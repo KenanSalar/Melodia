@@ -1,6 +1,5 @@
-//! The Import pill: native multi-file picker → import each playlist file, or
-//! each playlist in an archive, into a new playlist → refresh the grid →
-//! summary toast.
+//! The Import pill: each picked playlist file, or each playlist in a picked archive, into a new
+//! playlist, then one summary toast.
 
 use std::path::PathBuf;
 use std::rc::Rc;

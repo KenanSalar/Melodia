@@ -1,7 +1,4 @@
-//! `Search.*` result callbacks: cross-tab open-album / open-artist
-//! hand-offs, Top Result routing, `TrackList` row actions (play, queue,
-//! favorite toggle), sort, column visibility, and selection. See
-//! [`super::wire`].
+//! The results' callbacks: the cross-tab opens, Top Result routing and the Songs list.
 
 use std::sync::Arc;
 
@@ -23,8 +20,6 @@ use melodia_app::services::settings::ViewSort;
 use melodia_app::state::AppState;
 use melodia_ui::{AppWindow, Nav, Search};
 
-/// Wire the cross-tab open / Top Result / row-action / sort / selection
-/// callbacks.
 pub(super) fn wire(
     ui: &AppWindow,
     state: &AppState,
@@ -78,10 +73,8 @@ fn wire_open_artist(ui: &AppWindow, state: &AppState, artists_ui: &Arc<ArtistsUi
     });
 }
 
-/// Resolves to one of three cross-tab handlers based on `top-kind`:
-/// the two above plus `Nav.go-to-genre`, wired in `cross_tab_nav`.
-/// Invoking the global callback directly keeps the origin-stamp +
-/// nav-flip + persist all in one place.
+/// Routes through the kind's own open callback, so the origin stamp and the nav move stay in one
+/// place.
 fn wire_open_top_result(ui: &AppWindow) {
     let weak = ui.as_weak();
     ui.global::<Search>().on_open_top_result(move || {
@@ -101,10 +94,8 @@ fn wire_open_top_result(ui: &AppWindow) {
     });
 }
 
-/// Loads the visible results into the queue and starts on the
-/// clicked track. Search keeps no Rust-side cache of what's on screen (the
-/// sort and the `show-all-tracks` cap are applied at render), so the ids
-/// come off the live model.
+/// Queues the visible results, starting on the clicked track. The ids come off the live model,
+/// the one place the sort and the compact cut both hold.
 fn wire_play_row(ui: &AppWindow, state: &AppState) {
     let s = state.clone();
     let weak = ui.as_weak();
@@ -115,10 +106,8 @@ fn wire_play_row(ui: &AppWindow, state: &AppState) {
     });
 }
 
-/// Write through, then patch the cached result set
-/// and the visible row. Search has no `library_changed` subscriber to fall back on, so
-/// without the patch the pip never moves and the next click recomputes the same `!false`
-/// and re-sends a value the database already holds.
+/// Patched by hand, Search having no `library_changed` subscriber: unpatched, the pip never moves
+/// and the next click re-sends the value the database already holds.
 fn wire_row_flags(ui: &AppWindow, state: &AppState, search_ui: &Arc<SearchUi>) {
     let g = ui.global::<Search>();
     let weak = ui.as_weak();
@@ -162,9 +151,6 @@ fn wire_sort(ui: &AppWindow, state: &AppState, search_ui: &Arc<SearchUi>) {
         *su.state().sort.lock() = ViewSort { field: new_field.clone(), dir: new_dir };
         persist_view_sort(&s, view_id::SEARCH, new_field, new_dir);
 
-        // Re-derive the visible Songs slice from the cached
-        // results — no DB hit. If there are no cached results
-        // yet (no commit ran since startup) this is a no-op.
         fetch::reapply_cached_results(&su, &weak);
     });
 }

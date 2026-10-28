@@ -1,12 +1,9 @@
-// What every Copy entry in the tree does, one call per copy.
+// What every Copy entry in the tree does.
 //
-// **Stateless, `CardActions`' shape.** A menu holds ids rather than text, a selection's rows being
-// mostly unmounted, so each call names what to copy and Rust resolves the text before handing it
-// to `AppWindow.copy-to-clipboard`, the one clipboard there is. `field` is a token Rust parses once
-// at the boundary; an unknown one copies nothing.
+// **Stateless, as `CardActions` is.** A menu holds ids rather than text, a selection's rows being
+// mostly unmounted, so Rust resolves the text. An unknown `field` token copies nothing.
 export global CopyActions {
-    // A `TrackCopyFields` token, over track ids. One line per track, in the order handed over: a
-    // list's selection in the order Play would queue it, the queue's in queue order.
+    // A `TrackCopyFields` token. One line per track, in the order handed over.
     callback copy-tracks(string /*field*/, [int] /*track_ids*/);
     // `kind` is an `EntityKind` token. "name" for every kind, plus "artist" and "artist-name" for
     // an album.

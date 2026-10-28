@@ -1,16 +1,7 @@
-//! Turning the mixer's samples into the bytes an owned backend writes to the device.
-//!
-//! **This is the only place that happens.** cpal owns the byte layout on the shared path; an
-//! exclusive backend hands the card raw bytes, and every one of them is produced here, so the
-//! bit-perfect claim is checkable against one function.
-//!
-//! The scaling is the exact inverse of the decoder's: Symphonia divides an integer sample by a
-//! power of two on the way to `f32`, and multiplying back by the same power lands on the same
-//! integer. Anything the chain changed rounds to nearest and saturates, so a full-scale `+1.0`
-//! becomes the positive maximum rather than wrapping to the negative one.
-//!
-//! A writer encodes through [`BlockEncoder`], which runs each block through [`super::dither`] first
-//! and hands on unchanged any block the layout holds exactly.
+//! The one place the mixer's samples become an exclusive backend's bytes, so the bit-perfect claim
+//! is checkable against one function. The scaling is the exact inverse of the decoder's power of
+//! two; anything the chain changed rounds to nearest and saturates, so full-scale `+1.0` never
+//! wraps negative. Writers go through [`BlockEncoder`], which dithers first.
 
 use std::fmt;
 
@@ -18,12 +9,9 @@ use melodia_audio::player::source::audio::{Sample, SourceFormat};
 
 use super::dither::Dither;
 
-/// A sample layout a device can be opened with, all little-endian.
-///
-/// **The three 24-bit layouts are different formats, not three spellings of one.** `S24Packed`
-/// is three bytes per sample and is what many USB DACs offer alone. The other two put 24 bits in
-/// a 32-bit container: `S24Low` at the bottom, as ALSA's `S24_LE` does, and `S24High` at the
-/// top, as WASAPI's 24-in-32 does. Writing one where the other was opened plays 48 dB off.
+/// All little-endian. The three 24-bit layouts are different formats: `S24Packed` is three bytes,
+/// `S24Low` the bottom of a 32-bit container (ALSA's `S24_LE`) and `S24High` its top (WASAPI's
+/// 24-in-32). Writing one where another was opened plays 48 dB off.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum DeviceFormat {
     S16,
@@ -35,13 +23,9 @@ pub enum DeviceFormat {
 }
 
 impl DeviceFormat {
-    /// The formats to try for a source, best first: its own width, then the widest integer
-    /// that holds it, then the 24-in-32 containers. A backend skips whichever of those it has no
-    /// spelling for.
-    ///
-    /// **A float source takes the narrower integers last.** Only F32 holds it, so every other rung
-    /// converts it anyway, and one a device lacks would otherwise send a lossy track to the shared
-    /// mixer, which converts it too and resamples besides.
+    /// Best first: the source's own width, the widest integer holding it, then the 24-in-32
+    /// containers, a backend skipping what it can't spell. A float source takes the narrow integers
+    /// last rather than none, or a device lacking F32 would send it to the shared mixer instead.
     pub fn ladder(source: SourceFormat) -> &'static [Self] {
         use DeviceFormat::{F32, S16, S24High, S24Low, S24Packed, S32};
         match source {
@@ -54,10 +38,7 @@ impl DeviceFormat {
         }
     }
 
-    /// Whether a source in `source`'s format reaches the device in this one unchanged.
-    ///
-    /// A float source only in [`Self::F32`]: an `f32` smaller than 2⁻³¹ has bits a 32-bit
-    /// integer cannot hold, so "close enough" would make the panel's claim false.
+    /// A float source only in [`Self::F32`]: an `f32` under 2⁻³¹ has bits no 32-bit integer holds.
     pub fn carries(self, source: SourceFormat) -> bool {
         match self.integer_bits() {
             None => source.float && source.bits <= 32,
@@ -154,10 +135,8 @@ fn encode(samples: &[Sample], format: DeviceFormat, out: &mut Vec<u8>) {
     }
 }
 
-/// `sample` as a signed `bits`-wide integer, sign-extended into an `i32`.
-///
-/// `f64` because every step is exact there: the scale is a power of two and a 32-bit bound is
-/// representable, which `f32` can't say of `2³¹ − 1`. A NaN lands on zero through the cast.
+/// Sign-extended into an `i32`, through `f64`, where `2³¹ − 1` is representable and every step
+/// exact. A NaN lands on zero through the cast.
 #[expect(clippy::cast_possible_truncation, reason = "clamped to the target width first")]
 fn to_integer(sample: Sample, bits: u8) -> i32 {
     let scale = full_scale(bits);

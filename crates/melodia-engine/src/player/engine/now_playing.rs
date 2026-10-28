@@ -1,19 +1,10 @@
-//! What is playing, with the track-or-station split already made.
+//! What is playing, with the track-or-station split made once for the OS media panel, the tray,
+//! the Discord card and the Slint bridge: the song a stream announced, falling back to the
+//! station's name. Borrowed, since [`PlayerViewModelLight::source`] runs on every emit.
 //!
-//! Every surface that states the current source — the OS media panel, the tray, the Discord card,
-//! and the Slint bridge — used to ask `current_track` and get `None` for the whole life of a
-//! station. Each would need its own `vm.radio` arm, which is four copies of one ladder: the song
-//! the stream announced, falling back to the station's name until it announces one.
-//!
-//! Borrowed throughout. [`PlayerViewModelLight::source`] runs on every state emit, so it may not
-//! allocate; a consumer that needs to keep an answer past the borrow owns the few fields it
-//! compares rather than the whole summary.
-//!
-//! **Spelled a second time in Slint**, as `Player.source-{title,subtitle,tertiary}`, because only
-//! `@tr` at a literal reaches the catalogues and a translated fallback is one this side cannot
-//! hand over. The song-then-station order is the same and the empty arms deliberately are not: a
-//! label always paints something, where an absent field is what an OS surface wants rather than a
-//! placeholder nothing asked for.
+//! Spelled again in Slint as `Player.source-{title,subtitle,tertiary}`, only `@tr` at a literal
+//! reaching the catalogues. Same order, different empty arms: a label always paints something,
+//! where an OS surface wants an absent field.
 
 use super::state::PlayerViewModelLight;
 use super::types::RadioNowPlaying;
@@ -22,15 +13,12 @@ use super::types::RadioNowPlaying;
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SourceId<'a> {
     Track(i64),
-    /// Keyed on the stream URL rather than `station_id`, which is `0` for every station the user
-    /// has only browsed to — so the id collides across all of them.
+    /// The stream URL, `station_id` being `0` for every station only browsed to.
     Station(&'a str),
 }
 
-/// What a Now-Playing surface states about whatever is on the deck.
-///
-/// Shaped after the fields the OS media controls, the tray tooltip and a Discord activity all want,
-/// since those three agree on the questions and only disagree on which to draw.
+/// What a Now Playing surface states about the deck, shaped after what the OS media controls, the
+/// tray tooltip and a Discord activity all ask.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SourceSummary<'a> {
     pub id: SourceId<'a>,
@@ -44,17 +32,12 @@ pub struct SourceSummary<'a> {
     /// OS panel with three slots still says what is tuned.
     pub album: Option<&'a str>,
     pub artwork_path: Option<&'a str>,
-    /// `None` for a live source, so a consumer publishes an *absent* length rather than a zero
-    /// one. MPRIS renders the two differently.
+    /// `None` for a live source: MPRIS renders an absent length and a zero one differently.
     pub duration_ms: Option<u64>,
 }
 
 impl PlayerViewModelLight {
-    /// The source on the deck, or `None` when there is none.
-    ///
-    /// The two halves are mutually exclusive by construction: `begin_track` clears `radio` and
-    /// `build_station_connecting_actions` clears `current_track`. Radio is asked first anyway, so
-    /// a future that leaves both set can only read as the more specific of the two.
+    /// Radio is asked first, so a view model ever carrying both reads as the more specific.
     pub fn source(&self) -> Option<SourceSummary<'_>> {
         if let Some(radio) = self.radio.as_ref() {
             let station = radio.name.as_str();
@@ -94,16 +77,9 @@ pub struct Announcement<'a> {
 }
 
 impl<'a> Announcement<'a> {
-    /// Reads one announced line as artist and title, or `None` where it names no artist.
-    ///
-    /// **Split on the first `" - "`**, because `Artist - Title` is the convention stations follow
-    /// and a title carries a second dash far more often than an artist does (`Song - Remastered`).
-    /// It is a convention and not a format, so a line that doesn't split is a jingle, an ad or a
-    /// show name, and every consumer falls back to showing it whole.
-    ///
-    /// **Two halves with no letter between them are not a song.** Some stations briefly announce
-    /// their automation's catalogue ids (`403761 - 287105`) before the real line. One numeric half
-    /// is kept, since band names and titles like `311` or `1979` exist.
+    /// Splits on the first `" - "`, a title carrying a second dash more often than an artist does.
+    /// `None` for a line that doesn't split (a jingle, an ad, a show) or whose halves both lack a
+    /// letter (an automation's catalogue ids; one numeric half is a band like `311`).
     pub fn parse(line: &'a str) -> Option<Self> {
         let (artist, title) = line.split_once(" - ")?;
         let song = Self { artist: non_empty(artist)?, title: non_empty(title)? };
@@ -120,9 +96,7 @@ impl RadioNowPlaying {
     }
 }
 
-/// A field with something in it, trimmed. The ICY reader already trims what it stores, so this is
-/// what keeps the ladder honest for the fields nobody else guards — a track's blank artist column
-/// reaching MPRIS as an empty string rather than as an absent one.
+/// Trimmed and non-empty, so a blank artist column reaches MPRIS as absent rather than empty.
 fn non_empty(value: &str) -> Option<&str> {
     let value = value.trim();
     (!value.is_empty()).then_some(value)

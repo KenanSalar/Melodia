@@ -8,19 +8,10 @@ use super::upserts::{upsert_artist, upsert_genre};
 
 /// The artist and genre ids a transaction has already resolved, by name as spelled.
 ///
-/// A credit repeats across a release and the join writers ask once per credit per track, so
-/// without this a guest on a 200-track box set is 200 identical upserts. None of them is a read:
-/// `ON CONFLICT DO UPDATE SET name = excluded.name` rewrites the row and its index entry to say
-/// what it already said.
-///
-/// Keyed on the exact spelling. `artists.name` is `UNIQUE COLLATE NOCASE`, so two spellings share
-/// one row and the upsert leaves the newest standing; caching by exact string keeps that and drops
-/// only the repeats. The one thing it does change is that a spelling seen *again* after a
-/// different one no longer wins the row back, which is how [`super::super::ingest`] has always
-/// behaved for a track's primary artist.
-///
-/// Scoped to the caller's transaction and dropped with it, so it holds the distinct names of one
-/// chunk and never the library's.
+/// The join writers ask once per credit per track, and each upsert rewrites its row and index
+/// entry to say what they already said. Keyed on the exact spelling: two spellings share one
+/// `NOCASE` row with the newer standing, and one seen again after another doesn't win it back.
+/// Dropped with the transaction, so it holds one chunk's names, never the library's.
 #[derive(Default)]
 pub(crate) struct NameCache {
     artists: HashMap<String, i64>,

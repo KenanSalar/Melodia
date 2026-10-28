@@ -114,17 +114,13 @@ pub fn seed_category(ui: &AppWindow, persisted_category: i32) {
     page.set_category_idx(clamped);
 }
 
-/// Wire the Settings page's chrome. Call once during startup.
 pub fn install(ui: &AppWindow, state: &AppState) {
     let page = ui.global::<SettingsPage>();
 
-    // Slint 1.18 has no `.contains()` on string, so every section's row-visibility
-    // expression routes its substring test through here — the same predicate the library
-    // filter boxes run, so an ASCII query reaches the accented catalogue labels.
-    //
-    // The fold is memoized against the raw needle because this is the one `Needle`
-    // caller that can't hold a folded shadow: `matches` is invoked per *field*, not per
-    // pass, and the page has dozens of call sites live at once while searching.
+    // Slint 1.18 has no `.contains()` on a string, so every row's visibility test comes here, the
+    // filter boxes' own predicate, and an ASCII query reaches the accented catalogue labels.
+    // Memoized against the raw needle: invoked per *field* rather than per pass, this is the one
+    // `Needle` caller that can't hold a folded shadow.
     let folded: RefCell<(String, Needle)> = RefCell::new((String::new(), Needle::default()));
     page.on_matches(move |haystack, needle| {
         let mut memo = folded.borrow_mut();
@@ -142,14 +138,10 @@ pub fn install(ui: &AppWindow, state: &AppState) {
         open_on(&ui, category);
     });
 
-    // The panel two-way binds `category-idx`, so the UI is already showing the new category
-    // and the disk write is pure catch-up. Hand-rolled rather than `spawn_blocking_logged!`,
-    // which this otherwise matches: a pick already logs its own `nav:` line, so the macro's
-    // `view state:` line would say the same thing twice.
+    // A catch-up write, the panel's `<=>` already showing the pick, ordered by `IndexPersist`. Not
+    // `spawn_blocking_logged!`: a pick logs its own `nav:` line, which the macro's would repeat.
     let s = state.clone();
     let weak = ui.as_weak();
-    // Ordered: a bounce queues a value per pick and two blocking tasks have none of their
-    // own, so a reversed pair reopens the page on a category the user only passed through.
     let persist = Arc::new(IndexPersist::new(page.get_category_idx()));
     page.on_category_changed(move |category| {
         // As on the two curated pages' tabs: a pick moves no nav index, so

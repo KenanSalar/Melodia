@@ -1,8 +1,5 @@
-//! Top-level "is there a newer version?" query.
-//!
-//! [`check_for_update`] and [`recheck_for_update`] are the whole surface: manifest fetch + semver
-//! gate + platform-asset resolution. Recording the answer and notifying the user are
-//! [`run_check`](super::run_check)'s, so this stays a pure query.
+//! Whether a newer version is published, as a pure query: recording the answer and notifying are
+//! [`run_check`](super::run_check)'s.
 
 use melodia_core::error::AppError;
 
@@ -23,23 +20,17 @@ pub struct Checked {
 #[derive(Debug, Clone)]
 pub enum Verdict {
     UpToDate,
-    /// A newer release with no asset for the current platform (e.g. ARM Linux against an
-    /// x86_64-only release): nothing to install.
+    /// Newer, with no asset for this platform.
     NoAssetForTarget,
-    /// The manifest declares a `manifest_schema_version` past
-    /// [`manifest::SUPPORTED_MANIFEST_SCHEMA`], so this binary can't safely interpret it.
+    /// The manifest's schema is past [`manifest::SUPPORTED_MANIFEST_SCHEMA`].
     UnsupportedSchema,
-    /// A newer release this client can install, carrying the running target's entry from
-    /// `manifest.platforms` as resolved by [`current_target_key`].
+    /// Newer and installable, with this target's asset.
     Available(PlatformAsset),
 }
 
-/// Fetch `latest.json` in full, semver-gate it against `current_version`, and resolve the
-/// platform-specific asset.
-///
-/// `current_version` is normally [`installed_version`](super::install::installed_version) and
-/// `base_url` [`RELEASES_BASE`](super::github::RELEASES_BASE); both are parameters for the
-/// same reason, which is that a caller can be a test.
+/// Judges the published manifest against `current_version`, normally
+/// [`installed_version`](super::install::installed_version); it and `base_url` are parameters for
+/// tests.
 pub async fn check_for_update(
     http: &reqwest::Client,
     base_url: &str,
@@ -77,22 +68,14 @@ fn judge(
     Ok(Checked { manifest, etag, verdict })
 }
 
-/// The ladder itself, split from the fetch so every outcome is reachable without a network or a
-/// signature — the host answers `current_target_key` with one value, which left the `None` arm and
-/// five of the six package keys unexercised wherever the suite runs.
+/// Split from the fetch so every verdict is reachable from a test, the host answering
+/// `current_target_key` with one value.
 fn classify_manifest(
     manifest: &LatestManifest,
     current_version: &str,
     target_key: Option<&str>,
 ) -> UpdateResult<Verdict> {
-    // Forward-compat gate: a future schema revision (renamed platform
-    // keys, restructured PlatformAsset, etc.) bumps the manifest's
-    // `manifest_schema_version` past our compiled-in `SUPPORTED_*` value.
-    // We refuse to act on a manifest we don't fully understand rather
-    // than guessing — the user's binary can't safely interpret the new
-    // shape, and they need to upgrade out-of-band (download from the
-    // GitHub release page) before the in-app updater becomes useful
-    // again.
+    // A newer schema may have reshaped anything, so none of it is acted on.
     if manifest.manifest_schema_version > manifest::SUPPORTED_MANIFEST_SCHEMA {
         log::warn!(
             "updater: manifest_schema_version={} exceeds supported={} — \

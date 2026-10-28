@@ -3,17 +3,10 @@ import { Player } from "../../globals/player.slint";
 import { TrackListScrollbars } from "../../components/track-list-scrollbars.slint";
 import { TrackList } from "../../components/track-list/track-list.slint";
 
-// The Songs tab: a `TrackList` over the post-filter recency model, with its own
-// overlay scrollbars. No inputs — everything it reads is on a global. The
-// scrollbars live here rather than at the mount site because Slint can't read an
-// id declared inside an `if` from outside it, which is also what makes a per-tab
-// file the natural boundary.
+// A file of its own so the scrollbars sit beside the list, as on My Library's Songs tab.
 //
-// **Mounted `sortable: false`, and that is the page.** Recency is what this list
-// is; the order it would otherwise offer is a synthetic `"recency"` field no
-// header cell owns, so a single click was unreachable to undo — and it persisted,
-// so the page reopened permanently alphabetical. The headers still resize and
-// still toggle.
+// `sortable: false`, recency being the page: its order is a synthetic `"recency"` field no header
+// cell owns, so a header click, which persists, could never be undone.
 export component RecentlyPlayedSongsTab inherits Rectangle {
     tl := TrackList {
         width: 100%;

@@ -8,7 +8,7 @@ pub(super) fn is_hangul_syllable(letter: char) -> bool {
 /// The first codepoint of the Hangul syllables block, which the arithmetic below is relative to.
 const HANGUL_BASE: u32 = 0xAC00;
 
-/// How many syllables share one initial, and how many share one initial and vowel.
+/// How many syllables share one initial and vowel (one per final), and how many share one initial.
 const HANGUL_VOWEL_SPAN: u32 = 28;
 const HANGUL_INITIAL_SPAN: u32 = HANGUL_VOWEL_SPAN * 21;
 
@@ -31,24 +31,19 @@ const HANGUL_VOWELS: [&str; 21] = [
 ];
 
 /// Revised Romanization of each final jamo when it ends the syllable, index 0 being no final.
+/// Unreleased, so not the initials' spellings: 한국 ends `k` rather than the `g` that opens 국.
 ///
-/// A final consonant is unreleased, so these are not the initials' spellings: 한국 ends `k` rather
-/// than the `g` that opens 국.
-///
-/// **A ㄹ compound need not sound the half [`HANGUL_LINKED`] leaves behind.** The two tables agree
-/// at ㄼ ㄽ ㄾ and differ at ㄺ ㄻ ㄿ, where the ㄹ is what goes: 닭 is `dak` beside 읽어's
-/// `ilgeo`. ㅀ is neither, the ㄹ surviving as the half that *moves* and nothing staying behind
-/// it: 싫어 is `sireo`. Neither table is derivable from the other.
+/// **Not derivable from [`HANGUL_LINKED`].** They differ at ㄺ ㄻ ㄿ, where the ㄹ is what goes
+/// (닭 is `dak` beside 읽어's `ilgeo`), and at ㅀ, whose ㄹ moves and leaves nothing (싫어 is
+/// `sireo`).
 const HANGUL_FINALS: [&str; 28] = [
     "", "k", "k", "k", "n", "n", "n", "t", "l", "k", "m", "l", "l", "l", "p", "l", "m", "p", "p",
     "t", "t", "ng", "t", "t", "k", "t", "p", "t",
 ];
 
-/// What a final leaves behind and what it hands forward when the next syllable opens on ㅇ.
-///
-/// **This is what makes the spelling match how the word is said**: 있어 is `isseo` rather than
-/// `iteo`, and 좋은 is `joeun` rather than `joheun`, ㅎ being silent in the move. A two-consonant
-/// final splits, so 없어 is `eopseo`; where one of the two is ㅎ it elides and the other moves.
+/// What a final leaves behind and what it hands forward when the next syllable opens on ㅇ, so 있어
+/// is `isseo` and 좋은 `joeun`, ㅎ being silent in the move. A two-consonant final splits (없어 is
+/// `eopseo`); where one half is ㅎ it elides and the other moves.
 const HANGUL_LINKED: [(&str, &str); 28] = [
     ("", ""),
     ("", "g"),
@@ -90,9 +85,7 @@ struct Syllable {
 /// Revised Romanization of a run of Hangul, resyllabified across it.
 ///
 /// **No assimilation between syllables**, so 신라 comes out `sinra` where the standard says
-/// `silla`. That rule needs to know where the words are, which needs a dictionary; every other
-/// romanizer without one makes the same trade, and it is the spelling a reader gets from typing
-/// the letters they see.
+/// `silla`: that rule needs to know where the words are, which needs a dictionary.
 pub(super) fn push_hangul(run: &str, out: &mut String) {
     let syllables: Vec<Syllable> = run.chars().filter_map(decompose_hangul).collect();
 
@@ -128,7 +121,6 @@ fn palatalized(carried: &str, vowel: usize) -> &str {
     }
 }
 
-/// Split a composed syllable into its three jamo indices.
 fn decompose_hangul(letter: char) -> Option<Syllable> {
     if !is_hangul_syllable(letter) {
         return None;

@@ -1,20 +1,12 @@
-//! Turning a station's URL into something the decks can play.
+//! Turning a station's URL into something the decks can play: follow a playlist URL to the audio
+//! behind it, open that as a reader Symphonia accepts, and keep it fed from a thread of its own
+//! into [`super::prebuffer`]'s ring.
 //!
-//! Three jobs, in the order a station meets them: follow a playlist URL to the audio behind it,
-//! open that as a seekable reader Symphonia will accept, and keep it fed from a thread of its own.
-//! The ring that thread writes into is [`super::prebuffer`], which argues why the audio callback
-//! must never see a socket.
-//!
-//! **Reconnect lives here rather than in the playback monitor.** The feed thread already holds the
-//! URL, the client and the ring, so when its decoder ends it re-opens and keeps filling the *same*
-//! ring: the source never ends, the deck never blinks, and the state machine needs no
-//! reconnect path at all. A connection that goes quiet ends its decoder the same way, through
-//! `stall_watch`, rather than being re-requested underneath it. Only once the attempt budget is
-//! spent, or a server comes back with a format the already-appended source cannot carry, does the
-//! thread give up and let the deck drain — which the monitor reads as the end of the station.
-//!
-//! Nothing here logs a stream URL. They routinely carry a session token in the query string, and
-//! `services::diagnostics` puts the log tail in front of a public GitHub issue.
+//! **Reconnect lives in the feed thread** (`docs/adr/0014-no-network-on-the-audio-callback.md`): it
+//! re-opens into the same ring, so the deck never blinks, and gives up only once the attempt budget
+//! is spent or a server returns a format the appended source can't carry. A quiet connection ends
+//! its decoder through `stall_watch`. **Nothing here logs a stream URL**, which can carry a session
+//! token into a log tail users attach to public issues.
 
 use std::num::NonZeroUsize;
 use std::sync::Arc;
@@ -42,46 +34,35 @@ use super::prebuffer::{PrebufferSource, RingWriter, StreamShared};
 use super::stall_watch::StallWatch;
 use super::stream_decode::{LiveSource, StreamDecoder};
 
-/// The circular buffer between the socket and the decoder, in compressed bytes.
-///
-/// This is the *network* cushion, the one that decides how long a stalled connection can go
-/// unnoticed. It is sized in bytes rather than seconds because that is what the layer takes, and a
-/// byte budget buys wildly different amounts of audio across the bitrates stations advertise —
-/// which is the right way round, since a high-bitrate station is also the one whose stall costs
+/// The *network* cushion, in compressed bytes because that is what the layer takes. A byte budget
+/// buys less audio at a higher bitrate, which is the right way round: that station's stall costs
 /// most to ride out.
 const DOWNLOAD_BUFFER_BYTES: NonZeroUsize = match NonZeroUsize::new(512 * 1024) {
     Some(bytes) => bytes,
     None => NonZeroUsize::MIN,
 };
 
-/// How much of the stream to pull down before the decoder is allowed to read.
-///
-/// The floor and ceiling exist because the real figure is derived per station from the bitrate the
-/// server states: too little and the first seconds stutter, too much and the station takes
-/// noticeably long to start. The fallback covers a server that states no bitrate at all.
+/// Pulled down before the decoder may read, derived per station from its stated bitrate and
+/// clamped: too little and the first seconds stutter, too much and the station is slow to start.
 const PREFETCH_MIN_BYTES: u64 = 32 * 1024;
 const PREFETCH_MAX_BYTES: u64 = 128 * 1024;
 const PREFETCH_FALLBACK_BYTES: u64 = 64 * 1024;
 /// How many seconds of audio the prefetch aims at, where the bitrate is known.
 const PREFETCH_SECONDS: u64 = 2;
 
-/// How many times the feed thread re-opens a stream that ended before giving up.
-///
-/// Bounded rather than endless because a station that has stopped broadcasting is indistinguishable
-/// from one whose network is flaky, and the honest answer to the first is to say so and stop.
+/// Bounded, because a station that stopped broadcasting looks like a flaky network, and the honest
+/// answer to it is to say so and stop.
 const RECONNECT_ATTEMPTS: u32 = 5;
 /// The first backoff step; each attempt doubles it up to [`RECONNECT_MAX_DELAY`].
 const RECONNECT_BASE_SECS: u64 = 1;
 const RECONNECT_MAX_DELAY: Duration = Duration::from_secs(16);
-/// Granularity at which a wait notices the source was dropped. Shared with [`super::hls`]'s
-/// reader and with `stall_watch`, which ask the same question.
+/// How often a wait checks whether the source was dropped, here, in [`super::hls`] and in
+/// `stall_watch`.
 pub(super) const ABANDON_POLL: Duration = Duration::from_millis(100);
 
-/// Whole-request ceiling for fetching a playlist file, which is a small text document nobody
-/// should be waiting on. The audio request itself is deliberately unbounded — it never ends.
+/// For a small text document; the audio request is deliberately unbounded, never ending.
 const PLAYLIST_TIMEOUT: Duration = Duration::from_secs(15);
-/// How much of a playlist body to read before refusing it. A `.pls` or `.m3u` pointing at a
-/// station is a few hundred bytes; anything past this is not the document we were promised.
+/// A `.pls` or `.m3u` naming a station is a few hundred bytes.
 const PLAYLIST_MAX_BYTES: u64 = 64 * 1024;
 /// URL extensions that mean "this is a pointer, not audio".
 const PLAYLIST_EXTENSIONS: [&str; 4] = ["pls", "m3u", "m3u8", "asx"];
@@ -96,20 +77,13 @@ const PLAYLIST_CONTENT_TYPES: [&str; 7] = [
     "video/x-ms-asf",
 ];
 
-/// The reader stack a station is decoded from: metadata blocks stripped out of a bounded circular
-/// download buffer over an HTTP response.
+/// Metadata blocks stripped out of a bounded circular download buffer over an HTTP response.
 type StreamReader =
     IcyMetadataReader<StreamDownload<BoundedStorageProvider<MemoryStorageProvider>>>;
 
-/// The shared `reqwest::Client`, wearing the one header `stream-download` gives no other way to
-/// send.
-///
-/// `Icy-MetaData: 1` is what makes a server interleave track titles into the audio, and
-/// `RequestIcyMetadata` is implemented only on `reqwest::ClientBuilder` and `RequestBuilder`.
-/// stream-download's [`StreamClient::get`] is `self.get(url).send()` with nowhere to hand a
-/// `RequestBuilder` in, so the choice is a newtype or a second `reqwest::Client` — and a second
-/// client means a second connection pool and the loss of the `Melodia/<version>` User-Agent that
-/// some Icecast servers gate on.
+/// The shared client, wearing the `Icy-MetaData: 1` header that makes a server interleave titles.
+/// stream-download's [`StreamClient::get`] takes no `RequestBuilder`, and a second client would
+/// mean a second pool and losing the `Melodia/<version>` User-Agent some Icecast servers gate on.
 struct IcyClient(reqwest::Client);
 
 impl StreamClient for IcyClient {
@@ -118,10 +92,8 @@ impl StreamClient for IcyClient {
     type Response = reqwest::Response;
     type Error = reqwest::Error;
 
-    /// Only reachable through `StreamDownload::new`/`new_http`, which this tree never calls
-    /// (pinned by `nothing_reaches_the_convenience_constructors`): every open goes through
-    /// [`HttpStream::new`] with the shared client. Delegating to reqwest's own impl hands back
-    /// stream-download's internal default rather than building a third pool.
+    /// Reachable only through the convenience constructors this tree never calls, which
+    /// `nothing_reaches_the_convenience_constructors` pins.
     fn create() -> Self {
         Self(<reqwest::Client as StreamClient>::create())
     }
@@ -130,9 +102,8 @@ impl StreamClient for IcyClient {
         self.0.get(url.clone()).request_icy_metadata().send().await
     }
 
-    /// Only stream-download's own reconnect and a seek ask for a range, and a live mount gets
-    /// neither: `stall_watch` keeps the first off and the source is unseekable. The header stays
-    /// so turning that reconnect back on can't quietly cost a station its track names.
+    /// Asked only by stream-download's reconnect and a seek, and a live mount gets neither. The
+    /// header stays so turning that reconnect on can't quietly cost a station its track names.
     async fn get_range(
         &self,
         url: &Self::Url,
@@ -155,31 +126,25 @@ struct OpenedStream {
     facts: StationFacts,
 }
 
-/// What a server said about itself while the stream was being opened.
-///
-/// Every field is already parsed on the way to playback and thrown away, so carrying them out
-/// costs nothing and is what lets [`probe`] describe a hand-typed URL. `logo_url` and `homepage`
-/// are the two Icecast fields a directory row would otherwise be the only source of.
+/// What a server said about itself while opening, kept rather than thrown away so [`probe`] can
+/// describe a hand-typed URL.
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct StationFacts {
     pub name: Option<String>,
     pub genre: String,
     pub homepage: Option<String>,
     pub logo_url: Option<String>,
-    /// A short display token — `MP3`, `OPUS` — in the directory's own spelling for its `codec`
-    /// column, off the decoded container where [`codec_token`] names that codec and off the
-    /// response's content type otherwise. Empty where neither has a name for it.
+    /// A display token in the directory's spelling, off the decoded container where
+    /// [`codec_token`] names it and off the content type otherwise.
     pub codec: String,
-    /// Advertised kbps, `0` where the server does not say. Same display hint as the directory's.
+    /// Advertised kbps, `0` where the server does not say.
     pub bitrate: i32,
-    /// Whether what answered was a segment playlist rather than one endless response. Carried so a
-    /// hand-typed station records the same fact the directory's own `hls` column states.
+    /// A segment playlist, recorded as the directory's own `hls` column states it.
     pub hls: bool,
 }
 
-/// What was actually behind a URL. A mount with no extension can only be told apart from a pointer
-/// at it by what the server says it is, so [`connect`] reports that rather than guessing from the
-/// shape of a failure.
+/// What was behind a URL. An extensionless mount can only be told from a pointer at one by what
+/// the server says it is, so [`connect`] reports that rather than guessing from a failure.
 enum Opened {
     Audio(Box<OpenedStream>),
     Playlist,
@@ -187,35 +152,28 @@ enum Opened {
 
 /// What a playlist body turned out to name.
 enum Followed {
-    /// A segment playlist, already opened: the playlist *is* the station, and there is no further
-    /// URL to chase.
+    /// A segment playlist, already opened: the playlist *is* the station.
     Segments(Box<OpenedStream>),
-    /// A pointer at one audio mount.
     Mount(Url),
 }
 
 /// How the feed thread gets back to a station whose stream ended.
 #[derive(Clone, Copy)]
 enum Reopen {
-    /// Re-open the audio mount, which is what the first connect resolved to.
     Mount,
-    /// Re-fetch the segment playlist and start a fresh scheduler behind it. A segmented station
-    /// has no single mount to return to, so its playlist URL is what gets carried.
+    /// A segmented station has no single mount, so its playlist URL is what gets carried.
     Segments,
 }
 
-/// A station opened and ready to be fed, with what a reconnect would need to find it again.
+/// A station opened and ready to be fed, with what a reconnect needs to find it again.
 struct Resolved {
     opened: OpenedStream,
     url: Url,
     reopen: Reopen,
 }
 
-/// A live stream staged and ready to be appended to a deck.
-///
-/// Its feed thread is already running by the time this exists, so dropping one without playing it
-/// is how a superseded station cancels: the source's `Drop` tells the thread to stop and
-/// `StreamDownload` closes the connection with it.
+/// Its feed thread is already running, so dropping one unplayed is how a superseded station
+/// cancels.
 pub struct PreparedStream {
     source: PrebufferSource,
     shared: Arc<StreamShared>,
@@ -223,29 +181,21 @@ pub struct PreparedStream {
 }
 
 impl PreparedStream {
-    /// Split into the source the deck plays and the cell everyone else watches.
+    /// The source the deck plays, and the cell everyone else watches.
     pub fn into_parts(self) -> (PrebufferSource, Arc<StreamShared>) {
         (self.source, self.shared)
     }
 
-    /// [`StationFacts::codec`] for the mount that just opened, so a caller holding the station's
-    /// row can record what it actually serves. Empty where nothing could name it.
+    /// [`StationFacts::codec`] for the mount that just opened, so the station's row can record
+    /// what it actually serves.
     pub fn codec(&self) -> &str {
         &self.codec
     }
 }
 
-/// A prepared stream with no socket behind it, and a handle that outlives it.
-///
-/// `#[doc(hidden)] pub` rather than `#[cfg(test)]`, for `melodia-engine::fixtures`' reason: the
-/// generation protocol this exists to drive is one crate up and a `cfg(test)` item cannot cross a
-/// crate boundary. The staging doors move a `PreparedStream` around without reading a sample from
-/// it, so a ring nothing ever fills is the whole of what they need.
-///
-/// The `Weak` is the observation. Nothing exposes whether a stage is still held, and adding a
-/// getter for one would be production API with only a test behind it; every strong reference to
-/// the cell lives inside the returned value, so an upgrade that fails is the stage having been
-/// dropped and the connection with it.
+/// A prepared stream with no socket, for `melodia-engine`'s generation tests, a `cfg(test)` item
+/// being unable to cross crates. The `Weak` is the observation: every strong reference lives in the
+/// returned value, so an upgrade failing is the stage having been dropped.
 #[doc(hidden)]
 pub fn prepared_stream_for_test(shape: Shape) -> (PreparedStream, std::sync::Weak<StreamShared>) {
     let shared = StreamShared::new();
@@ -254,10 +204,8 @@ pub fn prepared_stream_for_test(shape: Shape) -> (PreparedStream, std::sync::Wea
     (PreparedStream { source, shared, codec: String::new() }, watching)
 }
 
-/// Open `url` and start feeding it, following one level of playlist indirection first.
-///
-/// Directory stations arrive already resolved in `url_resolved`, so the follow is for hand-typed
-/// URLs and for the occasional directory row that points at a `.pls` anyway.
+/// Opens `url` and starts feeding it, following one level of playlist indirection, which a
+/// hand-typed URL or the odd directory row pointing at a `.pls` needs.
 pub async fn open(client: &reqwest::Client, url: &str) -> Result<PreparedStream, AppError> {
     let url = Url::parse(url).map_err(|e| AppError::network("Invalid station URL", e))?;
     let shared = StreamShared::new();
@@ -280,34 +228,23 @@ pub async fn open(client: &reqwest::Client, url: &str) -> Result<PreparedStream,
     Ok(PreparedStream { source, shared, codec })
 }
 
-/// Open `url` far enough to know it plays, then let it go.
-///
-/// The same path [`open`] takes minus the ring and the thread, which is what makes it a real
-/// answer rather than a reachability check: the playlist indirection is followed, the response is
-/// buffered, and Symphonia probes the container — so a mount that is a web page, an encrypted
-/// segment playlist or a codec with no decoder is refused **here**, when the user is looking at a
-/// dialog, rather than at the moment they click play. Dropping the returned stream closes the
-/// socket.
-///
-/// The station's own headers come back with it, so a hand-typed URL can name itself.
+/// [`open`] minus the ring and the thread, so a web page, an encrypted playlist or a codec with no
+/// decoder is refused while the user is looking at a dialog rather than at play. The station's own
+/// headers come back so a hand-typed URL can name itself.
 pub async fn probe(client: &reqwest::Client, url: &str) -> Result<StationFacts, AppError> {
     let url = Url::parse(url).map_err(|e| AppError::network("Invalid station URL", e))?;
-    // Throwaway: the title callback writes into it and nothing ever reads it back.
+    // Throwaway: the title callback writes into it and nothing reads it back.
     let shared = StreamShared::new();
     Ok(connect_following_playlist(client, url, &shared).await?.opened.facts)
 }
 
-/// Open `url`, and if what came back is a playlist rather than audio, follow it once.
-///
-/// Returns whatever a reconnect would need to find the station again: the audio mount for an
-/// ordinary stream, and the playlist itself for a segmented one, which has no single mount.
+/// Opens `url`, following it once if what came back is a playlist.
 async fn connect_following_playlist(
     client: &reqwest::Client,
     url: Url,
     shared: &Arc<StreamShared>,
 ) -> Result<Resolved, AppError> {
-    // Extension first: a hand-typed `.pls` is worth spotting before opening a stream we would only
-    // throw away, and it is the shape most custom stations arrive in.
+    // Extension first, so a hand-typed `.pls` is spotted before opening a stream to throw away.
     let url = if is_playlist_url(&url) {
         match follow_playlist(client, &url, shared).await? {
             Followed::Segments(opened) => {
@@ -321,8 +258,7 @@ async fn connect_following_playlist(
 
     match connect(client, &url, shared).await? {
         Opened::Audio(opened) => Ok(Resolved { opened: *opened, url, reopen: Reopen::Mount }),
-        // An extensionless mount that turned out to be a pointer. Depth stays at one: what it
-        // names is opened as audio or not at all.
+        // An extensionless pointer. Depth stays at one.
         Opened::Playlist => match follow_playlist(client, &url, shared).await? {
             Followed::Segments(opened) => {
                 Ok(Resolved { opened: *opened, url, reopen: Reopen::Segments })
@@ -339,7 +275,7 @@ async fn connect_following_playlist(
     }
 }
 
-/// Re-open a station the feed thread has lost, by whichever route it arrived on.
+/// Re-opens a station the feed thread has lost, by whichever route it arrived on.
 async fn reopen(
     client: &reqwest::Client,
     url: &Url,
@@ -360,10 +296,7 @@ async fn reopen(
     }
 }
 
-/// Open a segment playlist as a stream, which is the whole of [`hls`]'s job plus the probe.
-///
-/// `shared` reaches the reader for its abandon flag alone, never for a title: HLS carries no ICY
-/// metadata, so nothing here has one to publish.
+/// `shared` reaches the reader for its abandon flag alone, HLS carrying no ICY titles.
 async fn open_segments(
     client: &reqwest::Client,
     url: &Url,
@@ -378,8 +311,7 @@ async fn open_segments(
         ..StationFacts::default()
     };
 
-    // On the blocking pool for the reason `connect` spells out: the probe reads, and this reader's
-    // read parks until the scheduler behind it delivers, which needs a worker free to run on.
+    // On the blocking pool for `connect`'s reason: this reader parks until the scheduler delivers.
     let decoder = tokio::task::spawn_blocking(move || {
         StreamDecoder::open(Box::new(LiveSource(stream.reader)), None)
     })
@@ -393,7 +325,7 @@ async fn open_segments(
     Ok(OpenedStream { shape: decoder.shape(), decoder, facts })
 }
 
-/// Open one URL: response, ICY headers, bounded download buffer, metadata reader, decoder.
+/// Opens one URL: response, ICY headers, bounded download buffer, metadata reader, decoder.
 async fn connect(
     client: &reqwest::Client,
     url: &Url,
@@ -438,16 +370,10 @@ async fn connect(
             titles.set_title(Some(title.trim()).filter(|t| !t.is_empty()).map(str::to_owned));
         });
 
-    // **On the blocking pool, never on a worker.** Building the decoder probes the container by
-    // *reading*, and `StreamDownload`'s reader is blocking: it parks the calling thread until its
-    // downloader task delivers bytes. That task needs a worker to run on, and the runtime has two
-    // — so a probe on a worker takes half the runtime hostage and two stations take all of it,
-    // deadlocking the reads against the downloads that would satisfy them. The tell is not a
-    // crash: the connect simply never returns, so nothing is staged, nothing is logged, and
-    // shutdown's own `timeout` never fires either, no worker being left to park and own the timer.
-    //
-    // The mime handed over is what the server actually sent, in preference to the directory's
-    // free-form `codec` string.
+    // **On the blocking pool, never a worker.** The probe reads, and `StreamDownload`'s reader
+    // parks its thread until the downloader task delivers, which needs a worker of its own: two
+    // stations probing on the runtime's two workers deadlock, nothing staged and nothing logged.
+    // The mime is what the server sent, preferred to the directory's free-form `codec`.
     let decoder = tokio::task::spawn_blocking(move || {
         StreamDecoder::open(Box::new(LiveSource(reader)), mime.as_deref())
     })
@@ -461,12 +387,9 @@ async fn connect(
     Ok(Opened::Audio(Box::new(OpenedStream { shape: decoder.shape(), decoder, facts })))
 }
 
-/// A metadata block as metadata, or `None` where it says nothing about the song.
-///
-/// A block that isn't UTF-8 is read as Windows-1252, what older servers send, rather than dropped:
-/// dropped, the previous song's title would stay up for the whole of this one. An empty block is
-/// skipped rather than read as a cleared title, which would make the next block look like a new
-/// song.
+/// A block that isn't UTF-8 is read as Windows-1252, what older servers send, rather than dropped
+/// and leaving the previous title up. An empty block is skipped, not read as a cleared title that
+/// would make the next block look like a new song.
 fn readable_metadata(parsed: Result<IcyMetadata, MetadataParseError>) -> Option<IcyMetadata> {
     match parsed {
         Ok(metadata) => Some(metadata),
@@ -478,9 +401,8 @@ fn readable_metadata(parsed: Result<IcyMetadata, MetadataParseError>) -> Option<
     }
 }
 
-/// Windows-1252's characters for 0x80–0x9F, where it parts from Latin-1. Read as Latin-1 those
-/// bytes are control codes, and they hold the curly apostrophe and the dash song titles are full
-/// of. The five bytes the code page leaves undefined keep their Latin-1 reading, as WHATWG's
+/// Windows-1252's 0x80–0x9F, where it parts from Latin-1 with the curly apostrophe and dashes
+/// song titles are full of. Its five undefined bytes keep their Latin-1 reading, as WHATWG's
 /// decoder does.
 const WINDOWS_1252_HIGH: [char; 32] = [
     '\u{20AC}', '\u{0081}', '\u{201A}', '\u{0192}', '\u{201E}', '\u{2026}', '\u{2020}', '\u{2021}',
@@ -496,23 +418,16 @@ fn windows_1252(byte: u8) -> char {
     }
 }
 
-/// A trimmed header value, or `None` where the server sent the field empty.
-///
-/// Icecast pads and blanks these freely, and an empty `name` handed on as `Some("")` would name a
-/// station after nothing at all.
+/// Icecast pads and blanks these freely, and an empty `name` would name a station after nothing.
 fn non_blank(value: Option<&str>) -> Option<String> {
     value.map(str::trim).filter(|v| !v.is_empty()).map(str::to_owned)
 }
 
-/// Between the genre words Icecast lists separately. Matches the directory's own `tags` spelling,
-/// so a hand-typed station's tags line reads like a browsed one's.
+/// The directory's own `tags` spelling, so a hand-typed station's tags read like a browsed one's.
 const GENRE_SEPARATOR: &str = ",";
 
-/// A response content type as the short codec token the directory would have used.
-///
-/// Deliberately not exhaustive and deliberately not fallible: an unrecognised type is a station
-/// whose codec line stays blank, which every surface already handles — `bitrate` is blank on a
-/// large share of live stations for the same reason.
+/// A content type as the directory's codec token. Not exhaustive and not fallible: an unrecognised
+/// type leaves the codec line blank, which every surface already handles.
 fn codec_from_mime(mime: Option<&str>) -> &'static str {
     match mime {
         Some("audio/mpeg" | "audio/mp3" | "audio/mpeg3" | "audio/x-mpeg") => "MP3",
@@ -525,15 +440,9 @@ fn codec_from_mime(mime: Option<&str>) -> &'static str {
     }
 }
 
-/// The codec the container turned out to hold, in that same spelling.
-///
-/// A content type names the container, so every Ogg mount answers `audio/ogg` whether it carries
-/// Vorbis, Opus or FLAC, and the directory's own column says `OGG` for the same reason. This is
-/// the one answer that can tell them apart, so it wins wherever it has one.
-///
-/// `None` for a codec with no token of ours, which leaves [`codec_from_mime`]'s answer standing:
-/// PCM is the case that matters, the id splitting into a dozen widths and layouts where the
-/// content type says `WAV` and is what a listener would recognise.
+/// The decoded codec in the same spelling, which wins wherever it has one: a content type names
+/// only the container, so every Ogg mount says `audio/ogg` whatever it carries. `None` leaves the
+/// content type's answer standing, which for PCM's dozen ids is the `WAV` a listener recognises.
 fn codec_token(codec: AudioCodecId) -> Option<&'static str> {
     match codec {
         CODEC_ID_MP1 | CODEC_ID_MP2 | CODEC_ID_MP3 => Some("MP3"),
@@ -546,10 +455,8 @@ fn codec_token(codec: AudioCodecId) -> Option<&'static str> {
     }
 }
 
-/// How much to buffer before the first read, from the bitrate the server states.
-///
-/// The directory's own `bitrate` column is not an input: it is `0` on a large share of live
-/// stations, so the fallback would fire far more often than the calculation.
+/// From the bitrate the server states, never the directory's column, which is `0` on a large share
+/// of live stations.
 fn prefetch_bytes(bitrate_kbps: Option<u32>) -> u64 {
     let Some(kbps) = bitrate_kbps.filter(|k| *k > 0) else {
         return PREFETCH_FALLBACK_BYTES;
@@ -558,11 +465,8 @@ fn prefetch_bytes(bitrate_kbps: Option<u32>) -> u64 {
     (bytes_per_second * PREFETCH_SECONDS).clamp(PREFETCH_MIN_BYTES, PREFETCH_MAX_BYTES)
 }
 
-/// Fetch a playlist and work out what it is: a station in its own right, or a pointer at one.
-///
-/// The HLS check comes first because the two overlap on the wire — a segment playlist is also a
-/// valid Extended M3U, and read as a pointer its first segment opens, plays for a few seconds and
-/// stops.
+/// The HLS check comes first: a segment playlist is also a valid Extended M3U, and read as a
+/// pointer its first segment plays for a few seconds and stops.
 async fn follow_playlist(
     client: &reqwest::Client,
     url: &Url,
@@ -580,7 +484,6 @@ async fn follow_playlist(
     Ok(Followed::Mount(mount))
 }
 
-/// Read at most [`PLAYLIST_MAX_BYTES`] of `url` as text.
 async fn fetch_playlist(client: &reqwest::Client, url: &Url) -> Result<String, AppError> {
     melodia_net::services::net::get_capped_text(
         client,
@@ -592,8 +495,7 @@ async fn fetch_playlist(client: &reqwest::Client, url: &Url) -> Result<String, A
     .await
 }
 
-/// Does this URL's path end in a playlist extension? Query and fragment are stripped first, since
-/// a mount routinely carries a session parameter after the name.
+/// Off the path alone, a mount routinely carrying a session parameter after the name.
 fn is_playlist_url(url: &Url) -> bool {
     let path = url.path();
     let Some((_, ext)) = path.rsplit_once('.') else {
@@ -602,27 +504,16 @@ fn is_playlist_url(url: &Url) -> bool {
     PLAYLIST_EXTENSIONS.iter().any(|known| ext.eq_ignore_ascii_case(known))
 }
 
-/// Does this response content type name a playlist? Parameters (`; charset=…`) are already gone by
-/// the time stream-download hands over a `ContentType`, but callers passing a raw header are
-/// tolerated.
+/// Tolerates a raw header with parameters, stream-download's `ContentType` having none.
 fn is_playlist_content_type(content_type: &str) -> bool {
     let bare = content_type.split(';').next().unwrap_or(content_type).trim();
     PLAYLIST_CONTENT_TYPES.iter().any(|known| bare.eq_ignore_ascii_case(known))
 }
 
-/// The first `http(s)` URL a playlist body names, across all three formats a station uses.
-///
-/// One pass rather than three parsers: `.pls` carries `File1=<url>` under a `[playlist]` header,
-/// `.m3u` carries the URL on a line of its own with `#` comments around it, and `.asx` carries it
-/// in an `href` attribute. Each line offers up to three readings and the first that is an absolute
-/// HTTP URL wins, which is what keeps them from stepping on each other: a bare `.m3u` line whose
-/// query string contains an `=` reads as a key/value pair under the `.pls` rule, and only falling
-/// through to the whole line recovers it.
-///
-/// `library::playlist_files::m3u` is deliberately not reused: it is private to `library` (which
-/// depends on this module's crate half, not the other way round) and it answers a different
-/// question — track paths with BLAKE3 hashes and `#EXTINF` durations, none of which a stream
-/// playlist carries, and neither of the other two formats at all.
+/// The first `http(s)` URL a playlist names, across `.pls`'s `File1=`, `.m3u`'s bare line and
+/// `.asx`'s `href`. Each line offers all three readings and the first absolute URL wins, so an
+/// `.m3u` line whose query holds an `=` still reaches the whole-line reading. Not
+/// `library::playlist_files::m3u`, which reads track paths and hashes from a layer above.
 fn first_stream_url(body: &str) -> Option<String> {
     let body = body.strip_prefix('\u{FEFF}').unwrap_or(body);
     for raw in body.lines() {
@@ -655,10 +546,8 @@ fn quoted_href(line: &str) -> Option<&str> {
     inner.split(quote).next()
 }
 
-/// How long to wait before reconnect attempt `attempt`, or `None` once the budget is spent.
-///
-/// Exponential from [`RECONNECT_BASE_SECS`] and capped, so a station that drops for a moment is
-/// back almost immediately while one that has gone away is not hammered.
+/// `None` once the budget is spent. Exponential and capped, so a blip is back almost at once and a
+/// station that has gone away is not hammered.
 fn reconnect_delay(attempt: u32) -> Option<Duration> {
     if attempt >= RECONNECT_ATTEMPTS {
         return None;
@@ -673,8 +562,7 @@ struct FeedContext {
     writer: RingWriter,
     shared: Arc<StreamShared>,
     client: reqwest::Client,
-    /// Where a reconnect goes, not whatever the user originally typed: the audio mount for an
-    /// ordinary stream, the segment playlist for a segmented one.
+    /// Where a reconnect goes: the audio mount, or the segment playlist for a segmented station.
     url: Url,
     reopen: Reopen,
     shape: Shape,
@@ -683,9 +571,8 @@ struct FeedContext {
 
 fn spawn_feed(ctx: FeedContext) {
     let shared = ctx.shared.clone();
-    // Spelled inline rather than lifted to a const: the thread-name walk in
-    // `crates/melodia/tests/packaging.rs` matches a literal after `.name(`, so a named constant
-    // here would be silently unmeasured.
+    // Inline rather than a const: `crates/melodia/tests/packaging.rs`'s thread-name walk matches a
+    // literal after `.name(`.
     if let Err(e) =
         std::thread::Builder::new().name("radio-buffer".to_owned()).spawn(move || feed_loop(ctx))
     {
@@ -695,7 +582,7 @@ fn spawn_feed(ctx: FeedContext) {
     }
 }
 
-/// Drain the decoder into the ring, reconnecting when it ends, until the source is dropped or the
+/// Drains the decoder into the ring, reconnecting when it ends, until the source is dropped or the
 /// attempt budget runs out.
 fn feed_loop(mut ctx: FeedContext) {
     let mut attempt = 0;
@@ -710,8 +597,8 @@ fn feed_loop(mut ctx: FeedContext) {
         if ctx.shared.is_abandoned() {
             return;
         }
-        // Only a connection that actually delivered audio earns a fresh budget; otherwise a server
-        // that accepts and immediately hangs up would be retried forever.
+        // Only a connection that delivered audio earns a fresh budget, or a server that accepts and
+        // hangs up at once would be retried forever.
         if produced {
             attempt = 0;
         }
@@ -732,8 +619,8 @@ fn feed_loop(mut ctx: FeedContext) {
                 () = abandoned(&ctx.shared) => None,
             }
         });
-        // Stopped mid-request, which a dead network can hold open for a long time. Dropping the
-        // request closes its socket.
+        // Stopped mid-request, which a dead network can hold open a long time; dropping it closes
+        // the socket.
         let Some(reopened) = reopened else { return };
         match reopened {
             Ok(opened) if opened.shape == ctx.shape => {
@@ -741,9 +628,8 @@ fn feed_loop(mut ctx: FeedContext) {
                 ctx.decoder = opened.decoder;
             }
             Ok(_) => {
-                // The deck built its converter from this source's channel count and rate at the
-                // append, and cannot rebuild it mid-source. Ending is what lets the station be
-                // restarted cleanly from the top.
+                // The deck's converter is fixed to this source's shape, so ending is what lets the
+                // station be restarted cleanly.
                 log::warn!("Radio stream returned in a different audio format; stopping");
                 ctx.shared.finish();
                 return;
@@ -753,7 +639,7 @@ fn feed_loop(mut ctx: FeedContext) {
     }
 }
 
-/// Sleep for `delay`, waking early if the source is dropped. `false` means it was.
+/// Sleeps for `delay`, waking early if the source is dropped. `false` means it was.
 fn sleep_unless_abandoned(shared: &StreamShared, delay: Duration) -> bool {
     let mut left = delay;
     while !left.is_zero() {

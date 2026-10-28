@@ -6,107 +6,47 @@ paths:
 
 # Symphonia Best Practices
 
-Decoding only. The layer under it — the device stream, the two decks, the rate conversion and the
-clock — is `crates/melodia-playback/src/player/playback/output/`, which is a directory with its
-own anchor files and argues itself
-there; `.claude/rules/audio-stack.md` holds what spans it and the DSP chain above it.
+Decoding only, against 0.6.1 through `player::source::decode`, the one Symphonia in the tree
+(`docs/adr/`). What spans it and the DSP chain above it is `.claude/rules/audio-stack.md`'s.
 
-## Symphonia — Audio Decoding
+## Opening and decoding
 
-### Format Probing
+- **Open through `decode::open`, never a second probe.** 0.6.1's probe scores each reader whose
+  marker matches against the bytes after it and never reads the `Hint`, so a hint can't steer a
+  wrong pick; pass one anyway, the parameter staying. `MediaSourceStream` is the read-ahead
+  buffer, so nothing wraps the source in a `BufReader`.
+- **Pick the track through `decode::audio_track`**: `default_track` honours the container's default
+  flag before the codec, so a null track can win unless filtered.
+- **`decode::fill` is the one decode loop.** `next_packet` answers `Ok(None)` at the end, a
+  `DecodeError` packet is skipped (a mount joined mid-frame opens with a few), and `ResetRequired`
+  ends the source. A packet decodes to a `GenericAudioBufferRef`, flattened with
+  `copy_to_vec_interleaved`.
 
-- **A `Hint` does not steer 0.5's probe** — `Probe::format` takes it as `_hint` and resolves the format by matching a two-byte marker, scoring still a `TODO`. Pass one anyway (it costs a line and 0.6 keeps the parameter), but never rely on it to break a tie: a container whose marker isn't registered is one the probe will mis-assign, silently and to whichever reader matches first. **This tree carried two Symphonia majors for that reason and no longer does** — everything decodes through `player::decode` against 0.6, whose probe scores each candidate against the frames that follow it. Read that module before touching either decoder; `docs/adr/` is why it exists.
-- Use `MediaSourceStream` (not `BufReader`) — it provides optimized buffering for multimedia I/O
-- Search for the first audio track explicitly — default track may be video in container formats
+## Seeking
 
-### Decode Loop Pattern
+`file_decode::try_seek` holds all three, and `file_decode_tests.rs` catches a missing trim.
 
-```
-loop {
-    match format_reader.next_packet() {
-        Ok(packet) => match decoder.decode(&packet) {
-            Ok(decoded) => { /* process audio buffer */ }
-            Err(DecodeError) => continue,  // skip corrupted frames
-            Err(e) => return Err(e),
-        },
-        Err(IoError) if end_of_stream => break,
-        Err(ResetRequired) => { /* reset decoder, re-read format */ }
-        Err(e) => return Err(e),
-    }
-}
-```
+- **`SeekMode::Accurate` with `SeekTo::Time`, then reset the decoder every time.** Upstream asks
+  for it, and the reset is a no-op for PCM, ADPCM, ALAC and FLAC. MP3 rebuilds its state and AAC
+  and Vorbis clear an overlap buffer that would otherwise blend the audio either side of the jump.
+- **A demuxer seek lands on a packet boundary**, so the head is trimmed from
+  `required_ts - actual_ts`. Nothing upstream does it.
+- **Clamp short of a stated length**, never onto it (`SEEK_END_MARGIN`).
 
-### Seeking
+## Gapless: what 0.6.1 leaves to us
 
-- **Always reset the decoder after a seek**, and don't be talked out of it. `FormatReader::seek`'s
-  own docs say every decoder consuming that reader should be reset, and in 0.6.1 the codecs holding
-  no state across packets — FLAC, ALAC, PCM, ADPCM — document their `reset` as doing nothing, so
-  the blanket call costs them a vtable hop. The ones it is *for* are MP3, which rebuilds its whole
-  state, and AAC and Vorbis, which clear an overlap-add buffer that otherwise blends the audio
-  either side of the jump. Reset selectively and those two are exactly what you lose.
-  [symphonia#274](https://github.com/pdeljanov/Symphonia/issues/274) is not an argument against it:
-  it reports MP3 seeks popping, and says the fault is *not* seen with MKA/Vorbis or M4A/AAC. It was
-  read here once as saying a reset sends some containers back to the start, which it does not say
-  and no decoder's `reset` could do
-- Use `FormatReader::seek()` with `SeekTo::Time` for timestamp-based seeking, and `SeekMode::Accurate`
-- **Clamp a seek short of a stated length, not onto it.** The last frame is not somewhere a demuxer
-  can land: the seek answers out of range and the failed attempt still parks the reader at the end,
-  so the next pull reads as the track finishing. A slider dragged to its right edge asks for exactly
-  the length, so this is the common case rather than an edge one — `file_decode::SEEK_END_MARGIN`
-- **A demuxer seek lands on a packet boundary, so trim the head yourself.** Without it every seek
-  replays the tail of what came before. `required_ts - actual_ts` through the track's timebase gives
-  the frames to drop. Nothing upstream does it for you, and `file_decode::try_seek` is what holds
-  it here; `file_decode_tests::a_seek_lands_on_the_frame_it_asked_for` is what says so, since
-  nothing else in the tree can tell you the trim went missing
+`AudioDecoderOptions::gapless` defaults to `true`, and only MP3 and Vorbis act on it. The rest of
+the padding a file states is read here, `docs/adr/` arguing why we read it rather than trust the
+flag, and `audio-stack.md` why both trims install in `file_decode` rather than `decode`.
 
-### Gapless Support
-
-- **0.6 moved the flag rather than dropping it**: it is `AudioDecoderOptions::gapless`, not
-  `FormatOptions::enable_gapless`, and it **defaults to `true`**, so `AudioDecoderOptions::default()`
-  needs nothing enabled
-- **But only two decoders act on it**, MP3 and Vorbis. AAC, ALAC, FLAC, PCM and ADPCM ignore
-  `opts.gapless` outright, and `symphonia-format-isomp4` populates neither `Packet::trim_start`/
-  `trim_end` nor `Track::delay`/`padding` (it parses the edit list into `TrakAtom.edts` and never
-  reads it; iTunSMPB is not parsed at all). `symphonia-format-mkv` is the same shape at the other
-  end of the file: it parses `DiscardPadding` onto a block-group struct marked
-  `#[allow(dead_code)]` and builds every packet through the constructor that zeroes both trims, so
-  a decoder that honours `trim_end` is told nothing however the flag is set, and `CodecDelay` lands
-  on its own track state rather than on `Track::delay`. This is not a 0.6 regression: 0.5 gated the
-  same two demuxers on `FormatOptions::enable_gapless`, and MP3 got *better*, since 0.6 emits the
-  trims unconditionally under a default-on flag
-- **`Track::delay`/`padding` reaches no decoder, and exactly one reader above them acts on it.**
-  CAF fills both from its packet table and nothing uses them. Opus-in-Ogg fills `delay` from
-  `pre_skip`, and `decode::open` drops the `Track` once it has the id, the timebase and the
-  length, so no decoder can see it: `player::source::opus` reads the priming off the
-  identification packet instead, which is what covers Matroska and MP4 as well, neither of them
-  filling the field. What `file_decode` then reads `delay` for is the *offset* rather than the
-  frames, the demuxer's timeline still counting priming the decoder no longer hands over, and it
-  is gated on `CODEC_ID_OPUS` rather than on the field being filled. MP3 and CAF fill it too and
-  want no offset: both open their timeline at `-delay` instead, so theirs already lines up and one
-  would skew it. Ogg's Opus mapper leaves `absgp_to_ts` at identity and starts at zero, which is
-  what makes it the only case where the timeline counts what the decoder does not hand over. So
-  AAC is trimmed here rather than upstream, in
-  `player::aac_trim`, which reads the two places a file states its padding and hands `file_decode` a
-  head and a playable length; that module argues the numbers,
-  `docs/adr/` argues why we read them rather than trusting the flag, and
-  `.claude/rules/audio-stack.md` says why it sits outside the shared `decode`
-- **`player::mkv_trim` is `aac_trim`'s sibling for `DiscardPadding`**, reading the tail a Matroska
-  file states for whatever codec its blocks carry. Each module names the other, but the comparison
-  between them, codec scope against container scope and a count against a window, is
-  `.claude/rules/audio-stack.md`'s
-
-### Performance
-
-- Reuse allocated buffers across decode iterations where possible
-- For metadata-only reads, skip decoding entirely — use format reader to read metadata packets
-
-### Sample Format Conversion
-
-- Symphonia decoded buffers are `AudioBuffer<T>` — call `.convert::<f32>()` or use `SampleBuffer<f32>` for interleaved output
-- `SampleBuffer::copy_interleaved_ref(&decoded)` writes decoded frames into a flat `&[f32]` slice, which is what a deck is appended
-
-### Error Recovery
-
-- `DecodeError` on a packet — log and `continue`; do not abort the decode loop. A mount joined
-  mid-frame opens with a few, and a file with a damaged frame plays past it the way every other
-  player does
+- **AAC in MP4: `aac_trim`.** isomp4 fills no packet trim and no `Track::delay`, and the AAC
+  decoder ignores the flag.
+- **Matroska: `mkv_trim`, the tail for any codec.** `CodecDelay` already comes off the
+  timestamps, and `DiscardPadding` is parsed and read nowhere.
+- **Opus: `opus`**, which drops the priming off the identification packet in every container,
+  Symphonia shipping no decoder.
+- **`Track::delay` is a timeline offset by then, never frames to drop.** `decode::open` drops the
+  `Track`, so no decoder sees it. MP3 and CAF fill it and open their timeline at `-delay`, so theirs
+  lines up; Ogg fills it for Opus from `pre_skip` and keeps `absgp_to_ts` at identity, so its
+  timeline still counts the priming `opus` dropped. Hence `file_decode::opus_priming`, gated on the
+  codec rather than on the field.

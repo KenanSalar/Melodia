@@ -1,22 +1,15 @@
 //! The station page: open, close, the hero it morphs the band into, and the directory refresh
 //! behind it.
 //!
-//! **A station is opened from a row, not fetched by id.** A browsed station has no database row —
-//! `RadioStationRow.id` is `0` for one — so the id cannot be the handle, and it cannot be the
-//! open/closed flag either. [`StationRef`] carries both halves of what identifies either kind, and
-//! `Radio.detail-tab` is the flag.
+//! **A station is opened from a row, not fetched by id**: a browsed one has no database row
+//! (`id == 0`), so [`StationRef`] carries both halves and `Radio.detail-tab` is the open flag.
 //!
-//! **A page belongs to the tab it was opened from, and all three tabs may hold one.** What is per
-//! tab is the *seat* ([`DetailState`]) rather than the properties: `Radio.detail-*`, `HeroBackdrop`
-//! and `HeroChips` are one set between six heroes, so only one page is ever painted. [`reseat`] is
-//! what keeps the painted one and the mounted tab in step, and it is `super::filter::sync_box`'s
-//! move one level up — the state belongs to the tab and the surface follows the mount.
+//! **Each tab holds its own page.** The seat ([`DetailState`]) is per tab, but `Radio.detail-*`,
+//! `HeroBackdrop` and `HeroChips` are one set, so only one page is painted and [`reseat`] keeps it
+//! in step with the mounted tab.
 //!
-//! **The refresh is additive.** What a kept row knows and what the directory knows overlap but do
-//! not agree: the table has no column for the popularity figures, the state or the directory's own
-//! last check, and the four `local_*` columns are the user's answers to what the directory left
-//! blank. So [`refresh_from_directory`] fills the first set and touches nothing else — letting it
-//! rewrite the rest would undo an override from a fetch nobody asked for.
+//! **The refresh is additive**: [`refresh_from_directory`] fills only what the table has no column
+//! for (votes, state, last check), so it can't undo a `local_*` override.
 
 use std::sync::Arc;
 
@@ -36,17 +29,11 @@ use melodia_ui::{AppWindow, NavEnterFrom, Radio, RadioStationRow};
 use super::tabs::{RadioTab, mounted_tab, section_is_up};
 use super::{RadioUi, browse, kept, rows};
 
-/// What identifies a station across the fetch that opens its page.
+/// What identifies a station across the fetch that opens its page: a browsed station has no `id`
+/// and a hand-typed one has no `uuid`, so it takes both.
 ///
-/// Both halves, because neither is enough on its own: a browsed station has no `id` and a
-/// hand-typed one has no `uuid`. `id == 0` is the split every other station call site already
-/// spells, and it decides which cache answers.
-///
-/// **The two id-only ways in name kept stations, and a kept station resolves by id.** The boot
-/// restore and the Mouse-4/5 replay have nothing else to build a ref from. A browsed open is the
-/// other way round: the uuid is the only handle its cache has. Either way [`open_station_with`]
-/// completes the ref off whatever resolved, above every reader of the uuid: the vote pill,
-/// [`refresh_from_directory`], and the seat the two of them are found by.
+/// The boot restore and the Mouse-4/5 replay arrive with the id alone; [`open_station_with`]
+/// completes the uuid off whatever resolved, ahead of every reader of it.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct StationRef {
     pub id: i64,
@@ -65,42 +52,32 @@ impl StationRef {
     }
 }
 
-/// A station page, and everything repainting it needs without asking anything again.
-///
-/// It holds the resolved [`StationSource`] rather than re-reading it, because a tab move repaints
-/// from here and the cache it came out of can be refilled underneath.
+/// A station page, and everything repainting it needs. Holds the resolved source because a tab
+/// move repaints from here while the cache it came from can be refilled underneath.
 #[derive(Clone)]
 struct OpenStation {
     station: StationRef,
     source: StationSource,
     facts: StationFacts,
-    /// The directory's own last reachability verdict. `None` is "nobody has said", which for a
-    /// station it no longer lists is forever, and only a real verdict is worth printing.
+    /// The directory's last reachability verdict; `None` is "nobody has said".
     check: Option<bool>,
     votes: i32,
     votable: bool,
-    /// The decoded hero, held so a tab move repaints in its own tick rather than a decode later.
-    /// Refcounted clones of what `DetailArtwork` already holds, so a seat costs a
-    /// `(cover, blur)` pair of its own only once the tier has evicted it.
+    /// The decoded hero, so a tab move repaints in its own tick. Refcounted clones of what
+    /// `DetailArtwork` holds, so a seat costs a pair of its own only once the tier evicts it.
     artwork: DetailPair,
 }
 
-/// One station page per tab, held beside the three tab caches.
+/// One station page per tab, a tab move not evicting another tab's page. Named fields rather than
+/// an array, so no Rust file restates the Slint `tab-*` indices.
 ///
-/// **A seat per tab, `kept::cache`'s shape**: a station opens from all three and a tab move must
-/// not evict what another tab is holding. Named fields rather than an array, `super::tabs` being
-/// deliberate about no Rust file restating the Slint `tab-*` indices.
-///
-/// No needle: the band's box is hidden while a station page is open, a station having no songs of
-/// its own to filter, so the page is the one surface here that is never filtered.
+/// No needle: the band's box is hidden while a page is open, a station having no songs to filter.
 #[derive(Default)]
 pub struct DetailState {
     browse: Option<OpenStation>,
     favorites: Option<OpenStation>,
     recent: Option<OpenStation>,
-    /// What `views.json` currently names, so a tab move that changes nothing writes nothing.
-    /// Seeded from the file by [`seed_detail_from_settings`], **before** its own liveness filter:
-    /// a persisted id whose row has since gone is exactly what the next write has to clear.
+    /// What `views.json` names, so a tab move that changes nothing writes nothing.
     persisted: Option<i64>,
 }
 
@@ -121,25 +98,19 @@ impl DetailState {
         }
     }
 
-    /// Whether any tab is holding a page, which is what "the page has a hero to hand back" means
-    /// once the mounted one has been dealt with.
     fn any_seated(&self) -> bool {
         RadioTab::ALL.into_iter().any(|tab| self.seat(tab).is_some())
     }
 }
 
-/// `Radio.detail-votes` before the directory has answered — which for a station it no longer
-/// lists is forever. `0` is a real number of votes and prints as one.
+/// `Radio.detail-votes` before the directory has answered; `0` is a real count.
 const VOTES_UNKNOWN: i32 = -1;
 
 /// `Radio.detail-tab` with no station page on the mounted tab.
 pub const NO_SEAT: i32 = -1;
 
-/// The station a page was opened for, from whichever side had it.
-///
-/// Two types rather than one because they know different things, which is [`DirectoryStation`]'s
-/// own argument: the table's id, logo and play stats mean nothing to the directory, and the
-/// popularity figures have no column here.
+/// The station a page was opened for, from whichever side had it: two types because they know
+/// different things, which [`DirectoryStation`] argues.
 #[derive(Clone)]
 enum StationSource {
     Kept(RadioStation),
@@ -148,8 +119,8 @@ enum StationSource {
 }
 
 impl StationSource {
-    /// The directory's own id, empty for a station the user typed in. That emptiness is the right
-    /// answer rather than a gap: there is no directory entry to vote on or to refresh against.
+    /// The directory's own id, empty for a hand-typed station, which has no entry to vote on or
+    /// refresh against.
     fn uuid(&self) -> &str {
         match self {
             Self::Kept(station) => station.station_uuid.as_deref().unwrap_or_default(),
@@ -171,12 +142,9 @@ impl StationSource {
         }
     }
 
-    /// What the band's chip strip states — where the station is and what it plays, and nothing
-    /// the band or the body already says. The codec, bitrate and vote count are rows on the page
-    /// instead, and the country is the band's own subtitle.
-    ///
-    /// A kept station has no `state`: only the directory carries it, and
-    /// [`refresh_from_directory`] is what fills it in.
+    /// What the band's chip strip states: where the station is and what it plays. Codec, bitrate
+    /// and votes are rows on the page and the country is the band's subtitle. A kept station has
+    /// no `state` until [`refresh_from_directory`] fills it.
     fn facts(&self) -> StationFacts {
         match self {
             Self::Kept(station) => StationFacts {
@@ -192,8 +160,7 @@ impl StationSource {
         }
     }
 
-    /// The directory's vote count where the page was opened from a directory answer, so the row
-    /// is right on the first frame rather than after the refresh lands.
+    /// The vote count a directory answer already carries, so the row is right on the first frame.
     fn votes(&self) -> i32 {
         match self {
             Self::Kept(_) => VOTES_UNKNOWN,
@@ -206,11 +173,8 @@ impl StationSource {
         match self {
             Self::Kept(station) => rows::to_slint_kept_station_row(station),
             Self::Browsed(station, logo) => {
-                // The logo is the one the page was opened with rather than a fresh resolve: a
-                // seated page keeps drawing what it was seated with.
-                //
-                // The star shadow is read out before the answers are taken, so the two are never
-                // held at once: `browse::apply` nests them the other way round.
+                // The logo the page was seated with, not a fresh resolve. The star shadow is read
+                // before the answers are locked, `browse::apply` nesting them the other way round.
                 let is_favorite = radio_ui.starred.lock().contains(&station.station_uuid);
                 let kept = radio_ui.kept_answers.lock();
                 let local = rows::LocalAnswers {
@@ -224,7 +188,6 @@ impl StationSource {
     }
 }
 
-/// Open a station's page.
 pub async fn open_station(
     state: &AppState,
     radio_ui: &Arc<RadioUi>,
@@ -235,12 +198,10 @@ pub async fn open_station(
     open_station_with(state, radio_ui, weak, station, enter_from, |_ui| {}).await
 }
 
-/// Open a station's page, running `on_applied` in the **same** UI-thread closure that raises
-/// `detail-open`.
-///
-/// The hook is what a Mouse-4/5 replay landing on a station page uses: the body router is a pure
-/// function of `(tab-idx, detail-open)`, so a nav written up front mounts the destination's *grid*
-/// for the length of this fetch. Handed in here, both land in one tick.
+/// Opens a station's page, running `on_applied` in the **same** UI-thread closure that raises
+/// `detail-open`. A Mouse-4/5 replay moves the tab there: the body router is a pure function of
+/// `(tab-idx, detail-open)`, so a nav written up front mounts the destination's grid for the
+/// length of the fetch.
 pub async fn open_station_with<F>(
     state: &AppState,
     radio_ui: &Arc<RadioUi>,
@@ -253,9 +214,8 @@ where
     F: FnOnce(&AppWindow) + Send + 'static,
 {
     let source = resolve(state, radio_ui, &station).await?;
-    // Completed off whatever resolved: two of the three ways in know only the id, and an empty
-    // uuid here silently costs the vote pill, the directory refresh behind it, and the seat
-    // equality a later vote is found by.
+    // Two of the three ways in know only the id; an empty uuid would cost the vote pill, the
+    // refresh and the seat equality a vote is found by.
     let station = StationRef { id: station.id, uuid: source.uuid().to_owned() };
     let facts = source.facts();
     let votes = source.votes();
@@ -269,8 +229,7 @@ where
         station: station.clone(),
         source,
         facts,
-        // A refresh has not answered yet, and a stale verdict under a new station is worse than
-        // none.
+        // A stale verdict under a new station is worse than none.
         check: None,
         votes,
         votable,
@@ -281,9 +240,8 @@ where
         let g = ui.global::<Radio>();
         crate::ui::nav_transition::mark(&ui, enter_from);
         on_applied(&ui);
-        // **After the hook**, which is what moves the tab on a history replay: the seat this
-        // lands in, and the section shadow `paint_seat` reads, both answer for the tab being
-        // left if anything here runs ahead of it.
+        // After the hook, which moves the tab on a history replay; read before it, the seat
+        // and `paint_seat`'s section shadow answer for the tab being left.
         let tab = mounted_tab(&g);
         paint_seat(&ui, &g, &radio_ui, &seated, true);
         *radio_ui.detail.lock().seat_mut(tab) = Some(seated);
@@ -292,19 +250,16 @@ where
         // **The seat property last** — everything above is what it gates.
         g.set_detail_tab(g.get_tab_idx());
 
-        // Named for the next launch here rather than at the click, so every way in gets it: the
-        // Mouse-4/5 replay and the boot restore never touch that callback. It is also the only
-        // point at which the tab the station landed on is known.
+        // Here rather than at the click, so the replay and the boot restore persist too, and
+        // because only here is the landing tab known.
         persist_seat(&landed_state, &ui, &radio_ui);
         crate::ui::nav_history::record_current(&ui);
-        // Last: the box has just gone away, so whatever the user typed on the tab underneath is
-        // no longer in front of them, and a re-open with the same station fires no mirror.
+        // Last: the box has just hidden, and a re-open of the same station fires no mirror.
         g.invoke_detail_scope_changed();
     });
 
-    // **Spawned, not awaited.** The page is painted; this only adds chips to it, and a directory
-    // that is merely slow would otherwise hold the open's caller for a whole request timeout —
-    // the boot restore's, which is what lowers `Radio.restoring`.
+    // Spawned, not awaited: it only adds chips, and a slow directory would otherwise hold the
+    // boot restore, and `Radio.restoring` with it, for a whole request timeout.
     let (refresh_state, refresh_ui) = (state.clone(), radio_ui.clone());
     state.runtime.spawn(async move {
         refresh_from_directory(&refresh_state, &refresh_ui, &weak, &station).await;
@@ -312,15 +267,11 @@ where
     Ok(())
 }
 
-/// Write a seat into the properties the station page and the band paint from.
+/// Writes a seat into the properties the page and the band paint from: the one writer for an
+/// open, a tab hand-off and a re-enter's re-decode, so the page can't describe one station while
+/// the hero paints another. `animate` is false only for the re-decode.
 ///
-/// The one writer for all three arrivals — a fresh open, a tab hand-off and a section re-enter's
-/// re-decode — so the page can never describe one station while the hero paints another's.
-/// `animate` is the caller answering "is this a hand-off between stations": `true` for an open
-/// and a tab move, `false` for a re-decode of what is already on screen.
-///
-/// UI thread only, and it reads `section_is_up` live, so any navigation the caller owes has to
-/// have landed first.
+/// Reads `section_is_up` live, so the caller's navigation must have landed first.
 fn paint_seat(
     ui: &AppWindow,
     g: &Radio<'_>,
@@ -328,8 +279,7 @@ fn paint_seat(
     open: &OpenStation,
     animate: bool,
 ) {
-    // The Slint row is built here rather than carried across an await: it holds `SharedString`s,
-    // and this is also the only side that can read the star shadow.
+    // Built here, not carried across an await: it holds `SharedString`s and reads the star shadow.
     g.set_detail_station(open.source.to_row(radio_ui));
     g.set_detail_stream_url(open.source.stream_url().into());
     g.set_detail_votable(open.votable);
@@ -343,18 +293,12 @@ fn paint_seat(
     apply_detail_artwork(ui, g, open.artwork.clone(), animate, on_screen);
 }
 
-/// Point the painted station page at whatever `tab` was left holding, or give the seat up where
-/// that tab holds nothing.
+/// Points the painted station page at whatever `tab` holds, or gives the seat up.
 ///
-/// **Synchronous, and on the click's own tick.** `Radio.tab-idx` has already moved by the time
-/// this runs, so anything deferred would let the view's own `changed` trackers read a
-/// `detail-open` that is briefly neither tab's answer.
-///
-/// With no seat it writes [`NO_SEAT`] and **touches nothing else**: the band paints the departing
-/// station all the way through its collapse, which is the same reason a close leaves the facts
-/// alone and `hero-collapsed` is what hands the images back.
-///
-/// UI thread only.
+/// Synchronous, on the click's own tick: `Radio.tab-idx` has already moved, so a deferral would
+/// let the view's `changed` trackers read a `detail-open` that is neither tab's answer. With no
+/// seat it writes [`NO_SEAT`] alone, so the band paints the departing station through its
+/// collapse and `hero-collapsed` hands the images back.
 pub fn reseat(ui: &AppWindow, radio_ui: &RadioUi, tab: RadioTab) {
     let g = ui.global::<Radio>();
     let Some(open) = radio_ui.detail.lock().seat(tab).cloned() else {
@@ -366,11 +310,8 @@ pub fn reseat(ui: &AppWindow, radio_ui: &RadioUi, tab: RadioTab) {
     g.set_detail_tab(g.get_tab_idx());
 }
 
-/// The station behind a [`StationRef`], from whichever cache holds it.
-///
-/// The caches come first because they carry what the database does not: the logo this session
-/// found on a station's own site, and the directory answer a browsed station has no row for. The
-/// database is the fallback for the one path with no cache at all, the boot restore.
+/// The station behind a [`StationRef`]. The caches come first, holding what the database can't
+/// (a session-found logo, a browsed answer); the database answers the boot restore.
 async fn resolve(
     state: &AppState,
     radio_ui: &Arc<RadioUi>,
@@ -387,21 +328,17 @@ async fn resolve(
         .ok_or_else(|| AppError::not_found_msg("Station is no longer in the browse results"))
 }
 
-/// A kept station from either local tab's cache — the row lives in both when it is starred *and*
-/// has been played, and in only one otherwise, so both are asked.
+/// A kept station from either local tab's cache, a row being in one or both.
 fn kept_from_cache(radio_ui: &RadioUi, id: i64) -> Option<RadioStation> {
     kept::resolve(radio_ui, RadioTab::Favorites, id)
         .or_else(|| kept::resolve(radio_ui, RadioTab::Recent, id))
 }
 
-/// Ask the directory what it currently says about the open station, and fold in the facts no
-/// local row can carry.
+/// Asks the directory about the open station and folds in the facts no local row carries.
 ///
-/// Quiet on every failure, including the switch being off: this is a refinement of a page that is
-/// already drawn, so an unreachable directory means fewer chips rather than an error to report.
-///
-/// The answer goes into whichever tab's seat holds that station, and reaches the properties only
-/// where that seat is the mounted one — a page waiting on another tab still comes back with it.
+/// Quiet on every failure, the switch included: the page is already drawn, so a miss is fewer
+/// chips rather than an error. The answer lands in whichever seat holds the station and reaches
+/// the properties only where that seat is mounted.
 pub(super) async fn refresh_from_directory(
     state: &AppState,
     radio_ui: &Arc<RadioUi>,
@@ -426,9 +363,7 @@ pub(super) async fn refresh_from_directory(
         let votes = clamp_i64_to_i32(found.votes);
         let Some((seated, facts)) = ({
             let mut detail = radio_ui.detail.lock();
-            // The user closed the page while this was in flight, or opened another station over
-            // it. Every tab is asked: the open that started this may not be the mounted one any
-            // more.
+            // The page may have closed or moved tabs while this was in flight.
             RadioTab::ALL
                 .into_iter()
                 .find(|tab| detail.seat(*tab).is_some_and(|open| open.station == station))
@@ -454,29 +389,24 @@ pub(super) async fn refresh_from_directory(
     });
 }
 
-/// Drop the Rust-side mirror of the page the mounted tab was showing. The Slint half is the
-/// closing callback's, and the hero's images are `hero-collapsed`'s.
-///
-/// **The mounted tab's alone**: a close is the back arrow on one page, and the other tabs' pages
-/// are not the user's to lose to it.
+/// Drops the mounted tab's page from the Rust mirror; the other tabs' pages aren't the back
+/// arrow's to lose. The Slint half is the closing callback's, the hero's images `hero-collapsed`'s.
 pub fn close_detail(ui: &AppWindow, radio_ui: &RadioUi) {
     let tab = mounted_tab(&ui.global::<Radio>());
     radio_ui.detail.lock().seat_mut(tab).take();
 }
 
-/// Give up every seat. The Radio switch going off is the only caller: the page itself is being
-/// taken away, so there is nothing left for the two unmounted tabs to come back to.
+/// Gives up every seat, for the Radio switch going off, which takes the page away.
 pub fn forget_all_seats(radio_ui: &RadioUi) {
     *radio_ui.detail.lock() = DetailState::default();
 }
 
-/// Whether any tab is holding a page, for the same caller.
 pub fn any_seated(radio_ui: &RadioUi) -> bool {
     radio_ui.detail.lock().any_seated()
 }
 
-/// Hand every seat's decoded hero back, keeping the seats themselves. The section leave's, beside
-/// the tier clear the images came out of; [`rewarm_hero`] is what the enter rebuilds them with.
+/// Hands every seat's decoded hero back on the section leave, keeping the seats;
+/// [`rewarm_hero`] rebuilds them on the enter.
 pub fn release_seated_artwork(radio_ui: &RadioUi) {
     let mut detail = radio_ui.detail.lock();
     for tab in RadioTab::ALL {
@@ -486,20 +416,12 @@ pub fn release_seated_artwork(radio_ui: &RadioUi) {
     }
 }
 
-/// Name the mounted tab's station in `views.json`, or clear the key where that tab names none.
+/// Names the mounted tab's station in `views.json`, or clears the key where it names none.
 ///
-/// **Only a station with a database row can be named** — a browsed one is a directory answer with
-/// a shelf life, and `id == 0` is what says so. Called on an open, a close and every tab move,
-/// because with a seat per tab "the last station opened" and "the station the restored tab is
-/// showing" stopped being the same answer, and only the second is what a boot can act on.
-///
-/// The shadow beside it is what keeps a tab bounce off the disk: the value changes on an open and
-/// a close, and on a tab move only where the two tabs disagree. What survives that holds
-/// `RadioUi::persist_writer` for the whole round trip, and reloads the shadow under it so a
-/// superseded write drops its own — the ordering the pool does not give, and which the tab index
-/// written beside this one takes from `IndexPersist`.
-///
-/// UI thread only.
+/// Only a kept station can be named, a browsed one being a directory answer with a shelf life.
+/// Called on an open, a close and every tab move, the station the restored tab shows being what a
+/// boot can act on. The shadow keeps a tab bounce off the disk, and holding `persist_writer` with
+/// the shadow reloaded under it drops a superseded write, the ordering the pool doesn't give.
 pub fn persist_seat(state: &AppState, ui: &AppWindow, radio_ui: &Arc<RadioUi>) {
     let tab = mounted_tab(&ui.global::<Radio>());
     let named = {
@@ -528,10 +450,8 @@ pub fn persist_seat(state: &AppState, ui: &AppWindow, radio_ui: &Arc<RadioUi>) {
     });
 }
 
-/// Every tab holding a page, and which station each is about.
-///
-/// Taken as a snapshot rather than walked under the lock: both callers reach a cache per seat and
-/// `restamp` reaches the star shadow besides, and neither is ours to order against `detail`.
+/// Every seated tab and its station, as a snapshot: both callers lock caches per seat, which
+/// aren't ours to order against `detail`.
 fn seated_stations(radio_ui: &RadioUi) -> Vec<(RadioTab, StationRef)> {
     let detail = radio_ui.detail.lock();
     RadioTab::ALL
@@ -540,21 +460,12 @@ fn seated_stations(radio_ui: &RadioUi) -> Vec<(RadioTab, StationRef)> {
         .collect()
 }
 
-/// Re-read every seated station from whichever cache owns it and rewrite the row the page paints.
+/// Re-reads every seated station from its cache and rewrites the row the page paints, at the tail
+/// of `browse::apply` and `kept::apply`, so the page and the grid can't disagree.
 ///
-/// Called at the tail of the two single write paths, `browse::apply` and `kept::apply`, so the
-/// page and the grid behind it cannot disagree about a station they both draw.
-///
-/// **A miss is left alone**, deliberately: these run at boot and on a column change too, when the
-/// cache the page's station lives in may simply not have been filled yet. Whether the station is
-/// *gone* is [`close_if_gone`]'s question, and only one caller is in a position to ask it.
-///
-/// **Every seat, not just the mounted one**, because a tab move repaints from the seat's own
-/// source: left unstamped, a page waiting on another tab comes back describing the station as it
-/// was when it was opened, and a star flipped in the meantime is invisible until it is reopened.
-/// Only the mounted tab's row reaches Slint.
-///
-/// UI thread only.
+/// A miss is left alone: at boot or on a column change the cache may not be filled yet, and
+/// whether a station is gone is [`close_if_gone`]'s question. Every seat is stamped, a tab move
+/// repainting from the seat's own source, but only the mounted row reaches Slint.
 pub fn restamp(ui: &AppWindow, radio_ui: &RadioUi) {
     let g = ui.global::<Radio>();
     let mounted = mounted_tab(&g);
@@ -563,8 +474,7 @@ pub fn restamp(ui: &AppWindow, radio_ui: &RadioUi) {
         let Some(source) = from_cache(radio_ui, &station) else {
             continue;
         };
-        // Built before the seat takes the source: `to_row` reaches the star shadow, and the two
-        // are not ours to order.
+        // Before the seat takes the source: `to_row` locks the star shadow.
         let row = (tab == mounted).then(|| source.to_row(radio_ui));
         if let Some(open) = radio_ui.detail.lock().seat_mut(tab).as_mut() {
             open.source = source;
@@ -575,26 +485,16 @@ pub fn restamp(ui: &AppWindow, radio_ui: &RadioUi) {
     }
 }
 
-/// Close a kept station's page once its row is gone.
+/// Closes a kept station's page on any tab once its row is gone.
 ///
-/// **Called from the one place a miss is authoritative** — `kept::refresh`'s landing, which has
-/// just rebuilt both caches from the database. Elsewhere an absent station is an unfilled cache.
-///
-/// It is not defensive: un-starring a station with no play behind it takes `delete_if_unlisted`
-/// with it, so the row a page is about really can vanish under it. Left open, the page keeps
-/// offering Play and Remove against a dead id, each failing to a log line with nothing on screen
-/// to say so.
-///
-/// Every tab is asked, not just the mounted one: a page waiting on another tab is exactly the one
-/// nothing else would ever notice had gone.
-///
-/// UI thread only.
+/// Called only from `kept::refresh`'s landing, which has just rebuilt both caches, so a miss there
+/// is authoritative. Un-starring an unplayed station deletes its row (`delete_if_unlisted`), and a
+/// page left open would offer Play and Remove against a dead id.
 pub fn close_if_gone(ui: &AppWindow, radio_ui: &RadioUi) {
     let g = ui.global::<Radio>();
     let mounted = mounted_tab(&g);
     for (tab, station) in seated_stations(radio_ui) {
-        // A browsed page is backed by the directory answer, not by these caches, and outlives
-        // them.
+        // A browsed page is backed by the directory answer, not these caches.
         if !station.is_kept() || kept_from_cache(radio_ui, station.id).is_some() {
             continue;
         }
@@ -615,12 +515,8 @@ fn from_cache(radio_ui: &RadioUi, station: &StationRef) -> Option<StationSource>
         .map(|(found, logo)| StationSource::Browsed(found, logo))
 }
 
-/// Re-answer whether the mounted tab's page is the station whose titles `Radio.history-rows` holds.
-///
-/// The rows themselves belong to whatever is playing and are written by `history::apply`; this is
-/// the only thing a seat change moves, which is why a tab hand-off no longer rebuilds a model.
-///
-/// UI thread only.
+/// Re-answers whether the mounted tab's page is the station `Radio.history-rows` describes; the
+/// rows are `history::apply`'s, so a seat change moves only this flag.
 pub fn sync_history_seat(ui: &AppWindow, radio_ui: &RadioUi) {
     let g = ui.global::<Radio>();
     let seated_url = radio_ui
@@ -632,21 +528,10 @@ pub fn sync_history_seat(ui: &AppWindow, radio_ui: &RadioUi) {
     g.set_detail_station_is_playing(is_playing);
 }
 
-/// Re-decode the heroes for whatever tabs were left holding a page when the section was left.
+/// Re-decodes every seated tab's hero on a section enter, the leave having handed the images back.
 ///
-/// The leave hands the hero's images and colours back and the enter rebuilds them, which is the
-/// one thing this page's otherwise-narrow leave has to re-fetch. Everything else — the three
-/// grids, the browse page, the logo memo — survives.
-///
-/// **Every seat, not only the mounted one.** A tab move repaints from the seat's own held pair,
-/// so a seat left cold would come back a decode late and flash its monogram on the way. Bounded
-/// at three.
-///
-/// **The mounted tab decodes first**, the rest being work for a tab move that has not happened
-/// yet: queued in declaration order the banner on screen waits behind up to two heroes nobody is
-/// looking at, and on a cold re-enter those are real decodes rather than tier hits.
-///
-/// UI thread only, for the mounted-tab read.
+/// Every seat, since a tab move repaints from the seat's held pair and a cold one would flash its
+/// monogram; the mounted tab first, the rest waiting on a tab move that hasn't happened.
 pub fn rewarm_hero(ui: &AppWindow, state: &AppState, radio_ui: &Arc<RadioUi>) {
     let weak = ui.as_weak();
     let mounted = mounted_tab(&ui.global::<Radio>());
@@ -679,44 +564,36 @@ pub fn rewarm_hero(ui: &AppWindow, state: &AppState, radio_ui: &Arc<RadioUi>) {
                 if mounted_tab(&g) != tab {
                     return;
                 }
-                // Cloned out rather than painted under the lock: `paint_seat` reaches the star
-                // shadow, and the two are not ours to order.
+                // Cloned out: `paint_seat` locks the star shadow.
                 let Some(open) = radio_ui.detail.lock().seat(tab).cloned() else {
                     return;
                 };
-                // `animate: false` — the banner was already on screen when the page was left, so
-                // this is a re-decode of what is painted rather than a hand-off between stations.
+                // A re-decode of what was already painted, not a hand-off.
                 paint_seat(&ui, &g, &radio_ui, &open, false);
             });
         }
     });
 }
 
-/// Reopen whatever station `views.json` was left holding.
-///
-/// **Only a station with a row can be named**, which is the whole of what `id != 0` buys: a
-/// browsed station is a directory answer with a shelf life, so a restart lands on the tab root
-/// rather than on a page rebuilt from a cache that no longer exists.
+/// Reopens the station `views.json` was left naming; only a kept one can be, so a browsed page
+/// lands on the tab root after a restart.
 pub fn seed_detail_from_settings(ui: &AppWindow, state: &AppState, radio_ui: &Arc<RadioUi>) {
     let named = library::settings::get_view_state(&state.paths)
         .ok()
         .and_then(|vs| vs.last_detail_ids.get(view_id::RADIO_DETAIL).copied());
-    // Seeded **before** the liveness filter, so the shadow says what the file says: an id whose
-    // row has since gone is exactly what the next [`persist_seat`] has to be allowed to clear.
+    // Before the liveness filter: a dead id is exactly what the next `persist_seat` must clear.
     radio_ui.detail.lock().persisted = named;
 
     let Some(id) = named.filter(|id| rows::station_has_row(*id)) else {
         return;
     };
 
-    // Synchronously, ahead of `app.show()`: the tab bodies gate on it, so without it a restore
-    // paints a grid for the length of the fetch and swaps.
+    // Ahead of `app.show()`: the tab bodies gate on it, else a restore paints a grid first.
     ui.global::<Radio>().set_restoring(true);
 
     let (state, radio_ui, weak) = (state.clone(), radio_ui.clone(), ui.as_weak());
     state.runtime.clone().spawn(async move {
-        // Id-only: `views.json` names nothing else, and `open_station_with` fills the uuid in off
-        // the row it resolves.
+        // Id-only: `open_station_with` completes the uuid off the row it resolves.
         let station = StationRef { id, uuid: String::new() };
         if let Err(e) =
             open_station(&state, &radio_ui, weak.clone(), station, NavEnterFrom::Above).await
@@ -729,10 +606,8 @@ pub fn seed_detail_from_settings(ui: &AppWindow, state: &AppState, radio_ui: &Ar
     });
 }
 
-/// The decoded logo's smallest side, which is what the hero compares its tile against.
-///
-/// Zero where nothing decoded, and the hero reads that as "draw the monogram" rather than as a
-/// zero-sized image.
+/// The decoded logo's smallest side, which the hero compares its tile against; zero, where
+/// nothing decoded, draws the monogram.
 fn logo_size(pair: &DetailPair) -> i32 {
     pair.cover
         .as_ref()

@@ -1,26 +1,9 @@
-//! Settings API: read / write the on-disk settings file plus per-section
-//! mutators. Split into focused sub-modules by domain:
+//! The settings API, one submodule per section. A setter only commits, its UI callback having
+//! applied the value first, any `AppState` shadow included; one that does more says so.
 //!
-//! - [`appearance`]: theme / variant / accent, dynamic colour style,
-//!   match-unfocused, corner radius.
-//! - [`playback`]: gapless, play-button animation, resume on startup, following the file's rate.
-//! - [`crossfade`]: crossfade on/off, duration, manual-change + same-album
-//!   exceptions, fade-on-pause.
-//! - [`view`]: locale, overflow buttons, and per-view UI state — column
-//!   visibility / widths, sort, browse path, nav index, detail ids,
-//!   section-collapse toggles — plus the `snap_to_preset` helper.
-//! - [`radio`]: the Radio section's master switch and its two sub-toggles.
-//! - [`folders`]: library folder CRUD, watcher toggle, and `scan_folder*`.
-//! - [`diagnostics`]: the Verbose Logging switch.
-//! - [`support`]: the launch counter behind the one-time Ko-fi prompt.
-//! - [`onboarding`]: the revision the welcome card has been shown at.
-//!
-//! `settings.json` setters funnel through
-//! [`crate::services::settings::mutate_settings`]; the per-view-state
-//! setters in [`view`] funnel through
-//! [`crate::services::view_state::mutate_view_state`] (the separate
-//! `views.json` file). Each file has its own mutate lock so concurrent
-//! writes to it serialize cleanly.
+//! `settings.json` writes funnel through [`crate::services::settings::mutate_settings`] and
+//! `views.json` writes through [`crate::services::view_state::mutate_view_state`], each with its
+//! own lock, so a burst of clicks can't race the read-mutate-write window.
 
 pub mod appearance;
 pub mod crossfade;
@@ -94,9 +77,7 @@ pub fn get_settings(paths: &Paths) -> Result<SettingsData, AppError> {
     services::settings::read_settings(paths)
 }
 
-/// Read the per-view UI state from `views.json`. Sibling of
-/// [`get_settings`]; a missing / unreadable file falls back to
-/// [`ViewStateData::default`].
+/// A missing or unreadable `views.json` falls back to [`ViewStateData::default`].
 pub fn get_view_state(paths: &Paths) -> Result<ViewStateData, AppError> {
     services::view_state::read_view_state(paths)
 }

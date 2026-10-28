@@ -11,30 +11,19 @@ use melodia_app::library::scan::OnStop;
 use melodia_app::state::AppState;
 use melodia_ui::{AppWindow, LibrarySettings};
 
-/// Wire the `LibrarySettings.*` callbacks. Pairs with
-/// `ui::settings::library_settings::install`, which handles the push side (folder list
-/// hydration + scan-progress subscriber). Call once after `wire_all`.
-///
-/// Add-folder runs the native `rfd` picker on the UI thread (via
-/// `slint::spawn_local`) and then drives the DB work through `Compat` so the
-/// async sqlx calls have a tokio reactor available. Validation errors are
-/// surfaced via the modal `Dialog` overlay.
+/// Wire the `LibrarySettings.*` callbacks, the pull half of
+/// `ui::settings::library_settings::install`. Call once after `wire_all`.
 pub fn wire_library_settings(ui: &AppWindow, state: &AppState) {
     let g = ui.global::<LibrarySettings>();
     let weak = ui.as_weak();
 
-    // Add Folder: native picker → add_folder → kick off a scan on success;
-    // on validation/other error pop the Dialog overlay.
     {
         let s = state.clone();
         let weak = weak.clone();
         g.on_add_folder(move || {
             let s = s.clone();
             let weak = weak.clone();
-            // `spawn_local` runs on the UI thread (which on Linux is also
-            // the only thread the GTK/portal-backed rfd dialog can be
-            // safely invoked from). `Compat` provides a tokio reactor so
-            // the awaited sqlx calls work.
+            // The UI thread, the only one the portal-backed picker may run on on Linux.
             let _ = slint::spawn_local(Compat::new(async move {
                 let dialog = file_dialog::parented(&weak, "Select Music Folder");
                 let Some(handle) = dialog.pick_folder().await else {
@@ -46,11 +35,8 @@ pub fn wire_library_settings(ui: &AppWindow, state: &AppState) {
         });
     }
 
-    // Remove folder: the row's confirm dialog routes the accept here. The
-    // `library_changed` bump inside `remove_folder` drives both the
-    // folder-list subscriber and the Tracks view's request_refresh, so
-    // the row vanishes and the cascade-deleted tracks disappear without
-    // any explicit re-fetch here.
+    // No re-fetch here: `remove_folder`'s `library_changed` bump repaints the folder list and
+    // every view the cascade-deleted tracks sat in.
     {
         let s = state.clone();
         g.on_remove_folder(move |id| {
@@ -60,9 +46,8 @@ pub fn wire_library_settings(ui: &AppWindow, state: &AppState) {
         });
     }
 
-    // Rescan: the scan-progress channel drives the bar, and its return to
-    // idle refreshes the folder list so `last_scanned` updates. A rescan that
-    // changed nothing bumps no `library_changed`.
+    // The scan's return to idle refreshes `last_scanned`, a rescan that changed nothing bumping
+    // no `library_changed`.
     {
         let s = state.clone();
         g.on_rescan_folder(move |id| library::scan::start(&s, i64::from(id), OnStop::Keep));

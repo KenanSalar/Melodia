@@ -1,11 +1,5 @@
-//! [`TaskSpawner`] — the single primitive every background task in this module uses
-//! to register itself on the shared shutdown lifecycle.
-//!
-//! [`TaskSpawner::spawn`] is for fire-and-forget work with its own terminal condition
-//! (a `sleep` deadline, a channel close); [`TaskSpawner::spawn_cancellable`] for a
-//! `loop` / `select!` that has to exit on shutdown. Bundling the pair is what stops a
-//! new task reaching into `AppState` by hand and forgetting the cancel arm, which pins
-//! runtime shutdown indefinitely.
+//! [`TaskSpawner`]: bundling the tracker with the shutdown token is what stops a new task reaching
+//! into `AppState` by hand and forgetting the cancel arm, which pins runtime shutdown.
 
 use std::future::Future;
 
@@ -14,8 +8,7 @@ use tokio_util::task::TaskTracker;
 
 use crate::state::AppState;
 
-/// Bundled task lifecycle primitives. Cheap to clone — both fields are already
-/// `Arc`-backed underneath.
+/// Cheap to clone, both fields being `Arc`-backed.
 #[derive(Clone)]
 pub struct TaskSpawner {
     pub tracker: TaskTracker,
@@ -23,15 +16,12 @@ pub struct TaskSpawner {
 }
 
 impl TaskSpawner {
-    /// Build a spawner from the live `AppState` — the single place where tasks couple
-    /// to the global state.
     pub fn from_state(state: &AppState) -> Self {
         Self { tracker: state.task_tracker.clone(), shutdown: state.shutdown_token.clone() }
     }
 
-    /// Spawn a tracked task that runs to completion on its own. The shutdown token is
-    /// **not** wired automatically, so this is for a future with its own terminal
-    /// condition — a single `await`, a channel close — never for a `loop`.
+    /// For a future with its own end, a single `await` or a channel close, and never a `loop`: the
+    /// shutdown token isn't wired.
     pub fn spawn<F>(&self, fut: F)
     where
         F: Future<Output = ()> + Send + 'static,
@@ -39,8 +29,7 @@ impl TaskSpawner {
         self.tracker.spawn(fut);
     }
 
-    /// Spawn a tracked task handed a clone of the shutdown token, which it is expected
-    /// to `select!` on and exit when it fires. The canonical shape for loops.
+    /// Hands the task the shutdown token to `select!` on; the shape for loops.
     pub fn spawn_cancellable<F, Fut>(&self, f: F)
     where
         F: FnOnce(CancellationToken) -> Fut + Send + 'static,

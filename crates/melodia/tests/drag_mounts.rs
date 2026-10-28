@@ -2,8 +2,7 @@
 //!
 //! Each of these builds, survives a quick drag and is wrong: a `DropArea` eating a target's drops,
 //! a source that never hears its drag end, a touch gate a binding overrides, an index a rebuilt
-//! list never retires, a lift whose texture crops Arabic marks. `slint-pitfalls.md`'s in-window
-//! drag entry has the mechanisms.
+//! list never retires, a lift whose texture crops Arabic marks.
 
 use std::collections::{BTreeMap, BTreeSet};
 

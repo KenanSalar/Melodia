@@ -1,15 +1,11 @@
 //! Sheets the directory answered with, kept on disk so a replay costs no traffic.
 //!
-//! **Not the artwork store's shape, and the difference is what it does not need.** Nothing else in
-//! the tree names these files, so there is no reference set to sweep against and no grace window
-//! to get right: the filesystem is the whole index, and the only question retention asks is how
-//! old a file is.
+//! Nothing else names these files, so the filesystem is the whole index and retention asks only
+//! how old a file is.
 //!
-//! **The name hashes the track's path, not its contents.** The artwork store hashes contents on
-//! purpose, and this deliberately does not: a tag edit rewrites the file and moves its content
-//! hash, and a sheet keyed that way would be orphaned by the user correcting a typo in the title.
-//! The two schemes wear the same 16 hex characters and mean different things, which is why this
-//! says so.
+//! **The name hashes the track's path, not its contents**, though it wears the artwork store's 16
+//! hex characters: a tag edit moves the content hash, and a sheet keyed on it would be orphaned by
+//! the user fixing a typo in the title.
 
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -31,18 +27,13 @@ const INSTRUMENTAL_EXT: &str = "instrumental";
 /// A track nobody had a sheet for. Expires, unlike the other two.
 const ABSENT_EXT: &str = "none";
 
-/// How long "nobody has this" stands before it is worth asking again.
-///
-/// The directory is a volunteer corpus that grows, so a miss is a statement about today rather
-/// than about the recording. Long enough that a library on repeat is not re-asking, short enough
-/// that a sheet contributed last month is found this month.
+/// How long "nobody has this" stands. The directory grows, so a miss is about today rather than
+/// the recording: long enough that a library on repeat isn't re-asking, short enough that a sheet
+/// contributed last month is found.
 const MISS_STANDS_FOR: Duration = Duration::from_hours(30 * 24);
 
-/// What the store has for a track, or `None` where it has nothing usable.
-///
-/// **A file that will not read is a miss rather than an error**, and that is the honest semantics
-/// rather than a swallowed failure: this is a cache, every answer it gives is an optimisation, and
-/// the caller's next move for "unreadable" and for "absent" is the same one.
+/// What the store has for a track, or `None`. A file that won't read is a miss, the caller's next
+/// move being the same either way.
 pub(super) fn read(dir: &Path, track_path: &str) -> Option<LyricsOutcome> {
     let stem = key(track_path);
 
@@ -60,11 +51,8 @@ pub(super) fn read(dir: &Path, track_path: &str) -> Option<LyricsOutcome> {
     None
 }
 
-/// What came back, in the form the store keeps it.
-///
-/// The sheet crosses as **text** rather than as a parsed `Lyrics`: what goes on disk is what the
-/// directory sent, so re-reading it later cannot differ from reading it now, and a sheet written
-/// back through a serializer would quietly lose whatever this parser drops.
+/// What came back, as the store keeps it. A sheet crosses as the directory's text, so re-reading
+/// it later can't differ from reading it now.
 #[derive(Clone, Copy)]
 pub(super) enum Fetched<'a> {
     Sheet(&'a str),
@@ -84,25 +72,18 @@ pub(super) fn write(dir: &Path, track_path: &str, fetched: Fetched<'_>) -> Resul
     }
 }
 
-/// Whether a miss marker is young enough to still answer for.
 fn still_stands(marker: &Path) -> bool {
     let Ok(modified) = fs::metadata(marker).and_then(|meta| meta.modified()) else {
         return false;
     };
-    // A marker stamped in the future is a clock that moved, not a miss from tomorrow; treating it
-    // as expired costs one request and treating it as fresh could cost every request forever.
+    // A marker from the future is a clock that moved. Read as expired it costs one request; read
+    // as fresh it would answer until the clock caught up.
     modified.elapsed().is_ok_and(|age| age < MISS_STANDS_FOR)
 }
 
-/// Drop every answer the store holds for one track: the sheet and both markers.
-///
-/// **The one thing that makes a re-ask possible.** Every other answer here expires or is
-/// overwritten on its own schedule, so without this a track the directory answered wrongly — off
-/// tags since corrected — keeps that answer until the store outgrows its budget.
-///
-/// Every name is attempted whatever the ones before it did, and the first error is what comes
-/// back. Stopping at the sheet would leave the absent marker behind, and that marker is what
-/// answers for the month the refresh was asked for.
+/// Drop every answer the store holds for one track, which is what makes a re-ask possible. Every
+/// name is attempted, the first error coming back: stopping at the sheet would leave the absent
+/// marker answering for the month.
 pub(super) fn forget(dir: &Path, track_path: &str) -> Result<(), AppError> {
     let stem = key(track_path);
     let mut first_error = None;
@@ -116,10 +97,7 @@ pub(super) fn forget(dir: &Path, track_path: &str) -> Result<(), AppError> {
     first_error.map_or(Ok(()), Err)
 }
 
-/// The stored sheet's text, verbatim as the directory sent it.
-///
-/// The two markers have no text and are not answers to this question: a caller asking for a sheet
-/// to write somewhere has nothing to do with "nobody has one".
+/// The stored sheet's text, verbatim. The markers answer a different question.
 pub(super) fn read_text(dir: &Path, track_path: &str) -> Option<String> {
     fs::read_to_string(entry(dir, &key(track_path), SHEET_EXT))
         .ok()
@@ -134,20 +112,12 @@ fn key(track_path: &str) -> String {
     blake3::hash(track_path.as_bytes()).to_hex()[..HASH_HEX_LEN].to_owned()
 }
 
-/// Total bytes the store may hold before the oldest sheets are retired.
-///
-/// A sheet is a couple of kilobytes, so this is thousands of tracks: past that it is a cache of
-/// songs nobody has played in a long time, and the oldest are the ones least likely to be wanted.
-/// Only `.lrc` files count toward it, and only `.lrc` files are retired against it. A marker is
-/// empty, so evicting one frees nothing and costs the request it was written to save.
+/// Bytes of sheets the store may hold before the oldest are retired, thousands of tracks' worth.
+/// Markers neither count nor go: empty, evicting one frees nothing and costs the request it saved.
 const MAX_BYTES: u64 = 8 * 1024 * 1024;
 
-/// Retire what the store no longer needs: expired misses first, then the oldest sheets until it
-/// fits.
-///
-/// **Only names this module writes are touched**, which is the artwork sweep's rule and it applies
-/// here for the same reason: this directory is under the user's data root, and a sweep that
-/// deleted whatever it found would be a sweep that deleted whatever someone else put there.
+/// Retire expired misses, then the oldest sheets until the store fits. **Only names this module
+/// writes are touched**, the artwork sweep's rule.
 pub(super) fn prune(dir: &Path) -> Result<u32, AppError> {
     let mut sheets: Vec<(SystemTime, u64, PathBuf)> = Vec::new();
     let mut expired = 0;
@@ -165,10 +135,8 @@ pub(super) fn prune(dir: &Path) -> Result<u32, AppError> {
             expired += u32::from(expire_stale_marker(&path));
             continue;
         }
-        // **Sheets only, and the markers are not merely uninteresting here.** Both are empty, so
-        // one in this list would be retired for no bytes at all and the eviction would walk
-        // straight on to the next. Past the budget that wipes every instrumental in the store, a
-        // permanent answer traded for nothing.
+        // Sheets only: past the budget an empty instrumental marker in this list would go for no
+        // bytes, a permanent answer traded for nothing.
         if extension != SHEET_EXT {
             continue;
         }
@@ -180,19 +148,14 @@ pub(super) fn prune(dir: &Path) -> Result<u32, AppError> {
     Ok(expired + evict_oldest_over_budget(sheets, bytes))
 }
 
-/// Delete a miss marker whose retry window has closed, and say whether it went.
-///
-/// Deleting it *is* the retry: `read` already treats a stale marker as no answer, so this only
-/// stops the directory keeping one per track for good.
+/// Delete a miss marker whose window has closed, saying whether it went. `read` already ignores a
+/// stale one, so this only keeps the folder from holding one per track.
 fn expire_stale_marker(path: &Path) -> bool {
     !still_stands(path) && fs::remove_file(path).is_ok()
 }
 
-/// Delete sheets oldest-first until the store is back inside [`MAX_BYTES`], answering with how
-/// many went. A store already inside its budget is a no-op.
-///
-/// Oldest is least-recently-*written* rather than least-recently-read: nothing here is touched on
-/// a hit, so a write time is all there is.
+/// Delete sheets oldest-first until the store is inside [`MAX_BYTES`], answering how many went.
+/// Oldest by write time, nothing here being touched on a hit.
 fn evict_oldest_over_budget(mut sheets: Vec<(SystemTime, u64, PathBuf)>, mut bytes: u64) -> u32 {
     if bytes <= MAX_BYTES {
         return 0;

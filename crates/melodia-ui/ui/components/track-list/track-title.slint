@@ -2,24 +2,17 @@ import { Theme } from "../../theme.slint";
 import { MaterialIcon } from "../material-icon.slint";
 import { StarRating } from "../star-rating.slint";
 
-// A track row's title and the marks after it: the heart a favourite keeps up and the rating strip
-// a track list row reveals on hover, each switched by the host. A track list switches both per
-// view from its columns pill; the queue panel mounts this for the title alone, its favourite and
-// rating being the row menu's.
+// A track row's title with its marks, the heart and hover star strip, each switched by the host.
 //
-// The title's `horizontal-stretch: 1`, and this layout's in the host, are what make
-// `overflow: elide` fire at all: without them the Text takes its intrinsic width, the full string,
-// and never learns it should elide, which RTL scripts make visible by overflowing into the cell
-// before it. The host's cell clips whatever still escapes.
+// The stretch on the title and on this layout is what makes elide fire: without it the `Text`
+// takes the full string's width and RTL titles overflow into the cell before.
 export component TrackTitle inherits HorizontalLayout {
     in property <string> title;
     in property <brush> ink;
     in property <bool> favorite-shown;
     in property <int> rating;
-    // The row's hover, which mounts the strip. Mounted under the row's own `TouchArea`, so hovering
-    // a star keeps the row hovered and the strip up (`StarRating`'s header).
+    // Under the row's own `TouchArea`, so hovering a star keeps the strip up (`StarRating`).
     in property <bool> rating-shown;
-    // A disk-only Browse row's dimming, carried into the heart's brush.
     in property <float> fade: 1.0;
 
     callback rated(int /*new_rating*/);
@@ -31,11 +24,8 @@ export component TrackTitle inherits HorizontalLayout {
 
     Text {
         horizontal-stretch: 1;
-        // The leading U+200E forces the string's BiDi base direction to LTR. Without it a title
-        // starting in Arabic or Hebrew takes an RTL base and Slint's elide drops the `…` entirely,
-        // leaving a gap at the cell's left edge with no truncation marker. Arabic substrings still
-        // render RTL inline, only the base direction moving, so the indicator anchors right for
-        // every row whatever the script.
+        // The leading U+200E makes the base direction LTR. An Arabic or Hebrew title otherwise
+        // takes an RTL base and Slint's elide drops its `…`; the script itself still renders RTL.
         text: "‎" + root.title;
         color: root.ink;
         font-size: Theme.font-size-row;
@@ -48,8 +38,7 @@ export component TrackTitle inherits HorizontalLayout {
         filled: true;
         fade: root.fade;
     }
-    // Beside the title, which elides to make room, rather than swapped for something the way the
-    // duration is.
+    // Beside the title, which elides to make room.
     if root.rating-shown: StarRating {
         rating: root.rating;
         star-size: 16px;

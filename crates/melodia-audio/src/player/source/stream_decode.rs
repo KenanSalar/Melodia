@@ -1,14 +1,5 @@
-//! Turning a live mount's bytes into samples: opening it.
-//!
-//! What is this module's own is everything a mount has and a file does not — no length, no seek,
-//! no end of its own, and a shape that can change under a reconnect. The probe, the codec registry
-//! and the packet cursor are [`super::decode`]'s, shared with [`super::file_decode`], and the
-//! argument for decoding against Symphonia 0.6 is in that module's `//!`; this was the path that
-//! hit it first.
-//!
-//! [`super::prebuffer`]'s ring sits below all of it, and what reaches the deck is `f32` rather
-//! than a decoder. That is to keep the network off the audio callback thread, and it holds whether
-//! or not anything else in the tree decodes.
+//! Opening a live mount: no length, no seek, no end of its own, and a shape that can change under
+//! a reconnect. Everything else is [`super::decode`]'s, shared with [`super::file_decode`].
 
 use std::io::{Read, Seek, SeekFrom};
 
@@ -22,19 +13,14 @@ use melodia_core::error::AppError;
 use super::audio::{Sample, Shape, SourceFormat};
 use super::decode;
 
-/// The most one read hands the demuxer.
-///
-/// Symphonia's stream buffer asks for up to 32 KiB a refill and takes a short read as it comes,
-/// so this is how far reading runs ahead of decoding. An ICY title fires when reading reaches it,
-/// and the ring can only measure the delay *after* decoding, so everything read ahead of that
-/// lands early; at a common bitrate the uncapped refill is seconds of audio.
+/// How far reading may run ahead of decoding. An ICY title fires when reading reaches it while the
+/// ring measures delay only after decoding, so whatever is read ahead lands early, and Symphonia's
+/// uncapped 32 KiB refill is seconds of audio at a common bitrate.
 const MAX_READ_AHEAD: usize = 4 * 1024;
 
-/// A reader the demuxer may read but must never seek or measure.
-///
-/// Both answers are the shape of a live mount rather than a shortcoming: there is no end to seek
-/// to, and a stated length is what sends the probe hunting for trailing metadata that will never
-/// arrive. The `Seek` impl exists only because [`MediaSource`] requires it.
+/// Never seekable and of no length: a mount has no end to seek to, and a stated length sends the
+/// probe hunting for trailing metadata that never arrives. `Seek` only because [`MediaSource`]
+/// requires it.
 pub struct LiveSource<R>(pub R);
 
 impl<R: Read> Read for LiveSource<R> {
@@ -60,11 +46,8 @@ impl<R: Read + Seek + Send + Sync> MediaSource for LiveSource<R> {
     }
 }
 
-/// A live stream's demuxer and codec, handing out interleaved samples one at a time.
-///
-/// The iterator ends when the mount does, or when it stops being the shape the deck was told
-/// about, both of which the feed thread reads as "try reconnecting". A packet that fails to decode
-/// is skipped rather than ending it: on a mount joined mid-frame the first few routinely do.
+/// Ends when the mount does or stops being the shape the deck was told about, both of which the
+/// feed thread reads as "try reconnecting".
 pub struct StreamDecoder {
     format: Box<dyn FormatReader>,
     decoder: Box<dyn AudioDecoder>,
@@ -74,18 +57,13 @@ pub struct StreamDecoder {
 }
 
 impl StreamDecoder {
-    /// Probe `source`, build a decoder for its audio track, and decode enough of it to know the
-    /// shape of what follows.
     pub fn open(source: Box<dyn MediaSource>, mime: Option<&str>) -> Result<Self, AppError> {
-        // Passed for the same reason the content type is read at all, though 0.6 still resolves
-        // the format by scoring rather than by hint.
+        // Passed anyway, though 0.6 resolves the format by scoring rather than by hint.
         let mut hint = Hint::new();
         if let Some(mime) = mime {
             hint.mime_type(mime);
         }
 
-        // The length and timebase [`decode::open`] also answers are a file's; a mount states
-        // neither, so they come back empty and are dropped here.
         let opened =
             decode::open(source, &hint).map_err(|e| AppError::player("The station's stream", e))?;
 
@@ -98,22 +76,19 @@ impl StreamDecoder {
         })
     }
 
-    /// The shape a deck builds its converter from — pinned at the open, since a mount that
-    /// renegotiates one mid-stream ends instead.
+    /// Pinned at the open; a mount that renegotiates mid-stream ends instead.
     pub fn shape(&self) -> Shape {
         self.cursor.shape()
     }
 
-    /// What the codec decodes to, as of the open. A reconnect keeps the first answer, since the
-    /// deck plays one `PrebufferSource` across all of them.
+    /// As of the open. A reconnect keeps the first answer, the deck playing one `PrebufferSource`
+    /// across all of them.
     pub fn format(&self) -> SourceFormat {
         self.source_format
     }
 
-    /// What is actually inside the container, as against what the response's content type named.
-    ///
-    /// Asked of the decoder rather than stored, for [`super::opus::seek_pre_roll`]'s reason: it is
-    /// read once per open.
+    /// What is actually inside the container, as against what the content type named. Asked of the
+    /// decoder rather than stored, being read once per open.
     pub fn codec(&self) -> AudioCodecId {
         self.decoder.codec_params().codec
     }

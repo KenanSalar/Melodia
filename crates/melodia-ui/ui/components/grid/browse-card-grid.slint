@@ -4,66 +4,46 @@ import { EntityCard } from "entity-card.slint";
 import { CardContextMenu } from "card-context-menu.slint";
 import { CardFavoriteButton } from "card-favorite-button.slint";
 
-// Browse's card view: one virtualized grid over subfolders *and* files, folders first, in the same
-// order the list would draw them. Rust chunks the flat card list into rows of `columns`, so the
-// inner `ListView` virtualizes by row.
-//
-// **`EntityCardGrid`'s skeleton, kept deliberately in step with it** — the delegate's fixed height,
-// the gap-padded row, the lazy `covers-generation` cover binding and the host-mounted-scrollbar
-// contract are that component's and should move together with it. What can't be shared is the card:
-// a browse card carries three things no entity card has — a coverless tile's fallback glyph,
-// whether the row is a real library track, and a folder path to drill into — and putting those on
-// `EntityStripRow` would tax the four grids sharing it for a case none of them has.
+// Browse's card view over subfolders and files, in the list's order. `EntityCardGrid`'s skeleton,
+// to be kept in step with it; the card differs, carrying a folder path, a fallback glyph and
+// whether the row is a library track, which `EntityStripRow` would carry for nobody else.
 export component BrowseCardGrid inherits Rectangle {
     in property <[BrowseCardGridRow]> rows;
     in property <length> card-width: 180px;
     in property <length> card-height: 226px;
-    // The gap is baked into the slot height because a `ListView` lays its delegates back-to-back
-    // and has no `spacing`.
+    // The gap is in the slot height, a `ListView` having no `spacing`.
     in property <length> row-height: 246px;
     in property <length> gap: 20px;
 
-    // Bumped by the host once the card tier behind `request-cover` is warm. A mode toggle has no
-    // fetch to await before the grid mounts, so the binding reads this to re-run and its value
-    // tells Rust whether it may decode.
+    // The repaint token: bumped as decodes land, so the `pure` cover lookup re-runs.
     in property <int> covers-generation: 0;
 
-    // A folder card drills in; a track card plays the folder from that track. Split at the delegate
-    // rather than dispatched in Rust, so the two existing `Browse` callbacks are reached with
-    // exactly the arguments the list already passes them.
+    // Split at the delegate, so the existing `Browse` callbacks get the list's arguments.
     callback folder-clicked(string /*path*/);
     callback track-clicked(int /*track_id*/, int /*row_index*/);
-    // Forwarded by the host to its own global. `pure` so a binding can call it.
     pure callback request-cover(string /*artwork_path*/, int /*generation*/) -> image;
 
-    // **Browse's cards read the *list's* selection**, not the shared `CardSelection` the five
-    // other grids use: they are the same rows, so toggling the presentation keeps the selection
-    // and the menu that describes it is the row's own. Forwarded rather than imported,
-    // as the two callbacks above are: `Browse` is a view global and this file names none.
+    // The list's selection rather than a `CardSelection` scope: the cards are its rows, so a
+    // presentation toggle keeps the set. Forwarded, this file naming no view global.
     in property <[int]> selected-ids;
     in property <int> selection-generation: 0;
     pure callback is-card-selected(int /*track_id*/, int /*generation*/) -> bool;
-    // `row_index` first, so the host forwards straight to `Browse.select-row` with the arguments
-    // the list already passes it and the shift-range walks one order for both presentations.
+    // `row_index` first, matching `Browse.select-row`, so a shift-range walks one order for both.
     callback select-card(int /*row_index*/, int /*track_id*/, bool /*shift*/, bool /*ctrl*/);
-    // Raised by a card's context menu; the view answers them against the list's set.
     callback select-all();
     callback clear-selection();
 
-    // **A track card's favorite is read off the list row it *is***, through its `row_index`,
-    // rather than carried on `BrowseCardRow`: the list's toggle already patches that row in place,
-    // so the heart follows it on the click's own frame with no card patch to keep in step.
+    // A track card's heart reads the list row it is, which the list's toggle patches in place.
     in property <[TrackListRow]> list-rows;
     callback toggle-favorite(int /*track_id*/, bool /*favorite*/);
 
-    // The folder card's menu, which the entity actions can't answer: a folder is a path.
+    // A folder is a path, which the entity actions can't answer.
     callback play-folder(string /*path*/);
     callback play-folder-next(string /*path*/);
     callback queue-folder(string /*path*/);
     callback reveal-folder(string /*path*/);
 
-    // Same sign convention as `TrackList`, `AlbumGrid` and `EntityCardGrid` — a positive `v-offset`
-    // is N px scrolled, where the inner `ListView` holds that as a non-positive `content-y`.
+    // `TrackList`'s sign convention: a positive `v-offset` is N px scrolled.
     out property <length> v-visible-height: list.visible-height;
     out property <length> v-viewport-height: list.content-height;
     out property <length> v-offset: -list.content-y;
@@ -73,12 +53,10 @@ export component BrowseCardGrid inherits Rectangle {
     list := ListView {
         vertical-scrollbar-policy: always-off;
         horizontal-scrollbar-policy: always-off;
-        // A card click and a drag-pan are one gesture, and the default is the style's to pick;
-        // argument on `views/radio/station-grid.slint`.
+        // The style's default too, pinned: a drag-pan takes any press that drifts.
         mouse-drag-pan-enabled: false;
 
         for grid-row in root.rows: Rectangle {
-            // A `ListView` delegate needs a fixed height or the virtualization math breaks.
             min-height: root.row-height;
             max-height: root.row-height;
 
@@ -88,14 +66,12 @@ export component BrowseCardGrid inherits Rectangle {
                 spacing: root.gap;
                 alignment: start;
 
-                // A wrapper per card, for the reason `CardCell` gives. Spelled out rather than
-                // mounted, that component deriving every answer from a `CardSelection` scope
-                // this grid has not got.
+                // `CardCell`'s wrapper spelled out, that component answering from a
+                // `CardSelection` scope this grid hasn't got.
                 for card in grid-row.cards: cell := Rectangle {
                     width: root.card-width;
                     height: root.card-height;
 
-                    // A library track, the one card with a favorite to draw or toggle.
                     property <bool> favorable: card.enabled && !card.is_folder;
                     property <bool> is-favorite:
                         cell.favorable && root.list-rows[card.row_index].is_favorite;
@@ -106,15 +82,10 @@ export component BrowseCardGrid inherits Rectangle {
                         artwork-path: card.artwork_path;
                         cover: root.request-cover(card.artwork_path, root.covers-generation);
                         fallback-icon: card.is_folder ? "folder" : "music-note";
-                        // A pronounced zoom on the placeholder, as on the other grids; real
-                        // artwork stays gentle so a cover doesn't jitter inside the tile clip.
+                        // Real artwork stays gentle so a cover doesn't jitter in the tile clip.
                         cover-scale-hover: card.artwork_path == "" ? 1.15 : 1.04;
                         title: card.title;
-                        // A folder's subtitle is a literal here rather than a string Rust pushed,
-                        // `@tr` only translating literals at codegen. A track card has its artist.
                         subtitle: card.is_folder ? @tr("Folder") : card.subtitle;
-                        // A disk-only file — on disk inside a library folder but not in the DB.
-                        // `EntityCard` dims it and disables its own TouchArea.
                         enabled: card.enabled;
                         clicked => {
                             if (card.is_folder) {
@@ -124,9 +95,7 @@ export component BrowseCardGrid inherits Rectangle {
                             }
                         }
 
-                        // **A folder and a disk-only file both hold `id == 0`**, which is what
-                        // keeps them out of an id-keyed selection — the same guard the list's
-                        // handler already opens with, so no second predicate is spelled here.
+                        // A folder and a disk-only file both hold `id == 0`, out of an id-keyed set.
                         selectable: card.enabled && !card.is_folder;
                         selected: root.is-card-selected(card.id, root.selection-generation);
                         selection-live: root.selected-ids.length > 0;
@@ -158,7 +127,7 @@ export component BrowseCardGrid inherits Rectangle {
                         effective-selection: root.selected-ids;
                         selection-count: root.selected-ids.length;
 
-                        // The card's own activation: the folder from this track, as a click gives.
+                        // What a click gives: the folder from this track.
                         play-single => { root.track-clicked(card.id, card.row_index); }
                         open-folder(path) => { root.folder-clicked(path); }
                         play-folder(path) => { root.play-folder(path); }

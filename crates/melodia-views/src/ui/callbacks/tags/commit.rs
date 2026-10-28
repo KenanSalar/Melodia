@@ -60,9 +60,8 @@ pub(super) fn wire_commit(
             (edit, sess.ids.clone(), sess.picked.clone())
         };
 
-        // A reflexive open-then-Save must not touch disk (lofty rewrites the
-        // tag whether or not anything changed). `is_noop()` already folds in
-        // the artwork tri-state.
+        // lofty rewrites the tag whether or not anything changed, so a reflexive open-then-Save
+        // must not reach disk.
         if edit.is_noop() {
             return;
         }
@@ -145,48 +144,34 @@ fn diff_str(cur: &str, orig: &str) -> FieldEdit<String> {
     }
 }
 
-/// A field edited as rows rather than as the string it renders as.
-///
-/// The trait exists so [`diff_multi`] is written once: the tri-state ladder is the dialog's
-/// central semantic, and three copies of it are three chances for one field to start answering
-/// `Keep` where its siblings answer `Clear`.
-///
-/// Named for the answer rather than for the state: spelled `is_empty` it shadows the inherent
-/// method each impl below delegates to, so retiring one of those turns the delegation into
-/// unbounded recursion that still compiles.
+/// A field edited as rows rather than as the string it renders as, so [`diff_multi`]'s tri-state
+/// is written once. Named for the answer: spelled `is_empty` it would shadow the inherent method
+/// each impl delegates to, and retiring one would turn that into recursion that still compiles.
 trait MultiValue: Clone + PartialEq {
     fn is_cleared(&self) -> bool;
 }
 
-/// Compared structurally, not through the rendered line: two different credits can render the same
-/// string, and a phrase swapped for one that renders identically is still an edit the file should
-/// receive. `Keep` is what makes an untouched multi-artist file safe, the list tag surviving a save
-/// that never looked at it.
+/// Compared structurally rather than through the rendered line: two credits can render the same
+/// string, and `Keep` is what lets an untouched multi-artist file keep its list tag.
 impl MultiValue for ArtistCredit {
     fn is_cleared(&self) -> bool {
         self.is_empty()
     }
 }
 
-/// Structural for the reason above: the rows are what the user edited and the line is derived from
-/// them, so a reordering that renders the same string is still an edit.
+/// Structural too: a reordering that renders the same line is still an edit.
 impl MultiValue for GenreList {
     fn is_cleared(&self) -> bool {
         self.is_empty()
     }
 }
 
-/// **Every role the form answers for or nothing**, because that is what the writer clears: a set
-/// built from the one box that changed would take every role beside it. So the answer is `Keep`
-/// until *some* box moves, and then the set is rebuilt from every box at once. That also makes the
-/// emptied box work — a role the user cleared is simply absent from the rebuild, and the writer
-/// removes its key.
+/// **Every role the form answers for, or nothing**, that being what the writer clears: `Keep`
+/// until some box moves, then the set rebuilt from every box, an emptied one simply absent.
 ///
-/// **Never `Clear`, and that is load-bearing rather than an oversight.** `FieldEdit::Clear` carries
-/// no payload, so a writer reaching it has no scope to honour and clears all ten roles — which on
-/// a selection that disagreed about one takes a credit nobody was shown. An emptied form arrives
-/// as a `Set` of an empty set instead, and the scope then decides exactly what goes, which is what
-/// `Clear` meant for the only selection that could have produced it.
+/// **Never `Clear`**: it carries no scope, so the writer would clear all ten roles, taking a
+/// credit nobody was shown on a selection that disagreed about one. An emptied form arrives as a
+/// `Set` of an empty set, and the scope decides what goes.
 impl MultiValue for RoleCreditEdit {
     fn is_cleared(&self) -> bool {
         false

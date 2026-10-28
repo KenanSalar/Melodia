@@ -1,17 +1,8 @@
-//! The audio visualizer's sample tap: it must see what you actually *hear* and must never be able
-//! to change it.
-//!
-//! [`VisualizerShared`] is the transport — a lock-free ring per deck, written by the audio thread
-//! and snapshotted by the UI as a mix — and [`VisualizerTap`] is an [`AudioSource`] wrapping
-//! [`EqSource`] that copies one downmixed value out of each frame it forwards, leaving the audio
-//! bit-identical either way.
-//!
-//! **`.claude/rules/audio-stack.md` argues the design** — where the tap sits in the chain, why
-//! there is one ring per deck rather than one shared, and why the analyzer reads
-//! [`VisualizerShared::analysis_rate`] rather than the media rate. What follows here is what each
-//! piece has to uphold.
-//!
-//! One value per interleaved *frame*, so a ring fills at its source's per-channel rate.
+//! The visualizer's tap: it must see what you hear and never change it. [`VisualizerShared`] is a
+//! lock-free ring per deck the UI snapshots as a mix, and [`VisualizerTap`] wraps [`EqSource`],
+//! copying one downmixed value per frame and leaving the audio bit-identical.
+//! Above the deck's speed and volume, so the slider can't flatten the bars and the analysis owes
+//! [`VisualizerShared::analysis_rate`]; a ring per deck, or a crossfade's two taps interleave.
 //!
 //! [`EqSource`]: super::equalizer::EqSource
 
@@ -24,29 +15,19 @@ use melodia_audio::player::source::audio::{
     AudioSource, ChannelCount, Sample, SampleRate, SeekError, SourceFormat,
 };
 
-/// Ring capacity, in mono samples. A power of two so the wrap is a mask, and comfortably wider
-/// than one analysis window so a snapshot always has a full recent one to work from.
-///
-/// Sized for the *widest* window any style asks for, at the highest rate a music file plausibly
-/// carries — the waveform's span plus its trigger slack is a fixed number of **milliseconds**, so
-/// it outgrows [`FFT_SIZE`](super::spectrum::FFT_SIZE) well before the rate ceiling. Allocated by
-/// the first arm and kept from then on, never reallocated.
+/// Mono samples, a power of two so the wrap is a mask. Sized for the widest window any style asks
+/// for at the highest plausible rate, the waveform's millisecond span outgrowing
+/// [`FFT_SIZE`](super::spectrum::FFT_SIZE) first; allocated on the first arm and kept.
 pub const RING_CAP: usize = 16_384;
 
-/// One deck's ring, plus the bookkeeping that says whether anything is filling it and how far back
-/// its current run reaches.
 struct DeckRing {
-    /// Bracketed by [`DeckRun`], so it is non-zero exactly while a tapped source is alive on this
-    /// deck — the signal [`VisualizerShared::snapshot`] mixes on.
+    /// Non-zero exactly while a tapped source is alive on this deck, bracketed by [`DeckRun`].
     sources: AtomicUsize,
-    /// Cursor the current run started at. Everything before it belongs to whatever this deck
-    /// played *last* and must never be mixed in.
+    /// Where the current run started; everything before is the deck's last track.
     valid_from: AtomicUsize,
-    /// Total samples ever pushed, monotonic — a `usize` takes millions of years to wrap, so the
-    /// modulo below is the only wrapping.
+    /// Monotonic, the modulo being the only wrapping.
     write_cursor: AtomicUsize,
-    /// `RING_CAP` `f32` bit patterns, built by [`Self::arm`] on the UI thread. The audio thread
-    /// only ever `get`s, a single acquire load, so it never waits on the allocation.
+    /// Built by [`Self::arm`] on the UI thread; the audio thread only `get`s, never waiting on it.
     ring: OnceLock<Box<[AtomicU32]>>,
 }
 
@@ -75,20 +56,14 @@ impl DeckRing {
         ring[idx % RING_CAP].store(sample.to_bits(), Ordering::Relaxed);
     }
 
-    /// Forget everything written so far, so the next window starts from silence.
-    ///
-    /// `fetch_max` rather than a store because there are two stampers — the UI thread arming the
-    /// tap, the control thread opening a run — whose read-then-write pairs can interleave, and an
-    /// older cursor landing last would re-admit exactly the history the stamp excludes.
+    /// `fetch_max` because the UI's arm and the control thread's run open can interleave, and an
+    /// older cursor landing last would re-admit the history the stamp excludes.
     fn drop_history(&self) {
         self.valid_from.fetch_max(self.write_cursor.load(Ordering::Relaxed), Ordering::Relaxed);
     }
 
-    /// Open a run. The first source on an idle deck drops the previous run's tail; a second one
-    /// joining a live deck (a gapless successor staged behind the playing track) keeps it, because
-    /// gapless audio is continuous.
-    ///
-    /// The `Release` publishes the stamp above to whoever loads `sources` next.
+    /// The first source on an idle deck drops the last run's tail; a gapless successor joining a
+    /// live deck keeps it, the audio being continuous. The `Release` publishes the stamp.
     fn open(&self) {
         if self.sources.load(Ordering::Relaxed) == 0 {
             self.drop_history();
@@ -109,9 +84,8 @@ impl DeckRing {
         f32::from_bits(ring[cursor % RING_CAP].load(Ordering::Relaxed))
     }
 
-    /// Write (or add) the most recent `out.len()` samples of this run into `out`, oldest first.
-    /// Short history pads at the **front**, so the newest sample is always last and a deck that
-    /// just started contributes its handful over silence — exactly what it gave the mixer.
+    /// Oldest first, short history padding the front, so a deck just started adds its handful over
+    /// silence, as it did to the mixer.
     fn read_into(&self, out: &mut [f32], add: bool) {
         let Some(ring) = self.ring.get() else {
             if !add {
@@ -137,27 +111,15 @@ impl DeckRing {
     }
 }
 
-/// The sample rings shared between the audio thread (one writer per deck) and the UI thread
-/// (single reader).
+/// The rings, one writer per deck and one reader. No [`Generation`], the flow running the other way
+/// round: the audio thread writes continuously and the UI reads when it draws. A snapshot racing a
+/// lapping writer can mix two passes, invisible on a decoration.
 ///
-/// Ownership follows [`EqShared`] / [`FadeShared`], but it deliberately carries no [`Generation`]
-/// counter: that pattern exists so an audio source can poll for control-side changes, and this
-/// cell runs the other way round — the audio thread writes continuously and the UI reads whenever
-/// it draws.
-///
-/// A snapshot taken while a writer laps the reader can mix two passes of the ring. Invisible on a
-/// spectrum display, so nothing is spent defending it.
-///
-/// [`EqShared`]: super::equalizer::EqShared
-/// [`FadeShared`]: super::crossfade::FadeShared
 /// [`Generation`]: super::dsp::Generation
 pub struct VisualizerShared {
     enabled: AtomicBool,
-    /// Per-channel rate of the source most recently started, `0` before anything has played. The
-    /// analyzer places band edges against it, and it varies from track to track.
+    /// The most recently started source's per-channel rate, `0` before anything has played.
     sample_rate: AtomicU32,
-    /// Live playback speed — see [`analysis_rate`](Self::analysis_rate) for why the analyzer can't
-    /// use `sample_rate` alone.
     speed: AtomicU32,
     /// One ring per deck, indexed by [`Deck::viz_slot`](super::decks::Deck).
     decks: [DeckRing; DECK_COUNT],
@@ -180,10 +142,7 @@ impl VisualizerShared {
         Arc::new(shared)
     }
 
-    // --- producer side (audio thread) --------------------------------------
-
-    /// Open a run on `deck` and hand back the handle its source pushes through. An index no deck
-    /// owns yields an inert handle rather than a panic on the audio thread.
+    /// An index no deck owns yields an inert handle rather than a panic on the audio thread.
     #[must_use]
     pub fn begin_run(self: &Arc<Self>, deck: usize) -> DeckRun {
         if let Some(ring) = self.decks.get(deck) {
@@ -192,18 +151,12 @@ impl VisualizerShared {
         DeckRun { viz: self.clone(), deck, released: false }
     }
 
-    /// Publish the rate of the source now feeding a ring.
     pub fn set_sample_rate(&self, hz: u32) {
         self.sample_rate.store(hz, Ordering::Relaxed);
     }
 
-    // --- consumer side (UI thread) -----------------------------------------
-
-    /// Copy the most recent `out.len()` samples into `out`, oldest first, summing every deck
-    /// currently being written.
-    ///
-    /// A request wider than [`RING_CAP`] is answered for the last `RING_CAP` samples only; the
-    /// rest stays silent rather than repeating wrapped data.
+    /// Oldest first, summing every live deck. Past [`RING_CAP`] the rest stays silent rather than
+    /// repeating wrapped data.
     pub fn snapshot(&self, out: &mut [f32]) {
         let mut written = false;
         for deck in &self.decks {
@@ -218,12 +171,8 @@ impl VisualizerShared {
         }
     }
 
-    // --- both sides ---------------------------------------------------------
-
-    /// Arm or disarm the tap. Arming builds the rings the first time and drops whatever history
-    /// they hold: it runs when the Now-Playing view comes back on screen, and the newest samples
-    /// down there may predate its closing. The stamps land *before* the flag, so no armed sample is
-    /// thrown away.
+    /// Arming builds the rings the first time and drops their history, which may predate Now
+    /// Playing's close. The stamps land before the flag, so no armed sample is thrown away.
     pub fn set_enabled(&self, on: bool) {
         if on && !self.is_enabled() {
             for deck in &self.decks {
@@ -239,9 +188,7 @@ impl VisualizerShared {
         self.enabled.load(Ordering::Relaxed)
     }
 
-    /// Publish the live playback speed. `PlaybackEngine::set_speed` is the single writer — boot
-    /// hydration goes through it and `play_media` / `begin_crossfade` only re-apply what it
-    /// published, so don't add calls there.
+    /// `PlaybackEngine::set_speed` is the single writer; don't add calls beside it.
     #[expect(
         clippy::cast_possible_truncation,
         reason = "speed is bounded to 0.25..=2.0, where f32 has far more precision than the UI's 8 presets can express"
@@ -257,12 +204,8 @@ impl VisualizerShared {
         self.sample_rate.load(Ordering::Relaxed)
     }
 
-    /// The rate the analyzer places its band edges against: the source's own rate scaled by the
-    /// live playback speed.
-    ///
-    /// The tap sits *above* the deck's converter, which is where speed is applied. So the ring
-    /// holds media samples at the media rate, and analysing against that plots the *file's* pitch
-    /// rather than the one the ear hears.
+    /// The source rate scaled by speed: the tap sits above the converter, so the media rate would
+    /// plot the file's pitch rather than the one heard.
     #[expect(
         clippy::cast_possible_truncation,
         clippy::cast_sign_loss,
@@ -288,31 +231,23 @@ const _: fn() = || {
     check::<VisualizerShared>();
 };
 
-/// One source's claim on a deck's ring, held for exactly as long as that source is alive — and
-/// what tells the reader which rings to mix. A deck whose last source was dropped still holds a
-/// full window, and mixing that frozen tail into every later frame leaves a ghost of the track
-/// that ended. A deck drops a source as soon as it is exhausted or cleared, so the claim is
-/// released within a frame of the audio stopping.
-///
-/// It is not *strictly* ordered against a control op.
+/// One source's claim on its deck's ring, which tells the reader what to mix: a dead deck's frozen
+/// tail would ghost into every later frame. Released within a frame of the audio stopping, though
+/// not strictly ordered against a control op.
 pub struct DeckRun {
     viz: Arc<VisualizerShared>,
     deck: usize,
-    /// Whether [`Self::release`] has already closed the ring, so the drop behind it is a no-op.
     released: bool,
 }
 
 impl DeckRun {
-    /// `begin_run` already validated the index, so the miss is unreachable — but a total lookup
-    /// costs one branch and no panic path on the audio thread.
+    /// Total, so the audio thread has no panic path.
     #[inline]
     fn ring(&self) -> Option<&DeckRing> {
         self.viz.decks.get(self.deck)
     }
 
-    /// Append one mono sample: an atomic load, a `fetch_add` and a store, wait-free. Disarmed it
-    /// is a single predictable branch touching no ring at all, which is what most of a listening
-    /// session runs — the tap is armed only while the Now-Playing view is on screen.
+    /// Wait-free; disarmed, one branch touching no ring, which is most of a session.
     #[inline]
     pub fn push(&self, sample: f32) {
         if !self.viz.is_enabled() {
@@ -323,16 +258,12 @@ impl DeckRun {
         }
     }
 
-    /// Publish the rate of the source holding this run.
     pub fn set_sample_rate(&self, hz: u32) {
         self.viz.set_sample_rate(hz);
     }
 
-    /// End the run now rather than at the drop.
-    ///
-    /// A spent source is freed off the audio callback and so outlives the audio it was making,
-    /// where this claim may not: the reader mixes every ring still claimed. Idempotent, because the
-    /// drop behind it runs either way.
+    /// Ends the run before the drop: a spent source is freed off the callback and outlives its
+    /// audio, where the claim may not. Idempotent.
     pub fn release(&mut self) {
         if self.released {
             return;
@@ -350,21 +281,16 @@ impl Drop for DeckRun {
     }
 }
 
-/// A transparent [`AudioSource`] copying a downmixed sample out of every frame it forwards. Every
-/// source the decks play is wrapped in one by
-/// `engine::backend::PlaybackEngine::build_source`, so the playing track, a
-/// gapless successor and both sides of a crossfade each feed the ring of the deck they were built
-/// for.
+/// Wraps every source the decks play (`PlaybackEngine::build_source`), so each feeds the ring of
+/// the deck it was built for.
 pub struct VisualizerTap<S> {
     input: S,
     run: DeckRun,
-    /// Read once — constant for a decoded source's life, and the reciprocal turns the downmix into
-    /// a multiply.
+    /// The reciprocal makes the downmix a multiply.
     channels: usize,
     inv_channels: f32,
-    /// This source's per-channel rate, published on its first completed frame.
+    /// Published on the first completed frame.
     rate_hz: u32,
-    /// Running sum of the frame being assembled, and how much has arrived.
     accum: f32,
     phase: usize,
     rate_published: bool,
@@ -396,9 +322,8 @@ impl<S: AudioSource> Iterator for VisualizerTap<S> {
         self.accum += s;
         self.phase += 1;
         if self.phase >= self.channels {
-            // Not in `new`: a gapless successor is built when it is *staged*, seconds before it
-            // plays, so announcing its rate then would analyse the tail of a differently-rated
-            // current track against it.
+            // Not in `new`: a gapless successor is built seconds before it plays, and its rate
+            // would mis-analyse the current track's tail.
             if !self.rate_published {
                 self.run.set_sample_rate(self.rate_hz);
                 self.rate_published = true;
@@ -442,16 +367,13 @@ impl<S: AudioSource> AudioSource for VisualizerTap<S> {
 
     fn try_seek(&mut self, pos: Duration) -> Result<(), SeekError> {
         self.input.try_seek(pos)?;
-        // Start the frame being averaged over. The input does resume in phase, so this re-anchors
-        // a grid rather than repairing one: at worst it downmixes one straddled frame, on a
-        // decoration, which is cheaper than threading the phase up through the tap.
+        // Re-anchors the averaging grid; at worst one straddled frame downmixes, on a decoration.
         self.accum = 0.0;
         self.phase = 0;
         Ok(())
     }
 
-    /// The claim this tap holds is exactly what the trait's default cannot know about: released
-    /// here, so a source freed off the callback stops being mixed the moment it stops playing.
+    /// So a source freed off the callback stops being mixed the moment it stops playing.
     fn release_claims(&mut self) {
         self.run.release();
         self.input.release_claims();

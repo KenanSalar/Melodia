@@ -10,8 +10,7 @@ use melodia_ui::{AppWindow, ArtistDetail, MiniPlayer, Nav, Player, Queue};
 use melodia_views::ui;
 use slint::ComponentHandle;
 
-/// Push the current `PlayerState` into `Player.vm` / `Player.queue` so the
-/// now-playing bar shows the persisted last-played source on launch.
+/// Shows the restored source in the player bar before the first view-model push.
 pub fn seed_initial_view_model(
     app: &AppWindow,
     state: &AppState,
@@ -26,15 +25,11 @@ pub fn seed_initial_view_model(
 
     let player = app.global::<Player>();
     player.set_vm(ui::shell::bridge::to_slint_player_vm(&light, cover_thumbs));
-    // Seed the position scalars too, so a restored session shows its saved
-    // position before the first playback-monitor tick lands.
     ui::shell::bridge::show_position(&player, light.position_ms, light.duration_ms);
     player.set_queue(ui::shell::bridge::to_slint_queue_vm(&qvm));
 
-    // The row tier is empty this early, so the seed above is guaranteed to be the cache-only
-    // lookup's miss — and no `view_model` push is owed on a restored-but-paused session, so
-    // nothing else would ever fill it. Both slots unconditionally: the restore seats a track or a
-    // station and never both, and an empty path is a no-op inside.
+    // The seed above always misses the still-empty row tier, and a paused restore owes no
+    // view-model push to fill it. Both slots, an empty path being a no-op.
     ui::shell::bridge::warm_vm_cover(
         app.as_weak(),
         &state.runtime,
@@ -51,11 +46,8 @@ pub fn seed_initial_view_model(
     );
 }
 
-/// Apply every UI-visible persisted section to the Slint globals — sidebar and
-/// queue panel geometry from `settings.json`, per-view columns and collapse state from
-/// `views.json`. Missing entries leave the defaults, which is first-launch
-/// behaviour. A `None` snapshot re-reads from disk; boot passes what `main()`
-/// already read to avoid a second parse.
+/// Applies the persisted layout in `settings.json` and `views.json` to the Slint globals,
+/// re-reading either one passed as `None`.
 pub fn hydrate_ui_from_settings(
     app: &AppWindow,
     state: &AppState,
@@ -108,9 +100,8 @@ fn apply_sidebar_collapsed(app: &AppWindow, settings: &services::settings::Setti
     app.global::<Nav>().set_sidebar_collapsed(settings.layout.sidebar_collapsed);
 }
 
-/// `app-window.slint` clamps the width where it is drawn, as the sidebar's is. An open panel needs
-/// nothing more: `AppWindow`'s `queue-shown` took its baseline at construction, before this, so the
-/// first change-handler pass reads the seeded open as an edge and shows it.
+/// Clamped where drawn, as the sidebar's width is. An open panel shows itself: `queue-shown` took
+/// its baseline at construction, so the first change pass reads this as an edge.
 fn apply_queue_panel(app: &AppWindow, settings: &services::settings::SettingsData) {
     let queue = app.global::<Queue>();
     queue.set_open(settings.queue_panel.queue_panel_open);
@@ -125,23 +116,17 @@ fn logical_px(width: f64) -> f32 {
     width as f32
 }
 
-/// Seed the miniplayer's backdrop switch. Ordinary hydration, unlike its restart-gated neighbour
-/// `apply_backdrop_style`, which has to run ahead of `install_views` because the artwork tiers
-/// decide their shape from it: this one only mounts a stack that tier already fits.
+/// Ordinary hydration, unlike `apply_backdrop_style`: this switch only mounts a stack the artwork
+/// tiers already fit.
 fn apply_mini_backdrop(app: &AppWindow, settings: &services::settings::SettingsData) {
     app.global::<MiniPlayer>().set_backdrop_shown(settings.backdrop.mini_backdrop);
 }
 
-/// Kick off the initial Tracks fetch, if the launch shows the Songs tab. A fresh install falls
-/// back to title ascending, matching the `Tracks` global default and the header
-/// `ui::tracks::install` seeds.
+/// Starts the Songs tab's first fetch if the launch shows it, else marks it dirty for its first
+/// enter: the whole library is the largest thing the launch could hold for nothing on screen.
 ///
-/// A hidden tab is marked dirty instead and fetches through `request-refresh` on its first
-/// enter: the whole library, converted and with its covers decoded, is the largest thing the
-/// launch could hold for nothing on screen.
-///
-/// Off the same snapshot that header is seeded from, rather than `resolve_view_sort`'s own
-/// `views.json` read: the two have to agree, and one source is what makes that structural.
+/// The sort comes off the snapshot the header was seeded from, so the two can't disagree; a fresh
+/// install takes title ascending, the `Tracks` global's default.
 pub fn spawn_initial_tracks_fetch(
     state: &AppState,
     tracks_ui: &Arc<ui::tracks::TracksUi>,
@@ -159,15 +144,11 @@ pub fn spawn_initial_tracks_fetch(
     ui::tracks::refresh(state, tracks_ui, query);
 }
 
-/// Kick off an entity grid's initial load, if the launch shows its My Library tab.
+/// Starts an entity grid's first load if the launch shows its tab, else marks it dirty for its
+/// first enter.
 ///
-/// A hidden tab is marked dirty instead and loads on its first enter, as after a leave, so the
-/// launch spends nothing on a grid no frame draws.
-///
-/// A macro rather than a generic `fn` because each `reload_grid` is a free function in
-/// its own module, and no trait the four `*Ui` types share carries it. Tracks is
-/// deliberately not among them, resolving a persisted sort and calling
-/// `ui::tracks::refresh` instead.
+/// A macro because each `reload_grid` is a free function in its own module, with no trait the
+/// four handles share to be generic over.
 macro_rules! initial_grid_fetch {
     ($(#[$doc:meta])* $name:ident, $module:ident, $handle:ty) => {
         $(#[$doc])*

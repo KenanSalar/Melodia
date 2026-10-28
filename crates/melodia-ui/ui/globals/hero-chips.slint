@@ -1,17 +1,10 @@
-// The hero band's metadata chips, written by `crates/melodia-views/src/ui/hero_chips.rs`. **One global for six views**,
-// only one hero being mountable at a time — the `globals/hero-backdrop.slint` argument.
-//
-// **The chips are built in Rust rather than composed here.** The facts already live there —
-// `AlbumStats.disc_count` and `.is_compilation` never reach `AlbumRow` — so it costs no new query,
-// and it makes "which chips, in what order, omitted when" a tested pure function instead of six
-// ternary chains. What Rust cannot do is translate; hence the trampolines below.
+// **One global for six views**, as `HeroBackdrop` is. The chips are built in Rust, where the facts
+// already live (`AlbumStats.disc_count` never reaches `AlbumRow`) and which chips show in what
+// order is a tested pure function. Rust can't translate, hence the trampolines.
 export global HeroChips {
-    // In reading order. The band shows two rows of them and clips the rest (`HeroChipStrip`'s
-    // `max-rows`). Empty means no chips at all.
+    // In reading order. A band shows two rows and clips the rest.
     in-out property <[string]> chips;
 
-    // Translated chip labels, resolved by Rust on the UI thread. The plural pairs deliberately
-    // reuse msgids the catalogues already carry from the meta lines these chips replace.
     pure callback tracks(int /*count*/) -> string;
     tracks(count) => {
         return @tr("{n} track" | "{n} tracks" % count);

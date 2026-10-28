@@ -9,13 +9,10 @@ use melodia_engine::player::engine::types::{PlaybackStatus, RepeatMode};
 
 /// The metadata last handed to the panel.
 ///
-/// **The dedupe key is the metadata, not a proxy for it.** Keyed on the track id, a live title
-/// arriving on the station already playing looked unchanged and never reached the panel — and so
-/// did a track re-tagged in place. The identity is deliberately *not* part of the comparison:
-/// two sources that would publish the same panel do not need a second platform round trip.
-///
-/// Owned, since it outlives the borrow it is built from, and compared *against* the borrowed form
-/// so the steady state allocates nothing.
+/// **The dedupe key is the metadata, not a proxy for it**: keyed on the track id, a live title on
+/// the station already playing would look unchanged, and so would a track re-tagged in place. The
+/// identity is deliberately left out, two sources publishing the same panel needing no second
+/// platform round trip. Compared against the borrowed form, so the steady state allocates nothing.
 pub(super) struct PublishedMetadata {
     pub(super) title: String,
     pub(super) secondary: Option<String>,
@@ -54,10 +51,8 @@ impl From<&SourceSummary<'_>> for PublishedMetadata {
     }
 }
 
-/// The playback rate the panel was told, and whether the source lets it move.
-///
-/// One value because MPRIS says both through the rate and its bounds, which a station pins to one:
-/// a change to either is announced together.
+/// The rate the panel was told, and whether the source lets it move. One value because MPRIS says
+/// both through the rate and its bounds, which a station pins to one, so the two change together.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub(super) struct PublishedRate {
     pub(super) rate: f64,

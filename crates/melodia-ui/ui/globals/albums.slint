@@ -1,14 +1,12 @@
 import { AlbumRow, AlbumGridRow, TrackListRow, TrackColumns } from "../models.slint";
 
-// The Album grid. Rust installs `grid-rows` once, a paged model over the grid's ids in SQL order
-// holding only the cards near the viewport: `apply-filter` and `request-sort` reload the ids, and
-// `columns`, computed by the view from its body width and pushed back, re-chunks them into rows of
-// N cards for the `ListView` to virtualize.
+// `grid-rows` is a paged model Rust installs once (`ui::card_grid`): `apply-filter` and
+// `request-sort` reload its ids, and `columns` re-chunks them.
 export global Albums {
     in-out property <[AlbumGridRow]> grid-rows;
-    // `-1` is "not fetched yet" (`ui::tab_bar::UNFETCHED_COUNT`) — the sentinel `curated.slint`
-    // argues at `Favorites.track-count`. One thing is new here: the header line interpolates this
-    // into a plural and `@tr` would spell the sentinel out, so that `Text` guards on `>= 0`.
+    // `-1` until fetched (`ui::tab_bar::UNFETCHED_COUNT`): a count outliving the model a leave
+    // empties would hide the empty state, and `0` would claim one through the fetch. The header
+    // guards on `>= 0`, `@tr` otherwise spelling the sentinel out.
     in-out property <int> total-count: -1;      // pre-filter album count
     in-out property <int> columns: 4;           // view-computed; always >= 1
     in-out property <string> filter;
@@ -19,60 +17,51 @@ export global Albums {
     callback apply-filter(string);
     callback request-sort(string /*field*/);
     callback open-album(int /*album_id*/);
-    // Invoked from each on-screen card's own binding, so only visible cards lock a cover.
-    // `pure` so Slint may evaluate it inside a binding at all. Cache-only: a miss schedules and
-    // comes back on the bump below, rather than decoding under the event loop.
+    // Asked by each mounted card, so only those hold a cover. A miss schedules a decode and
+    // repaints on the `covers-generation` bump.
     pure callback request-cover(string /*artwork_path*/, int /*generation*/) -> image;
     in property <int> covers-generation: 0;
-    // Rust shrinks the shared grid tier to proxies on `false` and re-warms the first screenful on
-    // `true` — the full-size buffers aren't worth keeping resident while the section is hidden,
-    // and the proxy is what paints the re-entry rather than the fallback glyph.
+    // A leave shrinks the grid tier to proxies, so a re-entry paints the right cover at once.
     callback section-active-changed(bool);
 }
 
-// The Album Detail view: `album-id == -1` shows the grid, `>= 0` swaps in the detail.
-// Its table is the shared `TrackList`, so the column / sort / selection shape mirrors
-// `Tracks` and `Browse` under its own persistence key. **The album column is off and locked** —
-// redundant inside a single album.
+// `album-id` -1 shows the grid. **The album column is off and locked**, redundant inside one
+// album.
 export global AlbumDetail {
     in-out property <int> album-id: -1;
-    // A persisted detail is being reopened and its id has not landed yet. Raised before
-    // `app.show()`, or on the first enter of a tab the launch left hidden, so the grid
-    // `album-id == -1` would otherwise mount never paints a frame of the wrong page while the
-    // fetch behind the restore runs.
+    // A persisted detail is being reopened and its id hasn't landed. Raised before `app.show()`,
+    // or on the first enter of a tab the launch left hidden, so the grid never paints a frame of
+    // the wrong page while the restore fetches.
     in-out property <bool> restoring: false;
     in-out property <AlbumRow> album;
     in-out property <[TrackListRow]> tracks;
 
-    // What the band's search box means while this detail is open. Cleared on a fresh open, but
-    // preserved across a library-changed refresh so a typed needle survives a scan finishing.
+    // Fed by the band's box. Cleared on a fresh open and kept across a library refresh, so a typed
+    // needle survives a scan.
     in-out property <string> filter;
 
     in-out property <TrackColumns> track-columns;
 
-    // Sorted in SQL, the list holding only its ids.
     in-out property <string> sort-field: "track_number";
     in-out property <string> sort-dir: "asc";
 
     in-out property <[int]> selected-ids;
     in-out property <int> selection-anchor: -1;
 
-    // The **section** the detail was opened from, or -1 for a drill that started inside My
-    // Library. Set synchronously by the cross-tab handler and read by `on_close_detail` to flip
-    // `Nav.selected-index` back **before** clearing `album-id`, so the conditional reroutes in the
-    // same frame with no grid flash. A drill from a *sibling tab* deliberately records nothing: the
-    // back arrow means "close this detail", and the tab bar already says Albums for the whole
-    // visit. In-memory only — `last_detail_ids` restores each page on the next launch.
+    // The **section** the detail was opened from, which the close restores **before** clearing
+    // `album-id`, so the page reroutes in one frame. A drill from a sibling tab records -1: the
+    // back arrow means "close this detail", and the tab bar names Albums for the whole visit.
+    // In memory only.
     in-out property <int> origin-nav-index: -1;
 
     // Decoded **once** per album into a `(cover, blur)` pair by `ui::artwork_cache`.
     in-out property <image> cover;
 
-    // The `Player.blur-img-*` dual-slot contract, so switching albums never flashes.
+    // The two-slot cross-fade: Rust fills the hidden slot and flips, so nothing flashes.
     in-out property <image> blur-img-a;
     in-out property <image> blur-img-b;
     in-out property <bool>  blur-use-a;
-    // False with no artwork or a failed decode: both slots fade to 0, the gradient floor showing.
+    // False with no artwork or a failed decode, leaving the gradient floor.
     in-out property <bool>  has-blur;
 
     callback close-detail();
@@ -87,6 +76,5 @@ export global AlbumDetail {
     callback clear-selection();
     callback request-sort(string /*field*/);
     callback toggle-column(string /*column_id*/);
-    // Rust reloads the list's ids under the new needle.
     callback filter-changed(string);
 }

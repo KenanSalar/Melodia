@@ -1,19 +1,17 @@
 import { Theme } from "../theme.slint";
 
-// Full-bleed hero blur: a gradient floor, two cross-fading `Image` slots, and a scrim. The Slint
-// half of the dual-slot contract `write_crossfade_slot` drives — the outgoing slot is never cleared,
-// so a refresh fades A↔B without flashing. `AuroraBackdrop`'s opposite number.
+// The hero blur: a gradient floor, two cross-fading `Image` slots and a scrim, the Slint half of
+// `write_crossfade_slot`'s two-slot contract. `AuroraBackdrop`'s opposite number.
 //
-// **Every colour is an input and the defaults are never taken** — `MetaChip`'s idiom, and what lets
-// one component serve the `HeroBackdrop` tier and Now Playing's `Player.np-*` alike. A `Theme.*`
-// brush would flip polarity with the variant, painting one cover as a dark banner under one theme
-// and a near-white one under another. `width/height: 100%` on the children is mandatory — an `Image`
-// does not auto-fill its parent.
+// **Every colour is an input and the defaults are never taken**, `MetaChip`'s idiom, so one
+// component serves `HeroBackdrop` and `Player.np-*` alike. A `Theme.*` brush would flip polarity
+// with the variant. `width/height: 100%` on the children is mandatory: an `Image` doesn't fill its
+// parent on its own.
 export component HeroBlurBackdrop inherits Rectangle {
     in property <color> floor-start: #2b2135;
     in property <color> floor-end: #14101a;
 
-    // Alpha baked in — see `HeroBackdrop.scrim`.
+    // Alpha baked in (`HeroBackdrop.scrim`).
     in property <brush> scrim: #0a0a0e73;
 
     in property <image> blur-a;
@@ -21,25 +19,21 @@ export component HeroBlurBackdrop inherits Rectangle {
     in property <bool> use-a;
     in property <bool> has-blur;
 
-    // Whether the host is painting a hero at all — `LibraryTabBand`'s question alone, its globals
-    // outliving the tab that filled them; the mosaic bands never stop and take the default. Not an
-    // `if`: at `false` the stack drains to transparent, which an unmounted one cannot do. Which of
-    // the two backdrops is live is a different question, and `HeroBackdropStack`'s.
+    // Whether the host paints a hero at all, `LibraryTabBand`'s question; the rest take the
+    // default. Not an `if`: at `false` the stack drains to transparent, which an unmounted one
+    // can't.
     in property <bool> shown: true;
 
-    // **The floor eases on the slots' own duration**, being the layer that *is* the backdrop whenever
-    // there is no blur image: an artwork-less hero, Genre Detail's name-hashed stops, the window
-    // between a hero opening and its decode landing. Both arms are two stops at 135deg, the only
-    // shape `Brush::interpolate` blends stop-for-stop — hence the gate swapping *stops* rather than
-    // the whole brush. Safe to `animate` where a tab-bar brush is not: Rust writes these discretely.
+    // **The floor eases on the slots' duration**, being the whole backdrop wherever there is no blur
+    // image. Both arms are two stops at 135deg, the only pair `Brush::interpolate` blends, hence the
+    // gate swapping stops rather than the brush. Rust writes these discretely, so animating is safe.
     background: root.shown
         ? @linear-gradient(135deg, root.floor-start, root.floor-end)
         : @linear-gradient(135deg, transparent, transparent);
     animate background { duration: Theme.dur-med; easing: ease-in-out; }
 
-    // **Every animated layer is read once at mount.** A first evaluation lands without easing, so a
-    // `shown` flipped before the first paint would arrive at full strength; the miniplayer's press is
-    // that flip.
+    // **Every animated layer is read once at mount**: first evaluated after a `shown` flipped
+    // before the first paint, it would land unanimated. The miniplayer's press is that flip.
     init => {
         root.background;
         slot-a.opacity;
@@ -67,12 +61,9 @@ export component HeroBlurBackdrop inherits Rectangle {
         opacity: (root.has-blur && !root.use-a) ? 1.0 : 0.0;
         animate opacity { duration: Theme.dur-med; easing: ease-in-out; }
     }
-    // The opacity is solved per artwork and baked into the brush, hence no `with-alpha`: a white
-    // sleeve needs roughly twice what a black one does. Animated on the slots' own duration, so a
-    // swap and its scrim land together instead of the scrim snapping ahead.
-    //
-    // **Gated with the floor**, so the whole stack drains together — ungated, the scrim is the one
-    // layer still painting once the floor and both slots have gone.
+    // The opacity is solved per artwork and baked into the brush, a white sleeve needing about
+    // twice a black one's. On the slots' duration, so a swap and its scrim land together; gated
+    // with the floor, so the whole stack drains together.
     scrim-layer := Rectangle {
         x: 0;
         y: 0;

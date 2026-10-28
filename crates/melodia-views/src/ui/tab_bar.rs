@@ -14,18 +14,15 @@
 /// is the one reader that splits on both, and its two mounts clamp.
 pub(crate) const UNFETCHED_COUNT: i32 = -1;
 
-// Satisfying neither gate is, for an `i32`, exactly "negative". Compile-time rather than a
-// test: a value that failed it is a contradiction in terms.
+// Missing both gates is, for an `i32`, exactly "negative".
 const _: () = assert!(
     UNFETCHED_COUNT < 0,
     "UNFETCHED_COUNT must miss both the `== 0` empty-state gates and the `> 0` pill gates"
 );
 
-/// Clamp a persisted tab index into range. `tab_count` comes from the mounting page's
-/// Slint global rather than a const here, so the number of tabs has exactly one
-/// definition. The guard matters on read, not write: the bar can only produce a valid
-/// index, but a `views.json` left by a build with more tabs selects a branch that mounts
-/// nothing.
+/// Clamp a persisted tab index into range, `tab_count` coming off the page's own global so the
+/// number of tabs has one definition. The bar only produces valid indices, but a `views.json`
+/// left by a build with more tabs would select a branch that mounts nothing.
 pub(crate) fn clamp_tab(tab: i32, tab_count: i32) -> i32 {
     tab.clamp(0, (tab_count - 1).max(0))
 }

@@ -3,22 +3,13 @@ import { SettingsPage } from "../../globals/settings-page.slint";
 import { SectionCard } from "../../components/settings/section-card.slint";
 import { ChoiceList } from "../../components/settings/choice-list.slint";
 
-// The locale list. Its options come from the `Settings` global, which
-// `crates/melodia-views/src/ui/settings/locale.rs::install_locale` fills from `SUPPORTED_LOCALES`. The native-name
-// labels are deliberately untranslated — a language picker always renders each option in its own
-// script — while the title takes `@tr()`. A list rather than chips, so a reader looking for their
-// own language's name can run down it in order.
+// The native names `ui::settings::locale::install_locale` fills stay untranslated, each in its own
+// script.
 //
-// **This section is the pattern every other one follows.** Each is a thin Rectangle hosting its card
-// inside an `if has-matches:`, so a card that matches nothing leaves the layout entirely, where
-// `visible: false` would keep its slot. The flag is an `out property` so the page can spot the
-// all-hidden state. The matching rule lives on `SettingsPage`; the local wrapper binds this
-// section's title once, so the per-row call sites stay two arguments.
-//
-// **A row's label and description are declared once, as properties, and read by both the
-// visibility term and the row itself.** The predicate is fed `label + " " + desc`, so spelling the
-// pair at each site lets a reworded description desync from what search matches on — invisible
-// until someone types a word from it and the card doesn't come up.
+// The pattern every section follows: a thin Rectangle hosting its card inside `if has-matches:`,
+// so a card matching nothing leaves the layout, and the flag `out` so the page can spot the
+// all-hidden state. The local `row-visible` binds the title once, keeping each row's call to two
+// arguments.
 export component LanguageSection inherits Rectangle {
     background: transparent;
     horizontal-stretch: 1;
@@ -40,10 +31,7 @@ export component LanguageSection inherits Rectangle {
 
     out property <bool> has-matches: row-visible(names-haystack, "");
 
-    // **The wrapper every section needs.** A `Rectangle` sizes to a layout
-    // child, never to a conditional one, so around a bare `if` it reports 0
-    // preferred-height. Wrapped, the height tracks the card when it's there and
-    // collapses to nothing when the filter hides it.
+    // The wrapper every section needs: a `Rectangle` sizes to a layout child, never to an `if`.
     VerticalLayout {
         if has-matches: SectionCard {
             title: root.card-title;

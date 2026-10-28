@@ -98,7 +98,7 @@ fn an_empty_uuid_is_what_closes_both_directory_gates() {
     );
 }
 
-/// **`views.json` may name a station only where there is a row to look it back up in** (D6).
+/// **`views.json` may name a station only where there is a row to look it back up in.**
 ///
 /// A browsed station is a directory answer that was never written down, so its `id` is `0` and
 /// the next launch has nothing to resolve. Persisted anyway, the restore either finds nothing and

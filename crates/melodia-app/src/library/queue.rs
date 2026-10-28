@@ -20,12 +20,8 @@ use super::import::{ImportFilesResult, import_and_summarize};
 use super::keyset::existing_in_order;
 use super::playback::player_play_tracks;
 
-/// Order a freshly-imported batch the way the rest of the app orders a list.
-///
-/// Files from outside — an OS drop's `text/uri-list`, a file manager's "Open
-/// with" — arrive in visual selection order on KDE / GNOME, not alphabetical.
-/// `natord` puts "Track 2" before "Track 10"; stable, so equal titles keep their
-/// import order.
+/// Files from outside, a drop or "Open with", arrive in visual selection order. Stable, so equal
+/// titles keep their import order.
 fn sort_for_queue(summaries: &mut [Arc<TrackSummary>]) {
     summaries.sort_by(|a, b| natord::compare(&a.title, &b.title));
 }
@@ -47,8 +43,7 @@ async fn append_imported(
         import_and_summarize(&ctx.db, &ctx.paths.artwork_dir, cover_cache, file_paths).await?;
 
     if !result.summaries.is_empty() {
-        // Moved rather than cloned: the drag-drop caller discards the success
-        // result, so an emptied `summaries` on it costs nothing.
+        // Moved rather than cloned: the drag-drop caller discards the success result.
         let mut summaries = std::mem::take(&mut result.summaries);
         sort_for_queue(&mut summaries);
         let ids: Vec<i64> = summaries.iter().map(|summary| summary.id).collect();
@@ -60,25 +55,19 @@ async fn append_imported(
     Ok(result)
 }
 
-/// The file-association entry point: import `file_paths`, make them the queue,
-/// play from the top.
-///
-/// Replaces rather than appends — the queue you were listening to is not the
-/// thing you just double-clicked. [`queue_import_files`] is the appending
-/// sibling and the two differ in nothing else.
-///
-/// Ids come off the sorted summaries, not `ImportFilesResult::track_ids`, which
-/// arrive partly out of a `HashMap` and would pick the first track by hash order.
+/// The file-association entry point: import `file_paths`, make them the queue, play from the top.
+/// Replaces rather than appends, since the queue you were listening to is not what you just
+/// double-clicked.
 pub async fn open_files(state: &AppState, file_paths: Vec<String>) -> AppResult<()> {
     open_as_queue(&state.playback_ctx(), &state.cover_cache, &file_paths).await?;
 
-    // An opened file is usually new to the library, so every view re-fetches —
-    // the same bump the drag-and-drop import does.
+    // An opened file is usually new to the library.
     state.library_changed.bump();
     Ok(())
 }
 
-/// Import `file_paths`, make them the queue, and play from the top.
+/// Ids come off the sorted summaries, not `ImportFilesResult::track_ids`, which arrive partly in
+/// `HashMap` order.
 async fn open_as_queue(
     ctx: &PlaybackContext,
     cover_cache: &CoverCache,
@@ -128,15 +117,12 @@ pub async fn queue_insert_before(
     Ok(())
 }
 
-/// The context menu's "Play Next": insert after `current_index` in input order,
-/// so the queue reads `[current, id_0, …, id_n, …]`. One DB round-trip and one
-/// `with_state_emit` for the batch.
+/// "Play Next": inserted after the current track in input order.
 pub async fn queue_play_next_many(state: &AppState, track_ids: Vec<i64>) -> Result<(), AppError> {
     play_next_many(&state.db, &state.player_state, &state.sinks, &track_ids).await
 }
 
-/// [`queue_play_next_many`]'s body, narrowed to what it reaches so the batch's ordering can be
-/// driven off a bare pool.
+/// Narrowed to what it reaches, so the ordering can be driven off a bare pool.
 async fn play_next_many(
     db: &DbPool,
     player_state: &PlayerStateHandle,
@@ -166,7 +152,7 @@ pub fn queue_remove(state: &AppState, index: usize) -> Result<(), AppError> {
 /// Moves the play-order slots `rows` together to `to`, counted once they have left: one dragged
 /// row, or every row the panel holds picked.
 pub fn queue_move(state: &AppState, rows: &[usize], to: usize) -> Result<(), AppError> {
-    // Once per drop, not per drag frame — Slint only emits on the drop gesture.
+    // Once per drop: Slint emits on the drop gesture alone.
     log::debug!("queue: move {} row(s) → {to}", rows.len());
     with_state_emit(&state.player_state, &state.sinks, |s| {
         s.queue.move_rows(rows, to);
@@ -183,8 +169,7 @@ pub fn queue_remove_batch(state: &AppState, indices: &[usize]) -> Result<(), App
 }
 
 pub fn queue_clear(state: &AppState) -> Result<(), AppError> {
-    // The one queue edit that can leave no other trace: with nothing playing it
-    // emits no `PlayerAction`.
+    // The one queue edit that can leave no other trace: with nothing playing it emits no action.
     log::debug!("queue: clear");
     with_state_emit(&state.player_state, &state.sinks, |s| {
         s.queue.clear();
@@ -221,13 +206,9 @@ pub async fn queue_skip_to_index(state: &AppState, index: usize) -> Result<(), A
     Ok(())
 }
 
-/// Drive shuffle to `enabled`, doing nothing when it is already there.
-///
-/// Comparison and flip share one `with_state_emit` closure, so a caller meaning
-/// "on" can't be raced into "off" by the transport button landing between a read
-/// and a write — the whole reason to reach for this over
-/// read-then-`queue_toggle_shuffle`. The toggle is the transport's own path,
-/// where flipping whatever is current *is* the intent.
+/// Drive shuffle to `enabled`. The comparison and the flip share one emit, so the transport button
+/// landing between a read and a write can't turn "on" into "off", which a read then
+/// [`queue_toggle_shuffle`] would allow.
 pub fn queue_set_shuffle(state: &AppState, enabled: bool) -> Result<(), AppError> {
     let new_shuffle = set_shuffle(&state.player_state, &state.sinks, enabled);
     log::debug!("queue: shuffle {new_shuffle}");
@@ -307,9 +288,7 @@ fn set_repeat(
     })
 }
 
-/// Fire-and-forget settings.json write for shuffle, on the blocking pool so the
-/// `wire_sync!` spawn returns immediately. A failed write only logs: the
-/// in-memory state already changed and persistence is best-effort.
+/// Best-effort: the state has already changed, so a failed write only logs.
 fn persist_shuffle(state: &AppState, enabled: bool) {
     state.persist_blocking("persist shuffle_enabled", move |paths| {
         mutate_settings(paths, |s| s.queue.shuffle_enabled = enabled)
@@ -331,17 +310,9 @@ fn load_persisted_playback(paths: &Paths) -> Option<PersistedPlayback> {
     serde_json::from_str(&json).ok()
 }
 
-/// Startup restore: what the last session was playing back into `PlayerState`, once, from
-/// `boot::tasks`.
-///
-/// The queue and the station over it come back together, in that order — seating the station
-/// clears the `current_track` the queue restore just set, and the queue underneath is what a stop
-/// hands back (D9).
-///
-/// Gather then apply, because the two halves are testable at different costs: [`plan_restore`]
-/// needs a pool and a data directory, the apply needs a `PlaybackEngine` and therefore an audio
-/// device. The station is resolved here rather than in the plan, being the one part that goes
-/// through the radio facade and its off switch.
+/// Startup restore of what the last session was playing. Gathered, then applied: [`plan_restore`]
+/// needs a pool, the apply an audio device. The station resolves here, being the one part behind
+/// the radio facade's off switch.
 pub async fn restore_persisted_playback(state: &AppState) -> AppResult<()> {
     let persisted = load_persisted_playback(&state.paths);
     let station = match persisted.as_ref().and_then(|p| p.station_id) {
@@ -369,14 +340,9 @@ struct RestorePlan {
 /// Resolve `queue.json`'s ids against the library and settle shuffle and repeat against
 /// `settings.json`.
 ///
-/// A row gone since the save drops out, and the current slot moves to the next track that
-/// survived, as a prune mid-session moves it; a track queued twice comes back twice, as it was
-/// saved. A folder going away between sessions is the ordinary case rather than the corrupt one.
-///
-/// `repeat_mode` and `shuffle_enabled` come from `settings.json`, not `queue.json`. A restored
-/// non-empty queue forces shuffle off because `original_order` isn't persisted — left on,
-/// "unshuffle" would be a no-op against an unknown original sequence. The file is rewritten to
-/// match in the same closure, so the value the state takes and the value on disk cannot disagree.
+/// A row gone since the save drops out and the current slot moves to the next survivor, as a prune
+/// mid-session does. A restored non-empty queue forces shuffle off, `original_order` not being
+/// persisted, and the file is rewritten in the same closure so state and disk can't disagree.
 /// Settled before the window is read, which wraps where repeat does.
 async fn plan_restore(
     db: &DbPool,
@@ -391,8 +357,6 @@ async fn plan_restore(
     let mut queue = QueueState::restored(ids, current_index);
     queue.prune_missing(&gone);
 
-    // One FS round-trip, all under the same `MUTATE_LOCK` so no writer
-    // interleaves between the read and the conditional rewrite.
     let restored_non_empty = !queue.is_empty();
     let paths = Arc::clone(paths);
     let (repeat_mode, shuffle_enabled) = tokio::task::spawn_blocking(move || -> AppResult<_> {
@@ -416,8 +380,8 @@ async fn plan_restore(
     Ok(RestorePlan { queue, records, station })
 }
 
-/// Seat a [`RestorePlan`]. The queue first and the station over it, which is the order the two
-/// halves of `queue.json` owe each other.
+/// The queue first and the station over it: seating the station clears the `current_track` the
+/// queue restore set, and the queue underneath is what a stop hands back.
 fn apply_restore(state: &mut PlayerState, plan: RestorePlan) -> Vec<PlayerAction> {
     let RestorePlan { queue, records, station } = plan;
 
@@ -429,9 +393,7 @@ fn apply_restore(state: &mut PlayerState, plan: RestorePlan) -> Vec<PlayerAction
     }
 }
 
-/// Shuffle the queue's `play_order` in place using a thread-local RNG,
-/// pinning the currently-playing track to position 0 so playback stays
-/// continuous. Allocation-free — no intermediate index Vec.
+/// Pins the playing track to position 0, so playback stays continuous.
 fn shuffle_inline(state: &mut PlayerState) {
     let mut rng = rand::rng();
     state.queue.shuffle_play_order_in_place(&mut rng, /* anchor_to_current */ true);

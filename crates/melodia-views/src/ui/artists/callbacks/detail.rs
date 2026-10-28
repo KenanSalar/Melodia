@@ -13,7 +13,6 @@ use melodia_app::library;
 use melodia_app::state::AppState;
 use melodia_ui::{AppWindow, ArtistDetail};
 
-/// Wire the `ArtistDetail` callbacks. See [`super::wire`].
 pub(super) fn wire(ui: &AppWindow, state: &AppState, artists_ui: &Arc<ArtistsUi>) {
     track_detail::wire(state, artists_ui);
     wire_close(ui, state, artists_ui);
@@ -44,11 +43,9 @@ fn wire_close(ui: &AppWindow, state: &AppState, artists_ui: &Arc<ArtistsUi>) {
         let au = au.clone();
         s.runtime.spawn_blocking(move || {
             au.release_detail_artwork();
-            // One arm or the other, never both: one tier serves the grid and the Albums strip,
-            // so a hand-back beside the prewarm would shrink the screenful it just decoded and
-            // leave the grid soft on the frame it mounts. Routing to another section, the grid
-            // isn't going to mount and the strip is gone, so the pixels are dead weight; coming
-            // back to the grid, warming it is the point, and an owed reload warms it itself.
+            // One arm or the other: the grid and the strip share a tier, so a hand-back beside the
+            // prewarm would shrink the screenful it just decoded. Leaving the page, the pixels
+            // are dead weight; back on the grid, an owed reload warms it itself.
             if origin_was_cross_section {
                 crate::ui::grid_prewarm::hand_back_covers();
             } else if !reloaded {
@@ -58,11 +55,9 @@ fn wire_close(ui: &AppWindow, state: &AppState, artists_ui: &Arc<ArtistsUi>) {
     });
 }
 
-/// Flips the flag synchronously so the UI repaints this frame, then persists it. Collapsing also
-/// hands the grid tier's pixels back: the `if !albums-collapsed` gate has unmounted the scroller,
-/// so nothing queries them. The strip pays a re-decode to come back either way, its lookup being
-/// the blocking one, which takes a proxy for a miss, so the proxy buys the bytes here and
-/// nothing else.
+/// Flips the flag synchronously so the UI repaints this frame, then persists it. Collapsing hands
+/// the tier's pixels back, the strip's scroller being unmounted; its blocking lookup takes a
+/// proxy for a miss, so the strip re-decodes on the way back either way.
 fn wire_albums_collapse(ui: &AppWindow, state: &AppState) {
     let s = state.clone();
     let weak = ui.as_weak();

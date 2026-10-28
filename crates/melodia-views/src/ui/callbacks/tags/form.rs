@@ -15,16 +15,9 @@ pub(super) const CREDIT_ARTIST: usize = 0;
 pub(super) const CREDIT_ALBUM_ARTIST: usize = 1;
 pub(super) const CREDIT_FIELD_COUNT: usize = 2;
 
-/// Every editable field that crosses the boundary as a string, named rather than numbered.
-///
-/// This replaced three positional lists — a getter array, `populate`'s `field!` calls and the
-/// diff — that had to agree on an index per field. At eleven fields that was merely fragile; the
-/// vocabulary is thirty-odd now, and the failure mode is silent and destructive: an index off by
-/// one writes the user's ISRC into their mood tag. Named on both sides of the diff, a mistake is a
-/// compile error.
-///
-/// The two artist fields are absent on purpose — they are credits and diff structurally, not as
-/// the rendered lines this holds.
+/// Every editable field crossing the boundary as a string, named rather than numbered: an index
+/// off by one would silently write the ISRC into the mood tag, where a name is a compile error.
+/// The artist fields are absent, being credits that diff structurally.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub(super) struct TextFields {
     pub title: String,
@@ -58,21 +51,17 @@ pub(super) struct TextFields {
     pub lyrics: String,
 }
 
-/// The whole editable form: the text fields plus the one switch among them.
-///
-/// The switch rides here rather than as its own argument so "what the user was shown" and "what
-/// the user left behind" are one type, compared as a whole.
+/// The whole editable form, the one switch included, so what the user was shown and what they
+/// left behind are one type, compared as a whole.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub(super) struct FormState {
     pub text: TextFields,
     pub compilation: bool,
 }
 
-/// The four multi-value fields, which every format worth the name stores as a list.
-///
-/// Their own type because they share a contract the text fields don't: each is edited as *rows*
-/// and diffed **structurally**, never through the string it renders as. Two credits that render
-/// alike are still different credits, and a genre may contain the comma its column joins with.
+/// The multi-value fields, edited as *rows* and diffed **structurally**, never through the string
+/// they render as: two credits that render alike still differ, and a genre may contain the comma
+/// its column joins with.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub(super) struct ListFields {
     pub credits: [ArtistCredit; CREDIT_FIELD_COUNT],
@@ -80,10 +69,7 @@ pub(super) struct ListFields {
     pub roles: RoleCreditEdit,
 }
 
-/// The live form, read back off the globals in one place.
-///
-/// Its counterpart is `populate`'s `field!`, which writes each of these and records the same value
-/// as the baseline — so the two sites name the same field and nothing pairs them by position.
+/// The live form, read back off the globals by the names `populate`'s `field!` wrote them under.
 pub(super) fn read_form(te: &TagEditor) -> FormState {
     FormState { compilation: te.get_compilation(), text: read_text_fields(te) }
 }

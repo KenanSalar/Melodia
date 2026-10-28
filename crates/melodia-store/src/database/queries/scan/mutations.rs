@@ -1,6 +1,4 @@
-//! Track-row write side: insert (single + multi-row), metadata refresh,
-//! location-only update (for moved/renamed files), bulk delete, and the
-//! cover roll-ups that run at the tail of every scan batch.
+//! The track rows' write side, and the cover roll-ups and orphan prune at the tail of a batch.
 
 use std::collections::HashMap;
 
@@ -16,13 +14,9 @@ use super::name_cache::NameCache;
 use super::sort_key::to_natural_sort_key;
 use super::upserts::{insert_track_joins, replace_track_joins};
 
-/// Column-name list shared by [`insert_track`]'s single-row INSERT and
-/// [`insert_tracks_batch`]'s multi-row form.
-///
-/// Both reach it through the one [`bind_track_columns`], and the placeholder grid and the bind
-/// budget below are counted off this string rather than typed out, so adding a column here is the
-/// whole edit. `update_track_metadata` binds through the same helper, which is what couples its
-/// SET list to this order.
+/// The columns [`insert_track`] and [`insert_tracks_batch`] write, in the order
+/// [`bind_track_columns`] binds them, which `update_track_metadata`'s `SET` list follows too. The
+/// placeholder grid and the bind budget are counted off this string.
 const TRACK_INSERT_COLUMNS: &str = "file_path, file_name,
     file_hash, title, artist, album_artist, album, genre, credits,
     track_number, track_total, disc_number, disc_total, disc_subtitle, subtitle,
@@ -38,8 +32,7 @@ const TRACK_INSERT_COLUMNS: &str = "file_path, file_name,
     play_count, skip_count, rating, is_favorite, last_played, last_position,
     date_added";
 
-/// How many names a comma-separated column list holds. `const` so everything sized off
-/// [`TRACK_INSERT_COLUMNS`] is derived from it rather than counted by hand and left to drift.
+/// How many names a comma-separated column list holds, at compile time.
 const fn column_count(list: &str) -> usize {
     let bytes = list.as_bytes();
     let mut count = 1;
@@ -55,18 +48,13 @@ const fn column_count(list: &str) -> usize {
 
 const TRACK_INSERT_COLUMN_COUNT: usize = column_count(TRACK_INSERT_COLUMNS);
 
-/// The playback defaults pushed as SQL literals rather than bound — `play_count`, `skip_count`,
-/// `is_favorite`, `last_played`, `last_position`. They carry nothing from the file, and the
-/// rating beside them binds because it does.
+/// The playback defaults pushed as SQL literals: `play_count`, `skip_count`, `is_favorite`,
+/// `last_played`, `last_position`. The rating beside them binds, carrying the file's tag.
 const LITERAL_DEFAULTS: usize = 5;
 
-/// Somewhere a track's columns can be bound, in order.
-///
-/// The single-row INSERT chains `Query::bind` and the multi-row one chains `Separated::push_bind`,
-/// which are the same operation through two types sqlx shares no trait between. One trait over
-/// both is what lets [`bind_track_columns`] be the only place the order is written down: a second
-/// copy is fifty adjacent binds that a reorder between two same-typed nullable columns would move
-/// silently, since arity still checks out and every value still encodes.
+/// Somewhere a track's columns can be bound, in order: `Query::bind` and `Separated::push_bind`,
+/// which sqlx shares no trait between. One trait keeps [`bind_track_columns`] the only place the
+/// order is written, where a second copy could swap two same-typed nullable columns silently.
 trait TrackBinder<'q> {
     fn bind_col<T: sqlx::Encode<'q, sqlx::Sqlite> + sqlx::Type<sqlx::Sqlite>>(
         self,
@@ -95,12 +83,8 @@ impl<'q, Sep: std::fmt::Display> TrackBinder<'q>
     }
 }
 
-/// Bind the canonical column block shared by `insert_track`,
-/// `insert_tracks_batch` and `update_track_metadata`: 44 metadata fields
-/// (`file_hash` through `artwork_path`), 4 foreign-key ids (`album_id`, `artist_id`, `genre_id`,
-/// `folder_id`), then `date_modified` and the two [`DerivedColumns`]. All three call sites place
-/// these in the same order in their respective SQL so this single helper
-/// covers schema changes in one place.
+/// Binds the block every track write shares: the metadata from `file_hash` to `artwork_path`, the
+/// four foreign keys, `date_modified` and the two [`DerivedColumns`].
 fn bind_track_columns<'q, B: TrackBinder<'q>>(
     binder: B,
     meta: &'q melodia_core::entities::scan::ExtractedMetadata,
@@ -161,9 +145,8 @@ fn bind_track_columns<'q, B: TrackBinder<'q>>(
         .bind_col(&derived.search_text)
 }
 
-/// The two columns computed from a file's tags rather than read off them. Built once per file
-/// because `insert_track`, `insert_tracks_batch` and `update_track_metadata` all bind both, and a
-/// row sorting or filtering by a different rule than its neighbours is invisible until a list is
+/// The two columns computed from a file's tags rather than read off them, one rule for every
+/// write: a row sorting or filtering differently from its neighbours is invisible until a list is
 /// read top to bottom.
 struct DerivedColumns {
     sort_key: String,
@@ -172,7 +155,6 @@ struct DerivedColumns {
 
 impl DerivedColumns {
     fn of(meta: &ExtractedMetadata) -> Self {
-        // The file's `TITLESORT` where it has one, the title otherwise.
         let sort_source = meta.sort.title.as_deref().unwrap_or(&meta.title);
         let search_text = SearchFields {
             title: &meta.title,
@@ -186,10 +168,8 @@ impl DerivedColumns {
     }
 }
 
-/// Insert a new track into the database. Returns the new track's `id` so the
-/// caller can collect inserted IDs without a follow-up `SELECT … WHERE
-/// file_path IN (…)` round-trip.
-/// `now` should be a pre-computed RFC3339 timestamp so all tracks in a batch share the same `date_added`.
+/// Inserts a track and returns its id. `now` is computed once per batch, so a batch shares one
+/// `date_added`.
 pub(crate) async fn insert_track(
     tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
     file_path: &str,
@@ -201,8 +181,6 @@ pub(crate) async fn insert_track(
 ) -> Result<i64, AppError> {
     let derived = DerivedColumns::of(meta);
 
-    // Column order: file_path, file_name, then the shared block bound by
-    // `bind_track_columns`, then the playback defaults and date_added.
     let sql = format!(
         "INSERT INTO tracks ({TRACK_INSERT_COLUMNS}) VALUES ({})",
         placeholders(TRACK_INSERT_COLUMN_COUNT)
@@ -226,8 +204,7 @@ pub(crate) async fn insert_track(
     Ok(track_id)
 }
 
-/// One buffered row for [`insert_tracks_batch`]. `meta` borrows from the
-/// scanned-file set the ingest loop iterates; the resolved ids are moved in.
+/// One buffered row for [`insert_tracks_batch`].
 pub struct NewTrackRow<'a> {
     pub file_path: String,
     pub file_name: String,
@@ -235,23 +212,13 @@ pub struct NewTrackRow<'a> {
     pub ids: ResolvedIds,
 }
 
-/// Rows per multi-row INSERT statement, sized so a chunk stays under `SQLite`'s bind cap. A row
-/// binds `file_path`, `file_name`, the shared block, `rating` and `date_added`; the five playback
-/// defaults beside them ride as SQL literals, which is what [`LITERAL_DEFAULTS`] subtracts.
-///
-/// The rating is bound rather than pushed as a literal like its neighbours
-/// because it is the one of the six that carries a *value* — the file's own
-/// tag — and data never rides in the statement text.
+/// Rows per multi-row INSERT inside the bind budget, the [`LITERAL_DEFAULTS`] riding as SQL.
 pub const INSERT_CHUNK_ROWS: usize =
     MAX_BINDS_PER_STATEMENT / (TRACK_INSERT_COLUMN_COUNT - LITERAL_DEFAULTS);
 
-/// Multi-row variant of [`insert_track`] for the scan/import ingest hot
-/// path: one `INSERT … VALUES (…), (…), … RETURNING id, file_path` per
-/// [`INSERT_CHUNK_ROWS`] rows instead of one statement per row. Returns
-/// the new ids **in `rows` order** — `SQLite` documents `RETURNING`
-/// output order as unspecified, so ids are mapped back via the returned
-/// `file_path` (a UNIQUE column) rather than by position. Callers rely
-/// on that ordering: the `DnD` import queues tracks in drop order.
+/// [`insert_track`] for the ingest hot path, one statement per [`INSERT_CHUNK_ROWS`] rows. Returns
+/// the ids **in `rows` order**, which the drag-and-drop import queues by: `RETURNING`'s order is
+/// unspecified, so each id is matched back by its `file_path`.
 pub(crate) async fn insert_tracks_batch(
     tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
     rows: &[NewTrackRow<'_>],
@@ -270,9 +237,7 @@ pub(crate) async fn insert_tracks_batch(
             let meta = row.meta;
             b.push_bind(&row.file_path).push_bind(&row.file_name);
             bind_track_columns(&mut b, meta, &row.ids, derived);
-            // Playback defaults as SQL literals (play_count, skip_count,
-            // is_favorite, last_played, last_position); the rating comes off
-            // the file's tag, so it binds.
+            // The `LITERAL_DEFAULTS` in column order, the rating and `date_added` bound among them.
             b.push("0")
                 .push("0")
                 .push_bind(meta.rating.unwrap_or(0))
@@ -289,9 +254,7 @@ pub(crate) async fn insert_tracks_batch(
             returned.into_iter().map(|(id, path)| (path, id)).collect();
         for row in chunk {
             let Some(id) = by_path.remove(row.file_path.as_str()) else {
-                // Unreachable in practice — every VALUES row produces a
-                // RETURNING row — but fail loudly rather than silently
-                // desync `inserted_track_ids` from reality.
+                // Every VALUES row returns one; failing beats ids out of step with the rows.
                 return Err(AppError::scanner_msg(format!(
                     "multi-row insert returned no id for {}",
                     row.file_path
@@ -304,11 +267,8 @@ pub(crate) async fn insert_tracks_batch(
     Ok(out)
 }
 
-/// Update a track's location when it has been moved or renamed.
-/// Preserves all playback state (`play_count`, rating, `is_favorite`, etc.).
-/// Returns `false` when no row with `track_id` exists — callers holding a
-/// candidate id resolved *before* the transaction opened must treat that
-/// as "the row vanished in-tx" and fall back to inserting.
+/// Re-points a moved or renamed track, keeping its playback state. `false` where the row is gone,
+/// which a caller holding an id resolved before the transaction opened takes as a cue to insert.
 pub(crate) async fn update_track_location(
     tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
     track_id: i64,
@@ -331,22 +291,13 @@ pub(crate) async fn update_track_location(
     Ok(result.rows_affected() > 0)
 }
 
-/// Update all metadata columns for an existing track that has changed on disk.
-/// Preserves playback state (`play_count`, `is_favorite`, `last_played`, `last_position`).
+/// Rewrites every tag-backed column of a track that changed on disk, keeping its playback state.
 ///
-/// The rating is the exception, and it is a tag-backed field like any other: retag a title
-/// elsewhere and a rescan shows the new title, so a star set elsewhere has to land the same way.
-/// What stops that being a plain `rating = ?` is the track whose file cannot carry one — a
-/// filename-derived Matroska row, a file on read-only media, an install with the write-back
-/// turned off — where the row is the only copy there is. Hence the `CASE`: the tag wins whenever
-/// it says something, and silence leaves the row alone.
-///
-/// The tag winning is not confined to the write-back's own re-extract: this runs on every rescan
-/// and every Edit-Tags save. So with the write-back **off**, a star set here is replaced by
-/// whatever another player wrote, and a star *cleared* here comes back, the file still carrying
-/// the tag and a cleared row being indistinguishable from an untouched one. Deliberate, on the
-/// same reading of "tag-backed field" as the title above it, and the price of the column not
-/// being able to say "the user meant zero".
+/// The rating is tag-backed too, but a file that can't carry one (a filename-derived Matroska row,
+/// read-only media, the write-back turned off) leaves the row its only copy, hence the `CASE`: the
+/// tag wins whenever it says something, and silence leaves the row alone. So with the write-back
+/// off, a star set here gives way to one another player wrote, and a cleared one comes back while
+/// the file still carries it, the column having no way to say "the user meant zero".
 pub(crate) async fn update_track_metadata(
     tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
     file_path: &str,
@@ -382,10 +333,8 @@ pub(crate) async fn update_track_metadata(
     let updated =
         q.bind(tag_rating).bind(tag_rating).bind(file_path).fetch_optional(&mut **tx).await?;
 
-    // Here rather than at the four callers, for the reason the module doc gives about hand-built
-    // UPDATEs: a re-ingest that refreshed the artist column and left the credit rows behind is a
-    // track that displays one thing and files under another. `RETURNING` rather than a follow-up
-    // SELECT, so an incremental scan pays no extra round trip per changed file.
+    // Here rather than at the callers: an artist column refreshed without its credit rows displays
+    // one thing and files under another.
     if let Some(row) = updated {
         let track_id: i64 = row.try_get("id")?;
         replace_track_joins(tx, track_id, meta, ids, names).await?;
@@ -393,12 +342,11 @@ pub(crate) async fn update_track_metadata(
     Ok(())
 }
 
-/// Give each album missing a cover the artwork of its lowest-id track that has one.
+/// Gives each album missing a cover the artwork of its lowest-id track that has one.
 ///
-/// Driven from the albums rather than from `tracks`, so the cost follows the albums still missing
-/// a cover, and each lookup is one `idx_tracks_album_id` seek already in `id` order. Don't fold it
-/// back into a window over `tracks`: `SQLite` answers a correlated read of a materialized CTE by
-/// scanning it once per album written, and a first scan writes nearly every album.
+/// Driven from the albums, so the cost follows the albums still missing a cover, each one
+/// `idx_tracks_album_id` seek in `id` order. Not a window over `tracks`: `SQLite` scans a
+/// materialized CTE once per album written, and a first scan writes nearly every album.
 pub(crate) async fn update_album_artwork_from_tracks(
     tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
 ) -> Result<(), AppError> {
@@ -436,26 +384,14 @@ pub(crate) async fn roll_up_covers(
     crate::database::queries::playlist::refresh_automatic_thumbnails(tx).await
 }
 
-/// Delete album, artist, and genre rows left with no tracks — orphans stranded
-/// by a retag that moved a track to a different album/genre, or by a track
-/// deletion that removed a parent's last member. Nothing else prunes these: the
-/// stats triggers decrement counts on the emptied row but never delete it.
+/// Deletes the albums, artists and genres no track reaches any more, which the stats triggers only
+/// ever count down.
 ///
-/// Order matters — albums first, so an artist whose only album just emptied
-/// becomes prunable in the same pass; then artists, except the id-1 "unknown"
-/// default that `albums.artist_id` falls back to. Genres share no FK with
-/// albums/artists and have no sentinel, so they're pruned independently.
-///
-/// **The credit tables are part of what keeps an artist alive**, and they are the only thing
-/// keeping a featured-only one: nothing points at them from `tracks.artist_id`, and
-/// `track_artists.artist_id` cascades. So a predicate over the two FKs alone deletes exactly the
-/// artists the credit tables exist to surface, and takes their credit rows down with them.
-///
-/// **Deletes only; it recomputes nothing.** Every caller reaches this either with the stats
-/// triggers live, where the album DELETE reaches `album_artists_stats_delete` through
-/// `albums_credits_cleanup` and the count is already down, or with `stats::recalculate_all_stats`
-/// behind it, which sets the same column from the same subquery. A recompute here is one of those
-/// twice and the other for nothing, over every artist row.
+/// Albums first, so an artist whose only album just emptied goes in the same pass, and never the
+/// "unknown" artist `albums.artist_id` falls back to. **The credit tables keep an artist alive**,
+/// and are all that keeps a featured-only one, so a predicate over the two FKs alone would delete
+/// exactly the artists they exist to surface. **Deletes only**: every caller has the stats triggers
+/// live or `stats::recalculate_all_stats` behind it, so a recompute here would be done twice.
 pub(crate) async fn prune_orphans(
     tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
 ) -> Result<(), AppError> {
@@ -490,8 +426,6 @@ pub(crate) async fn prune_orphans(
     Ok(())
 }
 
-/// Delete a single track by file path.
-/// The `tracks_stats_delete` trigger fires automatically, keeping stats correct.
 pub(crate) async fn delete_track_by_path(
     tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
     file_path: &str,
@@ -503,8 +437,7 @@ pub(crate) async fn delete_track_by_path(
     Ok(result.rows_affected() > 0)
 }
 
-/// Batch-delete tracks by file paths, chunked at [`MAX_BINDS_PER_STATEMENT`].
-/// Returns the total number of rows deleted.
+/// Deletes the tracks at `file_paths`, returning how many went.
 pub(crate) async fn delete_tracks_by_paths_batch(
     tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
     file_paths: &[String],

@@ -83,9 +83,8 @@ pub async fn absorb_folders(db: &DbPool, parent_id: i64, ids: &[i64]) -> Result<
     Ok(())
 }
 
-/// Get or create a folder by path, returning the folder ID.
-/// Created folders have `is_enabled = FALSE` so they are not watched or shown as library folders.
-/// If the folder already exists, its existing ID is returned without modification.
+/// Finds or creates a folder by path, returning its id. A created one is disabled, so it is neither
+/// watched nor listed as a library folder; an existing one is left as it is.
 pub(crate) async fn upsert_folder(
     tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
     path: &str,

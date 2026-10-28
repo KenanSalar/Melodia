@@ -1,7 +1,4 @@
-//! Setters for the Playback and Output cards, plus the persisted
-//! playback speed. Each only commits the disk write: the matching UI callback
-//! applies the runtime side, synchronously for a toggle and on the blocking pool
-//! where it has to wait on the output device.
+//! Setters for the Playback and Output cards, plus the persisted playback speed.
 
 use crate::library::playback::FOLLOW_RATE_SUPPORTED;
 use crate::services;
@@ -12,53 +9,38 @@ use melodia_engine::player::engine::backend::OutputChoice;
 use melodia_engine::player::engine::state::{MAX_SPEED, MAX_VOLUME, MIN_SPEED};
 use melodia_playback::player::playback::output::convert::Resampler;
 
-/// Persist the user toggle for "Gapless Playback". The runtime effect
-/// (gating `preload_gapless` inside the 500 ms position monitor in
-/// `crates/melodia-engine/src/player/engine/handlers.rs`) is applied
-/// synchronously by the UI callback through
-/// `library::playback::player_set_gapless` *before* this async disk write,
-/// so the next staging tick picks up the new value even when the file
-/// rewrite hasn't completed.
 pub fn set_gapless_playback(paths: &Paths, on: bool) -> Result<(), AppError> {
     services::settings::mutate_settings(paths, move |settings| {
         settings.playback.gapless_playback = on;
     })
 }
 
-/// Persist "Match the File's Sample Rate". The engine already holds the new value through
-/// `library::playback::player_set_follow_rate`, and acts on it at the next track.
 pub fn set_output_follow_rate(paths: &Paths, on: bool) -> Result<(), AppError> {
     services::settings::mutate_settings(paths, move |settings| {
         settings.output.output_follow_rate = on;
     })
 }
 
-/// Persist "Sample-Rate Conversion", which `library::playback::player_set_resampler` handed the
-/// engine in the same blocking task.
 pub fn set_output_resampler(paths: &Paths, resampler: Resampler) -> Result<(), AppError> {
     services::settings::mutate_settings(paths, move |settings| {
         settings.output.output_resampler = resampler;
     })
 }
 
-/// Persist "Give the Device Back When Paused". The engine already holds the new value through
-/// `library::playback::player_set_release_when_paused`, and the monitor reads it on its next tick.
 pub fn set_output_paused_device(paths: &Paths, on: bool) -> Result<(), AppError> {
     services::settings::mutate_settings(paths, move |settings| {
         settings.output.output_paused_device = PausedDevice::from_toggle(on);
     })
 }
 
-/// Persist the silence a reopen onto a new rate writes first, which
-/// `library::playback::player_set_resync_hold` already handed the engine.
+/// The silence a reopen onto a new rate writes first.
 pub fn set_output_resync_ms(paths: &Paths, ms: u32) -> Result<(), AppError> {
     services::settings::mutate_settings(paths, move |settings| {
         settings.output.output_resync_ms = ms;
     })
 }
 
-/// Persist the whole output choice the engine was just handed, since each of the Output card's
-/// pickers changes one part of it.
+/// The whole choice, since each of the Output card's pickers changes one part of it.
 pub fn set_output_choice(paths: &Paths, choice: &OutputChoice) -> Result<(), AppError> {
     services::settings::mutate_settings(paths, |settings| {
         settings.output.set_output_choice(choice);
@@ -97,15 +79,9 @@ fn apply_bit_perfect_reset(settings: &mut SettingsData, volume: u32) {
     }
 }
 
-/// Persist the user's "Play Button Animation" pick (None / Equalizer).
-/// The on-disk value stays a string token so future variants can be
-/// added without a migration; anything outside the known set (including
-/// the retired `"ripple"` token) falls back to `"none"` so a malformed
-/// UI write (or a hand-edited `settings.json` with a typo) can't pin the
-/// chip to an unrenderable index. Runtime effect (the `PlayButton`
-/// switching overlays) is reactive off the Slint
-/// `Settings.play-button-animation-idx` property, so the UI already
-/// repainted before this disk write is scheduled.
+/// A string token, so a variant can be added without a migration. Anything unknown, a retired
+/// token included, falls back to `"none"`, so a bad write can't pin the chip to an unrenderable
+/// index.
 pub fn set_play_button_animation(paths: &Paths, mode: String) -> Result<(), AppError> {
     let token = match mode.as_str() {
         "none" | "equalizer" => mode,
@@ -116,26 +92,18 @@ pub fn set_play_button_animation(paths: &Paths, mode: String) -> Result<(), AppE
     })
 }
 
-/// Persist the user toggle for "Resume on Startup". No runtime side
-/// effect at toggle time — the flag is consulted once, at the next
-/// `main.rs` startup after `restore_persisted_playback`, so a single-phase
-/// disk write is all that's needed. The on-disk default is `false`
-/// (`PlaybackFlags::default()` in `services/settings/playback.rs`), so
-/// first-launch users land with auto-resume off.
+/// Read once, by the next launch's restore.
 pub fn set_resume_on_startup(paths: &Paths, on: bool) -> Result<(), AppError> {
     services::settings::mutate_settings(paths, move |settings| {
         settings.playback.resume_on_startup = on;
     })
 }
 
-/// Persist the playback speed so it survives restarts, as repeat, shuffle and volume do. Clamped to
-/// the player's `MIN_SPEED..=MAX_SPEED` here too, so a malformed write can't pin an out-of-range
-/// value the boot restore would then have to clamp.
+/// Clamped to `MIN_SPEED..=MAX_SPEED`, so the boot restore never has to.
 ///
-/// NaN is refused rather than clamped, unlike the two bounds either side of it: `f64::clamp`
-/// passes it through, `serde_json` writes a non-finite float as `null`, and the next launch fails
-/// to parse `settings.json` and falls back to defaults — one malformed write costing the user
-/// every setting they have. `clamp_preamp` and `clamp_rg_preamp` each carry the same arm.
+/// NaN is refused rather than clamped: `f64::clamp` passes it through, `serde_json` writes it as
+/// `null`, and the next launch fails to parse `settings.json` and falls back to defaults, one bad
+/// write costing every setting. `clamp_preamp` and `clamp_rg_preamp` carry the same arm.
 pub fn set_playback_speed(paths: &Paths, speed: f64) -> Result<(), AppError> {
     if speed.is_nan() {
         return Err(AppError::validation_msg("Playback speed is not a number"));

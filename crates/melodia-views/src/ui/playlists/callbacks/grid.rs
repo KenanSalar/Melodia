@@ -1,6 +1,5 @@
-//! `Playlists.*` grid callbacks: lazy cover lookup, re-chunk on column
-//! count, the filter, the open-playlist drill-in, and the per-id name /
-//! description lookups backing the grid card's Rename overlay.
+//! `Playlists.*` grid callbacks, wired as `albums/callbacks/grid.rs` argues, plus the lookups
+//! behind the card's Rename overlay.
 
 use std::sync::Arc;
 
@@ -15,13 +14,10 @@ use melodia_app::state::AppState;
 use melodia_core::error::describe;
 use melodia_ui::{AppWindow, Playlists};
 
-/// Wire the `Playlists` grid callbacks. See [`super::wire`].
 pub(super) fn wire(ui: &AppWindow, state: &AppState, playlists_ui: &Arc<PlaylistsUi>) {
     let playlists = ui.global::<Playlists>();
     let weak = ui.as_weak();
 
-    // request-cover: lazy per-card cover lookup off the shared grid tier. Only on-screen cards
-    // invoke this, and `generation` is read for its effect on the binding, never its value.
     playlists
         .on_request_cover(|path, _generation| crate::ui::grid_prewarm::grid_cover(path.as_str()));
 
@@ -33,7 +29,6 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, playlists_ui: &Arc<Playlist
         });
     }
 
-    // A hidden grid reloads under the filter on its enter instead.
     {
         let s = state.clone();
         let pu = playlists_ui.clone();
@@ -83,9 +78,7 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, playlists_ui: &Arc<Playlist
         });
     }
 
-    // row-name / row-description: per-id lookups against the card on screen —
-    // back the grid card's "Rename" overlay, which only carries the playlist
-    // id. A card whose fetch hasn't landed reads as empty.
+    // The Rename overlay carries only the id. A card whose fetch hasn't landed reads as empty.
     {
         let weak = weak.clone();
         playlists.on_row_name(move |id| {

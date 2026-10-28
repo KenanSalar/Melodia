@@ -1,10 +1,7 @@
-//! What a folder card's right-click menu does.
-//!
-//! Here rather than on the shared `CardActions` global because a folder is named by a path, and
-//! every callback there carries an id list. All three transport arms resolve through
-//! [`library::browse::folder_track_ids`], which is **recursive**: a folder card is one the user
-//! has not navigated into, so an artist folder holding only album subfolders would otherwise offer
-//! a Play that queues nothing.
+//! What a folder card's right-click menu does, here rather than on `CardActions` because a folder
+//! is named by a path and every callback there carries ids. The three transport arms resolve
+//! through [`library::browse::folder_track_ids`], which is recursive: an artist folder holding
+//! only album subfolders would otherwise offer a Play that queues nothing.
 
 use std::future::Future;
 
@@ -15,7 +12,6 @@ use melodia_app::state::AppState;
 use melodia_core::error::describe;
 use melodia_ui::{AppWindow, Browse};
 
-/// Wire the four folder-card callbacks.
 pub(super) fn wire(ui: &AppWindow, state: &AppState) {
     let g = ui.global::<Browse>();
 
@@ -84,10 +80,8 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState) {
     }
 }
 
-/// Resolve `path` to its track ids on the runtime, then hand them to `act`.
-///
-/// Bails on an empty result rather than asking the transport to play nothing — a folder holding
-/// only files the scanner never took.
+/// Resolves `path` to its track ids and hands them to `act`, bailing on none, as for a folder
+/// holding only files the scanner never took.
 fn spawn_with_folder_tracks<Fut>(
     state: &AppState,
     label: &'static str,

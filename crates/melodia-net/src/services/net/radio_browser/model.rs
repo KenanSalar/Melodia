@@ -1,27 +1,19 @@
 //! The directory's JSON as it arrives, and its projection onto the entity types.
 //!
-//! Every shape here carries a container-level `#[serde(default)]`, because the
-//! API adds and removes fields without notice and a station dropped over one
-//! nobody reads is a station the user cannot find. Nullability is deliberately
-//! not handled: the API does send `null`, but only for fields none of these
-//! structs declares, and an undeclared field is already ignored.
+//! Every shape takes a container-level `#[serde(default)]`: the API adds and removes fields
+//! unannounced, and a station dropped over one nobody reads is a station nobody can find.
 
 use serde::Deserialize;
 
 use melodia_core::entities::radio::{DirectoryStation, Facet};
 
-/// One row of `/json/stations/search`.
-///
-/// The response carries roughly twice these fields — change stamps, an ISO
-/// duplicate of every timestamp, geo coordinates, an extended-info flag. Only
-/// what survives into [`DirectoryStation`] is listed.
+/// One row of `/json/stations/search`, listing only the fields [`DirectoryStation`] keeps.
 #[derive(Debug, Default, Deserialize)]
 #[serde(default)]
 pub struct ApiStation {
     pub stationuuid: String,
     pub name: String,
-    /// The station's own URL, and the fallback where the directory has not
-    /// resolved one.
+    /// The fallback where the directory has not resolved one.
     pub url: String,
     /// Already followed past any `.pls`/`.m3u` indirection.
     pub url_resolved: String,
@@ -43,12 +35,10 @@ pub struct ApiStation {
 }
 
 impl ApiStation {
-    /// Project onto the entity, doing the tidying the directory does not.
     pub fn into_directory_station(self) -> DirectoryStation {
         DirectoryStation {
             station_uuid: self.stationuuid,
-            // Names arrive padded often enough to matter: a leading tab sorts
-            // ahead of every letter and paints as a gap down the card column.
+            // A leading tab sorts ahead of every letter and paints as a gap down the cards.
             name: self.name.trim().to_owned(),
             stream_url: if self.url_resolved.is_empty() { self.url } else { self.url_resolved },
             homepage: non_empty(self.homepage),
@@ -76,10 +66,8 @@ pub struct ApiServer {
     pub name: String,
 }
 
-/// One entry of a facet list.
-///
-/// The four lists share a shape apart from their code field: `iso_3166_1` for
-/// countries, `iso_639` for languages, neither for tags and codecs.
+/// One entry of a facet list. The code field is `iso_3166_1` for countries, `iso_639` for
+/// languages, and absent for tags and codecs.
 #[derive(Debug, Default, Deserialize)]
 #[serde(default)]
 pub struct ApiFacet {
@@ -90,7 +78,6 @@ pub struct ApiFacet {
 }
 
 impl ApiFacet {
-    /// Project onto the entity, folding whichever code field this list carries.
     pub fn into_facet(self) -> Facet {
         Facet {
             code: self.iso_3166_1.or(self.iso_639).filter(|code| !code.is_empty()),
@@ -100,12 +87,8 @@ impl ApiFacet {
     }
 }
 
-/// The answer to `/json/vote/{uuid}`.
-///
-/// The only response here whose success is in the body rather than in the
-/// status: an unknown station and a vote the server is rate-limiting both come
-/// back `200 {"ok":false}`. `message` carries the server's own wording, which is
-/// what a refusal has to say for itself.
+/// The answer to `/json/vote/{uuid}`, the one response whose success is in the body; `message` is
+/// the server's own wording for a refusal.
 #[derive(Debug, Default, Deserialize)]
 #[serde(default)]
 pub struct ApiVote {
@@ -113,17 +96,8 @@ pub struct ApiVote {
     pub message: String,
 }
 
-/// The distinct hostnames in a mirror list.
-///
-/// The list carries one entry per address family, so a single mirror appears
-/// twice under one name. Picking from it undeduplicated is a coin flip between
-/// two spellings of one host, which looks like a working random pick right up
-/// until a second mirror exists.
-///
-/// The `ip` is dropped rather than kept as a fallback: the certificate is issued
-/// for the hostname, so an IP-keyed request fails TLS verification. That field
-/// is there for clients resolving names themselves, which is the work this
-/// whole endpoint exists to avoid.
+/// The distinct hostnames in a mirror list, which names each mirror once per address family. The
+/// `ip` is dropped: the certificate is for the name, so an IP-keyed request fails TLS.
 pub fn hosts(servers: &[ApiServer]) -> Vec<String> {
     let mut names: Vec<String> = servers
         .iter()
@@ -136,28 +110,20 @@ pub fn hosts(servers: &[ApiServer]) -> Vec<String> {
     names
 }
 
-/// A hostname and nothing else, which is the shape `url_for` spells the scheme
-/// and the separators around. One carrying either of its own would rewrite the
-/// path rather than name a mirror.
+/// A host and nothing else: one carrying a scheme or separator of its own would rewrite the path
+/// `url_for` builds.
 fn is_bare_host(name: &str) -> bool {
     !name.is_empty() && !name.contains(['/', ':', '?', '#']) && !name.contains(char::is_whitespace)
 }
 
-/// Whether a station uuid is safe to interpolate into a request path.
-///
-/// The two uuid-keyed endpoints take theirs as a path segment rather than as a
-/// query parameter, and a uuid does not only ever come from the directory: an
-/// imported station list carries whatever `station_uuid` the file named, so a
-/// value with a `/` or a `?` in it would reach past the endpoint it was meant
-/// for. Shaped like what the directory issues rather than parsed as a UUID,
-/// since it is the *path* this has to be safe in and nothing here cares whether
-/// the version nibble is plausible.
+/// Whether a uuid is safe as a request path segment. Not only the directory issues them: an
+/// imported station list carries whatever the file named, and a `/` or `?` would reach past the
+/// endpoint. Shaped like what the directory issues rather than parsed as a UUID.
 pub fn is_path_safe_uuid(uuid: &str) -> bool {
     !uuid.is_empty() && uuid.chars().all(|c| c.is_ascii_alphanumeric() || c == '-')
 }
 
-/// `None` for a field the directory left blank, which it does far more often
-/// than it omits one.
+/// The directory leaves a field blank far more often than it omits one.
 fn non_empty(value: String) -> Option<String> {
     if value.is_empty() { None } else { Some(value) }
 }

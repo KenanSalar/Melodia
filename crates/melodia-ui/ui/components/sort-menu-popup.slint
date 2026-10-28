@@ -4,10 +4,8 @@ import { MaterialIcon } from "material-icon.slint";
 import { PopupSurface } from "popup-surface.slint";
 import { FocusLossWatcher } from "focus-loss-watcher.slint";
 
-// One field row inside the sort popup. Unexported: useful nowhere else.
-//
-// `direction` carries active-ness as well as the arrow, the way `PillButton.sort-direction` does.
-// An empty string is "not the sorted field", so the two can't be set to disagree.
+// `direction` carries whether the row is the sorted field as well as the arrow, as
+// `PillButton.sort-direction` does, so the two can't disagree.
 component SortMenuRow inherits Rectangle {
     in property <string> label;
     in property <string> direction;
@@ -35,9 +33,7 @@ component SortMenuRow inherits Rectangle {
             overflow: elide;
         }
 
-        // Always rendered, transparent off the sorted field, so a pick shifts no row. Never an
-        // arrow concatenated into the label: a glyph Vazirmatn lacks pulls a fallback font whose
-        // line box pushes the patched glyphs off centre.
+        // Always rendered, so a pick shifts no row; never an arrow in the label (`PillButton`).
         MaterialIcon {
             horizontal-stretch: 0;
             name: root.direction == "asc" ? "arrow_drop_up" : "arrow_drop_down";
@@ -52,21 +48,15 @@ component SortMenuRow inherits Rectangle {
     }
 }
 
-// A labelled pill opening a PopupWindow of sort fields: `ColumnTogglePopup`'s shape, for the
-// orders a view can take rather than the columns it can show.
+// A labelled pill opening a popup of sort fields, taking **`SortPillRow`'s inputs verbatim** so the
+// two swap at a mount: which a page wants depends on how much room its band has.
 //
-// **`SortPillRow`'s inputs verbatim**, so the two are interchangeable at a mount and the parallel
-// arrays are one contract rather than two. Which of them a page wants is a question about how much
-// room its band has, not about its sort.
-//
-// **A pick leaves the popup open**, because clicking the sorted field again is how the direction
-// flips and reopening for that would cost the second half of the gesture two extra clicks.
+// **A pick leaves the popup open**: clicking the sorted field again is how the direction flips.
 export component SortMenuPopup inherits Rectangle {
-    // Keep this an inline `[@tr("Name"), …]` literal at the mount: `@tr` folds msgids at codegen,
-    // so a Rust-seeded array renders untranslated.
+    // An inline `[@tr("Name"), …]` literal at the mount, a Rust-seeded array rendering untranslated.
     in property <[string]> labels;
-    // Parallel to `labels`. These are the bare tokens Rust's comparator matches on, so a typo here
-    // sorts by the default arm while the arrow paints as though it worked.
+    // The bare tokens Rust's comparator matches on: a typo sorts by the default arm while the arrow
+    // paints as though it worked.
     in property <[string]> fields;
 
     in property <string> sort-field;
@@ -74,12 +64,11 @@ export component SortMenuPopup inherits Rectangle {
 
     callback request-sort(string /*field*/);
 
-    // Fixed to the pill row's height so the popup anchors below the chip's bottom edge whatever
-    // the inner button's alignment.
+    // The pill row's height, so the popup anchors below the chip whatever the button's alignment.
     width: btn.width;
     height: 32px;
 
-    // The label carries the meaning, so there's no tooltip repeating it.
+    // The label carries the meaning, so no tooltip repeats it.
     btn := PillButton {
         icon: "sort";
         text: @tr("Sort");
@@ -88,14 +77,10 @@ export component SortMenuPopup inherits Rectangle {
     }
 
     pop := PopupWindow {
-        // Hangs below, the trigger sitting in the band's header strip. Slint's `place_popup`
-        // clamps a popup's right edge to the window clip region, so a negative-x offset on a
-        // page-edge trigger just claims space the clamp takes back. The wrapper layout below
-        // reserves transparent margin *inside* the popup instead, and the visible chrome stops
-        // short of the edge even when the bounding box is clamped flush.
+        // `place_popup` clamps the right edge to the window, so a negative offset on a page-edge
+        // trigger claims room the clamp takes back. The margin is reserved *inside* the popup
+        // instead, so the chrome stops short of the edge even when the box is clamped flush.
         x: btn.width - self.width;
-        // Off the outer's bottom, not the button's, so the gap holds whatever the inner
-        // positioning does.
         y: root.height + Theme.popup-gap;
         close-policy: close-on-click-outside;
 

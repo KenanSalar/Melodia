@@ -1,33 +1,24 @@
 import { Theme } from "../../theme.slint";
 import { MaterialIcon } from "../material-icon.slint";
 
-// The settings page's labelled pill button — `icon-button.slint`'s sibling, in a
-// filled primary variant and an outline secondary one.
+// The labelled pill button, filled primary or outline secondary.
 export component SectionButton inherits Rectangle {
     in property <string> label;
     in property <string> icon;            // empty = no leading icon
-    // A leading *image* instead of a glyph, for a mark the icon font doesn't have and
-    // shouldn't: a third-party logo is multi-colour and must not be recoloured, which is
-    // exactly what a `MaterialIcon` would do. Slint has no empty-`image` literal, so the
-    // branch below gates on the source size the way `ArtworkImage` does — and on `icon`
-    // being empty, so "instead of" is enforced rather than left to the call site.
+    // For a third-party logo the icon font hasn't got and mustn't recolour. Gated on its source
+    // size, there being no empty-`image` literal, and on `icon` being empty.
     in property <image>  leading-image;
     in property <bool>   button-enabled: true;
     in property <bool>   primary: true;   // false = outline / "text" variant
-    // Only meaningful on the filled variant, where it swaps both the fill and
-    // its ink to the destructive pair. Hover *brightens* that red rather than
-    // reaching for a second hue, which would read as a colour jump.
-    // `PillButton`'s `danger` is a different treatment entirely — neutral hover
-    // fill, tinted label — so don't read the two as one pattern.
+    // The filled variant only; hover brightens the red rather than reaching for a second hue.
+    // Not `PillButton`'s `danger`, a different treatment.
     in property <bool>   destructive;
-    // Defaulted to the stadium every existing site draws. Softening it is for a button
-    // standing in for a third-party badge, where the brand's own shape is the reference.
+    // Softened only for a button standing in for a third-party badge.
     in property <length> corner-radius: root.height / 2;
 
     callback clicked();
 
-    // The disabled dimming, through each brush rather than `opacity`, which would render the
-    // button into a texture of its own for as long as it stays disabled.
+    // Through each brush, `opacity` holding a texture for as long as it stays disabled.
     private property <float> fade: root.button-enabled ? 1.0 : 0.5;
     private property <brush> ink: (root.primary
             ? (root.destructive ? Theme.danger-text : Theme.accent-text)

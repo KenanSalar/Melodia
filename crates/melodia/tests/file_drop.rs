@@ -1,7 +1,7 @@
 //! What a file drop's targets owe the hit test the winit filter runs for them.
 //!
 //! Slint has no pointer during an OS drag, so each target publishes where it is drawn and Rust
-//! decides where letting go lands (`desktop-shell.md`). Both halves fail away from the code that
+//! decides where letting go lands. Both halves fail away from the code that
 //! breaks them: a report in the wrong branch panics on a frame nothing obvious caused, and a second
 //! writer of the answer raises a banner over a target the files won't reach.
 
@@ -21,10 +21,9 @@ fn sources() -> Vec<(String, String)> {
 }
 
 /// **A `WindowRectReport` sits inside no `if` or `for` but the full-UI branch.** Its tracker
-/// watches its own geometry, so a branch dropped while its parent re-flows panics on it
-/// (`slint-pitfalls.md`'s entry on a `changed` handler inside an `if`). Climbed rather than read per
-/// file: the queue panel's report sits in no branch of its own file, and the panel's mount is what
-/// decides.
+/// watches its own geometry, so a branch dropped while its parent re-flows panics on it. Climbed
+/// rather than read per file: the queue panel's report sits in no branch of its own file, and the
+/// panel's mount is what decides.
 #[test]
 fn every_window_rect_report_sits_in_no_branch_but_the_full_ui() {
     let tree = sources();

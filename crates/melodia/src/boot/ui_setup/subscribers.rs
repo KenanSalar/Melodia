@@ -1,8 +1,5 @@
-//! Backend-to-UI bridges: the three `Signal` subscribers, the artwork restore's count and the
-//! process-wide toast channel. Plus the memory sampler, whose loop reads the UI.
-//!
-//! Each `Signal` one is a closure over `ui::signal::on_signal`, which owns the subscribe-and-spawn
-//! loop; what is left here is what each one does with the tick.
+//! Backend-to-UI bridges, each run on the UI thread, plus the memory sampler, whose loop reads
+//! the UI.
 
 use std::sync::Arc;
 
@@ -12,14 +9,8 @@ use melodia_ui::AppWindow;
 use melodia_views::ui;
 use slint::ComponentHandle;
 
-/// Keep the Tracks view in sync with scans and watcher batches. The initial `0`
-/// isn't observed — `changed()` only resolves on a real `send_modify` — so this
-/// doesn't race the explicit initial fetch.
-///
-/// Gated on section visibility, because every favourite, rating, tag edit and
-/// watcher batch bumps this channel, and a list nobody can see has no reason to
-/// reload for one. While hidden the bump folds into the `TracksUi` dirty flag
-/// and the section gate runs one refresh on re-enter.
+/// Reloads the Songs list on a library change while it is on screen, else marks it dirty for its
+/// next enter: every favourite, rating, tag edit and watcher batch bumps this channel.
 pub fn install_library_changed_refresher(
     state: &AppState,
     tracks_ui: &Arc<ui::tracks::TracksUi>,
@@ -35,11 +26,8 @@ pub fn install_library_changed_refresher(
     })
 }
 
-/// Toast on every kernel-overflow rescan. On the UI thread so it can hold the
-/// non-`Send` `Rc<NotificationsUi>` and resolve its strings at push time, in
-/// whichever locale was active when the rescan fired. Coalesced upstream by the
-/// `watch` slot and by the reconcile's own coalescing, so a burst of overflows still
-/// paints at most one toast per reconcile cycle.
+/// Toasts a kernel-overflow rescan. A burst of overflows coalesces upstream into one toast per
+/// reconcile.
 pub fn install_rescan_notice_subscriber(
     state: &AppState,
     weak: slint::Weak<AppWindow>,
@@ -64,11 +52,8 @@ pub fn install_rescan_notice_subscriber(
     })
 }
 
-/// Sticky warning toast when the output device goes away — sticky for the crash
-/// notice's reason: nothing else reports this and playback carries on
-/// regardless, so a notice the user looked away for did nothing. No action
-/// button, there being no device picker to send them to, so the kind only groups
-/// the row for `dismiss_by_kind`.
+/// Raises a sticky warning when the output device goes away: nothing else reports it, and
+/// playback carries on regardless.
 pub fn install_audio_device_lost_subscriber(
     state: &AppState,
     weak: slint::Weak<AppWindow>,
@@ -95,9 +80,8 @@ pub fn install_audio_device_lost_subscriber(
 
 /// Holds an info toast up while a scan restores cover art whose stored file went missing.
 ///
-/// A payload loop rather than [`ui::signal::on_signal`]: the boot scan can raise the count before
-/// this attaches, and a tick sent then is never seen where the count is still there to read. Acts
-/// only on the edges, so a second restore joining the first stacks no second card.
+/// A payload loop, not [`ui::signal::on_signal`]: the boot scan can raise the count before this
+/// attaches. Acts only on edges, so a second restore joining the first stacks no second card.
 pub fn install_artwork_restore_subscriber(
     state: &AppState,
     weak: slint::Weak<AppWindow>,
@@ -140,12 +124,8 @@ pub fn install_artwork_restore_subscriber(
     .map_err(|e| melodia_core::error::AppError::io("artwork restore subscriber", e))
 }
 
-/// Drain the process-wide `utils::toast` channel on the UI thread.
-///
-/// [`install_rescan_notice_subscriber`]'s shape over an `mpsc` rather than a
-/// `watch` — errors must not coalesce — resolving the localized title by kind at
-/// push time so a failure raised on a tokio worker paints in the locale that is
-/// active when it surfaces. The dynamic detail is shown verbatim.
+/// Drains the process-wide `utils::toast` channel, an `mpsc` because errors must not coalesce.
+/// Titles resolve by kind in the live locale; the detail is shown verbatim.
 pub fn install_toast_bridge(
     weak: slint::Weak<AppWindow>,
     notifications: std::rc::Rc<ui::shell::notifications::NotificationsUi>,
@@ -164,8 +144,6 @@ pub fn install_toast_bridge(
             let g = ui.global::<Settings>();
             match kind {
                 ToastKind::PlaybackFailed | ToastKind::OperationFailed => {
-                    // Only the title is ours to re-render; the detail is a Rust error
-                    // string that was never translated in the first place.
                     notifications.show_failure(&ui, move |ui| {
                         let g = ui.global::<Settings>();
                         RowText::plain(
@@ -177,9 +155,7 @@ pub fn install_toast_bridge(
                         )
                     });
                 }
-                // A restart that had nowhere to relaunch from: no dynamic
-                // detail, and it sticks because it asks the user to do
-                // something rather than reporting what happened.
+                // Sticky: it asks the user to do something rather than reporting what happened.
                 ToastKind::RestartRequired => {
                     notifications.show_localized(
                         &ui,
@@ -204,8 +180,7 @@ pub fn install_toast_bridge(
                         6000,
                     );
                 }
-                // A file the user asked to have written. Auto-dismissing: the sheet is the one
-                // they were already looking at, so the toast confirms rather than reports.
+                // Confirms a write the user asked for, on the sheet they are looking at.
                 ToastKind::LyricsSaved => {
                     notifications.show_auto_dismiss(
                         NotificationParams::plain(
@@ -216,8 +191,7 @@ pub fn install_toast_bridge(
                         4000,
                     );
                 }
-                // A confirmation for something the user just did, so shorter than the
-                // reports above.
+                // Confirms what the user just did, so shorter still.
                 ToastKind::Copied | ToastKind::NothingToCopy => {
                     let title = match kind {
                         ToastKind::Copied => g.invoke_toast_copied_title(),
@@ -232,8 +206,7 @@ pub fn install_toast_bridge(
                         2500,
                     );
                 }
-                // Auto-dismissing: the music carries on through the shared output, and the
-                // Output settings keep saying why for as long as it stays that way.
+                // The music carries on through the shared output, and Output settings say why.
                 ToastKind::ExclusiveRefused => {
                     notifications.show_auto_dismiss(
                         NotificationParams {
@@ -246,8 +219,7 @@ pub fn install_toast_bridge(
                         6000,
                     );
                 }
-                // A vote the directory would not take. Auto-dismissing: nothing is broken
-                // and there is nothing for the user to do about it.
+                // A refused vote: nothing is broken, and nothing is for the user to do.
                 ToastKind::RadioVote => {
                     notifications.show_auto_dismiss(
                         NotificationParams::plain(

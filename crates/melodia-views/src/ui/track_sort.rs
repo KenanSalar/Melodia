@@ -1,30 +1,17 @@
-//! Shared in-memory sort for already-fetched track-list rows.
+//! The in-memory sort for track-list rows already fetched: every list held in memory answers a
+//! header click through [`sort_track_rows_by`], and the SQL keyset ordering the two Songs tabs
+//! and the four details reproduces its arms one for one, `crates/melodia/tests/cross_tier.rs`
+//! holding the two together.
 //!
-//! The single source of truth for every track-list sort in the app. Callers differ only in
-//! the element type — a bare `TrackListRow`, a `BrowseFile` wrapper, a `usize` index — and
-//! the deterministic tie-breaker, so [`sort_track_rows_by`] factors the
-//! `match field → sort_by_cached_key → reverse-if-desc` shape behind a generic accessor.
-//!
-//! These arms answer a header click on every list held in memory, and the SQL keyset that
-//! orders the two Songs tabs and the four details reproduces them arm for arm,
-//! `crates/melodia/tests/cross_tier.rs` holding the two together. `ui::tests::track_sort_tests`
-//! pins which tokens can reach them.
-//!
-//! `sort_by_cached_key` is deliberate: a plain `sort_by` would re-`to_lowercase()` both
-//! operands on every one of its `O(n log n)` comparisons. `field` is fixed for the whole
-//! sort, so branching once and picking the key type per branch beats a uniform key enum —
-//! and **per branch is what lets the natural-order arm drop its tie-breaker**, keying on a
-//! bare `String` where the other six keep a pair.
-//!
-//! **What the comparator reads is a trait, not a row type**, so the parity tests can hand it
-//! a row read the way the Songs tabs display it (a missing year as `0`, the length as an
-//! `i32`) without a second spelling of the sort semantics.
+//! `sort_by_cached_key` because a plain `sort_by` would re-fold both operands on every
+//! comparison. Branching once on `field` picks the key type per arm, which is what lets the
+//! natural-order arm drop its tie-breaker. The comparator reads a trait rather than a row type,
+//! so the parity tests can hand it a row read the way the Songs tabs display it.
 
 use melodia_core::entities::track::TrackListRow as RsTrackListRow;
 
-/// The fields a track-list sort compares, so the comparator can be handed either a DB row
-/// or a display row's reading of one. The flattening rules live here rather than in the
-/// arms, so every implementor is held to the same one.
+/// The fields a track-list sort compares. The flattening rules live here rather than in the
+/// arms, so every implementor is held to the same ones.
 pub trait TrackSortFields {
     /// Effective disc number; `NULL` and `0` both mean disc 1.
     fn disc(&self) -> i32;
@@ -81,16 +68,13 @@ impl TrackSortFields for RsTrackListRow {
     }
 }
 
-/// Sort `items` in place by `field` / `dir`.
+/// Sort `items` in place by `field` / `dir`, `row` projecting each element to its
+/// [`TrackSortFields`] and `secondary` yielding the lowercased tie-breaker (the title on a
+/// detail, the file name on Browse).
 ///
-/// * `row` projects each element to something implementing [`TrackSortFields`].
-/// * `secondary` yields the lowercased deterministic tie-breaker — the track title for
-///   detail views, the file name for the Files view.
-///
-/// Unknown and `"title"` fields fall back to the natural-order `sort_key`, then the
-/// secondary. `"desc"` reverses the whole order for every field except `track_number`,
-/// whose disc and secondary components stay ascending: only the track component flips,
-/// by negating its sentinel rather than reversing the tuple.
+/// Unknown and `"title"` fields fall back to the natural-order `sort_key`. `"desc"` reverses the
+/// whole order for every field but `track_number`, where only the track component flips, by
+/// negating its sentinel, and disc and secondary stay ascending.
 pub fn sort_track_rows_by<T, F, R, S>(items: &mut [T], field: &str, dir: &str, row: R, secondary: S)
 where
     F: TrackSortFields + ?Sized,
@@ -100,15 +84,9 @@ where
     sort_rows(items, field, dir, row, secondary, false);
 }
 
-/// [`sort_track_rows_by`] plus the one thing only [`compute_track_order`] can say about
-/// itself: `secondary_is_natural_key` marks a caller whose tie-breaker *is* the value the
-/// natural-order arm already compares on, so that arm keys on it once instead of twice.
-/// `(k, k)` and `k` are the same comparison — arithmetic, not an assumption about the
-/// input — and the second copy cost a `String` per row on the default sort, which every
-/// cold fetch takes. Only that arm can drop it.
-///
-/// A private flag rather than a public parameter because exactly one caller may pass
-/// `true` and it lives in this file.
+/// [`sort_track_rows_by`] with `secondary_is_natural_key`, for [`compute_track_order`] alone,
+/// whose tie-breaker is the value the natural-order arm already compares on: `(k, k)` and `k`
+/// are the same comparison, and the second copy cost a `String` per row on the default sort.
 fn sort_rows<T, F, R, S>(
     items: &mut [T],
     field: &str,
@@ -123,9 +101,7 @@ fn sort_rows<T, F, R, S>(
 {
     let desc = dir == "desc";
 
-    // Disc ASC, track ASC/DESC, secondary ASC. The direction flips only the track
-    // component, so it is negated for `desc` and the whole tuple sorted ascending —
-    // never `.reverse()`, which would flip disc and secondary too.
+    // Never `.reverse()` here, which would flip disc and secondary too.
     if field == "track_number" {
         items.sort_by_cached_key(|t| {
             let r = row(t);
@@ -151,7 +127,6 @@ fn sort_rows<T, F, R, S>(
         "length" => {
             items.sort_by_cached_key(|t| (row(t).duration_ms(), secondary(t)));
         }
-        // "title" and any unrecognised field → natural-order `sort_key`.
         _ if secondary_is_natural_key => {
             items.sort_by_cached_key(|t| row(t).sort_key().to_ascii_lowercase());
         }
@@ -162,17 +137,14 @@ fn sort_rows<T, F, R, S>(
     }
 }
 
-/// Sort a `TrackListRow` slice in place the way a detail page orders it, the track title
-/// breaking ties. The pages sort in SQL now, so this is the comparator `cross_tier` holds
-/// their keyset arms to.
+/// Sort the way a detail page orders, the title breaking ties: the comparator `cross_tier` holds
+/// the details' keyset arms to.
 pub fn sort_track_list_rows(rows: &mut [RsTrackListRow], field: &str, dir: &str) {
     sort_track_rows_by(rows, field, dir, |r| r, |r| r.title.to_lowercase());
 }
 
-/// The display-order permutation of `rows`, without reordering `rows` itself: the Songs
-/// tabs' order, ties broken on the natural `sort_key`, which the Songs keyset is held
-/// against. That tie-breaker is also what lets it take [`sort_rows`]'
-/// `secondary_is_natural_key` arm.
+/// The Songs tabs' display order of `rows`, as a permutation, ties broken on the natural
+/// `sort_key` the Songs keyset is held against.
 pub fn compute_track_order<F: TrackSortFields>(rows: &[F], field: &str, dir: &str) -> Vec<usize> {
     let mut indexed: Vec<(usize, &F)> = rows.iter().enumerate().collect();
     sort_rows(&mut indexed, field, dir, |t| t.1, |t| t.1.sort_key().to_ascii_lowercase(), true);

@@ -1,12 +1,6 @@
-//! Track rows, and the projections queries select into.
-//!
-//! [`Track`] is the whole row, and the callers that need all of it are few: scan
-//! ingest, hash backfill, the detail view, fixtures. Everything else selects a
-//! narrower struct through its column list in `melodia-store`'s
-//! `queries::track::columns`, since a list view fetching the full row pays a
-//! decode per unused column on every row it draws.
-//!
-//! Pick the slimmest projection that carries what the caller renders:
+//! Track rows, and the projections queries select into through `queries::track::columns`. A list
+//! fetching the whole [`Track`] pays a decode per unused column per row, so take the slimmest that
+//! carries what you render, and the closest existing one over a near-duplicate:
 //!
 //! | projection | for |
 //! |---|---|
@@ -18,16 +12,12 @@
 //! | [`PlaylistExportRow`] | one M3U8 line |
 //! | [`TrackLinks`] | the three FK ids a "Go to …" menu entry navigates by |
 //!
-//! A new caller takes the closest existing projection rather than adding a
-//! near-duplicate of one. A list that can be library-sized holds no projection
-//! per track at all: it keeps ids and fetches the rows near its viewport
-//! (`ui::paged_rows`).
+//! A library-sized list holds no projection per track, only ids (`ui::paged_rows`).
 
 use sqlx::FromRow;
 
-/// Queue + `ViewModel` shape: what the player and the now-playing bar render.
-/// It is cloned into every published `ViewModel`, so it carries playback
-/// identity and nothing a list draws. Use [`TrackListRow`] for those.
+/// What the player and the bar render, cloned into every published view model, so it carries
+/// playback identity and nothing a list draws.
 #[derive(Clone, Debug, PartialEq, FromRow)]
 pub struct TrackSummary {
     pub id: i64,
@@ -43,22 +33,16 @@ pub struct TrackSummary {
     /// Last playback position — used for queue restore on startup.
     pub last_position: i64,
     pub is_favorite: bool,
-    /// 0–5 star rating (0 = unrated). Carried on the playback projection so
-    /// the Now-Playing controls can display/edit the current track's rating
-    /// without an async fetch.
+    /// 0–5, 0 unrated; here so Now Playing edits it without a fetch.
     pub rating: i32,
-    // ReplayGain — carried here (not just on the full `Track`) so the sync
-    // playback path can bake per-track gain into the audio source without an
-    // async DB fetch. Stored as `f32` (the DB column is REAL/f64) since the DSP
-    // math is `f32` anyway. All `None` for untagged tracks → unity gain.
+    // Here so the sync playback path bakes the gain without a fetch; `f32` as the DSP is, and all
+    // `None` is unity.
     pub replaygain_track_gain: Option<f32>,
     pub replaygain_track_peak: Option<f32>,
     pub replaygain_album_gain: Option<f32>,
     pub replaygain_album_peak: Option<f32>,
 }
 
-/// Narrow a DB `REAL`/`f64` `ReplayGain` value to the `f32` the DSP uses. The
-/// values are tiny (dB gains and 0..~1 peaks), so the narrowing is sub-audible.
 #[allow(
     clippy::cast_possible_truncation,
     reason = "ReplayGain dB/peak values are tiny and well within f32 range; the narrowing is intentional"
@@ -115,12 +99,8 @@ impl From<&Track> for TrackSummary {
     }
 }
 
-/// List-view shape: the columns shown in the Tracks table (and the same
-/// shape returned by per-album / per-artist / per-genre track queries).
-/// 17 fields against `Track`'s 60. Includes the foreign-key ids (`album_id`,
-/// `artist_id`, `genre_id`) so the UI can navigate from a row without a
-/// second fetch. No list draws the file's path or name, so neither is here;
-/// Browse, which matches rows to files on disk, fetches the path beside it.
+/// Every track list's row. The FK ids let a row navigate without a second fetch; no list draws
+/// the path, so Browse, which matches rows to files on disk, fetches it beside.
 #[derive(Clone, Debug, PartialEq, FromRow)]
 pub struct TrackListRow {
     pub id: i64,
@@ -135,8 +115,7 @@ pub struct TrackListRow {
     pub duration_ms: i64,
     pub artwork_path: Option<String>,
     pub is_favorite: bool,
-    /// 0–5 star rating (0 = unrated). Surfaced in list rows for the
-    /// hover-revealed star control.
+    /// 0–5, 0 unrated.
     pub rating: i32,
     pub album_id: Option<i64>,
     pub artist_id: Option<i64>,
@@ -144,12 +123,8 @@ pub struct TrackListRow {
     pub sort_key: Option<String>,
 }
 
-/// Playlist-export projection: just the fields an Extended-M3U8 line needs
-/// (`#EXTINF` duration + "artist - title", `#MELODIA-HASH`, and the path).
-/// Reading these five columns instead of a full `Track` avoids 55 unused
-/// column decodes per row when writing a playlist file. `file_hash` is
-/// nullable (tracks before retroactive hashing); the writer omits the hash
-/// line when it is `None`.
+/// One Extended-M3U8 line. `file_hash` is `None` before the retroactive hash, and the writer then
+/// omits that line.
 #[derive(Clone, Debug, PartialEq, FromRow)]
 pub struct PlaylistExportRow {
     pub file_path: String,
@@ -159,9 +134,7 @@ pub struct PlaylistExportRow {
     pub duration_ms: i64,
 }
 
-/// Technical-metadata projection for the full-screen Now Playing view's chip
-/// row: the columns `TrackMetaRow` renders, so a track change decodes those
-/// rather than the whole [`Track`] row.
+/// Now Playing's technical chips.
 #[derive(Clone, Debug, PartialEq, FromRow)]
 pub struct TrackMeta {
     pub id: i64,
@@ -174,15 +147,9 @@ pub struct TrackMeta {
     pub genre: Option<String>,
 }
 
-/// Projection backing the Edit-Track-Information dialog: the editable tag
-/// columns plus the read-only technical columns the Summary tab shows.
-/// Every field is a native `tracks` column, so the fetch needs no joins.
-/// `bpm` is the `REAL` column, hence `f64`.
-///
-/// The three multi-valued fields are absent for that reason and not by oversight: genres, role
-/// credits and the artist credits are rows, and the dialog reads them through the queries that
-/// return rows. `tracks.genre` and `tracks.credits` are the rendered halves those rows produce,
-/// and an editor populated from a rendered line is what splits `Chanson, Francaise` in two.
+/// The Edit Track Information dialog, native columns only. The multi-valued fields are rows it
+/// reads apart, an editor fed from a rendered line splitting `Chanson, Francaise` in two and the
+/// save making it permanent.
 #[derive(Clone, Debug, PartialEq, FromRow)]
 pub struct TagEditRow {
     pub id: i64,
@@ -223,11 +190,7 @@ pub struct TagEditRow {
     pub file_hash: Option<String>,
 }
 
-/// The metadata a scrobble needs, projected straight off `tracks` at track
-/// start. Every field is a native column (artist/album are denormalized
-/// text), so the fetch needs no joins. `title` is the track name;
-/// the two `musicbrainz_*` ids map to a `ScrobbleTrack`'s recording/release
-/// MBIDs. `ScrobbleTrack::from_row` does the conversion.
+/// What a scrobble needs, native columns only; `ScrobbleTrack::from_row` converts it.
 #[derive(Clone, Debug, PartialEq, FromRow)]
 pub struct ScrobbleRow {
     pub id: i64,
@@ -241,11 +204,8 @@ pub struct ScrobbleRow {
     pub musicbrainz_release_id: Option<String>,
 }
 
-/// A track's album/artist/genre linkage and nothing else, for a surface that
-/// renders from [`TrackSummary`] and so has no FK ids of its own — the queue
-/// sheet's context menu. A struct rather than the 4-tuple
-/// `get_track_paths_by_ids` gets away with: three same-typed `Option<i64>` in
-/// positional form let a swapped album and artist compile.
+/// The FK ids for a surface rendering from [`TrackSummary`], a struct so a swapped album and
+/// artist can't compile.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, FromRow)]
 pub struct TrackLinks {
     pub id: i64,
@@ -254,12 +214,7 @@ pub struct TrackLinks {
     pub genre_id: Option<i64>,
 }
 
-/// Full database entity: every column on the `tracks` table including
-/// playback stats, hashes, and per-track `ReplayGain`. Use this when you need
-/// the complete row (track-detail page, scan-time updates, hash backfill);
-/// otherwise prefer `TrackListRow` (list views), `TrackSummary` (queue /
-/// `ViewModel`), or `TrackMeta` (Now Playing chips) — all are far cheaper to
-/// clone.
+/// Every column, for the few callers needing the whole row.
 #[derive(Clone, Debug, PartialEq, FromRow)]
 pub struct Track {
     pub id: i64,
@@ -273,9 +228,7 @@ pub struct Track {
     pub album_artist: Option<String>,
     pub album: Option<String>,
     pub genre: Option<String>,
-    /// The role credits as one rendered string. The structured rows are `track_credits`, read
-    /// through `queries::track::get_track_role_credits_by_ids`; this column is what the FTS index
-    /// searches, which is why it is denormalized here at all.
+    /// Rendered for the FTS index; the structured rows are `track_credits`.
     pub credits: Option<String>,
     pub track_number: Option<i32>,
     pub track_total: Option<i32>,

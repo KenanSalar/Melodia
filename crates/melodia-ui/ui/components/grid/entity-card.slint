@@ -5,140 +5,86 @@ import { MaterialIcon } from "../material-icon.slint";
 import { PlayCountBadge } from "play-count-badge.slint";
 import { ContextClick } from "../context-menu.slint";
 
-// The card every grid and strip draws: a square artwork tile with an elided title and subtitle
-// beneath it, inside a hover-highlighted rounded surface. **The outer slot is a fixed size**, so
-// the grid layout stays stable — the host computes both dimensions from the available width — and a
-// trailing stretch Rectangle absorbs any slack, so a generous height doesn't distort the spacing.
+// The card every grid and strip draws. Its slot is a fixed size the host derives from the
+// available width, so the grid stays stable.
 export component EntityCard inherits Rectangle {
     in property <string> artwork-path;
     in property <image> cover;
     in property <string> title;
     in property <string> subtitle;
-    // A third line, for a card whose tile sits above three. Empty on every other host, and the
-    // dimmest of the three: a card that wants two lines says nothing and gets the layout it had.
     in property <string> subtitle2;
     in property <length> card-width: 180px;
     in property <length> card-height: 226px;
-    // The Artists grid's avatar mode: the tile takes a radius of half its size, the text staying
-    // square-aligned.
     in property <bool> circular: false;
-    // Artists passes `"person"`; everything else takes the default.
     in property <string> fallback-icon: "music-note";
-    // Initials to draw instead of the glyph, for a host whose entities have no shared icon worth
-    // repeating across a page. Both fall through to `ArtworkImage`, which prefers the text.
+    // Drawn in place of the glyph when set; `ArtworkImage` prefers it.
     in property <string> fallback-text;
-    // What the stored image would draw at 1:1, for a source too small to fill the tile. `0px`
-    // means "assume it fills", which is `ArtworkImage`'s own default and every host's answer but
-    // the one drawing favicons.
+    // The source's 1:1 size, for one too small to fill the tile. `0px` assumes it fills.
     in property <length> native-size: 0px;
 
-    // The tile's chrome. The Genres grid overrides both, painting its per-genre name-hashed
-    // gradient and tinting the fallback glyph against it.
     in property <brush> tile-bg: Theme.accent.with-alpha(0.15);
     in property <brush> tile-icon-color: Theme.accent;
 
-    // The Genres grid raises this: with no real artwork on a genre card, a subtle scale
-    // reads as no scale at all.
     in property <float> cover-scale-hover: 1.04;
 
-    // Whether the host put controls in the `@children` overlay slot, and the whole of what this
-    // gates. **The card draws none of its own** — raising the flag opens the slot rather than
-    // adding buttons, and a card that shipped some would land them over every host's.
+    // Opens the `@children` overlay slot and gates nothing else: the card draws no controls of
+    // its own, so a host raising it never gets buttons it has no callbacks for.
     in property <bool> show-overlay-actions: false;
 
-    // Hover on any control the *host* owns, OR'd into `card-hovered` below. Usually the ones in
-    // the overlay slot, but not only: a station card folds in its star too, which sits beside the
-    // card and takes the pointer off `touch` just the same.
-    // A component cannot read `has-hover` off its `@children`, so the host that named those
-    // buttons is the only thing that can answer, and without the answer the fill and the zoom
-    // drop out while the pointer is on one of them.
+    // Hover on any control the host owns, in the slot or beside the card. A component can't read
+    // `has-hover` off its `@children`, so only the host can answer.
     in property <bool> overlay-hovered: false;
-    // Whether the host's menu for this card is up, which `card-hovered` counts: the open popup
-    // takes the pointer, and hover alone would leave the card dark under its own menu.
+    // An open popup takes the card's hover, so the host says when its menu is up.
     in property <bool> menu-open: false;
 
-    // Browse's card view draws disk-only files — present inside a library folder but
-    // not in the DB — and dims them inert, as the disabled `TrackListRowItem` is. Defaulted
-    // `true`, so every other mount is unaffected; `touch` is gated on it, which drops the
-    // hover fill, the zoom and the pointer cursor together rather than leaving a card that
-    // looks live and does nothing.
+    // False for Browse's disk-only files: dimmed and inert, as a disabled `TrackListRowItem` is.
     in property <bool> enabled: true;
 
-    // A Material Symbols ligature, marking a smart playlist. Empty means no badge.
     in property <string> badge-icon: "";
 
-    // The play count, drawn by the shared badge rather than by this card. It takes the tile's
-    // **bottom right** on every host, clear of `badge-icon` and of the selection box, both of
-    // which own the top left.
     in property <int> play-count: 0;
 
-    // Whether this grid supports multi-selection, and whether this card is in the set. A host
-    // that says nothing draws no box and is unaffected.
     in property <bool> selectable: false;
     in property <bool> selected: false;
-    // Whether the host's scope already holds a pick, which is what turns the body into a second
-    // way to select. The host answers, the scope being its own.
+    // The host's scope already holds a pick, which makes a body click a pick too.
     in property <bool> selection-live: false;
 
     callback clicked();
-    // The box or the body was clicked; the host applies the modifiers against its own selection
-    // scope.
     callback select-clicked(bool /*shift*/, bool /*ctrl*/);
-    // A right-click, in this card's own coordinate frame. The host owns the menu, as
-    // `TrackListRowItem` does for a row.
+    // In the card's own frame.
     callback context-requested(length /*x*/, length /*y*/);
-    // A left press on the card body, which is what a drag from it would carry. A press on the box
-    // or a hover control never reaches the body, so a drag from one carries nothing.
+    // A left press on the body, which arms a drag. The box and hover controls never reach it.
     callback pressed();
 
-    // **Every hover-driven binding on this card reads this, not `touch.has-hover`.** A
-    // higher-z TouchArea captures the pointer, so hovering any nested button flips that
-    // false and the fill, the zoom and the overlay would all drop out while the user is
-    // aiming at one — which is what `overlay-hovered` is for.
-    // `out`, so a host placing a control *beside* the card rather than in the overlay slot can
-    // ride the same answer — the star on a station card is the one such control.
-    // The box is this card's own child rather than the host's, so it folds itself in here
-    // instead of going back out through `overlay-hovered`.
+    // Every hover binding here reads this, not `touch.has-hover`, which goes false under any
+    // nested button. `out` so a control beside the card (a station's star) can ride it too.
     out property <bool> card-hovered:
         touch.has-hover || box-touch.has-hover || root.overlay-hovered || root.menu-open;
 
-    // The box takes the badge corner while it is up, which is the grid's reading of the track
-    // row swapping its number for a checkbox. Idle and unselected it is gone and the badge is
-    // back, so a card nobody is pointing at looks exactly as it did.
+    // The box takes the badge's corner while up, as a track row swaps its number for a checkbox.
     private property <bool> box-shown: root.selectable && (root.card-hovered || root.selected);
 
-    // One click cannot both pick and open, so a live selection costs the detail until it is
-    // cleared. The first pick is still the box's, which is what keeps an idle grid navigable.
+    // One click can't both pick and open, so a live selection costs the detail until cleared.
+    // The first pick is still the box's, which keeps an idle grid navigable.
     private property <bool> picking: root.selectable && root.selection-live;
-    // Shift as it stood on the press the pick is about to complete; see `touch.clicked`.
     private property <bool> press-shift;
-    // Both the box and the body pick through here. Ctrl is forced on whenever shift isn't held,
-    // so the backend's "replace selection" branch is unreachable and a pick on a selected card
-    // always removes it.
+    // Ctrl is forced on unless shift is held: a pick toggles one card, and a plain click sent
+    // down the replace-selection arm could never untick a box.
     function pick(shift: bool) { root.select-clicked(shift, !shift); }
 
-    // The corner cross-fades on the same curve the overlay's controls ride, so the box arrives
-    // with them rather than snapping in over a card whose buttons are still easing.
-    //
-    // **One eased float, spent differently at each corner**, and the two arguments are at the
-    // corners rather than here: the badge folds it into its brushes, where `Opacity::need_layer`
-    // would rasterize it for nothing, and the box pays for an `opacity` because `Checkbox` eases
-    // its own fill and rim off `fade` and would stall on a `fade` that eases too.
+    // One eased float for the corner's cross-fade, on the overlay's curve. Each corner spends it
+    // its own way, argued there.
     private property <float> box-t: root.box-shown ? 1.0 : 0.0;
     animate box-t { duration: Theme.dur-fast; easing: ease-in-out; }
 
-    // The artwork square, published because a host positioning against it must not re-derive the
-    // formula: a station card sizes its favicon's 1:1 estimate off this, and a padding change here
-    // would otherwise skew that silently.
+    // Published for a host framing against the square: in the overlay slot `parent` is the
+    // whole card.
     out property <length> tile-size: root.card-width - 2 * Theme.pad-sm;
-    // Where the selection box ends, in the overlay slot's frame, for a host stacking a control
-    // under the corner it takes. Published for `tile-size`'s reason: the box's size is this
-    // card's to change.
+    // In the overlay slot's frame, for a control stacked under the box.
     out property <length> select-box-bottom: box.y + box.height - overlay.y;
 
-    // The dimming, through the tile and the text rather than `opacity`, which would render every
-    // dimmed card into a texture of its own for as long as it stays dimmed. The badges need none:
-    // Browse, the one host disabling cards, sets neither.
+    // Through the brushes, not `opacity`, which would hold a texture per dimmed card. The badges
+    // skip it: Browse, the one host disabling cards, sets neither.
     private property <float> fade: root.enabled ? 1.0 : Theme.fade-disk-only;
 
     width: card-width;
@@ -148,23 +94,14 @@ export component EntityCard inherits Rectangle {
         width: 100%;
         height: 100%;
         border-radius: Theme.radius-md;
-        // The hover fill alone. The selection tint is the child below, so the two states keep
-        // their own pace, and a selected card brightens under the pointer the way a selected
-        // row does rather than answering it with nothing.
+        // Hover fill and selection ring on one element, so the renderer tucks the fill under the
+        // stroke and the corner is antialiased once.
         background: root.card-hovered ? Theme.surface0 : transparent;
         animate background { duration: Theme.dur-fast; easing: ease-in-out; enabled: !Theme.recoloring; }
-        // The ring and the hover fill on **one** element, so the renderer tucks that fill under
-        // the stroke. An `EdgeOutline` is the answer where there is a rounded clip to cut its
-        // bleed away; there is none here.
         border-width: root.selected ? 2px : 0px;
         border-color: Theme.accent;
 
-        // The selection tint, mounted only while it paints and carrying no `animate`:
-        // `SelectionPill`'s shape, so a card answers a pick as a track row does. An animated
-        // fill cannot land on the frame the ring does whatever its duration, the curve starting
-        // a frame later and re-basing on every dirty its binding takes, so shortening it only
-        // turns the wait into a jump. A second rounded path is the cost, a sliver of the
-        // corner's coverage at this alpha.
+        // No `animate`: an eased tint would start a frame after the snapped ring.
         if root.selected: Rectangle {
             x: 0;
             y: 0;
@@ -218,20 +155,16 @@ export component EntityCard inherits Rectangle {
                 }
             }
 
-            // Absorbs the slack, so the block stays top-pinned whatever height the host
-            // computes.
+            // Top-pins the block whatever height the host computes.
             Rectangle { vertical-stretch: 1; }
         }
     }
 
     touch := TouchArea {
-        // A disabled TouchArea processes nothing, so a dimmed card gets no hover
-        // background, no cover zoom and no click — the `TrackListRowItem` contract.
         enabled: root.enabled;
         mouse-cursor: pointer;
-        // Both arms on `clicked` rather than the release, per `slint-pitfalls.md`. One handler
-        // also means `picking` is read once, so unpicking the last card cannot open its detail on
-        // the way out.
+        // Both arms on `clicked`, which needs this area's own press, reading `picking` once, so
+        // unpicking the last card can't open its detail on the way out.
         clicked => {
             if (root.picking) {
                 root.pick(root.press-shift);
@@ -240,8 +173,7 @@ export component EntityCard inherits Rectangle {
             }
         }
         pointer-event(ev) => {
-            // `clicked` carries no modifiers, so the shift a range-pick needs is taken off the
-            // press that armed it.
+            // `clicked` carries no modifiers, so a range-pick's shift comes off the press.
             if (ev.kind == PointerEventKind.down && ev.button == PointerEventButton.left) {
                 root.press-shift = ev.modifiers.shift;
                 root.pressed();
@@ -252,16 +184,10 @@ export component EntityCard inherits Rectangle {
         }
     }
 
-    // The host's own hover controls, framing the artwork square rather than the title row, and
-    // riding **one** `opacity` between them. That single fade is the point: an `opacity` per button
-    // layers each of them, and `Opacity::need_layer` bails only on a lone childless child, which an
-    // `IconButton` root is not. A control that has to stay up while the card is idle does not
-    // belong here — it is not a hover affordance, so it goes beside the card and takes
-    // `IconButton.fade`.
-    //
-    // **After `touch`**, so a nested button consumes its own click before the card's open action
-    // fires. `visible` propagates to the children, so nothing here is rendered, hit-tested or
-    // hover-tracked on a card whose host put no controls in the slot.
+    // The host's hover controls over the artwork square, sharing one `opacity`: one per button
+    // would layer each, an `IconButton` root not being childless (`need_layer`). A control that
+    // stays up while the card is idle goes beside it instead. After `touch`, so a nested button
+    // takes its own click.
     overlay := Rectangle {
         visible: root.show-overlay-actions;
         x: Theme.pad-sm;
@@ -275,12 +201,8 @@ export component EntityCard inherits Rectangle {
         @children
     }
 
-    // Top-left of the tile, clear of the hover trio. Non-interactive, so card clicks
-    // pass straight through. Yields the corner to the selection box, which is the one
-    // thing that can want it at the same time.
     badge := Rectangle {
-        // Gated on the eased float rather than on `box-shown`, so the branch outlives the
-        // fade-out and the two corners dissolve into each other instead of one popping.
+        // On the eased float, so the badge and the box dissolve into each other.
         visible: root.badge-icon != "" && root.box-t < 1.0;
         x: 2 * Theme.pad-sm;
         y: 2 * Theme.pad-sm;
@@ -299,34 +221,21 @@ export component EntityCard inherits Rectangle {
         }
     }
 
-    // **The tile's bottom right, on every host.** The top left belongs to `badge-icon` and to the
-    // selection box, so a count sharing it had to disappear under the pointer — which is exactly
-    // when a card is being compared against its neighbours. The offsets land it where the playlist
-    // card's own bottom-right control sits: `tile-size` less the badge, the tile's `pad-sm` origin
-    // absorbing the inset. A host with a control of its own there moves the control, not this.
-    //
-    // **`count` is passed straight through, and `visible` is left alone**: the badge owns the
-    // zero-count rule so no host restates it, and overriding that binding would draw an empty
-    // pill on every unplayed card.
+    // Bottom right on every host: a count sharing the top left with the badge and the box would
+    // vanish under the pointer, just when cards are being compared. `visible` is the badge's own
+    // zero-count rule.
     PlayCountBadge {
         x: root.tile-size - self.width;
         y: root.tile-size - self.height;
         count: root.play-count;
     }
 
-    // **Drawn by the card rather than handed to the overlay slot**, which carries one fade for
-    // everything in it and drops to zero on an idle card — a ticked box has to survive that.
-    // Same chrome as the badge it replaces, so the corner reads as one family over artwork.
-    // Declared after `touch` so it consumes its own click before the card's open action.
+    // The card's own rather than the slot's, whose idle fade a ticked box has to outlive. After
+    // `touch`, so it takes its own click.
     //
-    // **Split in two: this element is the input half and paints nothing.** It binds no
-    // `background`, so it stays an `Empty` the renderer never visits, and it is gated on
-    // `selectable` rather than on the fade — `visible` lowers to a `Clip` that `passes/visible.rs`
-    // creates *after* `default_geometry`, so it never gets the parent geometry its kind defaults
-    // to and sits at zero size, intercepting every pointer event while hidden. A box gated on its
-    // own fade therefore could not be hovered until the *next* event after it appeared, and a
-    // pointer that arrived and stopped never got one. The overlay's controls take `opacity`, which
-    // filters no input, which is why they are already lit by the time they finish fading in.
+    // This half takes input and paints nothing, gated on `selectable` rather than the fade:
+    // `visible` lowers to a `Clip` made after default geometry, so a box gated on its fade sat at
+    // zero size and missed the first hover after it appeared.
     box := Rectangle {
         visible: root.selectable;
         x: 2 * Theme.pad-sm;
@@ -334,58 +243,38 @@ export component EntityCard inherits Rectangle {
         width: 28px;
         height: 28px;
 
-        // The paint half, behind the eased float so an idle card builds no rounded path and
-        // allocates no layer. Gated on the float rather than its target, or the box would vanish
-        // on the frame the pointer leaves, taking its own fade-out with it.
+        // On the eased float, so an idle card builds no path and the fade-out still plays.
         if root.box-t > 0: Rectangle {
             width: 100%;
             height: 100%;
             border-radius: self.height / 2;
-            // The two brushes `IconButton` crosses between, on its curve, so the corner answers
-            // the pointer exactly as the controls beside it do.
+            // `IconButton`'s two brushes and curve, so the corner answers like its neighbours.
             background: box-touch.has-hover ? Theme.surface0 : Theme.floating-chrome-bg;
             animate background { duration: Theme.dur-fast; easing: ease-in-out; enabled: !Theme.recoloring; }
 
-            // **`opacity` here and brush alpha on the badge, and the difference is `Checkbox`.** It
-            // `animate`s its own fill and rim to cross-fade a tick, and folds `fade` into both of
-            // those bindings — so easing `fade` re-dirties them every frame and the rim stalls and
-            // then snaps, which is the pop this replaced. Nothing under the badge animates a brush,
-            // so that corner takes the free path.
-            //
-            // The layer this costs is bounded to the transition: `need_layer` bails at exactly 1.0,
-            // so a selected card sitting at rest allocates nothing and only the card under the
-            // pointer ever does. The glyph is a Material Symbols square, so the ink-cropping half
-            // doesn't apply either.
+            // `opacity` rather than brush alpha: `Checkbox` eases its own fill and rim off `fade`,
+            // and an eased `fade` stalls them. The layer lasts only the transition, `need_layer`
+            // bailing at 1.0.
             opacity: root.box-t;
 
             Checkbox {
                 x: (parent.width - self.width) / 2;
                 y: (parent.height - self.height) / 2;
                 checked: root.selected;
-                // The rim has to hold against artwork rather than against a panel, so it takes
-                // the loudest of the knob's three hosts.
+                // Loudest rim, to hold against artwork.
                 unchecked-border: Theme.subtext0;
             }
         }
 
         box-touch := TouchArea {
-            // The card's own `touch` contract, restated because this area sits above it and would
-            // otherwise leave a dimmed card one live corner. Held here rather than by the one host
-            // that also happens to make disabled cards unselectable.
+            // Above `touch`, so the gate is restated or a dimmed card keeps one live corner.
             enabled: root.enabled;
             mouse-cursor: pointer;
-            // **Ctrl is forced on unless shift is held**, the track row's box verbatim: a
-            // checkbox means "add or remove this one", so a plain click has to toggle. Passing
-            // the raw modifiers instead sends an unmodified click down the replace-the-selection
-            // arm, which makes a ticked box impossible to untick and a second card impossible
-            // to add — the whole feature, lost to one plausible-looking line.
             pointer-event(ev) => {
                 if (ev.kind == PointerEventKind.up && ev.button == PointerEventButton.left) {
                     root.pick(ev.modifiers.shift);
                 }
-                // This area sits over the card's own `touch`, which never sees a release inside
-                // it, so without this the corner is a hole in the card's right-click. Offset by
-                // the box's own origin, `context-requested` reporting in the card's frame.
+                // `touch` never sees a release here, so the box raises the menu itself.
                 if (ContextClick.raises-menu(ev, self.mouse-x, self.mouse-y, self.width, self.height)) {
                     root.context-requested(box.x + self.mouse-x, box.y + self.mouse-y);
                 }

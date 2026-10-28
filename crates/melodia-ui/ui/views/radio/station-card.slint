@@ -3,16 +3,9 @@ import { CardFavoriteButton } from "../../components/grid/card-favorite-button.s
 import { EntityCard } from "../../components/grid/entity-card.slint";
 import { IconButton } from "../../components/icon-button.slint";
 
-// One station, as all three Radio tabs draw it: an `EntityCard` carrying its own hover controls.
-//
-// The card frame is not restated here — the tile, the hover fill and zoom, the elided text block
-// and the play-count badge are all that component's, and the third line under the tile is its
-// `subtitle2`. What is genuinely a station's own is the overlay's five controls and the rule that
-// the star outlives a hover, so those are what this file holds.
-//
-// **The tags line is a string, not a chip strip.** The card's height is fixed inside a `ListView`
-// row, where a strip wrapping onto a second line has nowhere to go. Rust hands the line over
-// already trimmed and joined.
+// A station as all three Radio tabs draw it: an `EntityCard` with its own hover controls, the star
+// outliving the hover. The tags line is a string rather than a chip strip, the card's height being
+// fixed inside a `ListView` row where a wrapped second line has nowhere to go.
 export component StationCard inherits Rectangle {
     in property <string> artwork-path;
     in property <image> cover;
@@ -27,16 +20,13 @@ export component StationCard inherits Rectangle {
     // A station typed in by hand has no star: un-starring it would drop it from the only list
     // that shows it, leaving a row nothing can reach. Remove is its affordance instead.
     in property <bool> starrable: true;
-    // Whether being a favorite is worth marking on this list. False where the list *is* the
-    // favorites, so the mark answers nothing — see the button.
+    // False where the list is the favorites, the mark answering nothing there.
     in property <bool> star-marks-kept: true;
     in property <bool> editable;
     in property <bool> removable;
     in property <bool> homepage-known;
-    // Recently Played only, where it is what tells a station listened to daily from one played
-    // once by accident. `0` everywhere else draws nothing.
+    // Recently Played only, where it tells a station listened to daily from one played once.
     in property <int> play-count: 0;
-    // `EntityCard`'s selection and menu state, passed through.
     in property <bool> selected;
     in property <bool> selection-live;
     in property <bool> menu-open;
@@ -44,16 +34,12 @@ export component StationCard inherits Rectangle {
     in property <length> card-width: 180px;
     // The square tile plus three text lines, where an entity card of the same width carries two.
     in property <length> card-height: 246px;
-    // `Radio.logo-decode-size`, drilled like `covers-generation` — this file imports no global.
+    // `Radio.logo-decode-size`, drilled like `covers-generation`: this file imports no global.
     in property <int> logo-decode-size;
 
-    // What the stored logo would draw at 1:1 here. The tier decodes to `logo-decode-size` physical
-    // pixels across this tile and never pads a small source up, so the source's own width is the
-    // fraction of the tile it can cover — scale-free, both numbers being physical. What
-    // `ArtworkImage` does with it, and the budget it does it against, is the tile's own.
-    //
-    // Off the card's published square rather than a second copy of its formula, which would skew
-    // this silently if the card's padding ever moved.
+    // What the logo draws at 1:1: the tier decodes to `logo-decode-size` physical pixels across the
+    // tile and never pads a small source up, so the source's width is the share of the tile it can
+    // cover. Off the card's published square rather than a second copy of its formula.
     property <length> logo-native-size: root.logo-decode-size > 0
         ? card-body.tile-size * root.cover.width / root.logo-decode-size
         : card-body.tile-size;
@@ -83,19 +69,15 @@ export component StationCard inherits Rectangle {
         subtitle2: root.tags;
         play-count: root.play-count;
 
-        // A favicon is small by trade, so a good share of the directory has a logo that cannot
-        // cross the tile without going soft. Those float at a size that stays sharp, over the same
-        // gradient a station with no logo at all gets.
+        // A favicon too small to cross the tile floats at a sharp size over the no-logo gradient.
         native-size: root.logo-native-size;
-        // A station whose logo is missing, dead, or too small to draw gets its own two stops and
-        // its initials instead — a third of a directory page has no logo field at all, and one
-        // repeated glyph across them is what makes Browse read as a grid of icons rather than of
-        // stations. `ui::radio::identity` keeps the stops deep enough that this one ink is legible
-        // on every station.
+        // Without a usable logo a station gets its own stops and initials, one repeated glyph
+        // making a directory page read as a grid of icons. `ui::radio::identity` keeps the stops
+        // deep enough for this one ink.
         tile-bg: @linear-gradient(135deg, root.tile-color-1, root.tile-color-2);
         tile-icon-color: Theme.tile-ink;
         fallback-text: root.monogram;
-        // Still the last resort, for a name with no letters to take initials from.
+        // For a name with no letters to take initials from.
         fallback-icon: "radio";
 
         // The body opens the station's page; the play button over the tile is what tunes in.
@@ -108,8 +90,7 @@ export component StationCard inherits Rectangle {
         context-requested(x, y) => { root.context-requested(x, y); }
         menu-open: root.menu-open;
 
-        // The four below are hover affordances and ride the card's own single overlay fade; the
-        // star is not one of them and sits outside, below.
+        // The four below ride the card's overlay fade; the star sits outside, below.
         show-overlay-actions: true;
         overlay-hovered: fav_btn.has-hover
             || play_btn.has-hover
@@ -117,16 +98,9 @@ export component StationCard inherits Rectangle {
             || edit_btn.has-hover
             || remove_btn.has-hover;
 
-        // **In the middle of the tile, the top left being the selection box's** as on every
-        // selectable card, and the bottom right the play count's. A body click aimed at the
-        // artwork still opens the page anywhere but on the button itself.
-        //
-        // **The four below frame the tile off `card-body`'s published metrics, never off
-        // `parent`.** These are laid out inside the card's overlay slot, but a `@children` element
-        // resolves names where it is *written*, so `parent` here is the `EntityCard` — its full
-        // height, not the square. The source reads correctly either way and only the generated
-        // tree tells them apart, which is what `crates/melodia/tests/entity_card_overlay.rs` walks
-        // for.
+        // Centred, the top left being the selection box's and the bottom right the play count's.
+        // These frame off `card-body`'s published metrics, never `parent`, which in this slot is
+        // the whole card (`crates/melodia/tests/entity_card_overlay.rs`).
         play_btn := IconButton {
             x: (card-body.tile-size - self.width) / 2;
             y: (card-body.tile-size - self.height) / 2;
@@ -138,7 +112,6 @@ export component StationCard inherits Rectangle {
             clicked => { root.play-clicked(); }
         }
 
-        // Under the selection box's corner.
         home_btn := IconButton {
             visible: root.homepage-known;
             x: Theme.pad-sm;
@@ -150,8 +123,7 @@ export component StationCard inherits Rectangle {
             clicked => { root.homepage-clicked(); }
         }
 
-        // Bottom-left, clear of the column above: the two that change the row rather than
-        // following it. Only the kept tabs mount them, so Browse looks exactly as it did.
+        // The two that change the list, which only the kept tabs show.
         remove_btn := IconButton {
             visible: root.removable;
             x: Theme.pad-sm;

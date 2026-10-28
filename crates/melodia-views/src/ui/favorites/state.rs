@@ -1,5 +1,4 @@
-//! Internal data structures for the Favorites view, concentrated here so the public
-//! [`crate::ui::favorites::FavoritesUi`] surface stays small.
+//! What [`crate::ui::favorites::FavoritesUi`] caches.
 
 use parking_lot::Mutex;
 
@@ -9,29 +8,19 @@ use melodia_core::entities::track::FavoriteStats;
 use melodia_core::entities::track_list::{MostPlayedTotals, SortDir};
 use melodia_core::utils::needle::Needle;
 
-/// Per-section cached snapshots — every fetch lands here so callbacks can recover the underlying
-/// Rust data without round-tripping through Slint. Each field is mutated only on its own fetch
-/// path; the `Mutex`es keep them callable from any tokio worker without pinning the UI thread.
+/// What the fetches cache, so a worker reads Rust data rather than a Slint property.
 pub(crate) struct FavoritesUiState {
-    /// Active filter needle — cached so the live-refresh subscriber re-applies it without reading
-    /// the Slint property from a tokio thread.
     pub filter: Mutex<Needle>,
-    /// Active Songs-tab sort, written on `set-sort-*` and read on every re-fetch.
+    /// The Songs tab's sort.
     pub sort: Mutex<ViewSort>,
-    /// Most recent successful `get_favorite_stats`, held because `hero_chips::publish_favorites`
-    /// takes the band's count, running time and Songs-tab spread off this handle rather than back
-    /// off the properties written around it — the page is assembled from three fetches, so no call
-    /// site holds all of it.
+    /// Held for `hero_chips::publish_favorites`, which reads the band's facts off this handle: the
+    /// page is assembled from three fetches, so no call site holds all of them.
     pub stats: Mutex<FavoriteStats>,
-    /// What the band's chips state about the two grid tabs, answered beside each grid's ids.
-    ///
-    /// They describe the whole set, not the filtered view: the band names the page, and the count
-    /// that does follow the filter is the one gating each grid's empty state. Reset by
-    /// `FavoritesUi::release_section_state` beside the grids they describe.
+    /// What the band states about the two grid tabs: the whole set rather than the filtered view,
+    /// the band naming the page.
     pub most_played_totals: Mutex<MostPlayedTotals>,
     pub artist_total: Mutex<i32>,
-    /// The covers last composed into the banner, guarding against redoing four decodes, a
-    /// 600² compose and a blur when a refresh yields the same top four.
+    /// The covers last composed into the banner, so an unchanged top four skips the compose.
     pub last_mosaic_paths: MosaicGuard,
 }
 

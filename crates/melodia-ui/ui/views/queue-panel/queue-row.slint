@@ -9,24 +9,16 @@ import { ContextClick } from "../../components/context-menu.slint";
 import { SelectionPill } from "../../components/track-list/selection-pill.slint";
 import { TrackTitle } from "../../components/track-list/track-title.slint";
 
-// One fixed-height queue row: number-or-checkbox, artwork, title, and the duration, which gives way
-// to the remove button on hover. Favourite and rating are the row menu's, so the title keeps the
-// room a heart and a star strip would take.
-//
-// **The checkbox starts a selection and the row body extends one** — a body click is a no-op
-// until the panel holds a pick, the whole-row TouchArea otherwise being double-click skip-to. A
-// drag is the panel's `DragSource`, which this row only tells about its press.
+// Favourite and rating are the row menu's, so the title keeps the room a heart and stars would
+// take. The checkbox starts a selection and the row body extends one, a body click otherwise
+// being a no-op beside the double-click skip-to.
 export component QueueRowItem inherits Rectangle {
     in property <QueueRow> row-data;
     in property <int> row-index;
-    // Owned by the host, so the rows and its drop target's slots can't disagree about how tall a
-    // row is.
+    // The host's, so the rows and its drop target's slots agree.
     in property <length> row-height;
-    // Merge contiguous selected rows into one continuous pill; `QueuePanel` computes
-    // both from `Queue.rows[idx ± 1].selected`.
     in property <bool> prev-selected;
     in property <bool> next-selected;
-    // The row the panel's drag picked up.
     in property <bool> lifted;
 
     // A left press on the row body, which is what a drag from it would carry.
@@ -37,9 +29,7 @@ export component QueueRowItem inherits Rectangle {
     // The lifted row dims through its brushes rather than `opacity`, which would render it into a
     // texture for the length of the drag, and a drag of picks lifts a screenful.
     property <float> fade: root.lifted ? Theme.fade-lifted : 1.0;
-    // The number's and the title's colour; `Theme.text` throughout, as in the track lists: same
-    // body copy on the same background, and reading dimmer than the lists beside the panel is the
-    // one thing these rows shouldn't do.
+    // `Theme.text`, as in the track lists: these rows shouldn't read dimmer than the lists beside.
     property <brush> ink: (root.playing ? Theme.accent : Theme.text).transparentize(1.0 - root.fade);
     // What every hover-driven binding reads, so the row stays lit under its own menu.
     property <bool> hovered: touch.has-hover || ctx-menu.is-open;
@@ -52,8 +42,6 @@ export component QueueRowItem inherits Rectangle {
         }
     }
     property <bool> show-checkbox: root.hovered || root.selected;
-    // Once the panel holds a selection the row body picks instead of doing nothing; the first
-    // pick stays the checkbox's. The track lists' rule, spelled against the queue's own count.
     property <bool> selecting: Queue.selected-count > 0;
     // Modifiers as they stood on the press the pick is about to complete; see `touch.clicked`.
     property <bool> press-ctrl;
@@ -67,12 +55,9 @@ export component QueueRowItem inherits Rectangle {
 
     height: root.row-height;
 
-    // Inset so the rounded hover pill clears the card edges. The whole-row `TouchArea`
-    // lives **inside** chrome and **wraps** the cells layout, the `track-list-row.slint`
-    // pattern: that makes the checkbox and the delete button real descendants of
-    // `touch`, so deepest-wins hit-testing routes clicks to them first and falls through
-    // to `touch` only on empty cell area. Declared as a sibling instead, the inner
-    // TouchAreas are cousins, get none of that routing, and the row swallows every click.
+    // The whole-row `TouchArea` wraps the cells, as in `track-list-row.slint`, so the checkbox and
+    // the remove button are its descendants and take their clicks first; as siblings, the row
+    // would swallow every click.
     chrome := Rectangle {
         x: 8px;
         width: parent.width - 16px;
@@ -91,8 +76,8 @@ export component QueueRowItem inherits Rectangle {
         }
 
         touch := TouchArea {
-            // On `clicked` rather than the release, per `slint-pitfalls.md`, this row's checkbox
-            // being hover-mounted too. A drag sends this area a cancel, so neither fires after one.
+            // On `clicked`, which the hover-mounted checkbox's release, handed on as it unmounts,
+            // never fires. A drag sends this area a cancel, so neither fires after one.
             clicked => {
                 if (root.selecting) {
                     root.pick(root.press-ctrl, root.press-shift);
@@ -119,8 +104,6 @@ export component QueueRowItem inherits Rectangle {
                 spacing: 10px;
                 alignment: stretch;
 
-                // Fixed width, with the number by default and the checkbox swapping in
-                // on hover or selection.
                 Rectangle {
                     width: 28px;
                     if !root.show-checkbox: Text {
@@ -136,8 +119,6 @@ export component QueueRowItem inherits Rectangle {
                             checked: root.selected;
                             fade: root.fade;
                         }
-                        // The box starts a selection; once one is live the row body
-                        // picks too. Modifiers ride through `ev.modifiers`.
                         cb-touch := TouchArea {
                             mouse-cursor: pointer;
                             pointer-event(ev) => {
@@ -151,7 +132,6 @@ export component QueueRowItem inherits Rectangle {
                     }
                 }
 
-                // Artwork tile.
                 VerticalLayout {
                     alignment: center;
                     ArtworkImage {
@@ -164,10 +144,8 @@ export component QueueRowItem inherits Rectangle {
                     }
                 }
 
-                // The track lists' title cell. `horizontal-stretch: 1` here is half of what lets
-                // the title elide (`TrackTitle` argues the other). The right padding is breathing
-                // room between the title and the duration, which otherwise butt against each
-                // other across the layout's spacing.
+                // `horizontal-stretch: 1` is half of what lets the title elide (`TrackTitle` argues
+                // the other); the padding keeps it off the duration.
                 VerticalLayout {
                     horizontal-stretch: 1;
                     alignment: center;
@@ -178,11 +156,9 @@ export component QueueRowItem inherits Rectangle {
                     }
                 }
 
-                // The track-list length-cell pattern with the remove button in the heart's
-                // place: the `min-width` keeps the cell wide enough that the button lands where
-                // the duration's right edge was, and `alignment: end` right-aligns both states;
-                // an `h:mm:ss` duration expands it naturally. Swapped rather than faded, as the
-                // checkbox is: a fade leaves trails as the pointer sweeps across rows.
+                // The track list's length cell with the remove button in the heart's place, the
+                // `min-width` landing it on the duration's right edge. Swapped rather than faded,
+                // a fade leaving trails as the pointer sweeps across rows.
                 Rectangle {
                     min-width: 50px;
                     clip: true;
@@ -208,10 +184,7 @@ export component QueueRowItem inherits Rectangle {
             }
         }
 
-        // The same menu the track lists raise, under `view-context: "queue"` — which drops Play
-        // Next and Add to Queue (the queue *is* what they name) and swaps the remove entry onto
-        // this list. `play-next` and `add-to-queue` are left unbound; nothing under that
-        // context fires them.
+        // `"queue"` drops Play Next and Add to Queue, so neither callback is bound.
         ctx-menu := TrackContextMenu {
             row-id: root.row-data.id;
             row-is-favorite: root.row-data.is_favorite;
@@ -229,9 +202,8 @@ export component QueueRowItem inherits Rectangle {
             rate(ids, n) => { Queue.set-row-rating(ids, n); }
             select-all => { Queue.select-all(); }
             clear-selection => { Queue.clear-selection(); }
-            // Index-shaped rather than by the payload's ids, which name tracks: a single remove
-            // takes this row and `remove-selected` the rows Rust has picked, neither touching
-            // another copy of the same track.
+            // By row rather than by the payload's ids, which name tracks, so no other copy of the
+            // same track goes with it.
             request-remove(ids) => {
                 if (ctx-menu.multi-active) {
                     Queue.remove-selected();

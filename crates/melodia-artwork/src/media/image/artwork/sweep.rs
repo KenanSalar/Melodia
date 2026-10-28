@@ -1,14 +1,11 @@
 //! Retires stored artwork no database row points at any more.
 //!
-//! Artwork is shared — one cover serves every track on the album — so a per-track delete must not
-//! unlink the file, and a refcount would have to be exactly right across scan ingest, orphan
-//! cleanup, both watcher delete paths, tag edits that replace a cover, and composite regeneration.
-//! A reference sweep cannot undercount because it never counts, and it is the only thing that can
-//! reach files already orphaned by every one of those paths before it existed.
+//! By reference rather than by refcount. One cover serves a whole album, and a refcount would have
+//! to stay exact across scan ingest, orphan cleanup, both watcher delete paths, cover-replacing tag
+//! edits and composite regeneration; a sweep never counts, so it can't undercount.
 //!
-//! Two gates decide what goes, and both have to hold: the name has to be one
-//! [`super::is_stored_name`] recognises, and nothing in the reference set may name it. They are
-//! two calls rather than one because the *order* matters — see [`collect_candidates`].
+//! Two gates, both required: [`super::is_stored_name`] has to recognise the name, and nothing in
+//! the reference set may name it. Two calls because the order matters ([`collect_candidates`]).
 
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
@@ -18,27 +15,21 @@ use melodia_core::error::describe;
 
 use super::is_stored_name;
 
-/// How long a file is protected from the sweep purely for being new.
-///
-/// A tag edit or a scan worker can have written a cover whose row hasn't committed yet, which
-/// would otherwise read as an orphan and leave the committing transaction pointing at nothing. An
-/// hour is far past any write window, and what it spares is counted as [`SweepReport::deferred`]
-/// so the caller can come back for it.
+/// How long a new file is spared: a tag edit or scan worker may have written a cover whose row
+/// hasn't committed yet. What it spares counts as [`SweepReport::deferred`].
 pub const GRACE: Duration = Duration::from_hours(1);
 
 /// What one sweep did, for the caller's log line.
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
 pub struct SweepReport {
-    /// Files unlinked.
     pub deleted: u32,
-    /// Bytes those files occupied.
+    /// Of the deleted files.
     pub bytes: u64,
-    /// Stored files still referenced, and so left in place.
+    /// Still referenced.
     pub kept: u32,
-    /// Unreferenced files spared only for being inside the grace window. Orphans once it passes,
-    /// unless a row commits for them first.
+    /// Unreferenced but inside the grace window, so owed a later sweep.
     pub deferred: u32,
-    /// Stored files that could not be read or unlinked; left alone, retried next sweep.
+    /// Could not be read or unlinked; retried next sweep.
     pub failed: u32,
 }
 
@@ -47,21 +38,17 @@ pub struct Candidate {
     path: PathBuf,
     name: String,
     bytes: u64,
-    /// Inside the grace window: spared even unreferenced, but still checked, so the caller learns
-    /// whether a later sweep is owed.
+    /// Spared even unreferenced, but still checked so the report can say a later sweep is owed.
     young: bool,
 }
 
 /// Every stored file in `dir` the name gate left standing, plus what it already decided.
 ///
-/// **Call this before reading the reference set, never after.** A scan writes to both under it,
-/// and only this order fails safe: a row committed between the two is visible to the query, where
-/// the reverse reads it as an orphan and unlinks a live cover. [`GRACE`] does not cover that case
-/// — `store_image` leaves mtime alone when its content-addressed name already exists, so a cover
-/// carried over from an earlier session is long past the window the moment a re-scan points a row
-/// back at it.
-///
-/// **Blocking** — one directory listing plus a `stat` per stored file.
+/// **Call this before reading the reference set, never after.** A scan writes both meanwhile, and
+/// only this order fails safe: a row committed in between is visible to the query, where the
+/// reverse unlinks a live cover. [`GRACE`] doesn't cover it, since `store_image` leaves an existing
+/// file's mtime alone and a re-scan can point a row back at a cover from an earlier session.
+/// **Blocking.**
 pub fn collect_candidates(
     dir: &Path,
     grace: Duration,
@@ -76,7 +63,7 @@ pub fn collect_candidates(
     let mut candidates = Vec::new();
     for entry in entries.flatten() {
         let file_name = entry.file_name();
-        // A name that isn't UTF-8 is not one we wrote, so it fails the predicate either way.
+        // Not UTF-8, so not a name we wrote.
         let Some(name) = file_name.to_str() else {
             continue;
         };
@@ -106,16 +93,12 @@ pub fn named_in<S: std::hash::BuildHasher>(
     candidates.into_iter().filter(|candidate| names.contains(&candidate.name)).collect()
 }
 
-/// Deletes every candidate `referenced` does not name, folding into the report
-/// [`collect_candidates`] started.
+/// Deletes every candidate `referenced` doesn't name, adding to [`collect_candidates`]' report.
 ///
-/// `referenced` holds bare filenames rather than paths, and is deliberately the union across
-/// *every* artwork column rather than the one that points into the store: the names are content
-/// hashes, so a cross-directory hit means the bytes are genuinely identical and keeping the file
-/// is the harmless direction. Over-keeping is a leak the next sweep collects; over-deleting is a
-/// cover gone until a re-scan.
-///
-/// **Blocking** — one unlink per orphan.
+/// `referenced` is bare filenames across *every* artwork column, not just this store's: the names
+/// are content hashes, so a cross-directory hit is identical bytes and keeping it is the harmless
+/// way to be wrong. Over-keeping leaks until the next sweep; over-deleting loses a cover until a
+/// re-scan. **Blocking.**
 pub fn retire<S: std::hash::BuildHasher>(
     candidates: Vec<Candidate>,
     referenced: &HashSet<String, S>,
@@ -146,8 +129,7 @@ pub fn retire<S: std::hash::BuildHasher>(
     report
 }
 
-/// Whether the file is too young to sweep. An unreadable or future mtime counts as young, a clock
-/// that can't be trusted being no reason to delete.
+/// An unreadable or future mtime counts as young, an untrustworthy clock being no reason to delete.
 fn within_grace(metadata: &std::fs::Metadata, grace: Duration, now: SystemTime) -> bool {
     let Ok(modified) = metadata.modified() else {
         return true;

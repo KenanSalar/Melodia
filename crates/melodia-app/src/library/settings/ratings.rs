@@ -1,6 +1,4 @@
-//! The rating write-back switch. Persists to `settings.json`; the in-memory shadow on
-//! `AppState` is refreshed by the UI callback before the write, the same synchronous-shadow
-//! ordering [`super::radio`] uses.
+//! The rating write-back switch.
 
 use crate::services;
 use melodia_core::config::Paths;

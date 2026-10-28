@@ -4,9 +4,8 @@
 
 use melodia_core::themes::BRAND_MARK_ON_LIGHT;
 
-/// Repaints straight-alpha `rgba`, `width` pixels to a row, in the light gradient, keeping every
-/// pixel's alpha. The gradient runs from the top-left corner to the bottom-right, as the titlebar's
-/// `135deg` brush does.
+/// Repaints straight-alpha `rgba` in the light gradient, keeping every alpha, top-left to
+/// bottom-right as the titlebar's `135deg` brush runs.
 pub(super) fn paint(rgba: &mut [u8], width: u32, height: u32) {
     let Ok(row_len) = usize::try_from(width).map(|pixels| pixels * 4) else { return };
     if row_len == 0 || height == 0 {
@@ -15,8 +14,8 @@ pub(super) fn paint(rgba: &mut [u8], width: u32, height: u32) {
     let [from, to] = BRAND_MARK_ON_LIGHT;
     let (width, height) = (u64::from(width), u64::from(height));
 
-    // How far along the diagonal a pixel centre sits, `(x + ½) / width` and `(y + ½) / height`
-    // averaged, kept as `offset / span` so the arithmetic stays in integers.
+    // A pixel centre's place along the diagonal, `(x + ½) / width` and `(y + ½) / height`
+    // averaged, kept as `offset / span` to stay in integers.
     let span = 4 * width * height;
     for (y, row) in (0u64..).zip(rgba.chunks_exact_mut(row_len)) {
         for (x, pixel) in (0u64..).zip(row.chunks_exact_mut(4)) {

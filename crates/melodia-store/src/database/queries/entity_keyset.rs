@@ -1,10 +1,9 @@
 //! The ordered ids behind every card grid, filtered and sorted in SQL.
 //!
 //! A grid keeps only these and fetches the cards near its viewport by id, as the track lists do
-//! (`track::track_ids`, whose packed read-back these share). Each arm reproduces the in-memory
-//! sort it replaced: a lowercased name compares through `UNICODE_LOWER`, a missing album year
-//! reads as `0`, and every arm ends in the id, so the order is total and descending reverses every
-//! key. Cards that sort tied on every key come back in id order rather than fetch order.
+//! (`track::track_ids`, whose packed read-back these share). A lowercased name compares through
+//! `UNICODE_LOWER`, a missing album year reads as `0`, and every arm ends in the id, so the order
+//! is total and descending reverses every key.
 
 use sqlx::{AssertSqlSafe, QueryBuilder, Sqlite};
 

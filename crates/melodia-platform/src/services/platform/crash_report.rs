@@ -1,26 +1,16 @@
 //! Panic reports, written beside the rolling log.
 //!
-//! `panic = "abort"` in release means every Rust panic anywhere in the process
-//! is fatal, so a hook is complete coverage of the Rust half rather than a
-//! partial measure — and it does run under abort: the pinned toolchain's
-//! `rust_panic_with_hook` dispatches the hook before `__rust_start_panic`. It
-//! also means a run produces at most one report, since the first panic ends the
-//! process.
+//! `panic = "abort"` makes every Rust panic fatal, so a hook is complete coverage of the Rust half,
+//! and it does run under abort: `rust_panic_with_hook` dispatches the hook before
+//! `__rust_start_panic`. A run produces at most one report.
 //!
-//! **On what a backtrace is worth here.** `[profile.release]` sets
-//! `strip = "debuginfo"` rather than `strip = true` precisely so these stay
-//! readable, but that keeps the symbol table and not the line table — frames
-//! carry function names and no `file:line` — and `lto = "fat"` plus
-//! `codegen-units = 1` inline hard enough that the trace is sparse. v0 mangling
-//! at least makes the names unambiguous across monomorphizations. The `log`
-//! macros' own `file:line` in the rolling log is what fills the gap, which is
-//! why `services::platform::logging` formats files with `detailed_format`.
+//! **A backtrace here is sparse.** `strip = "debuginfo"` keeps symbols but no line table, and fat
+//! LTO inlines hard, so frames carry names without `file:line`. The `log` macros' own `file:line`
+//! fills the gap, which is why `logging` formats files with `detailed_format`.
 //!
-//! Timestamps are **local**, unlike everything else persisted by this app
-//! (`utils::now_rfc3339` is UTC). These reports sit in one folder with the log
-//! files and get read together, `flexi_logger` stamps its lines in local time,
-//! and a reporter saying "it crashed around 2pm" should match the filename. The
-//! RFC-3339 offset keeps it unambiguous.
+//! Timestamps are **local**, unlike everything else persisted (`utils::now_rfc3339` is UTC): the
+//! reports sit beside `flexi_logger`'s local-stamped lines and get read together, and "it crashed
+//! around 2pm" should match the filename. The RFC-3339 offset keeps it unambiguous.
 
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -30,50 +20,33 @@ use chrono::{DateTime, Local, NaiveDateTime};
 use melodia_core::error::describe;
 use melodia_core::utils::redact::redact_home;
 
-/// How many reports survive a [`prune`].
-///
-/// Each is a few KiB of text, so this is bounded by usefulness rather than by
-/// cost: what a reporter is asked for is the crash they just had, and anything
-/// older than the last handful has been superseded by a release or forgotten.
+/// Bounded by usefulness rather than cost: a reporter is asked for the crash they just had.
 const MAX_CRASH_REPORTS: usize = 10;
 
 const PREFIX: &str = "crash-";
 const SUFFIX: &str = ".txt";
 
-/// High-water mark of the newest report the user has already been shown, so a
-/// crash is announced once rather than on every launch after it.
+/// The newest report the user has been shown, so a crash is announced once.
 ///
-/// It shares the logs directory with the things it tracks and is retired by
-/// neither sweep: it carries neither [`PREFIX`] nor [`SUFFIX`], so
-/// [`timestamp_of`] rejects it, and `flexi_logger`'s own cleanup matches its
-/// `melodia` basename and `log` suffix. Two independent gates.
+/// Retired by neither sweep sharing the directory: it carries neither [`PREFIX`] nor [`SUFFIX`],
+/// so [`timestamp_of`] rejects it, and `flexi_logger`'s cleanup matches its `melodia` basename and
+/// `log` suffix.
 const LAST_SEEN_FILE: &str = "last-seen-crash.json";
 
-/// The timestamp format inside an artifact's file name. Sortable, path-safe,
-/// and second-resolution — the process aborts on the first panic, so two
-/// reports can only collide across concurrent instances.
-///
-/// Shared with `services::diagnostics`, whose saved bundle is stamped the same
-/// way: the two are read side by side, so they had better agree.
+/// Sortable, path-safe, second-resolution: the process aborts on its first panic, so two reports
+/// collide only across concurrent instances. Shared with `services::diagnostics`, whose bundle is
+/// read beside these.
 pub const FILE_TS_FORMAT: &str = "%Y%m%d-%H%M%S";
 
-/// Held for one trip through the hook, so two threads panicking at once don't
-/// interleave a report write, a prune and a `log::error!`.
+/// Held for one trip through the hook, so two threads panicking at once don't interleave a write,
+/// a prune and a `log::error!`.
 ///
-/// **Not a recursion guard, though it reads like one.** A panic raised *inside*
-/// this closure never reaches it a second time: `panic_count::increase` sets a
-/// thread-local in-hook flag and `rust_panic_with_hook` aborts on it *before*
-/// dispatching, so the only way to lose the exchange is a concurrent panic on
-/// another thread. That is why the loser still calls `previous` — one report per
-/// crash is plenty, one stderr message per panic is not.
-///
-/// Cleared on the way out rather than latched for the process: release builds
-/// abort on the first panic, but `[profile.dev]` unwinds and a panicking tokio
-/// task is swallowed by its `JoinHandle`, so a latch made every panic after the
-/// first invisible.
+/// **Not a recursion guard, though it reads like one**: a panic inside the hook aborts before
+/// dispatch, so only a concurrent panic on another thread loses the exchange, and it still calls
+/// `previous`. Cleared on the way out rather than latched, because a dev build unwinds and a tokio
+/// task swallows its panic, and a latch would hide every panic after the first.
 static IN_HOOK: AtomicBool = AtomicBool::new(false);
 
-/// Clears [`IN_HOOK`] when the hook body returns.
 struct HookGuard;
 
 impl Drop for HookGuard {
@@ -87,25 +60,19 @@ fn file_name(now: DateTime<Local>) -> String {
     format!("{PREFIX}{}{SUFFIX}", now.format(FILE_TS_FORMAT))
 }
 
-/// When a report was written, or `None` for a name this module did not write.
-/// Pruning is gated on this, so it is the whole of what keeps the sweep off a
-/// file that isn't ours — `melodia_rCURRENT.log` shares the directory.
+/// When a report was written, or `None` for a name this module didn't write. Pruning is gated on
+/// this, so it is the whole of what keeps the sweep off `melodia_rCURRENT.log` beside it.
 fn timestamp_of(name: &str) -> Option<NaiveDateTime> {
     parse_stamp(name.strip_prefix(PREFIX)?.strip_suffix(SUFFIX)?)
 }
 
-/// Read a bare [`FILE_TS_FORMAT`] stamp — the half [`timestamp_of`] and the
-/// last-seen marker share.
 fn parse_stamp(stamp: &str) -> Option<NaiveDateTime> {
     NaiveDateTime::parse_from_str(stamp, FILE_TS_FORMAT).ok()
 }
 
-/// Install the panic hook. Call once, as early as a logs directory exists, so
-/// boot panics are covered too.
-///
-/// Chains rather than replaces: `panic::update_hook` is still unstable on the
-/// pinned toolchain, and keeping the previous hook preserves the default stderr
-/// message for `cargo run`.
+/// Installs the panic hook, as early as a logs directory exists so boot panics are covered.
+/// Chains rather than replaces, `panic::update_hook` being unstable, so `cargo run` keeps the
+/// default stderr message.
 pub fn install_hook(logs_dir: &Path) {
     let logs_dir = logs_dir.to_path_buf();
     let previous = std::panic::take_hook();
@@ -125,15 +92,14 @@ pub fn install_hook(logs_dir: &Path) {
 
         let report = format_report(now, thread.name(), location.as_deref(), payload, &backtrace);
 
-        // Plain `fs`, deliberately: a panic raised inside a logging call must
-        // not have to go back through the logger to leave an artifact.
+        // Plain `fs`: a panic raised inside a logging call must not need the logger to leave an
+        // artifact.
         let path = logs_dir.join(file_name(now));
         let _ = std::fs::create_dir_all(&logs_dir);
         let _ = std::fs::write(&path, report);
         prune(&logs_dir);
 
-        // Only now the logger, so the panic also closes the rolling log in
-        // sequence with whatever led to it.
+        // Only now the logger, so the rolling log closes in sequence with what led here.
         log::error!(
             "panic at {}: {payload} — report written to {}",
             location.as_deref().unwrap_or("<unknown location>"),
@@ -144,7 +110,7 @@ pub fn install_hook(logs_dir: &Path) {
     }));
 }
 
-/// Render a report. Pure over its inputs so it is testable without panicking.
+/// Pure over its inputs, so testable without panicking.
 fn format_report(
     now: DateTime<Local>,
     thread: Option<&str>,
@@ -194,18 +160,14 @@ pub fn system_facts(now: DateTime<Local>) -> String {
         timestamp = now.to_rfc3339(),
         os = std::env::consts::OS,
         arch = std::env::consts::ARCH,
-        // `None` on macOS and unsupported arches — the install method is
-        // unknown there, not absent.
+        // `None` on macOS and unsupported arches, where the install method is unknown, not absent.
         install = crate::services::platform::install_kind::target::current_target_key()
             .unwrap_or("unknown"),
     )
 }
 
-/// The newest report the user hasn't been told about, marking it seen.
-///
-/// Returns `None` on the second call and on every later launch, so the boot
-/// toast fires once per crash. There are no false positives by construction:
-/// a report exists only because the hook above wrote one.
+/// The newest report the user hasn't been told about, marking it seen, so the boot toast fires
+/// once per crash.
 pub fn take_unseen(logs_dir: &Path) -> Option<PathBuf> {
     // `existing_reports` is oldest first.
     let (newest, path) = existing_reports(logs_dir).pop()?;
@@ -219,16 +181,14 @@ pub fn take_unseen(logs_dir: &Path) -> Option<PathBuf> {
 
     let record = LastSeen { newest: Some(newest.format(FILE_TS_FORMAT).to_string()) };
     if let Err(e) = melodia_core::utils::atomic_file::write_json_sync(&marker, &record) {
-        // Hand the report over anyway. The hook wrote into this same directory
-        // moments before, so a failure here is close to impossible — and a
-        // notice that repeats beats one that never arrives.
+        // Hand the report over anyway: a notice that repeats beats one that never arrives.
         log::warn!("crash report marker: {}", describe(&e));
     }
     Some(path)
 }
 
-/// What [`take_unseen`] persists. A [`FILE_TS_FORMAT`] string rather than a
-/// `NaiveDateTime` because chrono is pulled without its `serde` feature.
+/// A [`FILE_TS_FORMAT`] string rather than a `NaiveDateTime`, chrono being pulled without its
+/// `serde` feature.
 #[derive(Default, serde::Serialize, serde::Deserialize)]
 struct LastSeen {
     #[serde(default)]
@@ -243,9 +203,8 @@ pub fn recent(logs_dir: &Path, limit: usize) -> Vec<PathBuf> {
     reports.into_iter().map(|(_, path)| path).collect()
 }
 
-/// Every report in `logs_dir` that parses back into this module's scheme,
-/// oldest first. Anything else in the directory — a log file, something the
-/// user put there — is not collected and so can't be swept.
+/// Every report in `logs_dir` that parses back into this module's scheme, oldest first, so nothing
+/// else in the directory can be swept.
 fn existing_reports(logs_dir: &Path) -> Vec<(NaiveDateTime, PathBuf)> {
     let Ok(entries) = std::fs::read_dir(logs_dir) else {
         return Vec::new();
@@ -264,7 +223,7 @@ fn existing_reports(logs_dir: &Path) -> Vec<(NaiveDateTime, PathBuf)> {
     reports
 }
 
-/// Delete all but the newest [`MAX_CRASH_REPORTS`] reports.
+/// Deletes all but the newest [`MAX_CRASH_REPORTS`].
 fn prune(logs_dir: &Path) {
     let reports = existing_reports(logs_dir);
     let Some(surplus) = reports.len().checked_sub(MAX_CRASH_REPORTS) else {

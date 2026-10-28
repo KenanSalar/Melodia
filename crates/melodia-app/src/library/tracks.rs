@@ -7,35 +7,19 @@ pub async fn count(db: &DbPool) -> Result<i64, AppError> {
     queries::track::count_tracks(db).await
 }
 
-/// Fetch the [`track::TrackMeta`] projection for a single id — the 8
-/// columns the full-screen Now Playing view's technical-metadata chips
-/// (codec / bitrate / sample rate / bit depth / channels / year / genre)
-/// render. Returns `None` for a missing id. The slimmer list/summary
-/// projections don't carry those columns, but a full `Track` would pull
-/// 33 more the chips never read.
+/// The projection Now Playing's technical chips render: the list projections lack those columns,
+/// and a full `Track` would pull many the chips never read.
 pub async fn get_track_meta(db: &DbPool, id: i64) -> Result<Option<track::TrackMeta>, AppError> {
     queries::track::get_track_meta(db, id).await
 }
 
-/// Fetch the album/artist/genre linkage for the given ids, in the order
-/// asked. Ids with no row are dropped, so a shorter result is a queue that
-/// outlived a delete rather than an error.
+/// In the order asked. Ids with no row are dropped, so a shorter result is a queue that outlived a
+/// delete rather than an error.
 pub async fn get_track_links(db: &DbPool, ids: &[i64]) -> Result<Vec<track::TrackLinks>, AppError> {
     queries::track::get_track_links_by_ids(db, ids).await
 }
 
-/// Open the OS file manager at the folder containing the given track,
-/// backing the track-row "Open Containing Folder" context-menu action.
-///
-/// Resolves the track's `file_path` from the DB, then hands its parent
-/// directory to the platform default handler via the `open` crate
-/// (`xdg-open` on Linux, `open` on macOS, PowerShell `Invoke-Item` with
-/// an `explorer.exe` fallback on Windows). The existence check runs on the
-/// blocking pool because `is_dir` is a `stat` syscall.
-///
-/// **Detached, never `open::that`**, for the reason `ui::launcher` gives: `that`
-/// `waitpid`s the launcher, and a file manager that does not daemonise holds a
-/// blocking-pool slot for as long as the user leaves its window open.
+/// Open the OS file manager at the folder holding the track.
 pub async fn reveal_in_file_manager(db: &DbPool, track_id: i64) -> Result<(), AppError> {
     let file_path = queries::track::get_track_file_path(db, track_id)
         .await?
@@ -49,12 +33,11 @@ pub async fn reveal_in_file_manager(db: &DbPool, track_id: i64) -> Result<(), Ap
     reveal_folder(folder).await
 }
 
-/// Open the OS file manager at `folder`.
+/// Open the OS file manager at `folder`, on the blocking pool since the existence check is a `stat`.
 ///
-/// Here rather than in [`crate::library::browse`], which is the other caller, because everything
-/// the act needs arguing about is here: the detached spawn, the existence check's reason for being
-/// on the blocking pool, and the `open::that_detached` rule above. Takes no pool: a folder card
-/// already holds its path, and there is nothing to resolve.
+/// **Detached, never `open::that`**, for the reason `ui::launcher` gives: `that` `waitpid`s the
+/// launcher, and a file manager that does not daemonise holds a blocking-pool slot for as long as
+/// the user leaves its window open.
 pub async fn reveal_folder(folder: std::path::PathBuf) -> Result<(), AppError> {
     tokio::task::spawn_blocking(move || -> Result<(), AppError> {
         if !folder.is_dir() {

@@ -10,15 +10,10 @@ use melodia_ui::{AppWindow, Nav};
 use melodia_views::ui;
 use slint::ComponentHandle;
 
-/// The per-view handles `install_views` hands back for the wiring
-/// [`super::install_ui`] owns: the initial fetches, the playlist and station import/export pills
-/// (which need the notifications stack), and the `cover_thumbs` consumers.
+/// The view handles [`super::install_ui`] goes on to wire.
 ///
-/// Only handles a *caller* reads live here. `BrowseUi` / `FavoritesUi` /
-/// `RecentlyPlayedUi` / `SearchUi` deliberately don't: every wired closure
-/// captures its own strong `Arc` clone and is owned by the `AppWindow` for the
-/// life of the app, and there is no `Weak<…Ui>` anywhere in the tree — so a
-/// field here would be a keepalive guarding nothing.
+/// Only handles a caller reads: every wired closure owns its own strong `Arc`, and nothing holds a
+/// `Weak<…Ui>`, so a field kept for the rest would guard nothing.
 pub struct UiHandles {
     pub cover_thumbs: Arc<image::cover_thumbs::CoverThumbs>,
     pub tracks_ui: Arc<ui::tracks::TracksUi>,
@@ -29,10 +24,8 @@ pub struct UiHandles {
     pub radio_ui: Arc<ui::radio::RadioUi>,
 }
 
-/// Resolve every `TrackListRowItem` thumbnail — all track tables, all views —
-/// through the one shared row-tier LRU. Rows carry only the artwork path, so
-/// only instantiated rows pay a lookup and nothing pins evicted buffers. Part of
-/// no slice's `install`, serving every view.
+/// Answers every track row's cover from the shared row tier. Rows carry only the path, so only
+/// instantiated rows pay a lookup and nothing pins an evicted buffer.
 fn install_row_covers(app: &AppWindow, cover_thumbs: &Arc<image::cover_thumbs::CoverThumbs>) {
     let ct = cover_thumbs.clone();
     // `generation` is read for its effect on the binding, never its value — see `RowCovers`.
@@ -46,14 +39,11 @@ fn install_row_covers(app: &AppWindow, cover_thumbs: &Arc<image::cover_thumbs::C
     });
 }
 
-/// Re-run every card grid's cover binding once a scheduled decode lands.
+/// Re-runs every card grid's cover binding once a scheduled decode lands.
 ///
-/// **One notifier, because there is one grid tier** — `set_decoded_notifier` is a `OnceLock`, and
-/// the seven tiers that used to sit in six view files (Favorites held two) share it now. Bumping a
-/// generation whose page isn't mounted is a property write with no bindings to dirty, so answering
-/// for all six globals costs nothing and saves the tier having to know which grid asked. Slint
-/// globals share no trait to be generic over, hence the list. Radio is absent because its logo
-/// tier is its own.
+/// The one install for the one grid tier, `set_decoded_notifier` being a `OnceLock`. A bump on an
+/// unmounted page dirties nothing, so answering for every grid is cheaper than the tier knowing
+/// which one asked. Radio's logo tier is its own.
 fn install_grid_covers(app: &AppWindow) {
     ui::cover_generation::notify_on_decode(ui::grid_prewarm::tier(), app, |app| {
         macro_rules! repaint {
@@ -73,30 +63,18 @@ fn install_grid_covers(app: &AppWindow) {
     });
 }
 
-/// Install every view slice and its callbacks. Seeds the persisted nav index
-/// and reopens each view's persisted detail (if any), a My Library tab the launch
-/// doesn't show keeping its own until its first enter. Returns the per-view
-/// handles for downstream wiring.
+/// Installs every view slice, seeding the persisted nav index first and reopening each view's
+/// persisted detail last.
 pub fn install_views(
     app: &AppWindow,
     state: &AppState,
     startup_view_state: Option<&services::view_state::ViewStateData>,
 ) -> UiHandles {
-    // The persisted nav index and My Library's tab, *before* any `wire_*` runs:
-    // every section handle seeds its synchronous `section_active` shadow by
-    // reading these at wire time, and a `SectionActiveGate` can't be relied on
-    // to correct a wrong seed — its `ChangeTracker` baselines silently inside
-    // `AppWindow::new()`, so a section seeded active for a hidden view stays
-    // that way all session. See the gate's bullet in
-    // `.claude/rules/ui-patterns.md` for what that costs.
-    //
-    // The Favorites *tab* seeds down beside the detail views instead, needing
-    // the `favorites_ui` handle; My Library's and Radio's need none.
+    // Before any `wire_*`: every section seeds its `section_active` shadow off these, and its gate
+    // can't correct a wrong seed (`ui_setup_tests` says why).
     if let Some(vs) = startup_view_state {
-        // 4–7 were Albums / Artists / Genres / Playlists — a `views.json`
-        // written by a released build still holds them, and they route nowhere.
-        // 10 routes only while Radio is switched on, so the two folds compose:
-        // they answer different questions and neither belongs inside the other.
+        // One fold for the indices an older `views.json` holds that route nowhere now, one for
+        // Radio switched off. Neither belongs inside the other.
         let idx = ui::radio::fold_disabled_nav_index(
             ui::my_library::fold_retired_nav_index(vs.last_nav_index),
             state.radio_enabled.get(),
@@ -109,12 +87,10 @@ pub fn install_views(
     }
 
     ui::callbacks::wire_all(app, state);
-    // The page's own three callbacks take no view handle, so they wire here
-    // rather than after the five tabs.
+    // Takes no view handle, so it needn't wait for the five tabs.
     ui::my_library::install(app, state);
 
-    // Ahead of the first `install`, every slice cloning the row cache into its handle. The grid
-    // tier needs no clone and no `cx` field — `ui::grid_prewarm::tier()` is the whole of it.
+    // Ahead of the first `install`, every slice cloning the row tier into its handle.
     let cover_thumbs = Arc::new(image::cover_thumbs::CoverThumbs::new());
     install_row_covers(app, &cover_thumbs);
     install_grid_covers(app);
@@ -127,10 +103,8 @@ pub fn install_views(
         view_state: startup_view_state,
     };
 
-    // Each `install` is models + handle + wiring, in that order, inside the
-    // slice. The peer parameters below *are* the ordering — `artists::install`
-    // cannot be written above `albums_ui` — so a cross-tab hand-off wired
-    // against a handle that doesn't exist yet is a compile error, not a comment.
+    // The peer parameters are the ordering: a hand-off wired against a handle that doesn't exist
+    // yet is a compile error.
     let tracks_ui = ui::tracks::install(cx);
     let browse_ui = ui::browse::install(cx);
     let albums_ui = ui::albums::install(cx);
@@ -142,34 +116,24 @@ pub fn install_views(
     let radio_ui = ui::radio::install(cx);
     let search_ui = ui::search::install(cx, &albums_ui, &artists_ui);
 
-    // Every track-list view's right-click "Go to Album/Artist/Genre", after all
-    // three target handles exist.
     ui::callbacks::wire_cross_tab_nav(app, state, &albums_ui, &artists_ui, &genres_ui);
 
-    // Publish into the nav-history registry so Mouse-4/5 replay can dispatch
-    // `open_*` futures without threading handles through `winit_filter`.
+    // So Mouse-4/5 replay can open a detail without handles threaded through `winit_filter`.
     *ui::nav_history::nav().handles().albums.lock() = Some(albums_ui.clone());
     *ui::nav_history::nav().handles().artists.lock() = Some(artists_ui.clone());
     *ui::nav_history::nav().handles().genres.lock() = Some(genres_ui.clone());
     *ui::nav_history::nav().handles().playlists.lock() = Some(playlists_ui.clone());
     *ui::nav_history::nav().handles().radio.lock() = Some(radio_ui.clone());
 
-    // The five persisted-detail reopens stay adjacent here rather than folding
-    // into each slice's `install`, because the history seed below depends on
-    // none of them having landed yet. The tabbed pages' tab seeds *did* fold
-    // in, their handle being the receiver.
+    // Here rather than in each slice's `install`: the history seed below needs none of them landed.
     ui::albums::seed_detail_from_settings(app, state, &albums_ui);
     ui::artists::seed_detail_from_settings(app, state, &artists_ui);
     ui::genres::seed_detail_from_settings(app, state, &genres_ui);
     ui::playlists::seed_detail_from_settings(app, state, &playlists_ui);
     ui::radio::seed_detail_from_settings(app, state, &radio_ui);
 
-    // Seed the nav-history with the boot view, so Mouse-4 has a target after the
-    // first sidebar click — otherwise a boot landing on a section with no
-    // persisted detail records only the destination and `back()` returns `None`.
-    // Reads the detail global while it is still `-1`; the async
-    // `seed_detail_from_settings` future appends its own entry on top once it
-    // lands.
+    // The boot view, so Mouse-4 has a target after the first sidebar click. Reads the detail
+    // globals while still `-1`; each reopen appends its own entry once it lands.
     ui::nav_history::record_current(app);
 
     // The Now-Playing heart and star rating fan into every per-row cache.
@@ -184,35 +148,22 @@ pub fn install_views(
     };
     ui::callbacks::wire_now_playing_favorite(app, state, row_flags);
     ui::callbacks::wire_now_playing_rating(app, state, row_flags);
-    // Retune the cover tiers to the real display. One call for every card grid, they all draw
-    // the same card at the same size; Genres has no cover at all and Radio has its own tier.
-    //
-    // **Deferred to the event loop, because this runs long before
-    // `app.show()`**: inline, `with_winit_window` finds no window and the tier
-    // silently keeps its construction fallback, while `scale_factor` answers 1.0
-    // until the window is on a monitor and serves a `HiDPI` display the 1×
-    // decode size. The closure's `Arc` clones keep the handles this scope drops.
+    // Deferred past `app.show()`: until the window is on a monitor its scale factor reads 1.0, and
+    // a `HiDPI` display would get the 1× decode size.
     let (tune_rows, tune_radio) = (cover_thumbs.clone(), radio_ui.clone());
     let weak = app.as_weak();
     let retune = move || {
         let Some(app) = weak.upgrade() else { return };
         ui::grid_prewarm::tune_for_display(&app);
-        // Radio's logo tier is the one card tier that isn't the shared one — see its own
-        // `covers` module for why — so it still tunes itself.
+        // Radio's logo tier is its own, and `radio::covers` says why.
         ui::radio::tune_cache_for_display(&app, &tune_radio);
-        // The row tier is the other shared one and owes the same post-show read.
         tune_rows.set_thumb_size(image::cover_thumbs::row_cover_size(f64::from(
             app.window().scale_factor(),
         )));
     };
-    // **And again on every resize.** Both answers move with the window, and a cap read once at
-    // launch is the cap a later maximize overruns — the cards past it can only paint
-    // placeholders, the lookup behind them scheduling against a tier that cannot hold them.
-    // Setting the cap exactly rather than growing it: a smaller window really does draw fewer
-    // cards. Nothing here re-warms or announces, and nothing has to: a retune leaves the tier's
-    // buffers in place, so the cards keep painting what they had until each replacement lands.
-    // And whenever the content panel's width moves without the window's, the grids being laid out
-    // in the panel rather than the window.
+    // Again on every resize, of the window or of the content panel the grids lay out in: a cap
+    // read once at launch is one a later maximize overruns. A retune leaves the tier's buffers in
+    // place, so cards keep painting until each replacement lands.
     let chrome = app.global::<melodia_ui::WindowChrome>();
     chrome.on_display_changed(retune.clone());
     chrome.on_content_panel_resized(retune.clone());
@@ -220,14 +171,11 @@ pub fn install_views(
         log::warn!("Failed to schedule cover-cache display tuning: {}", describe(&e));
     }
 
-    // The four handles not returned are deliberately dropped here — see
-    // `UiHandles`.
     UiHandles { cover_thumbs, tracks_ui, albums_ui, artists_ui, genres_ui, playlists_ui, radio_ui }
 }
 
-/// Every Settings section, plus the notifications stack. The updater's Slint
-/// state seeds here too; its daily-check task and callbacks wire later in
-/// [`super::install_ui`], beside the onboarding card that defers the task.
+/// Every Settings section, plus the notifications stack. The updater's task and callbacks wire
+/// later, beside the onboarding card that defers the task.
 pub fn install_library_settings_and_friends(
     app: &AppWindow,
     state: &AppState,
@@ -251,15 +199,11 @@ pub fn install_library_settings_and_friends(
     ui::settings::rating_writeback::install(app, state);
     ui::settings::updater_settings::install(app, state);
     ui::settings::about::install(app, state);
-    // Takes the stack because it both toasts and, on the launch after a panic,
-    // pushes the "crashed last time" notice itself.
     ui::settings::diagnostics::install(app, state, &notifications);
     ui::settings::settings_page::install(app, state);
     ui::track_columns::install(app);
-    // The stack is the one surface a language switch can't reach on its own: its rows carry
-    // strings Rust resolved once, they outlive every navigation, and the file-watching
-    // toggle two cards from the language picker raises one. Wired here rather than inline in
-    // the locale callback because that runs before this handle exists.
+    // Toast rows carry strings Rust resolved once and outlive every navigation, so a language
+    // switch reaches them only through this. Not in the locale callback, which wires first.
     {
         let notifications = notifications.clone();
         if let Err(e) = ui::locale_refresh::on_locale_changed(state, app.as_weak(), move |ui| {

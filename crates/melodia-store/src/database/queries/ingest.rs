@@ -27,18 +27,13 @@ pub struct IngestResult {
     pub inserted_count: u32,
     pub moved_count: u32,
     pub updated_count: u32,
-    /// IDs of the freshly-inserted tracks, in **input order**. Populated by
-    /// `insert_tracks_batch`'s `RETURNING id, file_path` (remapped to input
-    /// order via the returned path, since `RETURNING` output order is
-    /// unspecified) so callers don't need a follow-up `WHERE file_path IN
-    /// (…)` lookup.
+    /// The freshly inserted tracks' ids, in **input order**.
     pub inserted_track_ids: Vec<i64>,
 }
 
-/// Rows a scan or a watcher batch writes above which the stats triggers are dropped and the counts
-/// rebuilt by one `recalculate_all_stats` sweep at the end. At or below it the triggers stay
-/// enabled: per-row maintenance on a handful of writes is far cheaper than the 3-table
-/// correlated-subquery recalc the drop would force.
+/// Rows a scan or watcher batch writes above which the stats triggers are dropped and the counts
+/// rebuilt by one `recalculate_all_stats` at the end; for a handful of writes the triggers are
+/// cheaper than that recalc.
 pub(crate) const BULK_THRESHOLD: usize = 20;
 
 /// What a scan's chunks wrote, summed across them, and how.
@@ -149,12 +144,8 @@ impl ExistingTrackInfo {
     }
 }
 
-/// In-memory caches reused across `resolve_ids` calls within a single ingest
-/// transaction. Bundles them so per-call signatures don't balloon.
-///
-/// Artist and genre live in `queries::scan::NameCache` rather than here, because the join
-/// writers ask the same questions once per credit per track and had no way to reach a cache
-/// scoped to this call.
+/// The caches [`resolve_ids`] reuses within one ingest transaction. Artist and genre are in
+/// [`NameCache`], which the join writers reach too.
 struct ResolveCaches {
     names: NameCache,
     album: HashMap<String, HashMap<i64, Option<i64>>>,
@@ -171,17 +162,12 @@ impl ResolveCaches {
     }
 }
 
-/// Insert scanned media files into the database within the given transaction.
-/// Deduplicates artist/album/genre upserts via in-memory caches.
+/// Ingests scanned files within `tx`.
 ///
-/// Features:
-/// - **Moved file detection**: If a new path has a hash matching an existing track,
-///   the existing track's path is updated instead of inserting a duplicate.
-/// - **Incremental scanning**: If an existing path's mtime + `file_size` haven't changed,
-///   the file is skipped entirely. If they have changed, metadata is re-extracted.
-/// - `update_artwork_on_existing`: when `true`, updates `artwork_path` on tracks that
-///   already exist but have no artwork (used by library scan, not by file import).
-/// - `pool`: the pass's own, which the moved-file stat fans out on.
+/// A new path whose hash matches a row whose file is gone re-points that row rather than
+/// inserting, and an existing path whose size and mtime haven't moved is skipped. With
+/// `update_artwork_on_existing`, a skipped row missing artwork takes the file's, which the library
+/// scan wants and an import doesn't.
 pub(crate) async fn ingest_scanned_files(
     tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
     scanned_files: &[ScannedFile],
@@ -196,10 +182,6 @@ pub(crate) async fn ingest_scanned_files(
     let mut inserts = InsertBuffer::new(scanned_files.len(), scan_timestamp);
     let mut moved_count: u32 = 0;
     let mut updated_count: u32 = 0;
-
-    // Collect (file_path, artwork_path) for unchanged-but-missing-artwork
-    // tracks instead of issuing one UPDATE per row. Single batched UPDATE
-    // after the loop.
     let mut artwork_backfill: HashMap<String, Vec<String>> = HashMap::new();
 
     for file in scanned_files {
@@ -231,11 +213,8 @@ pub(crate) async fn ingest_scanned_files(
             continue;
         }
 
-        // The entry is consumed after a successful re-point so two same-hash
-        // new files in one scan can't both steal the one existing row — the
-        // second falls through to a fresh insert (mirrors `scan::watch_batch`'s
-        // consume-once moved-candidates map). A failed folder resolution
-        // leaves the entry available for a later same-hash file.
+        // Consumed once re-pointed, so a second same-hash file inserts rather than stealing the
+        // row; a failed folder resolution leaves it for a later one.
         if let Some((existing_id, old_path)) = moved_from.get(meta.file_hash.as_str()).cloned() {
             let Some(folder_id) =
                 resolve_folder_id(tx, folder_resolution, file, file_path_str, &mut caches.folder)
@@ -243,9 +222,8 @@ pub(crate) async fn ingest_scanned_files(
             else {
                 continue;
             };
-            // `moved_from` was resolved inside this transaction and
-            // nothing deletes rows before this loop (orphan pruning runs
-            // after ingest), so the re-point bool is vacuously true.
+            // Resolved inside this transaction, and nothing deletes ahead of this loop, so the
+            // row is there.
             let _repointed = queries::scan::update_track_location(
                 tx,
                 existing_id,
@@ -275,12 +253,7 @@ pub(crate) async fn ingest_scanned_files(
         inserts.push(tx, row, &mut caches.names).await?;
     }
 
-    // Flush the insert remainder before the artwork backfill so the new
-    // rows exist for any later same-transaction reads.
     inserts.flush(tx, &mut caches.names).await?;
-
-    // Drain the artwork backfill: one chunked UPDATE per (artwork_path)
-    // group, instead of one per affected track.
     flush_artwork_backfill(tx, artwork_backfill).await?;
 
     let inserted_track_ids = inserts.inserted_ids;
@@ -292,12 +265,10 @@ pub(crate) async fn ingest_scanned_files(
     })
 }
 
-/// Batch-load existing tracks with file info for incremental comparison.
-/// Maps `file_path` -> (`file_size`, `date_modified`) for mtime+size gate.
+/// The stored size and mtime of each scanned path that already has a row.
 ///
-/// Chunked over `scanned_files` itself, so a chunk's `Cow` binds (alloc-free for valid UTF-8,
-/// the common case) drop at its end rather than one `String` per scanned path living for the
-/// whole ingest.
+/// Chunked over `scanned_files` itself, so a chunk's `Cow` binds drop at its end rather than a
+/// `String` per scanned path living for the whole ingest.
 async fn load_existing(
     tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
     scanned_files: &[ScannedFile],
@@ -324,11 +295,10 @@ async fn load_existing(
 }
 
 /// The existing rows a new path may have moved from, by hash: those whose own path is gone from
-/// disk. A row whose path is still there is a duplicate, and its file falls through to an insert.
+/// disk, a row whose path is still there being a duplicate the new file inserts beside.
 ///
-/// Every new path's hash goes in one chunked query, rather than a round-trip per file on a first
-/// scan. The stat runs with the writer transaction still open: moving it ahead of the transaction
-/// would change how a concurrent delete races it.
+/// The stat runs with the writer transaction open: moving it ahead would change how a concurrent
+/// delete races it.
 async fn resolve_move_candidates(
     tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
     scanned_files: &[ScannedFile],
@@ -351,11 +321,9 @@ fn file_name_of(file: &ScannedFile) -> String {
     file.path.file_name().and_then(|f| f.to_str()).unwrap_or("").to_string()
 }
 
-/// New-file inserts, buffered and flushed as multi-row statements a chunk at a time, never
-/// holding more than one chunk's worth of row metadata.
-///
-/// Safe to defer: nothing later in the ingest loop reads not-yet-inserted rows (path/hash lookups
-/// run against the pre-loaded maps, and FK upserts in `resolve_ids` execute immediately).
+/// New-file inserts, flushed as multi-row statements a chunk at a time. Safe to defer: nothing
+/// later in the loop reads a pending row, the lookups running against the pre-loaded maps and the
+/// FK upserts immediately.
 struct InsertBuffer<'a> {
     pending: Vec<queries::scan::NewTrackRow<'a>>,
     scan_timestamp: &'a str,
@@ -400,22 +368,17 @@ impl<'a> InsertBuffer<'a> {
     }
 }
 
-/// Below this threshold the rayon thread-pool overhead dominates the
-/// savings — small move-detection batches (the common case during
-/// incremental rescans) walk sequentially. Per `.claude/rules/rayon.md`.
+/// Below this the rayon overhead outweighs the stats, so the small batches incremental rescans
+/// make walk sequentially.
 const STAT_PAR_THRESHOLD: usize = 32;
 
-/// The subset of `paths` still on disk under their own spelling. A batch past
-/// [`STAT_PAR_THRESHOLD`] is answered from a blocking thread, its stats fanned out on the scan
-/// pool, keeping the syscalls and directory reads off the async worker; the caller's transaction
-/// stays open across the await either way.
+/// The subset of `paths` still on disk under their own spelling, a batch past
+/// [`STAT_PAR_THRESHOLD`] stat'ed on the scan pool from a blocking thread.
 ///
-/// **Under their own spelling**, because a case-insensitive or normalizing filesystem answers
-/// `exists()` for a spelling no entry carries: a rename that changed only case or Unicode
-/// normalization leaves the old path resolving to the renamed file, and that is a move. A copy or
-/// a hard link keeps an entry of its own and stays a duplicate. Only the file name is asked: the
-/// path above it starts at a folder root spelled as the user added it, which no listing has to
-/// match, so a directory renamed by case alone still reads as a copy.
+/// **Under their own spelling** because a case-insensitive or normalizing filesystem answers
+/// `exists()` for a spelling no entry carries, and a rename that changed only case or normalization
+/// is a move. Only the file name is asked: the folder root above it is spelled as the user added
+/// it, so a directory renamed by case alone still reads as a copy.
 async fn batch_still_on_disk(paths: Vec<String>, pool: &ScanPool) -> HashSet<String> {
     if paths.is_empty() {
         return HashSet::new();
@@ -459,12 +422,8 @@ fn entry_names(dir: &Path) -> Option<HashSet<OsString>> {
     Some(entries.flatten().map(|entry| entry.file_name()).collect())
 }
 
-/// Apply queued artwork backfills as a single chunked CTE-driven UPDATE.
-/// Flattens the by-artwork-path grouping into `(file_path, art_path)` pairs
-/// so we issue one UPDATE per chunk (~499 pairs each), not one UPDATE per
-/// unique artwork. Mirrors the `WITH v AS (VALUES ...)` pattern in
-/// `batch_update_hashes`. Round-trip count is O(chunks), not
-/// O(unique artwork paths × file-path chunks).
+/// Applies the queued artwork backfills as one `WITH v AS (VALUES …)` UPDATE per chunk of
+/// `(file_path, artwork_path)` pairs, `batch_update_hashes`' shape.
 async fn flush_artwork_backfill(
     tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
     by_artwork: HashMap<String, Vec<String>>,
@@ -502,8 +461,7 @@ async fn flush_artwork_backfill(
     Ok(())
 }
 
-/// Resolve the `folder_id` for a file based on the folder resolution strategy.
-/// Returns `None` when the file has no parent directory and should be skipped.
+/// The file's `folder_id`, or `None` for a file with no parent directory, which is skipped.
 async fn resolve_folder_id(
     tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
     folder_resolution: &FolderResolution,
@@ -531,8 +489,7 @@ async fn resolve_folder_id(
     }
 }
 
-/// Resolve artist, album, genre, and folder IDs for a track, using caches.
-/// Returns `None` when the file should be skipped (e.g. no parent directory).
+/// A track's artist, album, genre and folder ids, or `None` where the file is skipped.
 async fn resolve_ids(
     tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
     meta: &ExtractedMetadata,
@@ -547,16 +504,15 @@ async fn resolve_ids(
         return Ok(None);
     };
 
-    // The **first** credited name, matching `queries::scan::resolve_track_context` — an `artists`
-    // row keyed on the whole credit line is a third artist nobody recorded under.
+    // The **first** credited name, as `resolve_track_context` takes: a row keyed on the whole line
+    // is an artist nobody recorded under.
     let artist_name = meta.artist.primary_name();
     let album_name = meta.album.as_deref().unwrap_or("");
     let genre_name = meta.genres.primary().unwrap_or("");
 
     let artist_id = caches.names.artist(tx, artist_name, UNKNOWN_ARTIST_ID).await?;
 
-    // The album-artist (album_artist tag, else the track artist). The album groups by this, so a
-    // per-track featured credit doesn't split it.
+    // The album groups by its album artist, so a per-track featured credit doesn't split it.
     let album_artist_name = queries::scan::album_artist_name_for(meta);
     let album_artist_id = if album_artist_name == artist_name {
         artist_id
@@ -564,14 +520,13 @@ async fn resolve_ids(
         caches.names.artist(tx, album_artist_name, UNKNOWN_ARTIST_ID).await?
     };
 
-    // Resolve album (two-level cache, keyed on the album-artist)
     let album_id = if let Some(&id) =
         caches.album.get(album_name).and_then(|by_artist| by_artist.get(&album_artist_id))
     {
         id
     } else {
-        // Behind the cache miss deliberately: an album's credit is a property of the album, so
-        // rewriting it per *track* would cost a delete-and-insert cycle per row of a bulk scan.
+        // Behind the cache miss: rewriting an album's credit per track would cost a delete and an
+        // insert per row of a bulk scan.
         let album_credit = queries::scan::album_credit_for(meta);
         let id = queries::scan::upsert_album(
             tx,

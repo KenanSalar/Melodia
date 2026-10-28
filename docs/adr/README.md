@@ -143,15 +143,22 @@ broke, and without the symptom the decision reads as arbitrary.
 
 ## When not to write one
 
-An ADR is for a decision that is hard to reverse, whose consequences are spread across the tree
-rather than concentrated in one file, and that has a live alternative someone will eventually
-re-propose. Library and toolkit choices, threading and data-flow shapes, trust boundaries, the
-licence, what the crate graph may not reach.
+An ADR is for an architecturally significant decision: one that shapes the structure, a quality
+the whole app must hold (memory, latency, trust), an external dependency, an interface other code
+builds on, or how the code is built. It is hard to reverse, its consequences are spread across
+the tree rather than concentrated in one file, and it has a live alternative someone will
+eventually re-propose. Library and toolkit choices, threading and data-flow shapes, trust
+boundaries, the licence, what the crate graph may not reach. It is best written when the decision
+is made, while the alternatives and constraints are still in view.
 
-Not a tuning constant, which is argued in the doc comment on the constant. Not a contract
-spanning two trees, which is a `.claude/rules/` entry. Not a prohibition violable from anywhere,
-which stays in `CLAUDE.md`. Not a feature's implementation shape, which is a working doc under
-`docs/plans/`. And never a record of what changed, because an ADR is not a changelog.
+Not a feature, whatever its size, and not a feature's implementation shape, which is a working doc
+under `docs/plans/`. Not a tuning constant, which is argued in the doc comment on the constant,
+nor a UI treatment, nor anything one module can undo alone. Not a contract spanning two trees,
+which is a `.claude/rules/` entry. Not a prohibition violable from anywhere, which stays in
+`CLAUDE.md`. And never a record of what changed, because an ADR is not a changelog.
+
+A plan doc reaching deletion owes no ADR by itself. What it built is argued at its anchors first,
+and the deletion is the last check that no significant decision inside it went unrecorded.
 
 The bar matters in both directions. A collection that documents the formatter choice and skips
 the datastore is worse than no collection, because it teaches people not to look.

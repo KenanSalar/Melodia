@@ -10,15 +10,11 @@ use melodia_core::entities::track_list::{MostPlayedTotals, TrackListScope};
 use melodia_core::error::AppError;
 use melodia_core::utils::needle::Needle;
 
-/// The `ORDER BY` body every "most played" surface ranks with, the Favorites hero mosaic included.
+/// The `ORDER BY` body every "most played" surface ranks with, the Favorites hero included.
 ///
-/// `play_count DESC` is the ranking; the three keys after it are what make it *total*. Without
-/// them `SQLite` may hand back tied rows in any order, so the grid could re-order between
-/// refreshes and the mosaic — a second query over the same rows — had no reason to pick the same
-/// four covers. `last_played DESC` breaks a tie toward the most recently played (RFC-3339 text
-/// whose lexical order is chronological; NULLs sort last under `DESC`). `date_added DESC` is
-/// reachable wherever that ties, keeping the mosaic's fill newest-first, and `id ASC` closes the
-/// last gap.
+/// The keys after `play_count DESC` make it *total*, so the grid holds still between refreshes and
+/// the mosaic, a second query over the same rows, picks the same covers: the most recently played
+/// first, then the newest added, then the id. RFC 3339 `last_played` sorts as text, NULL last.
 const MOST_PLAYED_ORDER: &str = "play_count DESC, last_played DESC, date_added DESC, id ASC";
 
 /// Aggregate stats for the Favorites hero header: count, total duration, the artist and album
@@ -26,17 +22,10 @@ const MOST_PLAYED_ORDER: &str = "play_count DESC, last_played DESC, date_added D
 pub async fn get_favorite_stats(db: &DbPool) -> Result<track::FavoriteStats, AppError> {
     let facts = super::scope_facts(db, TrackListScope::Favorites).await?;
 
-    // Up to 4 *distinct* artworks for the Favorites banner collage: walk the
-    // favourites in `MOST_PLAYED_ORDER` and keep each cover's best slot, which
-    // makes the collage literally the head of the Most Played tab rather than a
-    // second ranking that has to be kept in step with it.
-    //
-    // The rank spans *all* favourites, not just `play_count > 0` as the grid
-    // does, so once the played covers run out the remainder fills the collage —
-    // unplayed rows sort last under `play_count DESC`. Duplicates are
-    // deliberately not synthesised: `compose_cover` lays 1–4 sources out per
-    // count, so a one-album-heavy library gets one full-bleed cover rather than
-    // the same artwork four times.
+    // The collage is the head of the Most Played tab, each cover at its best slot, rather than a
+    // second ranking to keep in step. Ranked over every favourite so unplayed ones fill it once
+    // the played covers run out, and never padded with repeats: `compose_cover` lays out one to
+    // four.
     let artwork_paths: Vec<String> = sqlx::query_scalar(AssertSqlSafe(format!(
         "SELECT artwork_path FROM ( \
             SELECT artwork_path, \

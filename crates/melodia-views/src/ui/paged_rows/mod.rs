@@ -252,15 +252,11 @@ impl<R: PagedRow, N: RowNotify> PagedRows<R, N> {
         self.scroll.clone()
     }
 
-    /// Show `keyset`, its seed rows stored first. Where its ids are the ones already shown, in
-    /// the same order, only the rows that read differently are repainted, so a library tick that
-    /// moved nothing on screen rebuilds no `ListView` delegate; anything else resets.
-    ///
-    /// The incoming ids are kept either way, so a list that built its own copy of an order (a
-    /// reorder shown ahead of the write) shares the publisher's again once that lands.
-    ///
-    /// The anchor survives the reset, Slint keeping the scroll offset: the rows it reads next sit
-    /// where the old ones did, which is the span the seed was fetched for.
+    /// Show `keyset`, its seed rows stored first. The same ids in the same order repaint only the
+    /// rows that read differently, so a library tick that moved nothing on screen rebuilds no
+    /// delegate; anything else resets. The incoming ids are kept either way, so a reorder shown
+    /// ahead of its write shares the publisher's copy once that lands. The anchor survives the
+    /// reset as Slint's scroll offset does, which is the span the seed was fetched for.
     pub fn show(&self, keyset: Keyset<R>) {
         let Keyset { ids, seed, read } = keyset;
         self.shown_read.set(read);
@@ -348,7 +344,6 @@ impl<R: PagedRow, N: RowNotify> PagedRows<R, N> {
         self.notify.reset();
     }
 
-    /// Every id the list shows, in order.
     pub fn ids(&self) -> Arc<[i64]> {
         Arc::clone(&self.keyset.borrow())
     }

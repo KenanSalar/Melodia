@@ -17,7 +17,6 @@ use melodia_core::error::describe;
 use melodia_core::utils::block_move;
 use melodia_ui::{AppWindow, PlaylistDetail};
 
-/// Wire the `PlaylistDetail` callbacks. See [`super::wire`].
 pub(super) fn wire(ui: &AppWindow, state: &AppState, playlists_ui: &Arc<PlaylistsUi>) {
     track_detail::wire(state, playlists_ui);
     wire_close(ui, state, playlists_ui);
@@ -26,11 +25,8 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, playlists_ui: &Arc<Playlist
     wire_remove_track(ui, state, playlists_ui);
 }
 
-/// The header's back button.
-///
-/// No `mark_drill_back`, where its three siblings have one: theirs precedes a `return_to_section`
-/// that flips the nav index, and this detail records no origin at all. The body that mounts in
-/// its place takes a fixed `below` and reads the global not at all; see `ui::nav_transition`.
+/// The header's back button. No `mark_drill_back` where its siblings have one: this detail
+/// records no origin, so its close never moves the nav index and nothing reads the edge.
 fn wire_close(ui: &AppWindow, state: &AppState, playlists_ui: &Arc<PlaylistsUi>) {
     let s = state.clone();
     let pu = playlists_ui.clone();
@@ -85,10 +81,9 @@ fn wire_reorder(ui: &AppWindow, state: &AppState, playlists_ui: &Arc<PlaylistsUi
     });
 }
 
-/// Optimistically moves the rows at `rows` to `to`, writes, then asks the database for the order
-/// it holds: a failed write is rolled back that way, and a refresh that landed mid-write and
-/// showed the order from before the drop is put right. A write that lands has the header and the
-/// card read again too, since the automatic cover follows whichever track now leads.
+/// Moves `rows` to `to` on screen, writes, then reads back the order the database holds, which
+/// rolls back a failed write and corrects a refresh that landed mid-write. A write that lands
+/// re-reads the header and the card, the automatic cover following whichever track now leads.
 fn move_tracks(
     ui: &AppWindow,
     state: &AppState,
@@ -120,11 +115,9 @@ fn move_tracks(
     });
 }
 
-/// Opens the Edit Artwork picker seeding `current-artwork` from `PlaylistDetail.cover`, already
-/// decoded for the open detail, so the dialog opens on a preview of the saved state.
-///
-/// Rename and Delete need no handler here: their opens are populated inline in
-/// `my-library/tab-pills.slint`, and their commits are `super::crud`'s.
+/// Opens the Edit Artwork picker on `PlaylistDetail.cover`, already decoded for the open detail.
+/// Rename and Delete need no handler here: `my-library/tab-pills.slint` fills their dialogs
+/// inline, and `super::crud` commits them.
 fn wire_edit_artwork(ui: &AppWindow, state: &AppState, playlists_ui: &Arc<PlaylistsUi>) {
     let s = state.clone();
     let pu = playlists_ui.clone();
@@ -142,9 +135,8 @@ fn wire_edit_artwork(ui: &AppWindow, state: &AppState, playlists_ui: &Arc<Playli
     });
 }
 
-/// The row menu's removal. One row and a whole selection both arrive as `[int]` and collapse to
-/// one batched write. Once it lands the rows and their picks leave on that tick, filtered or not,
-/// and `refresh_detail` reloads the rest.
+/// The row menu's removal, one row or a selection, as one batched write. Once it lands the rows
+/// and their picks leave on that tick, filtered or not, and `refresh_detail` reloads the rest.
 fn wire_remove_track(ui: &AppWindow, state: &AppState, playlists_ui: &Arc<PlaylistsUi>) {
     let s = state.clone();
     let pu = playlists_ui.clone();

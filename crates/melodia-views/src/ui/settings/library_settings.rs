@@ -1,11 +1,5 @@
-//! Library Folders settings glue: hydrates the `LibrarySettings` Slint global
-//! from the DB, subscribes to scan-progress and library-changed channels, and
-//! exposes a small helper for opening the modal `Dialog` overlay.
-//!
-//! The Slint `LibrarySettings.folders` model is rebuilt as a fresh
-//! `Rc<VecModel<FolderListRow>>` on every refresh — folder lists are tiny
-//! (a handful of entries) so virtualization isn't needed and the allocation
-//! cost is negligible.
+//! The Library Folders card: the scan bar, and the folder list, a fresh `VecModel` per refresh
+//! since a handful of folders needs no diff.
 
 use std::rc::Rc;
 
@@ -19,19 +13,12 @@ use melodia_app::state::{AppState, ScanProgressTick};
 use melodia_core::error::{AppError, describe};
 use melodia_ui::{AppWindow, Dialog, FolderListRow, LibrarySettings, ScanPhase};
 
-/// Wire up the `LibrarySettings` global: initial folder fetch +
-/// scan-progress subscriber + library-changed re-fetch subscriber. Call once
-/// during startup after `AppWindow::new()` and `AppState::init`.
 pub fn install(ui: &AppWindow, state: &AppState) -> Result<(), slint::EventLoopError> {
     let weak = ui.as_weak();
 
-    // Empty seed model so the Slint side never observes a default-constructed
-    // `ModelRc` (which is a no-op model that ignores `set_vec` etc. — we'd
-    // never see UI updates if we left it that way).
     let initial: Rc<VecModel<FolderListRow>> = Rc::new(VecModel::default());
     ui.global::<LibrarySettings>().set_folders(ModelRc::from(initial));
 
-    // 1. Initial fetch.
     {
         let weak = weak.clone();
         let s = state.clone();
@@ -40,9 +27,8 @@ pub fn install(ui: &AppWindow, state: &AppState) -> Result<(), slint::EventLoopE
         });
     }
 
-    // 2. Scan-progress subscriber: live progress bar updates on the UI, and the
-    //    folder list again once a run ends, which is when `last_scanned` moves.
-    //    A run that changed nothing bumps no `library_changed` to say so.
+    // The scan bar, and the folder list again as a run ends, when `last_scanned` moves: a run
+    // that changed nothing bumps no `library_changed` to say so.
     {
         let mut rx = state.scan.subscribe();
         let weak = weak.clone();
@@ -71,10 +57,8 @@ pub fn install(ui: &AppWindow, state: &AppState) -> Result<(), slint::EventLoopE
         }))?;
     }
 
-    // 3. Library-changed subscriber: refetch the folder list when a folder is
-    //    added, removed or absorbed by a scan.
-    //    Its own loop rather than `ui::signal::on_signal`, whose callback can't
-    //    await: awaiting the refetch here folds a burst of bumps into one more pass.
+    // A folder added, removed or absorbed. Its own loop rather than `ui::signal::on_signal`,
+    // whose callback can't await: awaiting the refetch folds a burst of bumps into one pass.
     {
         let mut rx = state.library_changed.subscribe();
         let weak = weak.clone();
@@ -93,9 +77,7 @@ pub fn install(ui: &AppWindow, state: &AppState) -> Result<(), slint::EventLoopE
     Ok(())
 }
 
-/// Fetch the folder list from the DB and publish it onto
-/// `LibrarySettings.folders`. Safe to call from any thread; the actual UI
-/// write hops onto the event loop.
+/// Publishes the folder list onto `LibrarySettings.folders`. Any thread.
 pub async fn refresh_folders(ui: Weak<AppWindow>, state: AppState) {
     let folders = match library::settings::get_folders(&state.db).await {
         Ok(f) => f,
@@ -133,8 +115,7 @@ pub async fn add_folder_and_scan(state: &AppState, ui: &Weak<AppWindow>, path: S
     }
 }
 
-/// Pop the modal Dialog overlay with the given title + message. Safe to call
-/// from any thread; routes through the UI event loop.
+/// Raises the modal Dialog with `title` and `message`. Any thread.
 pub fn show_error(ui_weak: &Weak<AppWindow>, title: impl Into<String>, message: String) {
     let title = title.into();
     let _ = ui_weak.upgrade_in_event_loop(move |ui| {
@@ -145,9 +126,7 @@ pub fn show_error(ui_weak: &Weak<AppWindow>, title: impl Into<String>, message: 
     });
 }
 
-/// RFC3339-stored timestamps (`folder.last_scanned`) → human display string
-/// shown under each folder row. `None` collapses to an empty string, which the
-/// row uses to hide the meta line.
+/// A folder's stored `last_scanned` as the line under its row, empty for `None`, which hides it.
 pub fn format_last_scanned(stamp: Option<&str>) -> String {
     let Some(stamp) = stamp else {
         return String::new();

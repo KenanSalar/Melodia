@@ -3,16 +3,13 @@ import { Theme } from "../theme.slint";
 import { FieldFrame } from "field-frame.slint";
 import { OverlayScrollbar } from "overlay-scrollbar.slint";
 
-// The tree's only multi-line, word-wrapping text box — every other `TextInput`
-// is single-line, and std-widgets' `TextEdit` forwards no appearance properties,
-// so it can't be themed to match a dialog. The scrolling recipe comes from
-// Slint's own `widgets/common/textedit-base.slint`; the chrome is `FieldFrame`'s.
+// The tree's only wrapping text box: std-widgets' `TextEdit` forwards no appearance properties, so
+// it can't be themed to match a dialog. The scrolling recipe is Slint's own
+// `widgets/common/textedit-base.slint`.
 //
-// **Never put `border-radius` + `clip: true` on the box holding the
-// `TextInput`**: a rounded clip renders the text into a texture. The root paints
-// the rounded fill and border as one shape, which the renderer antialiases once,
-// and the inner `ScrollView` clips its viewport rectangularly, inset by `pad` so
-// nothing it scrolls reaches the border. The `PickerListCard` shape.
+// **No `border-radius` + `clip: true` on the box holding the `TextInput`**: a rounded clip renders
+// the text into a texture. `FieldFrame` paints fill and border as one shape, and the `ScrollView`
+// clips its viewport square, inset by `pad` so nothing scrolled reaches the border.
 export component MultilineInput inherits FieldFrame {
     in property <string> placeholder;
     in-out property <string> text;
@@ -28,11 +25,8 @@ export component MultilineInput inherits FieldFrame {
         height: parent.height - 2 * root.pad;
         horizontal-scrollbar-policy: always-off;
         vertical-scrollbar-policy: always-off;
-        // Width locked to the viewport so lines wrap instead of scrolling
-        // sideways. The height's `max` is required: without it the content
-        // never grows past what's visible, so there is no vertical travel, the
-        // caret-nudge handler has nothing to scroll, and long text runs off the
-        // bottom.
+        // The width locked so lines wrap. The height's `max` gives the content travel past the
+        // viewport, without which the caret handler has nothing to scroll and long text runs off.
         content-width: self.visible-width;
         content-height: max(self.visible-height, ti.preferred-height);
 
@@ -43,9 +37,8 @@ export component MultilineInput inherits FieldFrame {
             single-line: false;
             wrap: word-wrap;
             page-height: sv.visible-height;
-            // Keeps the caret on screen. Word-wrap makes the x-axis inert, so
-            // only upstream's y-branch survives — with the line height derived
-            // from the font size rather than hardcoded as upstream does.
+            // Keeps the caret on screen: upstream's y-branch alone, word-wrap making x inert, with
+            // the line height off the font size rather than hardcoded.
             cursor-position-changed(cpos) => {
                 if (cpos.y + sv.content-y < 12px) {
                     sv.content-y = min(0px, max(sv.visible-height - self.height, -cpos.y + 12px));
@@ -56,14 +49,14 @@ export component MultilineInput inherits FieldFrame {
         }
     }
 
-    // Faked, because `TextInput` has no `placeholder-text`.
+    // Faked, `TextInput` having no `placeholder-text`.
     Text {
         x: sv.x;
         y: sv.y;
         width: sv.width;
         vertical-alignment: top;
         text: root.text == "" ? root.placeholder : "";
-        // Same rung as every other placeholder — see `search-bar.slint`.
+        // `SingleLineInput`'s placeholder rung.
         color: Theme.overlay2;
         font-size: Theme.font-size-md;
         wrap: word-wrap;

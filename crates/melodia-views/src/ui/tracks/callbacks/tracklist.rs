@@ -36,8 +36,8 @@ pub(super) fn wire(
     wire_refresh(ui, state, tracks_ui);
 }
 
-/// Seed the sort header from the persisted `view_sort["tracks"]` so the
-/// arrow matches the order `spawn_initial_tracks_fetch` fetches with.
+/// Seeds the persisted sort, so the header's arrow matches the order `spawn_initial_tracks_fetch`
+/// loads in.
 fn seed_sort(tracks: &Tracks<'_>, view_state: Option<&ViewStateData>) {
     if let Some(sort) = persisted_sort(view_state, view_id::TRACKS) {
         tracks.set_sort_field(SharedString::from(sort.field.as_str()));
@@ -45,9 +45,6 @@ fn seed_sort(tracks: &Tracks<'_>, view_state: Option<&ViewStateData>) {
     }
 }
 
-/// Clicking a header column. Same field flips dir; new field resets to
-/// ascending. The ids reload in the new order and every cached row is kept;
-/// the sort is persisted so it survives a restart.
 fn wire_sort(ui: &AppWindow, state: &AppState, tracks_ui: &Arc<TracksUi>) {
     let s = state.clone();
     let tu = tracks_ui.clone();
@@ -78,8 +75,6 @@ fn wire_filter(ui: &AppWindow, state: &AppState, tracks_ui: &Arc<TracksUi>) {
     });
 }
 
-/// Double-click loads the current view into the queue and starts
-/// on the clicked track — the standard music-player contract.
 fn wire_play_row(ui: &AppWindow, state: &AppState) {
     let s = state.clone();
     let weak = ui.as_weak();
@@ -90,9 +85,7 @@ fn wire_play_row(ui: &AppWindow, state: &AppState) {
     });
 }
 
-/// Write through, then patch each affected row (no list re-fetch, so
-/// scroll position holds and there's no flash). Rating never changes list
-/// membership.
+/// Patches the rows in place rather than reloading, neither flag changing what the list holds.
 fn wire_row_flags(ui: &AppWindow, state: &AppState, tracks_ui: &Arc<TracksUi>) {
     let tracks = ui.global::<Tracks>();
     let tu = tracks_ui.clone();
@@ -114,8 +107,8 @@ fn wire_row_flags(ui: &AppWindow, state: &AppState, tracks_ui: &Arc<TracksUi>) {
     });
 }
 
-/// Reload with the current sort and filter: a library tick while the tab is
-/// up, or a re-enter after one landed while it wasn't.
+/// Reloads under the current sort and filter: a library tick while the tab is up, or a re-enter
+/// after one landed while it wasn't.
 fn wire_refresh(ui: &AppWindow, state: &AppState, tracks_ui: &Arc<TracksUi>) {
     let s = state.clone();
     let tu = tracks_ui.clone();

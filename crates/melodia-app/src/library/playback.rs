@@ -15,16 +15,9 @@ use melodia_playback::player::playback::output::convert::Resampler;
 use melodia_playback::player::playback::output::{self, OutputDevice};
 use melodia_store::database::queries;
 
-/// Which slot of `queued` playback should start on.
-///
-/// `start_index` names a row in `track_ids` — the list the caller was looking
-/// at — but the queue drops ids that no longer exist, so the two index spaces
-/// diverge the moment one row is gone and every slot past the gap shifts.
-/// Resolving through the id keeps the picked track picked. `None` means there
-/// is no slot to start on: the caller picked no row at all, the index it passed
-/// is past the end of its own list, or the row it picked didn't survive. The
-/// caller falls back to the head and warns on the last two — they are
-/// different faults, and the messages say which.
+/// Which slot of `queued` playback should start on, resolved through the id: the queue drops ids
+/// that no longer exist, so an index into `track_ids` shifts past the first gap. `None` when no row
+/// was picked, the index is past the end, or the picked row didn't survive.
 fn resolve_start_slot(
     track_ids: &[i64],
     queued: &[i64],
@@ -34,18 +27,12 @@ fn resolve_start_slot(
     queued.iter().position(|&id| id == wanted)
 }
 
-/// Replace the queue with `track_ids` and start at `start_index` (`None` =
-/// head). Every way of starting playback from a browsing surface routes here —
-/// activating a row passes the clicked slot, the header Shuffle pill passes a
-/// random one — so the queue always ends up being the list the user was
-/// looking at.
+/// Replace the queue with `track_ids` and start at `start_index` (`None` = head). Every browsing
+/// surface starts playback here, so the queue is always the list the user was looking at.
 ///
-/// With shuffle already on, the rest of the list is shuffled behind the chosen
-/// track rather than played in display order: a freshly seeded `play_order` is
-/// the identity permutation, so without this the transport's shuffle button
-/// would stay lit while playback walked the album straight through.
-/// `original_order` is left as seeded, so turning shuffle back off restores
-/// display order.
+/// With shuffle on, the rest is shuffled behind the chosen track: a freshly seeded `play_order` is
+/// the identity, so the lit shuffle button would otherwise walk the album straight through.
+/// `original_order` stays as seeded, so turning shuffle off restores display order.
 pub async fn player_play_tracks(
     ctx: &PlaybackContext,
     track_ids: Vec<i64>,
@@ -69,9 +56,8 @@ pub async fn player_play_tracks(
         }
         0
     });
-    // The records of the window the start opens, fetched here so neither the start nor a skip
-    // straight after it waits on the window task. A shuffle reorders all but the start, whose
-    // neighbours the task then fetches.
+    // Fetched here so neither the start nor an immediate skip waits on the window task; under
+    // shuffle the task fetches the new neighbours.
     let wraps = lock_state(&ctx.player_state).queue.repeat_mode.wraps();
     let near: Vec<i64> = window_slots(queued.len(), Some(start), wraps)
         .filter_map(|slot| queued.get(slot).copied())
@@ -104,11 +90,9 @@ pub fn player_play(ctx: &PlaybackContext) -> Result<(), AppError> {
     Ok(())
 }
 
-/// Resume the paused track, or start it again where its deck no longer holds it, which is what a
-/// pause long enough to give an exclusive device back leaves.
-///
-/// The deck is asked with the state lock held, the lock order's own direction, so the answer and
-/// the actions it picks can't be split by anything that goes through the emit.
+/// Resume the paused track, or start it over where a pause long enough to give an exclusive device
+/// back left its deck empty. The deck is asked under the state lock, the lock order's own
+/// direction, so no other emit can split the answer from the actions it picks.
 fn play_actions(s: &mut PlayerState, engine: &PlaybackEngine) -> Vec<PlayerAction> {
     if s.status == PlaybackStatus::Paused && !engine.holds_source() {
         return s.build_replay_actions();
@@ -116,26 +100,19 @@ fn play_actions(s: &mut PlayerState, engine: &PlaybackEngine) -> Vec<PlayerActio
     s.build_play_actions()
 }
 
-/// Whether a play command has to re-open a station instead of resuming the deck.
-///
-/// `Paused` is the only state that holds a station without a connection: `Playing` and `Loading`
-/// already have one, and a stop forgets the station outright. Pure, so the routing can be pinned
-/// without a runtime, a backend or a socket.
+/// Whether a play command has to re-open a station instead of resuming the deck: `Paused` is the
+/// only state holding a station without a connection. Pure, so the routing is testable without a
+/// socket.
 pub(crate) fn needs_station_reopen(status: PlaybackStatus, has_station: bool) -> bool {
     has_station && status == PlaybackStatus::Paused
 }
 
-/// Re-open the station the player is paused on, if it is paused on one. `true` means it took over.
+/// Re-open the station the player is paused on, if any; `true` means it took over.
 ///
-/// Pausing a station drops its connection (see `PlayerState::build_pause_actions`), so resuming is
-/// a fresh open rather than a `Resume` — which is a network round trip, and so cannot happen under
-/// the state lock the ordinary transport path runs in. Every caller of the transport commands is
-/// already inside `runtime.spawn`, the same assumption `execute_actions` makes for its play-count
-/// writes.
-///
-/// The predicate and the transition it authorises run in **one** emit: read apart from the
-/// transition, a `Stop` landing in the gap would be undone by the connect it had already decided
-/// to start, and the session guard past this point cannot see a station it put back itself.
+/// A paused station has no connection, so resuming is a fresh open: a network round trip, spawned
+/// off the state lock, every transport caller already being inside `runtime.spawn`. The predicate
+/// and the connecting transition share **one** emit, or a `Stop` in the gap would be undone by the
+/// connect already decided on.
 fn resume_station(ctx: &PlaybackContext) -> bool {
     let mut resuming = None;
     ctx.emit_and_execute(|s| {
@@ -163,18 +140,14 @@ fn resume_station(ctx: &PlaybackContext) -> bool {
     true
 }
 
-/// Tune to `station`, stopping whatever was playing and leaving the queue untouched underneath.
+/// Tune to `station`, leaving the queue untouched underneath.
 ///
-/// Opening a stream is a network round trip, so this is split across two state transitions with an
-/// `.await` between them: the first clears the decks and shows the station as connecting, the
-/// second starts it. The generation returned by the first is what the second is checked against —
-/// a station the user has already moved off must not start playing seconds later.
+/// Two transitions around the open, and the second is checked against the first's generation, so a
+/// station the user has already moved off doesn't start playing seconds later.
 pub async fn player_play_station(
     ctx: &PlaybackContext,
     station: &Arc<RadioNowPlaying>,
 ) -> Result<(), AppError> {
-    // The session number has to come back out of the emit, since only the state machine can
-    // allocate one atomically with the transition that starts it.
     let mut generation = 0;
     ctx.emit_and_execute(|s| {
         let (session, actions) = s.build_station_connecting_actions(station.clone());
@@ -185,10 +158,8 @@ pub async fn player_play_station(
     open_and_start_station(ctx, station, generation).await
 }
 
-/// The network half of a tune, for a state machine already moved onto `generation`.
-///
-/// Split out so [`resume_station`] can take the connecting transition under the same emit as the
-/// predicate that authorised it, and still share everything past the `.await`.
+/// The network half of a tune, split out so [`resume_station`] can take the connecting transition
+/// under its predicate's emit.
 async fn open_and_start_station(
     ctx: &PlaybackContext,
     station: &Arc<RadioNowPlaying>,
@@ -205,9 +176,8 @@ async fn open_and_start_station(
                 s.adopt_probed_codec(generation, &codec);
                 s.build_station_connected_actions(generation)
             });
-            // The session can have ended while the open was in flight, in which case the emit
-            // above declined and nothing claimed the stage. Closing it here rather than leaving it
-            // for the next station is what stops an abandoned connection outliving its station.
+            // A session that ended mid-open declined the emit above and left the stage unclaimed;
+            // an abandoned connection must not outlive its station.
             ctx.engine.discard_staged_stream(generation);
             crate::library::radio::record_probed_codec(&ctx.db, station, &codec).await;
             Ok(())
@@ -223,18 +193,12 @@ async fn open_and_start_station(
     }
 }
 
-/// Fade length for a transport pause or stop, or `0` when the setting is off.
+/// Fade length for a transport pause or stop, `0` with the setting off. Everything reaching the
+/// four transport commands fades, the sleep timer's expiry included.
 ///
-/// The four transport commands route through here — `player_pause`,
-/// `player_toggle_play_pause`, `player_stop` and `player_stop_station` — so everything
-/// that reaches them fades: the UI buttons, the keyboard shortcuts, the OS media keys,
-/// the tray, the Radio switch, and the sleep timer's expiry (which ends on
-/// `player_pause`, and where a fade-out is exactly what you want).
-///
-/// What must *not* fade is what the machine does for its own reasons, and those
-/// paths pass `0` directly rather than calling this: `stop_end_of_queue` (nothing
-/// left to fade), and the `Pause` that next/previous append to restore a paused
-/// deck (fading there would make the incoming track audible on arrival).
+/// What the machine does for its own reasons passes `0` directly instead: `stop_end_of_queue`, and
+/// the `Pause` next/previous append to restore a paused deck, where a fade would make the incoming
+/// track audible.
 fn transport_fade_ms(ctx: &PlaybackContext) -> u64 {
     if ctx.engine.crossfade_settings().fade_on_pause {
         melodia_playback::player::playback::crossfade::PAUSE_FADE_MS
@@ -249,9 +213,8 @@ pub fn player_pause(ctx: &PlaybackContext) -> Result<(), AppError> {
     Ok(())
 }
 
-/// Toggle play/pause based on current playback status. Branching happens inside
-/// the state lock so two near-simultaneous toggles (e.g. UI + media-key) can't
-/// race past each other.
+/// Branches inside the state lock, so two near-simultaneous toggles (UI and media key) can't race
+/// past each other.
 pub fn player_toggle_play_pause(ctx: &PlaybackContext) -> Result<(), AppError> {
     if resume_station(ctx) {
         return Ok(());
@@ -273,13 +236,9 @@ pub fn player_stop(ctx: &PlaybackContext) -> Result<(), AppError> {
     Ok(())
 }
 
-/// Stop a live stream and nothing else — what the Radio switch owes when it goes off.
-///
-/// The check is inside the state lock for the reason `player_toggle_play_pause`'s is: a
-/// read-then-stop pair would let a track start in between and stop *that* instead.
-/// `build_stop_actions` forgets the station and ends its session, so a connect still in
-/// flight can't land afterwards and the untouched queue is what the transport falls back
-/// to (D9).
+/// Stop a live stream and nothing else, for the Radio switch going off. Checked under the state
+/// lock, since a read-then-stop would stop a track started in between. Ending the session keeps a
+/// connect in flight from landing afterwards.
 pub fn player_stop_station(ctx: &PlaybackContext) -> Result<(), AppError> {
     let fade_ms = transport_fade_ms(ctx);
     ctx.emit_and_execute(move |s| {
@@ -305,10 +264,9 @@ pub fn player_previous(ctx: &PlaybackContext) -> Result<(), AppError> {
     Ok(())
 }
 
+/// Live only: a drag fires this continuously, and [`commit_player_settings`] persists on release.
 pub fn player_set_volume(ctx: &PlaybackContext, level: u32) -> Result<(), AppError> {
-    // Fast no-op short-circuit: skip the whole with_state_emit / engine /
-    // ViewModel-watch dance when nothing would actually change. Catches
-    // duplicate slider emits at the boundary.
+    // Duplicate slider emits stop here, short of a view model.
     {
         let s = lock_state(&ctx.player_state);
         if s.holds_volume(level) {
@@ -316,9 +274,6 @@ pub fn player_set_volume(ctx: &PlaybackContext, level: u32) -> Result<(), AppErr
         }
     }
     ctx.emit_and_execute(|s| s.build_set_volume_actions(level));
-    // Persistence is intentionally NOT triggered here. The slider fires
-    // `set_volume` continuously during drag for live audio; settings.json
-    // is flushed once via `commit_player_settings` on slider release.
     Ok(())
 }
 
@@ -353,15 +308,8 @@ pub async fn player_toggle_mute(ctx: &PlaybackContext) -> Result<(), AppError> {
     commit_player_settings(ctx).await
 }
 
-/// Persist the current `PlayerState`'s volume + `is_muted` into settings.json.
-/// Called once from the volume slider's `pointer-event Up` (after a drag or
-/// click), once a run of key or wheel steps settles (`ShortcutScope`'s
-/// debounce), and inline from the mute mutators and [`player_set_volume_committed`].
-///
-/// Writes on a `spawn_blocking` thread so the async runtime worker isn't
-/// blocked, under the settings lock so a concurrent `mutate_settings` isn't
-/// overwritten. Skips the write when settings already match (common — e.g. a
-/// click that didn't change the value).
+/// Persist the current volume and mute once per gesture: the slider's release, a settled run of key
+/// or wheel steps, a mute, or [`player_set_volume_committed`]. Unchanged values write nothing.
 pub async fn commit_player_settings(ctx: &PlaybackContext) -> Result<(), AppError> {
     let (volume, is_muted) = {
         let s = lock_state(&ctx.player_state);
@@ -405,18 +353,12 @@ pub fn player_set_gapless(ctx: &PlaybackContext, enabled: bool) -> Result<(), Ap
     Ok(())
 }
 
-/// Arm / disarm the sleep-timer's "End of current track" mode. When armed, the
-/// playback monitor pauses at the next end-of-stream boundary instead of
-/// advancing the queue (see `crates/melodia-engine/src/player/engine/handlers.rs`).
-/// Session-only — nothing is persisted. The `with_state_emit` re-publishes the
-/// light `ViewModel` so the UI's `Player.vm.sleep_at_track_end` (and thus the
-/// overflow-menu sleep row) tracks the flag; the monitor disarms it when it
-/// fires, which re-emits and auto-clears the row.
+/// Arm the sleep timer's "end of current track": the playback monitor pauses at the next end of
+/// stream instead of advancing, and disarms it as it fires. Session-only.
 ///
-/// **Refused while a station plays.** A live source has no track end, so the monitor would never
-/// fire the flag and the sleep row would sit reading "Track end" over a timer that can only be
-/// cancelled. The guard is here rather than at the one caller so no later caller can arm it, and
-/// so a grep can prove it; the flyout dims the row on top of this.
+/// **Refused while a station plays**: a live source has no track end, so the row would read "Track
+/// end" over a timer that never fires. Guarded here rather than at the caller so no later caller
+/// can arm it.
 pub fn player_set_pause_at_track_end(ctx: &PlaybackContext, armed: bool) -> Result<(), AppError> {
     with_state_emit(&ctx.player_state, &ctx.sinks, |s| {
         s.pause_after_current_track = armed && s.source_allows(PlaybackSource::has_known_duration);
@@ -424,48 +366,31 @@ pub fn player_set_pause_at_track_end(ctx: &PlaybackContext, armed: bool) -> Resu
     Ok(())
 }
 
-// --- Graphic equalizer -----------------------------------------------------
-//
-// EQ state lives on the playback engine's lock-free shared cell, not the
-// `PlayerState` machine, so these bypass `with_state_emit` / `execute_actions`
-// and write the shared cell directly — the same place `set_volume`/`set_speed`
-// ultimately land. They're synchronous and infallible (no decode, no I/O), and
-// apply to both the playing track and the gapless-preloaded one at once.
+// The EQ, ReplayGain and crossfade setters write the engine's lock-free cells rather than
+// `PlayerState`, so they skip the emit and can't fail.
 
-/// Toggle the graphic equalizer on the live player.
 pub fn player_set_eq_enabled(ctx: &PlaybackContext, enabled: bool) {
     ctx.engine.set_eq_enabled(enabled);
 }
 
-/// Set a single EQ band's gain (dB) on the live player.
 pub fn player_set_eq_band(ctx: &PlaybackContext, index: usize, gain_db: f32) {
     ctx.engine.set_eq_band(index, gain_db);
 }
 
-/// Replace all EQ band gains on the live player (preset / reset / hydration).
 pub fn player_set_eq_gains(ctx: &PlaybackContext, gains: &[f32]) {
     ctx.engine.set_eq_gains(gains);
 }
 
-/// Set the EQ preamp / master gain (dB) on the live player.
 pub fn player_set_eq_preamp(ctx: &PlaybackContext, preamp_db: f32) {
     ctx.engine.set_eq_preamp(preamp_db);
 }
 
-// --- ReplayGain ------------------------------------------------------------
-//
-// ReplayGain master state (enabled / mode / preamp / prevent-clipping) lives on
-// the same lock-free shared cell as the EQ, so these setters mirror the EQ ones:
-// synchronous, infallible, and applied to the playing + gapless-preloaded track
-// at once. The *per-track* gain is baked per source at play time (see
-// `player::playback::replaygain`), not set here.
+// The per-track gain is baked per source at play time (`player::playback::replaygain`).
 
-/// Toggle `ReplayGain` on the live player.
 pub fn player_set_replaygain_enabled(ctx: &PlaybackContext, enabled: bool) {
     ctx.engine.set_replaygain_enabled(enabled);
 }
 
-/// Set the `ReplayGain` mode (Track / Album) on the live player.
 pub fn player_set_replaygain_mode(
     ctx: &PlaybackContext,
     mode: melodia_playback::player::playback::replaygain::RgMode,
@@ -473,29 +398,20 @@ pub fn player_set_replaygain_mode(
     ctx.engine.set_replaygain_mode(mode);
 }
 
-/// Set the `ReplayGain` preamp (dB) on the live player.
 pub fn player_set_replaygain_preamp(ctx: &PlaybackContext, preamp_db: f32) {
     ctx.engine.set_replaygain_preamp(preamp_db);
 }
 
-/// Toggle the static peak-based clip guard on the live player.
+/// The static, peak-based clip guard.
 pub fn player_set_replaygain_prevent_clipping(ctx: &PlaybackContext, on: bool) {
     ctx.engine.set_replaygain_prevent_clipping(on);
 }
 
-// --- Crossfade -------------------------------------------------------------
-//
-// Crossfade settings live on a lock-free shared cell like the EQ and ReplayGain
-// ones, so these setters are synchronous and infallible. Unlike those two the
-// cell is read by the *control* layer (this backend and the playback monitor),
-// never by the audio thread — the per-deck ramp it drives lives in `FadeShared`.
-
-/// Toggle crossfade on the live player.
 pub fn player_set_crossfade_enabled(ctx: &PlaybackContext, enabled: bool) {
     ctx.engine.set_crossfade_enabled(enabled);
 }
 
-/// Set the crossfade length (ms) on the live player. Clamped by the backend.
+/// Clamped by the backend.
 pub fn player_set_crossfade_duration_ms(ctx: &PlaybackContext, ms: u32) {
     ctx.engine.set_crossfade_duration_ms(ms);
 }
@@ -570,13 +486,11 @@ pub fn player_set_output_choice(ctx: &PlaybackContext, choice: OutputChoice) {
     ctx.engine.set_output_choice(choice);
 }
 
-/// Turn off everything the user chose that changes the samples on their way to the device, and
-/// follow the file's rate where that does anything, returning the volume it left. The live half
-/// only; `library::settings::reset_for_bit_perfect` persists the same set.
+/// Turn off everything the user chose that changes the samples, and follow the file's rate,
+/// returning the volume it left: the live half of `library::settings::reset_for_bit_perfect`.
 ///
 /// **A volume on the device's own control is left where it is**, only unmuted: it changes no
-/// sample, and raising it would be raising the user's speakers. Blocking: it reads the output,
-/// which a reopen holds for as long as a device takes to open.
+/// sample, and raising it would raise the user's speakers. Blocking: a reopen holds the output.
 pub fn player_make_bit_perfect(ctx: &PlaybackContext) -> u32 {
     player_set_eq_enabled(ctx, false);
     player_set_replaygain_enabled(ctx, false);
@@ -595,10 +509,7 @@ pub fn player_make_bit_perfect(ctx: &PlaybackContext) -> u32 {
     volume
 }
 
-// The visualizer has no setter here on purpose: its tap is armed by the
-// Now-Playing view's visibility rather than by a persisted setting, so
-// `melodia-views`' `ui/visualizer/` calls `VisualizerShared::set_enabled` on the cell it
-// already holds — `PlaybackEngine::visualizer()` — for snapshotting.
+// No visualizer setter: the Now Playing view arms the tap, the setting only mounting the strip.
 
 #[cfg(test)]
 #[path = "tests/playback_tests.rs"]

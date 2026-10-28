@@ -1,8 +1,7 @@
-//! Natural sort key precomputation. Lives next to the scan code because
-//! `insert_track` and `update_track_metadata` both write this column.
+//! The natural sort key `tracks.sort_key` holds, beside the scan writes that fill it.
 
-/// Precompute a natural sort key by zero-padding numeric segments.
-/// e.g. "Track 2" → "track 00000002", "10 Songs" → "00000010 songs"
+/// A natural sort key: lowercased, each run of digits zero-padded to eight, so `"Track 2"` reads
+/// `"track 00000002"`.
 pub fn to_natural_sort_key(title: &str) -> String {
     let lower = title.to_lowercase();
     let mut result = String::with_capacity(lower.len() + 16);
@@ -20,7 +19,6 @@ pub fn to_natural_sort_key(title: &str) -> String {
                     break;
                 }
             }
-            // Pad to 8 digits
             for _ in 0..(8usize.saturating_sub(num.len())) {
                 result.push('0');
             }

@@ -1,10 +1,6 @@
-//! Hero stats + the banner artwork for the Recently-Played view.
-//!
-//! Unlike the Favorites hero (which re-queries `get_favorite_stats`), the data
-//! here is derived from the already-fetched recency rows: the collage is the
-//! up-to-4 most-recently-played *distinct* covers composed into one image by
-//! [`crate::ui::mosaic_hero`], and the count/duration are summed off the same
-//! rows. Past the compose the banner is an ordinary single-artwork hero.
+//! The band's stats and collage, both taken off the recency rows rather than a query of their
+//! own; the collage is the latest four distinct covers, composed through
+//! [`crate::ui::mosaic_hero`].
 
 use std::sync::Arc;
 
@@ -18,12 +14,7 @@ use melodia_ui::{AppWindow, RecentlyPlayed};
 
 impl_curated_hero_helpers!(RecentlyPlayed, RecentlyPlayedUi);
 
-/// The up-to-`n` most-recently-played *distinct* cover paths, in recency
-/// order — the collage's sources. Skips empty/absent artwork.
-///
-/// The dedup is [`crate::ui::grid_prewarm::unique_artwork_paths`]', the same
-/// one every cover prewarm in the tree uses; only the `String` shape the
-/// Slint model wants is this function's own.
+/// The first `n` distinct covers in recency order, as the strings the compose takes.
 pub fn mosaic_paths_from(rows: &[RsTrackListRow], n: usize) -> Vec<String> {
     crate::ui::grid_prewarm::unique_artwork_paths(rows.iter().map(|r| r.artwork_path.as_deref()), n)
         .into_iter()
@@ -31,39 +22,26 @@ pub fn mosaic_paths_from(rows: &[RsTrackListRow], n: usize) -> Vec<String> {
         .collect()
 }
 
-/// Push the hero count into the Slint global, and the band's chips with it.
-/// Immediate (the collage is composed separately).
-///
-/// The running time and the spread reach the band as chips off the handle's own
-/// state, which `songs::refresh_tracks` filled before calling in. Routing a
-/// formatted string through Slint only to read it back would be a round trip for
-/// something this crate had in hand — and the band is per-tab now, so the facts
-/// have to outlive the fetch that folded them anyway.
+/// Publishes the count and the band's chips, which read the facts `songs::refresh_tracks` stored
+/// before calling in.
 pub fn push_hero_stats(count: i32, rp_ui: &Arc<RecentlyPlayedUi>, weak: &Weak<AppWindow>) {
     let rp_ui = rp_ui.clone();
     let weak = weak.clone();
     let _ = slint::invoke_from_event_loop(move || {
         let Some(ui) = weak.upgrade() else { return };
-        // The leave can land while this post is in flight, and it rewinds the count on its
-        // way out — the same guard, in the same place, as `songs::apply_filtered_tracks`.
+        // A leave landing mid-post has rewound the count on its way out.
         if !rp_ui.section_active() {
             return;
         }
         ui.global::<RecentlyPlayed>().set_track_count(count);
-        // Order-free: the chips take their facts off the handle's own state, not
-        // back off the properties written around them.
+        // Order-free, the chips reading the handle rather than these properties.
         crate::ui::hero_chips::publish_recently_played(&ui, &rp_ui);
     });
 }
 
-/// Compose the banner artwork from `mosaic_paths` and publish it. The CPU-bound compose,
-/// blur and colour measurement run on the blocking pool; the result lands on the UI
-/// thread. `animate` fades the cross-fade (true for live refreshes). An empty list
-/// composes to an empty pair, which clears the banner back to the gradient floor.
-///
-/// Overlapping composes are more reachable here than on Favorites — `refresh_tracks` spawns
-/// this detached, so the subscriber loop can come round again before the guard is claimed,
-/// once per tick. `MosaicGuard::claim` is what makes the second one a no-op.
+/// Composes and publishes the banner; an empty list clears it to the gradient floor. Spawned
+/// detached, so the next tick can start a second compose before this one claims the guard, and
+/// `MosaicGuard::claim` is what makes the second publish a no-op.
 pub async fn refresh_artwork(
     state: &AppState,
     rp_ui: &Arc<RecentlyPlayedUi>,

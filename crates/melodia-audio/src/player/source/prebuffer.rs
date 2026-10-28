@@ -1,19 +1,11 @@
-//! The ring that keeps the network off the audio callback thread.
+//! The ring that keeps the network off the audio callback thread
+//! (`docs/adr/0014-no-network-on-the-audio-callback.md`): a feed thread owns the decoder and fills
+//! [`SampleRing`], and [`PrebufferSource`] pops without blocking, yielding silence when dry.
 //!
-//! The mixer pulls each [`AudioSource`] from inside the cpal data callback, so a source that
-//! reads a socket stalls the whole block — the local track on the other deck included — for as
-//! long as the network is wedged. Everything here exists to make that impossible: a feed thread
-//! owns the decoder and fills [`SampleRing`] ahead of time, and [`PrebufferSource`] pops from it
-//! without ever blocking, yielding silence when it runs dry.
-//!
-//! Running dry is published rather than hidden. [`StreamShared`] is the one cell the feed thread,
-//! the audio thread and the playback monitor all read, and the buffering indicator the UI shows is
-//! that flag rather than a second mechanism inferring the same thing.
-//!
-//! The ring is single-producer / single-consumer by construction: the feed thread is the only
-//! writer of `write_cursor`, the audio thread the only writer of `read_cursor`. It borrows its
-//! shape from `playback::visualizer`'s per-deck ring, which is the same trade — atomics over a
-//! mutex, because one of the two parties is a real-time callback.
+//! Running dry is published rather than hidden: [`StreamShared`] is the one cell the feed thread,
+//! the audio thread and the monitor read, and the UI's buffering indicator is that flag. The ring
+//! is single-producer, single-consumer by construction, atomics over a mutex because one of the two
+//! parties is a real-time callback.
 
 use std::collections::VecDeque;
 use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, AtomicUsize, Ordering};
@@ -22,36 +14,23 @@ use std::time::Duration;
 
 use super::audio::{AudioSource, ChannelCount, Sample, SampleRate, SeekError, Shape, SourceFormat};
 
-/// How much decoded audio the ring holds before the feed thread has to wait for room.
-///
-/// This is the *decode and scheduling* cushion: it covers a slow packet, a preempted feed thread
-/// and the jitter between cpal's period size and the decoder's frame size. It is deliberately not
-/// the network cushion — that one is upstream, measured in compressed bytes, and argued at
-/// `stream_source::DOWNLOAD_BUFFER_BYTES`. Widening this trades resident memory for tolerance of
-/// something the layer above already tolerates better.
+/// The decode and scheduling cushion, deliberately not the network one, which sits upstream in
+/// compressed bytes (`stream_source::DOWNLOAD_BUFFER_BYTES`). Widening it trades resident memory
+/// for a tolerance the layer above already has.
 pub const PREBUFFER_MS: u64 = 1_500;
 
-/// How long the feed thread sleeps when it finds the ring full.
-///
-/// The steady state of a healthy stream is a full ring, so this is the thread's wakeup rate rather
-/// than an error path. Short enough that a drained ring refills without an audible gap, long
-/// enough that the thread is not spinning through a period's worth of samples at a time.
+/// A healthy stream's ring is full, so this is the feed thread's wake-up rate: short enough that a
+/// drained ring refills without a gap, long enough not to spin.
 const FEED_PARK: Duration = Duration::from_millis(20);
 
-/// How many announcements may wait for their audio at once. The ring holds seconds and a station
-/// announces once a song, so more than one is a station flapping its title, and only the newest
-/// of those is ever shown anyway.
+/// A station announces once a song and the ring holds seconds, so more than one waiting is a title
+/// flapping, of which only the newest is ever shown.
 const MAX_PENDING_TITLES: usize = 4;
 
-/// The state a live stream publishes to everyone who is not on the feed thread.
-///
-/// The flags are one-way latches or plain flags read from the audio callback, so they are atomics;
-/// the title is the one value with a payload, and its generation counter is what lets the playback
-/// monitor ask "did it change?" without taking the lock on every tick.
-///
-/// **A title is held back until its audio is heard.** The decoder reads it ahead of the samples
-/// that follow it by everything the ring holds, so publishing it on arrival changed the song on
-/// screen, on the OS panel and in a scrobble's timestamp seconds before the song itself.
+/// What a live stream publishes to everyone off the feed thread. The flags are atomics, being read
+/// from the audio callback; the title's generation lets the monitor ask whether it changed without
+/// the lock. **A title is held back until its audio is heard**, the decoder reading it a whole ring
+/// ahead of the samples after it.
 #[derive(Debug)]
 pub struct StreamShared {
     buffering: AtomicBool,
@@ -67,11 +46,9 @@ pub struct StreamShared {
 #[derive(Debug, Default)]
 struct Announced {
     pending: VecDeque<PendingTitle>,
-    /// The last title the stream sent, once [`Self::said_any`]. **Plenty of servers resend an
-    /// unchanged title in every metadata block**, about once a second, and each repeat would
-    /// republish the station to every surface watching it.
+    /// So a repeat is dropped: **plenty of servers resend an unchanged title** about once a second.
     last: Option<String>,
-    /// Kept apart from `last`, a cleared title being something a stream can say.
+    /// Apart from `last`, a cleared title being something a stream can say.
     said_any: bool,
 }
 
@@ -82,10 +59,9 @@ struct PendingTitle {
     at_sample: usize,
 }
 
-/// Tickets for [`StreamShared::title_generation`], drawn process-wide rather than counted per
-/// cell. The monitor carries **one** last-seen value across stations, so a per-cell counter lets a
-/// new station coincide with the number the previous one left behind — and a coincidence there
-/// swallows that station's first title for a whole song. A ticket no cell has held cannot.
+/// Drawn process-wide rather than per cell: the monitor carries **one** last-seen value across
+/// stations, so a per-cell counter could hand a new station the number the previous one left, and
+/// swallow its first title for a song.
 static NEXT_TITLE_GENERATION: AtomicU64 = AtomicU64::new(1);
 
 fn next_title_generation() -> u64 {
@@ -105,9 +81,8 @@ impl StreamShared {
         })
     }
 
-    /// Whether the source is currently emitting silence because the ring ran dry. Drives the UI's
-    /// buffering indicator; see `.claude/rules/audio-stack.md` for why it is not
-    /// `PlaybackStatus::Loading`.
+    /// Emitting silence because the ring ran dry. A flag beside `Playing` rather than
+    /// `PlaybackStatus::Loading`, which MPRIS reports as Stopped, so a rebuffer can't read as one.
     pub fn is_buffering(&self) -> bool {
         self.buffering.load(Ordering::Relaxed)
     }
@@ -116,9 +91,8 @@ impl StreamShared {
         self.buffering.store(on, Ordering::Relaxed);
     }
 
-    /// The feed thread has nothing left to give: the stream ended and reconnecting failed, or the
-    /// server came back with a format the already-appended source can't carry. Latched, because
-    /// the only thing that follows is the deck draining.
+    /// The feed thread has nothing left to give. Latched, the only thing following being the deck
+    /// draining.
     pub fn finish(&self) {
         self.finished.store(true, Ordering::Release);
     }
@@ -136,12 +110,9 @@ impl StreamShared {
         self.abandoned.load(Ordering::Acquire)
     }
 
-    /// Queue the live ICY title behind the audio already decoded. Called from the feed thread
-    /// inside `IcyMetadataReader`'s callback, which must not block — an uncontended lock and a
-    /// push is the whole handler. Before the ring exists (a title read during the probe) its audio
-    /// starts at the ring's first sample.
-    ///
-    /// A repeat of the last title is dropped.
+    /// Queues the ICY title behind the audio already decoded, from a metadata callback that must
+    /// not block. A title read during the probe, before the ring exists, starts at its first
+    /// sample.
     pub fn set_title(&self, title: Option<String>) {
         let mut announced = self.announced.lock();
         if announced.said_any && announced.last == title {
@@ -156,11 +127,8 @@ impl StreamShared {
         announced.pending.push_back(PendingTitle { title, at_sample });
     }
 
-    /// Publish the newest queued title whose audio has started playing, if one has.
-    ///
-    /// The monitor's to call, on its tick: the audio callback may not take a lock, and nothing
-    /// else knows when a sample has been heard. Only the newest of several due titles is shown,
-    /// the others never having been audible for long.
+    /// Publishes the newest queued title whose audio has started. The monitor's to call on its
+    /// tick, the audio callback being unable to take a lock.
     pub fn publish_heard_title(&self) {
         let played = self.ring.get().map_or(0, |ring| ring.read_cursor.load(Ordering::Acquire));
         let heard = {
@@ -175,9 +143,8 @@ impl StreamShared {
         self.title_generation.store(next_title_generation(), Ordering::Release);
     }
 
-    /// Moves on every [`Self::publish_heard_title`] that publishes, and never back onto a value any
-    /// cell has published. The monitor keeps the last value it saw and only takes the title's lock
-    /// when this moved, so a station that changes track once a song clones its title once a song.
+    /// Moves on every publish and never back onto a value any cell has held, so the monitor takes
+    /// the title's lock once a song.
     pub fn title_generation(&self) -> u64 {
         self.title_generation.load(Ordering::Acquire)
     }
@@ -187,11 +154,8 @@ impl StreamShared {
     }
 }
 
-/// The samples in flight between the decoder and the audio callback.
-///
-/// Cursors are monotonic totals rather than wrapped indices, so `write - read` is the fill level
-/// with no ambiguity between full and empty; the modulo when addressing a slot is the only wrap.
-/// A `usize` counter at audio rates takes millions of years to overflow.
+/// Cursors are monotonic totals, so `write - read` is the fill level with no ambiguity between full
+/// and empty; a `usize` at audio rates takes millions of years to wrap.
 struct SampleRing {
     /// `f32` bit patterns, one slot per sample.
     slots: Box<[AtomicU32]>,
@@ -210,18 +174,15 @@ impl std::fmt::Debug for SampleRing {
 }
 
 impl SampleRing {
-    /// A ring holding [`PREBUFFER_MS`] of audio at the source's real rate and channel count, which
-    /// is why it is sized here and not by a constant: neither is known until the stream is open.
+    /// Sized here rather than by a constant, the rate and channel count being unknown until open.
     fn for_format(channels: ChannelCount, sample_rate: SampleRate) -> Self {
         let frames = u64::from(sample_rate.get()) * PREBUFFER_MS / 1_000;
         let samples = frames * u64::from(channels.get());
-        // The floor keeps a frame's worth of room even at an implausibly low rate, so `try_push`
-        // can always make progress and the source's whole-frame gate can ever be satisfied.
+        // A frame's room even at an implausibly low rate, so the whole-frame gate can be satisfied.
         let capacity =
             usize::try_from(samples).unwrap_or(usize::MAX).max(usize::from(channels.get()));
         Self {
-            // `AtomicU32` isn't `Clone`, so this can't be `vec![…; n]`; collecting also keeps the
-            // buffer off the stack on its way out.
+            // `AtomicU32` isn't `Clone`, so this can't be `vec![…; n]`.
             slots: (0..capacity).map(|_| AtomicU32::new(0)).collect(),
             write_cursor: AtomicUsize::new(0),
             read_cursor: AtomicUsize::new(0),
@@ -232,16 +193,15 @@ impl SampleRing {
         self.slots.len()
     }
 
-    /// How many samples are waiting. Safe from either side: each party reads the other's cursor
-    /// with `Acquire` and its own with `Relaxed`, and the difference can only be stale in the
-    /// direction that makes the caller conservative.
+    /// Safe from either side: each reads the other's cursor with `Acquire`, and the difference can
+    /// only be stale in the direction that makes the caller conservative.
     fn len(&self) -> usize {
         self.write_cursor
             .load(Ordering::Acquire)
             .saturating_sub(self.read_cursor.load(Ordering::Acquire))
     }
 
-    /// Producer side. `false` means the ring is full and the caller should wait.
+    /// `false` means the ring is full and the caller should wait.
     fn try_push(&self, sample: f32) -> bool {
         let write = self.write_cursor.load(Ordering::Relaxed);
         if write - self.read_cursor.load(Ordering::Acquire) >= self.capacity() {
@@ -253,7 +213,7 @@ impl SampleRing {
         true
     }
 
-    /// Consumer side, called from the audio callback. Never blocks.
+    /// Called from the audio callback. Never blocks.
     fn try_pop(&self) -> Option<f32> {
         let read = self.read_cursor.load(Ordering::Relaxed);
         if read >= self.write_cursor.load(Ordering::Acquire) {
@@ -265,18 +225,14 @@ impl SampleRing {
     }
 }
 
-/// The producer half, handed to the feed thread.
-///
-/// Separate from the ring itself so the feed loop can only write and the source can only read —
-/// the SPSC invariant is then a property of the types rather than of review.
+/// The producer half, so the feed loop can only write and the source only read.
 pub struct RingWriter {
     ring: Arc<SampleRing>,
     shared: Arc<StreamShared>,
 }
 
 impl RingWriter {
-    /// Push one sample, waiting for room. `false` means the source was dropped and the caller
-    /// should stop feeding and close the connection.
+    /// Waits for room. `false` means the source was dropped and the feed should stop.
     pub fn push(&self, sample: f32) -> bool {
         while !self.ring.try_push(sample) {
             if self.shared.is_abandoned() {
@@ -288,20 +244,15 @@ impl RingWriter {
     }
 }
 
-/// The [`AudioSource`] the decks play for a live stream: a ring pop per sample, silence when
-/// starved, and an end only once the feed thread has given up *and* the ring has drained.
-///
-/// Everything it reports about the audio's shape is pinned at construction. A live mount does not
-/// renegotiate its format mid-stream, and a reconnect that comes back with a different one is
-/// refused by the feed thread rather than absorbed here — the deck has already been told what this
-/// source is.
+/// What the decks play for a live stream: a pop per sample, silence when starved, and an end only
+/// once the feed thread has given up *and* the ring has drained. Its shape is pinned at
+/// construction, a reconnect returning another one being refused by the feed thread.
 pub struct PrebufferSource {
     ring: Arc<SampleRing>,
     shared: Arc<StreamShared>,
     shape: Shape,
     format: SourceFormat,
-    /// Which sample of the current frame comes next. The starvation decision is taken once per
-    /// frame at phase 0 and held for the whole frame.
+    /// The starvation decision is taken at phase 0 and held for the whole frame.
     frame_phase: u16,
     frame_starved: bool,
     /// Mirror of `shared.buffering`, so a healthy stream doesn't store to the atomic every frame.
@@ -309,15 +260,13 @@ pub struct PrebufferSource {
 }
 
 impl PrebufferSource {
-    /// The source and the writer that feeds it, plus the shared cell both report through.
     pub fn new(
         shared: Arc<StreamShared>,
         shape: Shape,
         format: SourceFormat,
     ) -> (Self, RingWriter) {
         let ring = Arc::new(SampleRing::for_format(shape.channels, shape.rate));
-        // One source per cell, so a second `set` cannot happen; ignoring it keeps the first ring,
-        // which is the one the cell's titles were queued against.
+        // One source per cell, so the first ring, which titles were queued against, is kept.
         let _ = shared.ring.set(ring.clone());
         let writer = RingWriter { ring: ring.clone(), shared: shared.clone() };
         let source = Self {
@@ -341,8 +290,8 @@ impl PrebufferSource {
 }
 
 impl Drop for PrebufferSource {
-    /// Stores a flag and does nothing else. Joining the feed thread here would block for as long
-    /// as a socket read takes, and the drop happens wherever a spent source is collected.
+    /// Stores a flag and nothing else: joining the feed thread would block for as long as a socket
+    /// read takes, wherever a spent source is collected.
     fn drop(&mut self) {
         self.shared.abandon();
     }
@@ -358,7 +307,7 @@ impl Iterator for PrebufferSource {
             self.frame_starved = self.ring.len() < whole_frame;
             if self.frame_starved {
                 // A trailing partial frame goes with it: half a frame would flip this deck's
-                // channel parity for whatever plays next, and it is inaudible either way.
+                // channel parity for whatever plays next.
                 if self.shared.is_finished() {
                     return None;
                 }
@@ -372,8 +321,7 @@ impl Iterator for PrebufferSource {
         if self.frame_starved {
             Some(0.0)
         } else {
-            // Availability was checked for the whole frame at phase 0 and this is the only
-            // consumer, so the fallback is unreachable rather than a swallowed error.
+            // Checked for the whole frame at phase 0 with this the only consumer: unreachable.
             Some(self.ring.try_pop().unwrap_or(0.0))
         }
     }
@@ -394,7 +342,7 @@ impl AudioSource for PrebufferSource {
         self.format
     }
 
-    /// Starvation silence is not a change to the samples: nothing the station sent is altered.
+    /// Starvation silence alters nothing the station sent.
     fn dsp_engaged(&self) -> bool {
         false
     }
@@ -408,9 +356,8 @@ impl AudioSource for PrebufferSource {
         Err(SeekError::NotSupported { underlying_source: "live stream" })
     }
 
-    /// A live socket is the kind of claim this exists for, and the flag is one the drop already
-    /// sets — so setting it here is the difference between a station releasing its connection when
-    /// it stops and when someone next collects it.
+    /// The drop's flag, set here so a stopped station releases its connection when it stops rather
+    /// than when it is next collected.
     fn release_claims(&mut self) {
         self.shared.abandon();
     }

@@ -1,4 +1,4 @@
-//! Breadcrumb construction, folder basename, in-memory sort.
+//! The breadcrumb trail, the root's folder labels and the in-memory sort.
 
 use std::path::{Path, PathBuf};
 
@@ -9,23 +9,17 @@ use melodia_core::entities::browse::BrowseFile;
 use melodia_core::entities::folder::Folder;
 use melodia_ui::BreadcrumbRow as UiBreadcrumbRow;
 
-/// Build a breadcrumb trail that starts at the **library folder root**
-/// and walks down to `path`. The leading filesystem prefix is hidden so
-/// the user sees `Music › sport` rather than `home › kenan › Music ›
-/// sport`, the library folder being the conceptual root.
-///
-/// When `path` is empty (root view) returns an empty Vec. When `path`
-/// isn't under any enabled library folder (defensive — shouldn't
-/// happen since `browse_directory` validates this), falls back to a
-/// path-component walk so the user has *something* to click.
+/// Builds the trail from the library folder down to `path`, hiding the filesystem above it, the
+/// library folder being the user's root. Empty at the root. A `path` under no enabled folder,
+/// which `browse_directory` already refuses, falls back to every path component, so there is
+/// still something to click.
 pub(super) fn build_breadcrumbs(path: &str, library_folders: &[Folder]) -> Vec<UiBreadcrumbRow> {
     if path.is_empty() {
         return Vec::new();
     }
     let p = Path::new(path);
 
-    // Pick the deepest enabled library folder that is an ancestor of
-    // (or equal to) `path`.
+    // The deepest, for a library folder nested inside another.
     let lib_root: Option<&Path> = library_folders
         .iter()
         .filter(|f| f.is_enabled)
@@ -61,8 +55,6 @@ pub(super) fn build_breadcrumbs(path: &str, library_folders: &[Folder]) -> Vec<U
         return out;
     }
 
-    // Fallback: no library-folder ancestor matched. Walk the full path
-    // so the user still has clickable segments. Defensive only.
     let mut acc = PathBuf::new();
     let mut out: Vec<UiBreadcrumbRow> = Vec::new();
     for component in p.components() {
@@ -83,20 +75,15 @@ pub(super) fn build_breadcrumbs(path: &str, library_folders: &[Folder]) -> Vec<U
     out
 }
 
-/// Basename of a library-folder path (e.g. `/home/user/Music` → `Music`).
-/// Used to label root-view folder rows. Falls back to the full path when
-/// the basename can't be extracted (root paths, etc.).
+/// A library folder's label at the root: its basename, or the whole path where it has none.
 pub(super) fn folder_basename(path: &str) -> String {
     Path::new(path)
         .file_name()
         .map_or_else(|| path.to_owned(), |n| n.to_string_lossy().into_owned())
 }
 
-/// Sort `files` in place by `field` / `dir`, using the file name as the
-/// deterministic tie-breaker. Disk-only rows carry sparse `TrackListRow`s
-/// (most fields empty / `0`), so they cluster but stay in a consistent
-/// order. Delegates the shared `match field` shape to
-/// [`crate::ui::track_sort::sort_track_rows_by`].
+/// Sorts `files` in place, ties broken by file name, so the sparse disk-only rows cluster in a
+/// stable order.
 pub(super) fn sort_browse_files(files: &mut [BrowseFile], field: &str, dir: &str) {
     sort_track_rows_by(files, field, dir, |f| &f.row, |f| f.file_name.to_lowercase());
 }

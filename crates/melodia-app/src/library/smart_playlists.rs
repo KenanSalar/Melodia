@@ -1,7 +1,5 @@
-//! Smart (dynamic) playlist orchestration — thin async wrappers over the
-//! [`queries::smart_playlist`] evaluator and the smart-playlist CRUD in
-//! [`queries::playlist`]. Membership is resolved live from the stored criteria;
-//! nothing is ever materialized into `playlist_items`.
+//! Smart playlists, whose membership resolves live from the stored criteria and is never
+//! materialized into `playlist_items`.
 
 use crate::state::AppState;
 use melodia_core::entities::playlist::{Playlist, PlaylistStats};

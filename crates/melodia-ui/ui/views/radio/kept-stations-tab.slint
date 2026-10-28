@@ -6,11 +6,8 @@ import { GridEmptyState } from "../../components/grid/grid-empty-state.slint";
 import { OverlayScrollbar } from "../../components/overlay-scrollbar.slint";
 import { StationGrid } from "station-grid.slint";
 
-// Both local tabs: the stations the user kept, and the ones they played. One component for the
-// same reason `ui::radio::kept` is one module — they are one list at two filters, and what differs
-// is the model, the count and the copy on the empty state.
-//
-// **The scroller is here, not on the page**, as on Browse and for the same reason.
+// Both kept tabs, one list at two filters as in `ui::radio::kept`: what differs is the model, the
+// count and the empty state's copy.
 export component KeptStationsTab inherits Rectangle {
     in property <length> card-w;
     in property <length> card-h;
@@ -18,13 +15,10 @@ export component KeptStationsTab inherits Rectangle {
     in property <length> gap;
 
     in property <[RadioStationGridRow]> rows;
-    // Pre-filter, which is what separates the two states below: nothing kept at all against a box
-    // that matched none of what is. `-1` until the fetch lands, and an empty state over a list
-    // nobody has asked for yet claims something untrue for the length of the query.
+    // Pre-filter, telling nothing kept from nothing matched. `-1` until the fetch lands, so no
+    // empty state claims something untrue meanwhile.
     in property <int> count: -1;
 
-    // The tab's own half of the empty state. The no-matches state below is shared, the box being
-    // a filter on either tab.
     in property <string> empty-icon;
     in property <string> empty-title;
     in property <string> empty-body;
@@ -32,9 +26,7 @@ export component KeptStationsTab inherits Rectangle {
     property <bool> is-empty: root.count == 0;
     property <bool> no-matches: root.count > 0 && root.rows.length == 0;
 
-    // Which of the two this mount is. Off the live tab rather than a property the page passes,
-    // since only one of the two is ever mounted and the page already spells the same test to
-    // mount it.
+    // Off the live tab, only one of the two ever being mounted.
     property <bool> is-recent: Radio.tab-idx == Radio.tab-recent;
 
     VerticalLayout {
@@ -52,14 +44,11 @@ export component KeptStationsTab inherits Rectangle {
                 row-height: root.row-h;
                 gap: root.gap;
                 manageable: true;
-                // A scope per tab, so a set picked on one is never read by the other's cards.
                 selection-scope: root.is-recent ? "radio-recent" : "radio-favorites";
                 list: root.is-recent ? Radio.tab-recent : Radio.tab-favorites;
-                // Recently Played mixes starred and unstarred stations, so the mark still says
-                // something there; on Favorites it would be on every card.
+                // On Favorites the mark would be on every card; Recently Played mixes both, and
+                // its list is built by listening, which the count ranks.
                 star-marks-kept: root.is-recent;
-                // Same split: every Favorites card would carry a badge, where here it ranks a list
-                // the user built by listening.
                 show-play-count: root.is-recent;
                 covers-generation: Radio.covers-generation;
                 logo-decode-size: Radio.logo-decode-size;
@@ -79,8 +68,6 @@ export component KeptStationsTab inherits Rectangle {
                 body: root.empty-body;
             }
 
-            // Browse's own pair, reused verbatim: the box is a filter, so "clear a filter" is
-            // exactly the way out of this state here too.
             if root.no-matches: GridEmptyState {
                 icon: "search_off";
                 title: @tr("No stations matched");

@@ -1,17 +1,14 @@
 //! The library scan: one folder's walk, read and write, and the reconcile that runs it over several
 //! in turn.
 //!
-//! Every scan stops on a token from [`ScanControl`](crate::state::ScanControl), so [`cancel`]
-//! stops any of them, and quitting stops them at the same checkpoints: the walk, the incremental
-//! filter, each file of a read, and the head of every chunk. **A stopped scan keeps what it read
-//! and deletes nothing**, the one exception being the import of a folder just added, which a
-//! cancel takes back out ([`OnStop::Withdraw`]). Otherwise committed chunks stay, and so does the
-//! part of the chunk read when the cancel landed. The orphan purge doesn't run, and the folder
-//! isn't stamped as scanned. The next scan of the folder reads only the rest, the size and mtime
-//! gate skipping everything already stored.
+//! Every scan stops on [`ScanControl`](crate::state::ScanControl)'s token, for [`cancel`] and quit
+//! alike, at the walk, the filter, each file read and each chunk's head. **A stopped scan keeps
+//! what it read and deletes nothing**, except the import of a folder just added, which a cancel
+//! takes back out ([`OnStop::Withdraw`]). It skips the orphan purge and the scanned stamp, and the
+//! next scan reads only the rest, the size and mtime gate skipping what is stored.
 //!
-//! A scan leaves alone the files of a library folder nested inside its own, which stay that
-//! folder's until a completed scan absorbs it.
+//! A scan leaves alone the files of a library folder nested inside its own until a completed scan
+//! absorbs it.
 
 mod finish;
 mod reconcile;
@@ -64,10 +61,10 @@ pub enum OnStop {
     /// What was read stays: the folder was in the library before this scan, so a cancel only stops
     /// the refresh.
     Keep,
-    /// The folder goes, with everything the scan brought in. For the import of a folder just
-    /// added, where Cancel means not adding it, and keeping half of it would also leave the next
-    /// reconcile to finish what the user cancelled. An import that has already taken over tracks
-    /// from elsewhere in the library stays, since removing it would delete them.
+    /// The folder goes, with everything the scan brought in: for a folder just added, Cancel means
+    /// not adding it, and half of it would leave the next reconcile to finish what was cancelled.
+    /// An import that has taken over tracks from elsewhere in the library stays, since removing it
+    /// would delete them.
     Withdraw,
 }
 
@@ -144,12 +141,9 @@ pub fn cancel(state: &AppState) {
     state.scan.cancel();
 }
 
-/// Files a scan parses and then ingests in one write transaction. Large
-/// enough that per-chunk overhead (begin/commit + the 6 trigger DDL
-/// statements) is noise, small enough that interactive writes waiting on the
-/// single writer connection get a slot every few seconds even on slow disks.
-/// It is also the scan's memory peak: one chunk's parsed tags are resident at
-/// a time, however large the library.
+/// Files parsed and ingested per write transaction: large enough that begin, commit and the trigger
+/// DDL are noise, small enough that interactive writes get the single writer every few seconds on
+/// a slow disk. Also the scan's memory peak, one chunk's tags being resident at a time.
 const TX_CHUNK_FILES: usize = 2_000;
 
 async fn scan_one(
@@ -191,17 +185,10 @@ async fn scan_one(
 
     let scan_timestamp = melodia_core::utils::now_rfc3339();
 
-    // --- Stage 1: parse and ingest a chunk at a time, each chunk in a write
-    // transaction of its own. The single writer connection frees between
-    // chunks, so interactive writes (favorite toggles, play-count flushes,
-    // position saves) don't queue behind a multi-minute first scan. Lagging
-    // stats are invisible to the UI because `library_changed` is bumped only
-    // after the final commit. A crash between chunks leaves committed tracks
-    // behind; the next scan's size+mtime gate makes the re-run a cheap no-op
-    // over them.
-    //
-    // A cancel mid-read leaves the rest of that chunk unread, and what was
-    // read is still written: a stop costs at most this one transaction.
+    // --- Stage 1: a write transaction per chunk, so interactive writes don't queue behind a long
+    // first scan. `library_changed` bumps only after the final commit, and a crash between chunks
+    // leaves committed tracks the next scan's gate skips. A cancel mid-read still writes what it
+    // read.
     let mut remaining = to_scan.into_iter();
     while !run.is_cancelled() {
         let chunk: Vec<PathBuf> = remaining.by_ref().take(TX_CHUNK_FILES).collect();
@@ -284,26 +271,14 @@ struct Discovery {
     pool: ScanPool,
 }
 
-/// Walks the folder, pairs each file with its row, and filters the walk down to the files that
-/// need reading, or answers `None` once the scan is cancelled.
+/// Walks the folder, pairs each file with its row, and filters the walk to the files that are new
+/// or whose size or mtime moved, or answers `None` once the scan is cancelled.
 ///
-/// The walk and the filter go to the blocking pool. They are synchronous syscall loops
-/// (`WalkDir` over the whole tree, then one `fs::metadata` per already-known file inside
-/// `track_is_current`), and inline in the async caller they would pin one of the runtime's few
-/// workers for the duration on a cold-cache disk, stalling position ticks and watcher deliveries
-/// during boot reconciles. The rows are read between them through the read pool, one at a time
-/// against the sorted walk, so the folder's paths are never held twice.
-///
-/// The incremental filter only (re)parses files that are new, or whose
-/// size or mtime no longer matches the stored row. Byte-unchanged files
-/// keep their existing DB metadata untouched — Lofty is skipped for
-/// them entirely, which is the bulk of a typical startup rescan.
-///
-/// The filter runs on Rayon (like `scan_files_parallel` does downstream):
-/// *every* file in the library reaches it and almost none proceed past it, so
-/// its per-file `stat` is what a rescan-with-nothing-changed — the common case
-/// — actually spends its time on, and a serial syscall loop is the worst shape
-/// for it on a cold cache or a network mount. `to_scan` comes out in path order.
+/// The walk and the filter are synchronous syscall loops, so they go to the blocking pool rather
+/// than pin a runtime worker through a cold-cache boot reconcile. The rows are read between them
+/// one at a time against the sorted walk, so the folder's paths are never held twice. The filter
+/// runs on Rayon: every file reaches its `stat` and almost none pass, which makes it the whole cost
+/// of the common nothing-changed rescan. `to_scan` comes out in path order.
 async fn discover(
     db: &DbPool,
     folder_id: i64,

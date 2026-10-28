@@ -1,13 +1,6 @@
-//! Subscriber on `state.library_changed` that reconciles the playback
-//! queue against the live `tracks` table. When the file watcher (or any
-//! other library mutation) removes a row, this task drops the matching
-//! id out of the queue. If the currently-playing track
-//! was among the casualties, playback auto-skips to the next surviving
-//! entry — or stops if the queue is now empty.
-//!
-//! Pruning publishes through the existing `sinks.queue` watch channel via
-//! `with_state_emit`, so the queue panel's `ViewModel` subscriber redraws
-//! automatically. No new UI subscriber is needed.
+//! Drops the ids of deleted tracks from the queue on every `library_changed`, moving on, or
+//! stopping, when the playing track was one. The prune publishes through `emit_and_execute`, so
+//! the queue panel redraws off its existing subscriber.
 
 use std::collections::HashSet;
 use std::sync::Arc;
@@ -51,29 +44,22 @@ pub fn spawn(spawner: &TaskSpawner, state: &AppState) {
     log::info!("Queue prune task started");
 }
 
-/// One reconciliation pass: figure out which queued tracks no longer have a
-/// DB row, prune them, and auto-skip if the currently-playing entry was
-/// among them. Holds the player-state lock only inside the two
-/// `with_state_emit` calls (one for the snapshot, one for the mutation) so
-/// the DB roundtrip in the middle doesn't pin readers/writers.
+/// The player-state lock is held for the snapshot and for the mutation, never across the database
+/// round trip between them.
 async fn reconcile_once(
     db: &DbPool,
     player_state: &PlayerStateHandle,
     sinks: &PlayerSinks,
     engine: &Arc<PlaybackEngine>,
 ) -> AppResult<()> {
-    // Step 1: snapshot every track id currently referenced by the queue.
-    // Brief read-only lock — no with_state_emit because we're not mutating;
-    // observers should not see a spurious ViewModel re-emit.
+    // A bare lock rather than an emit: nothing changes, so observers shouldn't see a re-emit.
     let queued_ids = lock_state(player_state).queue.play_ids();
 
     if queued_ids.is_empty() {
         return Ok(());
     }
 
-    // Step 2: ask the DB which of those ids have no row any more. The snapshot can hold the same
-    // id more than once (a track queued twice), and a set is the right shape for the prune
-    // regardless.
+    // A set either way: the snapshot can hold a track queued twice.
     let to_remove = queries::track::missing_ids(db, &queued_ids).await?;
 
     if to_remove.is_empty() {
@@ -82,23 +68,17 @@ async fn reconcile_once(
 
     log::info!("Pruning {} missing tracks from queue", to_remove.len());
 
-    // Step 3: where the playing entry goes, the record of the one playback moves on to, so the
-    // start below needn't wait on the window task.
+    // The record playback moves on to, so the start below needn't wait on the window task.
     let successor = match unheld_successor(player_state, &to_remove) {
         Some(id) => queries::track::get_track_summaries_by_ids(db, &[id]).await?,
         None => Vec::new(),
     };
 
-    // Step 4: prune + (optionally) auto-skip in a single critical section.
-    // `with_state_emit` publishes the new queue VM on `sinks.queue` and the
-    // light VM on `sinks.view_model`, so the queue panel's subscriber
-    // rebuilds rows automatically.
     emit_and_execute(&**engine, player_state, sinks, |s| {
         let outcome = s.queue.prune_missing(&to_remove);
         s.window.seat(&s.queue.window_ids(), successor.into_iter().map(Arc::new));
-        // A station leaves the queue seated underneath rather than playing from it, so a row
-        // going missing out of it is not a playback event at all: reacting would stop the
-        // station and take it off screen over a track it was never playing.
+        // A station plays over the queue rather than from it, so a row missing from it is no
+        // playback event: reacting would stop the station over a track it was never playing.
         if !outcome.current_was_removed || !s.source_allows(PlaybackSource::advances_queue) {
             return Vec::new();
         }
@@ -106,8 +86,7 @@ async fn reconcile_once(
             return s.start_queued(id, false, 0);
         }
         let mut acts = stop_end_of_queue(s);
-        // Clear the deck so the now-playing bar stops showing a track the queue no longer
-        // holds. The published light ViewModel projects this field, so it propagates to the UI.
+        // So the bar stops showing a track the queue no longer holds.
         s.source = None;
         acts.push(PlayerAction::PreloadGapless(None));
         acts

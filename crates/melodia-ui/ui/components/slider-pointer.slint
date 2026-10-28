@@ -1,14 +1,12 @@
-// What a slider does with the pointer, under whatever the slider draws. `SliderTrack`, the volume
-// popup's vertical slider and `EqBandSlider` each mount one at their full size.
+// What a slider does with the pointer, mounted at full size under whatever it draws.
 //
 // A press inside the grab band captures the thumb without moving it: that band is the perceived
 // thumb, and a 1–2 px nudge there must not teleport the value. Outside it the value jumps to the
 // press. A release commits only what a jump or a drag moved, since the player advances during a
-// hold and committing a no-move grab would seek backwards to the click instant.
+// hold and committing a no-move grab would seek back to the click instant.
 export component SliderPointer inherits TouchArea {
     in property <Orientation> orientation: Orientation.horizontal;
-    // The thumb's centre along the value axis, in this area's own coordinates, and how far either
-    // side of it a press grabs rather than jumps.
+    // In this area's coordinates, and how far either side of it a press grabs rather than jumps.
     in property <length> thumb-center;
     in property <length> grab-half;
     // Off where every press jumps, as a graphic EQ's bands do.
@@ -16,8 +14,7 @@ export component SliderPointer inherits TouchArea {
 
     // Gated on movement, so a no-move grab doesn't flip a host's visuals into drag mode.
     out property <bool> dragging: self.pressed && self.moved-since-press;
-    // The fraction the pointer last moved the value to, 0 at the start of the axis and 1 at its
-    // end. Valid only while dragging.
+    // 0 at the axis's start, 1 at its end; valid only while dragging.
     out property <float> drag-value;
 
     callback changed(float);

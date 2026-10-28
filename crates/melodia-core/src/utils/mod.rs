@@ -24,14 +24,9 @@ pub fn now_unix() -> i64 {
     chrono::Utc::now().timestamp()
 }
 
-/// Cross-platform `canonicalize` that avoids the Windows verbatim
-/// (`\\?\C:\...`) form. On Windows we route through `dunce::canonicalize`
-/// — it strips the `\\?\` prefix whenever the resolved path fits in
-/// `MAX_PATH`, so the returned `PathBuf` round-trips through string
-/// storage (`folders.path`, `tracks.file_path`) and equality-matches
-/// what `std::fs::read_dir` yields. On non-Windows it forwards to
-/// `std::fs::canonicalize`. Use this everywhere a canonicalized path
-/// is persisted, displayed to the user, or used as a DB key.
+/// `canonicalize` without Windows' verbatim `\\?\` form, which `dunce` strips wherever the path
+/// fits `MAX_PATH`, so a stored path equality-matches what `read_dir` yields. For every path that
+/// is persisted, shown or used as a DB key.
 #[cfg(windows)]
 pub fn canonicalize_path<P: AsRef<Path>>(path: P) -> io::Result<PathBuf> {
     dunce::canonicalize(path)

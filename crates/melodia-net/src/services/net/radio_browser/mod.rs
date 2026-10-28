@@ -1,16 +1,9 @@
-//! Client for the [radio-browser.info](https://www.radio-browser.info) station
-//! directory: mirror discovery, station search, and the facet lists the filter
-//! chips are built from.
+//! Client for the [radio-browser.info](https://www.radio-browser.info) station directory: mirror
+//! discovery, station search, and the facet lists the filter chips are built from.
 //!
-//! Takes the shared `reqwest::Client` rather than building one. The directory
-//! asks callers for a descriptive `User-Agent` of the form `appname/appversion`
-//! and `services::net::build_http_client` already sends `Melodia/<version>`, so
-//! reusing it is what satisfies the request as well as what shares the pool.
-//!
-//! [`model`] holds the wire shapes and [`query`] every parameter name; both are
-//! pure, leaving the sending as the only part of this module that needs a
-//! socket. Nothing outside `library::radio` should reach here — that facade is
-//! where the setting that turns radio off is enforced.
+//! Takes the shared client, whose `Melodia/<version>` is the descriptive `User-Agent` the
+//! directory asks for. Nothing outside `library::radio` should reach here: that facade is where
+//! the setting that turns radio off is enforced.
 
 mod model;
 mod query;
@@ -29,34 +22,22 @@ use melodia_core::entities::radio::{
 use melodia_core::error::AppError;
 use model::{ApiFacet, ApiServer, ApiStation, ApiVote};
 
-/// Where the mirror list lives. One name in front of every mirror, so it needs
-/// no discovery of its own.
+/// The mirror list, behind one name so it needs no discovery of its own.
 const SERVERS_URL: &str = "https://all.api.radio-browser.info/json/servers";
 
-/// The mirror to talk to when discovery fails.
-///
-/// A bare hostname with no scheme and no trailing slash, so [`endpoint`] stays
-/// the single place a URL is spelled.
+/// For when discovery fails. A bare host, [`url_for`] being the one place a URL is spelled.
 const FALLBACK_HOST: &str = "de1.api.radio-browser.info";
 
-/// The mirror this session talks to.
 static MIRROR: OnceCell<String> = OnceCell::const_new();
 
-/// Whole-request ceiling for one directory call, connect included.
-///
-/// The shared client bounds a *read* and not a request, which is what the
-/// updater's multi-minute downloads want and the opposite of what a fetch
-/// somebody is waiting on wants: a mirror trickling a byte at a time never
-/// trips a per-read deadline. Wide enough to clear the client's own
-/// ten-second connect timeout and still transfer a facet list behind it.
+/// Whole-request ceiling: the shared client bounds a read, which a mirror trickling a byte at a
+/// time never trips. Wide enough to clear its ten-second connect and still fetch a facet list.
 const REQUEST_TIMEOUT: Duration = Duration::from_secs(20);
 
-/// Ceiling on a directory answer. The widest of them is the full country or language facet list,
-/// which is thousands of short objects; a station page is `PAGE_SIZE` rows and nowhere near it.
-/// Generous because a mirror is free to add fields, bounded because a mirror is a third party.
+/// The widest answer is the full country or language facet list, thousands of short objects.
+/// Generous because a mirror may add fields, bounded because a mirror is a third party.
 const DIRECTORY_MAX_BYTES: u64 = 16 * 1024 * 1024;
 
-/// Search the directory.
 pub async fn search(
     client: &reqwest::Client,
     search: &StationSearch,
@@ -74,16 +55,9 @@ async fn search_at(
     Ok(page_from(stations, search.limit))
 }
 
-/// Project one response onto a page, dropping the rows nothing can use and the rows
-/// this build refuses to show.
-///
-/// Rows failing [`DirectoryStation::is_usable`] are dropped here rather than at
-/// the surface, so a page can come back shorter than the limit it asked for. Hence
-/// [`StationPage::has_more`] off the **raw** response length: read off what
-/// survived the drop, a full page holding one uuid-less station would report the
-/// end of the directory and paging would stop there. `radio_blocklist` thins the
-/// same page for the same reason and needs the same care — a blocked country can
-/// empty a page the directory did serve, and paging has to step over it.
+/// One response as a page, without the rows nothing can use or this build won't show.
+/// [`StationPage::has_more`] comes off the **raw** length, so a full page thinned to nothing
+/// doesn't read as the end of the directory.
 fn page_from(stations: Vec<ApiStation>, limit: u32) -> StationPage {
     let full_page = usize::try_from(query::page_limit(limit)).unwrap_or(usize::MAX);
     let has_more = stations.len() >= full_page;
@@ -98,17 +72,11 @@ fn page_from(stations: Vec<ApiStation>, limit: u32) -> StationPage {
     }
 }
 
-/// Tell the directory a station was played, which is what its popularity
-/// ordering is built from.
+/// Tells the directory a station was played, which its popularity ordering is built from.
 ///
-/// Checked on **status and never parsed**: an unknown station comes back as a
-/// 404 with a zero-length body, so there is nothing to deserialize and asking
-/// for JSON turns a clean refusal into a parse error. (Its sibling
-/// `/json/vote/{uuid}` is the other way round, answering 200 with
-/// `{"ok":false}`, which is why neither can borrow the other's guard.)
-///
-/// Deduplicated server-side at one click per IP per station per day, so a
-/// repeated call is not an error and needs no client-side debounce.
+/// Checked on **status, never parsed**: an unknown station is a `404` with an empty body, the
+/// opposite of [`cast_vote`]. Deduplicated server-side per IP per station per day, so a repeat
+/// needs no client-side debounce.
 pub async fn count_click(client: &reqwest::Client, station_uuid: &str) -> Result<(), AppError> {
     let url = endpoint(client, &format!("url/{station_uuid}")).await;
     count_click_at(client, &url).await
@@ -129,18 +97,11 @@ async fn count_click_at(client: &reqwest::Client, url: &str) -> Result<(), AppEr
     Err(AppError::network_msg(format!("Radio directory click returned HTTP {status}")))
 }
 
-/// One station as the directory currently describes it.
+/// One station as the directory currently describes it, which a kept station's page refreshes
+/// its popularity and check figures from, the table having no columns for them.
 ///
-/// `Ok(None)` for a uuid the directory does not know, which is a station that
-/// was withdrawn rather than a failure to report: the endpoint answers an empty
-/// array for it, and a row kept locally outlives its directory entry by design.
-/// A blocked station answers the same way on purpose — every caller already
-/// handles a page that no longer exists, and none has to learn a second shape.
-///
-/// This is what a kept station's page is refreshed from. The table has no column
-/// for the popularity figures or the directory's own last check, so without a
-/// call here the same station would state fewer facts opened from Favorites than
-/// opened from Browse.
+/// `Ok(None)` for a uuid the directory has withdrawn (it answers an empty array), and for one
+/// this build won't show, so no caller learns a second shape.
 pub async fn station_by_uuid(
     client: &reqwest::Client,
     station_uuid: &str,
@@ -165,15 +126,9 @@ async fn station_by_uuid_at(
         .find(|station| station.is_usable() && !radio_blocklist::blocks(station)))
 }
 
-/// Vote for a station.
-///
-/// **Checked on the body, never on the status**, which is the opposite of
-/// [`count_click`] and the reason neither can borrow the other's guard: this
-/// endpoint reports a refusal as `200 {"ok":false}`.
-///
-/// Deduplicated server-side at one vote per station per ten minutes, so a second
-/// press inside that window is refused rather than counted — a real answer to
-/// report, not an error to swallow.
+/// **Checked on the body, never the status**: the endpoint refuses with `200 {"ok":false}`.
+/// Deduplicated per station per ten minutes, so a second press is a refusal to report, not an
+/// error to swallow.
 pub async fn cast_vote(client: &reqwest::Client, station_uuid: &str) -> Result<(), AppError> {
     if !model::is_path_safe_uuid(station_uuid) {
         return Err(AppError::validation_msg("Not a radio directory station id"));
@@ -196,10 +151,8 @@ pub async fn facets(client: &reqwest::Client, kind: FacetKind) -> Result<Arc<[Fa
     facet_cell(kind).get_or_try_init(|| fetch_facets(client, kind)).await.cloned()
 }
 
-/// The session slot for one facet list.
-///
-/// Four cells rather than a map behind a lock: the set is closed, and a cell
-/// cannot be caught holding a guard across the fetch it is waiting on.
+/// Four cells rather than a map behind a lock: the set is closed, and a cell can't be caught
+/// holding a guard across the fetch it is waiting on.
 fn facet_cell(kind: FacetKind) -> &'static OnceCell<Arc<[Facet]>> {
     static COUNTRIES: OnceCell<Arc<[Facet]>> = OnceCell::const_new();
     static LANGUAGES: OnceCell<Arc<[Facet]>> = OnceCell::const_new();
@@ -226,18 +179,13 @@ async fn fetch_facets_at(
     let path = query::facet_path(kind);
     let facets: Vec<ApiFacet> = get_json(client, url, &query::facet_params(kind), path).await?;
 
-    // A ceiling is not optional — omitting the parameter takes the directory's own
-    // default slice rather than everything — so the only question is whether hitting
-    // one is silent. Measured on the **raw** length, before the blocklist thins it, for
-    // `page_from`'s reason. A cut list is a degradation nothing else can report: the
-    // missing tags are simply not offered, and no surface looks wrong.
+    // A ceiling has to be sent, so the only question is whether hitting it is silent. The raw
+    // length, for `page_from`'s reason: a cut list is a degradation nothing else would report.
     if query::facet_list_is_capped(kind, facets.len()) {
         log::warn!("radio: the {path} list came back at its ceiling and is likely cut short");
     }
 
-    // Filtered before the list is frozen into its cell, so the cost lands once a
-    // session rather than on every chip open, and every consumer of the cached list
-    // — the pickers, their needle filter and the scope pills — is covered by it.
+    // Before the cell freezes it, so the cost lands once a session and every consumer is covered.
     Ok(facets
         .into_iter()
         .map(ApiFacet::into_facet)
@@ -245,27 +193,18 @@ async fn fetch_facets_at(
         .collect())
 }
 
-/// A full URL for one directory path, against this session's mirror.
 async fn endpoint(client: &reqwest::Client, path: &str) -> String {
     url_for(mirror(client).await, path)
 }
 
-/// The one place a scheme and a separator are spelled, which is what lets
-/// [`FALLBACK_HOST`] and the discovered hosts both stay bare names.
+/// The one place a scheme and a separator are spelled, so every host stays a bare name.
 fn url_for(host: &str, path: &str) -> String {
     format!("https://{host}/json/{path}")
 }
 
-/// The host to dial, resolved on the first call and kept for the session.
-///
-/// `tokio`'s cell rather than the `OnceLock<Mutex<Option<_>>>` used elsewhere in
-/// `services`, because the initialiser is `async` and `await_holding_lock` is
-/// denied.
-///
-/// A failed discovery pins the fallback rather than leaving the cell empty to
-/// retry: retrying puts a second connect timeout in front of every request made
-/// while the network is down, and doubling the wait to re-derive a host is a bad
-/// trade when the fallback is a working mirror rather than a placeholder.
+/// Resolved on the first call and kept for the session; `tokio`'s cell because the initialiser is
+/// async and `await_holding_lock` is denied. A failed discovery pins the fallback rather than
+/// retrying, which would put a second connect timeout in front of every request while offline.
 async fn mirror(client: &reqwest::Client) -> &'static str {
     MIRROR
         .get_or_init(|| async {
@@ -285,11 +224,8 @@ async fn mirror(client: &reqwest::Client) -> &'static str {
         .as_str()
 }
 
-/// Ask for the mirror list and pick one of its hosts.
-///
-/// The list URL is threaded through rather than read from [`SERVERS_URL`] at the fetch, so a test
-/// can point discovery at a local server — the shape `updater::github::RELEASES_BASE` already
-/// carries, and deliberately not a second configuration surface: the one caller spells the const.
+/// Picks one host off the mirror list. The list URL is a parameter so a test can serve one; the
+/// only caller spells the const.
 async fn discover_mirror(client: &reqwest::Client, servers_url: &str) -> Result<String, AppError> {
     let servers: Vec<ApiServer> =
         get_json(client, servers_url, &BTreeMap::new(), "mirror list").await?;
@@ -303,11 +239,8 @@ async fn discover_mirror(client: &reqwest::Client, servers_url: &str) -> Result<
     Ok(hosts.swap_remove(picked))
 }
 
-/// One GET, with the status guard every call here shares.
-///
-/// A non-success status is an `Err` rather than an empty result: search and the
-/// facet lists both report failure by status, and folding one into "no stations
-/// matched" would show an empty grid for an outage.
+/// One GET with the status guard every call here shares. A non-success status is an `Err`, never
+/// an empty result, or an outage would show as an empty grid.
 async fn get_json<T: serde::de::DeserializeOwned>(
     client: &reqwest::Client,
     url: &str,

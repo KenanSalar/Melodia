@@ -2,23 +2,19 @@
 //! shape. Event-driven by default; polled where the user asks, for the USB drivers that stutter
 //! under events.
 //!
-//! Exclusive mode hands the endpoint's buffer to the driver with no audio engine in between, so
-//! nothing converts on the way: a channel count or format the device lacks fails the claim, and so
-//! does a rate, unless the request lets the voices convert to one the device has. What reaches the
-//! device is [`encode`]'s output of the mixer's block, and nothing else touches it.
+//! Exclusive mode hands the endpoint's buffer to the driver with no audio engine in between, so a
+//! channel count or format the device lacks fails the claim, and so does a rate unless the request
+//! lets the voices convert to one the device has.
 //!
 //! **Two things users will report, and neither is a bug.** While the claim holds, Melodia is gone
-//! from the Windows volume mixer, and every other application on that device loses it: some fall
-//! silent, others move to another output. And a device whose "Allow applications to take exclusive
-//! control of this device" box is cleared, in its Advanced properties in the Sound control panel,
-//! refuses every claim; the panel names that.
+//! from the Windows volume mixer and every other application on the device loses it, some falling
+//! silent, others moving to another output. And a device whose "Allow applications to take
+//! exclusive control of this device" box is cleared (Sound control panel, Advanced) refuses every
+//! claim; the panel names that.
 //!
-//! **A claim's COM calls are made on the `wasapi-out` thread**, which opens the endpoint, answers
-//! the open with what it agreed to, then feeds it until told to stop, and on the helpers its rate
-//! sweep starts, each in an apartment and with a client of its own. No COM object crosses a
-//! thread, and nothing depends on the apartment of whichever thread asked for the claim.
-//!
-//! [`encode`]: super::encode
+//! **A claim's COM calls are made on the `wasapi-out` thread** and the rate sweep's helpers, each
+//! in an apartment and with a client of its own, so no COM object crosses a thread and the asking
+//! thread's apartment never matters.
 
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -127,13 +123,7 @@ pub(super) fn devices() -> Vec<OutputDevice> {
     }
 }
 
-/// Claim the requested device, or the system default where none is named, at the source's shape,
-/// or at another of the device's rates where the request allows, in a format that holds the
-/// source, and start feeding it from `feed`.
-///
-/// # Errors
-///
-/// A [`ClaimError`] naming why the device could not be had, which the caller falls back on.
+/// Claims the requested device, or the system default, and starts feeding it from `feed`.
 pub(super) fn open(
     request: &ExclusiveRequest,
     feed: &Feed,
@@ -262,12 +252,9 @@ fn endpoints(enumerator: &DeviceEnumerator) -> Result<Vec<Endpoint>, WasapiError
     Ok(found)
 }
 
-/// The endpoint a claim is aimed at: the chosen one looked up by id, or the system default.
-///
-/// By id rather than through [`endpoints`], which reads every device's name to find one. Only a
-/// device the system doesn't know or doesn't have active is `NotConnected`, the two cases the
-/// listing would leave out. Any other failure read as a disconnect would have the reclaim poll
-/// retrying a device that is plugged in, since the listing still shows it.
+/// The chosen endpoint by id, or the system default. Only an id the system doesn't know or doesn't
+/// have active is `NotConnected`, the two the listing leaves out: any other failure read as one
+/// would have the reclaim poll retrying a device that is plugged in.
 fn resolve(enumerator: &DeviceEnumerator, device: Option<&str>) -> Result<Endpoint, ClaimError> {
     let Some(id) = device else {
         return endpoints(enumerator)
@@ -321,17 +308,11 @@ fn negotiate(endpoint: &Endpoint, request: &ExclusiveRequest) -> Result<Session,
     Ok(session)
 }
 
-/// Initialise the first candidate the device takes at the source's rate, or, where the device lacks
-/// that rate and the request allows, at the one [`rates::device_rate_for`] picks out of the others
-/// it `offered`, and then at the device's own.
-///
-/// `offered` answers for any layout rather than this source's, so the pick can be a rate the device
-/// takes only in a format this source can't use. Nothing opens there, and the device's own rate
-/// stands behind it, as it does for a driver that passes a rate and then won't initialise it.
-///
-/// It also answers for every layout the source's rate would be asked in, so a rate it lacks isn't
-/// asked again: each of those asks would be refused, one candidate at a time. [`wasapi_offered`]
-/// says what an answer gone stale costs.
+/// Initialise the first candidate the device takes at the source's rate, else, where the request
+/// allows, at the [`retry_rates`]. `offered` answers for every layout, so a rate it lacks isn't
+/// asked again one refused candidate at a time, and the pick can be a rate the device takes only
+/// in a format this source can't use, which the device's own rate stands behind.
+/// [`wasapi_offered`] says what an answer gone stale costs.
 fn open_session(
     endpoint: &Endpoint,
     probe: &AudioClient,
@@ -376,12 +357,9 @@ fn source_rate_lacking(
         && offered.is_some_and(|offered| offered.contains(source.get()) == Some(false))
 }
 
-/// The rates a claim refused at the `source` rate tries next: the one [`rates::device_rate_for`]
-/// picks out of the others `offered`, then the device's `own`.
-///
-/// A driver can pass a rate it then won't initialise. The mix rate is the one the audio engine
-/// already runs the device at, so it stands behind the pick. The source's rate is left out even
-/// where it was offered: it has just been refused.
+/// The rates a claim refused at the `source` rate tries next: [`rates::device_rate_for`]'s pick out
+/// of the others `offered`, then the device's `own`, which the audio engine already runs it at and
+/// so stands behind a pick a driver passed and then won't initialise.
 fn retry_rates(
     source: SampleRate,
     own: Option<SampleRate>,
@@ -418,14 +396,13 @@ fn open_first(
     Ok(None)
 }
 
-/// A fresh client initialised for exclusive use in `wave`, driven as `drive` asks at a period near
-/// `period_hns`, and the period it took.
+/// A fresh client initialised for exclusive use in `wave` at a period near `period_hns`, and the
+/// period it took.
 ///
-/// The crate rounds the period up to the device's minimum. A driver that wants a buffer the period
-/// didn't land on still refuses with `AUDCLNT_E_BUFFER_SIZE_NOT_ALIGNED`, which Windows returns
-/// only to an event-driven claim, whose buffer is its period. The client that refused knows the
-/// size it wanted, but a client initialises once, so the retry takes a fresh one, and the refused
-/// one goes back first as Microsoft's recovery sequence has it.
+/// A driver wanting a buffer the period didn't land on refuses with
+/// `AUDCLNT_E_BUFFER_SIZE_NOT_ALIGNED` (event-driven claims only, whose buffer is the period). A
+/// client initialises once, so the retry at the size it wanted takes a fresh one, the refused one
+/// going back first as Microsoft's recovery sequence has it.
 fn initialize(
     device: &Device,
     wave: &WaveFormat,
@@ -480,7 +457,6 @@ struct Session {
     buffer_frames: usize,
     /// What the device takes per period: the whole buffer under events, a slice of it polled.
     period_frames: usize,
-    /// The rates the device offered, where the claim may resample.
     offered: Option<RateSet>,
 }
 
@@ -540,12 +516,9 @@ impl Session {
         self.client.start_stream()
     }
 
-    /// Hand the device whatever it has room for, each time it has some, until told to stop.
-    ///
-    /// Nothing here logs: the health counters are how this loop reports, and the one error it
-    /// returns is logged once, on the way out. A volume control that stops taking or reporting the
-    /// level ends the stream like a write refused, and the claim that follows decides again whether
-    /// to use it.
+    /// Nothing here logs: the health counters report, and the one error returned is logged on the
+    /// way out. A volume control that stops answering ends the stream like a refused write, and the
+    /// claim that follows decides again whether to use it.
     fn play(&mut self, feed: &Feed, stop: &AtomicBool) -> Result<(), WasapiError> {
         let channels = usize::from(self.shape.channels.get());
         let mut block: Vec<Sample> = vec![0.0; self.samples_per_buffer()];
@@ -582,13 +555,10 @@ impl Session {
         Ok(())
     }
 
-    /// Stop the device, drop what it holds and start it again from silence.
-    ///
-    /// An event-driven stream needs this once a stall leaves it stuck. Its event resets itself, so
-    /// the signals that landed while the writer was stalled come back as one wake, and the half of
-    /// the buffer they stood for is never refilled. Left running, the device runs dry every period,
-    /// which sounds as a buzz until the stream is reopened. The reset also sets its clock back to
-    /// zero. Restarts that don't bring the clock back stop being asked for, as [`StallWatch`] says.
+    /// Start the device again from silence, which a stuck event-driven stream needs: its event
+    /// resets itself, so the signals missed during a stall come back as one wake, half the buffer
+    /// is never refilled and the device runs dry every period, a buzz until a reopen. The reset
+    /// also zeroes the clock; [`StallWatch`] stops asking once restarts don't bring it back.
     fn restart(&self) -> Result<(), WasapiError> {
         self.client.stop_stream()?;
         self.client.reset_stream()?;

@@ -1,33 +1,16 @@
 //! Lyrics for the playing track, and the one door onto them.
 //!
-//! Four places a sheet can come from, and a caller learns which one answered only by asking the
-//! sheet itself. They resolve through one function so the two switches in front of them each have
-//! a single place to guard, which is `library::radio`'s shape and is here for its reason: the
-//! feature switch in front of all four, the lookup switch in front of the directory.
+//! A sidecar, the lyrics tag, a store of past directory answers and the directory itself resolve
+//! through [`for_track`], so each of two switches has one place to guard: the feature's in front
+//! of all four, the lookup's in front of the directory. **`is_enabled` and `online_lookup_enabled`
+//! may not move**, each being the one reader of its flag (`crates/melodia/tests/lyrics_switch.rs`).
 //!
-//! **`is_enabled` and `online_lookup_enabled` may not move, and each is the one place its flag is
-//! named.** A switch is enforced at the seam rather than per call site, so a fifth source added
-//! later cannot reach a file or the network around it.
+//! **The order is sidecar, tag, store, lookup, and a timed sheet cuts across it** wherever the
+//! sidecar hasn't spoken (`docs/adr/0038-lyrics-display-reads-the-file.md`). The store sits on the
+//! local side of the switch: turning the lookup off buys no traffic, not no lyrics.
 //!
-//! **What stays reachable with lyrics off is what keeps the store honest or belongs to the tag
-//! editor**: `forget_all` still runs on a retag, or the stale answer would be waiting when lyrics
-//! come back on, and `resident_text` and `write_to_tag` are that dialog's, local and user-driven.
-//!
-//! **The order is sidecar, tag, store, lookup, and timings cut across it.** A sidecar is the one a
-//! user places deliberately, so it outranks everything; the tag is the file's own and outranks
-//! what a stranger uploaded; the store is only ever a copy of the last answer. That order is what
-//! makes the feature correctable without a setting, since a wrong sheet is fixed by dropping a
-//! `.lrc` next to the file.
-//!
-//! **But a timed sheet beats an untimed one wherever the sidecar has not spoken**, because this
-//! feature is the follow rather than the words: a tagger who wrote plain prose into `USLT` has not
-//! expressed a preference against the sung line being marked, and honouring the order strictly
-//! left exactly those tracks showing a page nothing could follow while a timed sheet sat one
-//! request away. The order still decides between two sheets of the same kind.
-//!
-//! **The store sits on the local side of the switch**, which is the whole of what the switch
-//! sells. Turning the lookup off buys no traffic, not no lyrics: a sheet already fetched keeps
-//! being read, because reading it costs nothing anybody asked to stop paying.
+//! Reachable with lyrics off: `forget_all`, so a retag leaves no stale answer waiting for the
+//! feature to come back, and the tag editor's `resident_text` and `write_to_tag`.
 
 mod embedded;
 mod lrc;
@@ -47,29 +30,21 @@ use melodia_core::entities::track::TrackSummary;
 use melodia_core::error::AppError;
 use melodia_net::services::net::pacer::RequestPacer;
 
-/// What this track has, from whichever source has it, ready to draw.
-///
-/// **This owns its `spawn_blocking`**, unlike [`crate::library::tags::read_lyrics`], whose caller
-/// does. Two hops at most and neither is per source: [`resolve`] puts all three local reads on the
-/// pool together, and [`romanized`] goes back only for a sheet that has something to romanize.
+/// What this track has, from whichever source has it, ready to draw, in at most two blocking hops:
+/// the local reads together, then the romanization.
 pub async fn for_track(state: &AppState, track: &TrackSummary) -> Result<LyricsOutcome, AppError> {
     ensure_enabled(state)?;
     romanized(state, resolve(state, track).await?).await
 }
 
-/// Whether lyrics run at all.
-///
-/// **The one place the decision is read**, Now Playing's reseed and close included, so the view
-/// deciding whether to ask and this door deciding whether to answer cannot disagree.
+/// Whether lyrics run at all. Now Playing's reseed and close ask this too, so the view asking and
+/// this door answering can't disagree.
 pub fn is_enabled(state: &AppState) -> bool {
     state.lyrics_enabled.get()
 }
 
-/// A refusal when the user has switched lyrics off.
-///
-/// **A refusal rather than [`LyricsOutcome::Absent`], `library::radio`'s shape**: the panel is
-/// unmounted while off, so a call still arriving is a stale edge worth a log line, where
-/// [`online_lookup_enabled`]'s `false` is the ordinary state of most libraries.
+/// A refusal rather than [`LyricsOutcome::Absent`]: the panel is unmounted while lyrics are off,
+/// so a call still arriving is a stale edge worth a log line.
 fn ensure_enabled(state: &AppState) -> Result<(), AppError> {
     if is_enabled(state) {
         return Ok(());
@@ -77,15 +52,9 @@ fn ensure_enabled(state: &AppState) -> Result<(), AppError> {
     Err(AppError::settings_msg("Lyrics are switched off"))
 }
 
-/// The romanization drawn under each line, filled in off the UI thread.
-///
-/// **Here rather than in [`resolve`] because four arms answer it and one of them is the network's,
-/// so romanizing where a sheet is chosen would be four call sites for one question.** Filled
-/// whatever the panel's toggle says: the toggle is a display filter, and doing this lazily would
-/// put the pass on the thread that draws.
-///
-/// The `is_ascii` walk pays for the hop rather than the other way round. Most libraries are Latin
-/// throughout, and a sheet with nothing to romanize should not cost a trip to the blocking pool.
+/// The romanization drawn under each line, filled off the UI thread whatever the panel's toggle
+/// says: the toggle is a display filter, and filling lazily would put the pass on the thread that
+/// draws. Here rather than in each of [`resolve`]'s four arms.
 async fn romanized(state: &AppState, outcome: LyricsOutcome) -> Result<LyricsOutcome, AppError> {
     let LyricsOutcome::Sheet(mut sheet) = outcome else {
         return Ok(outcome);
@@ -106,9 +75,6 @@ async fn romanized(state: &AppState, outcome: LyricsOutcome) -> Result<LyricsOut
 }
 
 /// Which of the four sources answers for this track.
-///
-/// The three local ones share one trip to the blocking pool, so a track change costs one hop
-/// rather than one per source.
 async fn resolve(state: &AppState, track: &TrackSummary) -> Result<LyricsOutcome, AppError> {
     let path = PathBuf::from(&track.file_path);
     let paths = Arc::clone(&state.paths);
@@ -122,13 +88,11 @@ async fn resolve(state: &AppState, track: &TrackSummary) -> Result<LyricsOutcome
 
     let Local { own, is_sidecar, stored } = local;
     let own = match own {
-        // A sidecar is the sheet a user placed on purpose, and a timed sheet is already the best a
-        // lookup could answer with. Either ends it here.
+        // A sidecar is the user's own, and a timed sheet is the best a lookup could answer with.
         Some(own) if is_sidecar || own.is_synced() => return Ok(LyricsOutcome::Sheet(own)),
         own => own,
     };
-    // The directory has answered for this track before, and a second request would fetch that
-    // same answer.
+    // The directory has answered before, and asking again would fetch the same answer.
     if let Some(stored) = stored {
         return Ok(timed_first(stored, own));
     }
@@ -140,15 +104,9 @@ async fn resolve(state: &AppState, track: &TrackSummary) -> Result<LyricsOutcome
     Ok(timed_first(fetched, own))
 }
 
-/// The sheet this track already has, as its author wrote it, or `None`.
-///
-/// **Local only, and that is the point.** The tag editor's Lyrics tab offers to write this into
-/// the file, so what it hands over has to be text that exists rather than an answer a lookup might
-/// give — and a dialog opening on a selection must not spend a request per track.
-///
-/// Raw rather than the parsed sheet: a promotion writes the sheet on, so re-serializing
-/// [`LyricsOutcome`] back to LRC would drop the `[offset:]` tag and the gloss separator that made
-/// it worth keeping.
+/// The sheet this track already has, as raw text for the tag editor to write into the file.
+/// **Local only**, so a dialog over a selection spends no request per track; raw, since
+/// re-serializing a parsed sheet would drop its `[offset:]` tag and gloss separator.
 pub async fn resident_text(state: &AppState, track_path: &str) -> Result<Option<String>, AppError> {
     let path = PathBuf::from(track_path);
     let paths = Arc::clone(&state.paths);
@@ -161,12 +119,8 @@ pub async fn resident_text(state: &AppState, track_path: &str) -> Result<Option<
         .map_err(AppError::io_source)?
 }
 
-/// [`read_local`]'s three homes, answering with text instead of a sheet. Blocking.
-///
-/// **The same order, and it has to stay the same order**: a sidecar is the user's own, then
-/// whichever of the tag and the store is timed, then the file's own tag over a copy of somebody
-/// else's upload. What a reader sees and what a promotion writes are one answer, so a track whose
-/// panel shows the directory's timed sheet does not hand the tag's plain one to the editor.
+/// [`read_local`]'s three homes as text, **in [`resolve`]'s order**, so the editor is offered the
+/// sheet the panel shows. Blocking.
 fn read_local_text(
     path: &Path,
     lyrics_dir: &Path,
@@ -187,25 +141,19 @@ fn read_local_text(
     Ok(own.or(stored))
 }
 
-/// What the local sources had.
-///
-/// Three answers rather than the first of three, because which one spoke decides whether the
-/// directory may still be asked: a sidecar ends the question, a plain lyrics tag only floors it.
+/// What the local sources had: all three answers rather than the first, since a sidecar ends the
+/// question where a plain lyrics tag only floors it.
 struct Local {
-    /// The file's own sheet — the sidecar where there is one, otherwise the lyrics tag.
+    /// The sidecar where there is one, otherwise the lyrics tag.
     own: Option<Lyrics>,
-    /// Whether that sheet is the sidecar.
     is_sidecar: bool,
-    /// What the directory last said about this track, where it has been asked.
+    /// What the directory last said, where it has been asked.
     stored: Option<LyricsOutcome>,
 }
 
-/// The better of what the directory had and what the file carries.
-///
-/// **A timed sheet wins whatever wrote it**, this feature being the follow rather than the words.
-/// Below that the file's own tag wins, a stranger's upload being the weaker claim — and a
-/// directory calling the recording instrumental loses to a tag with words in it, for that reason
-/// rather than as a special case.
+/// The better of what the directory had and what the file carries: a timed sheet whatever wrote
+/// it, then the file's own, so a directory calling the recording instrumental loses to a tag with
+/// words in it.
 fn timed_first(fetched: LyricsOutcome, own: Option<Lyrics>) -> LyricsOutcome {
     let Some(own) = own else {
         return fetched;
@@ -222,8 +170,7 @@ fn read_local(path: &Path, lyrics_dir: &Path, track_path: &str) -> Result<Local,
         return Ok(Local { own: Some(lyrics), is_sidecar: true, stored: None });
     }
     let own = embedded::read(path)?;
-    // Skipped where the tag is already timed: nothing the store holds could better it, and this
-    // runs on every track change.
+    // Nothing stored could better a timed tag.
     let stored = match &own {
         Some(lyrics) if lyrics.is_synced() => None,
         _ => store::read(lyrics_dir, track_path),
@@ -231,34 +178,20 @@ fn read_local(path: &Path, lyrics_dir: &Path, track_path: &str) -> Result<Local,
     Ok(Local { own, is_sidecar: false, stored })
 }
 
-/// Whether a track with no sheet of its own may be looked up online.
-///
-/// **The one reader of the setting.** A second one is a copy that can be got wrong separately,
-/// which is why radio's equivalent is pinned to exactly one naming of its own flag.
-///
-/// Answering `false` ends the chain in [`LyricsOutcome::Absent`] rather than an error, and that is
-/// the whole difference from radio's guard, which refuses. Radio unmounts its section when off, so
-/// a call arriving there is a bug worth reporting; a track with no lyrics and no lookup is the
-/// ordinary state of most libraries, and a panel saying so would be right.
+/// Whether a track with no sheet of its own may be looked up online. `false` ends in
+/// [`LyricsOutcome::Absent`] rather than a refusal, being the ordinary state of most libraries.
 fn online_lookup_enabled(state: &AppState) -> bool {
     state.lyrics_online_enabled.get()
 }
 
-/// Forget what the directory said about this track, so the next lookup asks again.
-///
-/// **The whole of what a refresh is.** A sheet the directory matched off wrong tags is right about
-/// nothing except the tags it was asked with, and correcting those leaves the wrong answer sitting
-/// in the store until it ages out. Touches only the store: a sidecar and a lyrics tag are the
-/// user's own files, and a refresh that deleted either would be a delete nobody asked for.
+/// Forget what the directory said about this track, so the next lookup asks again: the whole of
+/// what a refresh is. Only the store; a sidecar and a lyrics tag are the user's own files.
 pub async fn forget(state: &AppState, track_path: &str) -> Result<(), AppError> {
     forget_all(state, vec![track_path.to_owned()]).await
 }
 
-/// [`forget`] over a retagged batch, in one hop rather than one per track.
-///
-/// Every path is attempted whatever the ones before it did: an entry left standing is a stale
-/// answer, and stopping at the first failure would leave the rest of the batch holding theirs over
-/// something that had nothing to do with them. The first error is what comes back.
+/// [`forget`] over a retagged batch, in one hop. Every path is attempted, one failure being no
+/// reason to leave the rest stale, and the first error comes back.
 pub async fn forget_all(state: &AppState, track_paths: Vec<String>) -> Result<(), AppError> {
     let paths = Arc::clone(&state.paths);
 
@@ -277,21 +210,13 @@ pub async fn forget_all(state: &AppState, track_paths: Vec<String>) -> Result<()
         .map_err(AppError::io_source)?
 }
 
-/// Write `text` into the track's own lyrics tag.
-///
-/// A tag edit like any other — through the same writer, the same self-write mark and the same
-/// `library_changed` bump — so the file is rewritten once and the scan pipeline re-reads it rather
-/// than a hand-built `UPDATE` leaving a fresh mtime beside a stale hash.
-///
-/// **Here rather than at the call site** because the two surfaces that offer it, the Edit Tags
-/// dialog and the Now Playing menu, must not each build their own idea of a lyrics-only edit.
+/// Write `text` into the track's own lyrics tag, as an ordinary tag edit so the scan pipeline
+/// re-reads the file. One spelling for the Edit Tags dialog and the Now Playing menu.
 pub async fn write_to_tag(state: &AppState, track_id: i64, text: &str) -> Result<(), AppError> {
     let edit = TagEdit { lyrics: FieldEdit::Set(text.to_owned()), ..TagEdit::default() };
     let report = crate::library::tags::apply_tag_edit(state, vec![track_id], edit, None).await?;
 
-    // **The writer reports per file rather than failing the batch**, so one track's refusal — a
-    // read-only file, a container with no key for it — comes back as an `Ok` carrying a failure,
-    // and a caller that only checked the `Result` would report a save that did not happen.
+    // A per-file refusal comes back inside the `Ok`, and would otherwise read as a save.
     if let Some((_, reason)) = report.failures.first() {
         return Err(AppError::io_other(reason.clone()));
     }
@@ -301,20 +226,14 @@ pub async fn write_to_tag(state: &AppState, track_id: i64, text: &str) -> Result
     Ok(())
 }
 
-/// A fresh pacer for the directory, for `AppState` to hold.
-///
-/// **Here rather than at the construction site**, so the directory client is named only from
-/// behind this door: `state` holds the pacer without being able to reach what it paces, which is
-/// the property `crates/melodia/tests/lyrics_switch.rs` walks the tree for.
+/// A fresh directory pacer for `AppState` to hold, built here so the directory client is named
+/// only behind this door.
 #[must_use]
 pub fn pacer() -> RequestPacer {
     melodia_net::services::net::lyrics_directory::pacer()
 }
 
-/// Hold the on-disk store to its bounds.
-///
-/// Through the door like everything else here, so `tasks::lyrics_cache` names no submodule and the
-/// naming scheme stays this module's business. Blocking; the task owns the `spawn_blocking`.
+/// Hold the on-disk store to its bounds. Blocking; `tasks::lyrics_cache` owns the hop.
 pub fn prune_store(paths: &Paths) -> Result<u32, AppError> {
     store::prune(&paths.lyrics_dir)
 }

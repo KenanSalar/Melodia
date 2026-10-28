@@ -1,4 +1,4 @@
-//! The Browse file list: play, queue, favorite, rating, sort, selection, columns.
+//! The Browse file list's callbacks.
 
 use std::sync::Arc;
 
@@ -16,7 +16,6 @@ use melodia_app::services::view_state::ViewStateData;
 use melodia_app::state::AppState;
 use melodia_ui::{AppWindow, Browse};
 
-/// Wire the list's own callbacks, and seed the sort the first navigation applies.
 pub(super) fn wire(
     ui: &AppWindow,
     state: &AppState,
@@ -26,11 +25,8 @@ pub(super) fn wire(
     let g = ui.global::<Browse>();
     seed_sort(&g, view_state, browse_ui);
     wire_play_row(&g, state, browse_ui);
-    // Disk-only rows (`id == 0`) are filtered out — they aren't in the
-    // library and can't be queued. (Selection-level gate at
-    // `browse/selection.rs` already keeps disk-only ids out of
-    // `Browse.selected-ids`; this filter is a belt-and-braces for
-    // single-row mode if anything ever changes upstream.)
+    // Disk-only rows (`id == 0`) can't be queued. The selection already keeps them out, so this
+    // guards single-row mode.
     wire_queue_actions(&g, state, collect_nonzero_track_ids);
     wire_row_flags(ui, state, browse_ui);
     wire_sort(ui, state, browse_ui);
@@ -39,8 +35,7 @@ pub(super) fn wire(
     wire_toggle_column(&g.as_weak(), state);
 }
 
-/// Seed the sort header + the `BrowseUi` sort cache from the persisted
-/// `view_sort["browse"]` so the first folder navigation sorts with it.
+/// Seeds the persisted sort before the first navigation applies it.
 fn seed_sort(g: &Browse<'_>, view_state: Option<&ViewStateData>, browse_ui: &BrowseUi) {
     if let Some(sort) = persisted_sort(view_state, view_id::BROWSE) {
         g.set_sort_field(SharedString::from(sort.field.as_str()));
@@ -49,11 +44,9 @@ fn seed_sort(g: &Browse<'_>, view_state: Option<&ViewStateData>, browse_ui: &Bro
     }
 }
 
-/// Double-click loads every in-library file in this folder into
-/// the queue and starts on the clicked one. Disk-only rows (`id == 0`)
-/// aren't in the library and are ignored — they also *displace* the row
-/// index, since `current_in_library_ids` drops them, which is the case
-/// `play_row_start`'s lookup-by-id fallback exists for.
+/// Queues the folder's in-library files, starting on the clicked one. Disk-only rows are ignored,
+/// and shift the row index off `current_in_library_ids`, the case `play_row_start`'s lookup by id
+/// exists for.
 fn wire_play_row(g: &Browse<'_>, state: &AppState, browse_ui: &Arc<BrowseUi>) {
     let s = state.clone();
     let bu = browse_ui.clone();
@@ -65,10 +58,7 @@ fn wire_play_row(g: &Browse<'_>, state: &AppState, browse_ui: &Arc<BrowseUi>) {
     });
 }
 
-/// Write through, then surgically update each row (no re-fetch, so scroll
-/// position holds and there's no flash). Disk-only rows have id 0 and are
-/// filtered out by `collect_nonzero_track_ids`; rating never changes list
-/// membership.
+/// Patched in place, cache and row, so the scroll holds.
 fn wire_row_flags(ui: &AppWindow, state: &AppState, browse_ui: &Arc<BrowseUi>) {
     let g = ui.global::<Browse>();
     let weak = ui.as_weak();
@@ -98,9 +88,6 @@ fn wire_row_flags(ui: &AppWindow, state: &AppState, browse_ui: &Arc<BrowseUi>) {
     }
 }
 
-/// Clicking a header column. Same field flips dir; new
-/// field resets to ascending. Browse sorts in-memory (it mixes
-/// disk-only + DB files) — no DB round-trip.
 fn wire_sort(ui: &AppWindow, state: &AppState, browse_ui: &Arc<BrowseUi>) {
     let s = state.clone();
     let bu = browse_ui.clone();
@@ -118,10 +105,7 @@ fn wire_sort(ui: &AppWindow, state: &AppState, browse_ui: &Arc<BrowseUi>) {
     });
 }
 
-/// Modifier-aware selection. The new
-/// selected set is computed in Rust (Slint expressions can't iterate
-/// a model for a membership check); disk-only rows are never
-/// selectable. Mirrors the Tracks view.
+/// Computed in Rust, a Slint expression being unable to iterate a model for a membership check.
 fn wire_selection(ui: &AppWindow, browse_ui: &Arc<BrowseUi>) {
     let g = ui.global::<Browse>();
     {

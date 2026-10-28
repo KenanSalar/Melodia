@@ -4,7 +4,7 @@
 //! into the next by writing a blend into `Theme` every frame. An `animate` on a brush that can read
 //! one restarts on each write and settles after the window has, so every colour animation carries
 //! an `enabled:` naming `Theme.recoloring`. Missing, it shows only during a fade, and nothing fails
-//! to build. `slint-pitfalls.md` has the mechanism and the kinds that need no gate.
+//! to build. A float, a tier Rust writes once per solve and a `states` transition need no gate.
 //!
 //! A colour is told by type rather than by name: a built-in brush property, or one some file
 //! declares as `brush` or `color`.

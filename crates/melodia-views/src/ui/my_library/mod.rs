@@ -1,19 +1,14 @@
-//! The My Library page — five tabs (Songs, Albums, Artists, Genres, Playlists) over the
-//! five views that used to be five sidebar sections at nav indices 3–7.
+//! The My Library page: five tabs over the Songs, Albums, Artists, Genres and Playlists views.
+//! It owns the page, not its contents: each view keeps its own handle, models, caches and sorts,
+//! and what lives here is the nav index, the mounted tab and where the filter box's keystrokes
+//! land.
 //!
-//! **This module owns the page, not its contents.** Each of the five keeps its own `*Ui`
-//! handle, models, caches, sorts and `view_id` keys; what lives here is the nav index,
-//! which tab is mounted, and where a keystroke in the single filter box has to land.
-//!
-//! There is deliberately **no `MyLibraryUi` handle**. A tabbed page usually needs a
-//! synchronous shadow of its active tab so off-thread fetchers know which model to fill,
-//! but here the answer already exists five times over: `SectionActiveGate` is mounted per
-//! tab, so each view's own `section_active` shadow means "My Library is up *and* my tab is
-//! mounted". Everything else that asks runs on the UI thread.
+//! There is deliberately no `MyLibraryUi` handle: `SectionActiveGate` is mounted per tab, so each
+//! view's own `section_active` shadow already means "my tab is mounted", and everything else that
+//! asks runs on the UI thread.
 
 mod callbacks;
-// `pub(super)` is `pub(in crate::ui)`: the dispatcher is reached by the four detail
-// slices' `open_*`, which reseat the shared box, and by nothing outside `ui::`.
+// Reached by the four details' `open_*`, which reseat the shared box.
 pub(super) mod filter;
 mod tabs;
 
@@ -26,21 +21,18 @@ pub use tabs::{
     tab_of_section, the_band_is_up,
 };
 
-/// Wire the page's own callbacks. Takes no view handle, which is why it runs before the
-/// five tab slices rather than after them. Call once, after `wire_all`.
+/// Wires the page's own callbacks, once, after `wire_all`. They take no view handle, so this runs
+/// before the five tab slices.
 pub fn install(ui: &AppWindow, state: &AppState) {
     callbacks::wire(ui, state);
 }
 
-/// The page's `Nav.selected-index`. **The single definition** — five separate `const`s
-/// spelled 4/5/6/7 across `nav_history`, `cross_tab_nav` and `artists/callbacks` used to
-/// stand for the sections this page absorbed.
+/// The page's `Nav.selected-index`, and the single definition of it.
 pub const NAV_MY_LIBRARY: i32 = 3;
 
-/// Map a persisted `views.json` nav index onto a live one. 4–7 were Albums / Artists /
-/// Genres / Playlists and are in files in the wild; left alone they select no router
-/// branch and the user boots onto `PlaceholderView`. Anything else passes through,
-/// including values outside the valid range, which the caller still has to bound.
+/// Maps a persisted nav index onto a live one. 4–7 were the sections this page absorbed and are
+/// still in files in the wild, and left alone they boot onto `PlaceholderView`. Anything else
+/// passes through, out-of-range values included, for the caller to bound.
 pub fn fold_retired_nav_index(idx: i32) -> i32 {
     if (4..=7).contains(&idx) { NAV_MY_LIBRARY } else { idx }
 }

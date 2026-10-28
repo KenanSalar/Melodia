@@ -8,16 +8,9 @@ import { SectionButton } from "../../components/settings/section-button.slint";
 import { ProgressBar } from "../../components/settings/progress-bar.slint";
 import { ToggleSwitch } from "../../components/settings/toggle-switch.slint";
 
-// The Software Updates row is always drawn; the rest — up-to-date, installed,
-// available, error — stack under it on their own mutually exclusive conditions.
-//
-// Every one read-binds `MelodiaUpdater` rather than mirroring into local
-// properties, so the section follows backend state without wiring.
-//
-// Search visibility follows `language-section.slint`: each row ANDs its state
-// condition with the predicate, so a query matching the section title still
-// surfaces only the rows whose state is actually true — no up-to-date message
-// on a session with an update pending.
+// The Software Updates row is always drawn; the rest stack under it on exclusive conditions read
+// straight off `MelodiaUpdater`. Search visibility follows `language-section.slint`, each row
+// ANDing its state with the predicate, so a title match shows only the rows whose state holds.
 export component UpdateSection inherits Rectangle {
     background: transparent;
     horizontal-stretch: 1;
@@ -40,13 +33,14 @@ export component UpdateSection inherits Rectangle {
     property <string> restart-label: @tr("Update Installed");
     property <string> restart-desc: @tr("Restart Melodia to apply the update");
     property <string> available-label: @tr("Version {} Available", MelodiaUpdater.available-version);
-    property <string> managed-label: @tr("Updates managed by your package manager");
+    property <string> managed-label: @tr("Updates are installed outside Melodia");
+    property <string> managed-desc: @tr("Install the new version the same way you installed this one.");
     property <string> auto-check-label: @tr("Check for updates automatically");
     property <string> auto-check-desc: @tr("Once a day, Melodia asks GitHub whether a newer version is out.");
 
     property <bool> show-software: row-visible(software-label, software-desc);
-    // The daily task is already suppressed on a package-managed install, so the switch there would
-    // describe nothing.
+    // The daily task never runs where no in-app path reaches, so the switch there would describe
+    // nothing.
     property <bool> show-auto-check: !MelodiaUpdater.system-managed
         && row-visible(auto-check-label, auto-check-desc);
     property <bool> show-up-to-date:
@@ -59,26 +53,16 @@ export component UpdateSection inherits Rectangle {
         && row-visible(available-label, MelodiaUpdater.notes-short);
     property <bool> show-error: MelodiaUpdater.error-message != ""
         && row-visible("", MelodiaUpdater.error-message);
-    // A ternary, so each branch's literal stays inside `@tr()` and re-resolves
-    // on a locale switch. The order matches `updater_settings.rs`'s values.
-    property <string> pkg-manager-hint:
-        MelodiaUpdater.platform-kind == "windows"
-            ? @tr("Re-run the latest .msi installer from the Releases page.")
-        : MelodiaUpdater.platform-kind == "macos"
-            ? @tr("Use brew upgrade melodia.")
-        : @tr("Use sudo dnf update melodia (or your distro equivalent).");
-    property <bool> show-package-managed: MelodiaUpdater.system-managed
-        && row-visible(managed-label, pkg-manager-hint);
+    property <bool> show-system-managed: MelodiaUpdater.system-managed
+        && row-visible(managed-label, managed-desc);
 
     // Gated as a whole rather than per row: an unsupported build has no state worth a card, and
     // routing it through `has-matches` is also what keeps a search for "update" from landing on
     // an empty one.
     out property <bool> has-matches: MelodiaUpdater.updates-supported
         && (show-software || show-auto-check || show-up-to-date || show-restart
-            || show-update-available || show-error || show-package-managed);
+            || show-update-available || show-error || show-system-managed);
 
-    // Wrapper so the root's preferred-height tracks the card's natural height —
-    // see `language-section.slint`.
     VerticalLayout {
     if has-matches: SectionCard {
         title: root.card-title;
@@ -111,11 +95,11 @@ export component UpdateSection inherits Rectangle {
 
         // Directly under the software row, so it's clear at once why the action
         // buttons below are missing.
-        if root.show-software && root.show-package-managed: SectionDivider {}
-        if root.show-package-managed: SettingRow {
+        if root.show-software && root.show-system-managed: SectionDivider {}
+        if root.show-system-managed: SettingRow {
             icon: "package_2";
             label: root.managed-label;
-            description: pkg-manager-hint;
+            description: root.managed-desc;
         }
 
         if root.show-software && root.show-up-to-date: SectionDivider {}
@@ -138,8 +122,8 @@ export component UpdateSection inherits Rectangle {
             }
         }
 
-        // Install and Skip go when the install path is package-managed: the
-        // available version is still worth showing, but the action isn't ours.
+        // Install and Skip go where no in-app path reaches: the available
+        // version is still worth showing, but the action isn't ours.
         if root.show-software && root.show-update-available: SectionDivider {}
         if root.show-update-available: SettingRow {
             icon: "new_releases";

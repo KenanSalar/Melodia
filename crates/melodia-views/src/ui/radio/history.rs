@@ -1,17 +1,9 @@
-//! The titles a station announces while it plays.
+//! The titles a station announces while it plays, off the view-model watch the Now Playing bar
+//! reads, so a history costs one subscriber and no change to the player.
 //!
-//! ICY metadata lands on the feed thread, is reconciled into `PlayerState.radio.live_title` by the
-//! playback monitor, and reaches here on the same view-model watch the Now Playing bar reads — so
-//! a history costs one subscriber and no change to the player at all.
-//!
-//! **Kept per station and dropped when a *different* one starts, not when playback stops.** A
-//! station you paused or stopped is still the one on screen, and a list that empties the moment
-//! you press stop is a list nobody gets to read.
-//!
-//! Radio owns it because the Radio page draws it, and the Now Playing view reads the *same*
-//! model rather than a second one: `Radio.history-rows` is by definition the playing station's
-//! titles, and the station page gates them on `Radio.detail-station-is-playing`. So the rows are
-//! written here, once per move, and a seat change only re-answers the flag.
+//! **Kept per station and dropped when a different one starts**, not on stop: a stopped station is
+//! still the one on screen. `Radio.history-rows` is the playing station's titles for the station
+//! page and Now Playing both, so it is written here and a seat change only re-answers the flag.
 
 use std::collections::VecDeque;
 use std::sync::Arc;
@@ -25,18 +17,14 @@ use melodia_ui::{AppWindow, StationHistoryRow};
 
 use super::{RadioUi, detail};
 
-/// How many titles one station keeps.
-///
-/// A couple of hours of listening at three or four minutes a song, which is the span the list is
-/// for: naming something you heard a while back and did not write down. Bounded because a stream
-/// can be left running for days.
+/// How many titles one station keeps: a couple of hours of listening, bounded because a stream can
+/// run for days.
 const HISTORY_CAP: usize = 50;
 
 /// One station's titles, newest first.
 #[derive(Default)]
 pub struct StationHistory {
-    /// Whose titles these are, keyed by stream URL — the one field every station has. The
-    /// database id is `0` for a browsed station and the uuid empty for a hand-typed one.
+    /// Whose titles these are, by stream URL, the one field every station has.
     stream_url: String,
     titles: VecDeque<String>,
 }
@@ -54,8 +42,7 @@ impl StationHistory {
         let Some(title) = title.map(str::trim).filter(|title| !title.is_empty()) else {
             return moved;
         };
-        // Stations re-send the current title on a timer, and plenty send it verbatim with every
-        // metadata block.
+        // Stations re-send the current title on a timer, often with every metadata block.
         if self.titles.front().is_some_and(|newest| newest == title) {
             return moved;
         }
@@ -75,11 +62,8 @@ impl StationHistory {
     }
 }
 
-/// Subscribe to the player's view model and keep the ring current.
-///
-/// Its own subscriber rather than a hook inside `ui::shell::bridge`'s, so the push-side glue stays
-/// ignorant of radio; a `watch` is built for several observers and the queue and position
-/// channels already have one each.
+/// Subscribes to the player's view model and keeps the ring current, as its own subscriber so
+/// `ui::shell::bridge` stays ignorant of radio.
 pub fn install(
     weak: slint::Weak<AppWindow>,
     radio_ui: &Arc<RadioUi>,
@@ -93,8 +77,7 @@ pub fn install(
             if rx.changed().await.is_err() {
                 break;
             }
-            // Folded inside the borrow, so a tick that carries no station and a title that has
-            // not moved both cost nothing — this fires on every state change, not just a title.
+            // Folded inside the borrow: this fires on every state change, not just a title.
             let moved = {
                 let vm = rx.borrow_and_update();
                 vm.as_ref().and_then(|vm| vm.radio.as_ref()).is_some_and(|radio| {
@@ -112,10 +95,8 @@ pub fn install(
     Ok(())
 }
 
-/// Publish the ring into `Radio.history-rows` and re-answer whose station it describes.
-///
-/// The borrow is scoped so the flag's own read of the ring is a second acquisition rather than a
-/// re-entrant one — `parking_lot::Mutex` would deadlock on the latter.
+/// Publishes the ring into `Radio.history-rows` and re-answers whose station it describes. The
+/// borrow is scoped because the flag reads the ring too, and `parking_lot::Mutex` isn't re-entrant.
 pub fn apply(ui: &AppWindow, radio_ui: &RadioUi) {
     let rows: Vec<StationHistoryRow> = {
         let history = radio_ui.history.lock();

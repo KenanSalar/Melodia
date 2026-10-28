@@ -15,8 +15,7 @@ use melodia_core::entities::genre::GenreList;
 use melodia_core::entities::scan::{ExtractedMetadata, ReleaseTags, SortTags};
 use melodia_core::error::AppError;
 
-/// Compute a full BLAKE3 hash of a file (64-char hex string).
-/// Uses `update_reader` for optimized streaming I/O with SIMD-friendly buffering.
+/// Returns the BLAKE3 hash of the whole file, as 64 hex characters.
 pub fn compute_file_hash(path: &Path) -> Result<String, AppError> {
     let mut file = std::fs::File::open(path).map_err(|e| {
         AppError::metadata(format!("Failed to open {} for hashing", path.display()), e)
@@ -28,14 +27,11 @@ pub fn compute_file_hash(path: &Path) -> Result<String, AppError> {
     Ok(hasher.finalize().to_hex().to_string())
 }
 
-/// Format an already-fetched `Metadata`'s modification time as an RFC 3339
-/// string. Returns `None` if the mtime is unavailable or out of range.
+/// Formats `meta`'s mtime as the RFC 3339 string `date_modified` stores, or `None` where it is
+/// unavailable or out of range.
 ///
-/// This is the single source of truth for the mtime string format. Callers
-/// that compare against a stored `date_modified` (e.g. the incremental-scan
-/// filter `scanner::track_is_current`) must derive their value through here
-/// so the formats can't drift apart. Takes `&Metadata` so a caller that
-/// already `stat`-ed the file doesn't pay for a second syscall.
+/// The one spelling of that format, since `scanner::track_is_current` compares against the stored
+/// string byte for byte. Takes the `Metadata` so a caller that already `stat`ed doesn't again.
 pub fn date_modified_from_metadata(meta: &std::fs::Metadata) -> Option<String> {
     meta.modified()
         .ok()
@@ -46,26 +42,21 @@ pub fn date_modified_from_metadata(meta: &std::fs::Metadata) -> Option<String> {
         .map(|dt| dt.to_rfc3339())
 }
 
-/// Extract the file's modification time as an RFC 3339 string.
-/// Returns `None` if the file metadata is unavailable or the timestamp is out of range.
+/// [`date_modified_from_metadata`] for a caller holding no `Metadata`, at the cost of a `stat`.
 pub fn extract_date_modified(path: &Path) -> Option<String> {
     std::fs::metadata(path).ok().as_ref().and_then(date_modified_from_metadata)
 }
 
 /// The container `path` holds, named by its header alone.
 ///
-/// `FileType::from_buffer` is the strict half of lofty's sniffing, and the strictness is
-/// the point. `Probe::guess_file_type` falls through to scanning the first kilobyte for
-/// an MPEG frame sync, which arbitrary binary contains. A Matroska file comes back
-/// confidently labelled AAC, carrying a sample rate and duration read out of the middle
-/// of somebody's audio. A header matching nothing has to stay unidentified.
+/// `FileType::from_buffer` and never `Probe::guess_file_type`, whose fallback scans the first
+/// kilobyte for an MPEG frame sync that arbitrary binary contains: a Matroska file comes back as
+/// AAC, with a duration read out of the middle of somebody's audio. 36 bytes is lofty's longest
+/// check.
 ///
-/// Reads what lofty's own sniffer reads: its longest check reaches byte 36.
-///
-/// **A fallback, never an identifier.** `from_buffer` makes no attempt to search past a leading
-/// `ID3v2` tag, so it answers `None` for the great majority of MP3s, which open with one. That is
-/// harmless where [`read_tags`] asks it, once the extension has resolved to nothing. Reached for
-/// as a primary gate it silently refuses nearly every MP3 there is.
+/// **A fallback, never an identifier.** `from_buffer` doesn't search past a leading `ID3v2` tag,
+/// so it answers `None` for most MP3s. Harmless where [`read_tags`] asks it, once the extension
+/// resolved to nothing; as a primary gate it would refuse nearly every MP3 there is.
 fn sniff_file_type(path: &Path) -> Option<FileType> {
     const SNIFF_BYTES: usize = 36;
 
@@ -77,15 +68,13 @@ fn sniff_file_type(path: &Path) -> Option<FileType> {
 /// The channel count `path`'s Opus identification packet states, or `None` where the file is not
 /// laid out the way an encoder writes one.
 ///
-/// Derived rather than assumed, because an Ogg page header runs 27 bytes plus one per segment
-/// and a packet laced into two would walk past a fixed offset. Anything this cannot make sense
-/// of goes to lofty, which is where every other malformed header already goes.
+/// Located rather than read at a fixed offset, since an Ogg page header runs 27 bytes plus one per
+/// segment. Anything this can't parse goes to lofty with every other malformed header.
 fn opus_channel_count(path: &Path) -> Option<u8> {
     const PAGE_HEADER: usize = 27;
     const SEGMENT_COUNT_AT: usize = 26;
     const MAGIC: &[u8] = b"OpusHead";
-    /// The longest a segment table runs, plus the version byte and the channel count behind the
-    /// magic.
+    /// The longest segment table, then the magic, the version byte and the count.
     const HEAD_BYTES: usize = PAGE_HEADER + 255 + 10;
 
     let mut head = Vec::with_capacity(HEAD_BYTES);
@@ -97,32 +86,26 @@ fn opus_channel_count(path: &Path) -> Option<u8> {
     rest.get(1).copied()
 }
 
-/// How much of a file [`read_tags`] is being asked for.
+/// How much of a file [`read_tags`] parses.
 ///
-/// Both halves lofty can be talked out of are expensive and neither is optional by default:
-/// embedded pictures are the larger part of a parse, and `read_properties` costs a full frame
-/// scan on a headerless VBR MP3, which is the shape a duration has to be counted out of.
+/// Pictures are most of a parse, and properties cost a full frame scan on a headerless VBR MP3.
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub enum TagScope {
-    /// Tags, embedded pictures and the technical properties: what the scanner ingests.
+    /// Tags, pictures and properties: what the scanner ingests.
     Full,
-    /// Tags and properties. For a rescan, which already has the pictures.
+    /// Tags and properties, for a rescan that already has the pictures.
     NoArtwork,
-    /// Tags alone: no pictures, and no frame scan for duration or bitrate.
+    /// Tags alone, with no frame scan for duration or bitrate.
     TagsOnly,
 }
 
-/// Probe `path` for tags.
+/// Probes `path` for tags. Every lofty open in the tree comes through here, `tag_writer`'s
+/// included, since a file the scan identifies by its header and the editor refuses by its
+/// extension has tags that are visible and unsavable.
 ///
-/// lofty keys `Probe::open` on the extension, and its map of those is narrower than what
-/// its parsers cover: `.oga` resolves to nothing there, so an Ogg Vorbis file named that
-/// way reads as an unknown format. Asking the header covers it. Only asked when the
-/// extension resolved to nothing, so every file that parses today still parses the same
-/// way, and the extra open stays off the scan's hot path.
-///
-/// Every lofty open in the tree comes through here, `media::ingest::tag_writer` included: a file the
-/// scan identifies by its header and the tag editor refuses by its extension is a track whose
-/// tags are visible and unsavable.
+/// lofty keys `Probe::open` on an extension map narrower than its parsers (`.oga` maps to
+/// nothing), so a file whose extension resolves to nothing is asked by its header. Only then,
+/// which keeps the extra open off the scan's hot path.
 pub fn read_tags(path: &Path, scope: TagScope) -> Result<TaggedFile, AppError> {
     let parse_opts = lofty::config::ParseOptions::new()
         .read_cover_art(scope == TagScope::Full)
@@ -138,12 +121,10 @@ pub fn read_tags(path: &Path, scope: TagScope) -> Result<TaggedFile, AppError> {
         probe = probe.set_file_type(sniffed);
     }
 
-    // `lofty::ogg::opus::properties` guards a mapping family above 1 and a channel count too
-    // large for the family named, and then hands the count to `ChannelMask::from_opus_channels`,
-    // whose arms run 1 to 8 and whose `expect` takes everything else. `panic = "abort"` leaves
-    // nothing to catch, so one crafted or truncated file in a watched folder ends the process
-    // mid-scan. Checked here rather than in [`sniff_file_type`], which only runs once the
-    // extension has resolved to nothing and so never sees a file named `.opus`.
+    // lofty's Opus reader guards a count too large for its mapping family but not a zero, which
+    // reaches `ChannelMask::from_opus_channels`' `expect`. Under `panic = "abort"` one crafted file
+    // in a watched folder ends the process mid-scan. Not in `sniff_file_type`, which never sees a
+    // file named `.opus`.
     if matches!(probe.file_type(), Some(FileType::Opus)) && opus_channel_count(path) == Some(0) {
         return Err(AppError::metadata_msg(format!("{} states no audio channels", path.display())));
     }
@@ -153,33 +134,25 @@ pub fn read_tags(path: &Path, scope: TagScope) -> Result<TaggedFile, AppError> {
         .map_err(|e| AppError::metadata(format!("Failed to read tags from {}", path.display()), e))
 }
 
-/// Parse a `ReplayGain` gain string like "-6.50 dB" to f64. Rejects non-finite
-/// values (`"nan"`, `"inf"` parse successfully as floats in Rust) so a malformed
-/// tag can't poison the playback DSP — the value is baked into the audio source
-/// and a `NaN`/`inf` gain would render the track as silence.
+/// Parses a `ReplayGain` gain like `"-6.50 dB"`. Rejects `nan` and `inf`, which `f64` parses and
+/// which would play the track as silence.
 fn parse_replaygain_gain(s: &str) -> Option<f64> {
     s.trim().trim_end_matches("dB").trim().parse::<f64>().ok().filter(|v| v.is_finite())
 }
 
-/// Parse a `ReplayGain` peak string (linear scale, e.g. "0.988553") to f64.
-/// Rejects non-finite values for the same reason as the gain parser.
+/// Parses a linear `ReplayGain` peak like `"0.988553"`, finite only.
 fn parse_replaygain_peak(s: &str) -> Option<f64> {
     s.trim().parse::<f64>().ok().filter(|v| v.is_finite())
 }
 
-/// What an `R128_*_GAIN` value has to move by to mean the same thing as a `REPLAYGAIN_*` one.
-///
-/// EBU R128 normalises to −23 LUFS where `ReplayGain` 2.0 normalises to −18, so a gain written
-/// against the first plays this much under a library normalised against the second. RFC 7845
-/// §5.2 fixes the reference the tag is written against, which is what makes the distance a
-/// property of the format rather than of whichever tagger wrote it.
+/// What an `R128_*_GAIN` value moves by to mean what a `REPLAYGAIN_*` one does: R128 normalises to
+/// −23 LUFS and `ReplayGain` 2.0 to −18, and RFC 7845 §5.2 fixes the reference the tag is written
+/// against.
 const R128_TO_REPLAYGAIN_DB: f64 = 5.0;
 
-/// Parse an `R128_*_GAIN` value — Q7.8 fixed-point dB, e.g. "-1280" — restated against
-/// `ReplayGain`'s reference so it can share the columns and the DSP.
-///
-/// `i16` because RFC 7845 §5.2 states the field as one, which caps the answer at ±128 dB: no
-/// non-finite guard is owed, unlike the two above, and no absurd one can reach the DSP either.
+/// Parses an `R128_*_GAIN` value, Q7.8 fixed-point dB like `"-1280"`, restated against
+/// `ReplayGain`'s reference. RFC 7845 states it as an `i16`, which caps it at ±128 dB and leaves no
+/// non-finite value to guard.
 fn parse_r128_gain(s: &str) -> Option<f64> {
     let q7_8 = s.trim().parse::<i16>().ok()?;
     Some(f64::from(q7_8) / 256.0 + R128_TO_REPLAYGAIN_DB)
@@ -192,11 +165,10 @@ enum OnUnreadableTags {
     FilenameRow,
 }
 
-/// Read a file's tags, properties and artwork into a row.
+/// Reads a file's tags, properties and artwork into a row, failing if the tags won't parse.
 ///
-/// Fails if the tags won't parse. Callers that write a file and re-read it to refresh
-/// its row want exactly that: a row built from a parse that didn't happen would blank
-/// the track instead of reporting the failure.
+/// Strict for the tag write's re-read: a row built from a parse that didn't happen would blank the
+/// track instead of reporting the failure.
 pub fn extract_metadata(
     path: &Path,
     artwork_dir: &Path,
@@ -206,16 +178,12 @@ pub fn extract_metadata(
     extract(path, artwork_dir, cover_cache, skip_artwork, OnUnreadableTags::Fail)
 }
 
-/// As [`extract_metadata`], but a file whose tags won't parse still yields a row, titled
-/// from its filename, with external artwork and a decoder-probed duration if either is
-/// there to be had.
+/// As [`extract_metadata`], but a file whose tags won't parse still yields a row titled from its
+/// filename, with external artwork and a decoder-probed duration where there are any.
 ///
-/// For the scan paths, where the alternative is the file disappearing: a container with
-/// no tag reader (Matroska, CAF) and one with tags too broken to parse both arrive here,
-/// and dropping either leaves a file sitting in a watched folder that the library never
-/// mentions. The hash above the parse is what makes this safe to do blind. It reads the
-/// whole file, so anything that gets past it is readable and the parse failure is the
-/// format's, not the disk's.
+/// For the scan paths, where the alternative is a file in a watched folder the library never
+/// mentions: Matroska and CAF have no tag reader at all. Safe to do blind because the hash reads
+/// the whole file first, so a parse failure past it is the format's, not the disk's.
 pub fn extract_or_filename_row(
     path: &Path,
     artwork_dir: &Path,
@@ -232,9 +200,6 @@ fn extract(
     skip_artwork: bool,
     on_unreadable: OnUnreadableTags,
 ) -> Result<ExtractedMetadata, AppError> {
-    // Only allocate the fallback name if a tag title is actually missing — for
-    // a tagged music library this avoids ~1 String allocation per scanned file
-    // on the hot scan path.
     let file_name = || path.file_stem().and_then(|s| s.to_str()).unwrap_or("Unknown").to_owned();
 
     let (file_size, date_modified) = file_stat(path);
@@ -243,35 +208,23 @@ fn extract(
     let tagged_file = open_tags(path, scope, on_unreadable)?;
     let audio = AudioProperties::read(path, tagged_file.as_ref());
 
-    // Try to read tags - check all tag types and pick the first one with data
     let tag =
         tagged_file.as_ref().and_then(|tagged| tagged.primary_tag().or_else(|| tagged.first_tag()));
 
-    // Extract artwork: check external cover files first, then embedded tag
     let artwork_path = if skip_artwork {
         None
     } else {
         artwork::find_and_cache_artwork(path, tag, artwork_dir, cover_cache)
     };
 
-    // Trim + drop whitespace-only tags. Some ripped/transcoded files carry an `Album`/`Genre`
-    // field that's nothing but spaces; left as-is they bypass the `is_empty()` guard in
-    // `upsert_album`/`upsert_genre` and create ghost entity rows. `read_credit` below owes the
-    // same for the artist fields, where the ghost rows also cost a futile image fetch.
     let title = text(tag, ItemKey::TrackTitle).unwrap_or_else(file_name);
 
-    // Their own lines rather than slots in a tuple: an artist field is a pair of tags read
-    // together, and neither half alone says what the credit is.
     let artist = read_credit(tag, ItemKey::TrackArtist, ItemKey::TrackArtists);
     let album_artist = read_credit(tag, ItemKey::AlbumArtist, ItemKey::AlbumArtists);
 
-    // Both halves of the release date are kept: the year every index and smart-playlist rule is
-    // built on, and the month and day beside it.
     let released = release_timestamp(tag);
     let originally_released = read_timestamp(tag, ItemKey::OriginalReleaseDate);
 
-    // The conversion this fronts is argued in `rating_tags`, where every format's shape is in
-    // view; the role credits' per-format holes are argued in `role_tags` for the same reason.
     let rating = tag.and_then(rating_tags::stars_from_tag);
     let credits = tag.map(role_tags::read_roles).unwrap_or_default();
 
@@ -342,11 +295,6 @@ fn extract(
 }
 
 /// The file's size and its stored mtime string, off one `stat`.
-///
-/// Derived from the `Metadata` already in hand — `extract_date_modified` would
-/// `stat` the file a second time. This is exactly what
-/// `date_modified_from_metadata` exists for; `scanner::track_is_current` is the
-/// other caller that already holds one.
 fn file_stat(path: &Path) -> (i64, Option<String>) {
     let fs_meta = std::fs::metadata(path);
     let file_size = fs_meta.as_ref().map_or(0, |m| i64::try_from(m.len()).unwrap_or(i64::MAX));
@@ -390,8 +338,7 @@ impl AudioProperties {
         let properties = tagged_file.map(TaggedFile::properties);
         let duration_ms = match properties {
             Some(props) => i64::try_from(props.duration().as_millis()).unwrap_or(i64::MAX),
-            // Lofty reports duration off the parse that just failed, so the decoder is the
-            // only thing left that knows. Still `0` where it can't say either.
+            // The parse failed, so only the decoder can count it; `0` where it can't either.
             None => melodia_audio::player::source::file_decode::probe_duration(path)
                 .map_or(0, |d| i64::try_from(d.as_millis()).unwrap_or(i64::MAX)),
         };
@@ -410,10 +357,8 @@ impl AudioProperties {
     }
 }
 
-/// `ItemKey::Bpm` has NO `ID3v2` mapping — MP3 / WAV / AIFF keep BPM in `TBPM`, which lofty
-/// exposes as `IntegerBpm`. Reading only `Bpm` therefore misses it on every `ID3v2` file,
-/// including the ones `tag_writer`'s BPM write puts there. Prefer the decimal key (Vorbis
-/// `BPM`, MP4 freeform); fall back to the integer.
+/// `ItemKey::Bpm` has no `ID3v2` mapping: MP3, WAV and AIFF keep BPM in `TBPM`, which lofty reads
+/// as `IntegerBpm`, and so does `tag_writer`'s write. The decimal key wins where both exist.
 fn read_bpm(tag: Option<&Tag>) -> Option<f64> {
     text(tag, ItemKey::Bpm)
         .or_else(|| text(tag, ItemKey::IntegerBpm))
@@ -423,10 +368,8 @@ fn read_bpm(tag: Option<&Tag>) -> Option<f64> {
 
 /// A `ReplayGain` gain, or its `R128` counterpart restated against the same reference.
 ///
-/// Opus carries `R128_*_GAIN` where everything else carries `REPLAYGAIN_*`, and read as
-/// untagged it would play at unity against a normalised library. `REPLAYGAIN_*` wins where
-/// both are present: it is already written against the reference the columns mean, so it
-/// owes no conversion.
+/// Opus carries `R128_*_GAIN`, and read as untagged would play at unity in a normalised library.
+/// `REPLAYGAIN_*` wins where both exist, already meaning what the columns mean.
 fn replaygain_gain(tag: Option<&Tag>, replaygain: ItemKey, r128: ItemKey) -> Option<f64> {
     text(tag, replaygain)
         .as_deref()
@@ -440,11 +383,11 @@ fn replaygain_peak(tag: Option<&Tag>, key: ItemKey) -> Option<f64> {
     text(tag, key).as_deref().and_then(parse_replaygain_peak)
 }
 
-/// One tag value, trimmed, `None` when absent or blank.
+/// One tag value, trimmed, `None` when absent or blank. Takes `Option<&Tag>` so a file whose tags
+/// wouldn't parse reads as one with none.
 ///
-/// Takes `Option<&Tag>` so a file whose tags wouldn't parse reads as a file with none, which is
-/// what the filename-row fallback needs — every field below is one line rather than a slot in a
-/// tuple whose `else` arm has to spell the same count of `None`s.
+/// Blank is absent: a whitespace-only `Album` or `Genre` would get past `upsert_album`'s and
+/// `upsert_genre`'s `is_empty()` guards and make a ghost row.
 fn text(tag: Option<&Tag>, key: ItemKey) -> Option<String> {
     tag.and_then(|tag| tag.get_string(key)).map(|s| s.trim().to_owned()).filter(|s| !s.is_empty())
 }
@@ -454,14 +397,12 @@ fn number(tag: Option<&Tag>, key: ItemKey) -> Option<i32> {
     text(tag, key).and_then(|s| s.parse().ok())
 }
 
-/// Whether a flag tag is set. Anything but a `0` or a `false` counts, `TCMP` being written as `1`
-/// and `COMPILATION` as either.
+/// Whether a flag tag is set: anything but `0` or `false`, `TCMP` being written as `1` and
+/// `COMPILATION` as either.
 ///
-/// **Case-folded, and it is the false half that has to be.** `upsert_album`'s `is_compilation` is
-/// an `OR`, so nothing but an explicit Edit-Tags clear ever lowers the flag again — one file whose
-/// tagger spelled it `FALSE` would mark the whole release, and no rescan could repair it. A
-/// spelling this doesn't know still fails toward "set", which is the direction a *present* flag
-/// argues for.
+/// **The `false` has to be case-folded.** `upsert_album`'s `is_compilation` is an `OR`, so one file
+/// spelling it `FALSE` would mark the whole release and no rescan could clear it. An unknown
+/// spelling fails toward set, the direction a present flag argues for.
 fn flag(tag: Option<&Tag>, key: ItemKey) -> bool {
     text(tag, key).is_some_and(|value| value != "0" && !value.eq_ignore_ascii_case("false"))
 }
@@ -477,12 +418,10 @@ fn read_timestamp(tag: Option<&Tag>, key: ItemKey) -> Option<Timestamp> {
     text(tag, key).and_then(|value| value.parse().ok())
 }
 
-/// Where a release date can sit, in the order it is taken.
-///
-/// `TDRL`/`RELEASEDATE` is the explicit answer, `TDRC`/`DATE` the one Picard actually writes, and
-/// `YEAR` a Vorbis-only spelling that `Accessor::date` keeps an arm for and some rippers still
-/// emit alone. Shared with [`super::tag_writer`], which clears the whole list before writing so an
-/// edit cannot land behind a key read first.
+/// Where a release date can sit, in the order it is taken: `TDRL`/`RELEASEDATE` is the explicit
+/// answer, `TDRC`/`DATE` the one Picard writes, and `YEAR` a Vorbis spelling some rippers emit
+/// alone. [`super::tag_writer`] clears all three before writing, so an edit can't land behind a
+/// key read first.
 pub(super) const RELEASE_DATE_KEYS: [ItemKey; 3] =
     [ItemKey::ReleaseDate, ItemKey::RecordingDate, ItemKey::Year];
 
@@ -493,10 +432,8 @@ pub(super) fn release_timestamp(tag: Option<&Tag>) -> Option<Timestamp> {
 
 /// Every genre the file names.
 ///
-/// A repeated `GENRE` is the multi-value form and needs no splitting. A *single* value is split on
-/// `;`, and on nothing else: that is the separator Picard flattens a list to when the frame cannot
-/// hold one, which is every ID3v2.3 file. Not `/` — `ID3v1`'s own genre list contains `Pop/Funk`, so
-/// a slash is genuinely ambiguous where a semicolon is not — and not `,` or `&`, which live inside
+/// A repeated `GENRE` is already a list. A single value splits on `;` alone, the separator Picard
+/// flattens a list to in ID3v2.3: `ID3v1`'s own list holds `Pop/Funk`, and `,` and `&` live inside
 /// names like `Drum & Bass`.
 fn read_genres(tag: Option<&Tag>) -> GenreList {
     let Some(tag) = tag else {
@@ -534,12 +471,10 @@ fn read_release_tags(tag: Option<&Tag>) -> ReleaseTags {
     }
 }
 
-/// The `MusicBrainz` ids listed in parallel with a credit's names.
+/// The `MusicBrainz` ids listed in parallel with a credit's names, **all of them or none**.
 ///
-/// **All of them or none.** Picard writes one id per credited artist in the same order, so the
-/// pairing is positional and a file whose counts disagree has no alignment left to trust — and a
-/// misaligned id stamps the wrong `MBID` onto a real artist, which nothing downstream can detect
-/// or undo. A solo credit is the common case and still passes.
+/// The pairing is positional, so counts that disagree leave no alignment to trust, and a misaligned
+/// id stamps the wrong `MBID` onto a real artist where nothing downstream can catch it.
 fn read_credit_mbids(tag: Option<&Tag>, key: ItemKey, credited: usize) -> Vec<String> {
     let Some(tag) = tag else {
         return Vec::new();
@@ -548,11 +483,8 @@ fn read_credit_mbids(tag: Option<&Tag>, key: ItemKey, credited: usize) -> Vec<St
     if ids.len() == credited { ids } else { Vec::new() }
 }
 
-/// A file's two artist credits, over a tag already in hand.
-///
-/// The file is the authority, which is what a database seeded from `artist_id` alone cannot be.
-/// Takes the tag rather than a path because its one caller — the Edit-Tags dialog — is opening the
-/// file for the lyrics tag anyway.
+/// A file's two artist credits, off the tag the Edit-Tags dialog already opened for its lyrics.
+/// The file is the authority, which a database seeded from `artist_id` alone cannot be.
 pub fn credits_from_tag(tag: Option<&Tag>) -> (ArtistCredit, ArtistCredit) {
     (
         read_credit(tag, ItemKey::TrackArtist, ItemKey::TrackArtists),
@@ -560,16 +492,12 @@ pub fn credits_from_tag(tag: Option<&Tag>) -> (ArtistCredit, ArtistCredit) {
     )
 }
 
-/// What one artist field reads as: the credit behind it, and the string that renders.
+/// What one artist field reads as: the credit, and the string that renders it.
 ///
-/// `ARTISTS` wins where it exists. Failing that, a multi-value `ARTIST` — a NUL-separated `TPE1`,
-/// a repeated Vorbis field — is the same list of names with nothing said about how they join. A
-/// *single* value is one artist whatever delimiters it contains, which is what the list tag
-/// exists for: `AC/DC` and `Earth, Wind & Fire` are one name each, and the exceptions list that
-/// splitting on punctuation would need is not one anybody can finish.
-///
-/// The string comes back rendered from the credit rather than copied off the tag, so the column
-/// and the join rows written beside it cannot disagree.
+/// `ARTISTS` wins, then a multi-value `ARTIST` (a NUL-separated `TPE1`, a repeated Vorbis field).
+/// A *single* value is one artist whatever it contains: `AC/DC` and `Earth, Wind & Fire` are one
+/// name each, and no exceptions list for splitting on punctuation could be finished. The string is
+/// rendered from the credit, so the column and its join rows can't disagree.
 fn read_credit(tag: Option<&Tag>, printed_key: ItemKey, list_key: ItemKey) -> ArtistCredit {
     let Some(tag) = tag else {
         return ArtistCredit::default();
@@ -582,16 +510,11 @@ fn read_credit(tag: Option<&Tag>, printed_key: ItemKey, list_key: ItemKey) -> Ar
     ArtistCredit::from_tags(&credit_line, &names)
 }
 
-/// A list tag that arrived as one `"; "`-joined string, split back into the names it holds.
+/// A list tag that arrived as one `"; "`-joined string, split back into its names.
 ///
-/// ID3v2.3 has no multi-value frame, so Picard writes `TXXX:Artists` as `"Alice; Bob"` — and that
-/// is most MP3s in the wild. Left whole it reads as one artist named that, which is the exact bug
-/// the `ARTISTS` tag exists to prevent.
-///
-/// Narrower than reversing [`read_credit`]'s never-split rule, and deliberately: this runs on the
-/// **list** key only, where a single value can only ever be a flattened list, never on the printed
-/// key where `AC/DC` and `Earth, Wind & Fire` live. The separator is the one Picard documents for
-/// the purpose, with the space required — a bare `;` inside a single name stays inside it.
+/// ID3v2.3 has no multi-value frame, so Picard writes `TXXX:Artists` as `"Alice; Bob"`. Only the
+/// **list** key comes here, where a single value can only be a flattened list, and the space is
+/// required so a bare `;` inside a name stays there.
 fn unflattened(values: Vec<String>) -> Vec<String> {
     let [single] = values.as_slice() else {
         return values;
@@ -602,12 +525,9 @@ fn unflattened(values: Vec<String>) -> Vec<String> {
     single.split("; ").map(str::trim).filter(|s| !s.is_empty()).map(str::to_owned).collect()
 }
 
-/// Every value under `key`, trimmed, blanks dropped. The one multi-value read in the tree —
-/// [`super::role_tags`] unpacks its ten keys through it too.
-///
-/// The blanks are not hypothetical: a whitespace-only artist field is common enough in ripped
-/// libraries to have its own guard downstream, and a NUL-terminated UTF-8 frame leaves an empty
-/// tail value behind it.
+/// Every value under `key`, trimmed, blanks dropped; [`super::role_tags`] reads through it too.
+/// Ripped libraries carry whitespace-only artist fields, and a NUL-terminated UTF-8 frame leaves an
+/// empty tail value.
 pub(super) fn trimmed_values(tag: &Tag, key: ItemKey) -> Vec<String> {
     tag.get_strings(key).map(str::trim).filter(|s| !s.is_empty()).map(str::to_owned).collect()
 }

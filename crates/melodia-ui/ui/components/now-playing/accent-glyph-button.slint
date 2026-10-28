@@ -1,13 +1,8 @@
 import { Player } from "../../globals/player.slint";
 import { IconButton } from "../icon-button.slint";
 
-// `AccentDiscButton` without the disc — the Now-Playing header's glyph family: the favourite
-// heart, a station's vote, and the two view toggles beside them.
-//
-// No chrome in any state, hover included, so `hover-bg` is overridden too and hover reads through
-// the glyph's own colour. The accent is the visualizer's, so the row sits with the stars and the
-// chips against the blur; a toggle carries its state as outlined-vs-filled, which leaves the
-// untoggled variant needing only to be quieter.
+// `AccentDiscButton` without the disc: the Now-Playing header's glyphs. No chrome in any state, so
+// hover reads through the glyph's colour; a toggle carries its state as outlined-vs-filled.
 export component AccentGlyphButton inherits IconButton {
     diameter: 36px;
     icon-size: 22px;
@@ -16,9 +11,7 @@ export component AccentGlyphButton inherits IconButton {
     hover-fg: Player.np-accent-bright;
     active-fg: Player.np-accent-bright;
     on-backdrop: true;
-    // The active and hover colours above are one brush, so without this a lit glyph is the only
-    // control in the row that answers a pointer with nothing. It rests a step under instead and
-    // comes up to full, which is the same lift the untoggled variant already makes from `dim`,
-    // and the same one the star row beside it makes.
+    // Active and hover are one brush, so a lit glyph rests a step under and comes up to full,
+    // the lift its neighbours make.
     hover-lift: true;
 }

@@ -10,66 +10,48 @@ import { ContextMenuMetrics, ContextMenuPopup, FavoriteMenuItem, MenuItem,
 import { RatingMenuRow } from "../rating-menu-row.slint";
 import { TrackCopyFields } from "../track-copy-items.slint";
 
-// The right-click menu every track row raises, and the only place its entries are mounted.
+// The right-click menu every track row raises, and the only place its entries are mounted. The
+// host says where through `show-at`, which stores it: an open popup follows its `x`/`y`, so an
+// anchor bound to the pointer would drag the menu along.
 //
-// **The host says where; this keeps the menu.** A row hands over where the right-click landed
-// through `show-at`, which stores it: an open popup follows its `x`/`y`, so an anchor bound to the
-// row's pointer would drag the menu after it. Four hosts: `TrackListRowItem`, the queue panel's
-// `QueueRowItem`, Up Next's row and the now-playing bar's track card, which is why the entries
-// live here rather than inline in the first.
-//
-// **The root is zero-size on purpose.** It mounts as a free sibling of the row's TouchArea, so the
-// popup's coordinate frame is the row chrome's, which is the frame `touch.mouse-x` already reports
-// in. Sized, it would claim layout space in a row whose height the virtualizer measures.
-//
-// `OverflowMenu`'s constraint binds here too: the enclosing component cannot read a property
-// declared inside a `PopupWindow`, so anything a host reads back is declared on this root.
+// Anything a host reads back sits on this root, a host being unable to read into a `PopupWindow`.
 export component TrackContextMenu inherits Rectangle {
     in property <int> row-id;
     in property <bool> row-is-favorite;
     in property <int> row-rating;
     in property <bool> row-selected;
-    // FK targets; 0 means no linkage and hides the entry.
+    // 0 means no linkage and hides the entry.
     in property <int> album-id;
     in property <int> artist-id;
     in property <int> genre-id;
-    // Suppresses the entry naming the surface you are already looking at, and picks the remove
-    // arm. One of "tracks", "album-detail", "artist-detail", "genre-detail", "playlist-detail",
+    // Suppresses the entry naming the surface you're on and picks the remove arm. One of
+    // "tracks", "album-detail", "artist-detail", "genre-detail", "playlist-detail",
     // "smart-playlist-detail", "browse", "favorites", "recently_played", "search", "queue",
-    // "up-next", "now-playing"; empty means no suppression.
+    // "up-next", "now-playing"; empty suppresses nothing.
     in property <string> view-context;
-    // Set only under `view-context == "playlist-detail"`; the Add-to-Playlist sub-list filters it
-    // out so "add to the playlist you're looking at" never appears. 0 = none.
+    // Playlist Detail's own, kept out of the Add-to-Playlist list. 0 = none.
     in property <int> current-playlist-id: 0;
-    // The batch payload in multi mode. The host owns what it contains — a track list passes its
-    // `selected-ids` verbatim, the queue passes a deduped copy.
+    // The host's: a track list passes its `selected-ids`, the queue a deduped copy.
     in property <[int]> effective-selection;
-    // What the labels count, and all `multi-active` and Clear selection know of the set.
-    // Deliberately not `effective-selection.length`: the queue selects rows and acts on ids, and
-    // one track sitting in it twice makes those two different numbers.
+    // Not `effective-selection.length`: the queue selects rows and acts on ids, and a track queued
+    // twice makes those two numbers differ.
     in property <int> selection-count;
 
-    // Read by the host to route a batch action, so it sits on the root rather than in the popup.
     out property <bool> multi-active: Selection.acts-on-set(root.row-selected, root.selection-count);
     out property <bool> is-open: pop.is-open;
 
     property <int> multi-count: root.selection-count;
-    // The bar's card is the track already playing, out of a queue already holding it, and it has
-    // no set to select from.
+    // The playing track, out of a queue holding it, with no set to select from.
     property <bool> on-now-playing: root.view-context == "now-playing";
-    // Up Next is the queue past the playing track, and picks nothing.
+    // Up Next picks nothing.
     property <bool> on-up-next: root.view-context == "up-next";
     property <bool> on-queue: root.view-context == "queue" || root.on-up-next;
     property <bool> show-play: !root.multi-active && !root.on-now-playing;
-    // The queue *is* the target both of these name, so it takes neither, and the playing track is
-    // in it. The separator under them is on a wider gate: single mode still has Play above it, and
-    // only when that is gone too would it land first in the menu.
+    // The queue is what both name.
     property <bool> show-queue-actions: !root.on-queue && !root.on-now-playing;
     property <bool> show-selection-actions: !root.on-now-playing && !root.on-up-next;
 
-    // One source of truth for the "Go to …" entries, read by each entry's own `if` and by the
-    // preceding separator's `any-cross-tab-visible` — so the divider tracks *any* entry being
-    // visible rather than just the album one.
+    // Shared with the separator above them, so it tracks any entry rather than the album's.
     property <bool> show-go-to-album:
         !root.multi-active && root.album-id != 0 && root.view-context != "album-detail";
     property <bool> show-go-to-artist:
@@ -80,7 +62,6 @@ export component TrackContextMenu inherits Rectangle {
         show-go-to-album || show-go-to-artist || show-go-to-genre;
     property <bool> show-remove: root.view-context == "playlist-detail" || root.on-queue;
 
-    // The Copy flyout. Collapsed by every `show-at()`, so the menu always opens on its own column.
     property <bool> copy-open;
     property <length> at-x;
     property <length> at-y;
@@ -92,48 +73,38 @@ export component TrackContextMenu inherits Rectangle {
         pop.show();
     }
 
-    // **Every entry but the rating row closes the menu itself, after it has acted.** The popup's own
-    // policy can't: closing on any click inside would take the click that opens the Copy flyout
-    // with it. After, because `pop.effective-ids` goes with the popup. A star leaves the menu up.
+    // Called by every entry but the rating row, after it acts, `effective-ids` going with the
+    // popup. A star leaves the menu up so a pick can be corrected.
     function dismiss() {
         root.copy-open = false;
         pop.close();
     }
 
-    // Single-target by nature: a track list plays the row against its own view, the queue skips to
-    // it. Hidden in multi mode either way, so the host needs no arguments back.
+    // Hidden over a selection, so the host needs nothing back.
     callback play-single();
-    // Batch-shaped: single mode emits a 1-element array. One signature for both spares the Rust
-    // handlers a single/batch dispatch branch.
+    // Batch-shaped, a single row being a one-element array.
     callback play-next([int]);
     callback add-to-queue([int]);
     callback toggle-favorite([int] /*track_ids*/, bool /*new_state*/);
     callback rate([int] /*track_ids*/, int /*rating*/);
-    // Playlist Detail removes from the open playlist, the queue panel and Up Next from the queue.
     callback request-remove([int] /*track_ids*/);
-    // Take every displayed row, and drop the whole set. No payload either way: the host owns
-    // the set, and the queue's is a different shape from a track list's.
+    // No payload: the host owns the set, the queue's being a different shape.
     callback select-all();
     callback clear-selection();
 
-    // **Pinned at the origin, and the zero size is why.** An element with no `x`/`y` in a
-    // non-layout parent is *centred* — Slint generates `(parent.width - self.width) / 2` — so at
-    // zero width the wrapper lands at half the row and carries the popup with it, `at-x` being
-    // measured from here. Set inside the component rather than at each mount: the frame the host
-    // reports `touch.mouse-x` in is the row chrome's, and a third mount would have no way to know
-    // that the offset is its problem.
+    // Zero-size, so it claims nothing in a row the virtualizer measures, and pinned here because a
+    // zero-size wrapper is otherwise centred. The host reports in the row chrome's frame, and no
+    // mount would know the offset is its problem.
     x: 0px;
     y: 0px;
     width: 0px;
     height: 0px;
 
-    // One PopupWindow per row instance — the ListView only instantiates visible rows, so this
-    // stays a screenful of popups whatever the library size. Add-to-Playlist hands off to a picker
-    // dialog rather than scrolling inline.
+    // One per instantiated row, so a screenful whatever the library size.
     pop := ContextMenuPopup {
         anchor-x: root.at-x;
         anchor-y: root.at-y;
-        // Off the root's position, which sits outside the popup and so still means the window.
+        // Off the root, which sits outside the popup and so still means the window.
         anchor-window-x: root.absolute-position.x + root.at-x;
         anchor-window-y: root.absolute-position.y + root.at-y;
         copy-open: root.copy-open;
@@ -145,19 +116,15 @@ export component TrackContextMenu inherits Rectangle {
             root.dismiss();
         }
 
-        // Computed once so every `clicked` handler reads the same list.
         property <[int]> effective-ids: Selection.effective-ids(
             root.row-id, root.row-selected, root.selection-count, root.effective-selection);
-        // Gates the Add-to-Playlist entry. On Playlist Detail the current playlist is left out,
-        // adding to itself being a no-op.
         property <int> visible-playlist-count:
             root.current-playlist-id > 0
                 ? max(0, Playlists.count - 1)
                 : Playlists.count;
 
-        // Single-row mode keeps "Play", matching double-click. Over a selection the verb
-        // is ambiguous — queue it, or replace the queue with it — so it's dropped; Play
-        // Next and Add to Queue read the same either way and stay.
+        // Over a selection "Play" is ambiguous (queue it, or replace the queue with it), so only
+        // a single row keeps it.
         if root.show-play: MenuItem {
             label: @tr("Play");
             icon: "play_arrow";
@@ -190,21 +157,15 @@ export component TrackContextMenu inherits Rectangle {
         }
         if root.show-queue-actions || root.show-play: MenuSeparator {}
 
-        // Unconditional — creating a playlist is useful with none.
         MenuItem {
             label: @tr("New Playlist…");
             icon: "add";
             clicked => {
-                // Stash the ids and open the Create dialog, no Rust round-trip. The
-                // dispatcher's create-playlist branch reads `pending-track-ids` once the
-                // row exists and adds the tracks in the same call.
                 Dialog.open-create-playlist(pop.effective-ids);
                 root.dismiss();
             }
         }
-        // Hidden when there is nothing to add to. Only the heading is ours — the same
-        // ternary as the label, being the same sentence — the rest of the chrome
-        // belonging to the opener, which the card menu shares.
+        // Only the heading is ours, the rest of the chrome being the opener's.
         if pop.visible-playlist-count > 0: MenuItem {
             label: root.multi-active
                 // Translators: `{}` is how many items are selected
@@ -235,8 +196,8 @@ export component TrackContextMenu inherits Rectangle {
                 root.dismiss();
             }
         }
-        // A Browse row outside the library has nothing to rate; a selection still does, its host
-        // dropping the ids it can't.
+        // A Browse row outside the library has nothing to rate; a selection's host drops the ids
+        // it can't.
         RatingMenuRow {
             row-height: ContextMenuMetrics.item-h;
             icon-size: 16px;
@@ -249,10 +210,7 @@ export component TrackContextMenu inherits Rectangle {
             rated(n) => { root.rate(pop.effective-ids, n); }
         }
 
-        // Opens the tag editor over the right-clicked row or the whole selection — batch
-        // editing is the point. **Don't set `Dialog.open` here**: `request-edit` fetches
-        // the rows, fills `TagEditor` and flips it on a fresh tick, the recursion-guard
-        // hop `SmartEditor.request-edit` also takes.
+        // Don't set `Dialog.open` here: the opener raises it once Rust has filled `TagEditor`.
         MenuItem {
             label: root.multi-active
                 // Translators: `{}` is how many items are selected
@@ -270,8 +228,7 @@ export component TrackContextMenu inherits Rectangle {
             }
         }
 
-        // Opens the flyout and closes nothing. Not behind an `if`, the flyout lining up
-        // against its `y`.
+        // Not behind an `if`, the flyout lining up against its `y`.
         MenuSeparator {}
         copy-row := MenuItem {
             label: @tr("Copy");
@@ -281,8 +238,6 @@ export component TrackContextMenu inherits Rectangle {
             submenu-left: pop.flyout-left;
             clicked => { root.copy-open = !root.copy-open; }
         }
-        // Single-target by nature, so hidden over a selection like the cross-tab entries
-        // below. Straight to `Nav`.
         if !root.multi-active: MenuItem {
             label: @tr("Open Containing Folder");
             icon: "folder_open";
@@ -292,10 +247,6 @@ export component TrackContextMenu inherits Rectangle {
             }
         }
 
-        // Hidden over a selection, which may span several albums, and on the detail view
-        // already showing the target. The separator tracks `any-cross-tab-visible` rather
-        // than the album entry alone, so it neither appears by itself nor vanishes when a
-        // row is merely missing its album linkage. Straight to `Nav`, like the folder entry.
         if root.any-cross-tab-visible: MenuSeparator {}
         if root.show-go-to-album: MenuItem {
             label: @tr("Go to Album");
@@ -322,14 +273,9 @@ export component TrackContextMenu inherits Rectangle {
             }
         }
 
-        // The selection group. With no clear button on any list, Clear is the only way
-        // out of a large set other than Escape, so it is offered wherever the host holds
-        // a set, this row in it or not: on a long list the picks can sit far out of
-        // view, and gating on the row sent the user scrolling back to find one. The
-        // entries above still act on an unselected row alone. Select All is ungated, an
-        // offer rather than a statement about the row. Both go through the host rather
-        // than a global: nine list globals keep their own set and the queue a tenth, and
-        // this component is deliberately told none of them.
+        // Clear is offered wherever the host holds a set, this row in it or not: the picks can
+        // sit far out of view on a long list. Both go through the host, ten globals keeping their
+        // own sets.
         if root.show-selection-actions: MenuSeparator {}
         if root.show-selection-actions: MenuItem {
             label: @tr("Select all");
@@ -348,9 +294,7 @@ export component TrackContextMenu inherits Rectangle {
             }
         }
 
-        // Removes the row, or the whole selection, from whichever list the host is. Two
-        // arms rather than a host-supplied label: `@tr` only resolves literals at codegen,
-        // so a string passed in would ship untranslated.
+        // Two arms rather than a host-supplied label, which would ship untranslated.
         if root.show-remove: MenuSeparator {}
         if root.view-context == "playlist-detail": MenuItem {
             label: root.multi-active

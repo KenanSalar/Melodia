@@ -1,18 +1,9 @@
-//! Publishes the hero band's solved colour set into the `HeroBackdrop` global.
+//! Publishes the hero band's solved colour set into the `HeroBackdrop` global, all at once so a
+//! hero and the Now Playing view answer alike; [`crate::ui::backdrop`] argues the colours.
 //!
-//! The thin half of [`crate::ui::backdrop`]: that module argues the colours, this one writes the
-//! answer. Six views share one global, so every hero opens by calling exactly one of these, and the
-//! whole set goes out at once — scrim, floor, the three washes, chrome and both text tiers — so a
-//! hero and the Now Playing view answer identically.
-//!
-//! **Every hero has washes**, the artwork's own wherever there is artwork: a genre substitutes its
-//! name-hashed pair through [`apply_gradient`], anything else coverless a seated accent pair inside
-//! [`aurora::tints`]. The set is a snapshot of the palette live when the hero opened, which is what
-//! [`republish_for_palette`] refreshes.
-//!
-//! **A band with no hero on it has none**, and that is [`reset`]'s whole difference from an art-less
-//! [`apply`]: it publishes [`aurora::idle_tints`] over [`backdrop::idle_backdrop`]'s floor, so a page
-//! waiting on its collage paints the surface rather than a colour it has not earned yet.
+//! Every hero has washes: the artwork's own, a genre's name-hashed pair ([`apply_gradient`]), or a
+//! seated accent pair inside [`aurora::tints`]. A band with no hero has none, which is [`reset`]'s
+//! whole difference from an art-less [`apply`].
 
 use std::cell::Cell;
 
@@ -24,29 +15,21 @@ use crate::ui::backdrop::{self, BackdropColors, BackdropSample};
 use melodia_ui::{AppWindow, HeroBackdrop};
 
 thread_local! {
-    /// What the set now in `HeroBackdrop` was derived from, so a palette change can re-solve it.
-    /// `None` is the idle set — before the first hero opens, and after every teardown.
-    ///
-    /// A thread-local because it shadows a global that is itself process-wide, and both are the
-    /// UI thread's alone.
+    /// What the published set came from, so a palette change can re-solve it; `None` is the idle
+    /// set.
     static PUBLISHED_HERO: Cell<Option<PublishedHero>> = const { Cell::new(None) };
 }
 
-/// The two inputs a hero can be published from, kept so [`republish_for_palette`] can re-run
-/// whichever one it was. **A genre belongs here too now**: its tiers were theme-independent while
-/// it was permanently on the blur, and the aurora arm hands it `Theme.base` and a neutral ink.
+/// What a hero was published from, for [`republish_for_palette`] to re-run.
 #[derive(Clone, Copy)]
 enum PublishedHero {
     Artwork(BackdropSample),
     Genre(GenreStops),
 }
 
-/// Genre Detail's two name-hashed pairs, from [`crate::ui::genres::genre_accent`].
-///
-/// Two, because the arms want different ones: the blur paints `floor` verbatim — the dimmed pair,
-/// picked so the scrim it solves leaves the foreground legible — where the aurora washes `wash`, the
-/// saturated pair the genre's own square and grid card paint, having no scrim for the dimming to
-/// survive. A struct rather than four arguments, two same-typed pairs being swappable in silence.
+/// Genre Detail's two name-hashed pairs ([`crate::ui::genres::genre_accent`]). The blur paints the
+/// dimmed `floor` its scrim leaves legible; the aurora washes the saturated `wash` the genre's
+/// square and card paint. A struct, two same-typed pairs being swappable in silence.
 #[derive(Clone, Copy)]
 pub(crate) struct GenreStops {
     pub floor: (u32, u32),
@@ -56,18 +39,14 @@ pub(crate) struct GenreStops {
 /// Which stops the gradient floor takes.
 #[derive(Clone, Copy)]
 enum Floor {
-    /// The tier set's own — every hero but one.
+    /// The tier set's own, every hero but one.
     FromTiers,
-    /// Genre Detail's dimmed pair, which only the blur arm ever paints: the aurora's floor is flat
-    /// `Theme.base` like every other hero's, the genre's colours reaching it through the washes.
+    /// Genre Detail's dimmed pair, painted on the blur arm only.
     Own(u32, u32),
 }
 
-/// Solve and publish from a cover's measurement. An empty sample — no artwork, or a failed decode —
-/// takes the same path as every cover; what it falls back to on each arm is on
-/// [`BackdropSample::solve`] and [`aurora::tints`].
+/// Solves and publishes from a cover's measurement, an empty sample taking the same path.
 pub(crate) fn apply(ui: &AppWindow, sample: BackdropSample) {
-    // One read for both halves: the tier set, and the seed the washes fall back to.
     let theme = backdrop::theme_tokens(ui);
     let colors = sample.solve(&theme, backdrop::kind(ui));
     let tints = aurora::tints(sample.seeds, &theme);
@@ -75,35 +54,24 @@ pub(crate) fn apply(ui: &AppWindow, sample: BackdropSample) {
     write(ui, &colors, &tints, Floor::FromTiers);
 }
 
-/// Re-solve the open hero against a palette that has just changed.
+/// Re-solves the open hero against a palette that just changed; otherwise a new accent would wait
+/// for the next drill, and the open hero's ink would keep the old theme's tones.
 ///
-/// A hero is written at open time and holds until the next one, so without this a new accent would
-/// reach the band only on the next drill and the ink over an open hero would keep the *old* theme's
-/// tones against the base the new one paints.
-///
-/// **The idle arm is what seeds the globals at boot.** `appearance::install` applies the persisted
-/// palette through `apply_palette`, which lands here before any hero has published — so a restored
-/// curated page comes up on the theme's own base rather than `hero-backdrop.slint`'s placeholders.
+/// The idle arm seeds the globals at boot, `appearance::install` landing here before any hero.
 pub(crate) fn republish_for_palette(ui: &AppWindow) {
     match PUBLISHED_HERO.get() {
         Some(PublishedHero::Artwork(sample)) => apply(ui, sample),
-        // Idempotent on the blur, whose stops are the genre's own — no second gate for an arm
-        // that re-solves to the colours it already published.
+        // Idempotent on the blur, whose stops are the genre's own.
         Some(PublishedHero::Genre(stops)) => apply_gradient(ui, stops),
         None => reset(ui),
     }
 }
 
-/// Solve and publish for the one hero with colours of its own rather than a cover — Genre Detail,
-/// whose name-hashed stops come from [`crate::ui::genres::genre_accent`].
+/// Solves and publishes Genre Detail, whose colours are its own stops rather than a cover's.
 ///
-/// The washes are the saturated pair whichever arm runs — two opaque colours a quantizer could have
-/// answered with, so [`aurora::tints`] fans a third off them and needs no genre case. The arms
-/// disagree only about the floor and the tiers over it:
-///
-/// - **Blur** — the dimmed pair verbatim as the floor, `stops.floor.0` doubling as the hue seed so
-///   the chrome tier stays recognisably that genre's rather than reverting to the theme accent.
-/// - **Aurora** — the theme's own tiers over a flat base, exactly as a cover gets.
+/// The washes are the saturated pair on both arms, [`aurora::tints`] fanning a third off them. The
+/// blur takes the dimmed pair as its floor and `floor.0` as its hue, so the chrome stays the
+/// genre's; the aurora gets the theme's tiers, exactly as a cover does.
 pub(crate) fn apply_gradient(ui: &AppWindow, stops: GenreStops) {
     let theme = backdrop::theme_tokens(ui);
     let tints = aurora::tints([Some(stops.wash.0), Some(stops.wash.1), None, None], &theme);
@@ -121,12 +89,8 @@ pub(crate) fn apply_gradient(ui: &AppWindow, stops: GenreStops) {
     }
 }
 
-/// Publish the idle set — no hero is painting, so the band takes the surface itself: **no washes at
-/// all**, over [`backdrop::idle_backdrop`]'s floor.
-///
-/// Deliberately not [`apply`] with an empty sample. That is a hero that *has* opened with nothing to
-/// quantize, and both its arms reach for the accent — a colour the next surface has not earned. A
-/// curated banner wore it for the length of its collage compose.
+/// Publishes the idle set: no washes, over [`backdrop::idle_backdrop`]'s floor. Not [`apply`] with
+/// an empty sample, which seats an accent the next surface hasn't earned.
 pub(crate) fn reset(ui: &AppWindow) {
     let theme = backdrop::theme_tokens(ui);
     let colors = backdrop::idle_backdrop(&theme, backdrop::kind(ui));

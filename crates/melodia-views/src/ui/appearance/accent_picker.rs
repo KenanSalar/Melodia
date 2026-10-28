@@ -20,10 +20,7 @@ use super::{
     PersistedAccent, persist, read_last_static_accent, registry_get, usize_from, variant_id_at,
 };
 
-/// True when the active theme is Material 3 *and* the coordinator has
-/// produced a dynamic palette + accent for the current artwork. Drives
-/// `Settings.material-you-active` and `accent_id` resolution inside
-/// [`super::apply_and_seed`].
+/// Whether the theme is Material 3 and the coordinator has a palette for the current artwork.
 pub(super) fn material_you_active(theme_id: &str, system: &SystemColorState) -> bool {
     theme_id == MATERIAL3.id && system.material_you.is_some()
 }
@@ -59,12 +56,8 @@ pub(super) fn seat_accent(g: &Settings<'_>, theme: &ThemeDef, accent_id: &str) {
     g.set_accent_idx(slot_index(accent_slot(theme, accent_id)));
 }
 
-/// Resolve the accent id we actually want to render and paint with.
-/// When the persisted `accent_id` is `MATERIAL_YOU_ACCENT_ID` but MY
-/// isn't currently active (theme isn't material3, style is None, or no
-/// dynamic palette has been generated yet because there's no artwork),
-/// fall back to the user's last static accent — and finally to the
-/// theme's hard default if no static was ever picked.
+/// The accent to paint: a Material You accent with Material You inactive falls back to the last
+/// one picked by hand, then to the theme's default.
 pub(super) fn effective_accent_id<'a>(
     theme: &'a ThemeDef,
     accent_id: &'a str,
@@ -102,9 +95,6 @@ pub(super) fn wire_accent_changed(
         let snapshot = os_state.read().clone();
         seat_accent(&g, theme, accent_id);
         super::apply_palette(&ui, theme.id, variant_id, accent_id, &snapshot);
-        // Update the synchronous accent shadow before the async write
-        // — a sibling `wire_variant_changed` that fires before the disk
-        // commit will then read the new accent (not the previous one).
         accent_id.clone_into(&mut persisted_accent.lock());
         // No kick: the coordinator's snapshot doesn't include the accent.
         persist(&s, theme.id, variant_id, accent_id);

@@ -10,37 +10,25 @@ import { CompositeScrollbars } from "../../components/composite-scrollbars.slint
 import { OverlayScrollbar } from "../../components/overlay-scrollbar.slint";
 import { CollapsibleSectionHeader } from "../../components/collapsible-section-header.slint";
 
-// `AlbumDetailBody` with an optional Albums sub-section above the list, whose card click
-// hands off to the Albums tab, and the artist column locked off, every row being the same
-// artist. The banner is `LibraryTabBand`'s and the action pills `tab-pills.slint`'s.
-//
-// **Its insets are per child**, the Albums sub-section's own and the list's: `below-hero` is the
-// region `CompositeScrollbars` measures and the `CompositeScroll` hover sentinel covers, so it
-// has to run full-bleed to the panel edge.
+// `AlbumDetailBody` with an optional Albums strip above the list, whose card click hands off to
+// the Albums tab. Insets are per child: `below-hero` is the region `CompositeScrollbars` measures
+// and the hover sentinel covers, so it runs full-bleed.
 export component ArtistDetailBody inherits Rectangle {
-    // Smaller than the grid view's cards, so several albums fit at once without
-    // dominating the page vertically.
+    // Smaller than the grid's, so several albums fit without dominating the page.
     property <length> album-card-w: 140px;
     property <length> album-card-h: 184px;
-    // The band the strip's own scrollbar runs in, reserved below the cards rather than
-    // overlaid on them — `HorizontalCardStrip` does the same.
+    // The strip's scrollbar band, reserved below the cards as `HorizontalCardStrip` does.
     property <length> albums-bar-h: 8px;
 
-    // Wraps the Albums sub-section and the list in one outer `ScrollView`, so a single
-    // scrollbar covers both. The list is capped at the outer viewport height, so its inner
-    // `ListView` keeps virtualizing; the outer travel covers the Albums strip, and the
-    // mounted `CompositeScrollbars` composes the two. **The wheel doesn't hand off
-    // natively** — the inner list swallows it at its edge — so `hover-catch` reports region
-    // hover to the winit filter, which routes vertical wheel through that same split.
+    // A composite view: one outer `ScrollView` over the strip and the list, the list capped at
+    // the outer viewport so its `ListView` keeps virtualizing.
     below-hero := Rectangle {
         width: 100%;
         height: 100%;
         clip: true;
 
-        // The `CompositeScroll` hover sentinel. It forwards every event through, so
-        // clicks, drags and native horizontal scroll are unaffected and only `has-hover`
-        // is read; empty-space clicks land here and give the band's SearchBar up. It fills
-        // the body, so there is no root-level backdrop TouchArea beside it.
+        // The `CompositeScroll` hover sentinel. It fills the body, so it also takes the
+        // empty-space clicks that give the band's box up.
         hover-catch := TouchArea {
             width: 100%;
             height: 100%;
@@ -57,16 +45,13 @@ export component ArtistDetailBody inherits Rectangle {
                 VerticalLayout {
                     spacing: 0;
 
-                    // Hidden entirely when the artist has no album credits. Its header
-                    // toggles the persisted collapse flag, handing the scroller's vertical
-                    // space to the list.
                     if ArtistDetail.albums.length > 0: VerticalLayout {
                         vertical-stretch: 0;
                         padding-left: Theme.pad-lg;
                         padding-right: Theme.pad-lg;
                         padding-top: Theme.pad-md;
-                        // The outer column has no `spacing`, so without this the divider
-                        // butts straight against the list header below.
+                        // The outer column has no `spacing`, so this keeps the divider off the
+                        // list header.
                         padding-bottom: Theme.pad-lg;
                         spacing: Theme.pad-sm;
 
@@ -80,12 +65,8 @@ export component ArtistDetailBody inherits Rectangle {
                             }
                         }
 
-                        // A plain horizontal `ScrollView` under its own bar: an artist's
-                        // album count is small enough not to need virtualizing. `if`
-                        // rather than `visible: false`, so collapsing it really frees the
-                        // space — and the bar has to sit inside that branch too, Slint
-                        // being unable to read an id declared inside an `if` from
-                        // outside it.
+                        // Not virtualized, an artist's albums being few. Its bar sits inside the
+                        // `if`, an id there being unreadable from outside.
                         if !ArtistDetail.albums-collapsed: Rectangle {
                             height: root.album-card-h + 2 * Theme.pad-xs + root.albums-bar-h;
 
@@ -135,8 +116,6 @@ export component ArtistDetailBody inherits Rectangle {
                         // gives the hidden sub-section a clear lower edge against the list.
                         Rectangle {
                             height: 1px;
-                            // Alpha in the brush, never `opacity` — free on a childless
-                            // rect, and a layer that crops its ink on anything else.
                             background: Theme.surface2.with-alpha(0.5);
                         }
                     }
@@ -144,10 +123,6 @@ export component ArtistDetailBody inherits Rectangle {
                     tl := TrackList {
                         horizontal-stretch: 1;
                         vertical-stretch: 0;
-                        // **Capped at the outer viewport**: a small list keeps the
-                        // content-tall layout, a large one pins to the visible region
-                        // so the inner list virtualizes instead of instantiating every
-                        // row.
                         height: min(self.content-height, below-sv.visible-height);
 
                         rows: ArtistDetail.tracks;
@@ -168,7 +143,6 @@ export component ArtistDetailBody inherits Rectangle {
                         select-row(idx, id, sh, ct) => { ArtistDetail.select-row(idx, id, sh, ct); }
                         select-all => { ArtistDetail.select-all(); }
                         clear-selection => { ArtistDetail.clear-selection(); }
-                        // A click in the track list blurs the band's SearchBar.
                         request-blur-search => { MyLibrary.blur-search-tick += 1; }
                     }
                 }
@@ -176,8 +150,6 @@ export component ArtistDetailBody inherits Rectangle {
         }
     }
 
-    // The unified vbar over the sub-section and the list, and the wheel routing, both owned
-    // by the shared component.
     CompositeScrollbars {
         x: 0; y: 0;
         width: 100%; height: 100%;

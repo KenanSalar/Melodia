@@ -1,15 +1,10 @@
 import { Theme } from "../../theme.slint";
 
-// One text cell in the track table — the shape the artist, album and genre columns share. The
-// leading U+200E it prepends is what keeps `overflow: elide` putting its ellipsis at the right edge
-// whatever the script's direction. Title, number, year and length are structurally different and
-// stay inline in `track-list-row.slint`.
-//
-// **The host places it**, `x` and `width` both: left to size itself, the cell takes its text's full
-// width and paints over the next column instead of eliding.
+// The artist, album and genre cells. The leading U+200E keeps the ellipsis at the right edge
+// whatever the script's direction. The host places it, `x` and `width` both: sized by itself, the
+// cell takes its text's full width and paints over the next column.
 export component DataCell inherits Rectangle {
     in property <string> text-content;
-    // The row's `ink`, so every cell answers playing and dimmed in one place.
     in property <brush> ink;
 
     clip: true;

@@ -3,45 +3,33 @@ import { RadioStationGridRow, RadioStationRow } from "../../models.slint";
 import { CardCell } from "../../components/grid/card-cell.slint";
 import { StationCard } from "station-card.slint";
 
-// Virtualized station grid, `EntityCardGrid`'s contract over `RadioStationGridRow`: Rust chunks the
-// flat list into rows of `columns` cards, so the inner `ListView` virtualizes by row, and the host
-// mounts the scrollbar so it can sit flush with the content-panel edge.
-//
-// Its own component rather than a mount of `EntityCardGrid`, because a station card is not an
-// entity card: it carries three text lines and its own set of hover controls. All three Radio tabs
-// mount this one, which is what keeps that from becoming three.
+// `EntityCardGrid`'s contract over `RadioStationGridRow`, its own component because a station card
+// carries three text lines and its own hover controls. All three Radio tabs mount it.
 export component StationGrid inherits Rectangle {
     in property <[RadioStationGridRow]> rows;
     in property <length> card-width: 180px;
-    // Taller than an entity card of the same width by the station card's third text line.
     in property <length> card-height: 246px;
-    // The gap is baked into the slot height because a `ListView` lays its delegates back-to-back
-    // and has no `spacing`.
+    // The gap is baked in, a `ListView` laying its delegates back-to-back with no `spacing`.
     in property <length> row-height: 266px;
     in property <length> gap: 20px;
 
-    // Read by the card's binding, which is the only thing that makes a landed decode repaint: a
-    // `pure` callback's result is cached until a dependency dirties, and at `0` the Rust side
-    // answers cache-only so a mount on a released tier queues nothing.
+    // The repaint token; at `0` Rust answers cache-only, the logo tier being released on a leave
+    // because the card lays out off the decoded logo's size.
     in property <int> covers-generation: 0;
     pure callback request-logo(string /*artwork_path*/, int /*generation*/) -> image;
 
-    // `Radio.logo-decode-size`, passed on to the card that measures its logo against it.
     in property <int> logo-decode-size;
 
-    // The kept tabs only. Browse leaves it false, so a directory row draws exactly as before.
+    // The kept tabs only.
     in property <bool> manageable;
 
-    // Favorites turns this off, its rows being starred by definition. Defaulted on for the two
-    // lists that mix kept and unkept stations — see the card's star.
+    // Off on Favorites, whose rows are starred by definition.
     in property <bool> star-marks-kept: true;
 
-    // `EntityCardGrid`'s own opt-in, and off for the same reason: a badge on every card of a list
-    // that isn't ranked by it says nothing. Recently Played is the one tab that turns it on.
+    // Off by default, as on `EntityCardGrid`: a badge says nothing on a list not ranked by it.
     in property <bool> show-play-count: false;
 
-    // The `CardSelection` scope this tab picks in, one per tab so no tab reads another's set. The
-    // cards pick by `select_key`, which is what lets Browse's id-less stations take part.
+    // One scope per tab. Cards pick by `select_key`, so Browse's id-less stations take part.
     in property <string> selection-scope;
     // `Radio.tab-*`, the list these cards are on, which the menu reads for what removal means.
     in property <int> list;
@@ -53,8 +41,7 @@ export component StationGrid inherits Rectangle {
     callback edit-clicked(RadioStationRow);
     callback remove-clicked(RadioStationRow);
 
-    // Same sign convention as `TrackList` and the entity grids — a positive `v-offset` is N px
-    // scrolled, where the inner `ListView` holds that as a non-positive `content-y`.
+    // A positive `v-offset` is px scrolled, as on `TrackList` and the entity grids.
     out property <length> v-visible-height: list.visible-height;
     out property <length> v-viewport-height: list.content-height;
     out property <length> v-offset: -list.content-y;
@@ -64,13 +51,9 @@ export component StationGrid inherits Rectangle {
     list := ListView {
         vertical-scrollbar-policy: always-off;
         horizontal-scrollbar-policy: always-off;
-        // **Stated because the default is the *style's* to pick, and a card click and a
-        // drag-pan are one gesture.** Every style publishes this off today, so a scroller
-        // that binds nothing is one upstream default away from panning. Where it is on
-        // the pan takes a press that drifts, which reads as "sometimes it doesn't open"
-        // and only on a grid long enough to flick. Nothing here wants drag-to-pan; the
-        // wheel scrolls either way.
-        // `slint-pitfalls.md` carries the mechanism.
+        // Pinned rather than left to the style, a card click and a drag-pan being one gesture:
+        // where the pan is on it takes a press that drifts, which reads as "sometimes it doesn't
+        // open". The wheel scrolls either way.
         mouse-drag-pan-enabled: false;
 
         for grid-row in root.rows: Rectangle {
@@ -99,10 +82,8 @@ export component StationGrid inherits Rectangle {
                         artwork-path: station.artwork_path;
                         cover: root.request-logo(station.artwork_path, root.covers-generation);
                         name: station.name;
-                        // Each separator hangs off what precedes it, so a station missing any of
-                        // the three does not lead with a middot. The directory is missing one
-                        // often: `bitrate` is `0` on a large share of live stations, the
-                        // most-clicked in the world included.
+                        // Each separator hangs off what precedes it, so a missing field never
+                        // leaves a leading middot; the directory often reports `bitrate` as `0`.
                         meta: station.country
                             + (station.country != "" && station.codec != "" ? " · " : "")
                             + station.codec
@@ -115,15 +96,11 @@ export component StationGrid inherits Rectangle {
                         tile-color-2: station.tile_color_2;
                         monogram: station.monogram;
                         is-favorite: station.is_favorite;
-                        // An empty uuid is a station the user typed in: there is nothing in the
-                        // directory to star it against, and Remove is what it has instead.
+                        // An empty uuid is a station typed in by hand.
                         starrable: station.uuid != "";
                         star-marks-kept: root.star-marks-kept;
-                        // Both kinds, and the dialog decides what that means: a hand-typed station
-                        // gets its whole form, a directory one gets the website field alone. Gated
-                        // on the row rather than on the uuid, because a directory entry that
-                        // already names a site has nothing here for the user to set and everything
-                        // to lose.
+                        // On the row rather than the uuid: a directory entry already naming a site
+                        // has nothing to set and everything to lose.
                         editable: root.manageable && station.editable;
                         removable: root.manageable;
                         homepage-known: station.homepage != "";

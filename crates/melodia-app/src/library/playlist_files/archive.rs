@@ -1,9 +1,6 @@
-//! The zip a multi-playlist export is saved as, and read back from.
-//!
-//! Only the container lives here: each entry's text is [`super::m3u`]'s, and which playlist
-//! becomes which entry is the caller's. Nothing is ever extracted to disk, so an entry's name
-//! matters only as the name its playlist falls back to and the folder its relative paths
-//! resolve against.
+//! The zip a multi-playlist export is saved as, and read back from: the container alone. Nothing
+//! is extracted to disk, so an entry's name matters only as its playlist's fallback name and the
+//! folder its relative paths resolve against.
 
 use std::io::{Read, Seek, Write};
 use std::path::Path;
@@ -17,10 +14,9 @@ use melodia_core::error::{AppError, describe};
 
 /// How much playlist text one archive may expand to before it is refused whole.
 ///
-/// A plain playlist file is bounded by its own size on disk and an archive is not, deflate being
-/// built to expand. The budget counts bytes actually read rather than the sizes the archive
-/// declares, which it is free to lie about. Set far past any real library, since landing on it
-/// refuses the whole import, and export refuses the whole archive rather than write one past it.
+/// A playlist file is bounded by its size on disk and an archive is not, deflate being built to
+/// expand, so this counts bytes actually read rather than the sizes the archive declares. Set far
+/// past any real library, since landing on it refuses the whole import.
 pub const MAX_TEXT_BYTES: u64 = 64 * 1024 * 1024;
 
 /// What is left of [`MAX_TEXT_BYTES`] for one archive. Export spends it the way import does, so

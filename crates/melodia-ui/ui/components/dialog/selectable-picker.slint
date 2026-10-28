@@ -4,21 +4,13 @@ import { ArtworkImage } from "../artwork-image.slint";
 import { MaterialIcon } from "../material-icon.slint";
 import { OverlayScrollbar } from "../overlay-scrollbar.slint";
 
-// Data-agnostic building blocks for the selectable-list dialogs (Add-to-Playlist,
-// Export-playlists). Everything arrives as plain `in` properties, so neither picker's globals reach
-// in here and both share one implementation.
-//
-// **Load-bearing: nothing containing the rows carries a rounded `clip`.** It renders them into a
-// texture that is sampled linearly on the way back, so row text landing on a fractional pixel
-// reads soft beside the header. A border costs no texture, so `PickerListCard` carries its own.
-// The tonal fill and the filled indicator carry the selection.
+// The selectable-list dialogs' toolkit, data-agnostic so neither picker's globals reach in.
+// No rounded `clip` holds the rows, its texture softening text on a fractional pixel.
 
-// Tri-state M3 indicator: a filled disc with a check when checked, with a dash
-// for the header's some-but-not-all state, a hollow ring otherwise.
+// The dash is the header's some-but-not-all state.
 export component SelectIndicator inherits Rectangle {
     in property <bool> checked;
     in property <bool> indeterminate;
-    // A disabled row's dimming, handed down so the row needs no `opacity`.
     in property <float> fade: 1.0;
 
     private property <bool> active: root.checked || root.indeterminate;
@@ -42,9 +34,8 @@ export component SelectIndicator inherits Rectangle {
     }
 }
 
-// One list item. The host hands over an already-formatted `subtitle` (empty ⇒
-// no second line) and a resolved `cover`, so the row stays clear of the data
-// source. Its `height` MUST match `PickerListCard.row-h`.
+// One list item, its `height` matching `PickerListCard.row-h`. An empty `subtitle` draws no
+// second line.
 export component SelectableRow inherits Rectangle {
     in property <string> name;
     in property <string> subtitle;
@@ -55,13 +46,11 @@ export component SelectableRow inherits Rectangle {
     in property <bool> disabled;
     callback toggled();
 
-    // The disabled dimming, through each brush rather than `opacity`, which would render the row
-    // into a texture of its own for as long as the dialog shows it disabled.
+    // Through each brush, `opacity` holding a texture for as long as the row is disabled.
     private property <float> fade: root.disabled ? 0.5 : 1.0;
 
     height: 60px;
     border-radius: Theme.radius-md;
-    // Tonal accent when selected, flat with a soft hover fill otherwise.
     background: (root.selected
             ? Theme.accent.with-alpha(0.16)
             : (touch.has-hover && !root.disabled ? Theme.surface1 : transparent))
@@ -81,7 +70,6 @@ export component SelectableRow inherits Rectangle {
             artwork-path: root.artwork-path;
             cover: root.cover;
             fallback-icon: root.fallback-icon;
-            // The grid cards' hover zoom, skipped while disabled.
             cover-scale: touch.has-hover && !root.disabled ? 1.05 : 1.0;
             fade: root.fade;
         }
@@ -118,7 +106,6 @@ export component SelectableRow inherits Rectangle {
     }
 }
 
-// The "Select all" header; its count chip turns accent once anything is picked.
 export component SelectAllHeader inherits Rectangle {
     in property <bool> checked;
     in property <bool> indeterminate;
@@ -180,17 +167,14 @@ export component SelectAllHeader inherits Rectangle {
     }
 }
 
-// The rounded card the rows scroll inside; the host passes `row-count` and
-// drops its `for` into `@children`. This is where the blur fix lives: the
-// ScrollView clips its viewport rectangularly, a cheap scissor with no layer.
-// The fill and border are the root's one shape, antialiased once, and the
-// ScrollView sits inside the border so no row scrolls over it.
+// The rounded card the rows scroll inside, the host's `for` arriving through `@children`. The
+// `ScrollView` clips its viewport with a scissor, no layer, and sits inside the border so no row
+// scrolls over it; fill and border are one shape, antialiased once.
 export component PickerListCard inherits Rectangle {
     in property <int> row-count;
     in property <length> list-max-height: 312px;
 
-    // Every picker shares these, so the card sizes itself from `row-count`
-    // alone. `row-h` MUST equal `SelectableRow.height`.
+    // `row-h` equals `SelectableRow.height`, so the card sizes itself from `row-count` alone.
     private property <length> row-h: 60px;
     private property <length> row-spacing: 4px;
     private property <length> pad: 6px;
@@ -204,13 +188,10 @@ export component PickerListCard inherits Rectangle {
     background: Theme.surface0;
     border-radius: Theme.radius-md;
     border-width: root.border-w;
-    // `surface2` rather than `Theme.border` — the card is `surface0` on a
-    // `surface0` dialog, and on Catppuccin that token *is* `surface0`, so the
-    // list had no visible edge at all and its rows floated on the dialog.
+    // `surface2`, `Theme.border` being `surface0` itself and so invisible on this fill.
     border-color: Theme.surface2;
 
-    // The border comes out of `pad` and the viewport alike, so rows sit where
-    // they would without one and a list that fits gains no scroll travel.
+    // The border comes out of `pad` and the viewport alike, so a list that fits gains no travel.
     sv := ScrollView {
         x: root.border-w;
         y: root.border-w;

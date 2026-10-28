@@ -16,11 +16,8 @@ pub struct PositionTick {
     pub stamp: u64,
 }
 
-/// Full `ViewModel`, built only by the test-only `PlayerState::to_view_model`.
-///
-/// The bool fields mirror the Slint `PlayerVm`/`QueueVm` structs in
-/// `crates/melodia-ui/ui/models.slint`; the shape must match exactly across the boundary, so
-/// they cannot be collapsed into a bitflags wrapper.
+/// Built only by the test-only `PlayerState::to_view_model`. The bools mirror the Slint structs in
+/// `crates/melodia-ui/ui/models.slint` exactly, so they can't collapse into bitflags.
 #[allow(
     clippy::struct_excessive_bools,
     reason = "ViewModel mirrors Slint struct shape across the FFI boundary"
@@ -77,12 +74,9 @@ pub struct PlayerViewModelLight {
     pub repeat_mode: RepeatMode,
 }
 
-/// Queue-specific `ViewModel` emitted only when the queue changes.
-///
-/// **It carries no [`QueueEntry`](crate::player::engine::queue::QueueEntry)s.** The watch and Now
-/// Playing keep the latest one alive for every install, so a field here would cost a word a
-/// queued row whether or not the queue panel is ever opened. The panel, their one reader, takes
-/// them off the state through `QueueState::play_entries` while it is shown.
+/// Emitted only when the queue changes. It carries no
+/// [`QueueEntry`](crate::player::engine::queue::QueueEntry)s: the latest one stays alive for every
+/// install, so the panel takes them through `QueueState::play_entries` while it is shown.
 #[derive(Debug, Clone)]
 pub struct QueueViewModel {
     /// The queue in play order, shared with the state until the order moves: an advance publishes
@@ -114,10 +108,7 @@ impl PlayerState {
             && (self.queue.current_index.is_some_and(|ci| ci > 0) || self.queue.repeat_mode.wraps())
     }
 
-    /// Full `ViewModel` — kept only for tests that assert against the
-    /// composed state. Production traffic flows through `to_view_model_light`
-    /// plus `to_queue_view_model` so the queue projection is rebuilt only
-    /// when the queue actually changes, not on every player-state emit.
+    /// Production publishes the light and queue halves, so the queue is rebuilt only when it moves.
     #[cfg(test)]
     pub fn to_view_model(&self) -> PlayerViewModel {
         PlayerViewModel {
@@ -141,7 +132,6 @@ impl PlayerState {
         }
     }
 
-    /// Lightweight `ViewModel` — excludes queue data for smaller payloads.
     pub fn to_view_model_light(&self) -> PlayerViewModelLight {
         PlayerViewModelLight {
             status: self.status.as_str(),
@@ -163,7 +153,6 @@ impl PlayerState {
         }
     }
 
-    /// Queue-only `ViewModel` — emitted only when the queue changes.
     pub fn to_queue_view_model(&self) -> QueueViewModel {
         QueueViewModel {
             ids: self.queue.play_ids(),
@@ -176,8 +165,6 @@ impl PlayerState {
     }
 }
 
-/// Widen a u64 millisecond position to f64 for ratio math. Audio durations
-/// stay well below 2^53 ms, so the conversion is lossless in practice.
 #[allow(
     clippy::cast_precision_loss,
     reason = "ms positions are < 2^53; widening to f64 is lossless for any real audio duration"

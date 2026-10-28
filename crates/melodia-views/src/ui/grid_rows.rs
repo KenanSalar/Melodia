@@ -1,13 +1,7 @@
-//! The chunk a built card grid does before it can hand Slint a model.
-//!
-//! Each grid's `ListView` virtualizes by *row*, so the chunking is the virtualization
-//! boundary: a flat card list becomes `ceil(n / columns)` one-field row structs, each
-//! holding that row's cards as a nested model. The library grids page theirs through
-//! `ui::paged_rows::grid`; Browse and Radio build a flat `Vec` in the walk that filters it
-//! and chunk it here.
-//!
-//! Kept out of [`crate::ui::grid_prewarm`]: that module is the grids' shared *cover*
-//! machinery, and nothing here touches a cache.
+//! The chunking a built card grid does before it can hand Slint a model. A grid's `ListView`
+//! virtualizes by *row*, so a flat card list becomes `ceil(n / columns)` row structs each holding
+//! its cards as a nested model. The library grids page theirs through `ui::paged_rows::grid`;
+//! Browse and Radio chunk here.
 
 use std::rc::Rc;
 

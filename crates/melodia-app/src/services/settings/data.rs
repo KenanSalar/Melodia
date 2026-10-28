@@ -27,9 +27,8 @@ pub const MAX_CORNER_RADIUS: u32 = 15;
 pub struct ThemePreference {
     pub variant: String,
     pub accent: String,
-    /// Last accent picked that was *not* `MATERIAL_YOU_ACCENT_ID`. Two paths
-    /// fall back to it rather than to the theme's hard default: Material You
-    /// with no dynamic palette available, and disabling Color Style outright.
+    /// The last accent picked that wasn't Material You's, which Material You without a palette and
+    /// a disabled Color Style both fall back to.
     #[serde(default)]
     pub last_static_accent: Option<String>,
 }
@@ -192,8 +191,6 @@ impl Default for SettingsData {
             window_y: 100.0,
             full_player_geometry: None,
             volume: 100,
-            // Tracks the host desktop so the window outline feels native out of
-            // the box; a returning install already has the field written.
             corner_radius: get_os_corner_radius(),
             play_button_animation: "none".to_owned(),
             dynamic_color_style: "none".to_owned(),
@@ -225,9 +222,7 @@ impl Default for SettingsData {
     }
 }
 
-/// The theme and variant a fresh install opens with, its accent being the theme's own default.
-/// Windows, KDE and GNOME each open on their own theme under the System variant, so the first
-/// window matches the desktop around it. A desktop with no theme of its own gets Catppuccin.
+/// A fresh install opens on the desktop's own theme, so the first window matches what's around it.
 fn first_launch_theme(desktop: HostDesktop) -> (&'static ThemeDef, &'static str) {
     if cfg!(target_os = "windows") {
         return (&themes::windows::WINDOWS, SYSTEM_VARIANT_ID);
@@ -292,9 +287,7 @@ fn detect_windows_locale() -> Option<String> {
 
     use windows_sys::Win32::Globalization::GetUserDefaultLocaleName;
 
-    // The conversion is infallible; the `unwrap_or` keeps it lint-clean and
-    // saturates *down*, so the unreachable arm claims a smaller buffer than
-    // there is rather than a larger one.
+    // Saturating down, so the unreachable arm claims less buffer than there is, never more.
     let mut buf = [0u16; 85];
     let buf_len = i32::try_from(buf.len()).unwrap_or(0);
     // SAFETY: `buf_len` never exceeds `buf`'s length, so the pointer is valid for

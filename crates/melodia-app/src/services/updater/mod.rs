@@ -1,18 +1,6 @@
-//! Auto-updater backend.
-//!
-//! The pipeline: [`run_check`] fetches `latest.json`, revalidating only where a
-//! `304` can still be trusted, `is_upgrade` decides on semver, and an accepted notification runs
-//! `download_and_install` → `verify_stream` (prehashed minisign) → `swap_in_place`
-//! (atomic, `cfg`-branched) → `request_respawn_and_quit`. An RPM or deb replaces only the swap,
-//! with dnf/apt under `pkexec` and the same respawn after it. An MSI replaces the swap with
-//! `msiexec`, which normally closes Melodia itself and reopens the new build; one that exits with
-//! Melodia still up hands back to the same respawn.
-//!
-//! The manifest schema lives in [`manifest`] and signature verification in
-//! [`minisign`]. The threat model's trust boundary is the GitHub repo: `latest.json`
-//! and every artifact are minisign-signed with the key embedded at
-//! `assets/updater-pubkey.b64`, and the client fails closed on a missing or invalid
-//! signature.
+//! The in-app updater. Its trust boundary is the GitHub repo: `latest.json` and every artifact
+//! are minisign-signed with the key in `assets/updater-pubkey.b64`, and a missing or invalid
+//! signature fails closed.
 
 #[cfg(target_os = "linux")]
 use std::path::PathBuf;
@@ -41,26 +29,15 @@ pub use install::{
 };
 pub use run::{Finding, PanelPaint, run_check};
 
-/// Whether this build has an in-app updater at all.
-///
-/// A source build doesn't: `target/` belongs to cargo, so a swapped-in release is older than the
-/// tree above it and gone at the next build. Where `install_kind::is_system_install` keeps the
-/// check and only trades the install button for a package-manager hint, this takes the whole
-/// section.
+/// Whether this build has an in-app updater at all: not a source build, whose `target/` belongs to
+/// cargo and would lose a swapped-in release at the next build.
 #[must_use]
 pub fn is_available() -> bool {
     !melodia_core::utils::exe::is_dev_build()
 }
 
-/// `<install_target>.old` — the rollback copy [`install::swap_in_place`] retains on
-/// Linux atomic-swap installs (`AppImage` / tarball), so a failed post-swap smoke
-/// test can restore it before the user sees a broken installation and a successful
-/// boot can reap it from `main()`. Errors only if `install_kind::install_target` does.
-///
-/// Linux-only: a Windows install is `msiexec /i` of a signed MSI, so Windows
-/// Installer's `MajorUpgrade` + Restart Manager own the replace and no `.old` is
-/// ever produced. Derived through [`install::old_path`], which keeps the swap path
-/// and the reaping path bit-identical.
+/// `<install_target>.old`, the rollback copy a Linux swap keeps until a successful boot reaps it
+/// from `main()`. Linux-only: Windows installs through msiexec and keeps none.
 #[cfg(target_os = "linux")]
 pub fn install_target_old() -> AppResult<PathBuf> {
     let target = install_target()?;

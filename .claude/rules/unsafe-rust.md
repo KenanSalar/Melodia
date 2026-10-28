@@ -26,8 +26,8 @@ effect would be to move every allow into a `build.rs`-shaped workaround.
 ## The one sanctioned category: platform FFI
 
 Every `unsafe` in production is a call into an OS the type system can't reach. There is
-no other kind, and the list is short enough to keep here. **Eighteen calls, in sixteen `unsafe`
-blocks, across eight files, under thirteen `#[allow(unsafe_code)]` attributes.** Say which of
+no other kind, and the list is short enough to keep here. **Seventeen calls, in fifteen `unsafe`
+blocks, across seven files, under twelve `#[allow(unsafe_code)]` attributes.** Say which of
 the four you mean when you quote a number, and re-derive it the same way — they differ,
 and none of them is the count of rows below. (The attributes fall three short of the blocks
 because `dwm_titlebar.rs`'s first `#[allow]` sits on a function holding two of them, and
@@ -40,7 +40,6 @@ because `dwm_titlebar.rs`'s first `#[allow]` sits on a function holding two of t
 | `crates/melodia-platform/…/dwm_titlebar.rs` | `DwmSetWindowAttribute` ×3 |
 | `crates/melodia-platform/…/registry.rs` | `RegGetValueW` (the DWM accent a window border takes, and the Windows app mode) |
 | `crates/melodia-app/…/settings/data.rs` | `GetUserDefaultLocaleName` |
-| `crates/melodia-app/…/updater/install/swap.rs` | `MoveFileExW` |
 | `crates/melodia-playback/…/output/mmcss.rs` | `AvSetMmThreadCharacteristicsW` and `AvRevertMmThreadCharacteristics` (the exclusive writer's MMCSS registration, reverted on the same thread) |
 | `crates/melodia-playback/…/output/endpoint_volume.rs` | `CoCreateInstance`, `IMMDeviceEnumerator::GetDevice` and `IMMDevice::Activate` (reaching the endpoint volume `wasapi` doesn't wrap), `Get`/`SetMasterVolumeLevelScalar` (the claimed device's own volume control, on the exclusive writer's thread) |
 
@@ -88,7 +87,7 @@ process state, and `cargo test` runs in parallel by default. There is one shape:
 **lock → snapshot → clear → set → `catch_unwind(body)` → restore → `resume_unwind`**
 
 and it is written once, in **`melodia_testkit::with_env_set`**
-(`crates/melodia-testkit/src/lib.rs`).
+(`crates/melodia-testkit/src/env.rs`).
 Call it. Don't re-roll it — each of those seven steps has been missing from a hand-rolled
 copy at some point, and the restore is the one that goes first.
 
@@ -138,8 +137,8 @@ none left anywhere, because the mutation moved behind the safe helpers.
 next, and one sat in `library/settings/tests/folders_tests.rs` over a file with no
 `unsafe` in it at all. Routing a file through the shared helper is exactly the edit that
 strands one, and it has retired four (`target_tests.rs`, `system_install_tests.rs`,
-`linux_pkg_tests.rs`, `settings_tests.rs`). `crates/melodia/tests/headless.rs` is the fifth and got there
-the other way — `Paths::rooted_at` left it no reason to touch the environment at all. The
+`linux_pkg_tests.rs`, `settings_tests.rs`). `crates/melodia/tests/headless.rs` is the fifth and
+got there the other way — `Paths::rooted_at` left it no reason to touch the environment at all. The
 one that remains is on `with_env_set` itself — on the function, not the file, per the
 narrowest-item rule above.
 

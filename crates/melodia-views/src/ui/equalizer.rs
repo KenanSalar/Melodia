@@ -1,18 +1,7 @@
-//! Wire the graphic equalizer to Rust: the Equalizer card on Settings ▸ Effects and the overflow
-//! menu's dialog, both driving the one `Equalizer` global.
-//!
-//! Seeds the `Equalizer` global from `settings.json` at startup (enabled flag,
-//! the band-gains model, and the selected-preset dropdown index) and registers
-//! its callbacks. Each follows the established two-phase shape (see
-//! [`crate::ui::settings::playback_settings`]): apply to the live playback engine
-//! synchronously, then persist on the blocking pool. Live band drags update the
-//! Slint model in place (so the slider tracks the cursor) and persist only on
-//! release via `commit-band`, mirroring the `set-volume` / `commit-volume`
-//! split.
-//!
-//! EQ state lives on the playback engine's lock-free shared cell, not the
-//! `PlayerState` machine, so the runtime apply goes through the infallible
-//! `library::playback::player_set_eq_*` helpers.
+//! The graphic equalizer's wiring: the Equalizer card on Settings ▸ Effects and the overflow
+//! menu's dialog both drive the one `Equalizer` global. Each callback applies to the engine
+//! synchronously and persists on the blocking pool; a band drag updates the model in place and
+//! persists only on release (`commit-band`), the `set-volume` / `commit-volume` split.
 
 use std::rc::Rc;
 
@@ -27,7 +16,6 @@ use melodia_ui::{AppWindow, Equalizer};
 pub fn install_equalizer(ui: &AppWindow, state: &AppState) {
     let model = seed(ui, state);
 
-    // set-enabled — live toggle + persist.
     ui.global::<Equalizer>().on_set_enabled(toggle_binding(
         state,
         "persist eq_enabled",
@@ -42,19 +30,14 @@ pub fn install_equalizer(ui: &AppWindow, state: &AppState) {
     wire_commit_preamp(ui, state);
 }
 
-/// Dropdown index of the synthetic "Custom" entry (one past the last
-/// built-in preset). `PRESET_COUNT` is small and constant, so the
-/// conversion never truncates.
+/// The synthetic "Custom" entry's dropdown index, one past the last built-in preset.
 fn custom_preset_index() -> i32 {
     i32::try_from(equalizer::PRESET_COUNT).unwrap_or(0)
 }
 
-/// Write the persisted state onto the global, handing back the backing model
-/// for the `band-gains` `[float]` property. Cloned into the callbacks, so
-/// preset / reset / drag updates mutate the same model the card and the dialog read.
+/// Write the persisted state onto the global, handing back the `band-gains` model the callbacks
+/// share with the card and the dialog.
 fn seed(ui: &AppWindow, state: &AppState) -> Rc<VecModel<f32>> {
-    // A missing / unreadable file falls back to the inert defaults (off, flat,
-    // "Flat").
     let flags = read_or_default(state, "equalizer").equalizer;
     let gains = equalizer::normalize_gains(&flags.eq_band_gains);
     let preset_idx = equalizer::preset_index(&flags.eq_selected_preset)
@@ -69,9 +52,7 @@ fn seed(ui: &AppWindow, state: &AppState) -> Rc<VecModel<f32>> {
     eq.set_preset_idx(preset_idx);
     eq.set_preamp(equalizer::clamp_preamp(flags.eq_preamp));
 
-    // Seed the dB ranges from the DSP constants so Rust stays the single source
-    // of truth (the band/preamp sliders read these). Runs at boot, before the
-    // card or the dialog can mount.
+    // The sliders' ranges are the DSP's constants, seeded before either surface can mount.
     eq.set_min_gain(equalizer::MIN_GAIN_DB);
     eq.set_max_gain(equalizer::MAX_GAIN_DB);
     eq.set_min_preamp(equalizer::MIN_PREAMP_DB);
@@ -79,9 +60,8 @@ fn seed(ui: &AppWindow, state: &AppState) -> Rc<VecModel<f32>> {
     model
 }
 
-/// Live band change during a drag: update the model (so the
-/// slider tracks), apply to the player, and flip the dropdown to "Custom".
-/// No disk write (commit-band persists on release).
+/// A live band drag: the model and the player follow and the dropdown flips to "Custom", the
+/// release persisting.
 fn wire_set_band(ui: &AppWindow, state: &AppState, model: &Rc<VecModel<f32>>) {
     let state = state.clone();
     let model = model.clone();
@@ -148,8 +128,7 @@ fn wire_reset(ui: &AppWindow, state: &AppState, model: &Rc<VecModel<f32>>) {
     });
 }
 
-/// Live preamp change during a drag: apply to the player and
-/// update the property so the slider's dB readout tracks. No disk write.
+/// A live preamp drag, the readout following and the release persisting.
 fn wire_set_preamp(ui: &AppWindow, state: &AppState) {
     let state = state.clone();
     let weak = ui.as_weak();

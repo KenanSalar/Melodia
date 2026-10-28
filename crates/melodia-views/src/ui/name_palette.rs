@@ -1,21 +1,13 @@
-//! Deterministic colours for an entity that has no artwork, from its name alone.
+//! Deterministic colours for an entity with no artwork, from its name alone. The hash and its
+//! rotated views are shared; each caller composes its own stops
+//! ([`crate::ui::genres::genre_accent`], [`crate::ui::radio::station_tile`]).
 //!
-//! Two views need this and want different gradients out of it: a genre card is a colour tile by
-//! design and goes vivid, a station tile has a monogram to keep legible and goes deep. So what is
-//! shared is the *derivation* — one hash, rotated views of it per axis, HSV out — and each caller
-//! composes its own stops on top. [`crate::ui::genres::genre_accent`] and
-//! [`crate::ui::radio::station_tile`] are those two.
-//!
-//! [`hash_name`] may not change: it is the only thing keeping each genre the colour its users
-//! already know from one release to the next.
+//! [`hash_name`] may not change: it keeps each genre the colour its users already know.
 
 use slint::Color;
 
-/// JavaScript `((h << 5) - h + ch) | 0` reproduced over the string's UTF-16 code units.
-///
-/// `wrapping_*` mimics the JS `| 0` 32-bit truncation; `.unsigned_abs()` mirrors `Math.abs(i32)`
-/// (handling the `-2^31` corner where regular `.abs()` would overflow). UTF-16 iteration matches
-/// JS `charCodeAt(i)` exactly, which a non-ASCII name's colour depends on.
+/// JavaScript `((h << 5) - h + ch) | 0` over the string's UTF-16 units, which a non-ASCII name's
+/// colour depends on. `unsigned_abs` is `Math.abs` without `abs`'s overflow at `-2^31`.
 pub fn hash_name(name: &str) -> u32 {
     let mut hash: i32 = 0;
     for unit in name.encode_utf16() {
@@ -24,9 +16,8 @@ pub fn hash_name(name: &str) -> u32 {
     hash.unsigned_abs()
 }
 
-/// A hue in 0..360 from `hash`. Callers pass a rotated view for a second axis — `rotate_right(N)`
-/// is a free bit shuffle, and it is what keeps the axes decorrelated for short names where raw
-/// hash entropy is low.
+/// A hue in 0..360. Callers pass a `rotate_right(N)` view for a second axis, which keeps the axes
+/// decorrelated for short names.
 pub fn hue_from_hash(hash: u32) -> u16 {
     u16::try_from(hash % 360).unwrap_or(0)
 }
@@ -36,20 +27,13 @@ pub fn hue_to_f32(hue: u16) -> f32 {
     f32::from(hue)
 }
 
-/// A 0..0.15 jitter off `rotated_hash`, in hundredths.
-///
-/// One-sided so a caller's base saturation and value act as a floor and the jitter only lifts a
-/// few entries toward vivid, rather than scattering the grid either side of a midpoint.
+/// A 0..0.15 jitter, one-sided so a caller's base saturation and value act as a floor.
 pub fn jitter_0_to_15(rotated_hash: u32) -> f32 {
-    // Masked to a `u8` first so the cast to f32 is exact — 8 bits is well inside the mantissa.
     let raw = u8::try_from(rotated_hash % 16).unwrap_or(0);
     f32::from(raw) * 0.01
 }
 
-/// HSV → `slint::Color`, with `hue` in degrees and `sat` / `val` in 0..1.
-///
-/// Pre-normalises the inputs so callers don't have to. Alpha is fixed at 1.0 — every gradient stop
-/// built here is opaque, and what goes over it is applied on the Slint side.
+/// HSV → `slint::Color`, `hue` in degrees and `sat` / `val` in 0..1, normalised here and opaque.
 pub fn hsv_color(hue: f32, sat: f32, val: f32) -> Color {
     Color::from_hsva(hue.rem_euclid(360.0), sat.clamp(0.0, 1.0), val.clamp(0.0, 1.0), 1.0)
 }

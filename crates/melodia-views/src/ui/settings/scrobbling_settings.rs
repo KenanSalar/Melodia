@@ -1,20 +1,10 @@
-//! Wire the Scrobbling settings section + the two login dialogs to Rust.
+//! The Scrobbling card and its two login dialogs. The rows are seeded from
+//! `ScrobbleService::status()` and kept current by a `watch<ScrobbleStatus>` subscriber, so an
+//! auto-disconnect, which the submitter reports by clearing an invalid credential, flips the row
+//! live. Each connect runs the provider call on the runtime and leaves the repaint to that watch.
 //!
-//! Two shapes combine here. The **status side** is sync-seeded from
-//! `ScrobbleService::status()` (like [`crate::ui::replaygain`]) and then kept
-//! current by a `watch<ScrobbleStatus>` subscriber — the single writer of the
-//! `Settings.scrobble-*` props, so a background auto-disconnect (invalid Last.fm
-//! session / `ListenBrainz` token, which the submitter reports by clearing the
-//! credential) flips the row live without reopening the section. The **auth
-//! side** is the async-network shape (mirrors `about.rs`'s browser-open and the
-//! updater's `runtime.spawn` + `upgrade_in_event_loop`): each connect flow
-//! spawns the provider call on the runtime, pushes results back onto the UI
-//! thread, persists via `ScrobbleService`, and lets the status watch repaint.
-//!
-//! The whole Last.fm surface is gated on `lastfm::is_configured()`: a keyless
-//! build shows "Not configured in this build" and never opens the Last.fm
-//! dialog, so `lastfm-open-auth` / `lastfm-finish` return early on the absent
-//! keys.
+//! A keyless build shows Last.fm as not configured and never opens its dialog, so
+//! `lastfm-open-auth` / `lastfm-finish` return early on the missing keys.
 
 use std::sync::Arc;
 
@@ -35,9 +25,7 @@ use melodia_integrations::services::integrations::scrobble::{
 };
 use melodia_ui::{AppWindow, Dialog, ScrobbleUi, Settings};
 
-/// Paint the per-service connection/enabled props from a status snapshot. The
-/// single writer of these props — called once for the seed and then on every
-/// `subscribe_status` change.
+/// The one writer of each service's rows, for the seed and every status change.
 fn paint_status(ui: &AppWindow, status: &ScrobbleStatus) {
     let g = ui.global::<Settings>();
     g.set_scrobble_lastfm_connected(status.lastfm.connected);
@@ -50,9 +38,8 @@ fn paint_status(ui: &AppWindow, status: &ScrobbleStatus) {
     g.set_scrobble_listenbrainz_love(status.listenbrainz.love_enabled);
 }
 
-/// Snapshot the current enabled flags so one toggle can be flipped without
-/// clobbering the others (the service only exposes a whole-`ScrobbleFlags`
-/// setter).
+/// The flags as they stand, so one toggle can move without clobbering the others, the service
+/// taking only a whole `ScrobbleFlags`.
 fn current_flags(service: &ScrobbleService) -> ScrobbleFlags {
     let s = service.status();
     ScrobbleFlags {
@@ -63,10 +50,8 @@ fn current_flags(service: &ScrobbleService) -> ScrobbleFlags {
     }
 }
 
-/// Spawn the retroactive favorite→love backfill for `target` on the runtime.
-/// `backfill_loves` self-gates (no-op if the provider's love toggle isn't armed),
-/// so callers fire it unconditionally after a love toggle turns on or a connect
-/// succeeds.
+/// Loves the existing favorites on `target`. `backfill_loves` gates itself on the provider's love
+/// toggle, so a toggle turning on and a connect both fire it unconditionally.
 fn spawn_love_backfill(state: &AppState, target: LoveTarget) {
     let rt = state.runtime.clone();
     let state = state.clone();
@@ -75,11 +60,9 @@ fn spawn_love_backfill(state: &AppState, target: LoveTarget) {
     });
 }
 
-/// Build the change-handler for one scrobble enable/love toggle: flip that field
-/// in a fresh flags snapshot, apply it to the shadow synchronously (so the
-/// detector/submitter see it at once), run the optional on-enable side-effect,
-/// then persist. Sibling of [`crate::ui::settings_bind::toggle_binding`] — that
-/// one applies to the playback engine, this one to the whole-struct `set_flags`.
+/// One toggle's handler: the field flipped in a fresh flags snapshot and applied synchronously,
+/// so the detector and the submitter see it at once, `on_enable` run, then persisted.
+/// `set_flags` publishes the status, so the row repaints with it.
 fn scrobble_toggle_binding(
     state: &AppState,
     label: &'static str,
@@ -99,21 +82,17 @@ fn scrobble_toggle_binding(
     }
 }
 
-/// Turning on Last.fm love-sync retroactively pushes existing favorites.
 fn enable_lastfm_love(state: &AppState) {
     spawn_love_backfill(state, LoveTarget::Lastfm);
 }
 
-/// `ListenBrainz` sibling of [`enable_lastfm_love`].
 fn enable_listenbrainz_love(state: &AppState) {
     spawn_love_backfill(state, LoveTarget::ListenBrainz);
 }
 
-/// A disconnect handler: clear the provider's stored credential off the UI thread
-/// (the setter offloads its blocking write), toasting on failure. `provider`
-/// labels the log + toast; `disconnect` is the service's async credential-clearing
-/// setter, invoked with `None` on an owned `Arc<ScrobbleService>` so the future
-/// owns everything it awaits.
+/// A disconnect: the provider's stored credential cleared off the UI thread, a failure toasted.
+/// Clearing persists and publishes the status, which repaints the row. `disconnect` takes an
+/// owned `Arc<ScrobbleService>` so the future owns everything it awaits.
 fn spawn_disconnect<F, Fut>(
     state: &AppState,
     provider: &'static str,
@@ -137,8 +116,6 @@ where
     }
 }
 
-/// Set the login dialog busy + clear any inline error on entry to a connect flow
-/// (UI thread).
 fn begin_busy(weak: &slint::Weak<AppWindow>) {
     if let Some(ui) = weak.upgrade() {
         let su = ui.global::<ScrobbleUi>();
@@ -147,8 +124,7 @@ fn begin_busy(weak: &slint::Weak<AppWindow>) {
     }
 }
 
-/// A connect succeeded: retroactively sync existing favorites to the newly
-/// connected provider, then clear busy + close the dialog on the UI thread.
+/// A connect landed: the existing favorites go to the new provider and the dialog closes.
 fn finish_connected(weak: &slint::Weak<AppWindow>, state: &AppState, target: LoveTarget) {
     spawn_love_backfill(state, target);
     let _ = weak.upgrade_in_event_loop(|ui| {
@@ -160,10 +136,7 @@ fn finish_connected(weak: &slint::Weak<AppWindow>, state: &AppState, target: Lov
 pub fn install_scrobbling(ui: &AppWindow, state: &AppState) {
     ui.global::<Settings>().set_scrobble_lastfm_configured(lastfm::is_configured());
 
-    // Seed once, then subscribe. Subscribing *before* the seed paint closes the
-    // window where a change could land between the two and be missed — a fresh
-    // receiver's version tracks the sender, so `changed()` still fires for any
-    // update after subscribe.
+    // Subscribed ahead of the seed, so a change between the two still wakes `changed()`.
     let mut rx = state.scrobble.subscribe_status();
     paint_status(ui, &state.scrobble.status());
     {
@@ -185,9 +158,6 @@ pub fn install_scrobbling(ui: &AppWindow, state: &AppState) {
     wire_login_flows(ui, state);
 }
 
-/// The four toggles: apply to the service shadow synchronously on the UI
-/// thread (so the detector/submitter see it at once), then persist. `set_flags`
-/// publishes to the status watch, so the toggle's painted state stays in sync.
 fn wire_enable_toggles(ui: &AppWindow, state: &AppState) {
     let settings = ui.global::<Settings>();
 
@@ -205,7 +175,6 @@ fn wire_enable_toggles(ui: &AppWindow, state: &AppState) {
         library::settings::set_scrobble_listenbrainz_enabled,
         None,
     ));
-    // The love toggles additionally sync existing favorites when turned on.
     settings.on_scrobble_lastfm_love_changed(scrobble_toggle_binding(
         state,
         "persist scrobble lastfm_love",
@@ -222,9 +191,6 @@ fn wire_enable_toggles(ui: &AppWindow, state: &AppState) {
     ));
 }
 
-/// Disconnect clears the stored credential (which persists the file and publishes
-/// the status → the subscriber repaints the row). Off the UI thread since the
-/// credential write is blocking I/O.
 fn wire_disconnect(ui: &AppWindow, state: &AppState) {
     let settings = ui.global::<Settings>();
 
@@ -240,11 +206,8 @@ fn wire_disconnect(ui: &AppWindow, state: &AppState) {
     ));
 }
 
-/// The three login callbacks on `ScrobbleUi`. Each sets `busy` on entry (UI
-/// thread), spawns the provider call, and pushes the outcome back via
-/// `upgrade_in_event_loop`. On success the credential setter persists + publishes
-/// (the status watch repaints the row) and the dialog closes; on failure an
-/// inline localized error is shown and the dialog stays open.
+/// The three login callbacks. On success the credential setter persists and publishes, which
+/// repaints the row, and the dialog closes; a failure shows inline and leaves it open.
 fn wire_login_flows(ui: &AppWindow, state: &AppState) {
     wire_listenbrainz_verify(ui, state);
     wire_lastfm_open_auth(ui, state);
@@ -341,8 +304,7 @@ fn wire_lastfm_finish(ui: &AppWindow, state: &AppState) {
                     let saved = state.scrobble.set_lastfm_credentials(Some(credentials)).await;
                     connected_or_save_failed(&weak, &state, LoveTarget::Lastfm, saved);
                 }
-                // Usually "not approved yet" — surface inline, keep the
-                // dialog open so the user can approve and click Finish again.
+                // Usually not approved yet, so the dialog stays open for another Finish.
                 Err(e) => {
                     log::info!("Last.fm get_session failed: {}", describe(&e));
                     show_inline_error(&weak, InlineError::NotAuthorized);

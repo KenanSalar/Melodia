@@ -1,26 +1,14 @@
-//! Opening the output device, and the ladder that keeps a boot from ending in silence.
+//! Opening the output device through a ladder, so a config the host dislikes never boots into
+//! silence: the default first, then every config the device reports in cpal's order, taking the
+//! first that opens and reporting the original failure if none do. A requested rate's configs go
+//! ahead of the default. CI depends on it: the runners have no card, ALSA's default PCM pointing
+//! at the userspace `null` device, and a stricter open fails `crates/melodia/tests/headless.rs`
+//! looking like a scan bug.
 //!
-//! **The ladder is the whole point of this module.** Asking cpal for the device's default config
-//! and giving up when it is refused turns any config the host dislikes into a start with no audio
-//! at all — which is what rodio's `open_stream` did and why this tree always called
-//! `open_sink_or_fallback` instead. What follows is that behaviour, owned: the default first, then
-//! every config the device reports, in cpal's own preference order, taking the first that opens and
-//! reporting the *original* failure if none do. Where a rate is asked for, the configs that can run
-//! it go ahead of the default.
-//!
-//! **The block size is one of the things a rung varies, not a constant across them.** rodio asked
-//! for a fixed block only on its first attempt: its retry rungs rebuilt the config from scratch and
-//! dropped the request with it, so a host that took the config and refused `BufferSize::Fixed`
-//! still opened. Carrying one size down every rung loses that, and `Fixed` is the least portable
-//! thing in this file — on ALSA it names a *period*, checked against a range reported for the whole
-//! buffer. So the walk runs twice, [`TARGET_BUFFER`] first and the host's own choice behind it.
-//! Both passes run the whole ladder, which lets a rung at the size we want beat the device's own
-//! config at a size we didn't — safe because `Fixed` is a device-wide constraint, so a first pass
-//! that fails at the default fails at every rung and the second lands back on the default.
-//!
-//! It also has to survive CI, where there is no sound card and `.github/actions/headless-audio`
-//! points ALSA's default PCM at the userspace `null` device. A stricter open than this one makes
-//! `crates/melodia/tests/headless.rs` fail looking like a scan bug.
+//! The walk runs twice, [`TARGET_BUFFER`] first and the host's own block size behind it, `Fixed`
+//! being the least portable request here (on ALSA a period, checked against a range for the whole
+//! buffer). It is device-wide, so a first pass failing at the default fails at every rung and the
+//! second lands back on the default.
 
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -42,12 +30,8 @@ use super::encode::DeviceFormat;
 use super::mixer::MixerPull;
 use super::{Negotiated, OutputFormat};
 
-/// Device frames the host is asked to hand over at a time.
-///
-/// Latency against wakeup cost. rodio asked for the same 50 ms; the value is a request rather than
-/// a promise, and a host outside its own reported range clamps or ignores it. The second pass
-/// doesn't ask at all, and keeps this only as the size the callback's staging buffer starts at.
-/// What the ear lags the clock by is measured per callback instead, into [`Lead`].
+/// Latency against wakeup cost, and a request the host may clamp or ignore. The second pass asks
+/// nothing and keeps this only as the staging buffer's starting size.
 const TARGET_BUFFER: Duration = Duration::from_millis(50);
 
 /// The live stream. Dropping it stops audio and releases the device.
@@ -62,10 +46,7 @@ impl DeviceStream {
     }
 }
 
-/// The device an open is aimed at, and the config it names as its own.
-///
-/// Resolved afresh for every open rather than kept, so a reopen after the device went away asks
-/// the system again: for the device named, or for whatever it calls its default *now*.
+/// Resolved per open, so a reopen asks the system again for the named device or today's default.
 pub struct Target {
     device: cpal::Device,
     default: cpal::SupportedStreamConfig,
@@ -73,10 +54,6 @@ pub struct Target {
 
 impl Target {
     /// The shape the device prefers, which is the first rung [`open`] tries.
-    ///
-    /// # Errors
-    ///
-    /// [`AppError::Player`] when that config reports no channels or no rate.
     pub fn default_shape(&self) -> Result<Shape, AppError> {
         shape_of(&self.default)
     }
@@ -91,14 +68,8 @@ fn device_name(device: &cpal::Device) -> Option<String> {
     device.description().ok().map(|description| description.name().to_owned())
 }
 
-/// The system's default output device, as `host` sees it.
-///
-/// `host` is the caller's to keep between opens: on ALSA, cpal frees alsa-lib's parsed config once
-/// its last host, device and stream are gone, which a host made per open reaches at every reopen.
-///
-/// # Errors
-///
-/// [`AppError::Player`] when there is no output device, or it cannot name its own default config.
+/// `host` is the caller's to keep: on ALSA, cpal frees alsa-lib's parsed config once its last
+/// host is gone, which a host made per open reaches at every reopen.
 pub fn default_target(host: &cpal::Host) -> Result<Target, AppError> {
     let device = host
         .default_output_device()
@@ -106,17 +77,9 @@ pub fn default_target(host: &cpal::Host) -> Result<Target, AppError> {
     target_of(device)
 }
 
-/// The device `host` lists under `id`, or `None` where no active device has that id.
-///
-/// Anything short of "not listed" is an error rather than `None`: a caller waiting for a missing
-/// device to come back would otherwise find it listed and reopen it forever. Hence the listing by
-/// hand, since cpal's `device_by_id` answers `None` for a listing that failed too, and a miss
-/// where some device's id couldn't be read is an error too, since that device may be this one.
-///
-/// # Errors
-///
-/// [`AppError::Player`] when the devices can't be listed, the device cannot name its own default
-/// config, or it isn't found while a listed device's id couldn't be read.
+/// `None` only where no device lists under `id`; anything else is an error, or a caller waiting for
+/// a missing device would find it listed and reopen it endlessly. Listed by hand, cpal's
+/// `device_by_id` answering `None` for a failed listing too.
 pub fn named_target(host: &cpal::Host, id: &str) -> Result<Option<Target>, AppError> {
     let wanted = cpal::DeviceId::new(host.id(), id);
     let devices = host
@@ -143,13 +106,8 @@ fn target_of(device: cpal::Device) -> Result<Target, AppError> {
     Ok(Target { device, default })
 }
 
-/// How far the ear is behind the voices' clocks: audio pulled and handed to the device that it has
-/// not played yet.
-///
-/// The clocks count what the mixer pulled, which is what the crossfade and the gapless stage have
-/// to be timed against. What the user hears is this much older, and it depends on the device, so
-/// only the backend feeding one can measure it. Zero until one does, which reads the clock as it
-/// is.
+/// How far the ear is behind the voices' clocks, which count what was pulled. Only the backend
+/// feeding a device can measure it; zero until one does.
 #[derive(Debug, Default)]
 pub struct Lead {
     nanos: AtomicU64,
@@ -164,17 +122,14 @@ impl Lead {
         self.nanos.store(u64::try_from(lead.as_nanos()).unwrap_or(u64::MAX), Ordering::Relaxed);
     }
 
-    /// Forget a measurement taken on a stream that has gone, which says nothing about the next.
+    /// A gone stream's measurement says nothing about the next.
     pub(super) fn clear(&self) {
         self.set(Duration::ZERO);
     }
 }
 
-/// A level the device's own volume control was moved to from outside Melodia, by the system's
-/// volume slider or its keys, waiting for the player to take it.
-///
-/// One slot rather than a queue: only the latest level means anything, so a move landing before
-/// the last was taken replaces it.
+/// A level the system moved the device's own volume to, waiting for the player. One slot, only the
+/// latest meaning anything.
 #[derive(Debug)]
 pub struct ExternalVolume {
     /// The level's bits, or [`ExternalVolume::NONE`] while nothing waits.
@@ -211,11 +166,8 @@ impl Default for ExternalVolume {
     }
 }
 
-/// What every stream's callbacks hold: the puller, the two cells they report into, and the
-/// volume a claim carrying it on the device reads and reports back.
-///
-/// The puller never leaves its owner: each stream holds a clone of the `Arc`, so dropping the
-/// stream is all it takes to get it back.
+/// What every stream's callbacks hold. Each stream holds an `Arc` clone, so dropping the stream
+/// returns the puller.
 #[derive(Clone)]
 pub struct Feed {
     pub(super) pull: Arc<Mutex<MixerPull>>,
@@ -239,20 +191,14 @@ impl Feed {
         }
     }
 
-    /// Say how much of what has been pulled the device still holds unplayed. An atomic store, so
-    /// the audio thread may call it.
+    /// An atomic store, so the audio thread may call it.
     pub(super) fn report_lead(&self, lead: Duration) {
         self.lead.set(lead);
     }
 
-    /// Pull one block, or write silence where the puller is taken.
-    ///
-    /// **The beat comes first and unconditionally**, silence included: a callback that has stopped
-    /// being called is the one failure no host reports, and the beat is how it is seen.
-    ///
-    /// `try_lock` because this is the audio thread. Every reshape lands before a stream pulls, so
-    /// the one holder it can meet is its own reopen disarming the resync as it starts, where a
-    /// block of silence is lost in the reopen's own gap.
+    /// The beat comes first, silence included: a callback no longer called is the one failure no
+    /// host reports. `try_lock` on the audio thread, the one holder it can meet being its own
+    /// reopen, whose gap swallows the silent block.
     pub(super) fn fill(&self, block: &mut [Sample]) {
         self.health.beat();
         match self.pull.try_lock() {
@@ -262,16 +208,7 @@ impl Feed {
     }
 }
 
-/// Open a stream on `target`, feeding it from `feed` at whichever config takes, `rate` first where
-/// one is asked for.
-///
-/// Each rung reshapes the puller to its own shape before building, because only opening the stream
-/// says whether that shape works.
-///
-/// # Errors
-///
-/// [`AppError::Player`]: the first rung's failure when nothing opens, or a plain message where the
-/// device offered no config the puller can feed.
+/// Each rung reshapes the puller first, only opening the stream saying whether a shape works.
 pub fn open(
     target: &Target,
     feed: &Feed,
@@ -279,10 +216,7 @@ pub fn open(
 ) -> Result<DeviceStream, AppError> {
     let Target { device, default } = target;
 
-    // Listed once for both passes, and **not** with `?`: a device that cannot enumerate can still
-    // open the config it just named as its default, which is the likeliest rung of all and the one
-    // rodio reached first — it only lists inside the fallback its default attempt failed into. A
-    // `?` here spends a listing failure on the whole open without trying that config once.
+    // Not `?`: a device that can't enumerate can still open its own default, the likeliest rung.
     let supported = supported_configs(device).unwrap_or_else(|e| {
         log::warn!("Falling back to the default output config alone: {}", describe(&e));
         Vec::new()
@@ -307,7 +241,7 @@ pub fn open(
     Err(first.unwrap_or_else(|| AppError::player_msg("The output device offered no config")))
 }
 
-/// Every config the device reports, best first by cpal's own ordering, which is what rodio walked.
+/// Best first by cpal's own ordering.
 fn supported_configs(
     device: &cpal::Device,
 ) -> Result<Vec<cpal::SupportedStreamConfigRange>, AppError> {
@@ -329,10 +263,8 @@ struct Rungs {
     fallback: Vec<cpal::SupportedStreamConfig>,
 }
 
-/// Rank `supported`, already in preference order, into [`Rungs`] for `rate`.
-///
 /// `try_` rather than `with_sample_rate`, whose out-of-range arm is an `expect` that would take the
-/// boot with it: a range that cannot run a rate answers `None` and drops out.
+/// boot with it.
 fn ladder(supported: Vec<cpal::SupportedStreamConfigRange>, rate: Option<SampleRate>) -> Rungs {
     let preferred = rate.map_or_else(Vec::new, |rate| {
         supported.iter().filter_map(|range| range.try_with_sample_rate(rate.get())).collect()
@@ -347,12 +279,8 @@ fn ladder(supported: Vec<cpal::SupportedStreamConfigRange>, rate: Option<SampleR
     Rungs { preferred, fallback }
 }
 
-/// The rates one reported range is tried at: its top, the two standard rates, then its floor.
-///
-/// **A standard rate only when it falls strictly inside.** The endpoints are already the rungs
-/// either side of it, so the strict test is what stops a duplicate, and a rung costs a stream the
-/// driver may take its time refusing. The floor drops the same way where it *is* the top, which
-/// rodio's walk emitted twice.
+/// Its top, the two standard rates strictly inside, then its floor where it isn't the top: a
+/// duplicate rung costs a stream the driver may be slow to refuse.
 fn rates_for(
     min: cpal::SampleRate,
     max: cpal::SampleRate,
@@ -366,7 +294,6 @@ fn rates_for(
     std::iter::once(max).chain(standard).chain(floor)
 }
 
-/// Build and start a stream for one config, or say why it could not be.
 fn attempt(
     device: &cpal::Device,
     supported: &cpal::SupportedStreamConfig,
@@ -438,52 +365,29 @@ fn target_frames(supported: &cpal::SupportedStreamConfig) -> cpal::FrameCount {
     cpal::FrameCount::try_from(target).unwrap_or(cpal::FrameCount::MAX)
 }
 
-/// The period [`Buffer::Target`] asks for: [`target_frames`] held inside what the device reports.
-///
-/// **Held under half the reported maximum, not under it.** On ALSA the range bounds the *buffer*
-/// while a `Fixed` is a period cpal doubles into a buffer request, so asking for the whole of it
-/// lands on one period per buffer. Nothing refuses that either — the `_near` setters take what they
-/// are given — so the stream opens and underruns for as long as it is held, where a rung that fails
-/// outright would just fall through to the next one. Core Audio's range is the callback size itself
-/// and WASAPI usually reports none, so there the halving costs a little latency and buys nothing.
-///
-/// `min` last rather than `clamp`, which asserts its two bounds are the right way round: the pair
-/// comes straight off a driver, and one reporting them backwards would panic the boot.
+/// [`target_frames`] held under half the reported maximum: on ALSA the range bounds the buffer while
+/// `Fixed` is a period cpal doubles, and asking for all of it opens a stream that underruns rather
+/// than failing over. `min` then `max` rather than `clamp`, which asserts on a driver reporting its
+/// bounds backwards.
 fn period_frames(supported: &cpal::SupportedStreamConfig) -> cpal::FrameCount {
     let target = target_frames(supported);
     let held = match supported.buffer_size() {
         cpal::SupportedBufferSize::Range { min, max } => target.min(max / 2).max(*min),
         cpal::SupportedBufferSize::Unknown => target,
     };
-    // A driver reporting a zero floor and a ceiling under two lands this on zero, which cpal 0.18
-    // refuses before the driver sees it — so the rung would fail on the request rather than on the
-    // device. One frame is something a driver can round up, which beats not asking.
+    // cpal refuses a zero period before the driver sees it; one frame a driver can round up.
     held.max(1)
 }
 
-/// Samples the callback's staging buffer holds before it has ever run.
-///
-/// [`TARGET_BUFFER`]'s worth as a floor, which on [`Buffer::HostChoice`] is a floor under a block
-/// nobody named — comfortably over the 512–2048 frames the mainstream hosts pick for themselves.
-/// Sizing that pass from the request would size it from nothing, leaving the callback to allocate
-/// its way up to the host's own block, on the one thread in the process that must not wait for the
-/// arena lock.
-///
-/// The larger of the two rather than [`period_frames`] alone, for the same reason in reverse: a
-/// period narrowed to what the device can double-buffer bounds what we may *ask* for, not what a
-/// host may hand over. A device whose floor sits above the target pushes the period the other way,
-/// and staging follows it up or the first callback allocates.
+/// At least [`TARGET_BUFFER`]'s worth and at least the period, so neither a host-chosen block nor a
+/// high device floor makes the first callback allocate on the audio thread.
 fn staging_samples(supported: &cpal::SupportedStreamConfig) -> usize {
     let frames = target_frames(supported).max(period_frames(supported));
     frames as usize * usize::from(supported.channels())
 }
 
-/// One arm per sample format the host can ask for, because the callback is monomorphic in it.
-///
-/// Every arm but one stages in [`Sample`] and converts on the way out, so [`MixerPull::fill`] stays
-/// the one place samples are produced however the device wants them — the conversion is the only
-/// thing that differs between a shared stream and an exclusive one later. The exception is the
-/// format that *is* [`Sample`], which needs neither half; [`direct_stream`] says what that saves.
+/// One arm per sample format, the callback being monomorphic in it. Every arm but `F32` stages and
+/// converts on the way out, so [`MixerPull::fill`] stays the one place samples are produced.
 fn build_stream(
     device: &cpal::Device,
     config: cpal::StreamConfig,
@@ -506,13 +410,9 @@ fn build_stream(
         };
     }
 
-    // Every format `SizedSample` names bar `F32` above, which together is what rodio covered.
-    // The three DSD ones are outside it by construction — nothing implements `SizedSample` for
-    // them, so only `build_output_stream_raw` could carry one — and `SampleFormat` is
-    // `#[non_exhaustive]` besides, which is what makes `other` the compiler's requirement rather
-    // than a courtesy. The 24-bit pair is the one worth naming: cpal's own config ordering ranks
-    // it above `I16` now, so a card offering nothing else is no longer the edge case it was, and
-    // without an arm it would fail every rung of the ladder and take the boot with it.
+    // Every `SizedSample` format bar `F32`; DSD has no `SizedSample`, and `SampleFormat` is
+    // `#[non_exhaustive]`. The 24-bit pair matters: cpal ranks it above `I16`, and a card offering
+    // nothing else would fail every rung without an arm.
     arms! {
         F64 => f64,
         I8 => i8,
@@ -528,14 +428,8 @@ fn build_stream(
     }
 }
 
-/// The stream for a device that already speaks [`Sample`]: no staging buffer, no conversion pass,
-/// the mixer writing straight into the block cpal handed over.
-///
-/// This is the rung essentially every install lands on, the default config being `f32` on ALSA,
-/// `PipeWire`, `CoreAudio` and WASAPI shared mode, so what the other arms need is worth not paying
-/// here: a resident buffer the size of one period, and a full pass over every block to copy each
-/// sample onto itself. [`MixerPull::fill`] zeroes what it is handed before writing, partial
-/// trailing frame included, so nothing depended on owning that buffer first.
+/// For a device already speaking [`Sample`], nearly every install's default: no staging buffer
+/// and no copy pass, [`MixerPull::fill`] zeroing what it is handed.
 fn direct_stream(
     device: &cpal::Device,
     config: cpal::StreamConfig,
@@ -617,11 +511,8 @@ where
     ))
 }
 
-/// The rung whose grid a shared integer format puts samples on, where it is narrow enough to
-/// dither. Only the grid is read, so the 24-bit container a host packs into doesn't matter.
-///
-/// Putting a block on that grid first is also what makes cpal's conversion exact. Alone it
-/// truncates toward zero, and wraps a 24-bit sample at or past full scale to the negative end.
+/// The grid a narrow shared integer format puts samples on, the container aside. Putting a block on
+/// it first also makes cpal's conversion exact, which alone truncates and wraps 24-bit full scale.
 fn dithered_rung(format: cpal::SampleFormat) -> Option<DeviceFormat> {
     match format {
         cpal::SampleFormat::I16 | cpal::SampleFormat::U16 => Some(DeviceFormat::S16),

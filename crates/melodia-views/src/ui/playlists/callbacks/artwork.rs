@@ -1,6 +1,5 @@
-//! The Edit Artwork picker: the grid card's opener (the detail's is
-//! `super::detail`'s, over the same [`open_edit_artwork`]), the mosaic-candidate
-//! toggle, and the apply / clear commits the `Dialog.accepted` dispatcher routes.
+//! The Edit Artwork picker: the card's opener (the detail's is `super::detail`'s, over the same
+//! [`open_edit_artwork`]), the mosaic toggle, and the commits `Dialog.accepted` routes here.
 
 use std::sync::Arc;
 
@@ -26,12 +25,9 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, playlists_ui: &Arc<Playlist
     wire_clear_artwork(ui, state, playlists_ui);
 }
 
-/// Grid-card variant of the detail view's `request-edit-artwork`. The detail
-/// view isn't necessarily open for this id, so the dialog preview's "current
-/// artwork" is the card's own thumbnail, resolved via the grid-tier LRU (the
-/// path the card itself uses for `request-cover`, so the decode is already
-/// warm). `slint::Image` isn't `Send`, so only the path crosses the spawn
-/// boundary and the lookup runs inside the opener's UI-thread hop.
+/// The card's opener, which may have no detail open for this id, so the preview is the card's own
+/// cover off the grid tier, already warm. `slint::Image` isn't `Send`, so only the path crosses
+/// the spawn and the lookup runs in the opener's UI-thread hop.
 fn wire_request_edit_artwork_for(ui: &AppWindow, state: &AppState) {
     let s = state.clone();
     let weak = ui.as_weak();
@@ -57,11 +53,9 @@ fn wire_request_edit_artwork_for(ui: &AppWindow, state: &AppState) {
     });
 }
 
-/// Populate the mosaic candidates from the covers `playlist` lists under `draw`, and open the
-/// picker on `cover`, a preview of the saved state. The draw is the surface's own, which only a
-/// random cap reads: the page's on the detail, the default its thumbnail was filled under on a
-/// card. The rest of the chrome is `Dialog.prepare-edit-artwork`'s. `claim` is taken by the caller
-/// at its click.
+/// Fills the mosaic candidates from the covers `playlist` lists under `draw` and opens the picker
+/// on `cover`, the saved state. Only a random cap reads the draw: the page's on the detail, the
+/// default a card's thumbnail was filled under. `claim` is the caller's, taken at its click.
 pub(super) fn open_edit_artwork(
     state: &AppState,
     weak: &Weak<AppWindow>,
@@ -93,10 +87,8 @@ pub(super) fn open_edit_artwork(
     });
 }
 
-/// Mutate `Dialog.mosaic-selection` on the UI thread. Any toggle —
-/// including toggling the last entry back off — flips `mosaic-touched`, so
-/// the preview switches off the "current saved artwork" branch and Apply can
-/// wipe the artwork on an explicit clear.
+/// Any toggle, the last entry's back off included, raises `mosaic-touched`, so the preview leaves
+/// the saved artwork and Apply can clear it.
 fn wire_toggle_mosaic_candidate(ui: &AppWindow) {
     let weak = ui.as_weak();
     ui.global::<Playlists>().on_toggle_mosaic_candidate(move |path| {
@@ -109,8 +101,7 @@ fn wire_toggle_mosaic_candidate(ui: &AppWindow) {
     });
 }
 
-/// `path` toggled in or out of the selection. A path past [`MOSAIC_CAP`] is
-/// silently refused.
+/// `path` toggled in or out of the selection, a path past [`MOSAIC_CAP`] refused.
 fn toggle_mosaic(mut selection: Vec<SharedString>, path: &str) -> Vec<SharedString> {
     if let Some(pos) = selection.iter().position(|p| p.as_str() == path) {
         selection.remove(pos);
@@ -120,8 +111,6 @@ fn toggle_mosaic(mut selection: Vec<SharedString>, path: &str) -> Vec<SharedStri
     selection
 }
 
-/// The dispatcher hands us `(id, paths 1..4)`. Backend composes a 600x600
-/// collage; we refresh.
 fn wire_apply_mosaic(ui: &AppWindow, state: &AppState, playlists_ui: &Arc<PlaylistsUi>) {
     let s = state.clone();
     let pu = playlists_ui.clone();
@@ -146,7 +135,6 @@ fn wire_apply_mosaic(ui: &AppWindow, state: &AppState, playlists_ui: &Arc<Playli
 }
 
 /// An empty mosaic selection leaves the playlist with no artwork, an automatic cover included.
-/// Reuse `update_playlist` with `clear_thumbnail = true`; description preserved.
 fn wire_clear_artwork(ui: &AppWindow, state: &AppState, playlists_ui: &Arc<PlaylistsUi>) {
     let s = state.clone();
     let pu = playlists_ui.clone();

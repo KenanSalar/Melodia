@@ -2,22 +2,19 @@
 //! one element of the card's simple mixer, on the curve `alsamixer` shows. Taking it, following it
 //! and giving it back is [`hardware_volume`]'s.
 //!
-//! **`Master`, else the card's only element with a playback volume, and only for the card's device
-//! 0.** Anything looser can take an element that changes nothing the claim plays, and the voices
-//! would then hand the card unity samples at full volume:
-//! - the mixer is the card's, and an HDMI or S/PDIF device on an HD Audio card shares it while no
-//!   element on it acts on that device;
-//! - `PCM` on an HD Audio card is usually alsa-lib's softvol, a user control only its own plugin
-//!   applies, so it does nothing on `hw:`, and the alsa crate can't tell a user control from a
-//!   driver's;
-//! - past `Master`, an HD Audio codec's elements each reach one output or an input's loopback,
-//!   never the whole card.
+//! **`Master`, else the card's only element with a playback volume, and only for device 0.**
+//! Anything looser can take an element that changes nothing the claim plays, leaving the card
+//! unity samples at full volume:
+//! - an HDMI or S/PDIF device on an HD Audio card shares its mixer, and no element acts on it;
+//! - `PCM` there is usually alsa-lib's softvol, which does nothing on `hw:` and which the alsa
+//!   crate can't tell from a driver's control;
+//! - past `Master`, a codec's elements each reach one output or an input's loopback.
 //!
-//! Where none qualifies the voices keep the level, and the claim goes ahead.
+//! Where none qualifies the voices keep the level.
 //!
-//! **The curve is alsa-utils' `volume_mapping.c`**, so `alsamixer` and Melodia's slider read the
-//! same percentage: linear in dB over a range of 24 dB or less, a cube-root taper of the amplitude
-//! past it, and the raw steps where the element states no dB range.
+//! **The curve is alsa-utils' `volume_mapping.c`**, so `alsamixer` and Melodia's slider agree:
+//! linear in dB over 24 dB or less, a cube-root taper of the amplitude past it, the raw steps where
+//! the element states no dB range.
 //!
 //! [`hardware_volume`]: super::hardware_volume
 
@@ -59,10 +56,6 @@ pub(super) struct MixerControl {
 
 /// The volume element for a claim on `card`, set to `volume` unless the system had it quieter, or
 /// `None` where the card has none a claim can trust.
-///
-/// # Errors
-///
-/// What the card answered when its mixer was opened, or asked for the element's level or a new one.
 pub(super) fn take(card: &Card, volume: f64) -> Result<Option<CardVolume>, alsa::Error> {
     let Some(control) = MixerControl::open(card)? else { return Ok(None) };
     HardwareVolume::take(control, &card.device.id, volume).map(Some)

@@ -29,8 +29,6 @@ export component RatingsSection inherits Rectangle {
 
     out property <bool> has-matches: show-write-tags;
 
-    // Wrapper so the root's preferred-height tracks the card's natural height —
-    // see `language-section.slint`.
     VerticalLayout {
         if has-matches: SectionCard {
             title: root.card-title;

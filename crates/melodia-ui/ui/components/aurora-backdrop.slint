@@ -1,48 +1,40 @@
 import { Theme } from "../theme.slint";
 
-// One of the three sweeps: album colour along one edge of the surface, thinning to nothing by the
-// far end of its gradient line. The headings are near-orthogonal, so each owns a different edge and
-// one corner is left showing the floor — that asymmetry is the whole effect, four symmetric corner
-// washes averaging to one flat tone whatever the record was. They are CSS-convention degrees
-// needing no conversion, Slint's `line_for_angle` taking the same magic-corner construction.
+// One sweep: album colour along one edge, thinning to nothing at the far end. The headings are
+// near-orthogonal, so each owns an edge and one corner shows the floor; four symmetric washes
+// would average to one flat tone whatever the record. CSS-convention degrees, as Slint takes them.
 //
-// **Two stops, the far one this tint at zero alpha — never the `transparent` keyword.** FemtoVG
-// interpolates stops in straight RGBA, so fading to rgba(0,0,0,0) drags the colour toward black and
-// the ramp darkens instead of thinning.
+// **The far stop is this tint at zero alpha, never `transparent`**: FemtoVG interpolates straight
+// RGBA, so a fade to rgba(0,0,0,0) darkens the ramp instead of thinning it.
 //
-// **And both stops sit at the extents, which is a memory constraint rather than a taste one.**
-// FemtoVG fills a two-stop gradient from shader uniforms only while the near stop is at or before 0
-// and the far one at or past 1; inset either and the brush falls through to the multi-stop path,
-// which synthesizes a gradient texture per distinct stop set through its `GradientStore`. Three
-// sweeps on that path grow the driver's buffer pool by a whole slab, and it never shrinks. An
-// earlier falloff is one number away and brings the slab back with it.
+// **Both stops sit at the extents, which keeps FemtoVG on its two-stop path.** Inset either and
+// every sweep synthesizes a gradient texture, and the driver backs it with a slab it keeps.
 component AuroraSweep inherits Rectangle {
     in property <color> tint;
     in property <angle> heading;
     in property <bool> shown: true;
 
-    // `transparentize` multiplies, so a synthesized wash keeps the lower weight `ui::aurora` gave it.
-    // Both arms one type at one stop count, the only shape `Brush::interpolate` blends stop-for-stop.
-    // Safe to `animate`: Rust writes the tint discretely, so nothing can restart the binding.
+    // `transparentize` multiplies, so a synthesized wash keeps the weight `ui::aurora` gave it. Both
+    // arms are one gradient shape, the only pair `Brush::interpolate` blends. Rust writes the tint
+    // discretely, so nothing restarts the ease.
     background: root.shown
         ? @linear-gradient(root.heading, root.tint.transparentize(0.45) 0%, root.tint.transparentize(1.0) 100%)
         : @linear-gradient(root.heading, root.tint.transparentize(1.0) 0%, root.tint.transparentize(1.0) 100%);
     animate background { duration: Theme.dur-med; easing: ease-in-out; }
 
-    // Read once at mount, for the reason `HeroBlurBackdrop` gives at its own.
+    // Read once at mount: first evaluated after an early flip, the background would have nothing
+    // to ease from.
     init => {
         root.background;
     }
 }
 
-// The artwork-derived backdrop: three broad sweeps of album colour over the theme's own base, and a
-// grain of noise. Nothing caps the washes, so a surface keeps the record's value structure and reads
-// as light falling across a plane rather than as a tint; `ui::aurora` argues the trade.
+// Three sweeps of album colour over the theme's base, and a grain of noise. Nothing caps the
+// washes, so a surface keeps the record's value structure; `ui::aurora` argues the trade.
 //
-// **Every colour is an input and the defaults are never taken** — `MetaChip`'s idiom, so this file
-// imports no global: one mount reads the `Player` tier and the others `HeroBackdrop`. That holds
-// even for `base-start` / `base-end`, which carry `Theme.base` on this arm; they stay two properties
-// because the blur reads the same pair and solves a real ramp into it.
+// **Every colour is an input and the defaults are never taken**, `MetaChip`'s idiom, so the file
+// imports no global. `base-start`/`base-end` carry `Theme.base` on this arm and stay two because
+// the blur solves a real ramp into the same pair.
 export component AuroraBackdrop inherits Rectangle {
     in property <color> base-start: #2b2135;
     in property <color> base-end: #14101a;
@@ -50,13 +42,11 @@ export component AuroraBackdrop inherits Rectangle {
     in property <color> tint-2: #2d3a4a;
     in property <color> tint-3: #4a2d3a;
 
-    // Grain over everything below; `ui::aurora::dither_tile` argues it. An unset image draws
-    // nothing, so a mount without one degrades to undithered gradients rather than to a hole.
+    // `ui::aurora::dither_tile`'s. Unset, it draws nothing and the gradients go undithered.
     in property <image> dither;
 
-    // Whether the host is painting a hero at all — `HeroBlurBackdrop.shown`'s twin, and drained
-    // through rather than unmounted, an unmounted stack having nothing to fade from. **Discrete
-    // bool** — a float would restart every binding below per frame.
+    // `HeroBlurBackdrop.shown`'s twin, drained rather than unmounted. **A discrete bool**: a float
+    // would restart every binding below per frame.
     in property <bool> shown: true;
 
     clip: true;
@@ -66,13 +56,12 @@ export component AuroraBackdrop inherits Rectangle {
         : @linear-gradient(135deg, transparent, transparent);
     animate background { duration: Theme.dur-med; easing: ease-in-out; }
 
-    // Read once at mount, as each sweep's is.
+    // As each sweep's.
     init => {
         root.background;
     }
 
-    // **Declared back to front.** Slint paints the last child on top, so tint-3 goes down first and
-    // tint-1 — the colour the artwork most is — lands over both.
+    // **Back to front**, so tint-1, the colour the artwork most is, lands over both others.
     AuroraSweep {
         width: 100%;
         height: 100%;
@@ -95,13 +84,9 @@ export component AuroraBackdrop inherits Rectangle {
         shown: root.shown;
     }
 
-    // **`image-fit: preserve` is what makes this dither rather than decoration**: the default `fill`
-    // scales the tile before tiling it, turning one texel into a block tens of pixels across. Only
-    // `preserve` maps a source texel to a physical pixel, the frequency dither has to run at to
-    // disappear; `pixelated` so filtering can't average it back toward the flat colour it breaks up.
-    // Alpha lives in the tile rather than in `opacity`, which would rasterize this into a layer —
-    // and is why the grain unmounts rather than easing out with everything else, there being nothing
-    // to fade. Ungated it would grain the blur through every crossing.
+    // **`preserve` is what makes this dither**: `fill` scales the tile into blocks, and only
+    // `preserve` maps a texel to a physical pixel; `pixelated` so filtering can't average it away.
+    // Its alpha lives in the tile, so there is nothing to fade and it unmounts instead.
     if root.shown: Image {
         x: 0;
         y: 0;

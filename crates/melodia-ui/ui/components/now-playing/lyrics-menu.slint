@@ -9,44 +9,34 @@ import { MenuSurface } from "./menu-surface.slint";
 import { OverflowRow } from "./overflow-row.slint";
 import { FlyoutMetrics } from "./flyout-presets.slint";
 
-// The lyrics panel's own menu, beside the switch that mounts it at the top right of the Now-Playing
-// view. `VisualizerPicker`'s shape with a menu column where that one has a flyout: one popup, one
-// surface, and the rows in the host because the popup sizes itself off their layout.
-//
-// **The switch owns the swap, so everything here acts on a panel that is on screen**, which is why
-// the trigger is inert while lyrics are off: a sheet matched off tags that were wrong has to be
-// re-askable, a sheet worth keeping has to be writable into the file that will outlive this cache,
-// a sheet that is nearly right has to be editable, a sheet in a script the reader cannot sound out
-// has to be able to say how it sounds, and a panel whose whole copy is that a setting turned the
-// lookup off has to be able to turn it back on.
+// The lyrics panel's menu, beside the switch that mounts the panel. `VisualizerPicker`'s shape with
+// a menu column for a flyout. The switch owns the swap, so everything here acts on a panel that is
+// on screen, and the trigger is inert while lyrics are off.
 export component LyricsMenu inherits Rectangle {
     width: btn.width;
     height: btn.height;
 
-    // The drawn glyph's edge, inside the larger hit slot above, for a host matching it by eye.
+    // The drawn glyph inside the larger hit slot, for a host matching it by eye.
     out property <length> glyph-size: btn.icon-size;
 
-    // The glyph while lyrics are off. The host's, so it can match the switch beside it.
+    // The host's, so it can match the switch beside it.
     in property <brush> off-fg: Player.np-accent-dim;
 
-    // Every row is drawn whether or not it can act, so the popup's reserve below is a constant and
-    // the rows do not move under the pointer between one open and the next.
+    // Every row drawn whether it can act or not, so the reserve is a constant and no row moves
+    // under the pointer between opens.
     property <length> menu-h: FlyoutMetrics.menu-row-h * 5 + FlyoutMetrics.chrome-h;
 
     btn := AccentGlyphButton {
         icon: "lyrics";
         filled: Lyrics.enabled;
-        // Lit while the column is showing lyrics, and while the menu is open: a bare glyph has no
-        // disc for `force-bg` to light.
+        // A bare glyph has no disc for `force-bg` to light.
         active: Lyrics.enabled || pop.is-open;
-        // Off, drawn at rest rather than greyed: the switch beside it says why nothing answers,
-        // and a greyed glyph beside a working switch reads as something broken.
+        // Drawn at rest rather than greyed, which beside a working switch reads as broken.
         button-enabled: Lyrics.enabled;
         disabled-fg: root.off-fg;
         disabled-fade: 1.0;
         tooltip-text: @tr("Lyrics");
-        // This row is the panel's top edge, and the switch leaves too little room at its right one
-        // for a centred pill in a long locale.
+        // The panel's top edge, with too little room right of the switch for a centred pill.
         tooltip-side: TooltipSide.below;
         tooltip-align-end: true;
         clicked => {
@@ -55,12 +45,10 @@ export component LyricsMenu inherits Rectangle {
     }
 
     pop := PopupWindow {
-        // Here rather than up top, so it can read its own descendant's `preferred-width`: the
-        // rows' content sets the floor, over a minimum that preserves the English look.
+        // On the popup, the only element that can read its descendant's `preferred-width`.
         property <length> menu-w: max(200px, menu-vl.preferred-width + 2px);
 
-        // Downward and right-aligned on the trigger, which sits one control from the row's end: a
-        // left-aligned popup would hang off the panel.
+        // Right-aligned, the trigger sitting one control from the panel's edge.
         x: btn.width - self.width;
         y: btn.height + Theme.popup-gap;
         width: self.menu-w;
@@ -78,11 +66,8 @@ export component LyricsMenu inherits Rectangle {
                 padding: Theme.pad-xs;
                 spacing: 0;
 
-                // Both halves, the visualizer picker's shape: the property so the sheet re-lays on
-                // the click, the callback so it is still that way next launch. Enabled only where
-                // there is a sheet to re-lay: on every other state the row would say it had done
-                // something and the panel would look identical, which is worse than a row that is
-                // plainly inert.
+                // The property re-lays the sheet on the click, the callback persists it. Inert
+                // without a sheet, where it would claim to have done something.
                 OverflowRow {
                     icon: "translate";
                     label: @tr("Show romanization");
@@ -96,10 +81,8 @@ export component LyricsMenu inherits Rectangle {
                     }
                 }
 
-                // The Settings switch, where the panel's own "lookup is off" copy sends the reader.
-                // Same two halves again, and the same argument as romanization for being in both
-                // places: a default worth finding in Settings, and the thing you reach for the
-                // moment a panel tells you a setting is why it is empty.
+                // The Settings switch, here too because the panel's "lookup is off" copy sends the
+                // reader to this menu.
                 OverflowRow {
                     icon: "travel_explore";
                     label: @tr("Look up lyrics online");
@@ -115,10 +98,8 @@ export component LyricsMenu inherits Rectangle {
                 OverflowRow {
                     icon: "refresh";
                     label: @tr("Look up again");
-                    // A track has to be up, which is anything but `idle`, including the two states
-                    // that found nothing where a re-ask is most useful. And the row above has to be
-                    // on: forgetting what the directory said *is* the re-ask, so with the lookup
-                    // off this could only delete the sheet the panel is showing.
+                    // Needs the lookup on: forgetting the directory's answer is the re-ask, so off
+                    // it could only delete the sheet on show.
                     button-enabled: Lyrics.state != LyricsState.idle && Lyrics.online-enabled;
                     clicked => {
                         Lyrics.refresh();
@@ -136,12 +117,8 @@ export component LyricsMenu inherits Rectangle {
                     }
                 }
 
-                // The tag editor's own Lyrics tab, on the playing track. "Save to file" above
-                // writes what the panel found and asks nothing; this is for the sheet that is
-                // nearly right, where a stamp is half a second out and the fix is to type it.
-                //
-                // **The playing track is read here rather than at wire time**, this popup
-                // outliving any one song.
+                // For a sheet that is nearly right. The playing track is read at the click, this
+                // popup outliving any one song.
                 OverflowRow {
                     icon: "edit";
                     label: @tr("Edit lyrics…");

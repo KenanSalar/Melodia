@@ -1,8 +1,6 @@
 //! The Genres tab as [`grid_tab`] drives it through a section enter, a leave and a library
 //! change.
-//!
-//! Genres are procedural-gradient tiles with no cover tier, so a leave hands back no images and
-//! the detail's hero gives back only the colour set and chip row every hero shares.
+//! With no cover tier, a leave hands back no images and the hero only what every hero shares.
 
 use std::sync::Arc;
 
@@ -17,7 +15,6 @@ use melodia_app::state::AppState;
 use melodia_core::error::AppResult;
 use melodia_ui::{AppWindow, GenreDetail, Genres, NavEnterFrom};
 
-/// Wire the Genres section-lifecycle callbacks. See [`super::wire`].
 pub(super) fn wire(ui: &AppWindow, state: &AppState, genres_ui: &Arc<GenresUi>) {
     grid_tab::wire(ui, state, genres_ui);
 }

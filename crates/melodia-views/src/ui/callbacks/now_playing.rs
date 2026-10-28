@@ -18,12 +18,9 @@ use melodia_app::state::AppState;
 use melodia_core::error::describe;
 use melodia_ui::{AppWindow, Player};
 
-/// The view-side surfaces holding a per-row `is_favorite` / `rating`, bundled so the two
-/// Now-Playing fan-outs clone one handle. Each patch no-ops where the id isn't listed, so
-/// mirroring into all of them on every change is safe.
-///
-/// Search is here because the bar's heart is on screen while its results are, and it is the
-/// one surface with no `library_changed` subscriber to correct a missed patch later.
+/// The surfaces holding a per-row `is_favorite` / `rating`. A patch no-ops where the id isn't
+/// listed, so every change mirrors into all of them. Search is here because the bar's heart is
+/// on screen beside its results, and it has no `library_changed` subscriber to catch a miss.
 #[derive(Clone)]
 struct CurrentTrackMirrors {
     tracks: Arc<TracksUi>,
@@ -75,8 +72,7 @@ fn mirrors(ui: &AppWindow, handles: RowFlagHandles<'_>) -> CurrentTrackMirrors {
     }
 }
 
-/// The handles both fan-outs take, borrowed rather than cloned — a parameter list this long
-/// reads as an ordering nobody can check at the call site.
+/// The handles both fan-outs take, bundled so the call site names each one.
 #[derive(Clone, Copy)]
 pub struct RowFlagHandles<'a> {
     pub tracks: &'a Arc<TracksUi>,
@@ -88,13 +84,8 @@ pub struct RowFlagHandles<'a> {
     pub search: &'a Arc<SearchUi>,
 }
 
-/// Wire `Player.toggle-favorite` (heart in the Now Playing view, the
-/// now-playing-bar, and the queue/track overflow menu). Mirrors the
-/// resulting `(id, fav)` into every view-side surface that holds a
-/// per-row `is_favorite`, so a row showing the currently-playing track
-/// updates instantly regardless of which view it sits in.
-///
-/// Call once after every `install` whose handle [`RowFlagHandles`] carries.
+/// Wires `Player.toggle-favorite`, mirroring the result into every [`CurrentTrackMirrors`]
+/// surface. Call once after every `install` whose handle [`RowFlagHandles`] carries.
 pub fn wire_now_playing_favorite(ui: &AppWindow, state: &AppState, handles: RowFlagHandles<'_>) {
     let s = state.clone();
     let m = mirrors(ui, handles);
@@ -111,12 +102,7 @@ pub fn wire_now_playing_favorite(ui: &AppWindow, state: &AppState, handles: RowF
     });
 }
 
-/// Wire `Player.set-current-rating` (star control in the Now Playing view and
-/// the overflow menu). The star-rating analogue of [`wire_now_playing_favorite`]:
-/// rates the currently-playing track and mirrors the `(id, rating)` result into
-/// every view-side surface that holds a per-row `rating`.
-///
-/// Call once after the per-view wires, alongside `wire_now_playing_favorite`.
+/// [`wire_now_playing_favorite`] for `Player.set-current-rating`, wired at the same point.
 pub fn wire_now_playing_rating(ui: &AppWindow, state: &AppState, handles: RowFlagHandles<'_>) {
     let s = state.clone();
     let m = mirrors(ui, handles);

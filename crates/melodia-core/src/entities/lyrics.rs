@@ -1,31 +1,13 @@
-//! What a lyric sheet is, independent of where it came from.
-//!
-//! `library::lyrics` resolves one of these out of a sidecar, a tag or the network, and the Now
-//! Playing panel renders it. Neither end owns the vocabulary, and the panel's crate can name
-//! neither of the other two, so it sits here.
+//! What a lyric sheet is, independent of where it came from: `library::lyrics` resolves one and
+//! the Now Playing panel draws it, and the panel's crate can name neither.
 
 use crate::utils::text::filled;
 
-/// One line, timed or not.
-///
-/// `at_ms` is `None` for a sheet carrying no timing at all, not for an odd line inside a timed
-/// one: the parser keeps a sheet whole, so a mix never reaches here. Non-negative, since an
-/// `[offset:]` that would push an early stamp below zero clamps instead; there is nowhere before
-/// the start to seek to.
-///
-/// `end_ms` is where the sheet says the singing stops, which is a different question from where
-/// the next line starts and is answered far less often: `None` means the sheet did not say, not
-/// that the line runs to its successor. Only a sheet that spells it can tell a pause apart from a
-/// long line, which is what the panel draws its instrumental breaks from.
-///
-/// `translation` is the gloss a bilingual sheet carries under the words. Two fields rather than
-/// one string with a separator in it: the panel draws them at different sizes and the parser is
-/// the half that knows how the sheet spelled the break.
-///
-/// `romanization` is the same words in Latin letters, and unlike the gloss it is derived rather
-/// than read: `library::lyrics::romanize` fills it for a line written in a script it can sound
-/// out, and leaves it `None` for every Latin one. The panel draws the three in the order they are
-/// declared.
+/// One line, timed or not. `at_ms` is `None` only for a sheet with no timing at all, and clamped
+/// non-negative. `end_ms` is where the sheet says the singing stops, `None` where it didn't say,
+/// which is how the panel tells a pause from a long line. `translation` is a bilingual sheet's
+/// gloss, apart because the panel draws it smaller; `romanization` is derived by
+/// `library::lyrics::romanize`. The panel draws the three in declaration order.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct LyricLine {
     pub at_ms: Option<i64>,
@@ -35,11 +17,7 @@ pub struct LyricLine {
     pub translation: Option<String>,
 }
 
-/// Which arm of the resolver answered.
-///
-/// Kept for two questions the resolver cannot answer from the lines alone: whether a sheet is a
-/// candidate for the on-disk store, which only [`LyricsSource::Online`] is, and where an
-/// unexpected one came from when it reaches a log line.
+/// Which arm answered: only [`LyricsSource::Online`] is a candidate for the on-disk store.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum LyricsSource {
     /// A `.lrc` beside the audio file.
@@ -58,13 +36,9 @@ pub struct Lyrics {
 }
 
 impl Lyrics {
-    /// Builds a sheet, or `None` where there is nothing to show.
-    ///
-    /// Every resolver arm ends here, so "blank means no answer" is settled once rather than three
-    /// times. Blank rather than empty: a tag holding only newlines is one a tagger created and
-    /// nobody filled in, and drawing it hands the user a bare panel that claims to have found
-    /// something. Blank lines *inside* a plain sheet are kept, being how one spaces its verses; a
-    /// timed sheet reaches here with none, its blank stamps having closed the lines they end.
+    /// `None` where every line is blank, settled once for every arm: a tag holding only newlines
+    /// is one a tagger created and nobody filled. Blank lines inside a plain sheet are kept,
+    /// spacing its verses.
     #[must_use]
     pub fn new(lines: Vec<LyricLine>, source: LyricsSource) -> Option<Self> {
         if lines.iter().all(|line| line.text.trim().is_empty()) {
@@ -73,22 +47,15 @@ impl Lyrics {
         Some(Self { lines, source })
     }
 
-    /// Whether the panel can follow the song rather than only print it.
-    ///
-    /// Derived rather than stored: a `synced` field is a second answer to a question the lines
-    /// already settle, and two answers can drift apart.
+    /// Derived rather than stored, so it can't drift from the lines.
     #[must_use]
     pub fn is_synced(&self) -> bool {
         self.lines.iter().any(|line| line.at_ms.is_some())
     }
 }
 
-/// What asking "does this track have lyrics" came to.
-///
-/// Three states rather than an `Option<Lyrics>`, because the store has to tell the last two apart:
-/// a recording the directory *knows* has no words should never be asked about again, where one it
-/// simply has not got deserves another try once its contributors have caught up. The panel draws
-/// them differently too, one saying the song is instrumental and the other that nothing was found.
+/// The store never asks about an instrumental again, retries an absent one once contributors
+/// have caught up, and records nothing for [`Self::Unavailable`].
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum LyricsOutcome {
     Sheet(Lyrics),
@@ -96,24 +63,13 @@ pub enum LyricsOutcome {
     Instrumental,
     /// Nobody has a sheet for it.
     Absent,
-    /// The directory could not be asked, or refused to answer.
-    ///
-    /// **Not a fact about the recording**, which is the whole reason it is not [`Self::Absent`].
-    /// The other three are answers and this is the absence of one, so nothing may record it: a
-    /// refusal written down as "nobody has this" would suppress the track for as long as a real
-    /// miss stands, on the strength of a bad minute.
+    /// The directory couldn't be asked, or refused. Not a fact about the recording, so recording
+    /// it would suppress the track on the strength of a bad minute.
     Unavailable,
 }
 
-/// What a lyrics directory said about one track.
-///
-/// The boundary between the crate that makes the request and the crate that decides what to do
-/// with it, so the service's own response shape stays private to the former, as the radio
-/// directory's does.
-///
-/// **Three outcomes, not two.** A sheet, nothing, or a track the directory knows has no words at
-/// all. The last is a *positive* answer: it deserves copy that says so and it should never be
-/// asked again, where "nothing found" is a different sentence and a different retry.
+/// What a lyrics directory said about one track, keeping the service's response shape private to
+/// the crate that asked. `instrumental` is a positive answer, never asked again.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct LyricsAnswer {
     /// LRC text, where the directory has a timed sheet.
@@ -124,57 +80,34 @@ pub struct LyricsAnswer {
 }
 
 impl LyricsAnswer {
-    /// The text worth keeping, timed in preference to plain.
-    ///
-    /// One place decides that preference, so the copy written to the store and the copy handed to
-    /// the parser cannot disagree about which sheet arrived.
-    ///
-    /// **Each field is judged before it is preferred.** A directory that answers with an empty
-    /// `syncedLyrics` beside a real `plainLyrics` is answering with the plain one, and picking the
-    /// timed field first and testing it afterwards would throw that away.
+    /// Timed in preference to plain, decided once so the stored and the parsed copy agree. Each
+    /// field is judged before it is preferred: an empty `syncedLyrics` beside a real
+    /// `plainLyrics` answers with the plain one.
     #[must_use]
     pub fn text(&self) -> Option<&str> {
         filled(self.synced.as_deref()).or_else(|| filled(self.plain.as_deref()))
     }
 
-    /// Whether the answer carries a sheet the panel can follow.
-    ///
-    /// Here beside [`Self::text`] because it is the same judgement one step earlier: a client
-    /// deciding whether to keep looking for a timed sheet has to read the field the way the
-    /// caller that consumes it will. A present-but-blank `synced` tested for presence alone ends
-    /// the search on a sheet [`Self::text`] then declines to hand over.
+    /// Judged as [`Self::text`] judges it, or a blank `synced` would end a search on a sheet
+    /// `text` then declines.
     #[must_use]
     pub fn is_synced(&self) -> bool {
         filled(self.synced.as_deref()).is_some()
     }
 
-    /// Whether the sheet it carries glosses its lines.
-    ///
-    /// Read off the text rather than a field of its own: the directories carry no such column, and
-    /// a bilingual upload is one that put the gloss in the string.
+    /// Read off the text, the directories carrying no such column.
     #[must_use]
     pub fn has_gloss(&self) -> bool {
         self.text().is_some_and(carries_gloss)
     }
 }
 
-/// What a bilingual sheet puts between a line and its translation.
-///
-/// No part of the format, but the directories carry sheets written this way and left in the string
-/// the gloss is drawn as the tail of the line it is glossing, which is the one thing it must not
-/// look like.
-///
-/// **Here rather than beside the parser** because the client that picks a row has to read a gloss
-/// the same way the parser that splits one will: the directory files several uploads per recording
-/// and only some carry a translation, so choosing between them means asking this question of raw
-/// text, one crate before anything is parsed.
+/// What a bilingual sheet puts between a line and its gloss, no part of the format. Here because
+/// the client choosing among a recording's uploads asks about a gloss of raw text, before anything
+/// is parsed.
 pub const TRANSLATION_MARK: char = '^';
 
-/// Splits one line into the words and the gloss under them.
-///
-/// **Only a caret with text either side is a separator; a bare one is a character.** Falls back to
-/// the whole line wherever it is not acting as one, so a sheet that simply contains a caret keeps
-/// it.
+/// Only a caret with text either side separates; anywhere else it is a character, and kept.
 #[must_use]
 pub fn split_gloss(line: &str) -> (&str, Option<&str>) {
     let Some((sung, gloss)) = line.split_once(TRANSLATION_MARK) else {
@@ -187,11 +120,7 @@ pub fn split_gloss(line: &str) -> (&str, Option<&str>) {
     (sung, Some(gloss))
 }
 
-/// Whether any line of `text` carries a gloss.
-///
-/// Asked of raw LRC, stamps and all: [`split_gloss`] reads the tail of a line and cares nothing
-/// for what precedes the caret, so this answers before a sheet is parsed. An `[ar:A^B]` counts
-/// where the parser would drop the line, which is worth less than a second reading of the sheet.
+/// Asked of raw LRC, stamps and all, so it answers before a sheet is parsed.
 #[must_use]
 pub fn carries_gloss(text: &str) -> bool {
     text.lines().any(|line| split_gloss(line).1.is_some())

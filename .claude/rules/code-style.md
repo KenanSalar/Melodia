@@ -67,6 +67,13 @@ tests, holds no duplication, says what it means, and has no more parts than that
   taken owned (`String`, `Vec<T>`, `PathBuf`): a caller done with its value moves it in, one
   that isn't clones at the call site. A `&str` the body `.to_owned()`s copies on every call.
   Clippy's `needless_pass_by_value` catches an owned parameter that is only read, not this.
+- **Borrow the data, not its holder** - a parameter that is only read takes `&T`, `&[T]`, `&str`,
+  `&Path` or `Option<&T>`, not `&Arc<T>`, `&Rc<T>`, `&Box<T>`, `&Vec<T>`, `&String`, `&PathBuf`
+  or `&Option<T>`. Naming the holder ties every caller to one way of storing the value. A
+  `&Arc<T>` or `&Rc<T>` is right only where the body keeps a pointer of its own: it clones or
+  downgrades it, or hands it to a callee that does. Clippy holds `&Box<T>`, `&Vec<T>`, `&String`
+  and `&PathBuf` everywhere (`borrowed_box`, `ptr_arg`) and `&Option<T>` on private items only
+  (`ref_option`); nothing holds `&Arc<T>` or `&Rc<T>`.
 - **Command or query, never both** - a function either changes state or answers a question.
   One that does both leaves every call site working out whether calling it twice is safe.
 - **Don't reach through** - `a.b().c().d()` couples the caller to the shape of everything in
@@ -125,6 +132,20 @@ each earn its place, and re-read every comment before moving on.
 - **Document public APIs** using the doc-comment format below. Start with a single-sentence
   summary; don't just repeat the member name.
 
+**The budget is about 0.25 comment lines per line of code**, each corpus measured on its own:
+
+```bash
+# production Rust
+cloc --include-lang=Rust --exclude-dir=tests,target,melodia-testkit,benches \
+  --not-match-f='_tests\.rs$' crates
+# the Slint tree: cloc has no Slint, and C++ comments the same way
+cloc --force-lang=C++,slint --include-ext=slint crates/melodia-ui/ui
+```
+
+It holds across the corpus, not per file: a module of `SAFETY:` invariants and tuned constants
+can sit above it while a plain one sits well below. It shows drift and is never an allowance; a
+comment the rules above don't justify goes whatever the count says.
+
 **Doc comments in this tree:**
 
 | Language | Doc syntax | Notes |
@@ -133,4 +154,6 @@ each earn its place, and re-read every comment before moving on.
 | Slint | none — `//` and `/* */` only | Nothing extracts docs from `.slint`, so a note above a component, property or callback is the whole affordance; keep it to why the binding is shaped that way |
 
 SQL migrations (`--`) and the `scripts/` helpers (`#`) have no doc-comment form either; the
-generic rules above are the whole contract there.
+generic rules above are the whole contract there. A shipped migration's comments are frozen with
+its SQL: sqlx checksums the whole file, so trimming one fails the migration run on every database
+that already applied it.

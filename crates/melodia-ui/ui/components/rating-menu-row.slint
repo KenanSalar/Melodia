@@ -2,13 +2,11 @@ import { Theme } from "../theme.slint";
 import { MaterialIcon } from "material-icon.slint";
 import { StarRating } from "star-rating.slint";
 
-// A menu's rating row: a star glyph, the label and the strip, a star applying as it is clicked. The
-// bar's overflow menu mounts it over the playing track and the row menu over its row or selection,
-// each sized to its own rows. Neither closes on a star, so a pick can be corrected in place.
+// A menu's rating row, a star applying as it is clicked. No host closes on a star, so a pick can be
+// corrected in place.
 //
 // **Over a selection it shows the clicked row's stars and the host applies the pick to the whole
-// set**, so the lit star clears every track in it. That is `FavoriteMenuItem`'s rule, the direction
-// taken from the item the menu was raised on: a selection has no one rating to show.
+// set**, `FavoriteMenuItem`'s rule: a selection has no one rating to show.
 export component RatingMenuRow inherits Rectangle {
     in property <int> rating;
     in property <bool> enabled: true;
@@ -17,7 +15,7 @@ export component RatingMenuRow inherits Rectangle {
     in property <length> row-height;
     in property <length> icon-size;
     in property <length> star-size;
-    // The glyph's ink while unrated, which is the host's own row icon colour.
+    // The host's own row icon colour, for the glyph while unrated.
     in property <brush> idle-icon-color;
 
     callback rated(int /*new_rating*/);
@@ -46,8 +44,7 @@ export component RatingMenuRow inherits Rectangle {
             filled: root.rating > 0;
             fade: root.fade;
         }
-        // Elided, so a long translation shortens inside a menu at its width ceiling. The preferred
-        // width stays the whole label, which is what a menu sizes itself off.
+        // Elided, its preferred width still the whole label, which a menu sizes itself off.
         Text {
             horizontal-stretch: 1;
             text: root.multi-active

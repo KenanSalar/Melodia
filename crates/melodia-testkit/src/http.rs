@@ -10,10 +10,10 @@
 //! did **not** happen anywhere needs no server, and a suite cannot see a call site nobody has
 //! written yet.
 //!
-//! Hand-rolled against `std::net` rather than taken as a dependency. `.claude/rules/testing.md`
-//! asks for an argument before a framework arrives, and the argument here comes out the other
-//! way: enough HTTP/1.1 to serve a status, some headers and a body is this file, and a mock
-//! framework's matching DSL is the half these suites would not use.
+//! Hand-rolled against `std::net` rather than taken as a dependency, a mock framework being a
+//! choice for the whole workspace, which runs none. Enough HTTP/1.1 to serve a status, some
+//! headers and a body is this file, and a framework's matching DSL is the half these suites would
+//! not use.
 
 use std::io::{BufRead, BufReader, Read, Write};
 use std::net::{Shutdown, SocketAddr, TcpListener, TcpStream};

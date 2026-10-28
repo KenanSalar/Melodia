@@ -1,7 +1,5 @@
-//! `Search.*` lazy cover-lookup callbacks — album strip, artist strip,
-//! and the kind-routed Top Result tile. (Result rows resolve through the
-//! shared `RowCovers` global like every other `TrackListRowItem`.) See
-//! [`super::wire`].
+//! The strips' and the Top Result's cover lookups; result rows resolve through `RowCovers` like
+//! every list's.
 
 use std::sync::Arc;
 
@@ -10,7 +8,6 @@ use slint::ComponentHandle;
 use crate::ui::search::SearchUi;
 use melodia_ui::{AppWindow, Search};
 
-/// Wire the three `request-*-cover` callbacks.
 pub(super) fn wire(ui: &AppWindow, search_ui: &Arc<SearchUi>) {
     let g = ui.global::<Search>();
     let weak = ui.as_weak();
@@ -23,15 +20,8 @@ pub(super) fn wire(ui: &AppWindow, search_ui: &Arc<SearchUi>) {
         let su = search_ui.clone();
         g.on_request_artist_strip_cover(move |path| su.artist_strip_cover(path.as_str()));
     }
-    // Top Result cover routes per kind — album → album-strip tier,
-    // artist → artist-strip tier. Cache parity with the strip below
-    // means clicking a strip card after the top card hits a warm LRU.
-    // A genre still reaches this, with an empty path — `ArtworkImage`
-    // reads `cover` in every one of its branch conditions, so the card's
-    // binding evaluates whatever the kind is. `get_or_load_opt` filters
-    // the empty string to `Image::default()`, so which tier it lands in
-    // is a no-op and the card paints its gradient branch. Same for a
-    // coverless album or artist, which is why the `else` needs no arm.
+    // Each kind asks its own strip's tier. A genre or a coverless result still asks, with an
+    // empty path that loads nothing from either, so the `else` needs no genre arm.
     {
         let su = search_ui.clone();
         let weak = weak.clone();

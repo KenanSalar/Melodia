@@ -1,17 +1,9 @@
-//! Last.fm provider: the signed API calls behind desktop auth, "now playing",
-//! scrobble submission, and love/unlove.
+//! The signed Last.fm calls: desktop auth, now-playing, scrobbles and love/unlove.
 //!
-//! The API key + shared secret identify the *application*, not a listening
-//! account — every user scrobbles to their own account via their own session
-//! key. They're read at compile time from the environment so nothing secret is
-//! committed: official releases inject them as CI secrets, while a keyless local
-//! build leaves `ListenBrainz` fully working and the Last.fm surface inert
-//! (gated on [`is_configured`]).
-//!
-//! Every call POSTs to the 2.0 endpoint as form-urlencoded with `format=json`.
-//! Last.fm reports failures in the response *body* (HTTP stays 200), so the
-//! functions parse the in-body `{"error": <code>}` into a [`LastfmError`] the
-//! submitter can act on.
+//! The key and shared secret identify the application, not an account, and are read at compile
+//! time so nothing secret is committed. A keyless build leaves `ListenBrainz` working and this
+//! surface inert ([`is_configured`]). Last.fm reports a failure in the body under HTTP 200, so
+//! the in-body code is what becomes a [`LastfmError`].
 
 use std::collections::BTreeMap;
 
@@ -24,11 +16,8 @@ use melodia_core::error::AppError;
 const LASTFM_API_KEY: Option<&str> = non_empty_env(option_env!("LASTFM_API_KEY"));
 const LASTFM_SHARED_SECRET: Option<&str> = non_empty_env(option_env!("LASTFM_SHARED_SECRET"));
 
-/// Treat a present-but-empty compile-time env var as absent. CI wires
-/// `env: LASTFM_API_KEY: ${{ secrets.LASTFM_API_KEY }}` unconditionally, and a
-/// missing secret substitutes an empty string that `option_env!` reports as
-/// `Some("")`, not `None` — folding it back to `None` keeps a keyless build
-/// ListenBrainz-only.
+/// CI sets `LASTFM_API_KEY: ${{ secrets.LASTFM_API_KEY }}` unconditionally, and a missing secret
+/// arrives as `Some("")`, which has to read as keyless.
 const fn non_empty_env(value: Option<&str>) -> Option<&str> {
     match value {
         Some(s) if s.is_empty() => None,
@@ -36,13 +25,9 @@ const fn non_empty_env(value: Option<&str>) -> Option<&str> {
     }
 }
 
-/// The Last.fm 2.0 API endpoint. Every method POSTs here as form-urlencoded.
-///
-/// Not a parameter, unlike [`listenbrainz::LB_API_BASE`]: reaching the POST at all needs
-/// [`is_configured`], which reads keys baked in at compile time, so a drain test would exercise
-/// the call on a keyed build and skip on a keyless CI one while asserting the same thing. What is
-/// testable either way is the retry policy, and `submit`'s `lastfm_reaction` holds that with no
-/// socket.
+/// A constant, unlike [`listenbrainz::LB_API_BASE`]: a POST needs the compile-time keys, so a
+/// drain test against it would run on a keyed build and skip on keyless CI. The retry policy is
+/// what's testable either way, and `submit::lastfm_reaction` holds it with no socket.
 ///
 /// [`listenbrainz::LB_API_BASE`]: super::listenbrainz::LB_API_BASE
 const LASTFM_ENDPOINT: &str = "https://ws.audioscrobbler.com/2.0/";
@@ -51,36 +36,26 @@ const LASTFM_ENDPOINT: &str = "https://ws.audioscrobbler.com/2.0/";
 /// error shape, which carries a message written for a human.
 const RESPONSE_MAX_BYTES: u64 = 256 * 1024;
 
-/// Whether this build shipped Last.fm app credentials (both key and secret).
-/// Gates the Last.fm setter / UI / detector so a keyless build ships
-/// ListenBrainz-only.
+/// Whether this build shipped both app keys.
 pub fn is_configured() -> bool {
     keys().is_some()
 }
 
-/// The app key and shared secret this build shipped, `None` unless it shipped both. Every signed
-/// call takes the pair, so a caller asks for it whole.
+/// `None` unless the build shipped both, every signed call taking the pair.
 pub fn keys() -> Option<(&'static str, &'static str)> {
     Some((LASTFM_API_KEY?, LASTFM_SHARED_SECRET?))
 }
 
-/// A Last.fm API call's outcome, classified so the submitter can pick a policy.
-/// The retry decision hinges on the numeric in-body error code, not HTTP status.
+/// Classified by the in-body code, not the HTTP status, for the submitter's retry policy.
 #[derive(Debug, thiserror::Error)]
 pub enum LastfmError {
-    /// Error 9 — the session key is no longer valid. Drop it, prompt a re-auth,
-    /// and stop retrying.
+    /// Error 9: the session key is no longer valid.
     #[error("Last.fm session key rejected (error 9)")]
     InvalidSession,
-    /// Errors 11/16 (service offline / temporarily unavailable) and 29 (rate
-    /// limit): keep the work queued and back off.
+    /// Errors 11 and 16 (service offline or unavailable) and 29 (rate limit).
     #[error("Last.fm temporarily unavailable (error {code}): {message}")]
     Transient { code: u32, message: String },
-    /// Any other API-level error code. Retried with the submitter's exponential
-    /// backoff; there's no per-item attempt counter, so a genuinely permanent
-    /// code (e.g. 10 invalid API key, 26 suspended) keeps its queue slot until the
-    /// cap evicts it. Kept queued deliberately — a code mis-classified as
-    /// permanent would otherwise silently lose the listen.
+    /// Any other code, retried all the same (`submit::lastfm_reaction`).
     #[error("Last.fm API error {code}: {message}")]
     Api { code: u32, message: String },
     /// Transport or response-decode failure (no reply, malformed JSON, …).
@@ -88,8 +63,7 @@ pub enum LastfmError {
     Transport(#[from] AppError),
 }
 
-/// Step 1 of desktop auth: request an unauthorized token to send the user to the
-/// Last.fm approval page. Signed, but carries no session key yet.
+/// Desktop auth, step one: a token for the user to approve on Last.fm's page.
 pub async fn get_token(
     client: &reqwest::Client,
     api_key: &str,
@@ -108,8 +82,7 @@ pub async fn get_token(
     Ok(token.to_owned())
 }
 
-/// Step 2 of desktop auth: exchange the user-approved token for a long-lived
-/// session key, returning the credentials to persist.
+/// Desktop auth, step two: the approved token traded for the session to persist.
 pub async fn get_session(
     client: &reqwest::Client,
     api_key: &str,
@@ -137,7 +110,6 @@ pub async fn get_session(
     Ok(LastfmCredentials { session_key: session_key.to_owned(), username: username.to_owned() })
 }
 
-/// Report the currently-playing track. Ephemeral — never retried or queued.
 pub async fn update_now_playing(
     client: &reqwest::Client,
     api_key: &str,
@@ -150,8 +122,7 @@ pub async fn update_now_playing(
     Ok(())
 }
 
-/// Submit a batch of scrobbles. Last.fm caps a single POST at 50 listens; the
-/// caller chunks accordingly. An empty batch is a no-op.
+/// The caller chunks to Last.fm's cap of 50 listens a POST. An empty batch is a no-op.
 pub async fn scrobble_batch(
     client: &reqwest::Client,
     api_key: &str,
@@ -167,7 +138,7 @@ pub async fn scrobble_batch(
     Ok(())
 }
 
-/// Love or unlove a track on the user's account (mirrors the in-app favorite).
+/// Mirrors the in-app favorite onto the user's account.
 pub async fn love(
     client: &reqwest::Client,
     api_key: &str,
@@ -181,7 +152,6 @@ pub async fn love(
     Ok(())
 }
 
-/// Map a Last.fm in-body error code to its retry policy.
 fn classify(code: u32, message: String) -> LastfmError {
     match code {
         9 => LastfmError::InvalidSession,
@@ -190,12 +160,8 @@ fn classify(code: u32, message: String) -> LastfmError {
     }
 }
 
-/// Compute the `api_sig`: MD5 hex of the params sorted by name and concatenated
-/// as `name1value1name2value2…` with the shared secret appended.
-///
-/// `format` and `api_sig` are excluded from the signature simply by never being
-/// in `params` — they're added to the request only after signing. `method` is
-/// included; the `BTreeMap` supplies the required alphabetical key order.
+/// The `api_sig`: MD5 hex of `name1value1name2value2…` in name order, the shared secret
+/// appended. `format` and `api_sig` stay out of it by being added only after signing.
 fn sign<K: AsRef<str>>(params: &BTreeMap<K, String>, secret: &str) -> String {
     let mut signing_input = String::new();
     for (name, value) in params {
@@ -206,8 +172,6 @@ fn sign<K: AsRef<str>>(params: &BTreeMap<K, String>, secret: &str) -> String {
     format!("{:x}", md5::compute(signing_input))
 }
 
-/// Sign the request, then append the two params excluded from the signature:
-/// `api_sig` itself and `format=json`.
 fn finalize_and_sign<K>(mut params: BTreeMap<K, String>, secret: &str) -> BTreeMap<K, String>
 where
     K: Ord + AsRef<str> + From<&'static str>,
@@ -218,8 +182,6 @@ where
     params
 }
 
-/// The signed-portion params for `track.updateNowPlaying` (no `format` /
-/// `api_sig` — those are added after signing).
 fn now_playing_params(
     api_key: &str,
     session_key: &str,
@@ -249,8 +211,6 @@ fn now_playing_params(
     params
 }
 
-/// The signed-portion params for a `track.scrobble` batch, one bracketed index
-/// per listen (`artist[0]`, `track[0]`, `timestamp[0]`, …).
 fn scrobble_params(
     api_key: &str,
     session_key: &str,
@@ -283,7 +243,6 @@ fn scrobble_params(
     params
 }
 
-/// The signed-portion params for `track.love` / `track.unlove`.
 fn love_params(
     api_key: &str,
     session_key: &str,
@@ -300,10 +259,6 @@ fn love_params(
     params
 }
 
-/// POST the finalized (signed) params as form-urlencoded and turn the response
-/// into a classified result. Last.fm answers with HTTP 200 and an in-body
-/// `{"error": <code>, "message": …}` on failure, so success is read from the
-/// body, not the status.
 async fn send<K: Serialize>(
     client: &reqwest::Client,
     params: &BTreeMap<K, String>,

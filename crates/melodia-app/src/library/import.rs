@@ -10,10 +10,7 @@ use melodia_store::database::{DbPool, queries};
 use melodia_store::media::ingest::scan_pool::ScanPool;
 use melodia_store::media::ingest::scanner::{Unobserved, scan_files_parallel};
 
-/// Result of importing files into the library (shared by playlist and queue import).
-///
-/// `summaries` costs a second projection query, so [`import_files`] leaves it empty and
-/// [`import_and_summarize`] is the variant that fills it.
+/// `summaries` costs a second query, so only [`import_and_summarize`] fills it.
 #[derive(Clone)]
 pub struct ImportFilesResult {
     pub track_ids: Vec<i64>,
@@ -22,11 +19,9 @@ pub struct ImportFilesResult {
     pub summaries: Vec<Arc<TrackSummary>>,
 }
 
-/// Imports audio files into the library, returning track IDs for all valid files
-/// (both newly imported and already-existing). Reusable by playlist and queue commands.
-///
-/// Takes the three pieces it reaches rather than an `&AppState`, as
-/// [`super::tags::write_tag_edit`] does, so a drop can be replayed against a `test_pool`.
+/// Imports audio files, answering the id of every valid one, new or already in the library. Takes
+/// the three pieces it reaches rather than `&AppState`, so a drop can be replayed against a
+/// `test_pool`.
 async fn import_files(
     db: &DbPool,
     artwork_dir: &Path,
@@ -93,9 +88,8 @@ async fn import_files(
 
             imported_count = result.inserted_count;
 
-            // IDs come from `insert_tracks_batch`'s `RETURNING id, file_path`
-            // (remapped to input/drop order via the returned path), collected
-            // during ingest — no follow-up `WHERE file_path IN (…)` round-trip.
+            // From `insert_tracks_batch`'s `RETURNING`, remapped to drop order by path, so there
+            // is no follow-up `IN` query.
             all_track_ids.extend(result.inserted_track_ids);
         }
     }
@@ -108,10 +102,7 @@ async fn import_files(
     })
 }
 
-/// Like [`import_files`] but additionally fetches `TrackSummary` rows for every imported id
-/// (both newly-inserted and already-existing) in a single `WHERE id IN (...)` query, populated
-/// into `ImportFilesResult.summaries`, so a drop path doesn't have to do its own follow-up
-/// SELECT.
+/// [`import_files`] plus every imported id's `TrackSummary`, in one query.
 pub(crate) async fn import_and_summarize(
     db: &DbPool,
     artwork_dir: &Path,

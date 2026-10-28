@@ -1,15 +1,9 @@
 //! [`PlaybackContext`], the one dependency slice of [`AppState`], taken by `library::playback::*`.
 //!
-//! No second context exists. Elsewhere in `library` a function reading only `paths` or only `db`
-//! takes that field and the rest take the whole state, and a struct between the two would only
-//! rename one of them.
-//!
-//! `PlaybackContext` owns its `Arc`s rather than borrowing from
-//! `AppState`. Each field is already `Arc`-backed under the hood, so a
-//! `playback_ctx()` call costs six `Arc::clone` increments — cheap
-//! enough that callers don't need to think about reuse. Owned fields
-//! also dodge the "temporary doesn't live long enough" pattern when the
-//! ctx is built inline in an `async move` block.
+//! No second context exists: elsewhere in `library` a function takes the one field it reads or the
+//! whole state, and a struct between the two would only rename one of them. The context owns its
+//! `Arc`s rather than borrowing from `AppState`, so building one is six clones and it moves into
+//! an `async move` without a lifetime to satisfy.
 
 use std::sync::{Arc, OnceLock};
 
@@ -21,8 +15,7 @@ use melodia_store::database::DbPool;
 
 use super::AppState;
 
-/// Dependency slice consumed by `library::playback::*`. Every field is
-/// `Arc`-backed; cloning the context is cheap.
+/// Dependency slice consumed by `library::playback::*`.
 #[derive(Clone)]
 pub struct PlaybackContext {
     pub player_state: Arc<PlayerStateHandle>,
@@ -30,18 +23,15 @@ pub struct PlaybackContext {
     pub engine: Arc<PlaybackEngine>,
     pub db: DbPool,
     pub paths: Arc<Paths>,
-    /// The same lazily-built client `AppState`, scrobbling and Discord presence share, so a
-    /// station opens on the one connection pool and carries the `Melodia/<version>` User-Agent
-    /// with it. Carried here rather than passed per call because resuming a paused station is a
-    /// transport command like any other, and `player_play` has only this.
+    /// [`AppState::http_client_cell`], so a station opens on the one pool with its User-Agent.
+    /// Carried rather than passed per call, resuming a paused station being a transport command
+    /// like any other and `player_play` having only this.
     pub http: Arc<OnceLock<reqwest::Client>>,
 }
 
 impl PlaybackContext {
-    /// Serialized mutate → emit → execute against this context's handles. Thin
-    /// forwarder over [`melodia_engine::player::engine::actions::emit_and_execute`] so the
-    /// `library::playback::*` / `library::queue::*` call sites stay one-liners
-    /// while still routing through the shared execution lock.
+    /// [`melodia_engine::player::engine::actions::emit_and_execute`] over this context's handles,
+    /// so the call sites stay one-liners through the shared execution lock.
     pub fn emit_and_execute<F>(&self, f: F)
     where
         F: FnOnce(&mut PlayerState) -> Vec<PlayerAction>,
@@ -56,9 +46,7 @@ impl PlaybackContext {
 }
 
 impl AppState {
-    /// Snapshot a [`PlaybackContext`] from the live state. Cheap — six
-    /// `Arc::clone` calls. Build once per UI callback rather than per
-    /// `library::playback::*` invocation if you're firing several in a row.
+    /// Snapshot a [`PlaybackContext`] from the live state.
     pub fn playback_ctx(&self) -> PlaybackContext {
         PlaybackContext {
             player_state: self.player_state.clone(),

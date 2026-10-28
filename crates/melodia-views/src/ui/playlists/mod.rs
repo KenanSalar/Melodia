@@ -1,23 +1,9 @@
-//! Playlists-view glue between Rust and Slint.
+//! The Playlists page, shaped like [`crate::ui::albums`]: a card grid, and a detail listing the
+//! playlist as a [`TrackRows`] whose keyset, in the playlist's own order, *is* the playlist, so a
+//! drag moves one id in it.
 //!
-//! Two Slint globals are driven from here:
-//!
-//! * `Playlists` — the responsive playlist-card grid, a paged grid of the
-//!   playlists' ids in the current sort and filter, its loads `ui::card_grid`'s.
-//!   Per-card cover lookup is lazy via `request-cover`. `Playlists.count`, which
-//!   every row menu's Add to Playlist entry is gated on, is kept current from
-//!   launch by every playlist write, whatever tab is up.
-//!
-//! * `PlaylistDetail` — the full playlist detail view. `open_playlist`
-//!   fetches the header and the playlist's tracks as a keyset in a
-//!   [`TrackRows`], whose [`DetailCache`] holds the sort and filter its loads
-//!   run under. In its own order the keyset *is* the playlist's, so a drag
-//!   moves one id in it.
-//!
-//! Cross-thread layout mirrors `albums.rs`: `PlaylistsUi` is `Send + Sync`,
-//! cloned into callbacks / tokio tasks; Slint properties and models are
-//! only touched from the UI thread via
-//! `Weak<AppWindow>::upgrade_in_event_loop`.
+//! `Playlists.count` gates every row menu's Add to Playlist, so it is kept current from launch by
+//! every playlist write, whatever tab is up.
 
 mod callbacks;
 mod detail;
@@ -50,28 +36,21 @@ use melodia_ui::{
 
 use grid::PlaylistsGrid;
 
-// Reached from outside the slice: `ui::nav_history` replays a walk into a
-// detail, `boot::ui_setup` seeds the persisted one, and its
-// `initial_grid_fetch!` kicks the first load after the window is shown
-// — which is why `reload_grid` can't fold into `install` with the rest.
 pub use detail::{detail_on_screen, open_playlist_with, seed_detail_from_settings};
 pub use grid::reload_grid;
 
-// Reached from this slice's own `callbacks/`. `pub(super)` is `pub(in crate::ui)`
-// here, one notch wider than that.
 pub(super) use detail::{
     apply_optimistic_move, open_playlist, picked_rows, refresh_detail, refresh_header,
     restore_detail, track_ids_at,
 };
 pub(super) use grid::{refresh_after_write, refresh_play_stats, shown_card};
 
-/// The M3U8 import / export and Add-to-Playlist wiring, kept out of [`install`] because each
-/// needs the `Rc<NotificationsUi>` for its completion toasts and that is created after the
-/// per-view wiring runs. Boot's `install_ui` calls it once the stack exists.
+/// The M3U8 import and export and the Add-to-Playlist wiring, outside [`install`] for the
+/// `Rc<NotificationsUi>` their toasts need, which exists only after the views.
 pub use callbacks::wire_files;
 
-/// Install the Playlists grid + detail models, build the handle, and wire every
-/// `Playlists.*` / `PlaylistDetail.*` callback to it, bar the ones [`wire_files`] holds.
+/// Installs the grid and detail models and wires every `Playlists.*` / `PlaylistDetail.*`
+/// callback but [`wire_files`]'.
 ///
 /// The returned handle is not a keepalive; see [`crate::ui::albums::install`].
 pub fn install(cx: ViewCtx<'_>) -> Arc<PlaylistsUi> {
@@ -89,21 +68,15 @@ pub fn install(cx: ViewCtx<'_>) -> Arc<PlaylistsUi> {
     playlists_ui
 }
 
-/// Rust-side state for the Playlists grid + detail views. Shared between
-/// the UI callbacks (`callbacks::wire`) and the async loads. Mirrors
-/// `AlbumsUi` field-for-field.
+/// The Playlists grid's and detail's state, shared by the UI callbacks and the async loads.
 pub struct PlaylistsUi {
     grid: GridLoads,
     detail: DetailCache<PlaylistDetail<'static>>,
-    /// Row-tier cache — shared with Tracks / Browse — backs the
-    /// detail track-list's artwork column.
-    /// The grid cards draw from `ui::grid_prewarm::tier()`, which no view holds.
+    /// The shared row tier, for the detail `TrackList`'s artwork column and the mosaic picker's
+    /// tiles. The cards draw from `ui::grid_prewarm::tier()`, which no view holds.
     cover_thumbs: Arc<CoverThumbs>,
-    /// Detail-tier `(cover, blur)` pair cache for the Playlist Detail
-    /// header. Released on detail-close and on section-leave.
+    /// The detail header's `(cover, blur)` pair; see [`crate::ui::detail_artwork`].
     detail_artwork: Arc<DetailArtwork>,
-    /// Section-visibility + staleness bookkeeping (on-screen shadow, dirty
-    /// flag, and the wipe/fetch mutation gate). See [`SectionState`].
     section: SectionState,
     /// The pick a random-capped smart playlist's detail lists, drawn once per open so its sorts,
     /// filters, reloads and hero all describe the same tracks.
@@ -131,8 +104,8 @@ impl PlaylistsUi {
         }
     }
 
-    /// Drop just the detail-tier `(cover, blur)` pair cache — called
-    /// when the user closes a playlist detail.
+    /// Drops the detail's `(cover, blur)` pair on close, for
+    /// [`crate::ui::albums::AlbumsUi::release_detail_artwork`]'s reason.
     pub fn release_detail_artwork(&self) {
         self.detail_artwork.clear();
         melodia_platform::services::platform::allocator::trim();
@@ -145,7 +118,7 @@ impl PlaylistsUi {
         card_grid::prewarm_seeded::<PlaylistsGrid>(self);
     }
 
-    /// Playlist id currently open in the detail view (`-1` = grid).
+    /// The playlist open in the detail, `-1` while the grid is up.
     pub fn detail_playlist_id(&self) -> i64 {
         self.detail.id()
     }
@@ -159,20 +132,14 @@ impl PlaylistsUi {
         *self.draw.lock() = Draw(rand::random());
     }
 
-    /// Row-tier cover lookup — backs
-    /// `Playlists.request-row-cover`, used by the mosaic-picker
-    /// dialog's 64 px candidate tiles and preview slots. Resolves
-    /// against the shared `cover_thumbs` LRU (the same one the detail
-    /// track-list artwork column uses), so the dialog doesn't pay for
-    /// a full-size grid-tier decode for a 64 px tile.
+    /// `Playlists.request-row-cover`, for the mosaic picker's 64 px tiles, off the row tier rather
+    /// than a grid-tier decode a tile that size doesn't need.
     pub fn row_cover(&self, artwork_path: &str) -> slint::Image {
         self.cover_thumbs.get_or_load_opt(Some(artwork_path).filter(|s| !s.is_empty()))
     }
 }
 
-/// Build the empty models the Playlists grid, the detail track list, and the detail selection
-/// need, and hand them to the Slint globals as `ModelRc`s. The grid is a `PagedGrid` and the track
-/// list a [`TrackRows`], each installed once.
+/// Hands both globals their models, each installed once and found by downcast afterwards.
 fn install_models(
     ui: &AppWindow,
     state: &AppState,
@@ -206,9 +173,7 @@ impl PagedRow for UiPlaylistRow {
     }
 }
 
-/// Convert a `PlaylistStats` into the Slint `PlaylistRow` an `EntityCard`
-/// (and the detail header) renders. Pure data — the cover is *not*
-/// decoded here; it's pulled lazily per visible card via `request-cover`.
+/// A `PlaylistStats` as the `PlaylistRow` a card and the detail header render.
 pub fn to_slint_playlist_row(p: &PlaylistStats) -> UiPlaylistRow {
     UiPlaylistRow {
         id: clamp_i64_to_i32(p.id),
@@ -224,7 +189,6 @@ pub fn to_slint_playlist_row(p: &PlaylistStats) -> UiPlaylistRow {
 
 impl_section_state_helpers!(PlaylistsUi);
 
-// `const _` is type-checked but never dead-code-flagged, so no `#[allow]` is owed.
 const _: fn() = || {
     fn check<T: Send + Sync>() {}
     check::<PlaylistsUi>();

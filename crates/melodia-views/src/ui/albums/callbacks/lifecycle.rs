@@ -14,7 +14,6 @@ use melodia_app::state::AppState;
 use melodia_core::error::AppResult;
 use melodia_ui::{AlbumDetail, Albums, AppWindow, NavEnterFrom};
 
-/// Wire the Albums section-lifecycle callbacks. See [`super::wire`].
 pub(super) fn wire(ui: &AppWindow, state: &AppState, albums_ui: &Arc<AlbumsUi>) {
     grid_tab::wire(ui, state, albums_ui);
 }

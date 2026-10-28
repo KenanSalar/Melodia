@@ -12,10 +12,8 @@ use melodia_app::state::{AppState, PlaybackContext, SharedFlag};
 use melodia_core::config::Paths;
 use melodia_core::error::{AppError, describe};
 
-/// Persisted settings for an installer to seed its global from, falling back to the inert
-/// defaults if the file is missing or unreadable. Deriving that fallback from
-/// `SettingsData::default()` keeps the seed computed one way either side of the error arm,
-/// which would otherwise be a second copy of the `Default` impl.
+/// Persisted settings for an installer to seed its global from, or `SettingsData::default()`'s
+/// inert values where the file is missing or unreadable.
 pub fn read_or_default(state: &AppState, what: &str) -> SettingsData {
     settings::read_settings(&state.paths).unwrap_or_else(|e| {
         log::warn!("read settings for {what}: {}", describe(&e));
@@ -42,10 +40,8 @@ pub fn toggle_binding(
 
 /// The change-handler for a boolean setting a worker also reads: move the shadow, then persist.
 ///
-/// **The order is the whole of it.** A task firing between the two has to see the new answer
-/// rather than the one still on disk, which is what [`SharedFlag`] is for and what its own doc
-/// asks of every writer. Spelled once here so no call site can get it the other way round, and so
-/// a handler with an extra effect of its own has only that effect left to spell.
+/// **The order is the whole of it**, [`SharedFlag`]'s doc arguing it; spelled once here so no
+/// call site can get it the other way round.
 pub fn shadow_toggle(
     state: &AppState,
     shadow: &SharedFlag,

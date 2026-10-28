@@ -18,8 +18,8 @@
 # centres merge it with the AppStream component, and both so switching
 # install paths leaves no duplicate launcher or icon-cache entry.
 #
-# No sudo required, and the in-app updater needs no polkit prompt either:
-# the install path is user-writable.
+# No sudo required. The install path is user-writable, which is what lets the
+# in-app updater replace the binary.
 #
 # Uninstall:
 #   ./uninstall-linux.sh

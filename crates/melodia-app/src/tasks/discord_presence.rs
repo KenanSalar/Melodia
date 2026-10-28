@@ -1,16 +1,9 @@
-//! Discord Rich Presence detector: turns the player's view-model watch into
-//! presence updates (via the pure [`PresenceState`]) and hands them to the
-//! [`DiscordPresenceService`]. Runs off the same state-change-only seam the
-//! scrobbler and Material You use, so it never touches the player state machine
-//! and imports no `ui::*`.
+//! Discord Rich Presence: turns the view-model watch into presence updates through the pure
+//! [`PresenceState`] and hands them to the [`DiscordPresenceService`].
 //!
-//! Always spawned; inert while the feature is disabled (self-gates on
-//! `service.armed()`), which is why it logs its start and stop at debug: at info
-//! they read as Discord having been in use. Self-throttled between writes (see
-//! `MIN_UPDATE_INTERVAL`): an update landing inside the window is deferred to
-//! the window's end and re-read from the (latest-only) watch, so suppressed
-//! intermediates collapse into a single write on current truth — the progress
-//! bar keeps animating client-side off the last anchor meanwhile.
+//! Always spawned and inert while the feature is off, hence start and stop at debug: at info they
+//! read as Discord having been in use. An update inside `MIN_UPDATE_INTERVAL` waits out the
+//! window and re-reads the latest-only watch, so suppressed intermediates collapse into one write.
 
 use std::sync::Arc;
 use std::time::{Duration, Instant};
@@ -27,15 +20,11 @@ use melodia_integrations::services::integrations::discord::DiscordPresenceServic
 use melodia_integrations::services::integrations::discord::model::{PresenceState, Update};
 use melodia_store::database::{DbPool, queries};
 
-/// Self-throttle between presence writes. The Rich Presence SDK docs cite one
-/// update per 15 s, but that's the conservative legacy figure: over raw IPC the
-/// local Discord client accepts updates far faster and only drops the presence
-/// under real hammering (discord-api-docs#668), so 4 s keeps skips responsive
-/// while staying well clear of that. (The 5-per-20 s cap people cite is the
-/// gateway/bot presence limit — a different transport, not this one.)
+/// The SDK docs cite one update per 15 s, but over raw IPC the local client takes far more and
+/// drops presence only under real hammering (discord-api-docs#668), so skips stay responsive. The
+/// 5-per-20 s figure is the gateway's limit, another transport.
 const MIN_UPDATE_INTERVAL: Duration = Duration::from_secs(4);
 
-/// Spawn the presence detector on the shared task lifecycle.
 pub fn spawn(spawner: &TaskSpawner, state: &AppState) {
     let service = state.discord.clone();
     let db = state.db.clone();
@@ -44,8 +33,6 @@ pub fn spawn(spawner: &TaskSpawner, state: &AppState) {
     log::debug!("Discord presence task started");
 }
 
-/// Do-while shaped like `tasks::scrobble::run_detector`: process the primed
-/// view-model, then `select!` on shutdown / a change.
 async fn run_detector(
     shutdown: CancellationToken,
     service: Arc<DiscordPresenceService>,
@@ -74,9 +61,7 @@ async fn run_detector(
             continue;
         }
 
-        // Enforce the throttle by waiting out the remaining window first, so the
-        // model is only ever evaluated (and its dedupe state advanced) at the
-        // moment we actually send — on current truth re-read after the sleep.
+        // Wait first, so the model is evaluated, and its dedupe advanced, only when sending.
         if let Some(last) = detector.last_update {
             let elapsed = last.elapsed();
             if elapsed < MIN_UPDATE_INTERVAL {
@@ -95,22 +80,16 @@ async fn run_detector(
     }
 }
 
-/// The detector's mutable working state, threaded through the loop. Bundling it
-/// keeps the per-step signatures to `&mut self` + the watch receiver.
 struct Detector {
     service: Arc<DiscordPresenceService>,
-    /// Read only by [`Self::resolve_cover`], for the credited name behind a track's printed
-    /// artist. `tasks::scrobble`'s detector holds one off the same seam for its own row fetch.
+    /// For the credited name behind a track's printed artist.
     db: DbPool,
     presence: PresenceState,
-    /// False→true edge means the feature was just enabled — the card was cleared
-    /// while off, so the dedupe state must forget it (else the re-enable dedupes).
+    /// A false→true edge forgets the dedupe state, the card having been cleared while off.
     was_armed: bool,
-    /// When the last update actually reached the worker — the throttle anchor.
+    /// When the last update reached the worker: the throttle anchor.
     last_update: Option<Instant>,
-    /// The last track whose cover we resolved, and its URL. Keyed on `track.id`
-    /// so pause/resume/seek reuse it (no cache lock, no network) — only a genuine
-    /// track change resolves.
+    /// The last track's cover URL, so pause, resume and seek reuse it.
     last_art: Option<(i64, Option<String>)>,
 }
 
@@ -135,24 +114,20 @@ impl Detector {
         }
     }
 
-    /// Feature is off: the settings path already cleared the card. Mark the value
-    /// seen, drop the throttle anchor (so a later re-enable paints immediately),
-    /// and reset the arming edge.
+    /// The settings path already cleared the card. Dropping the throttle anchor lets a re-enable
+    /// paint at once.
     fn on_disabled(&mut self, vm_rx: &mut watch::Receiver<Option<PlayerViewModelLight>>) {
         let _ = vm_rx.borrow_and_update();
         self.was_armed = false;
         self.last_update = None;
     }
 
-    /// Clear the card on shutdown, logging the stop once.
     fn shutdown_clear(&self) {
         self.service.clear();
         log::debug!("Discord presence task stopped");
     }
 
-    /// Read current truth from the watch, project it through the model, and push
-    /// any resulting update. Assumes the feature is armed. Records the send time
-    /// so the throttle window starts from it.
+    /// Assumes the feature is armed.
     async fn evaluate_and_send(
         &mut self,
         vm_rx: &mut watch::Receiver<Option<PlayerViewModelLight>>,
@@ -161,8 +136,6 @@ impl Detector {
             self.presence.reset();
             self.was_armed = true;
         }
-        // Clone out of the watch so we can `.await` the cover lookup without
-        // holding the borrow.
         let vm = vm_rx.borrow_and_update().clone();
         let flags = self.service.flags();
         let Some(update) = self.presence.on_view_model(vm.as_ref(), now_unix(), &flags) else {
@@ -183,13 +156,8 @@ impl Detector {
         self.last_update = Some(Instant::now());
     }
 
-    /// Resolve the current track's cover URL, reusing the last one for the same
-    /// track. Only a genuine track change (both tags present) hits the service —
-    /// pause/resume/seek land on the `track.id` fast path with no lock or network.
-    ///
-    /// **A station has no `current_track`, so it bails here and keeps the app logo.** Deliberate:
-    /// its stored logo is a local path Discord's CDN cannot read, and the directory's favicon URL
-    /// points at arbitrary third-party hosts Discord rejects at will.
+    /// **A station has no `current_track`, so it keeps the app logo**: its stored logo is a local
+    /// path Discord's CDN can't read, and directory favicons sit on hosts Discord rejects at will.
     async fn resolve_cover(&mut self, vm: Option<&PlayerViewModelLight>) -> Option<String> {
         let track = vm.and_then(|v| v.current_track.as_ref())?;
         if let Some((id, url)) = self.last_art.as_ref()
@@ -197,8 +165,7 @@ impl Detector {
         {
             return url.clone();
         }
-        // A new track: resolve only when both tags are present (an untagged
-        // library would otherwise spend a request per track searching for nothing).
+        // Both tags or nothing: an untagged library would spend a request per track on no answer.
         let url = match (track.artist.as_deref(), track.album.as_deref()) {
             (Some(artist), Some(album)) => {
                 let lead = self.lead_artist(track.id, artist).await;
@@ -210,15 +177,9 @@ impl Detector {
         url
     }
 
-    /// The name to search a cover directory with: the first artist the track's credit names.
-    ///
-    /// **The printed credit is the wrong key and Deezer's search is why.** It pins the field
-    /// exactly, and `artist:"Alice feat. Bob"` names no album on it, so a guest credit sent whole
-    /// drops the lookup onto the looser iTunes term search, which is not pinned to the album
-    /// either. A cover is filed under the lead, which is what `artist_id` has always pointed at.
-    ///
-    /// Falls back to the printed line, which is what this asked with before the credit tables and
-    /// what a single-name credit renders to anyway.
+    /// The credit's first artist, the name a cover is filed under. Deezer pins the artist field,
+    /// so a whole guest credit finds no album there and drops to the looser iTunes search. Falls
+    /// back to the printed line, which a single-name credit renders to anyway.
     async fn lead_artist(&self, track_id: i64, printed: &str) -> String {
         match queries::track::get_track_credit(&self.db, track_id).await {
             Ok(credit) if !credit.is_empty() => credit.primary_name().to_owned(),

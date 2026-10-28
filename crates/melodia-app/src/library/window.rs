@@ -1,3 +1,7 @@
+//! The window's settings on disk. A setter here only commits: the live effect is its UI
+//! callback's, applied before the write, except where the doc says it is restart-gated or, for
+//! the pin, applied here.
+
 use std::sync::Arc;
 
 use crate::services::{
@@ -10,18 +14,15 @@ use melodia_core::error::AppError;
 use melodia_platform::services::platform::always_on_top::AlwaysOnTopMethod;
 use melodia_platform::services::platform::desktop;
 
-/// Apply the user's pinned choice and persist it. On Linux this drops
-/// into the `KWin` / GNOME D-Bus backends via
-/// `melodia_platform::services::platform::always_on_top::apply`; on macOS / Windows the UI callback
-/// already pushed `WindowLevel::AlwaysOnTop` to winit synchronously, so
-/// here we just persist. A failure to apply persists nothing, and the
-/// caller reverts its optimistic toggle on any error, whatever the variant.
+/// Apply the pin, through the D-Bus backends on Linux (elsewhere the UI callback has set winit's
+/// level), then persist it. A failed apply persists nothing, and the caller reverts its optimistic
+/// toggle on any error.
 pub async fn set_always_on_top(state: &AppState, pinned: bool) -> Result<(), AppError> {
     apply_then_persist(&state.paths, state.always_on_top.method, pinned).await
 }
 
-/// [`set_always_on_top`]'s body, narrowed to the paths and the method it reaches so the ordering
-/// can be driven against a desktop that supports nothing.
+/// Narrowed to what it reaches, so the ordering can be driven against a desktop that supports
+/// nothing.
 async fn apply_then_persist(
     paths: &Arc<Paths>,
     method: AlwaysOnTopMethod,
@@ -46,29 +47,18 @@ pub async fn record_always_on_top(paths: &Arc<Paths>, pinned: bool) -> Result<()
     .map_err(|e| AppError::io("persist always_on_top join", e))?
 }
 
-/// Persist the user's titlebar choice. This only commits the new value to disk; the
-/// caller (`window_chrome::on_restart_app`) respawns the binary, and the next process
-/// hydrates it before first show.
+/// Restart-gated: the respawn that follows hydrates it before first show.
 ///
-/// On KDE, enabling the native titlebar also turns on
-/// `match_unfocused_to_system_bg` in the same write: the unfocused-tint
-/// feature mirrors KDE's window-decoration fade and is only meaningful
-/// under the native titlebar, so it ships on by default the moment that
-/// mode becomes active. Both fields land in one `mutate_settings` call
-/// so the respawned process reads a consistent pair. Disabling the
-/// native titlebar leaves the flag untouched — the runtime gate lives
-/// in the Slint binding sites (`sidebar.slint` / `now-playing-bar.slint`
-/// both check `Settings.match-unfocused-bg && Theme.use-native-titlebar
-/// && !Theme.window-focused`), so the tint is suppressed automatically
-/// in custom-titlebar mode while the persisted value survives for the
-/// next time the native titlebar is enabled.
+/// On KDE, turning the native titlebar on also turns on `match_unfocused_to_system_bg` in the same
+/// write, the tint mirroring KDE's decoration fade and meaning nothing without it. Turning it off
+/// leaves the flag alone: the Slint bindings already gate the tint on the native titlebar, and the
+/// value survives for next time.
 pub fn set_use_native_titlebar(paths: &Paths, on: bool) -> Result<(), AppError> {
     write_use_native_titlebar(paths, on, desktop::is_kde_desktop())
 }
 
-/// [`set_use_native_titlebar`]'s body, with the desktop probe passed in rather than read: the
-/// second write is the whole decision, and a test that steered it through `XDG_CURRENT_DESKTOP`
-/// would be testing the environment as well.
+/// Takes the desktop probe rather than reading it, so a test steers the second write without the
+/// environment.
 fn write_use_native_titlebar(paths: &Paths, on: bool, is_kde: bool) -> Result<(), AppError> {
     let enable_match_unfocused = on && is_kde;
     services::settings::mutate_settings(paths, move |s| {
@@ -79,57 +69,36 @@ fn write_use_native_titlebar(paths: &Paths, on: bool, is_kde: bool) -> Result<()
     })
 }
 
-/// Persist the user toggle for "Close to tray". When `true` (and a tray icon
-/// is actually active) closing the window hides it to the system tray
-/// instead of quitting. The runtime effect — `window_chrome`'s close
-/// handlers consulting the value — is applied synchronously by the UI
-/// callback through `ui::shell::tray_bridge::set_close_to_tray` *before* this
-/// async disk write, so the new behaviour takes effect immediately.
 pub fn set_close_to_tray(paths: &Paths, on: bool) -> Result<(), AppError> {
     services::settings::mutate_settings(paths, move |s| {
         s.tray.close_to_tray = on;
     })
 }
 
-/// Persist the user toggle for "System Tray Icon". When `false`
-/// boot skips `ui::shell::tray_bridge::install` at startup, so the
-/// tray subsystem — D-Bus connection, service thread, action tasks — never
-/// runs. The toggle is restart-gated through the `restart-tray` `Dialog`
-/// flow, so this write commits just before the process respawns and the new
-/// value takes effect on the next launch.
+/// Restart-gated: boot skips `ui::shell::tray_bridge::install` while it is off, so the tray's D-Bus
+/// connection and thread never run.
 pub fn set_tray_enabled(paths: &Paths, on: bool) -> Result<(), AppError> {
     services::settings::mutate_settings(paths, move |s| {
         s.tray.tray_enabled = on;
     })
 }
 
-/// Persist the user toggle for "Aurora Backdrop". When `false` the
-/// artwork-derived surfaces blur the cover behind them, and the two artwork tiers build a
-/// blurred half per decode; when `true` they wash the cover's own colours over `Theme.base`
-/// and no blur is built at all. Restart-gated through the `restart-backdrop` `Dialog` flow —
-/// `boot::ui_setup::chrome::apply_backdrop_style` is what reads it, before the first tier exists.
+/// Restart-gated: `boot::ui_setup::chrome::apply_backdrop_style` reads it before the first artwork
+/// tier exists, deciding whether any blur is built.
 pub fn set_aurora_backdrop(paths: &Paths, on: bool) -> Result<(), AppError> {
     services::settings::mutate_settings(paths, move |s| {
         s.backdrop.aurora_backdrop = on;
     })
 }
 
-/// Persist the miniplayer's own backdrop switch. **Not restart-gated, where its neighbour above
-/// is**: that one decides which stack every colour tier is solved for, so a live flip would leave
-/// one surface painting the other's colours, where this only mounts or unmounts the stack that
-/// setting already chose. The seed is `boot::ui_setup`'s and the runtime effect is the Slint
-/// property the button writes before this fires.
+/// **Not restart-gated**, unlike [`set_aurora_backdrop`]: that one decides which stack every colour
+/// tier is solved for, where this only mounts or unmounts the stack it chose.
 pub fn set_mini_backdrop(paths: &Paths, on: bool) -> Result<(), AppError> {
     services::settings::mutate_settings(paths, move |s| {
         s.backdrop.mini_backdrop = on;
     })
 }
 
-/// Persist the user's pick for the custom titlebar's decoration button
-/// style (Windows, macOS traffic lights or KDE). The runtime effect lives in
-/// `Theme.titlebar-button-style`, mirrored synchronously by the UI
-/// callback before this fires, so the visual swap happens immediately;
-/// here we only commit the new value to disk.
 pub fn set_titlebar_button_style(
     paths: &Paths,
     style: TitlebarButtonStyle,
@@ -139,8 +108,6 @@ pub fn set_titlebar_button_style(
     })
 }
 
-/// Persist the miniplayer's caption style, in the same shape: `MiniPlayer.button-style` is
-/// mirrored synchronously by the UI callback, and this only commits the pick.
 pub fn set_mini_player_button_style(
     paths: &Paths,
     style: TitlebarButtonStyle,
@@ -150,35 +117,26 @@ pub fn set_mini_player_button_style(
     })
 }
 
-/// Persist the user's pick for the custom titlebar's decoration button
-/// side (Right vs Left). Same async-only shape as
-/// `set_titlebar_button_style` — `Theme.titlebar-button-side` is mirrored
-/// synchronously by the UI callback so the buttons reposition before this
-/// disk write commits.
 pub fn set_titlebar_button_side(paths: &Paths, side: TitlebarButtonSide) -> Result<(), AppError> {
     services::settings::mutate_settings(paths, move |s| {
         s.window.titlebar_button_side = side;
     })
 }
 
-/// Persist whether the frameless window draws its outline. The Slint switch has already flipped
-/// `Settings.window-border-shown`, which the outline reads directly, so this only commits it.
 pub fn set_window_border(paths: &Paths, border: WindowBorder) -> Result<(), AppError> {
     services::settings::mutate_settings(paths, move |s| {
         s.window.window_border = border;
     })
 }
 
-/// Persist the outline's colour: `WINDOW_BORDER_SYSTEM_COLOR`, or an accent id of the active
-/// theme. The UI callback has already painted the pick, so this only commits it.
+/// `WINDOW_BORDER_SYSTEM_COLOR`, or an accent id of the active theme.
 pub fn set_window_border_color(paths: &Paths, color_id: String) -> Result<(), AppError> {
     services::settings::mutate_settings(paths, move |s| {
         s.window.window_border_color = color_id;
     })
 }
 
-/// Persist what the System colour is mixed from under Material You. The UI callback has already
-/// repainted the outline, so this only commits it.
+/// What the System colour is mixed from under Material You.
 pub fn set_window_border_tint(paths: &Paths, tint: BorderTint) -> Result<(), AppError> {
     services::settings::mutate_settings(paths, move |s| {
         s.window.window_border_tint = tint;

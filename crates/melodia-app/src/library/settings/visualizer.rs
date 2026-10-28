@@ -1,25 +1,18 @@
-//! Visualizer-section setters. Unlike their audio siblings there is no runtime
-//! half to pair with: the flags only decide whether the Now-Playing strip
-//! mounts and which style it draws, and the Slint bindings have already applied
-//! that by the time these run. Arming the sample tap follows from the
-//! strip being on screen — see `ui::visualizer`.
+//! Visualizer-section setters, with no engine half: arming the tap follows from the strip being on
+//! screen (`ui::visualizer`).
 
 use crate::services;
 use melodia_core::config::Paths;
 use melodia_core::error::AppError;
 
-/// Persist the visualizer on/off toggle. Unlike the other audio features this
-/// one defaults to *on* (`VisualizerFlags::default()`) — see its doc for why —
-/// so this write is what records a user turning it off.
 pub fn set_visualizer_enabled(paths: &Paths, enabled: bool) -> Result<(), AppError> {
     services::settings::mutate_settings(paths, move |settings| {
         settings.visualizer.viz_enabled = enabled;
     })
 }
 
-/// Persist the chosen visualizer style, by key. The caller resolves the key
-/// from its style table (`melodia-views`' `ui/visualizer/`), so nothing unrecognized
-/// reaches the file.
+/// By key, which the caller resolves from its style table, so nothing unrecognised reaches the
+/// file.
 pub fn set_visualizer_style(paths: &Paths, style: String) -> Result<(), AppError> {
     services::settings::mutate_settings(paths, move |settings| {
         settings.visualizer.viz_style = style;

@@ -4,31 +4,25 @@ import { EntityCard } from "entity-card.slint";
 import { CardCell } from "card-cell.slint";
 import { DragSource } from "../drag-source.slint";
 
-// Virtualized genre-card grid: `AlbumGrid` minus the cover plumbing. A genre has no artwork, so
-// each card falls back to its glyph and nothing here allocates an `Image` or needs an LRU. Rust
-// hands it rows of `columns` cards, so the inner `ListView` virtualizes by row.
-// Same host-mounted-scrollbar contract as `TrackList` and `AlbumGrid`.
+// The virtualized genre grid: `AlbumGrid` without covers, a genre having no artwork.
 export component GenreGrid inherits Rectangle {
     in property <[GenreGridRow]> rows;
     in property <length> card-width: 180px;
     in property <length> card-height: 226px;
-    // The gap is baked into the slot height because a `ListView` lays its delegates back-to-back
-    // and has no `spacing`.
+    // The gap is in the slot height, a `ListView` having no `spacing`.
     in property <length> row-height: 246px;
     in property <length> gap: 20px;
 
     callback open-genre(int /*genre_id*/);
     callback request-blur-search();
 
-    // Same sign convention as `TrackList` — a positive `v-offset` is N px scrolled, where the
-    // inner `ListView` holds that as a non-positive `content-y`.
+    // `TrackList`'s sign convention: a positive `v-offset` is N px scrolled.
     out property <length> v-visible-height: list.visible-height;
     out property <length> v-viewport-height: list.content-height;
     out property <length> v-offset: -list.content-y;
     callback set-v-offset(length);
     set-v-offset(o) => { list.content-y = -o; }
 
-    // Cards drag out as what Add to Queue on them would take.
     src := DragSource {
         width: 100%;
         height: 100%;
@@ -40,12 +34,10 @@ export component GenreGrid inherits Rectangle {
             height: 100%;
             vertical-scrollbar-policy: always-off;
             horizontal-scrollbar-policy: always-off;
-            // A card click and a drag-pan are one gesture, and the default is the style's to
-            // pick; argument on `views/radio/station-grid.slint`.
+            // The style's default too, pinned: a drag-pan takes any press that drifts.
             mouse-drag-pan-enabled: false;
 
             for grid-row in root.rows: Rectangle {
-                // A `ListView` delegate needs a fixed height or the virtualization math breaks.
                 min-height: root.row-height;
                 max-height: root.row-height;
 
@@ -65,22 +57,16 @@ export component GenreGrid inherits Rectangle {
                         EntityCard {
                             card-width: root.card-width;
                             card-height: root.card-height;
-                            // With no cover binding the card paints its glyph over a
-                            // name-hashed gradient. Rust precomputes both stops on
-                            // three independent axes — hue, hue offset, S/V jitter — so
-                            // cards stay distinguishable even at neighbouring hues.
+                            // A name-hashed gradient, spelled out per caller: a gradient's stops
+                            // can't read a function's arguments.
                             fallback-icon: "theater_comedy";
                             tile-bg: @linear-gradient(135deg,
                                 genre.tile_color_1,
                                 genre.tile_color_2);
                             tile-icon-color: #ffffff.with-alpha(0.3);
-                            // The pronounced zoom, not the covers' gentle one: on a glyph drawn
-                            // at just over half the tile, the gentle one reads as no zoom at all.
+                            // On a glyph at half the tile, the covers' gentle zoom reads as none.
                             cover-scale-hover: 1.15;
                             title: genre.name;
-                            // The duration arrives display-ready from Rust; the count takes the
-                            // Artists grid's plural pair, a genre being able to exist for one
-                            // track.
                             subtitle:
                                 @tr("{n} track" | "{n} tracks" % genre.track_count)
                                 + " · " + genre.display_duration;

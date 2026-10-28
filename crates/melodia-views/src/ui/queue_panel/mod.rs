@@ -1,6 +1,5 @@
-//! The queue panel's wiring. Owns the Slint `Queue` global's
-//! callbacks, its rows, a [`QueueRows`] over the queue's ids, and
-//! the `shown` atomic its row subscriber and lifecycle are gated on.
+//! The queue panel: the `Queue` global's callbacks and a [`QueueRows`] over the queue's ids,
+//! followed only while the panel is shown.
 //!
 //! **Picks are by queue entry, not by track**: the queue can hold a track twice, and each copy is
 //! its own row to pick, drag and remove.
@@ -22,10 +21,7 @@ use melodia_app::state::AppState;
 use melodia_artwork::media::image::cover_thumbs::CoverThumbs;
 use melodia_ui::{AppWindow, Queue};
 
-/// Wire `Queue` callbacks, install the row model, and spawn the
-/// queue-rows watch subscriber.
-///
-/// Must run on the Slint event-loop thread.
+/// Installs the row model and wires the panel. UI thread.
 pub fn install(
     ui: &AppWindow,
     state: &AppState,
@@ -34,8 +30,7 @@ pub fn install(
     let rows = QueueRows::new(queue_rows::fetcher(state));
     ui.global::<Queue>().set_rows(ModelRc::from(rows.clone()));
 
-    // Persistent, so every later write mutates in place rather than swapping a
-    // model out from under the rows reading it — the track lists' idiom.
+    // Installed once, as on the track lists, so a write mutates it under the rows reading it.
     let selected_ids: Rc<VecModel<i32>> = Rc::new(VecModel::default());
     ui.global::<Queue>().set_selected_ids(ModelRc::from(selected_ids));
 
@@ -44,9 +39,8 @@ pub fn install(
     // lists and the now-playing bar still need. Backed by it, so a cover both draw is one buffer.
     let queue_covers = Arc::new(CoverThumbs::backed_by(row_covers.clone()));
 
-    // Lazy row covers, wired once: the `boot::ui_setup` `RowCovers` shape, against this panel's
-    // private tier. A miss borrows the row tier's buffer or schedules a decode, never decoding on
-    // the UI thread, and the generation the notifier bumps is what brings a scheduled one back.
+    // A miss borrows the row tier's buffer or schedules a decode, never decoding here; the
+    // generation the notifier bumps brings a scheduled one back.
     {
         let covers = queue_covers.clone();
         ui.global::<Queue>().on_request_cover(move |path, _generation| {
@@ -60,13 +54,8 @@ pub fn install(
 
     callbacks::wire_callbacks(ui, state, &rows);
     lifecycle::wire(ui, state, &rows, &queue_covers, &shown);
+    // No seed: the panel starts hidden, and its first show seats the queue.
     rows::spawn_queue_rows_subscriber(ui, state, rows, shown)?;
-
-    // No install-time seed: the panel is hidden at startup, so the
-    // subscriber is gated and the model stays empty (no covers decoded
-    // for an off-screen panel). `on_shown_changed(true)` shows the queue
-    // on the first show.
-
     Ok(())
 }
 

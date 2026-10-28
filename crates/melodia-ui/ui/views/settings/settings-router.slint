@@ -13,14 +13,8 @@ import { IntegrationsPage } from "pages/integrations-page.slint";
 import { UpdatesPage } from "pages/updates-page.slint";
 import { AboutPage } from "pages/about-page.slint";
 
-// The Settings router: one category, or every one at once while a search is running.
-// `settings-view.slint` owns the chrome around it.
-//
-// **Search deliberately escapes the categories.** Filtering only the selected one would answer "no
-// matching settings" for a query whose row sits a category over — the failure that makes split
-// settings worse than a single scroll. Mounting every page gives back the flat cross-category list
-// and needs no filtering logic of its own, each card already hiding itself. Both modes mount the
-// same pages, so which card lives in which category is stated once, in the page files.
+// One category, or every page at once while a search runs: search escapes the categories, so a
+// query never answers "no matching settings" for a row a category over.
 export component SettingsRouter inherits Rectangle {
     in property <int> category-index;
     in property <bool> searching;

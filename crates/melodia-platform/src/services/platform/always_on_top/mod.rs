@@ -8,9 +8,8 @@ pub mod gnome;
 #[cfg(target_os = "linux")]
 pub mod kwin;
 
-/// `Copy` because every variant is a unit one: it is a detected capability passed by value to
-/// whatever acts on it, and a `&AlwaysOnTopCapability` in hand should not force a clone to read
-/// which arm it is.
+/// `Copy`, every variant being a unit one: a detected capability passed by value to whatever acts
+/// on it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum AlwaysOnTopMethod {
     Native,
@@ -49,9 +48,7 @@ impl AlwaysOnTopCapability {
     }
 }
 
-/// Detect always-on-top capability for the current platform.
-/// Called once at startup and cached on `AppState`. The matching `apply`
-/// dispatcher uses the cached method to route to the right backend.
+/// Detected once at startup and cached on `AppState`, which [`apply`] routes by.
 #[cfg(not(target_os = "linux"))]
 pub fn detect_capability() -> AlwaysOnTopCapability {
     AlwaysOnTopCapability::native()
@@ -70,10 +67,8 @@ fn detect_capability_linux() -> AlwaysOnTopCapability {
         return AlwaysOnTopCapability::native();
     }
 
-    // Single blocking D-Bus connection shared across startup probes AND
-    // every later apply call. Per CLAUDE.md, zbus's tokio feature must stay
-    // off. Detection runs once, inside `AppState::init`, and the apply path
-    // drops to `spawn_blocking` before reusing this same pooled connection.
+    // One blocking connection for the probes and every later apply, which drops to
+    // `spawn_blocking` first.
     let Ok(conn) = session_connection() else {
         return AlwaysOnTopCapability::unsupported("D-Bus session bus not available");
     };
@@ -86,8 +81,7 @@ fn detect_capability_linux() -> AlwaysOnTopCapability {
         HostDesktop::Gnome if probe_gnome_window_calls(&conn) => {
             AlwaysOnTopCapability::supported(AlwaysOnTopMethod::GnomeExtension)
         }
-        // No extension available — fall back to native decorations
-        // so the user can right-click the title bar for "Always on Top"
+        // Without the extension, native decorations leave the titlebar's own "Always on Top".
         HostDesktop::Gnome => AlwaysOnTopCapability {
             supported: false,
             reason: None,
@@ -100,18 +94,12 @@ fn detect_capability_linux() -> AlwaysOnTopCapability {
     }
 }
 
-/// Apply the user's pinned choice. The `Native` branch is intentionally a
-/// no-op here — winit's `Window::set_window_level` must run on the UI
-/// thread, so `window_chrome::controls` handles that synchronously before invoking this.
-/// The Linux branches do D-Bus work via the per-backend modules (each one
-/// already drops to `spawn_blocking`, so calling this from the runtime is
-/// fine). `Unsupported` returns an error so the UI can revert its
+/// Applies the user's pin. `Native` is a no-op here, winit's window level having to be set on the
+/// UI thread by `window_chrome::controls` first. `Unsupported` errs so the UI can revert its
 /// optimistic toggle.
 ///
-/// Takes the two answers it needs rather than an `AppState`: the detected `method` and, for the
-/// `KwinDbus` arm, the directory its script is written into. Both callers hold one and can spell
-/// `state.always_on_top.method` themselves, and a platform adapter that names the app's whole
-/// state is the edge this directory exists on the far side of.
+/// Takes the method and directory rather than an `AppState`: a platform adapter naming the app's
+/// whole state is the edge this crate exists on the far side of.
 #[cfg_attr(
     not(target_os = "linux"),
     allow(
@@ -137,9 +125,8 @@ pub async fn apply(
     }
 }
 
-/// Send every change the window manager makes to the pin to `reports`, whoever makes it. Only
-/// `KWin` can say; elsewhere nothing is watched and `reports` is dropped, which ends a receiver's
-/// loop.
+/// Sends every change the window manager makes to the pin to `reports`, whoever makes it. Only
+/// `KWin` can say; elsewhere `reports` is dropped, which ends a receiver's loop.
 #[cfg(target_os = "linux")]
 pub async fn watch_changes(
     method: AlwaysOnTopMethod,
@@ -154,12 +141,8 @@ pub async fn watch_changes(
     }
 }
 
-/// Lazily-initialized, shared D-Bus session connection used by the Linux
-/// backends. `zbus::blocking::Connection` is internally Arc-backed so the
-/// clone is cheap, and blocking per the CLAUDE.md zbus footgun. Held
-/// behind a `parking_lot::Mutex` because no caller awaits while holding
-/// it: detection is synchronous and every later caller is inside
-/// `tokio::task::spawn_blocking`.
+/// `parking_lot` because no caller awaits while holding it: detection is synchronous and every
+/// later caller is inside `spawn_blocking`.
 #[cfg(target_os = "linux")]
 static SESSION_CONN: parking_lot::Mutex<Option<zbus::blocking::Connection>> =
     parking_lot::Mutex::new(None);

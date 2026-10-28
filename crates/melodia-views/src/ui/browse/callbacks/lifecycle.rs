@@ -11,29 +11,18 @@ use melodia_app::state::AppState;
 use melodia_core::error::describe;
 use melodia_ui::{AppWindow, Browse, Nav};
 
-/// Seed the section shadow, wire the gate, and subscribe to `library_changed`.
 pub(super) fn wire(ui: &AppWindow, state: &AppState, browse_ui: &Arc<BrowseUi>) {
     let g = ui.global::<Browse>();
     let weak = ui.as_weak();
 
-    // Seed the shadow from the current nav state: the gate's `ChangeTracker` baselines
-    // inside `AppWindow::new()` and fires only on a later difference, so a section the
-    // boot doesn't land on gets no edge at all, and the one it does land on gets its edge
-    // a frame late — after boot has already read this shadow. See the `SectionActiveGate`
-    // bullet in `.claude/rules/ui-patterns.md`.
+    // Seeded here, the gate firing only on a later difference.
     browse_ui.set_section_active(ui.global::<Nav>().get_selected_index() == NAV_BROWSE);
-    // `browse::seed_from_settings` fetches whatever section the launch lands on, and off
-    // screen the leave that follows hands its covers back as proxies. Seeding the flag here
-    // costs one re-fetch on the first visit to a Browse the boot didn't land on, and nothing
-    // at all on the one it did.
+    // The boot seed fetches wherever the launch lands but warms no covers off screen, so a
+    // Browse it didn't land on re-fetches once on its first visit.
     if !browse_ui.section_active() {
         browse_ui.mark_dirty();
     }
 
-    // section-active-changed: mirror visibility into the synchronous shadow and, on
-    // re-enter, re-fetch the current directory once if a `library_changed` bump arrived
-    // while the section was hidden (the subscriber below marks dirty instead of
-    // re-fetching a view the user can't see).
     {
         let s = state.clone();
         let bu = browse_ui.clone();
@@ -41,18 +30,15 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, browse_ui: &Arc<BrowseUi>) 
         g.on_section_active_changed(move |active| {
             bu.set_section_active(active);
             if !active {
-                // Browse keeps its card model across the leave, so the covers under it are
-                // handed back as proxies rather than dropped — cleared, the surviving
-                // delegates would re-evaluate against an empty tier and the whole grid would
-                // paint its placeholder on re-entry. `mark_dirty` beside it is the
-                // `tracks/callbacks/lifecycle.rs` rule: Browse has no enter-time fetch of its
-                // own, so nothing else would refresh the listing.
+                // Browse has no enter-time fetch of its own, so nothing else would refresh the
+                // listing (`tracks/callbacks/lifecycle.rs`'s rule). Its card model survives the
+                // leave, so the covers under it go back as proxies rather than dropped, or the
+                // re-entry would paint placeholders.
                 bu.mark_dirty();
                 if let Some(ui) = weak.upgrade() {
-                    // A selection the user can no longer see still answers
-                    // `Selection.any-live()`, so it swallows an Escape meant for the page they
-                    // moved to, and comes back stamped on re-entry. Guarded on there being one,
-                    // the unstamp walking every row of the directory.
+                    // A selection the user can't see still answers `Selection.any-live()`,
+                    // swallowing an Escape meant for the next page. Guarded, the unstamp walking
+                    // every row.
                     if ui.global::<Browse>().get_selected_ids().row_count() > 0 {
                         browse_ui_mod::clear_selection(&ui);
                     }
@@ -77,18 +63,15 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, browse_ui: &Arc<BrowseUi>) 
     install_library_refresher(ui, state, browse_ui);
 }
 
-/// Watcher / scan completion / folder add+remove all bump `library_changed`.
-/// Re-fetch the current path so new files appear, removed files disappear,
-/// and the root view updates when folders are added/removed.
+/// Re-fetches the current path on `library_changed`, which a watcher batch, a scan or a folder
+/// change bumps.
 fn install_library_refresher(ui: &AppWindow, state: &AppState, browse_ui: &Arc<BrowseUi>) {
     let s = state.clone();
     let bu = browse_ui.clone();
     let installed =
         on_signal(&state.library_changed, ui.as_weak(), "browse-library-changed", move |ui| {
-            // Skip the directory re-fetch (read_dir + a full-index LIKE scan) while
-            // the section is hidden — a scan or a busy watcher can bump this channel
-            // repeatedly, and re-fetching a view nobody is looking at is O(library)
-            // per bump. Mark dirty so the next section-enter re-fetches once instead.
+            // Hidden, a re-fetch costs a directory read and a library-wide scan per bump, so the
+            // next enter does it once instead.
             if !bu.section_active() {
                 bu.mark_dirty();
                 return;

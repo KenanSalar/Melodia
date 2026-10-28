@@ -1,10 +1,6 @@
-//! Ordering for the `views.json` index writes that can fire more than once a tick.
-//!
-//! Six indices are written this way — the sidebar's `last_nav_index` and the five pages'
-//! tab indices — and every one of them is a *catch-up* write: the Slint property is
-//! already correct, so nothing on screen depends on the disk hop landing. What does
-//! depend on it is the next launch, and there the only value that matters is the last
-//! one the UI published.
+//! Ordering for the `views.json` index writes that can fire more than once a tick. Each is a
+//! *catch-up* write, its Slint property already right, so only the next launch depends on it,
+//! and there only the last value the UI published matters.
 
 use std::sync::atomic::{AtomicI32, Ordering};
 

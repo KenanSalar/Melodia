@@ -15,9 +15,8 @@ use melodia_core::error::describe;
 use melodia_engine::player::engine::state::PlayerViewModelLight;
 use melodia_ui::{AppWindow, Player};
 
-/// The FK trio as the Slint row spells it: 0 for absent, so the menu's
-/// `album-id != 0` gate reads a missing linkage and a not-yet-fetched one the
-/// same way. That is the honest reading — until the fetch lands, we don't know.
+/// The FK trio as the Slint row spells it: 0 for absent, so the menu's `album-id != 0` gate
+/// reads a missing linkage and a not-yet-fetched one the same way.
 #[derive(Clone, Copy, Default)]
 struct RowLinks {
     album: i32,

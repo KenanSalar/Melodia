@@ -1,11 +1,7 @@
-// The My Library page at nav index 3: five tabs over what used to be five sidebar entries, 4–7
-// retired. Holds only what the *page* owns — the five views keep their own globals. A tab switch is
-// a section switch, `SectionActiveGate` mounting once per tab at `index: 3`, so the page needs no
-// `covers-generation` machinery. **No `detail-open` here** — it would make this the second globals
-// file to import siblings; `views/my-library-view.slint` derives it privately.
+// Only what the page owns, each tab keeping its own global. **No `detail-open` here**: it would make
+// this a third globals file importing siblings, so `views/my-library-view.slint` derives it.
 export global MyLibrary {
-    // **`tab-count` is the sole definition of how many there are** — Rust clamps the persisted
-    // index against it, so a build with fewer tabs can't restore onto an unmounted branch.
+    // **`tab-count` is the sole definition of how many tabs there are**; Rust clamps against it.
     out property <int> tab-songs: 0;
     out property <int> tab-albums: 1;
     out property <int> tab-artists: 2;
@@ -14,22 +10,18 @@ export global MyLibrary {
     out property <int> tab-count: 5;
 
     in-out property <int> tab-idx: 0;
-    // Fires after the bar has already moved `tab-idx`.
+    // **Fires after the bar has moved `tab-idx`.**
     callback tab-changed(int);
-    // For arrivals that aren't picks — a cross-tab drill, a Mouse-4/5 walk — which persist the
+    // For the arrivals that aren't picks, a cross-tab drill or a Mouse-4/5 walk, which persist the
     // index but must not clear the filter.
     callback persist-tab-idx(int);
 
-    // The band's `SearchBar` is the page's only box; `ui::my_library::filter` routes a settled
-    // keystroke to whichever of the nine surfaces is mounted.
+    // Routed by `ui::my_library::filter` to whichever of nine surfaces is mounted.
     in-out property <string> filter;
-    // Bumped to make the filter input give up the keyboard; a global can't bind a callback inline,
-    // so the `SearchBar` watches this counter.
     in-out property <int> blur-search-tick: 0;
     callback filter-changed(string);
-    // The box describes a different surface with nobody having typed, so Rust *reseats* it rather
-    // than clearing (`filter::sync_box`). **Five** mirrors fire it, `changed` rejecting a path
-    // expression on a global: the four detail ids plus `tab-idx`.
+    // Rust *reseats* the box rather than clearing it (`filter::sync_box`). Fired by five mirrors,
+    // the four detail ids and `tab-idx`.
     callback detail-scope-changed();
 
     callback back();
@@ -38,8 +30,7 @@ export global MyLibrary {
     // a sixth would go false → false behind Now Playing. Rides `changed watched-nav-idx`.
     callback page-active-changed(bool);
 
-    // The band has finished collapsing, so its hero is nobody's. Deferred here because every hero
-    // fact is a ternary over the detail id, so a teardown at the id clear spends the whole morph
-    // collapsing a placeholder. `release_collapsed_hero` hands back per id.
+    // The band has finished collapsing. The teardown waits for it so the morph doesn't collapse
+    // a placeholder; `release_collapsed_hero` hands back per id.
     callback hero-collapsed();
 }

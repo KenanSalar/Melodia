@@ -1,36 +1,22 @@
-//! The logo a station's own site advertises, for a directory row that names none.
+//! The logo a station's own site advertises, for a directory row that names none: the field is
+//! community-maintained, and the site usually still points at one from its `<head>`.
 //!
-//! Roughly a third of the directory carries no `favicon_url` at all, and a station whose row is
-//! empty is not always a station with no logo: the field is community-maintained and the site
-//! usually still points at one from its own `<head>`. This finds that pointer and hands it on.
-//!
-//! **A URL, not a second download path.** What comes back goes through
-//! `library::radio::fetch_logo` exactly as a directory-supplied `favicon_url` would, so the
-//! scheme guard, the byte caps, the size floor and the tile composition all apply unchanged.
-//!
-//! **Never a whole directory page.** A page would pay a document fetch for the third of its rows
-//! that carry no logo field, so the two callers are the ones asking about a station somebody
-//! named: the kept-station heal, and a browse result narrow enough to be the station the user just
-//! searched for. `library::radio` is where that scoping lives. Nothing here logs a URL.
+//! **A URL, not a second download path**: it goes through `library::radio::fetch_logo` like any
+//! `favicon_url`, so every guard applies. Asked only about a station somebody named, never a whole
+//! page, which `library::radio` scopes. Nothing here logs a URL.
 
 use crate::media::fetch::station_logo::{LOGO_REQUEST_TIMEOUT, fetchable_url};
 use crate::services::net::read_capped;
 use melodia_core::error::AppError;
 
-/// Ceiling on the page read. A `<head>` that has not named an icon inside this much markup is not
-/// going to; the cap is what stops a site streaming a document into a station refresh.
+/// A `<head>` that hasn't named an icon inside this much markup isn't going to.
 const MAX_PAGE_BYTES: u64 = 512 * 1024;
 
-/// What to try when the document names nothing. Still worth a request: the well-known path
-/// predates the `<link>` and plenty of sites serve only it.
+/// Still worth a request when the document names nothing: plenty of sites serve only this.
 const WELL_KNOWN_ICON: &str = "/favicon.ico";
 
-/// The site to ask, derived from what the row actually carries.
-///
-/// `homepage` when the directory has one. Otherwise the stream's own host, with its port and path
-/// dropped: a mount on `:8811` says nothing about where the site is, and the host is the only part
-/// of a stream URL that names the station's owner. HTTPS regardless of the stream's scheme, a
-/// cleartext mount being a statement about the audio server rather than about the site.
+/// `homepage` when the row has one, otherwise the stream's host over HTTPS: a mount's port and
+/// path say nothing about where the site is, and a cleartext mount is about the audio server.
 pub fn origin_for(homepage: &str, stream_url: &str) -> Option<reqwest::Url> {
     if let Ok(homepage) = fetchable_url(homepage) {
         return Some(homepage);
@@ -39,12 +25,8 @@ pub fn origin_for(homepage: &str, stream_url: &str) -> Option<reqwest::Url> {
     reqwest::Url::parse(&format!("https://{host}/")).ok()
 }
 
-/// The absolute logo URL `origin`'s document advertises, or the well-known path when it names
-/// none.
-///
-/// `Ok(None)` only where the answer could not be made absolute. A page that refuses or carries no
-/// pointer still resolves to [`WELL_KNOWN_ICON`], because the caller's next step is a fetch that
-/// answers that question properly.
+/// The absolute icon URL `origin`'s document advertises, else [`WELL_KNOWN_ICON`]. `Ok(None)` only
+/// where the answer couldn't be made absolute.
 pub async fn icon_url(
     client: &reqwest::Client,
     origin: &reqwest::Url,
@@ -54,7 +36,6 @@ pub async fn icon_url(
     Ok(origin.join(href).ok().map(String::from))
 }
 
-/// The raw href the document names, if it names one.
 async fn advertised_href(
     client: &reqwest::Client,
     origin: &reqwest::Url,
@@ -74,12 +55,8 @@ async fn advertised_href(
     Ok(icon_href(&String::from_utf8_lossy(&page)))
 }
 
-/// The first icon the document advertises, as the href it was written with.
-///
-/// Ordered by how deliberate the choice is: an `apple-touch-icon` is a square someone picked at a
-/// drawable size, a plain `icon` is whatever the tab needed, and `og:image` is a share card that at
-/// least belongs to the site. Only the head is read, so a `<link>` in the body cannot outrank one
-/// the author put where it belongs.
+/// The first icon the head advertises, by how deliberate the choice was: an `apple-touch-icon`,
+/// then a plain `icon`, then an `og:image` share card. Only the head is read.
 fn icon_href(html: &str) -> Option<String> {
     let lower = html.to_ascii_lowercase();
     let head = lower.find("</head>").unwrap_or(lower.len());
@@ -113,11 +90,8 @@ fn icon_href(html: &str) -> Option<String> {
         .map(str::to_owned)
 }
 
-/// Every `name …>` span in the document, lowercased and raw.
-///
-/// The two slices are byte-aligned: `to_ascii_lowercase` only rewrites A–Z, so an index found in
-/// one addresses the same character in the other. A `>` inside a quoted attribute cuts the span
-/// short, which costs that one tag and nothing else.
+/// Every `name …>` span, lowercased and raw. Byte-aligned, `to_ascii_lowercase` rewriting only
+/// A–Z; a `>` inside a quoted attribute costs that one tag.
 fn tags<'a>(lower: &'a str, raw: &'a str, name: &str) -> Vec<(&'a str, &'a str)> {
     lower
         .match_indices(name)
@@ -128,10 +102,7 @@ fn tags<'a>(lower: &'a str, raw: &'a str, name: &str) -> Vec<(&'a str, &'a str)>
         .collect()
 }
 
-/// One attribute's value out of a tag span.
-///
-/// The name has to start a word, or `href` would match inside `xlink:href` and `rel` inside a
-/// `hreflang` that happens to precede the one wanted.
+/// The name has to start a word, or `href` would match inside `xlink:href`.
 fn attribute<'a>(tag_lower: &str, tag_raw: &'a str, name: &str) -> Option<&'a str> {
     let mut from = 0;
     while let Some(at) = tag_lower[from..].find(name) {
@@ -146,11 +117,8 @@ fn attribute<'a>(tag_lower: &str, tag_raw: &'a str, name: &str) -> Option<&'a st
     None
 }
 
-/// The value sitting immediately after an `=`, quoted or bare.
-///
-/// The `/` of a self-closing `/>` belongs to the tag and is trimmed; one anywhere else is a path.
-/// Terminating on it instead dropped every unquoted absolute href: `href=/logo.png` came back
-/// empty and the site read as advertising nothing, which is the spelling a minifier emits.
+/// The value after an `=`, quoted or bare. A trailing `/` is the tag's self-close and trimmed;
+/// one anywhere else is a path, as in a minifier's `href=/logo.png`.
 fn attribute_value<'a>(rest_lower: &str, rest_raw: &'a str) -> Option<&'a str> {
     let quote = rest_lower.chars().next().filter(|c| *c == '"' || *c == '\'');
     let value = if let Some(quote) = quote {

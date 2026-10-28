@@ -57,7 +57,6 @@ PLATFORM_PATTERNS: list[tuple[re.Pattern[str], str]] = [
     (re.compile(r"-aarch64-linux\.tar\.gz$"), "linux-aarch64-tarball"),
     (re.compile(r"\.aarch64\.rpm$"), "linux-aarch64-rpm"),
     (re.compile(r"-aarch64\.deb$"), "linux-aarch64-deb"),
-    (re.compile(r"-aarch64-windows\.zip$"), "windows-aarch64-zip"),
     (re.compile(r"-aarch64\.msi$"), "windows-aarch64-msi"),
     # x86_64.
     (re.compile(r"-x86_64\.AppImage$"), "linux-x86_64-appimage"),
@@ -66,7 +65,6 @@ PLATFORM_PATTERNS: list[tuple[re.Pattern[str], str]] = [
     # is invariant across Fedora releases.
     (re.compile(r"\.x86_64\.rpm$"), "linux-x86_64-rpm"),
     (re.compile(r"-x86_64\.deb$"), "linux-x86_64-deb"),
-    (re.compile(r"-x86_64-windows\.zip$"), "windows-x86_64-zip"),
     (re.compile(r"-x86_64\.msi$"), "windows-x86_64-msi"),
 ]
 
@@ -273,7 +271,7 @@ def build_manifest(
     if not platforms:
         raise SystemExit(
             f"no recognised artifacts in {artifacts_dir} — "
-            "expected at least one .AppImage / .tar.gz / .zip / .msi"
+            "expected at least one .AppImage / .tar.gz / .rpm / .deb / .msi"
         )
 
     return {

@@ -6,8 +6,8 @@
 //! settings test may not name the nav map, and a database test may not name the lists' sort.
 //! Held from outside all of them instead, which is also the only place that can see both.
 //!
-//! `.claude/rules/testing.md` gives every corpus walk one home; these are the walks'
-//! compile-time cousins and land in the same place for the same reason.
+//! Corpus walks live here too, so a per-crate `cargo test` stays a question about that crate;
+//! these are their compile-time cousins and land beside them for the same reason.
 
 use melodia_core::entities::smart_criteria::Draw;
 use melodia_core::entities::track::TrackListRow;
@@ -253,7 +253,7 @@ fn queued(pairs: &[(i64, i64)]) -> Vec<i64> {
     pairs.iter().map(|&(_, track_id)| track_id).collect()
 }
 
-/// **What `library-data.md` said nothing could check.** The card beside a detail page queues
+/// **What neither crate can check on its own.** The card beside a detail page queues
 /// through `entity_ids`, a second SQL spelling of the page's default order, and the two have
 /// already shipped disagreeing: the same set played in one order from the page and another from
 /// the card. Both are held to the comparator, Rust against SQL in crates that cannot name each

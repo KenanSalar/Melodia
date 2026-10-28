@@ -64,10 +64,9 @@ pub(super) fn wire_request_edit(
             };
             let single = rows.len() == 1;
 
-            // Lyrics live in the file, not the DB, and so does the authoritative credit — a
-            // library whose join rows were seeded from `artist_id` alone knows only the first
-            // name. One read for both; a multi-selection takes the database instead, N file reads
-            // on the open path being what the row projection exists to avoid.
+            // Lyrics live in the file, and so does the authoritative credit, join rows seeded from
+            // `artist_id` alone knowing only the first name. A multi-selection takes the database
+            // instead, N file reads on the open path being what the row projection avoids.
             let (lyrics, credits) = if single {
                 let path = PathBuf::from(&rows[0].file_path);
                 let read =
@@ -108,8 +107,7 @@ pub(super) fn wire_request_edit(
                 None
             };
 
-            // Cover preview from the first row that has one (decode off the
-            // UI thread — a full-res source could jank it).
+            // Decoded off the UI thread, a full-resolution source being able to jank it.
             let cover_path = rows.iter().find_map(|r| {
                 r.artwork_path.as_deref().filter(|p| !p.is_empty()).map(PathBuf::from)
             });
@@ -148,10 +146,8 @@ pub(super) fn wire_request_edit(
                 &session,
                 Fetched { rows, credits, roles, genre_lists, release, lyrics, resident, cover },
             );
-            // After `populate`, which resets to Tags: the request's tab is the last word. Only a
-            // single selection can honour it, Lyrics and Summary being unmounted in batch mode, so
-            // a request for one over many rows would open on a tab that draws nothing. The bounds
-            // are the global's own, so nothing here restates a position the body owns.
+            // After `populate`, which resets to Tags. Lyrics and Summary are unmounted over many
+            // rows, so only a single selection may open on the tab asked for.
             if single {
                 let te = ui.global::<TagEditor>();
                 te.set_active_tab(tab.clamp(te.get_tab_tags(), te.get_tab_summary()));
@@ -182,11 +178,8 @@ fn placeholder(disagrees: bool, sentinel: &SharedString) -> SharedString {
     if disagrees { sentinel.clone() } else { SharedString::default() }
 }
 
-/// Everything one open of the dialog fetched, before any of it reaches a property.
-///
-/// One value rather than seven parameters: the four slices are all per-selected-track and
-/// **parallel to `rows`**, which is an invariant a reader can check here and could not check across
-/// an argument list. The three singles come off the same fetch and travel with them.
+/// Everything one open of the dialog fetched, before any of it reaches a property. The four
+/// slices are per selected track and **parallel to `rows`**.
 struct Fetched {
     rows: Vec<TagEditRow>,
     credits: Vec<(ArtistCredit, ArtistCredit)>,
@@ -206,11 +199,8 @@ struct Form<'a> {
     originals: FormState,
 }
 
-/// Set one field: value + placeholder (the ‹multiple values› sentinel iff the
-/// selection disagrees) + record the populated string as the diff baseline.
-///
-/// The leading field name is what pairs this with `read_text_fields` — the commit reads the
-/// same name back, so the two can't drift the way an index into a shared array could.
+/// Sets one field, its placeholder and its diff baseline. The leading field name pairs it with
+/// `read_text_fields`, which reads the same name back, so the two can't drift as an index could.
 macro_rules! field {
     ($form:expr, $name:ident, $val:expr, $set:ident, $set_ph:ident) => {{
         let (value, disagrees) = $val;
@@ -360,12 +350,9 @@ fn fill_tags_tab(
     TagsTab { credits: [artist, album_artist], genres, join_phrases: phrases }
 }
 
-/// The role credits, a list of rows per role. Structural like the genres and the two artist
-/// credits, so the sentinel is per role: one selection can agree on the composer and disagree
-/// on the producer.
-///
-/// The sentinel rides the edit's own scope rather than a mask beside it — a role the form
-/// cannot answer for is exactly the one that shows the hint, so one answer serves both.
+/// The role credits, a list of rows per role, with a sentinel per role: one selection can agree
+/// on the composer and disagree on the producer. It rides the edit's own scope, a role the form
+/// can't answer for being exactly the one that shows the hint.
 fn fill_credits_tab(ui: &AppWindow, form: &Form<'_>, roles: &[RoleCredits]) -> RoleCreditEdit {
     let role_edit = common_roles(roles);
     write_role_rows(ui, role_edit.credits());
@@ -455,11 +442,8 @@ fn fill_lyrics_tab(form: &mut Form<'_>, lyrics: String) {
     form.originals.text.lyrics = lyrics;
 }
 
-/// Everything the commit diffs against, as it was the moment the dialog opened.
-///
-/// One value rather than four parameters because that is what the four are: a baseline. They are
-/// written once by `populate` and read once by the commit, and `join_phrases` rides with them
-/// because the picker list the dialog offers is part of what the user was shown.
+/// Everything the commit diffs against, as it was the moment the dialog opened. `join_phrases`
+/// rides with it, the picker list offered being part of what the user was shown.
 struct Baseline {
     originals: FormState,
     lists: ListFields,
@@ -489,7 +473,6 @@ fn finalize_populate(
         te.set_has_cover(false);
     }
 
-    // Single row ⇒ fill the Summary tab; multi ⇒ blank it (tab unmounted).
     set_summary(te, single.then(|| &rows[0]));
 
     *session.borrow_mut() = TagSession {
@@ -503,11 +486,9 @@ fn finalize_populate(
     };
 }
 
-/// Fill the read-only Summary strings from a single row's technical columns, or
-/// blank all ten when `row` is `None` (multi mode — the tab isn't mounted, but a
-/// stale single-select value shouldn't linger).
+/// Fills the read-only Summary from a single row, or blanks it over many, where the tab isn't
+/// mounted but a stale single-selection value shouldn't linger.
 fn set_summary(te: &TagEditor, row: Option<&TagEditRow>) {
-    // Each field is the row's value, or "" when `row` is None.
     fn s(row: Option<&TagEditRow>, get: impl Fn(&TagEditRow) -> String) -> SharedString {
         opt_shared(row.map(get))
     }

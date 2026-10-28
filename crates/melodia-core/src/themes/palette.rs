@@ -2,11 +2,9 @@
 //! imports and no OS signals: the brush writes live in `ui::appearance::theme_paint`, the OS
 //! signals in `system_color_state.rs`.
 
-/// The theme-dependent brush slots that come from a palette table. Stored as
-/// packed `0x00RRGGBB` so the data tables read as the hex colours they
-/// are. `theme_paint` writes three more that don't:
-/// `mantle_unfocused` (an OS signal, which a [`Variant`] may snapshot), and
-/// `accent` / `accent_text` (picked independently of the variant).
+/// The brush slots a palette table fills, as `0x00RRGGBB` so the tables read as the hex they are.
+/// `theme_paint` writes three more: `mantle_unfocused`, and `accent` / `accent_text`, picked apart
+/// from the variant.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Palette {
     // 13 base / structure
@@ -27,12 +25,8 @@ pub struct Palette {
     // because most palettes keep `surface1` all but level with the card.
     pub card_control: u32,
     pub card_control_hover: u32,
-    // 3 semantic. Every palette names all three — there is deliberately no
-    // struct-update fallback to fill them, because the one that used to exist
-    // let the two generated palettes (Material You, KDE-from-kdeglobals) ship
-    // a neutral grey into `green` / `yellow` without anyone noticing. The
-    // surfaces reading them are signals: the macOS-style traffic lights, the
-    // success/warning toasts, the star rating.
+    // 3 semantic, named by every palette with no struct-update fallback, so one that forgets a
+    // slot fails to compile rather than greying the traffic lights, toasts and stars.
     pub red: u32,
     pub green: u32,
     pub yellow: u32,
@@ -75,8 +69,7 @@ pub struct AccentDef {
 }
 
 impl AccentDef {
-    /// Hex for this accent in the given variant; falls back to the first
-    /// listed variant if the requested one isn't present.
+    /// Falls back to the first listed variant.
     pub fn hex_in(&self, variant_id: &str) -> Option<u32> {
         self.per_variant
             .iter()
@@ -86,20 +79,12 @@ impl AccentDef {
     }
 }
 
-/// Synthetic variant id used for the "follow the OS" chip. Not a real
-/// `Variant` in any theme's `variants` list — `apply()` resolves it to the
-/// theme's `system_dark_variant` / `system_light_variant` based on the
-/// current OS appearance, and on KDE Breeze it can additionally re-source
-/// the whole palette from `~/.config/kdeglobals` so the player matches Plasma
-/// exactly.
+/// The "follow the OS" chip, in no theme's `variants`: `apply()` resolves it to the theme's system
+/// pair, and on KDE Breeze may re-source the whole palette from `kdeglobals`.
 pub const SYSTEM_VARIANT_ID: &str = "system";
 
-/// Synthetic accent id used for the "Material You" dot in the Material 3
-/// theme's accent grid. Only valid when the user has picked a non-`None`
-/// Color Style — the accent then follows whatever primary the dynamic
-/// scheme produced from album art. Treated like [`SYSTEM_VARIANT_ID`]:
-/// not in any theme's `accents` list, and `apply()` resolves it at paint
-/// time to the dynamic accent that lives on `SystemColorState`.
+/// The Material You dot, valid only under a Color Style and in no theme's `accents`; resolved at
+/// paint time to the accent `SystemColorState` holds.
 pub const MATERIAL_YOU_ACCENT_ID: &str = "material_you";
 
 /// The Melodia mark's two gradient stops on a light surface, as `0x00RRGGBB`: Catppuccin Latte's
@@ -115,9 +100,7 @@ pub struct ThemeDef {
     pub accents: &'static [AccentDef],
     pub default_variant: &'static str,
     pub default_accent: &'static str,
-    /// True when this theme advertises a "System" chip alongside its
-    /// declared variants. Selecting System maps to `system_dark_variant`
-    /// or `system_light_variant` at apply time based on the OS signal.
+    /// Whether the theme offers a "System" chip, mapped to its system pair at apply time.
     pub supports_system_mode: bool,
     pub system_dark_variant: &'static str,
     pub system_light_variant: &'static str,
@@ -132,8 +115,7 @@ impl ThemeDef {
         self.accents.iter().find(|a| a.id == id)
     }
 
-    /// Resolved hex for `accent_id` in `variant_id`, with both lookups
-    /// falling back to first-listed entries on miss.
+    /// Both lookups fall back to the first listed entry.
     pub fn accent_hex(&self, accent_id: &str, variant_id: &str) -> Option<u32> {
         self.accent(accent_id).and_then(|a| a.hex_in(variant_id))
     }
@@ -150,10 +132,8 @@ impl ThemeDef {
             .unwrap_or(self.resolved_variant(variant_id).palette.overlay1)
     }
 
-    /// Map the `"system"` synthetic id to one of this theme's real variants
-    /// based on `system_theme` (`"light"` / anything-else-treated-as-dark).
-    /// Falls back to `default_variant` when the theme opts out of system
-    /// mode or the named system pair isn't actually in `variants`.
+    /// `"light"` picks the light variant and anything else the dark; `default_variant` where the
+    /// theme opts out of system mode or its pair is missing.
     pub fn resolve_system_variant(&self, system_theme: &str) -> &'static Variant {
         if !self.supports_system_mode {
             return self.resolved_variant(self.default_variant);
@@ -177,26 +157,15 @@ impl ThemeDef {
     }
 }
 
-/// sRGB luma weights, applied to the gamma-encoded channels rather than to
-/// linearized ones — cheap, and the threshold below is tuned for it. Not the
-/// relative luminance `ui::backdrop` solves scrims against; that one linearizes
-/// first. Named because `theme.slint`'s `ink-on` spells the same four numbers
-/// out and `themes::tests::theme_slint_is_light_matches_on_accent_hex` builds
-/// its expected Slint expression from these, so a drift on either side fails.
-///
-/// A third copy lives in `services::platform::dwm_titlebar::is_dark_from_rgb`, duplicated
-/// on purpose to keep that windows-only module off the palette code that calls
-/// into it. It is pinned against `on_accent_hex` rather than against these, by
-/// `services::platform::dwm_titlebar::tests` — which runs only under the
-/// `test-windows` job, the reason that copy went unchecked for so long.
+/// sRGB luma on the gamma-encoded channels, not the linearized luminance `ui::backdrop` solves
+/// against. Named because `theme.slint`'s `ink-on` spells the same numbers, pinned by
+/// `themes::tests`; `dwm_titlebar::is_dark_from_rgb` is the third copy, pinned by its own tests.
 pub const LUMA_R: f64 = 0.2126;
 pub const LUMA_G: f64 = 0.7152;
 pub const LUMA_B: f64 = 0.0722;
 /// Above this, `fill` is light enough to take dark ink.
 pub const LUMA_THRESHOLD: f64 = 0.5;
 
-/// Returns whether `fill_hex` is light enough to take dark ink. f64 keeps clippy happy on the
-/// u8 → float lift (channel values are 0..=255, well inside f64's range).
 pub fn is_light_hex(fill_hex: u32) -> bool {
     let r = f64::from((fill_hex >> 16) & 0xff) / 255.0;
     let g = f64::from((fill_hex >> 8) & 0xff) / 255.0;
@@ -204,14 +173,8 @@ pub fn is_light_hex(fill_hex: u32) -> bool {
     LUMA_R * r + LUMA_G * g + LUMA_B * b > LUMA_THRESHOLD
 }
 
-/// Pick a contrast colour for text/icons rendered on top of `accent_hex`:
-/// dark `#1e1e2e` for light accents, white for dark accents. Fast enough that
-/// we don't bother caching per accent.
-///
-/// `theme.slint`'s `Theme.ink-on(brush)` is the Slint-side twin, for the
-/// surfaces whose fill isn't the accent (`danger`, the traffic-light hues).
-/// Same weights, same threshold, same pair — keep them in step.
-///
+/// Dark ink on a light accent, white on a dark one. `Theme.ink-on` is the Slint twin for fills
+/// that aren't the accent; keep the two in step.
 pub fn on_accent_hex(accent_hex: u32) -> u32 {
     if is_light_hex(accent_hex) { 0x001e_1e2e } else { 0x00ff_ffff }
 }

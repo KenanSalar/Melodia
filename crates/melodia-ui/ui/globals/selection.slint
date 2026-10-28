@@ -7,22 +7,18 @@ import { PlaylistDetail } from "playlists.slint";
 import { Search } from "search.slint";
 import { Browse, Tracks } from "tracks.slint";
 
-// One question and one verb over every surface that can hold a multi-selection, so the Escape
-// chain asks once instead of importing ten globals to spell a ten-term `||` inside a key binding.
-// A dispatcher over siblings, `globals/dialog.slint`'s shape, and a leaf: nothing imports this.
+// Lets the Escape chain ask once rather than import ten globals into a key binding.
 //
 // **The queue is deliberately absent.** Its picks are Escape's only while the queue was the last
 // thing pressed, which its own arm in `shortcut-scope.slint` asks; joining here would clear them
 // wherever Escape landed.
 export global Selection {
-    // Whether what is done to an item is done to its whole set: only when the item is in one of
-    // more than one, so a right-click beside a selection acts on that item alone and leaves the set
-    // be. The one statement of it, for every item menu.
+    // Only when the item sits in a set of more than one, so a right-click beside a selection acts
+    // on that item alone. Every item menu asks here.
     public pure function acts-on-set(item-selected: bool, set-count: int) -> bool {
         return item-selected && set-count > 1;
     }
 
-    // The ids that answer: `set` itself, or the item alone.
     public pure function effective-ids(
         item-id: int,
         item-selected: bool,
@@ -32,8 +28,6 @@ export global Selection {
         return self.acts-on-set(item-selected, set-count) ? set : [item-id];
     }
 
-    // Every surface tests its own set, because there is no shared one — the card grids share
-    // `CardSelection` keyed by scope, the nine lists each keep their own `selected-ids`.
     public pure function any-live() -> bool {
         return Tracks.selected-ids.length > 0
             || Browse.selected-ids.length > 0
@@ -47,8 +41,7 @@ export global Selection {
             || CardSelection.selected-ids.length > 0;
     }
 
-    // Guarded per surface rather than cleared blind: a list's clear walks its whole row model to
-    // unstamp the flags, and only one of these can be the one the user is looking at.
+    // Guarded per surface, a list's clear walking its whole row model to unstamp the flags.
     public function clear-live() {
         if (Tracks.selected-ids.length > 0) { Tracks.clear-selection(); }
         if (Browse.selected-ids.length > 0) { Browse.clear-selection(); }

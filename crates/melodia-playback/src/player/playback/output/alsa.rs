@@ -1,18 +1,12 @@
 //! Exclusive output on Linux: an ALSA `hw:` device, opened at the source's own shape.
 //!
-//! `hw:` is the card with nothing in between, so nothing on the way converts, which is the whole
-//! difference from the shared path: a channel count or format the card lacks fails the claim, and
-//! so does a rate, unless the request lets the claim run the card at another of its own for the
-//! voices to convert to. What reaches the card is [`encode`]'s output of the mixer's block, and
-//! nothing else touches it.
+//! `hw:` has nothing in between to convert, so a channel count or format the card lacks fails the
+//! claim, and so does a rate unless the request lets the voices convert to another of the card's.
 //!
-//! **Two things users will report, and neither is a bug.** While the claim holds, Melodia's
-//! stream is gone from the sound server, so it is missing from its mixer and its volume, and
-//! every other application on that card falls silent. And `PIPEWIRE_ALSA`, which `main.rs` sets
-//! for the shared stream, has no effect here: it configures `PipeWire`'s ALSA plugin, and `hw:`
-//! never goes through the plugin.
-//!
-//! [`encode`]: super::encode
+//! **Two things users will report, and neither is a bug.** While the claim holds, Melodia is gone
+//! from the sound server's mixer and every other application on the card falls silent. And
+//! `PIPEWIRE_ALSA`, set in `main.rs` for the shared stream, configures `PipeWire`'s ALSA plugin,
+//! which `hw:` never goes through.
 
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -63,8 +57,8 @@ const RECOVER_ATTEMPTS: u32 = 3;
 /// How long a granted release waits for the writer to close the card before answering anyway.
 const RELEASE_WAIT: Duration = Duration::from_secs(1);
 
-/// How long an open waits for the sound server to finish closing a card it has just let go.
-/// Past it the card is someone else's, and the claim falls back as busy.
+/// How long an open waits out a card the sound server has released but not yet closed. Past it
+/// the card is someone else's, and the claim falls back as busy.
 const BUSY_WAIT: Duration = Duration::from_secs(1);
 
 const BUSY_RETRY: Duration = Duration::from_millis(50);
@@ -77,10 +71,8 @@ pub(super) struct Card {
     pub(super) number: u32,
 }
 
-/// Every playback device on every card, by the stable `hw:CARD=<id>,DEV=<n>` spelling.
-///
-/// Built from the cards themselves rather than ALSA's name hints, which list plugin aliases and
-/// numbered names that move when a card is plugged in.
+/// Every card's playback devices as `hw:CARD=<id>,DEV=<n>`, read off the cards rather than ALSA's
+/// name hints, whose numbered names move when a card is plugged in.
 pub(super) fn devices() -> Vec<OutputDevice> {
     cards().into_iter().map(|card| card.device).collect()
 }
@@ -122,14 +114,11 @@ fn cards() -> Vec<Card> {
     found
 }
 
-/// A card's reservation, kept apart from the stream on it so a reopen on the same card can carry
-/// it over rather than hand the card back and take it again.
+/// A card's reservation, kept apart from its stream so a reopen on the same card carries it over.
 ///
 /// **The hand-back is what breaks the desktop, not the claim.** The session manager rebuilds a
-/// card in the background once it has it back, and a claim landing mid-rebuild strands the card's
-/// node name, so the card returns under a numbered one: every rename and the saved default output
-/// are keyed on the old name, and both are lost until the session manager restarts. A reopen is
-/// exactly that pattern, milliseconds apart.
+/// card once it has it back, and a claim landing mid-rebuild returns the card under a numbered node
+/// name, losing every rename and the saved default output until the session manager restarts.
 pub(super) struct Claim {
     card: i32,
     /// The writer a granted release stops, which is whichever stream holds the claim now.
@@ -174,14 +163,8 @@ impl Drop for ExclusiveStream {
     }
 }
 
-/// Claim the requested card, or the first listed where none is named, at its shape, or another
-/// rate where the request allows one, and a format that holds its source, and start feeding it
-/// from `feed`. `held` is the last stream's claim, reused when it is on the same card and given
-/// back otherwise.
-///
-/// # Errors
-///
-/// A [`ClaimError`] naming why the card could not be had, which the caller falls back on.
+/// Claims the requested card, or the first listed, and starts feeding it from `feed`. `held`, the
+/// last stream's claim, is reused on the same card and given back otherwise.
 pub(super) fn open(
     request: &ExclusiveRequest,
     feed: &Feed,
@@ -283,10 +266,7 @@ fn resolve(device: Option<&str>) -> Result<Card, ClaimError> {
     found.ok_or_else(|| ClaimError::NotConnected { id: device.unwrap_or_default().to_owned() })
 }
 
-/// Open the card, waiting out a busy one for up to [`BUSY_WAIT`].
-///
-/// The sound server answers a release once it has let the card go, but closes it a moment later,
-/// so the first open after taking the card over can meet it still open.
+/// Opens the card, waiting out a busy one for up to [`BUSY_WAIT`].
 fn open_pcm(id: &str) -> Result<PCM, ClaimError> {
     let deadline = Instant::now() + BUSY_WAIT;
     loop {
@@ -380,13 +360,10 @@ fn configure(pcm: &PCM, request: &ExclusiveRequest) -> Result<Config, ClaimError
     Ok(Config { rate: device_rate, offered, channels, format, requested_period, period_frames })
 }
 
-/// The rate to run the card at: the source's own where the card runs it, else, where the request
-/// allows, the one [`rates::device_rate_for`] picks out of the ladder's rungs the card offers.
-/// Under Resample those rungs come back too, even where the source's rate runs, since they are
-/// what tells a later track whether this claim plays it.
-///
-/// Asked before the channels and format narrow `hw`, they are exactly what a fresh claim picks
-/// from. The source's rate is asked directly, as a rate off the ladder has no bit in the set.
+/// The source's rate where the card runs it, else [`rates::device_rate_for`]'s pick where the
+/// request allows. Under Resample the offered rungs come back even where the source's rate runs,
+/// since they tell a later track whether this claim plays it; read before the channels and format
+/// narrow `hw`, they are what a fresh claim picks from.
 fn pick_rate(
     hw: &HwParams<'_>,
     source: SampleRate,
@@ -478,7 +455,6 @@ impl WriterControl {
     }
 }
 
-/// Everything the `alsa-out` thread owns.
 struct Writer {
     pcm: PCM,
     feed: Feed,
@@ -506,12 +482,9 @@ impl Writer {
         control.mark_closed();
     }
 
-    /// Pull, dither, encode and write one period at a time until told to stop.
-    ///
-    /// Nothing here logs: the health counters are how this loop reports, and the one error it
-    /// returns is logged once, on the way out. A volume element that stops taking or reporting the
-    /// level ends the stream like a write refused, and the claim that follows decides again whether
-    /// to use it.
+    /// Nothing here logs: the health counters report, and the one error returned is logged on the
+    /// way out. A volume element that stops answering ends the stream like a refused write, and the
+    /// claim that follows decides again whether to use it.
     fn write_until_stopped(&mut self) -> Result<(), alsa::Error> {
         let io = self.pcm.io_bytes();
         let frame_bytes = usize::try_from(self.pcm.frames_to_bytes(1))

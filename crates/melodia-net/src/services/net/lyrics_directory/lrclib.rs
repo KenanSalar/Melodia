@@ -1,14 +1,8 @@
-//! lrclib.net, the lyrics directory.
+//! lrclib.net, the lyrics directory: at most two requests per track change, only from behind
+//! `library::lyrics`' switch, and its wire shape stays here.
 //!
-//! At most two requests per track change, and only from behind `library::lyrics`' switch. The
-//! service's own response shape stays private here and what crosses out is
-//! [`LyricsAnswer`], the same way the radio directory keeps its `ApiStation` to itself.
-//!
-//! **Every request goes through the pacer, and a refusal arms it.** The service documents both
-//! halves as requirements rather than advice: a delay between requests, and a `429` whose
-//! `Retry-After` a client *must* honour on pain of being blocked by `User-Agent`. Sending again
-//! into a window we have been told is closed is the specific behaviour its maintainer has named
-//! as what turns a busy hour into an outage.
+//! **Every request goes through the pacer, and a refusal arms it.** The service requires both: a
+//! delay between requests, and honouring a `429`'s `Retry-After` on pain of a `User-Agent` ban.
 
 use std::time::Duration;
 
@@ -23,53 +17,37 @@ use super::LookupError;
 use super::recording::{Recording, query_title, search_artist};
 use crate::services::net::pacer::{RequestPacer, Turn};
 
-/// The exact-signature endpoint: four fields that together name one recording, so it answers or it
-/// does not, and nothing here has to decide which of several rows is this track.
+/// The exact signature: four fields naming one recording, so it answers or it doesn't.
 const GET_ENDPOINT: &str = "https://lrclib.net/api/get";
 
-/// The index behind it, and **it reaches records the signature cannot**. That is the finding this
-/// fallback exists for rather than a preference for fuzzy matching: a library's tags routinely
-/// name a shorter artist credit than the row that carries the timings, so the signature lands on a
-/// duplicate with only plain text — and there are rows the signature returns `404` for while the
-/// index returns them under an exact match on all three strings.
+/// The index, which **reaches rows the signature can't**: tags routinely name a shorter credit
+/// than the timed row carries, and some rows the signature `404`s come back here on an exact match.
 const SEARCH_ENDPOINT: &str = "https://lrclib.net/api/search";
 
-/// What the service asks clients to identify themselves as: a name, a version and somewhere to
-/// complain. The shared client already sends `Melodia/<version>`; this adds the project URL, and
-/// only on requests going to this host.
+/// What the service asks clients to send: a name, a version and somewhere to complain. Only on
+/// requests to this host.
 const AGENT: &str =
     concat!("Melodia/", env!("CARGO_PKG_VERSION"), " (https://github.com/KenanSalar/Melodia)");
 
-/// A sheet is text and text is small. Generous against the longest song anyone has written, and
-/// still a refusal for a body that is not one.
+/// Generous against the longest song, and still a refusal for a body that isn't a sheet.
 const MAX_BYTES: u64 = 256 * 1024;
 
 /// The index answers with whole sheets, a score of them at a time.
 const MAX_SEARCH_BYTES: u64 = 2 * 1024 * 1024;
 
-/// How far a candidate's own duration may sit from the track's and still be the same recording.
-///
-/// The signature endpoint's own window, measured against it: a track it answers for at `n` is
-/// still answered at `n ± 2` and refused at `n ± 3`. Taking anything wider here would let a radio
-/// edit answer for the album cut, which is precisely the confusion the signature avoids.
+/// The signature endpoint's own window, measured: answered at `n ± 2` s and refused at `n ± 3`.
+/// Any wider and a radio edit would answer for the album cut.
 const DURATION_TOLERANCE_MS: f64 = 2_000.0;
 
 /// In line with the station logo's, the other fetch that must not hold a view open waiting.
 const REQUEST_TIMEOUT: Duration = Duration::from_secs(10);
 
-/// How long to stand down after a refusal that named no period.
-///
-/// A refusal with no usable header still has to cost something, or the next track change walks
-/// straight back into the closed window.
+/// For a refusal naming no period, so the next track change doesn't walk straight back in.
 const DEFAULT_BACKOFF: Duration = Duration::from_mins(1);
 
-/// The longest a single refusal may hold the lookup off.
-///
-/// A header claiming an implausible window would otherwise park the feature for the rest of the
-/// session; capping it costs one extra refusal where the window really was that long.
+/// So an implausible `Retry-After` can't park the feature for the rest of the session.
 const MAX_BACKOFF: Duration = Duration::from_mins(15);
 
-/// The response, spelled as the service spells it.
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct ApiLyrics {
@@ -79,12 +57,10 @@ struct ApiLyrics {
     plain_lyrics: Option<String>,
     #[serde(default)]
     instrumental: bool,
-    /// Seconds, fractional. Read on both legs: the query rounds to the second and no longer pins
-    /// the album, so what came back is measured against [`DURATION_TOLERANCE_MS`] either way.
+    /// Seconds, fractional, checked against [`DURATION_TOLERANCE_MS`] on both legs.
     #[serde(default)]
     duration: f64,
-    /// The index's own idea of what this row is, which is the half that has to be checked: it is
-    /// a keyword search, and it will answer with another artist's song of the same name.
+    /// What the index thinks this row is, which has to be checked: it is a keyword search.
     #[serde(default)]
     track_name: String,
     #[serde(default)]
@@ -102,30 +78,19 @@ impl ApiLyrics {
         }
     }
 
-    /// Whether this row carries timings, which is the only thing the index is asked for.
-    ///
-    /// [`LyricsAnswer::is_synced`] asks it of a converted answer and cannot be reached from here:
-    /// the row is filtered while it still carries the duration and album the ranking below needs.
+    /// [`LyricsAnswer::is_synced`] on the raw row, which still carries what the ranking needs.
     fn is_timed(&self) -> bool {
         self.synced_lyrics.as_deref().is_some_and(|text| !text.trim().is_empty())
     }
 
-    /// How far this row's recording sits from the one playing, in milliseconds.
-    ///
-    /// Fractional because [`DURATION_TOLERANCE_MS`] is measured against it, and because it is the
-    /// last separator the ranking has left once [`Self::second_off`] and the two ranks under it
-    /// have all tied.
+    /// Fractional, being the ranking's last separator.
     fn distance_ms(&self, duration_ms: i64) -> f64 {
         let track_ms = f64::from(i32::try_from(duration_ms).unwrap_or(i32::MAX));
         (self.duration.max(0.0) * 1000.0 - track_ms).abs()
     }
 
-    /// [`Self::distance_ms`] in whole seconds, which is the resolution the choice is made at.
-    ///
-    /// The directory files a length per upload and a tag carries one per file, and neither is
-    /// measured against the other; below a second the difference between two rows says nothing
-    /// about which is the better sheet. Saturates rather than wrapping, and the filter has already
-    /// bounded what reaches it.
+    /// Whole seconds, the resolution the choice is made at: the directory files a length per
+    /// upload and a tag one per file, so below a second two rows' lengths say nothing.
     #[expect(
         clippy::cast_possible_truncation,
         clippy::cast_sign_loss,
@@ -135,21 +100,16 @@ impl ApiLyrics {
         (self.distance_ms(duration_ms) / 1000.0) as u32
     }
 
-    /// What this row claims to be, for [`Recording::matches`] to check.
     fn recording(&self) -> Recording {
         Recording::new(&self.track_name, &self.artist_name)
     }
 }
 
-/// Asks the directory about one track.
+/// Asks the directory about one track: the signature first, and the index only where that left
+/// no timed or no glossed sheet, so an ordinary hit costs one request.
 ///
-/// The signature first, and the index only for what it could not answer: a timed sheet, or a
-/// glossed one. So an ordinary hit still costs one request, and the second is spent exactly where
-/// the first left the panel something a reader cannot use.
-///
-/// `Ok(None)` is a miss rather than a failure, which is what a `404` means here and the majority
-/// of what this function returns for an ordinary library. Every other non-success status is an
-/// error, so an outage reads as one instead of as a library nobody has written lyrics for.
+/// `Ok(None)` is a miss, which is what a `404` means and most of what a library gets. Every other
+/// non-success status is an error, so an outage doesn't read as nobody having written lyrics.
 pub(super) async fn fetch(
     client: &reqwest::Client,
     pacer: &RequestPacer,
@@ -158,11 +118,7 @@ pub(super) async fn fetch(
     album: &str,
     duration_ms: i64,
 ) -> Result<Option<LyricsAnswer>, LookupError> {
-    // Built once and lent to both legs: each checks the rows it gets back against the same
-    // recording, and the signature no longer pins enough to skip the check.
     let ours = Recording::from_credit(title, credit);
-    // The signature is a match against whatever the uploader tagged, so it asks with the credit as
-    // printed. Only the index, which is asked loosely, has any use for the shape behind it.
     let printed = credit.line().unwrap_or_default();
     let exact = get_exact(client, pacer, title, printed, duration_ms, &ours).await?;
     if exact.as_ref().is_some_and(|answer| answer.instrumental || settles_it(answer)) {
@@ -174,17 +130,13 @@ pub(super) async fn fetch(
     match search_timed(client, pacer, title, credit, album, duration_ms, &ours).await {
         Ok(Some(timed)) if worth_taking(exact.as_ref(), &timed) => Ok(Some(timed)),
         Ok(Some(_) | None) => Ok(exact),
-        // **A failed errand for a gloss may not cost the sheet it was run for.** Reported as a
-        // failure it reaches the panel as "could not ask", which clears a sheet the reader could
-        // already follow and stores nothing, so the next play pays for both requests again.
+        // A failed gloss errand mustn't cost the sheet: as a failure it would clear what the
+        // reader could already follow, and store nothing.
         Err(_) if gloss_errand => Ok(exact),
-        // **A refusal ends the lookup whatever the signature found.** The index request would be
-        // one more knock on a door we have just been told is shut, and the pacer would refuse it
-        // anyway; reporting it is what lets the caller say so rather than claim a miss.
+        // A refusal ends the lookup whatever the signature found, so the caller can say so.
         Err(e @ LookupError::RateLimited { .. }) => Err(e),
-        // **Otherwise only fatal where it was the only source left.** With a sheet already in hand
-        // the failure costs its timings; with none, reporting a miss would have the caller record
-        // "nobody has this" for a month on the strength of an outage.
+        // Otherwise fatal only with no sheet in hand, or the caller would record "nobody has
+        // this" for a month on the strength of an outage.
         Err(e) if exact.is_some() => {
             log::debug!("lyrics: index unreachable: {}", describe(&e));
             Ok(exact)
@@ -193,33 +145,21 @@ pub(super) async fn fetch(
     }
 }
 
-/// Whether the signature's answer leaves the index nothing to add.
+/// Whether the signature's answer leaves the index nothing to add. A timed sheet isn't enough
+/// alone: of a recording's uploads only some gloss their lines, and which one the signature
+/// returns depends on how the length rounded.
 ///
-/// **A timed sheet used to settle it on its own, and the duration is why that was not enough.**
-/// The directory files several uploads per recording and only some gloss their lines, so which one
-/// the signature returns comes down to how the track's length rounded to the second — a track half
-/// a second either side of a boundary gets a different upload, and the plain one is as likely as
-/// not. Asking the index costs a request and buys the gloss back.
-///
-/// **Gated on `is_ascii`**, the same cheap question the resolver asks before it romanizes, and
-/// deliberately the loose one: a gloss is a translation *out of* the language sung, so an English
-/// sheet wants none, but an accented Latin one is not ASCII and pays for a request it will usually
-/// spend for nothing. That is the direction to fail in. The precise predicate is
-/// `romanize::needs_romanization`, which is a crate away and cannot be reached from here.
+/// Gated on `is_ascii` as the cheap, loose stand-in for `romanize::needs_romanization`, a crate
+/// away: an accented Latin sheet pays for a request it rarely needs, the right direction to fail.
 fn settles_it(answer: &LyricsAnswer) -> bool {
-    // An untimed sheet leaves the index its original errand, whatever else it carries.
     if !answer.is_synced() {
         return false;
     }
     answer.has_gloss() || answer.text().is_some_and(str::is_ascii)
 }
 
-/// Whether the index's row is worth taking over what the signature answered.
-///
-/// **A timed sheet beats no sheet and an untimed one**, which is what the index was added for.
-/// Against a sheet that is *already* timed the bar is the gloss: both are followable, and swapping
-/// one for the other on anything less would trade a length the signature matched for one merely
-/// inside the window.
+/// A timed sheet beats none and an untimed one. Against one already timed the bar is the gloss,
+/// or a length the signature matched would be traded for one merely inside the window.
 fn worth_taking(exact: Option<&LyricsAnswer>, found: &LyricsAnswer) -> bool {
     match exact {
         Some(answer) if answer.is_synced() => found.has_gloss(),
@@ -227,16 +167,11 @@ fn worth_taking(exact: Option<&LyricsAnswer>, found: &LyricsAnswer) -> bool {
     }
 }
 
-/// The row whose title, artist and length are this recording's, or `None` where the directory has
-/// no such row.
+/// The row whose title, artist and length are this recording's.
 ///
-/// **The album is deliberately not asked about.** The endpoint treats `album_name` as a filter
-/// rather than a hint, so a value it holds no row under is a `404` even where the track, the
-/// artist and the length all agree. That is the tag least worth staking a request on: a
-/// compilation, a reissue and a soundtrack name the same recording differently every time. Sent,
-/// it turned an ordinary multi-artist track into a miss only the index could repair; omitted, the
-/// same request answers. The album still ranks a *searched* row through [`album_rank`], which is
-/// the tie-break it is fit for.
+/// **The album is deliberately not sent.** The endpoint treats it as a filter, so a compilation or
+/// reissue naming the release differently is a `404` though everything else agrees. It still
+/// ranks a searched row through [`album_rank`].
 async fn get_exact(
     client: &reqwest::Client,
     pacer: &RequestPacer,
@@ -249,8 +184,7 @@ async fn get_exact(
     url.query_pairs_mut()
         .append_pair("track_name", title)
         .append_pair("artist_name", artist)
-        // Rounded rather than truncated: the window either side is two seconds, and a track
-        // reported a second short spends half of it before the request is even made.
+        // Rounded: a track reported a second short would spend half the window before asking.
         .append_pair("duration", &((duration_ms + 500) / 1000).to_string());
 
     let Some(body) = send(client, pacer, url, "Lyrics sheet", MAX_BYTES).await? else {
@@ -262,41 +196,18 @@ async fn get_exact(
     Ok(answers_for(ours, &row, duration_ms).then(|| row.into_answer()))
 }
 
-/// Whether the row the signature answered with is the recording that was asked about.
-///
-/// Dropping the album from the query is what makes this necessary: the answer is now drawn from
-/// every release the directory holds this recording under rather than the one release asked about,
-/// and which of them comes back is the service's to decide. Both checks are the ones
-/// [`pick_timed`] already runs on a searched row, so the two legs accept a row on the same terms
-/// rather than on the endpoint's word for it.
-///
-/// **The length is measured here rather than left to the service.** It enforces one of its own and
-/// the query rounds to the second, so both windows are already its to choose; asking again is what
-/// makes [`DURATION_TOLERANCE_MS`] mean the same thing on both legs instead of only on the one it
-/// is named in.
-///
-/// Falls through to the length alone where our own side cannot be compared at all. A title that is
-/// nothing but a bracketed aside leaves [`Recording`] nothing to equal, and refusing there would
-/// drop sheets the query used to return.
+/// Whether the signature's row is the recording asked about, on [`pick_timed`]'s terms: without
+/// the album the service picks among every release, and measuring the length here keeps
+/// [`DURATION_TOLERANCE_MS`] meaning one thing on both legs. A side with nothing comparable falls
+/// through to the length alone.
 fn answers_for(ours: &Recording, row: &ApiLyrics, duration_ms: i64) -> bool {
     row.distance_ms(duration_ms) <= DURATION_TOLERANCE_MS
         && (!ours.can_match() || ours.matches(&row.recording()))
 }
 
-/// The index's best timed row for this recording.
-///
-/// **Asked loosely and answered strictly**, which is the split the two endpoints are for. The
-/// query drops the `feat.` credit no two taggers spell alike and the guests after the first,
-/// because a row filed under one of them is still this song; the album goes too, being the tag
-/// most likely to disagree with whoever uploaded the sheet and the one the signature already
-/// tried. Then every row that comes back is checked against the tags in hand — the index is a
-/// keyword search, so "Heartbeat" by an artist it half-matched is exactly what it is built to
-/// return.
-///
-/// Three filters, in the order that makes each cheap: a row without timings is nothing this call
-/// was made for, a row outside the duration window is a different recording, and a row naming a
-/// different song is what [`Recording::matches`] is for. What survives ranks by the whole second
-/// it is out by, then by whether it glosses its lines, then by the album.
+/// The index's best timed row for this recording: **asked loosely, answered strictly**. The query
+/// drops the `feat.` credit, the guests after the first and the album, a row filed under any of
+/// them still being this song; every row back is then checked.
 async fn search_timed(
     client: &reqwest::Client,
     pacer: &RequestPacer,
@@ -306,17 +217,14 @@ async fn search_timed(
     duration_ms: i64,
     ours: &Recording,
 ) -> Result<Option<LyricsAnswer>, LookupError> {
-    // **Asked here first, because nothing this side cannot compare is worth a request.** A title
-    // that is nothing but a bracketed credit, or a credit that is nothing but separators, folds to
-    // a recording `Recording::matches` refuses every row against, so the cap could only be spent
-    // to be told nothing. The signature has no such bail: it asks by exact title and length, which
-    // stay comparable when the fold does not.
+    // Nothing this side can't compare is worth a request. The signature has no such bail: its
+    // exact title and length stay comparable where the fold doesn't.
     if !ours.can_match() {
         return Ok(None);
     }
 
-    // Back to the tag where the trim empties a field. The cut is there to widen the query, and a
-    // title opening on its own `feat.` would otherwise be searched for by nothing at all.
+    // Back to the tag where the trim empties a field, or a title opening on `feat.` searches for
+    // nothing.
     let printed = credit.line().unwrap_or_default();
     let track_query = match query_title(title) {
         "" => title,
@@ -341,13 +249,9 @@ async fn search_timed(
     Ok(pick_timed(rows, ours, album, duration_ms).map(ApiLyrics::into_answer))
 }
 
-/// The row the index returned that is this recording, or nothing it can stand behind.
-///
-/// Split out so the tolerance and the tie-break are table-testable: everything either side of it
-/// needs a socket, and this is where the answer is actually decided.
-///
-/// The filter runs cheapest predicate first, and `min_by` keeps the first of equal rows, so a full
-/// tie falls back to the order the index sent.
+/// The searched row that is this recording, ranked by whole seconds off, then gloss, then album,
+/// then the fractional distance; a full tie keeps the index's order. Split out to be
+/// table-testable without a socket.
 fn pick_timed(
     rows: Vec<ApiLyrics>,
     ours: &Recording,
@@ -371,30 +275,20 @@ fn pick_timed(
         })
 }
 
-/// `0` where the row glosses its lines, `1` otherwise.
-///
-/// **Ranked above the album and under the second**, which is the order the three answer in. Two
-/// uploads whose lengths agree to the second are the same recording twice and the choice between
-/// them is what they carry, so a fifth of a second must not decide it — that is noise, and it is
-/// exactly what handed a reader the one upload of six with no translation in it. A row a whole
-/// second further out is a different matter and still loses.
+/// Under the second and above the album: two uploads agreeing to the second are one recording
+/// twice, so what they carry decides rather than a fifth of a second of noise. A whole second
+/// further out still loses.
 fn gloss_rank(row: &ApiLyrics) -> u8 {
     u8::from(!row.synced_lyrics.as_deref().is_some_and(carries_gloss))
 }
 
-/// `0` where the row is filed under the album in hand, `1` otherwise. A tie-break and never more
-/// than that: two rows the same distance from the track's duration are the same recording twice,
-/// and the release it was ripped from is the only thing left to prefer.
+/// A tie-break only: the release it was ripped from is all that is left to prefer.
 fn album_rank(row: &ApiLyrics, album: &str) -> u8 {
     u8::from(album.is_empty() || fold(&row.album_name) != *album)
 }
 
-/// One GET under a cap and behind the pacer, with `None` for the `404` both endpoints spell a miss
-/// as.
-///
-/// **The single choke point, which is why the classification is here.** Both endpoints reach the
-/// network through this one function, so the floor, the stop and the reading of a refusal are each
-/// written once and cannot be half-applied by a new call site.
+/// One GET under a cap and behind the pacer, `None` for a `404`. The single choke point, so the
+/// floor, the stop and the reading of a refusal are written once.
 async fn send(
     client: &reqwest::Client,
     pacer: &RequestPacer,
@@ -418,10 +312,8 @@ async fn send(
     if status == reqwest::StatusCode::NOT_FOUND {
         return Ok(None);
     }
-    // **Both refusals, and read off the status rather than the body.** The service's own
-    // documentation of the `429` payload does not match what it sends, and the `503` it sheds load
-    // with is documented nowhere at all; both carry a `Retry-After` and both mean the same thing to
-    // a client, which is to come back later.
+    // Off the status, not the body: the documented `429` payload isn't what is sent, the `503`
+    // it sheds load with is undocumented, and both carry a `Retry-After`.
     if matches!(
         status,
         reqwest::StatusCode::TOO_MANY_REQUESTS | reqwest::StatusCode::SERVICE_UNAVAILABLE
@@ -431,9 +323,8 @@ async fn send(
         return Err(LookupError::RateLimited { retry_after });
     }
     if !status.is_success() {
-        // A `520` is Cloudflare's, not the directory's, and it is the shape a blocked `User-Agent`
-        // gets back. Named here because nothing else in the tree would explain it and the answer
-        // is not something a retry reaches.
+        // Cloudflare's, and what a blocked `User-Agent` gets back. Named because nothing else in
+        // the tree would explain it and no retry reaches it.
         if status.as_u16() == 520 {
             log::warn!(
                 "lyrics: the directory's edge refused us outright (HTTP 520), which is what a \
@@ -452,11 +343,8 @@ async fn send(
         .map_err(LookupError::Failed)
 }
 
-/// The `Retry-After` a refusal carried, clamped to something a session can sit out.
-///
-/// **Delta-seconds only.** The header's other spelling is an HTTP-date, and parsing one would buy
-/// a date crate for this crate to read a form rate limiters do not send; an unreadable value falls
-/// through to the caller's default, which is the same answer as an absent one.
+/// Delta-seconds only: the HTTP-date form would buy a date crate for a spelling rate limiters
+/// don't send, and an unreadable value takes the caller's default like an absent one.
 fn retry_after(headers: &reqwest::header::HeaderMap) -> Option<Duration> {
     let secs: u64 = headers
         .get(reqwest::header::RETRY_AFTER)
@@ -466,15 +354,11 @@ fn retry_after(headers: &reqwest::header::HeaderMap) -> Option<Duration> {
     Some(Duration::from_secs(secs).min(MAX_BACKOFF))
 }
 
-/// One of the two endpoint constants above, ready for its query pairs.
-///
-/// Both are literals that parse, so the error arm is unreachable rather than merely unlikely —
-/// which is why it costs one spelling between them rather than one each.
+/// Both endpoint constants parse, so the error arm is unreachable and spelled once between them.
 fn endpoint(url: &'static str) -> Result<reqwest::Url, LookupError> {
     reqwest::Url::parse(url).map_err(|e| failed("Lyrics directory endpoint is not a URL", e))
 }
 
-/// An I/O-boundary failure, which is every arm of this module that is not a refusal.
 fn failed(
     msg: &'static str,
     source: impl std::error::Error + Send + Sync + 'static,

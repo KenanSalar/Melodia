@@ -11,35 +11,26 @@ import { PillOverflowMenu } from "../../components/pill-overflow-menu.slint";
 import { SortPillRow } from "../../components/sort-pill-row.slint";
 import { ColumnTogglePopup } from "../../components/track-list/column-toggle-popup.slint";
 
-// The per-tab and per-detail action pills, handed to `LibraryTabBand` as its whole `@children`.
-// Nine mutually exclusive rows matching the sheet's nine body branches — the four detail predicates
-// arrive as `in` properties rather than being re-derived, since spelled twice the pills and the
-// body could disagree about which branch is up.
+// The per-tab and per-detail action pills, handed to `LibraryTabBand` as its `@children`, the
+// detail predicates taken from the sheet so the pills and the body can't disagree.
 //
-// **A component rather than rows written into the mount sheet, and the Playlists row is the
-// reason**: its pills carry `tooltip-overlay: true`, so the pill is drawn by a frame the host
-// declares *after* the scroll body. That frame reaches the pills by id, and an id declared inside
-// an `if` can't be read from outside it — so the ids live at a root the host can see and this file
-// publishes their rect. One component holds all five rows: the band's slot spaces its cells, so a
-// second always-mounted child would offset every other tab's row from the band's right edge.
+// A component rather than rows in the sheet because of the Playlists row: its tooltips are drawn
+// by a frame the host declares after the body, which reaches the pills by id, and an id inside an
+// `if` is unreadable from outside. One component holds every row, since the band's slot spaces its
+// cells and a second always-mounted child would offset every other tab's row.
 export component MyLibraryTabPills inherits Rectangle {
-    // Which of the sheet's nine branches is mounted. See the file header.
     in property <bool> album-open;
     in property <bool> artist-open;
     in property <bool> genre-open;
     in property <bool> playlist-open;
-    // The band's eased verdict that the row is short of room, handed to every labelled pill with a
-    // glyph to fall back to. The sort rows have none and keep their labels.
+    // For every labelled pill with a glyph to fall back to; the sort rows have none.
     in property <float> compact-t: 0.0;
 
     HorizontalLayout {
         alignment: end;
-        // No spacing. The rows are mutually exclusive, and the Playlists slot below is a
-        // real cell even while collapsed, so any gap here would show up as a permanent
-        // inset on the other four tabs.
+        // The Playlists cell never unmounts, so spacing here would inset every other tab.
         spacing: 0px;
 
-        // --- Songs: the column toggle -----------------------------------------
         if MyLibrary.tab-idx == MyLibrary.tab-songs: ActionPill {
             ColumnTogglePopup {
                 columns <=> Tracks.track-columns;
@@ -48,16 +39,7 @@ export component MyLibraryTabPills inherits Rectangle {
             }
         }
 
-        // --- Albums / Artists / Genres: one sort row each ---------------------
-        //
-        // The active field carries the direction arrow. Clicking it flips the direction
-        // and a new field starts ascending — both Rust's, through the shared `next_sort`.
-        // Each is gated **off** its detail as well as on its tab: a sort row over an open
-        // album sorts a grid nobody can see.
-        //
-        // `labels` stays an inline literal at each mount — `@tr` folds msgids at codegen,
-        // so a Rust-seeded array renders untranslated — and `fields` is the parallel list
-        // of tokens the comparator matches on.
+        // Gated off the detail too: over an open album a sort row sorts a grid nobody can see.
         if MyLibrary.tab-idx == MyLibrary.tab-albums && !root.album-open: SortPillRow {
             labels: [@tr("Name"), @tr("Year"), @tr("Artist")];
             fields: ["name", "year", "artist"];
@@ -82,15 +64,8 @@ export component MyLibraryTabPills inherits Rectangle {
             request-sort(f) => { Genres.request-sort(f); }
         }
 
-        // --- The four details ------------------------------------------------
-        //
-        // Each is the row that used to sit at the foot of that view's `DetailHeader`,
-        // unchanged: one pill holding Shuffle, whatever is particular to the entity, and the
-        // column toggle with its own column locked off. **The
-        // tooltips stay in-tree** — `Tooltip`'s default side is `above` and the band's
-        // slot rides its lower edge, so the pill lands inside the band, painted after
-        // everything the band owns and before the body. Only the Playlists row below needs
-        // the published-anchor treatment, and it needs it for a reason of its own.
+        // The detail rows' tooltips stay in-tree: they open above, inside the band, where the
+        // body declared after it can't cover them.
         if root.album-open: ActionPill {
             PillButton {
                 icon: "shuffle";
@@ -102,7 +77,6 @@ export component MyLibraryTabPills inherits Rectangle {
             ColumnTogglePopup {
                 columns <=> AlbumDetail.track-columns;
                 compact-t: root.compact-t;
-                // Meaningless here: every row is the same album.
                 hide-album: true;
                 toggled(id) => { AlbumDetail.toggle-column(id); }
             }
@@ -119,7 +93,6 @@ export component MyLibraryTabPills inherits Rectangle {
             ColumnTogglePopup {
                 columns <=> ArtistDetail.track-columns;
                 compact-t: root.compact-t;
-                // Meaningless here: every row is the same artist.
                 hide-artist: true;
                 toggled(id) => { ArtistDetail.toggle-column(id); }
             }
@@ -136,7 +109,6 @@ export component MyLibraryTabPills inherits Rectangle {
             ColumnTogglePopup {
                 columns <=> GenreDetail.track-columns;
                 compact-t: root.compact-t;
-                // Meaningless here: every row is the same genre.
                 hide-genre: true;
                 toggled(id) => { GenreDetail.toggle-column(id); }
             }
@@ -150,17 +122,13 @@ export component MyLibraryTabPills inherits Rectangle {
                 clicked => { PlaylistDetail.shuffle-all(); }
             }
             PillDivider { }
-            // Rust-side because the picker needs the playlist's track artworks first. It
-            // fills Dialog from a fresh event-loop tick, so the property-recursion guard
-            // doesn't trip.
+            // Through Rust: the picker needs the playlist's track artworks first.
             PillButton {
                 icon: "image";
                 tooltip-text: @tr("Edit artwork");
                 clicked => { PlaylistDetail.request-edit-artwork(); }
             }
             PillDivider { }
-            // Rename / Delete fill Dialog inline — everything they need is already on
-            // `PlaylistDetail`, so no Rust hop and no recursion risk.
             PillButton {
                 icon: "edit";
                 tooltip-text: @tr("Rename");
@@ -172,8 +140,6 @@ export component MyLibraryTabPills inherits Rectangle {
                     );
                 }
             }
-            // Chrome inline so `@tr` applies; Rust loads the criteria and opens the editor
-            // from a fresh tick.
             if PlaylistDetail.playlist.is_smart: PillDivider { }
             if PlaylistDetail.playlist.is_smart: PillButton {
                 icon: "tune";
@@ -197,14 +163,9 @@ export component MyLibraryTabPills inherits Rectangle {
             }
         }
 
-        // --- Playlists: collapsed, never unmounted ----------------------------
-        //
-        // The one row that can't sit under an `if`, per the file header. It collapses to
-        // a zero-width clipped cell instead: nothing paints, and `Clip` swallows every
-        // event outside its empty rect, so the pills are as unreachable as an unmounted
-        // branch while their ids stay readable from this root. The three width
-        // constraints are spelled out because an explicit `min-width` is what *replaces*
-        // the constraint the pill's own bound width would otherwise merge in.
+        // Collapsed rather than unmounted: a zero-width clip paints nothing and takes no events,
+        // while the ids stay readable from the root. `min-width` is spelled because it replaces
+        // the constraint the pill's own width would merge in.
         Rectangle {
             clip: true;
             min-width: 0px;
@@ -214,22 +175,17 @@ export component MyLibraryTabPills inherits Rectangle {
                 && !root.playlist-open ? pl.preferred-width : 0px;
 
             pl := ActionPill {
-                // Fills the Dialog inline rather than hopping through Rust: a synchronous
-                // `set_open(true)` mid-click-handler trips Slint's recursion guard.
                 np := PillButton {
                     icon: "add";
                     text: @tr("New Playlist");
                     compact-t: root.compact-t;
                     tooltip-text: @tr("Create an empty playlist");
-                    // Drawn by the host's top-layer frame, out of the grid's way.
                     tooltip-overlay: true;
                     clicked => { Dialog.open-create-playlist([]); }
                 }
 
                 PillDivider { }
 
-                // Chrome inline so `@tr` applies; Rust resets the editor state and opens
-                // from a fresh tick, the same hop as Export.
                 sp := PillButton {
                     icon: "auto_awesome";
                     icon-filled: true;
@@ -244,10 +200,7 @@ export component MyLibraryTabPills inherits Rectangle {
 
                 PillDivider { }
 
-                // **Import and Export fold in here rather than carrying a pill each.** Four
-                // labelled pills overran the band, and these two are the rarest, so they are
-                // what gives up the width. Both are still pure Rust flows over native rfd
-                // dialogs.
+                // The rarest actions on the row, so they give up the width.
                 om := PillOverflowMenu {
                     tooltip-text: @tr("More playlist actions");
                     tooltip-overlay: true;
@@ -270,11 +223,8 @@ export component MyLibraryTabPills inherits Rectangle {
         }
     }
 
-    // --- The Playlists pills' tooltip anchor ---------------------------------
-    //
-    // Published, never drawn: see the file header. The window rect comes off the hovered
-    // pill live rather than being snapshotted on the hover edge, so a pill that moves
-    // under a parked pointer — a resize, Ctrl+B — keeps its tooltip anchored.
+    // The hovered pill's tooltip rect, read live so a pill moving under a parked pointer keeps
+    // its tooltip anchored.
     property <length> px: np.hovered ? np.absolute-position.x
         : sp.hovered ? sp.absolute-position.x
         : om.hovered ? om.absolute-position.x
@@ -299,8 +249,7 @@ export component MyLibraryTabPills inherits Rectangle {
         : om.hovered ? om.tooltip-text
         : "";
     out property <bool> tip-visible: np.hovered || sp.hovered || om.hovered;
-    // Off the pill rather than spelled here: which of the three wants its trailing edge pinned
-    // is `PillButton`'s rule, and the in-tree mount reads the same property.
+    // `PillButton`'s rule, read rather than restated.
     out property <bool> tip-align-end: np.hovered ? np.icon-only
         : sp.hovered ? sp.icon-only
         : om.hovered ? om.icon-only

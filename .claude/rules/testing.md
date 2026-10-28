@@ -94,6 +94,24 @@ The seven ISTQB principles, as they bear on writing a test:
 - **Doc tests document; they are not the test suite.** They are disabled here
   (`[lib] doctest = false`), so an examples block explains and does not run.
 
+## Corpus walks
+
+A test that reads the source as text holds what the compiler can't, and it rots in silence: a
+walk that matches nothing passes, taking every pin standing on it along. Each owes five things,
+none of which a passing run can show:
+
+- **A vacuity floor**, the fewest files the walk must find. Keep it loose: one tight enough to be
+  interesting trips on an ordinary file deletion.
+- **An equality, not a floor, wherever a vanishing subtree is the failure.** A floor can't see one
+  slice of the corpus stop existing.
+- **Unreadable paths collected and asserted empty, never skipped.** A path that won't read is
+  indistinguishable from one holding nothing.
+- **Comments stripped before the needle, and brace-matched scope wherever a substring would
+  lie**, so a nested block's text can't answer for the block around it.
+- **An exemption held to an exact count**, each entry asserted to still match. A second hit in a
+  sanctioned file is itself the regression, and an entry matching nothing is a hole that reads as
+  coverage.
+
 ## Rust: attributes and signatures
 
 - `#[test]` applies to monomorphic free functions taking no arguments whose return type

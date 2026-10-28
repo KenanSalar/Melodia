@@ -7,17 +7,13 @@ import { PopupDismissCatcher } from "../popup-dismiss-catcher.slint";
 import { SliderPointer } from "../slider-pointer.slint";
 import { VolumeTrigger } from "volume-trigger.slint";
 
-// A `VolumeTrigger` and a popup holding a Material 3 vertical slider, plus the shared `Tooltip` pill
-// reading the percentage out to its left. **The popup is wider than the slider chrome**: slider
-// right, readout left, transparent gap between, so the two read as separate floating chromes rather
-// than one wide bar. A `PopupWindow`'s content can't render outside its own rectangle, so the gap
-// is how that is spelled — not a second popup or negative coordinates.
+// A `VolumeTrigger` and a popup holding a Material 3 vertical slider, its percentage read out to
+// the left. The popup is wider than the slider's chrome, the transparent strip holding the
+// readout, a popup's content being unable to draw outside its rectangle.
 export component VolumePopup inherits Rectangle {
     in property <length> diameter: 36px;
     in property <length> icon-size: 22px;
-    // The trigger's ink only. **The popup keeps the theme palette whatever a host passes**: it is
-    // a `PopupSurface` floating on `Theme.crust`, not part of the surface behind the button, so a
-    // solved tier there would be the one chrome on screen tinted by a record.
+    // The trigger's only: the popup floats on `Theme.crust` whatever the surface behind the button.
     in property <brush> trigger-fg: Theme.text;
     in property <brush> trigger-hover-fg: root.trigger-fg;
     in property <brush> trigger-hover-bg: Theme.surface0;
@@ -38,9 +34,7 @@ export component VolumePopup inherits Rectangle {
     }
 
     pop := PopupWindow {
-        // The chrome centred on the button and the badge extending leftward. Not right-aligned:
-        // the chrome is wider than any disc it hangs over, so matching edges pulls it off the
-        // glyph's axis.
+        // The chrome centred on the button; matching edges would pull it off the glyph's axis.
         x: (trigger.width + chrome.width) / 2 - self.width;
         y: -self.height - Theme.popup-gap;
         width: 92px;
@@ -51,9 +45,7 @@ export component VolumePopup inherits Rectangle {
             close => { pop.close(); }
         }
 
-        // **The empty left strip is still inside the popup's rectangle**, so a click
-        // there doesn't trigger close-on-click-outside and the popup feels sticky.
-        // Declared before the chrome, so the slider's own TouchArea still wins.
+        // The empty strip is inside the popup, so it closes nothing on its own.
         PopupDismissCatcher {
             x: 0;
             y: 0;
@@ -62,8 +54,6 @@ export component VolumePopup inherits Rectangle {
             close-requested => { pop.close(); }
         }
 
-        // `pill: true` derives the radius from the short axis. No entry animation —
-        // popups appear instantly.
         chrome := PopupSurface {
             x: parent.width - self.width;
             y: 0;
@@ -78,32 +68,21 @@ export component VolumePopup inherits Rectangle {
                 height: parent.height - 2 * Theme.pad-md;
 
                 property <float> frac: clamp(Player.vm.volume / 100, 0, 1);
-                // **Two bars meeting exactly at the thumb's centre, with no gap** — the thumb pill
-                // blankets the seam, so it reads as one continuous track. No minimum-size
-                // threshold and no opacity gate: at either extreme one half shrinks to a couple of
-                // pixels and is fully covered. The thumb halves along the value axis while
-                // pressed, as Compose Material 3's slider does.
+                // Two bars meeting at the thumb's centre, which blankets the seam, so neither
+                // extreme needs a threshold. The thumb halves while pressed, as Material 3's does.
                 property <length> track-w: 8px;
                 property <length> thumb-w: 24px;
                 property <length> thumb-h: vol-touch.pressed ? 2px : 4px;
-                // The mask between the bars and the thumb. Its **fixed** height leaves
-                // an equal band peeking either side of the centred thumb, which is the
-                // visible gap making the slider read as two rounded bars — and since it
-                // doesn't move while the thumb shrinks on press, that gap grows, so the
-                // track reads as absorbing the freed pixels.
+                // A fixed mask, so the gap either side of the thumb grows as it shrinks on press.
                 property <length> thumb-bg-w: self.thumb-w;
                 property <length> thumb-bg-h: 12px;
                 property <length> stop-d: 4px;
-                // Seated inside the bar's top hemisphere — its centre on the rounded
-                // end's radius — so it reads as the endpoint cap rather than a separate
-                // element floating below the top.
+                // Inside the bar's top hemisphere, so it reads as the end cap.
                 property <length> stop-y: 3px;
 
                 property <length> track-cx: self.width / 2;
-                // **Centred against the rest height, not the live animated one.**
-                // Deriving the position from a height-dependent term pins one edge at
-                // the extremes, so only the other moves inward on press and it reads
-                // asymmetric. The mask hides the pixel of overflow past the ends.
+                // Against the rest height, not the animated one, which would pin one edge at the
+                // extremes and shrink the thumb lopsided.
                 property <length> thumb-cy:
                     (1 - self.frac) * (self.height - 4px) + 2px;
                 property <length> thumb-y: self.thumb-cy - self.thumb-h / 2;
@@ -112,7 +91,6 @@ export component VolumePopup inherits Rectangle {
 
                 animate thumb-h { duration: 200ms; easing: cubic-bezier(0.2, 0, 0, 1); }
 
-                // The top half; its bottom edge runs to the thumb, which covers it.
                 Rectangle {
                     x: parent.track-cx - parent.track-w / 2;
                     y: 0;
@@ -122,7 +100,6 @@ export component VolumePopup inherits Rectangle {
                     background: Theme.surface1;
                 }
 
-                // The bottom half, starting where the thumb sits.
                 Rectangle {
                     x: parent.track-cx - parent.track-w / 2;
                     y: parent.thumb-cy;
@@ -132,8 +109,7 @@ export component VolumePopup inherits Rectangle {
                     background: Theme.accent;
                 }
 
-                // Always at full opacity: the thumb's mask is drawn after it, so the dot
-                // disappears behind the moving thumb rather than fading.
+                // The mask drawn after it hides the dot behind the thumb rather than fading it.
                 Rectangle {
                     x: parent.track-cx - parent.stop-d / 2;
                     y: parent.stop-y;
@@ -143,10 +119,8 @@ export component VolumePopup inherits Rectangle {
                     background: Theme.accent;
                 }
 
-                // A chrome-coloured stadium masking the bars where they meet, which is
-                // what makes the two-separate-bars look **without** a geometric gap:
-                // near either end it simply covers more of the small remnant, so there
-                // is nothing to glitch.
+                // Parts the bars without a geometric gap, so near either end it only covers more
+                // of the remnant.
                 Rectangle {
                     x: parent.track-cx - parent.thumb-bg-w / 2;
                     y: parent.thumb-cy - parent.thumb-bg-h / 2;
@@ -156,8 +130,6 @@ export component VolumePopup inherits Rectangle {
                     background: Theme.crust;
                 }
 
-                // Wider than the track, so it overhangs the bars either side. Painted
-                // after the dot, so the dot stays covered if a fade lags the position.
                 Rectangle {
                     x: parent.track-cx - parent.thumb-w / 2;
                     y: parent.thumb-y;
@@ -167,10 +139,8 @@ export component VolumePopup inherits Rectangle {
                     background: Theme.accent;
                 }
 
-                // The last integer forwarded. A drag that doesn't change the rounded value is
-                // dropped, so a full drag emits at most once per step rather than once per pixel.
-                // Forgotten at the commit: the volume can move from outside while the popup stays
-                // up, and a press landing on the old value has to reach it.
+                // So a drag emits once per step rather than per pixel. Forgotten at the commit:
+                // the volume can move from outside while the popup is up.
                 property <int> last-emitted: -1;
                 function emit-volume(v: int) {
                     if (v != self.last-emitted) {
@@ -179,8 +149,7 @@ export component VolumePopup inherits Rectangle {
                     }
                 }
 
-                // The mask region is the grab band, being the thumb as the eye reads it. The
-                // commit writes `settings.json`, which a press that never moved has no reason to.
+                // The mask is the grab band, being the thumb as the eye reads it.
                 vol-touch := SliderPointer {
                     orientation: Orientation.vertical;
                     thumb-center: parent.thumb-cy;
@@ -195,10 +164,7 @@ export component VolumePopup inherits Rectangle {
             }
         }
 
-        // A zero-size anchor at the chrome's left edge, level with the thumb: `Tooltip`
-        // positions itself against a host *box*, and what this pill hangs off is a
-        // *point*. Chained through the chrome and slider offsets, so it stays on the
-        // thumb through a drag.
+        // A zero-size anchor level with the thumb, so the readout hangs off the value it shows.
         Rectangle {
             x: chrome.x;
             y: chrome.y + slider.y + slider.thumb-cy;
@@ -212,8 +178,7 @@ export component VolumePopup inherits Rectangle {
                 side: TooltipSide.left;
                 gap: 10px;
                 in-popup: true;
-                // No reveal delay — the readout has to be up on the frame the drag
-                // starts. Same hook `VolumeTrigger`'s keyboard readout takes.
+                // Up on the frame the drag starts, with no reveal delay.
                 force-shown: vol-touch.has-hover || vol-touch.pressed;
             }
         }

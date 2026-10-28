@@ -1,20 +1,6 @@
-//! Full-screen Now Playing view wiring.
-//!
-//! Four pieces of Rust→Slint glue, all installed by [`install`] on the event-loop
-//! thread:
-//!
-//! 1. **Dual-slot blurred background + sharp cover.** A `sinks.view_model` subscriber
-//!    decodes and blurs the source's artwork off-thread through
-//!    [`crate::ui::now_playing_artwork`] — *only while the view is open*, one decode yielding
-//!    both — into the *inactive* `Player.blur-img-{a,b}` slot, then flips `Player.blur-use-a`.
-//!    A station's logo runs the same path: the tier is keyed on a path and knows nothing about
-//!    entity kinds.
-//! 2. **Technical-metadata chips**, off the same subscriber's `TrackMeta` fetch.
-//! 3. **"Up Next" list.** A `sinks.queue` subscriber rebuilds `NowPlaying.up-next-rows`
-//!    and resets `slide-phase` only when the current track actually changed.
-//! 4. **The lyrics panel**, which takes that same column when it is switched on. No
-//!    subscriber of its own: three edges kick [`lyrics`]'s hook and it dedupes on the
-//!    track it is holding.
+//! The Now Playing view and the state the miniplayer shares with it: the cover and its blurred
+//! backdrop, decoded off-thread only while a surface draws them, the metadata chips, Up Next and
+//! the lyrics panel. A station's logo takes the cover's path, the tier knowing nothing of kinds.
 
 mod lyrics;
 mod metadata;
@@ -43,26 +29,17 @@ pub(crate) use source_change::republish_for_palette;
 use source_change::{apply_source_change, spawn_source_change_subscriber};
 use up_next::{spawn_seed, spawn_up_next_subscriber, wire_now_playing_open, wire_reorder};
 
-/// Re-fill a `NowPlayingState`-shadowed surface (the Up Next list, the high-res cover slot or the
-/// lyrics panel's sheet), or hand the cover back.
-///
-/// Set once, after [`install`] has built the state each one reads. The Up Next and cover kicks are
-/// called by [`crate::ui::shell::mini_player::install`] when the miniplayer becomes visible — the
-/// subscribers stash while no surface renders the model, so without those kicks a never-opened
-/// session followed by a direct shrink-to-mini shows empty or stale content. The lyrics one is
-/// called from wherever a sheet could have gone stale, and dedupes on the one it holds.
+/// Re-fills a surface `NowPlayingState` shadows, or hands the cover back. Set once [`install`] has
+/// built the state each reads: the subscribers stash while nothing renders, so a session shrinking
+/// straight to the miniplayer would otherwise show empty or stale content.
 type Hook = Box<dyn Fn()>;
 
 /// The list scrolls, so this is a soft cap — large enough to feel complete, small enough
 /// that rebuilding it on every queue mutation stays cheap.
 pub(crate) const UP_NEXT_N: usize = 20;
 
-/// What the view's artwork, backdrop tiers and chips describe.
-///
-/// One type for both kinds of source, because every consumer in this module asks the same three
-/// questions: has it moved, what is there to decode, and is there a `tracks` row behind it. A
-/// station answers the last with `None` — chips come off an eight-column projection of a row it
-/// does not have.
+/// What the view's artwork, backdrop tiers and chips describe, for either kind of source. A
+/// station has no `tracks` row, which the chips come off.
 #[derive(Clone)]
 pub(super) struct NowPlayingSource {
     pub(super) key: SourceKey,
@@ -70,11 +47,9 @@ pub(super) struct NowPlayingSource {
     pub(super) track: Option<Arc<TrackSummary>>,
 }
 
-/// The identity a repaint dedupes on.
-///
-/// **A station is its stream URL and nothing else.** Its announced title moves several times an
-/// hour and changes none of what this module produces — the labels are Slint bindings on
-/// `Player.vm` — so folding the title in would re-decode the same logo per song.
+/// The identity a repaint dedupes on. **A station is its stream URL alone**: its announced title
+/// moves several times an hour and changes nothing produced here, so folding it in would re-decode
+/// the logo per song.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(super) enum SourceKey {
     Track(i64),
@@ -82,9 +57,8 @@ pub(super) enum SourceKey {
 }
 
 impl SourceKey {
-    /// Whether `id` is the source `held` already names. Asked on every player emit, so it
-    /// compares against the borrowed form rather than building a key to compare with: only a
-    /// genuine move is worth a `String`.
+    /// Asked on every player emit, so it compares against the borrowed form: only a genuine move is
+    /// worth a `String`.
     pub(super) fn describes(held: Option<&Self>, id: Option<SourceId<'_>>) -> bool {
         match (held, id) {
             (None, None) => true,
@@ -96,12 +70,10 @@ impl SourceKey {
 }
 
 impl NowPlayingSource {
-    /// Project a published view model, or `None` when nothing is on the deck.
     pub(super) fn from_vm(vm: &PlayerViewModelLight) -> Option<Self> {
         let source = vm.source()?;
-        // The row comes off the same arm as the key rather than off `vm` beside it: `source` has
-        // already settled which half wins, and reading `current_track` independently is what would
-        // hand the chips a `tracks` row under a station.
+        // Off the key's own arm: `source` has settled which half wins, and `current_track` read
+        // beside it would hand the chips a `tracks` row under a station.
         let (key, track) = match source.id {
             SourceId::Track(id) => (SourceKey::Track(id), vm.current_track.clone()),
             SourceId::Station(stream_url) => (SourceKey::Station(stream_url.to_owned()), None),
@@ -110,105 +82,76 @@ impl NowPlayingSource {
     }
 }
 
-/// Shared UI-thread state coordinating the view's two subscribers and the
-/// `now-playing-open` callback. All three run on the event-loop thread, so
-/// `Rc<Cell/RefCell>` is enough.
+/// The UI-thread state the view's subscribers, its open callback and the miniplayer share.
 pub struct NowPlayingState {
-    /// Mirrors `Nav.now-playing-open`. Both subscribers skip their work while it is
-    /// false — nothing they produce is on screen.
+    /// Mirrors `Nav.now-playing-open`; the subscribers skip their work while it is false.
     pub(super) open: Cell<bool>,
-    /// Mirrors `MiniPlayer.active`, true for every layout. Only the column renders Up Next, but
-    /// the broader flag keeps the gate simple and the wasted rebuild behind the other two is a
-    /// handful of rows.
+    /// Mirrors `MiniPlayer.active`, every layout: only the column renders Up Next, but the rebuild
+    /// wasted behind the other two is a handful of rows.
     pub(crate) mini_visible: Cell<bool>,
-    /// Mirrors `MiniPlayer.layout`. The card and the column draw the large artwork and only the
-    /// column mounts a panel; see [`Self::renders_artwork`] and [`Self::renders_panel`].
     pub(crate) mini_layout: Cell<MiniLayout>,
-    /// Mirrors `MiniPlayer.backdrop-shown`. Every layout paints the artwork backdrop under it, and
-    /// the backdrop is solved from the same decode the large artwork is, so the strip needs that
-    /// decode while this is on even though its own tile comes off the row tier.
+    /// Mirrors `MiniPlayer.backdrop-shown`. The backdrop solves off the large artwork's decode, so
+    /// even the strip needs that decode while this is on.
     pub(crate) mini_backdrop: Cell<bool>,
-    /// Latest queue snapshot, kept whether or not the view is open so opening it can
-    /// rebuild Up Next immediately.
+    /// Kept while the view is closed, so opening it rebuilds Up Next at once.
     pub(super) latest_qvm: RefCell<Option<QueueViewModel>>,
-    /// Track ids the Up Next model currently holds. A queue mutation that doesn't
-    /// change this slice — a reorder *below* the window — skips the rebuild.
+    /// A mutation leaving this slice alone, a reorder below the window, skips the rebuild.
     pub(super) rendered_ids: RefCell<Vec<i64>>,
     /// The newest Up Next fetch, so one overtaken by a later publish or seed lands nothing.
     pub(super) up_next_ticket: Cell<u64>,
-    /// Current-track id at the last Up Next rebuild; a change drives the slide.
+    /// A change drives the slide.
     pub(super) last_current_id: Cell<Option<i64>>,
-    /// Queue play-order index at the last rebuild; a forward step (wrap included) slides
-    /// up. Seeded from the install snapshot so the first real change picks right.
+    /// A forward step, wrap included, slides up.
     pub(super) last_queue_index: Cell<i32>,
-    /// Latest source on the deck, kept whether or not the view is open so opening it can
-    /// seed the artwork and chips.
+    /// Kept while the view is closed, so opening it can seed the artwork and chips.
     pub(super) current_source: RefCell<Option<NowPlayingSource>>,
-    /// The source whose artwork and chips are currently in the `Player` global. The open
-    /// callback compares it against `current_source` to skip a redundant re-seed when
-    /// nothing changed while the view was closed.
+    /// The source in the `Player` global, so an open with nothing changed skips the re-seed.
     pub(super) applied_source: RefCell<Option<SourceKey>>,
-    /// `None` only between `Rc::new(…)` and [`install`]'s post-init writes. Captures a
-    /// `Weak<NowPlayingState>` to avoid the `Rc → closure → Rc` cycle.
     up_next_seeder: RefCell<Option<Hook>>,
-    /// The high-res cover, accent and chips, invoked by [`Self::kick_artwork`] when a miniplayer
-    /// layout drawing them becomes visible, so the sharp tile replaces the row-tier fallback
-    /// without waiting for the next source change.
     artwork_seeder: RefCell<Option<Hook>>,
-    /// [`Self::release_artwork`]'s half, the seeder's twin.
     artwork_releaser: RefCell<Option<Hook>>,
     /// Defers the release past the fades still reading the slots it clears. One timer rather than
     /// one per release, so a later release restarts the wait instead of racing it.
     slot_release: slint::Timer,
-    /// The lyrics panel's rows, offset table and sung index. Lives here rather than beside the
-    /// panel because the panel is `if`-mounted and this outlives it, and because the three edges
-    /// that refill it are all out here.
+    /// Here rather than beside the `if`-mounted panel, which it outlives, and beside the three
+    /// edges that refill it.
     pub(super) lyrics: Rc<lyrics::LyricsUi>,
 }
 
 impl NowPlayingState {
-    /// Rebuild the Up Next list from the stashed queue snapshot, so the miniplayer's column
-    /// doesn't render an empty list while the subscriber's snapshot is fresh. A no-op
-    /// before [`install`] returns, and when nothing has been stashed.
+    /// Rebuilds Up Next from the stashed snapshot, for a miniplayer column that has just shown.
     pub(crate) fn kick_up_next(&self) {
         if let Some(seeder) = self.up_next_seeder.borrow().as_ref() {
             seeder();
         }
     }
 
-    /// Decode the current track's high-res cover, accent and chips into the `Player`
-    /// global, for a miniplayer surface that has just started drawing them.
-    /// A no-op before [`install`] returns, and when the current track is already applied.
+    /// Decodes the source's cover and chips for a miniplayer surface that has just started drawing
+    /// them, unless they are already applied.
     pub(crate) fn kick_artwork(&self) {
         if let Some(seeder) = self.artwork_seeder.borrow().as_ref() {
             seeder();
         }
     }
 
-    /// Hand back the high-res cover and blur once no surface draws them: the cross-fade slots not
-    /// on show and the decode cache, after the fades still reading them are over. The shown slots
-    /// stay, so a same-source reopen needs no decode. A no-op before [`install`] returns.
+    /// Hands back the cover and blur once no surface draws them: the cross-fade slots not on show
+    /// and the decode cache, after the fades still reading them are over. The shown slots stay, so
+    /// a same-source reopen needs no decode.
     pub(crate) fn release_artwork(&self) {
         if let Some(releaser) = self.artwork_releaser.borrow().as_ref() {
             releaser();
         }
     }
 
-    /// Ask the lyrics sheet to catch up with the current track, for a surface that has just been
-    /// mounted. A no-op before [`install`] returns, and idempotent: `reseed` dedupes on the claim
-    /// it already holds. The third of these wrappers, and here for their reason — the seeder
-    /// itself is this module's, where the miniplayer's wiring is a sibling of it.
+    /// Asks the lyrics sheet to catch up with the current track; `reseed` dedupes on its claim.
     pub(crate) fn kick_lyrics(&self) {
         self.lyrics.kick();
     }
 
-    /// Whether anything draws what the source-change subscriber produces; see
-    /// [`Surfaces::renders_artwork`].
     pub(crate) fn renders_artwork(&self) -> bool {
         self.surfaces().renders_artwork()
     }
 
-    /// Whether anything mounts the now-playing column's panels; see [`Surfaces::renders_panel`].
     pub(crate) fn renders_panel(&self) -> bool {
         self.surfaces().renders_panel()
     }
@@ -233,27 +176,23 @@ struct Surfaces {
 }
 
 impl Surfaces {
-    /// Whether anything draws the cover, the chips and the solved colour tiers. The full view, a
-    /// miniplayer layout drawing the large artwork, or any miniplayer layout painting the artwork
-    /// backdrop, whose colours come off that same decode.
+    /// Whether anything draws the cover, the chips and the solved colour tiers: the backdrop counts,
+    /// its colours coming off the same decode.
     fn renders_artwork(self) -> bool {
         let large_artwork = self.mini_layout != MiniLayout::Strip;
         self.open || (self.mini_visible && (large_artwork || self.mini_backdrop))
     }
 
-    /// Whether anything mounts Up Next and the lyrics sheet.
-    ///
-    /// **Deliberately narrower than [`Self::renders_artwork`].** Only the miniplayer's column has a
-    /// slot for either; the card and the strip have none whatever they are painted on, so a sheet
-    /// resolved for them would spend a request per track on something nobody can see.
+    /// Whether anything mounts Up Next and the lyrics sheet, **deliberately narrower** than
+    /// [`Self::renders_artwork`]: only the column has a slot for either, and a sheet resolved for
+    /// the card or the strip would spend a request per track on nothing anyone can see.
     fn renders_panel(self) -> bool {
         self.open || (self.mini_visible && self.mini_layout == MiniLayout::Column)
     }
 }
 
-/// Drops the [`NowPlayingArtwork`] LRU and `malloc_trim`s the pages back, off the UI thread:
-/// `clear()` drops buffers and `trim()` walks arenas. Runs after [`clear_unshown_slots`], so the
-/// trim sees what both let go of; the displayed track's pair stays alive in the slot showing it.
+/// Drops the [`NowPlayingArtwork`] LRU and trims the heap, off the UI thread. After
+/// [`clear_unshown_slots`], so the trim sees what both let go of.
 fn release_artwork_off_thread(state: &AppState, np_artwork: &Arc<NowPlayingArtwork>) {
     let np_artwork = Arc::clone(np_artwork);
     state.runtime.spawn_blocking(move || {
@@ -262,12 +201,9 @@ fn release_artwork_off_thread(state: &AppState, np_artwork: &Arc<NowPlayingArtwo
     });
 }
 
-/// Hands back the lyrics sheet and checks the store's bounds, once the caller knows no panel is left.
-///
-/// The sheet and its offset table are the whole of what a panel pinned, the model being the larger
-/// half. The store is pruned beside them for the radio logo cache's reason: a mounted panel with
-/// lyrics on is the only thing that writes to it, so the last one going is when it stops growing.
-/// Now Playing's close and the miniplayer's exit can each be that one.
+/// Hands back the lyrics sheet once no panel is left, and prunes the store for the radio logo
+/// cache's reason: a mounted panel is its only writer, so the last one going is when it stops
+/// growing.
 pub(crate) fn release_lyrics(ui: &AppWindow, state: &AppState, np_state: &NowPlayingState) {
     lyrics::release(ui, &np_state.lyrics);
     if melodia_app::library::lyrics::is_enabled(state) {
@@ -278,8 +214,7 @@ pub(crate) fn release_lyrics(ui: &AppWindow, state: &AppState, np_state: &NowPla
     }
 }
 
-/// Install the Now Playing view's models + subscribers. Runs on the Slint
-/// event-loop thread, between `AppWindow::new()` and `app.show()`.
+/// Runs between `AppWindow::new()` and `app.show()`.
 pub fn install(
     ui: &AppWindow,
     state: &AppState,
@@ -290,9 +225,7 @@ pub fn install(
     ui.global::<NowPlaying>().set_up_next_rows(ModelRc::from(up_next_model.clone()));
     wire_request_cover(ui, cover_thumbs);
 
-    // `watch::Receiver::changed()` only fires on sends *after* subscribe and the
-    // startup queue-restore already broadcast, so without an explicit seed the view is
-    // empty until the next playback transition. As in `queue_panel::install`.
+    // Seeded from the state: the startup queue restore broadcast before anything subscribed.
     let (current_source, qvm) = {
         let s = lock_state(&state.player_state);
         (NowPlayingSource::from_vm(&s.to_view_model_light()), s.to_queue_view_model())
@@ -305,33 +238,24 @@ pub fn install(
     wire_now_playing_open(ui, state, np_artwork.clone(), up_next_model.clone(), np_state.clone());
     wire_reorder(ui, state, up_next_model.clone(), np_state.clone());
 
-    // Seeded here, the queue-restore broadcast having fired before the subscriber subscribed; the
-    // snapshot also stays in `latest_qvm` for a later open. The rows land once the loop runs.
+    // Kept for a later open too; the rows land once the loop runs.
     *np_state.latest_qvm.borrow_mut() = Some(qvm);
     spawn_seed(ui.as_weak(), state.clone(), up_next_model.clone(), np_state.clone());
 
-    // Each hook takes a `Weak<NowPlayingState>` to avoid the `Rc → closure → Rc` cycle;
-    // everything else is cheap to clone.
+    // Each hook holds a `Weak<NowPlayingState>`, against an `Rc` cycle through its own field.
     install_up_next_seeder(ui, state, &up_next_model, &np_state);
     install_artwork_seeder(ui, state, np_artwork, &np_state);
     install_artwork_releaser(ui, state, np_artwork, &np_state);
 
-    // Same `Weak<NowPlayingState>` reason, one layer down: the lyrics panel's own state is a
-    // field of the thing its reseed has to read.
     lyrics::wire_reseed(ui, state, &np_state);
     lyrics::wire_menu(ui, state, &np_state);
 
-    // No artwork seed here: backdrop, cover and chips are decoded on demand by
-    // `wire_now_playing_open` on first open, or by `kick_artwork` when a miniplayer layout
-    // drawing them first becomes visible.
+    // No artwork seed: it decodes on the first open, or on `kick_artwork`.
     Ok(np_state)
 }
 
 impl NowPlayingState {
-    /// `last_current_id` from the snapshot so the first real track change slides the right
-    /// way, `current_source` so the first open can seed the artwork. `applied_source`
-    /// starts `None`: the `Player` global's artwork slots are empty, so the first open
-    /// always seeds. The hooks stay `None` until [`install`] fills them.
+    /// `applied_source` starts `None`, the global's slots being empty, so the first open seeds.
     fn new(
         ui: &AppWindow,
         state: &AppState,
@@ -342,10 +266,8 @@ impl NowPlayingState {
             open: Cell::new(ui.global::<Nav>().get_now_playing_open()),
             mini_visible: Cell::new(false),
             mini_layout: Cell::new(MiniLayout::Strip),
-            // Off the global rather than off `settings.json`: `hydrate_ui_from_settings` has
-            // already seeded it and runs well before this, so a second read would answer the same
-            // question twice. The two miniplayer mirrors beside it start at rest because the
-            // switch writes both on entry.
+            // Off the global `hydrate_ui_from_settings` already seeded. The switch writes the two
+            // mirrors beside it on entry.
             mini_backdrop: Cell::new(ui.global::<MiniPlayer>().get_backdrop_shown()),
             latest_qvm: RefCell::new(None),
             rendered_ids: RefCell::new(Vec::new()),
@@ -363,9 +285,8 @@ impl NowPlayingState {
     }
 }
 
-/// Lazy row covers against the shared row tier, the `RowCovers` shape
-/// `boot::ui_setup` wires for the track lists. `QueueRow` carries no decoded image, so
-/// this is where an Up Next thumbnail comes from — only for the rows on screen.
+/// `QueueRow` carries no image, so an Up Next thumbnail comes from the row tier here, for the rows
+/// on screen only.
 fn wire_request_cover(ui: &AppWindow, cover_thumbs: &Arc<CoverThumbs>) {
     let covers = cover_thumbs.clone();
     ui.global::<NowPlaying>().on_request_cover(move |path| {
@@ -391,9 +312,7 @@ fn install_up_next_seeder(
     }));
 }
 
-/// `wire_now_playing_open`'s seed-on-open path: dedup against `applied_source`, then
-/// an off-thread decode and UI-thread write. `animate = false` — the cover should
-/// already be there when the miniplayer paints, not cross-fade in.
+/// Not animated: the cover should already be there when the miniplayer paints.
 fn install_artwork_seeder(
     ui: &AppWindow,
     state: &AppState,
@@ -426,9 +345,8 @@ fn install_artwork_seeder(
     }));
 }
 
-/// The seeder's twin. Waits out `dur-med`, which the cover's fade, the blur stack's and the
-/// miniplayer backdrop's drain all run on, and hands nothing back if a surface draws again by
-/// then.
+/// Waits out `dur-med`, which the cover's, the blur's and the miniplayer backdrop's fades run on,
+/// and hands nothing back if a surface draws again by then.
 fn install_artwork_releaser(
     ui: &AppWindow,
     state: &AppState,
@@ -465,14 +383,11 @@ fn install_artwork_releaser(
     }));
 }
 
-/// Write one dual-slot cross-fade pair — the blurred backdrop or the sharp cover tile —
-/// into the `Player` global.
+/// Writes one cross-fade pair, the blurred backdrop or the sharp cover.
 ///
-/// `animate = true` is a live track change: write into the *inactive* slot, then flip
-/// `use_a`, the previously-active slot staying painted for the whole fade. `animate =
-/// false` is the seed-on-open path: write the *active* slot in place, so the cover is
-/// already there when the view appears. `None` — no artwork or a failed decode — clears
-/// `has_image` instead, both slots fading to 0 over the gradient floor.
+/// Animated, the image goes into the inactive slot and `use_a` flips, the outgoing slot staying
+/// painted for the fade. Not animated, the active slot is written in place, so the cover is there
+/// when the view appears. `None` clears `has_image`, both slots fading over the gradient floor.
 pub(crate) fn write_crossfade_slot(
     img: Option<Image>,
     animate: bool,
@@ -502,8 +417,8 @@ pub(crate) fn write_crossfade_slot(
     }
 }
 
-/// Empty every cross-fade slot nothing draws, the other half of [`write_crossfade_slot`]: the slot
-/// `use_a` doesn't name, or both where there is no image. Only once no fade is reading them.
+/// Empties every cross-fade slot nothing draws: the one `use_a` doesn't name, or both where there
+/// is no image. Only once no fade is reading them.
 fn clear_unshown_slots(player: &Player<'_>) {
     clear_unshown_slot(
         player.get_np_cover_has_image(),
@@ -535,7 +450,6 @@ fn clear_unshown_slot(
     }
 }
 
-/// The id of the currently-playing track in a queue snapshot, if any.
 pub(super) fn current_track_id(qvm: &QueueViewModel) -> Option<i64> {
     let idx = usize::try_from(qvm.queue_index).ok()?;
     qvm.ids.get(idx).copied()

@@ -2,11 +2,7 @@ use std::fs;
 
 use tempfile::tempdir;
 
-#[cfg(any(target_os = "linux", target_os = "windows"))]
-use super::old_path;
-#[cfg(target_os = "linux")]
-use super::pkexec_failure;
-use super::swap_in_place;
+use super::{old_path, pkexec_failure, swap_in_place};
 use crate::services::updater::install::staging::staged_path;
 
 type TestResult = Result<(), Box<dyn std::error::Error>>;
@@ -30,24 +26,10 @@ fn same_dir_swap_succeeds() -> TestResult {
     Ok(())
 }
 
-#[test]
-fn swap_replaces_existing_target_bytes() -> TestResult {
-    let dir = tempdir()?;
-    let target = dir.path().join("Melodia.exe");
-    let staged = staged_path(&target);
-    fs::write(&target, b"v0.1.0")?;
-    fs::write(&staged, b"v0.2.0")?;
-    swap_in_place(&target, &staged)?;
-    assert_eq!(fs::read(&target)?, b"v0.2.0");
-    Ok(())
-}
-
-/// `swap_in_place` (Linux + Windows branches) keeps a `.old` snapshot of
-/// the previously-running binary so a failed post-swap smoke test can
-/// roll back, and so `main()`'s startup remove on first successful boot
-/// has something to reap. The same-fs atomic rename path is what the
-/// per-user tarball / `AppImage` / Windows-zip cases all hit.
-#[cfg(any(target_os = "linux", target_os = "windows"))]
+/// `swap_in_place` keeps a `.old` snapshot of the previously-running
+/// binary so a failed post-swap smoke test can roll back, and so
+/// `main()`'s startup remove on first successful boot has something to
+/// reap. The per-user tarball and `AppImage` both take this path.
 #[test]
 fn swap_retains_old_snapshot_for_rollback() -> TestResult {
     let dir = tempdir()?;
@@ -68,9 +50,7 @@ fn swap_retains_old_snapshot_for_rollback() -> TestResult {
 }
 
 /// A stale `.old` from a prior incomplete swap shouldn't block a fresh
-/// swap; `linux_swap` / `windows_swap` both clear it best-effort before
-/// the new two-step rename.
-#[cfg(any(target_os = "linux", target_os = "windows"))]
+/// swap, which clears it best-effort before the two-step rename.
 #[test]
 fn swap_clears_stale_old_before_retaining_fresh_snapshot() -> TestResult {
     let dir = tempdir()?;
@@ -98,7 +78,6 @@ fn swap_clears_stale_old_before_retaining_fresh_snapshot() -> TestResult {
 ///
 /// Driven by omitting the staged file, which is the one way to fail the second rename without
 /// privileges: nothing else in the two-step needs a permission a test can withhold.
-#[cfg(target_os = "linux")]
 #[test]
 fn a_failed_second_rename_puts_the_live_binary_back() -> TestResult {
     let dir = tempdir()?;
@@ -122,7 +101,6 @@ fn a_failed_second_rename_puts_the_live_binary_back() -> TestResult {
 
 /// The restore is best-effort and logged; the error the caller sees has to stay the one that
 /// actually stopped the install, since its variant is what picks the toast.
-#[cfg(target_os = "linux")]
 #[test]
 fn the_reported_error_is_the_rename_failure_not_the_rollback() -> TestResult {
     let dir = tempdir()?;
@@ -140,20 +118,18 @@ fn the_reported_error_is_the_rename_failure_not_the_rollback() -> TestResult {
 
 /// The one exit that is the user's own answer, so the install hands the button back without a
 /// failure toast.
-#[cfg(target_os = "linux")]
 #[test]
 fn a_dismissed_polkit_prompt_is_a_cancel() {
-    let outcome = pkexec_failure("pkexec mv", 126, b"Request dismissed\n");
+    let outcome = pkexec_failure("dnf5 install", 126, b"Request dismissed\n");
 
     assert!(matches!(outcome, Ok(super::InstallOutcome::Cancelled)), "got {outcome:?}");
 }
 
 /// 127 also covers a policy that refuses the user and a session with no agent, neither of which
 /// may pass as a cancel the user chose.
-#[cfg(target_os = "linux")]
 #[test]
 fn a_polkit_refusal_is_a_failure_carrying_pkexecs_reason() -> TestResult {
-    let outcome = pkexec_failure("pkexec mv", 127, b"Not authorized\n");
+    let outcome = pkexec_failure("dnf5 install", 127, b"Not authorized\n");
 
     let Err(melodia_core::error::AppError::Updater { msg, .. }) = outcome else {
         return Err(format!("expected a refusal, got {outcome:?}").into());
@@ -163,7 +139,6 @@ fn a_polkit_refusal_is_a_failure_carrying_pkexecs_reason() -> TestResult {
     Ok(())
 }
 
-#[cfg(target_os = "linux")]
 #[test]
 fn any_other_exit_is_the_commands_own_failure() -> TestResult {
     let outcome = pkexec_failure("dnf5 install", 1, b"No match for argument\n");

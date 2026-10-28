@@ -1,27 +1,20 @@
-//! The grain laid over an aurora backdrop, and the noise generator behind it.
-//!
-//! **`FemtoVG` has no dithering pass**, so a ramp as wide and as shallow as the washes quantizes
-//! into visible stripes; the blur beside it escapes that only because a photograph carries its own
-//! grain. One tile serves the whole process — it answers to the renderer rather than to any
-//! artwork, so nothing ever rewrites it.
+//! The grain laid over an aurora backdrop. `FemtoVG` has no dithering pass, so washes this wide
+//! and shallow band into stripes; the blur escapes only through a photograph's own grain.
 
 use slint::{Rgba8Pixel, SharedPixelBuffer};
 
-/// Side of the noise tile. Big enough that the repeat carries no structure to lock onto — the
-/// generator wraps, so the tile is seamless — and small enough not to be worth measuring. `u32`
-/// because that is the buffer's own unit, and the generator's one index cast reads better than a
-/// fallible conversion with no failing case.
+/// Big enough that the repeat carries no structure, the generator wrapping so the tile is
+/// seamless. `u32`, the buffer's own unit.
 const DITHER_TILE_SIDE: u32 = 64;
 
 const DITHER_TILE_PIXELS: usize = (DITHER_TILE_SIDE * DITHER_TILE_SIDE) as usize;
 
-/// Alpha the tile is composited at. **One 8-bit level is the whole prescription**: the tile spans
-/// the full byte range, so `1/255` moves what is under it by exactly one quantization step — enough
-/// to break a contour, not enough to see. At six this drew as a film of dust.
+/// One 8-bit level: the tile spans the full byte range, so this moves what is under it by exactly
+/// one quantization step, enough to break a contour and not enough to see.
 const DITHER_ALPHA: u8 = 1;
 
-/// High-pass iterations shaping the noise toward blue. Neighbour contrast reaches 0.39 by the
-/// eighth pass against white noise's 0.33 and then flattens, so anything past it sorts for nothing.
+/// High-pass iterations shaping the noise toward blue; neighbour contrast stops improving past
+/// eight.
 const BLUE_NOISE_PASSES: usize = 8;
 
 const _: () = assert!(
@@ -29,10 +22,8 @@ const _: () = assert!(
     "with no pass, the levels below are raw white noise rather than ranks, and the scale is wrong"
 );
 
-/// A tile of neutral blue noise, laid over the backdrop to break up 8-bit banding.
-///
-/// **Blue rather than white** is the difference between invisible and grubby — white noise keeps
-/// energy in the low frequencies the eye is most sensitive to and reads as blotches.
+/// A tile of neutral blue noise breaking up 8-bit banding. Blue rather than white, whose
+/// low-frequency energy reads as blotches.
 pub fn dither_tile() -> SharedPixelBuffer<Rgba8Pixel> {
     let levels = blue_noise_levels();
     let mut buf = SharedPixelBuffer::<Rgba8Pixel>::new(DITHER_TILE_SIDE, DITHER_TILE_SIDE);
@@ -42,9 +33,7 @@ pub fn dither_tile() -> SharedPixelBuffer<Rgba8Pixel> {
     buf
 }
 
-/// White noise, repeatedly high-passed and re-flattened, which is the cheap way to a blue
-/// spectrum: subtracting a blurred copy removes the low frequencies, and re-ranking puts the
-/// histogram back to uniform so the next pass has the same amount of signal to work on.
+/// White noise high-passed and re-ranked to uniform, repeatedly: the cheap way to a blue spectrum.
 #[expect(
     clippy::cast_precision_loss,
     clippy::cast_possible_truncation,
@@ -52,8 +41,7 @@ pub fn dither_tile() -> SharedPixelBuffer<Rgba8Pixel> {
     reason = "the tile is 64×64, so every rank is exactly representable and lands in 0..=255"
 )]
 fn blue_noise_levels() -> Vec<u8> {
-    // Constant seed: a tile that changed between runs would be a rendering difference nobody
-    // could reproduce.
+    // Constant seed, so a rendering difference can be reproduced.
     let mut state = 0x2545_f491_4f6c_dd1d_u64;
     let mut values: Vec<f32> = (0..DITHER_TILE_PIXELS)
         .map(|_| {
@@ -71,19 +59,13 @@ fn blue_noise_levels() -> Vec<u8> {
         values = rank_of_each(&high);
     }
 
-    // `values` is already a rank permutation — the last pass ended in `rank_of_each` — so ranking
-    // it again is the identity, and the assertion above is what keeps that true.
-    //
-    // Scaled by the *count*, not the last index: dividing by 255/(n-1) puts the single top rank
-    // alone in level 255 and leaves the histogram one bin short of flat, which is the one shape
-    // this must not have — whether a pixel rounds up is decided against a fixed threshold, so an
-    // uneven histogram dithers parts of the surface differently.
+    // Already a rank permutation, the last pass ending in `rank_of_each`. Scaled by the count, not
+    // the last index, which would leave the histogram a bin short of flat and so dither parts of
+    // the surface differently.
     values.iter().map(|rank| (*rank * 256.0 / DITHER_TILE_PIXELS as f32) as u8).collect()
 }
 
-/// Each value's position in sorted order. Re-ranking is what keeps the distribution uniform
-/// across passes — a plain high-pass leaves it bunched around zero, and a bunched histogram
-/// dithers unevenly.
+/// Each value's rank; re-ranking keeps the distribution uniform across passes.
 fn rank_of_each(values: &[f32]) -> Vec<f32> {
     let mut order: Vec<usize> = (0..values.len()).collect();
     order.sort_unstable_by(|a, b| values[*a].total_cmp(&values[*b]));
@@ -98,12 +80,10 @@ fn rank_of_each(values: &[f32]) -> Vec<f32> {
     ranks
 }
 
-/// Separable binomial blur that **wraps at the edges**, which is what keeps the tile seamless:
-/// clamped edges leave the border rows correlated differently from the interior, and the seam then
-/// shows as a grid at the tile's own pitch.
+/// Separable binomial blur that wraps at the edges, so the tile stays seamless rather than showing
+/// a grid at its own pitch.
 fn low_pass_toroidal(source: &[f32]) -> Vec<f32> {
-    // Narrow on purpose — a wide blur has a low cutoff and leaves most of the spectrum untouched.
-    // Measured, the three-tap beats a seven-tap at every pass count.
+    // Narrow on purpose: a wide blur's low cutoff leaves most of the spectrum untouched.
     const KERNEL: [f32; 3] = [1.0, 2.0, 1.0];
     const KERNEL_SUM: f32 = 4.0;
     const RADIUS: usize = 1;

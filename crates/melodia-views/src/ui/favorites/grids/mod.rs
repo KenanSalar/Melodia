@@ -1,13 +1,5 @@
-//! The two grid tabs — Most Played and Favorite Artists — as `CardGrid`s.
-//!
-//! Albums are the Albums tab's; surfacing them again here was redundant.
-//!
-//! Each grid keeps its keyset and the cards near its viewport across a tab pick, as Songs does,
-//! and hands both back on the section leave. Only the mounted tab loads: a tick reaching the page
-//! with another tab up marks the grid dirty, and the pick that mounts it reloads.
-//!
-//! The counts each writes are the filtered ones, gating its `GridEmptyState`; the band states the
-//! whole set, which each load answers beside its ids.
+//! The two grid tabs as `CardGrid`s. The count each writes is the filtered one, gating its empty
+//! state; the band states the whole set, which each load answers beside its ids.
 
 use std::sync::Arc;
 
@@ -166,8 +158,7 @@ impl CardGrid for FavoriteArtistsGrid {
     }
 }
 
-/// Reload the grid `tab` mounts: what a section enter, a library or stats tick and a pick onto a
-/// tab that missed one ask for. Songs has no grid. UI thread.
+/// Reloads `tab`'s grid; Songs has none.
 pub fn reload_grid(ui: &AppWindow, state: &AppState, fav_ui: &Arc<FavoritesUi>, tab: FavoritesTab) {
     match tab {
         FavoritesTab::MostPlayed => card_grid::reload::<FavoriteMostPlayed>(ui, state, fav_ui),
@@ -176,7 +167,7 @@ pub fn reload_grid(ui: &AppWindow, state: &AppState, fav_ui: &Arc<FavoritesUi>, 
     }
 }
 
-/// Load the mounted grid's ids under a new filter or sort. UI thread.
+/// Reloads the mounted grid's ids under a new filter or sort.
 pub fn requery_grid(ui: &AppWindow, state: &AppState, fav_ui: &Arc<FavoritesUi>) {
     match fav_ui.active_tab() {
         FavoritesTab::MostPlayed => card_grid::requery::<FavoriteMostPlayed>(ui, state, fav_ui),
@@ -185,20 +176,18 @@ pub fn requery_grid(ui: &AppWindow, state: &AppState, fav_ui: &Arc<FavoritesUi>)
     }
 }
 
-/// Chunk both grids at `columns` cards a row, one property serving whichever is mounted. UI
-/// thread.
+/// Chunks both grids at `columns` cards a row, one property serving whichever is mounted.
 pub fn set_columns(ui: &AppWindow, columns: i32) {
     card_grid::set_columns::<FavoriteMostPlayed>(ui, columns);
     card_grid::set_columns::<FavoriteArtistsGrid>(ui, columns);
 }
 
-/// Empty both grids for the section leave. UI thread.
 pub fn release_grids(ui: &AppWindow, fav_ui: &FavoritesUi) {
     card_grid::release::<FavoriteMostPlayed>(ui, fav_ui);
     card_grid::release::<FavoriteArtistsGrid>(ui, fav_ui);
 }
 
-/// Warm the covers the `tab` grid's last load opened on. Blocking.
+/// Warms the covers `tab`'s grid last opened on. Blocking.
 pub fn prewarm_tab_covers(fav_ui: &FavoritesUi, tab: FavoritesTab) {
     match tab {
         FavoritesTab::MostPlayed => card_grid::prewarm_seeded::<FavoriteMostPlayed>(fav_ui),

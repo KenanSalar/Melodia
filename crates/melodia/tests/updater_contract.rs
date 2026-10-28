@@ -19,10 +19,9 @@ use melodia_testkit::{REPO_ROOT, strip_line_comments};
 /// would wave it through.
 const SIGNING_INVOCATIONS: usize = 3;
 
-/// Ten from `format_key`, twelve from the script. Equalities so that adding a platform has to be
-/// done on both sides at once rather than on whichever one the change started in.
-const CLIENT_KEYS: usize = 10;
-const MANIFEST_KEYS: usize = 12;
+/// Five formats on two arches. The vacuity floor under the set equality, which two empty parses
+/// would otherwise pass.
+const PLATFORM_KEYS: usize = 10;
 
 fn read(path: &Path) -> String {
     let src = fs::read_to_string(path).unwrap_or_default();
@@ -148,23 +147,20 @@ fn the_signing_step_still_prehashes_and_writes_the_comment() {
 
 /// `format_key` produces the keys a client asks for; `build-latest-json.py` decides which ones the
 /// manifest carries. A key on the client's side alone reaches the user as a failed update naming
-/// a platform asset that was never published.
+/// a platform asset that was never published; one on the script's side alone is a pattern for a
+/// format nothing builds and no client reads.
 #[test]
-fn every_platform_key_the_client_asks_for_is_one_the_manifest_can_carry() {
+fn the_client_and_the_manifest_name_the_same_platform_keys() {
     let client = platform_keys(&strip_line_comments(&read(
         &Path::new(REPO_ROOT)
             .join("crates/melodia-platform/src/services/platform/install_kind/target.rs"),
     )));
     let manifest = platform_keys(&read(&Path::new(REPO_ROOT).join("scripts/build-latest-json.py")));
 
-    assert_eq!(client.len(), CLIENT_KEYS, "client keys drifted: {client:?}");
-    assert_eq!(manifest.len(), MANIFEST_KEYS, "manifest keys drifted: {manifest:?}");
-
-    let unpublishable: Vec<&String> = client.difference(&manifest).collect();
-    assert!(
-        unpublishable.is_empty(),
-        "{unpublishable:?} can be asked for but never appears in a manifest — the filename \
-         patterns are downstream of the packaging steps and must move with them"
+    assert_eq!(client.len(), PLATFORM_KEYS, "client keys drifted: {client:?}");
+    assert_eq!(
+        client, manifest,
+        "the filename patterns are downstream of the packaging steps and must move with them"
     );
 }
 

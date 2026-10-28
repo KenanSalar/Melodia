@@ -3,30 +3,18 @@ import { Player } from "../../globals/player.slint";
 import { MiniPlayer } from "../../globals/shell.slint";
 import { IconButton } from "../icon-button.slint";
 
-// The miniplayer's stepped glyph tiers, read off its backdrop switch: at rest, lit, and the hover
-// fill behind them. A global because the controls that aren't a `MiniIconButton` (the volume
-// trigger, the window captions) paint the same three, and a component can't read a property off
-// the view it is mounted in.
-//
-// **Stepped, never eased here**: every reader eases its own colours, and a brush eased twice
-// restarts its curve on every frame of the outer ease.
+// The miniplayer's glyph tiers off its backdrop switch. A global because the volume trigger and
+// the captions paint them too, and a component can't read a property off the view mounting it.
+// Stepped: every reader eases its own colours, and a brush eased twice restarts its curve.
 export global MiniGlyphs {
     out property <brush> idle: MiniPlayer.backdrop-shown ? Player.np-accent-dim : Theme.text;
     out property <brush> lit: MiniPlayer.backdrop-shown ? Player.np-accent-bright : Theme.text;
     out property <brush> hover-bg: MiniPlayer.backdrop-shown ? Colors.transparent : Theme.surface0;
 }
 
-// The head row's control sizes, stepped from the strip's up to what a card with room to spare
-// opens them to. A global for `MiniGlyphs`' reason: the two controls in that row that aren't a
-// `MiniIconButton` take the same travel, and a component can't read a property off the view it is
-// mounted in.
-//
-// **The far ends are the now-playing bar's own**, so a miniplayer given the room lands on the full
-// player's sizes rather than a second set beside them. `MiniPlayer.controls-max-width` is these
-// added up and has to move with them.
-//
-// The timeline's own buttons are deliberately not here: its height is what the card's artwork is
-// sized against, so growing them would take the room the growth is spending back off the cover.
+// The head row's control sizes, from the strip's up to a roomy card's; a global for `MiniGlyphs`'
+// reason. The far ends are the now-playing bar's own, and `MiniPlayer.controls-max-width` sums them.
+// Not the timeline's buttons: the card's artwork is sized against its height.
 export global MiniSizes {
     pure function between(strip: length, roomy: length) -> length {
         return strip + (roomy - strip) * MiniPlayer.room-grow;
@@ -36,23 +24,13 @@ export global MiniSizes {
     out property <length> button-icon: root.between(18px, 20px);
     out property <length> play-d: root.between(30px, 38px);
     out property <length> play-icon: root.between(16px, 20px);
-    // A step above the row's glyphs at either end, as the bar sets its own: at one size the
-    // speaker reads smaller than the icons beside it.
+    // A step above the row's glyphs, as the bar sets its own: at one size the speaker reads smaller.
     out property <length> volume-icon: root.between(20px, 22px);
 }
 
-// The miniplayer's button, so the treatment is answered once rather than as the same bindings on
-// every `IconButton`. It reads the switch straight off the global: the rule that a shared leaf
-// takes its colours as inputs is there so one component can serve both tiers, and this one has a
-// single host.
-//
-// **On the backdrop these are `AccentGlyphButton`'s**, the family Now Playing's header is made of:
-// no chrome in any state, the glyph resting at the dim tier and coming up to full under the
-// pointer, and a lit glyph lifting too so it still answers. Off it, the stock button. Not that
-// component mounted directly, which has no off arm to switch to.
-//
-// Every arm steps, and `IconButton` eases the step itself at the view's repaint pace: easing them
-// out here as well would restart its curve on every frame of this one.
+// The miniplayer's button. It reads the switch off the global rather than taking its colours as
+// inputs, having one host. On the backdrop it is `AccentGlyphButton`'s treatment, off it the stock
+// button; every arm steps and `IconButton` eases it.
 export component MiniIconButton inherits IconButton {
     on-backdrop: MiniPlayer.backdrop-shown;
 

@@ -1,11 +1,7 @@
 import { GenreRow, GenreGridRow, TrackListRow, TrackColumns } from "../models.slint";
 
-// The Genre grid, on the `Albums` / `Artists` ownership contract.
-//
-// **No `request-cover` callback**, unlike its siblings: genres have no intrinsic
-// artwork, so each tile renders the `EntityCard` fallback glyph and the detail header
-// paints only its gradient floor and scrim. That keeps the whole tab free of cover-cache
-// plumbing — and makes `section-active-changed` a no-op today, kept for symmetry.
+// On `Albums`' contract, less the covers: a genre has no artwork, its tile painting a name-hashed
+// gradient.
 export global Genres {
     in-out property <[GenreGridRow]> grid-rows;
     // `-1` until fetched; see `Albums.total-count`.
@@ -22,10 +18,8 @@ export global Genres {
     callback section-active-changed(bool);
 }
 
-// The Genre Detail view, on the `AlbumDetail` shape under its own persistence key.
-// The genre column is off and locked, redundant inside a single genre, and
-// **there are no image slots at all**, since a genre has no artwork: the band paints its
-// gradient floor and scrim alone, which is what `has-blur: false` on that arm asks for.
+// `AlbumDetail`'s shape with **no image slots**, a genre having no artwork. The genre column is
+// off and locked.
 export global GenreDetail {
     in-out property <int> genre-id: -1;
     // See `AlbumDetail.restoring`.
@@ -33,18 +27,15 @@ export global GenreDetail {
     in-out property <GenreRow> genre;
     in-out property <[TrackListRow]> tracks;
 
-    // What the band's search box means while this detail is open. Cleared on a fresh
-    // open, preserved across library-changed refreshes.
+    // As `AlbumDetail.filter`.
     in-out property <string> filter;
 
-    // `AlbumDetail.origin-nav-index`, so cross-section back-nav takes the same atomic
-    // flip-Nav-then-clear-id path — see the argument there for why a drill from a sibling
-    // tab records nothing at all.
+    // As `AlbumDetail.origin-nav-index`.
     in-out property <int> origin-nav-index: -1;
 
     in-out property <TrackColumns> track-columns;
 
-    // Sorted in SQL, as the other details are; by album so rows group naturally.
+    // By album, so the rows group.
     in-out property <string> sort-field: "album";
     in-out property <string> sort-dir: "asc";
 
@@ -63,6 +54,5 @@ export global GenreDetail {
     callback clear-selection();
     callback request-sort(string /*field*/);
     callback toggle-column(string /*column_id*/);
-    // Rust reloads the list's ids under the new needle.
     callback filter-changed(string);
 }

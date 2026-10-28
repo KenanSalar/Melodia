@@ -1,16 +1,11 @@
-//! The two local tabs: the stations the user kept, and the ones they played.
+//! The two local tabs: the stations the user kept, and the ones they played. One list at two
+//! filters, drawn by the same grid; the query and whether a sort applies are a [`RadioTab`] away.
 //!
-//! One module for both because they are one list at two filters — `is_favorite` against
-//! `last_played` — drawn by the same grid through the same converter. What differs is the query
-//! and whether a sort applies, and both fit in a [`RadioTab`] argument.
+//! **These are `SQLite`**, so the section enter refetches unconditionally with no dirty flag; the
+//! leave still keeps them ([`super::covers`]).
 //!
-//! **Unlike Browse, these are `SQLite` and cost nothing to re-ask**, so the section enter refetches
-//! unconditionally and no dirty flag rides with them. Unlike every other grid page, the leave
-//! still keeps them: see [`super::covers`] for what a Radio leave actually hands back.
-//!
-//! The needle is stored raw and folded per apply. A [`Needle`] holds its text case- and
-//! accent-folded, which is right for matching and wrong for the box: reseating from it would put
-//! a lowercased, unaccented spelling of what the user typed back in front of them.
+//! The needle is stored raw and folded per apply: reseating the box from a [`Needle`] would hand
+//! the user back a lowercased, unaccented spelling of what they typed.
 
 use std::borrow::Cow;
 use std::collections::{HashMap, HashSet};
@@ -45,24 +40,12 @@ impl KeptState {
     }
 }
 
-/// What a station row is searchable by.
+/// What a station row is searchable by: the card's three lines and the fields behind them, through
+/// the resolvers so the box searches what the card draws. An empty needle matches everything.
 ///
-/// The card's own three lines plus the fields behind them the user is most likely to reach for —
-/// a station is remembered by its country or its genre at least as often as by its name. An empty
-/// needle matches everything, so an unfiltered list needs no branch.
-///
-/// Through the resolvers, so the box searches what the card draws: a genre the user typed over a
-/// blank directory entry is on screen, and a directory value an override replaced is not.
-///
-/// **Format is the one read as its two columns instead**, [`RadioStation::format`] composing a
-/// `String` where this runs per row per keystroke. What that gives up is a needle spanning the
-/// separator, which is nothing a user types looking for a station.
-///
-/// **Bitrate is `Option` here because `0` is the directory saying it does not know**, not a
-/// station that streams at zero, and a large share of live rows carry it — matched raw, the needle
-/// `0` would select all of them. It is also the one field matched whole rather than as a
-/// substring: the values come off a short ladder that shares digits, where a single one selects
-/// most of the list.
+/// Format is read as its two columns, [`RadioStation::format`] allocating per row per keystroke.
+/// Bitrate is `None` at `0`, the directory's "unknown", and matched whole: its values share
+/// digits, so a substring would select most of the list.
 fn station_matches(station: &RadioStation, needle: &Needle) -> bool {
     needle.contains(&station.name)
         || needle.contains(station.genre().unwrap_or_default())
@@ -73,11 +56,8 @@ fn station_matches(station: &RadioStation, needle: &Needle) -> bool {
         || needle.equals_number((station.bitrate > 0).then_some(station.bitrate))
 }
 
-/// The Favorites tab's sort, lifted off the global by whoever holds the UI thread.
-///
-/// A snapshot rather than a live read because the two prewarm sites are on a worker by the time
-/// they need it, and `Radio` is a Slint global. `None` is Recently Played, whose order is the
-/// query's.
+/// The Favorites tab's sort, snapshotted on the UI thread for the prewarm sites on a worker.
+/// `None` is Recently Played, whose order is the query's.
 struct KeptSort {
     field: String,
     dir: SortDir,
@@ -92,8 +72,7 @@ impl KeptSort {
     }
 }
 
-/// What a tab shows, in the order it shows it. The one walk the grid and the prewarm share, so
-/// neither can end up describing a list the other isn't drawing.
+/// What a tab shows, in order: the one walk the grid and the prewarm share.
 fn in_display_order<'a>(state: &'a KeptState, sort: Option<&KeptSort>) -> Vec<&'a RadioStation> {
     let mut matched: Vec<&RadioStation> = state.matches().collect();
     if let Some(sort) = sort {
@@ -102,10 +81,7 @@ fn in_display_order<'a>(state: &'a KeptState, sort: Option<&KeptSort>) -> Vec<&'
     matched
 }
 
-/// The logos a tab's visible list points at, in display order.
-///
-/// Order is what a prewarm spends its capacity on — it keeps the prefix the tier can hold — and
-/// the tier is shared with Browse, so a long kept list is not guaranteed the whole of it.
+/// The logos a tab's list points at in display order, the prefix being what a prewarm keeps.
 fn warm_targets(radio_ui: &RadioUi, tab: RadioTab, sort: Option<&KeptSort>) -> Vec<String> {
     let state = cache(radio_ui, tab).lock();
     in_display_order(&state, sort)
@@ -114,7 +90,6 @@ fn warm_targets(radio_ui: &RadioUi, tab: RadioTab, sort: Option<&KeptSort>) -> V
         .collect()
 }
 
-/// The cache a tab draws from.
 fn cache(radio_ui: &RadioUi, tab: RadioTab) -> &parking_lot::Mutex<KeptState> {
     match tab {
         RadioTab::Recent => &radio_ui.recent,
@@ -147,10 +122,8 @@ pub fn set_filter(ui: &AppWindow, radio_ui: &RadioUi, tab: RadioTab, filter: &st
     apply(ui, radio_ui, tab);
 }
 
-/// The station behind a row, by database id.
-///
-/// By id rather than by index for the reason Browse resolves by uuid: the model is chunked and
-/// rebuilt whenever anything moves, so a position is only true for the frame it was read on.
+/// The station behind a row, by database id, for the reason [`super::browse::resolve`] goes by
+/// uuid.
 pub fn resolve(radio_ui: &RadioUi, tab: RadioTab, id: i64) -> Option<RadioStation> {
     cache(radio_ui, tab).lock().stations.iter().find(|station| station.id == id).cloned()
 }
@@ -168,15 +141,9 @@ pub fn resolve_keys(
         .collect()
 }
 
-/// Rebuild one tab's grid from its cache.
-///
-/// **The one write path**, as `browse::apply` is for the directory: a landed fetch, a keystroke, a
-/// sort pick and a column change all come through here rather than each patching rows in place.
-///
-/// UI thread only.
+/// Rebuilds one tab's grid from its cache: the one write path, as `browse::apply` is for Browse.
 pub fn apply(ui: &AppWindow, radio_ui: &RadioUi, tab: RadioTab) {
     let g = ui.global::<Radio>();
-    // `None` on Recently Played, which takes the query's own order: newest first *is* the page.
     let sort = KeptSort::of(&g, tab);
     let (station_rows, held): (Vec<_>, usize) = {
         let state = cache(radio_ui, tab).lock();
@@ -187,12 +154,8 @@ pub fn apply(ui: &AppWindow, radio_ui: &RadioUi, tab: RadioTab) {
         (rows, state.stations.len())
     };
 
-    // **The count is pre-filter**, which is what the global declares and what lets the tab body
-    // tell "nothing kept" from "the box matched nothing" — the two want different empty states,
-    // and a filtered count reads as the first when it is the second.
-    //
-    // Above the write, for the reason every tabbed page writes its count above its signature
-    // guard: a count that arrives late strands the empty state.
+    // Pre-filter, so the body can tell "nothing kept" from "the box matched nothing"; above the
+    // write, since a late count strands the empty state.
     let count = len_as_i32(held);
     if tab == RadioTab::Favorites {
         g.set_favorites_count(count);
@@ -202,9 +165,8 @@ pub fn apply(ui: &AppWindow, radio_ui: &RadioUi, tab: RadioTab) {
 
     let model =
         if tab == RadioTab::Favorites { g.get_favorites_rows() } else { g.get_recent_rows() };
-    // `browse::apply`'s reason: a refetch that moved one row must not reset a grid the pointer is
-    // sitting on. Recently Played is the tab that genuinely reshapes — a play moves its station to
-    // the front — and there the full write is what the reorder asks for anyway.
+    // Patched as in `browse::apply`. A play reshapes Recently Played, and there the reset is what
+    // the reorder asks for anyway.
     let columns = g.get_grid_columns();
     if !rows::patch_grid(&model, &station_rows, columns) {
         let grid =
@@ -212,16 +174,12 @@ pub fn apply(ui: &AppWindow, radio_ui: &RadioUi, tab: RadioTab) {
         replace_rows(&model, grid, "radio::kept");
     }
 
-    // `browse::apply`'s reason: the station page draws a station this cache owns, so it follows
-    // the write path rather than each caller that could have moved a field.
+    // The station page draws off this cache too.
     super::detail::restamp(ui, radio_ui);
 }
 
-/// Order the kept list.
-///
-/// Every field tie-breaks on `sort_key`, which is the natural-sort column the table already
-/// carries — without it two stations sharing a play count swap places between refreshes. Reversed
-/// rather than branched for `Desc`, mirroring `ui::favorites::grids::sort`.
+/// Orders the kept list, every field tie-breaking on `sort_key` so equal stations don't swap
+/// places between refreshes.
 fn sort_stations(stations: &mut [&RadioStation], field: &str, dir: SortDir) {
     match field {
         "added" => stations.sort_by(|a, b| {
@@ -230,8 +188,7 @@ fn sort_stations(stations: &mut [&RadioStation], field: &str, dir: SortDir) {
         "plays" => stations.sort_by(|a, b| {
             a.play_count.cmp(&b.play_count).then_with(|| a.sort_key.cmp(&b.sort_key))
         }),
-        // A station never played sorts below every station that was, which is what puts the
-        // never-played end of the list under the ascending arrow rather than scattered through it.
+        // `None` sorts first, so the never-played stations gather at the ascending end.
         "played" => stations.sort_by(|a, b| {
             a.last_played.cmp(&b.last_played).then_with(|| a.sort_key.cmp(&b.sort_key))
         }),
@@ -242,15 +199,10 @@ fn sort_stations(stations: &mut [&RadioStation], field: &str, dir: SortDir) {
     }
 }
 
-/// Re-read both lists and repaint whichever tab is on screen.
-///
-/// **One fetch answers three things**: the kept tab's rows, the recents tab's rows, and the uuid
-/// set Browse fills its stars from. A separate `favorite_uuids` query used to answer the last on
-/// its own and was a second statement to keep true.
+/// Re-reads both lists and repaints the mounted tab. One fetch answers both tabs' rows and the
+/// uuid set Browse fills its stars from.
 pub fn refresh(ui: &AppWindow, state: &AppState, radio_ui: &Arc<RadioUi>) {
-    // Read on the way out, the sort with it: the background task cannot reach a Slint global, and
-    // a tab picked mid-fetch only means the warm targets the one that was up — the pick warms its
-    // own, and both tabs share the tier anyway.
+    // Read here, out of the task's reach; a tab picked mid-fetch warms its own.
     let (mounted, sort) = {
         let g = ui.global::<Radio>();
         let mounted = local_tab(&g);
@@ -273,14 +225,9 @@ pub fn refresh(ui: &AppWindow, state: &AppState, radio_ui: &Arc<RadioUi>) {
             }
         };
 
-        // A stored path outlives its file more easily than the row outlives the path, so the
-        // column is not evidence on its own. Blanked here rather than in the converter: the
-        // projection stays a projection, and the walk lands off the UI thread. A card with no path
+        // A stored path outlives its file, so a dead one is blanked ahead of everything derived
+        // from these lists, on the blocking pool, being a `stat` per row. A card with no path
         // draws its monogram; one with a dead path drew nothing.
-        //
-        // Ahead of everything derived from these lists, so nothing downstream can hand a card a
-        // path this pass already knows is gone. On the blocking pool because it is a `stat` per
-        // row, and a large Favorites tab is a runtime worker parked on the filesystem.
         let Ok((favorites, recent)) = tokio::task::spawn_blocking(move || {
             (forget_absent_artwork(favorites), forget_absent_artwork(recent))
         })
@@ -304,18 +251,9 @@ pub fn refresh(ui: &AppWindow, state: &AppState, radio_ui: &Arc<RadioUi>) {
     });
 }
 
-/// Re-derive the two uuid-keyed maps Browse falls back on, from whatever the two caches now hold.
-///
-/// **Off the caches rather than off the rows a caller has in hand**, so the maps cannot describe a
-/// list that has since moved: the bulk refresh and a landed heal both change what a row holds, and
-/// a partial update is exactly Browse painting a monogram beside a tab drawing the real thing.
-///
-/// Both lists, since a station can be in either — a played-but-unstarred station is as likely to
-/// come back in a directory page as a favorite. One the user typed in carries no uuid and no page
-/// can name it, so it contributes nothing.
-///
-/// One pass for both, the second map having the same key, the same source rows and the same
-/// staleness to avoid.
+/// Re-derives the uuid-keyed map Browse falls back on, off the caches rather than a caller's rows
+/// so it can't describe a list that has since moved. Both lists feed it; a hand-typed station has
+/// no uuid for a directory page to name.
 fn remember_kept_answers(radio_ui: &RadioUi) {
     let mut answers: HashMap<String, KeptAnswers> = HashMap::new();
     for cache in [&radio_ui.kept, &radio_ui.recent] {
@@ -324,13 +262,11 @@ fn remember_kept_answers(radio_ui: &RadioUi) {
                 continue;
             };
             let format = station.format().map(Cow::into_owned);
-            // No entry for a row that answered neither, so presence in the map still means the
-            // station told Browse something.
+            // Presence in the map means the station told Browse something.
             if station.artwork_path.is_none() && format.is_none() {
                 continue;
             }
-            // Per field rather than per entry: the same station can sit in both caches, and a
-            // later row that lost one answer must not blank the other's.
+            // Per field: in both caches, one row's gap must not blank the other's answer.
             let answer = answers.entry(uuid.clone()).or_default();
             if let Some(path) = &station.artwork_path {
                 answer.logo = Some(path.clone());
@@ -353,27 +289,16 @@ fn forget_absent_artwork(mut stations: Vec<RadioStation>) -> Vec<RadioStation> {
     stations
 }
 
-/// How many logo repairs to have in flight at once.
-///
-/// Below Browse's window: a repair can cost two requests rather than one, and it runs behind a
-/// list that is already on screen rather than in front of one that is not.
+/// Logo repairs in flight at once, below Browse's window: a repair can cost two requests and runs
+/// behind a list already on screen.
 const HEAL_BATCH: usize = 4;
 
-/// Re-fetch logos for kept stations whose row has none, and repaint whatever lands.
+/// Re-fetches logos for kept stations whose row has none and repaints what lands, after the paint
+/// and the warm.
 ///
-/// **After the paint and the warm, never before them.** This is network work on behalf of a list
-/// already on screen; a station that has been without a logo since it was kept can wait for its
-/// tab to be drawn.
-///
-/// **Once per station per session**, which is what makes the cost bear the frequency: `refresh`
-/// runs on a section enter, on every star flip — Browse's included — and on every removal, and a
-/// station that failed is a stored backoff a repeat is told about without spending a round trip.
-/// The set is what the backoff already says, held where a click can't spend a round trip on it.
-///
-/// **The stored answers for the whole set are read ahead of the flight**, one query rather than
-/// two per station — `library::radio::AnswerSeed` argues why. Shared rather than handed out per
-/// task, hence the `Arc`: which answers a station needs has nothing to do with its seat in the
-/// window.
+/// Once per station per session: `refresh` runs on every enter, star flip and removal. The stored
+/// answers are read for the whole set up front (`library::radio::AnswerSeed` argues why) and
+/// shared, a station's answers having nothing to do with its seat in the window.
 async fn heal_logos(state: &AppState, radio_ui: &Arc<RadioUi>, weak: &Weak<AppWindow>) {
     let logoless = logoless_stations(radio_ui);
     let seed = Arc::new(
@@ -399,12 +324,9 @@ async fn heal_logos(state: &AppState, radio_ui: &Arc<RadioUi>, weak: &Weak<AppWi
         landed = true;
     }
     if landed {
-        // Browse draws from the maps, not from the caches, so they have to be re-derived here too
-        // — this is the one path that finds a logo *after* the refresh built them.
+        // The one path that finds a logo after the refresh built the map. Only paths moved, so
+        // each `apply` patches rather than resets under a pointer mid-click.
         remember_kept_answers(radio_ui);
-        // Both grids, because a heal moves both: the row's own `artwork_path`, and the uuid-keyed
-        // map a browsed card reads. Only the paths moved, so each `apply` patches rather than
-        // resetting, which is what lets this land under a pointer that is mid-click.
         paint_mounted(weak, radio_ui);
     }
 }
@@ -423,13 +345,8 @@ fn spawn_heal(
     });
 }
 
-/// The kept and recent stations carrying no drawable logo that this session has not already tried,
-/// deduplicated by id.
-///
-/// The two lists overlap wherever a favorite has been played, and a station healed under one is
-/// the same row as the one healed under the other. Claiming the id here rather than after the
-/// attempt: what the walk is skipping is *asking again*, and that is owed whether the attempt
-/// found a logo or nothing.
+/// The kept and recent stations with no drawable logo this session hasn't tried, deduplicated by
+/// id. Claimed before the attempt: what is skipped is asking again, whatever the answer was.
 fn logoless_stations(radio_ui: &RadioUi) -> Vec<RadioStation> {
     let mut tried = radio_ui.healed.lock();
     let mut out = Vec::new();
@@ -454,39 +371,26 @@ fn adopt_logo_path(radio_ui: &RadioUi, id: i64, path: &str) {
     }
 }
 
-/// Repaint the mounted local tab, and Browse's stars with it.
-///
-/// Twice per [`refresh`]: once on the landing, once more if a heal found a logo behind it.
+/// Repaints the mounted local tab and Browse's stars: on [`refresh`]'s landing and after a heal.
 fn paint_mounted(weak: &Weak<AppWindow>, radio_ui: &Arc<RadioUi>) {
     let ru = radio_ui.clone();
     let _ = weak.upgrade_in_event_loop(move |ui| {
-        // Browse draws its stars from the same set, so a favorite that moved on another tab lands
-        // here rather than waiting for the next directory page.
         super::browse::apply(&ui, &ru);
         if let Some(tab) = local_tab(&ui.global::<Radio>()) {
             apply(&ui, &ru, tab);
         }
-        // **From this path and no other**: both caches were rebuilt from the database above and a
-        // heal only ever stamps a logo onto one, so a station in neither is a station that is
-        // gone. Everywhere else a miss is a cache that has not been filled yet.
+        // The one path where a miss is authoritative, both caches having just been rebuilt.
         super::detail::close_if_gone(&ui, &ru);
     });
 }
 
-/// Decode a screenful of one tab's logos and announce the tier.
-///
-/// Nothing is downloaded: a kept station's logo was stored when it was kept, so this only ever
-/// reads files already on disk. Paths arrive already ordered, since only a caller on the UI thread
-/// can read the sort they are ordered by. There are no rows to repaint beside the announce — the
-/// apply that produced this order has already run.
+/// Decodes a screenful of one tab's logos, already on disk, and announces the tier. The paths
+/// arrive sorted, the sort being the UI thread's to read.
 async fn warm(radio_ui: &Arc<RadioUi>, weak: &Weak<AppWindow>, paths: Vec<String>) {
     covers::warm_and_announce(radio_ui, weak, paths, |_| {}).await;
 }
 
-/// Bring a tab the user just picked up to date from cache.
-///
-/// A pick runs against whatever is already loaded — the fetch is the enter's, not the pick's — so
-/// this paints and warms and asks for nothing.
+/// Brings a picked tab up to date from cache; the fetch is the enter's, not the pick's.
 pub fn on_tab_entered(ui: &AppWindow, state: &AppState, radio_ui: &Arc<RadioUi>, tab: RadioTab) {
     apply(ui, radio_ui, tab);
     let sort = KeptSort::of(&ui.global::<Radio>(), tab);

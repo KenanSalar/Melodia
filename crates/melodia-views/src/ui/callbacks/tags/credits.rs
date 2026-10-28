@@ -42,9 +42,7 @@ pub(super) fn wire_credits(te: &TagEditor, ui: &AppWindow, session: &Rc<RefCell<
             {
                 vm.remove(row);
             }
-            // A credit with no names is a state the editor should not be able to reach: the
-            // field would read as "cleared" on save, which is not what removing a collaborator
-            // means.
+            // A credit with no rows would save as "cleared", which removing a name doesn't mean.
             if vm.row_count() == 0 {
                 vm.push(blank_credit_row());
             }
@@ -86,8 +84,8 @@ fn credit_field(field: i32) -> usize {
     }
 }
 
-/// The model behind one of the two credits. Spelled once: three call sites used to carry the same
-/// branch, which is two chances for the album artist's rows to be written into the artist's.
+/// The model behind one of the two credits, spelled once so no site can write the album artist's
+/// rows into the artist's.
 fn credit_model(te: &TagEditor, field: usize) -> ModelRc<ArtistCreditRow> {
     if field == CREDIT_ALBUM_ARTIST { te.get_album_artists() } else { te.get_artists() }
 }
@@ -185,12 +183,8 @@ pub(super) fn rows_from_credit(
     if rows.is_empty() { vec![blank_credit_row()] } else { rows }
 }
 
-/// The picker index for `rendered`, appending it when the file uses a phrase the built-in list
-/// has never heard of.
-///
-/// Round-tripping somebody else's " meets " matters more than a tidy picker: without this, opening
-/// such a file and saving any field at all would silently rewrite the credit to whatever sits at
-/// index 0.
+/// The picker index for `rendered`, appended where the built-in list lacks it: otherwise saving
+/// any field of a file joining on " meets " would rewrite its credit to whatever sits at index 0.
 fn register_phrase(phrases: &mut Vec<(String, String)>, rendered: &str) -> i32 {
     if rendered.is_empty() {
         return 0;

@@ -1,12 +1,9 @@
-//! Windows / macOS tray backend, built on [`tray_icon`].
+//! The Windows and macOS tray, over [`tray_icon`].
 //!
-//! `tray_icon::TrayIcon` and the `muda` menu items are `!Send` — they must be
-//! created, updated, and dropped on the thread that owns the event loop (the
-//! Slint UI / main thread). They are therefore parked in a `thread_local`
-//! rather than handed back as a value: `update` and `shutdown` are free
-//! functions the UI thread calls. `shutdown` must run before `main`'s
-//! `std::process::exit(0)` — that call skips destructors, and a leaked
-//! `TrayIcon` lingers as a ghost entry in the Windows notification area.
+//! `TrayIcon` and the `muda` items are `!Send`, living and dying on the UI thread, so they sit in
+//! a `thread_local` behind free functions. `shutdown` has to run before `main`'s
+//! `process::exit(0)`, which skips destructors and would leave a ghost icon in the notification
+//! area.
 
 use std::cell::RefCell;
 
@@ -18,42 +15,35 @@ use melodia_core::error::describe;
 
 use super::{TrayAction, TraySnapshot};
 
-// Stable menu-item ids — `muda` delivers `MenuEvent { id }` globally, so the
-// event handler routes by id.
+// `muda` delivers every `MenuEvent` to one global handler, which routes by these.
 const ID_PLAY_PAUSE: &str = "melodia.tray.playpause";
 const ID_NEXT: &str = "melodia.tray.next";
 const ID_PREV: &str = "melodia.tray.previous";
 const ID_SHOW_HIDE: &str = "melodia.tray.showhide";
 const ID_QUIT: &str = "melodia.tray.quit";
 
-/// UI-thread-owned tray state. The four menu items are retained so `update` can rewrite the
-/// labels and follow the transport's own enabled state.
+/// The four items are kept so `update` can relabel them and follow the transport.
 struct TrayState {
     tray: TrayIcon,
     track_item: MenuItem,
     play_pause_item: MenuItem,
     next_item: MenuItem,
     prev_item: MenuItem,
-    /// The taskbar the icon was last painted for, so a recheck that finds it unchanged sets nothing.
+    /// What the icon was last painted for, so a recheck finding it unchanged sets nothing.
     on_light_taskbar: bool,
 }
 
 thread_local! {
-    /// The live tray, owned by the Slint UI thread for its whole lifetime.
     static TRAY: RefCell<Option<TrayState>> = const { RefCell::new(None) };
 }
 
-/// Create the tray icon. MUST be called on the Slint UI thread once the
-/// event loop is running (`tray_icon` on macOS needs the `NSApplication` up;
-/// on Windows the icon's hidden window is pumped by the winit message loop).
-/// Returns `false` when the platform refused to create it — the app then
-/// runs without a tray.
+/// On the UI thread once the event loop runs: macOS needs the `NSApplication` up, and on Windows
+/// the icon's hidden window is pumped by winit's loop. `false` where the platform refused it.
 pub fn init(action_tx: mpsc::Sender<TrayAction>) -> bool {
     let menu = Menu::new();
     let track_item = MenuItem::new("Melodia", false, None);
     let play_pause_item = MenuItem::with_id(ID_PLAY_PAUSE, "Play", true, None);
-    // Both start disabled, matching `TraySnapshot::default()`: nothing is playing yet, so there
-    // is nowhere to skip to until the first snapshot lands.
+    // Disabled, matching `TraySnapshot::default()` until the first snapshot lands.
     let next_item = MenuItem::with_id(ID_NEXT, "Next", false, None);
     let prev_item = MenuItem::with_id(ID_PREV, "Previous", false, None);
     let show_hide_item = MenuItem::with_id(ID_SHOW_HIDE, "Show / Hide Window", true, None);
@@ -89,8 +79,7 @@ pub fn init(action_tx: mpsc::Sender<TrayAction>) -> bool {
         }
     };
 
-    // Route `muda` menu clicks into the action channel. The handler runs on
-    // whichever thread pumps the platform events; `try_send` is non-blocking.
+    // Runs on whichever thread pumps the platform events, hence `try_send`.
     MenuEvent::set_event_handler(Some(move |ev: MenuEvent| {
         let action = match ev.id.as_ref() {
             ID_PLAY_PAUSE => TrayAction::PlayPause,
@@ -119,8 +108,7 @@ pub fn init(action_tx: mpsc::Sender<TrayAction>) -> bool {
     true
 }
 
-/// Repaint the icon if the taskbar changed mode since it was last painted. Must be called on the UI
-/// thread. No-op if the tray was never created or has been shut down.
+/// Repaints only where the taskbar changed mode since the last paint. UI thread only.
 pub fn refresh_icon() {
     TRAY.with_borrow_mut(|slot| {
         let Some(state) = slot else { return };
@@ -136,7 +124,6 @@ pub fn refresh_icon() {
     });
 }
 
-/// The embedded icon, painted for the taskbar it sits on.
 fn icon_for(on_light_taskbar: bool) -> Option<Icon> {
     let (width, height, mut rgba) = super::decode_icon()?;
     if on_light_taskbar {
@@ -162,9 +149,7 @@ fn taskbar_is_light() -> bool {
     false
 }
 
-/// Push a fresh snapshot — relabels the play/pause + track rows, follows the transport on the
-/// skip rows, and rewrites the tooltip. Must be called on the UI thread. No-op if the tray was
-/// never created or has been shut down.
+/// UI thread only.
 pub fn update(snapshot: &TraySnapshot) {
     TRAY.with_borrow(|slot| {
         let Some(state) = slot else { return };
@@ -178,10 +163,8 @@ pub fn update(snapshot: &TraySnapshot) {
     });
 }
 
-/// Drop the tray icon. Must be called on the UI thread before `std::process::exit`.
-///
-/// The menu-event handler stays installed: muda's slot takes one value per process, so a
-/// `set_event_handler(None)` here would be a no-op, and with the menu gone nothing reaches it.
+/// UI thread only, before `process::exit`. The menu handler stays installed: `muda`'s slot takes
+/// one value per process, and with the menu gone nothing reaches it.
 pub fn shutdown() {
     if TRAY.with_borrow_mut(std::option::Option::take).is_some() {
         log::info!("System tray removed");

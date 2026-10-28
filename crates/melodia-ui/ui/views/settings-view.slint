@@ -9,45 +9,29 @@ import { FilterThrottle } from "../components/filter-throttle.slint";
 import { SettingsNav } from "settings/settings-nav.slint";
 import { SettingsRouter } from "settings/settings-router.slint";
 
-// The category panel beside a vertically scrolling, width-clamped column of cards, the two centred
-// as one group.
-//
-// **Page chrome only** — where the panel sits, the search row the rail opens, the scroll body and
-// its overlay scrollbar, the rail's tooltip. The panel's own behaviour is
-// `settings/settings-nav.slint`'s and which cards live in which category
-// `settings/settings-router.slint`'s. The scrollbar follows the Tracks view: both inner policies
-// off and an `OverlayScrollbar` at the root, so it sits flush with the content panel's right edge.
+// Page chrome only: the panel's behaviour is `settings/settings-nav.slint`'s, and which cards live
+// where `settings/settings-router.slint`'s.
 export component SettingsView inherits Rectangle {
-    // No background of its own, so the panel's `Theme.base` shows through at the rounded corners.
-
-    // Bumps the blur counter for any click no inner widget consumes — Slint's `TextInput` has no
-    // click-outside behaviour of its own. Declared first, so everything in front gets first crack.
     TouchArea {
         clicked => { SettingsPage.blur-search-tick += 1; }
     }
 
-    // The throttle every filterable view mounts. Expensive here despite driving only visibility: a
-    // query mounts every category page and fans out to three Rust round-trips per row.
     property <int> filter-tick-pending;
     FilterThrottle {
         pending: root.filter-tick-pending;
         fire() => { SettingsPage.search-query = SettingsPage.search-input; }
     }
 
-    // Reads the **settled** query, not the input.
+    // The settled query, not the input.
     property <bool> searching: SettingsPage.search-query != "";
 
-    // Mirrored imperatively rather than read live: a binding reading `root.width` and feeding a
-    // child's size re-enters the shell's layout pass, surfacing as a `RefCell already borrowed`
-    // panic in parley's text measurement. **The mirror costs a frame, so the seed is a real
-    // decision**: seeded at zero the panel's first verdict is the rail, which a narrow page draws
-    // anyway and a wide one widens out of once, where a wide seed would draw the full panel into a
-    // page that can't seat it.
+    // Mirrored rather than read live: a `root.width` read feeding a child's size re-enters the
+    // shell's layout pass and panics in parley's text measurement. Seeded at zero, so the panel's
+    // first verdict is the rail, which a wide page widens out of once.
     property <length> view-w: 0px;
     changed width => { self.view-w = self.width; }
 
-    // **The seed obliges this**: `changed` doesn't fire when the first layout settles directly on
-    // the final value, and a window opened straight into Settings is never *resized*.
+    // `changed` doesn't fire on a first layout that settles straight onto the final width.
     Timer {
         interval: 1ms;
         triggered => {
@@ -57,30 +41,25 @@ export component SettingsView inherits Rectangle {
     }
 
     property <length> gap: Theme.pad-lg;
-    // What the panel and the body beside it share: the page less its own padding and the gap.
     property <length> shared-w: max(0px, root.view-w - 2 * Theme.pad-lg - root.gap);
-    // Centres the panel and one card at the cap as a group, down to the page padding. Rounded,
-    // since a half-pixel origin splits every vertical rim on the page across two dim columns.
+    // Centres the panel and one capped card as a group. Rounded, since a half-pixel origin splits
+    // every vertical rim on the page across two dim columns.
     property <length> lead: Math.round(max(Theme.pad-lg,
         (root.view-w - nav.drawn-w - root.gap - SettingsPage.card-cap) / 2) / 1phx) * 1phx;
-    // What's right of the panel, less the gap and the right padding — published, since a card is
-    // drawn at it and can't measure its own column (`SettingsPage.card-w`).
+    // Published, a card being unable to measure its own column (`SettingsPage.card-w`).
     property <length> body-avail: max(0px,
         root.view-w - root.lead - nav.drawn-w - root.gap - Theme.pad-lg);
     changed body-avail => { SettingsPage.body-avail = self.body-avail; }
 
-    // A fresh category, or entering or leaving search, starts at the top — a tall page to a short
-    // one otherwise leaves the viewport parked past the new content. Written **imperatively**: a
-    // `<=>` on `content-y` disables Slint's own out-of-bounds correction.
+    // A fresh category, or entering or leaving search, starts at the top. Imperatively: a `<=>` on
+    // `content-y` disables Slint's own out-of-bounds correction.
     property <int> watched-category: SettingsPage.category-idx;
     changed watched-category => { sv.content-y = 0px; }
     property <bool> watched-searching: root.searching;
     changed watched-searching => { sv.content-y = 0px; }
 
-    // The rail's search field, which **only its button closes**: losing focus, in the page or to
-    // another window, leaves it open with its text, as the panel's own box stays put. Closing
-    // clears the query: a page filtered by a field nobody can see reads as missing settings,
-    // which is also why a live query keeps the field showing however it was opened.
+    // Only the rail's button closes the field, and closing clears the query: a page filtered by a
+    // field nobody can see reads as missing settings, which is also why a live query keeps it up.
     property <bool> search-open: false;
     property <bool> flyout-shown: nav.compact && (root.search-open || SettingsPage.search-input != "");
 
@@ -94,9 +73,8 @@ export component SettingsView inherits Rectangle {
         }
     }
 
-    // Crossing the threshold hands the focus to whichever box is about to show, so typing carries
-    // on. Widening always lets the field go, the panel's box taking over; narrowing brings it back
-    // only for a query or a focused box. On a mirror because `changed` rejects a path into a child.
+    // Crossing the threshold hands focus to whichever box is about to show, so typing carries on.
+    // A mirror, `changed` rejecting a path into a child.
     property <bool> watched-compact: nav.compact;
     changed watched-compact => {
         if (self.watched-compact) {
@@ -112,8 +90,7 @@ export component SettingsView inherits Rectangle {
         }
     }
 
-    // A Timer, not a call in the same handler: the box only becomes visible on the next pass, and
-    // `search-view.slint` focuses its bar the same way.
+    // Timers, the box only becoming visible on the next pass.
     focus-flyout := Timer {
         interval: 1ms;
         running: false;
@@ -140,14 +117,12 @@ export component SettingsView inherits Rectangle {
     HorizontalLayout {
         padding-left: root.lead;
 
-        // Outside the scroller, so the panel stays put while the cards scroll beside it.
         VerticalLayout {
             padding-top: Theme.pad-lg;
             padding-bottom: Theme.pad-lg;
             alignment: start;
 
-            // **The label array must stay an inline literal** so `@tr` registers the msgids at
-            // codegen, in `category-*` order.
+            // In `category-*` order.
             nav := SettingsNav {
                 labels: [@tr("Library"), @tr("Playback"), @tr("Effects"), @tr("Output"),
                          @tr("Appearance"), @tr("Language"), @tr("Window"), @tr("Radio"),
@@ -174,9 +149,8 @@ export component SettingsView inherits Rectangle {
         VerticalLayout {
             horizontal-stretch: 1;
 
-            // Collapsed through explicit bounds and `visible` rather than an `if`, so the bar's
-            // `changed blur-trigger` tracker never outlives a branch; the zero `min-width` replaces
-            // the bar's own, which would floor the body column at it.
+            // Collapsed rather than behind an `if`, which the bar's `changed blur-trigger` tracker
+            // would outlive; the zero `min-width` replaces the bar's, which would floor the column.
             Rectangle {
                 min-width: 0px;
                 min-height: 0px;
@@ -184,9 +158,8 @@ export component SettingsView inherits Rectangle {
                 max-height: root.flyout-shown ? flyout-row.preferred-height : 0px;
                 visible: root.flyout-shown;
 
-                // A layout rather than a placed child, so the bar is drawn at `input-width`: a
-                // plain `Rectangle` hands a component its own full width, which ran the bar past
-                // the page by the gap it was offset by.
+                // A layout, so the bar is drawn at `input-width`: a plain `Rectangle` hands a
+                // component its full width, running it past the page by its offset.
                 flyout-row := HorizontalLayout {
                     padding-top: root.flyout-top;
                     padding-bottom: root.clip-gap;
@@ -194,9 +167,7 @@ export component SettingsView inherits Rectangle {
                     padding-right: Theme.pad-lg;
                     alignment: start;
 
-                    // At the card column's width, and floating over the page like any other
-                    // page's bar, so it keeps the swell the panel's own box goes without. Cornered
-                    // like the rail's button that opens it.
+                    // Floats like any page's bar, keeping the swell the panel's box goes without.
                     flyout := SearchBar {
                         corner-radius: Theme.radius-md;
                         bar-height: nav.row-h;
@@ -209,9 +180,6 @@ export component SettingsView inherits Rectangle {
                 }
             }
 
-            // The body sits beside the panel at `card-w`, which has no floor: below the cap it
-            // shrinks with the page down to whatever its cards report, which is what lets the page
-            // fit the narrowest panel and why there is no horizontal scrollbar.
             sv := ScrollView {
                 horizontal-stretch: 1;
                 vertical-stretch: 1;
@@ -224,9 +192,8 @@ export component SettingsView inherits Rectangle {
                     alignment: start;
 
                     VerticalLayout {
-                        // In here so both scroll with the cards rather than being reserved outside
-                        // the viewport, which reads as a dead strip. Under the search row the
-                        // clearance splits around `clip-gap`, as above.
+                        // Inside the viewport, so it scrolls with the cards; under the search row
+                        // the clearance splits around `clip-gap`.
                         padding-top: root.flyout-shown ? 2 * Theme.pad-lg - root.clip-gap : Theme.pad-lg;
                         // The last card carries the gap under it, see `SectionCard`.
 
@@ -235,8 +202,7 @@ export component SettingsView inherits Rectangle {
                             searching: root.searching;
                         }
 
-                        // Collects the surplus when the mounted category is shorter than the
-                        // viewport; without it the column stretches the cards themselves instead.
+                        // Takes the surplus the column would otherwise hand the cards.
                         Rectangle {
                             vertical-stretch: 1;
                         }
@@ -246,10 +212,6 @@ export component SettingsView inherits Rectangle {
         }
     }
 
-    // A sibling of the padded layout, pinned to the view's right edge so it lines up with the
-    // content panel border; the absolute-position subtraction puts it in this view's frame.
-    // **Vertical only** — nothing overflows sideways now the content column has no width floor.
-    // Don't reintroduce the horizontal bar: a page needing one is a page with a row that can't wrap.
     OverlayScrollbar {
         horizontal: false;
         x: parent.width - self.width;
@@ -262,9 +224,7 @@ export component SettingsView inherits Rectangle {
         scroll-to(o) => { sv.content-y = -o; }
     }
 
-    // Declared last so it paints above the cards — left inside the panel, the pill beside the rail
-    // lands over the body and the first card covers it. The frame-tracks-the-host idiom; the rect
-    // derives from the hovered *row*, which the equal-height rows make possible.
+    // Last, so the pill beside the rail paints over the first card.
     TooltipFrame {
         x: nav.absolute-position.x - root.absolute-position.x + nav.tip-x;
         y: nav.absolute-position.y - root.absolute-position.y + nav.tip-y;

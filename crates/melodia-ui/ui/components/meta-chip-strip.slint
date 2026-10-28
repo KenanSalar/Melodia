@@ -1,25 +1,21 @@
 import { Theme } from "../theme.slint";
 import { MetaChip } from "meta-chip.slint";
 
-// A wrapping strip of `MetaChip`s, broken into lines at the width the host draws it.
-//
-// Both brushes are inputs for the reason `MetaChip` states, and every mount overrides both.
+// A wrapping strip of `MetaChip`s, broken into lines at the width it is drawn. Both brushes are
+// inputs for `MetaChip`'s reason, and every mount sets both.
 export component MetaChipStrip inherits Rectangle {
     in property <[string]> chips;
     in property <brush> chip-fill;
     in property <brush> chip-label-color;
     // Now Playing centres its rows under the cover; a hero's text column is left-aligned.
     in property <bool> centred: false;
-    // Hides the chips and keeps every line they take reserved. Now Playing hides the outgoing
-    // track's until the new metadata lands, and a strip that shrank for the gap would move the
-    // centred column down and back on every track change.
+    // Hides the chips and keeps their lines reserved: Now Playing hides the outgoing track's until
+    // the new metadata lands, and a strip shrinking for the gap would bounce the centred column.
     in property <bool> show-rows: true;
-    // How many rows are drawn, zero for all of them. The chips are one height, so a cap at a row
-    // boundary clips the next row away whole rather than slicing it.
+    // Zero for all of them. The chips are one height, so the cap clips the next row away whole.
     in property <int> max-rows: 0;
 
-    // Tighter than the gap between chips: a wrapped row is the same strip continuing, not a
-    // second one, which is what lets a hero band absorb it without growing.
+    // Tighter than between chips: a wrapped row is the same strip continuing.
     property <length> row-gap: Theme.pad-xs;
     property <length> capped-h:
         root.max-rows * Theme.meta-chip-h + (root.max-rows - 1) * root.row-gap;
@@ -27,15 +23,14 @@ export component MetaChipStrip inherits Rectangle {
         ? min(rows.preferred-height, root.capped-h)
         : rows.preferred-height;
 
-    // Bound to what the rows need at this width, so a host short of height can't squeeze a
-    // wrapped row over whatever follows. One row is reserved even with no chips, so a track with
-    // no metadata doesn't reflow what sits above.
+    // Bound, so a host short of height can't squeeze a wrapped row over what follows. One row is
+    // reserved with no chips, so a track without metadata doesn't reflow what sits above.
     height: max(Theme.meta-chip-h, root.rows-h);
-    // A scissor rather than a layer, the clip having no radius.
+    // No radius, so a scissor.
     clip: root.max-rows > 0;
 
-    // **Never inside an `if`**, where a flex reports its height at its own near-square preferred
-    // width rather than the width it is drawn and the strip reserves lines it never draws.
+    // **Never inside an `if`**, where a flex reports its height at its preferred width rather
+    // than the one it draws at.
     rows := FlexboxLayout {
         visible: root.show-rows;
         spacing-horizontal: Theme.pad-sm;

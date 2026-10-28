@@ -1,15 +1,8 @@
-//! Reusable `VecModel<T>` swap helpers. [`apply_rows_keyed`] prefers per-row updates over
-//! full-model replacement; [`replace_rows`] is the one whose job the replacement is.
-//!
-//! Slint's `VecModel::set_vec` fires a `reset()` that tears down and re-instantiates every
-//! visible `ListView` delegate; `set_row_data` only fires `row_changed`, so the delegate
-//! cache survives. So: same length and positionally-aligned ids → write the rows that
-//! actually differ, otherwise fall back to `set_vec`.
-//!
-//! Comparing is worth it because every generated row type is `PartialEq` and cheap —
-//! `slint::Image`'s equality bottoms out in a pointer compare on the shared pixel buffer,
-//! so two rows handed the same cached cover compare equal without touching the data. A
-//! false "changed" verdict is the only possible error and it just writes the row.
+//! `VecModel<T>` swap helpers. `set_vec` fires a `reset()` that rebuilds every visible
+//! `ListView` delegate where `set_row_data` keeps the delegate cache, so [`apply_rows_keyed`]
+//! writes only the rows that differ wherever the ids line up; [`replace_rows`] is for the callers
+//! whose job the replacement is. The comparison is cheap, `slint::Image`'s equality being a
+//! pointer compare on the shared buffer.
 
 use slint::{Model, ModelRc, VecModel};
 
@@ -64,9 +57,8 @@ pub fn replace_rows<T: Clone + 'static>(model: &ModelRc<T>, rows: Vec<T>, label:
     vm.set_vec(rows);
 }
 
-/// Empty a `VecModel<T>`-backed model in place, logging a downcast miss under `label`.
-/// Section-leave teardown uses this so the model's `SharedString`s drop on the same UI
-/// tick as the Image-property release.
+/// Empty a `VecModel<T>`-backed model in place, logging a downcast miss under `label`, so a
+/// leave's `SharedString`s drop on the tick its images are released.
 pub fn clear_vec_model<T: Clone + 'static>(model: &ModelRc<T>, label: &str) {
     replace_rows(model, Vec::new(), label);
 }

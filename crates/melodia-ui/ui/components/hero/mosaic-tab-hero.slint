@@ -6,26 +6,19 @@ import { HeroBackdropStack } from "hero-backdrop-stack.slint";
 import { MosaicHeroTile } from "mosaic-hero-tile.slint";
 import { TabSearchHeader } from "tab-search-header.slint";
 
-// The pinned banner both tabbed mosaic pages wear: `TabSearchHeader` over the artwork square, the
-// title and the chip band. Favorites and Recently Played mount one each and differ only in their
-// strings, their tab list and the pills they pass as `@children`.
-//
-// **Data-agnostic on purpose.** A Slint component can't be parameterised over a global and
-// `Favorites` / `RecentlyPlayed` are distinct generated types — the wall Rust answers with a
-// trait over the generated globals (`ui::detail_view::HeroSlots`), and the reason this is a
-// component rather than a third copy.
+// The pinned banner Favorites and Recently Played both wear. Data-agnostic because a component
+// can't be parameterised over a global, the two pages' being distinct generated types (the wall
+// Rust answers with `ui::detail_view::HeroSlots`).
 export component MosaicTabHero inherits Rectangle {
-    // **Inline `[@tr("…"), …]` at the call site** — an array populated from Rust renders
-    // untranslated. Forwarding one through here keeps the literal in a `.slint` file.
     in property <[string]> tab-labels;
     in property <[string]> tab-icons;
-    // Two-way, per the orphaned-one-way-binding pitfall — the bar writes this on every pick.
+    // Two-way: the bar writes it on every pick, which would detach a one-way binding.
     in-out property <int> tab-idx;
 
     in property <string> title;
     in property <string> filter-placeholder;
-    // The band's own empty state: a sentence rather than a "0 tracks" chip. The gate is the host's,
-    // only it knowing which tab is mounted and what its unfiltered count is.
+    // A sentence rather than a "0 tracks" chip. The host gates it, knowing the mounted tab and its
+    // unfiltered count.
     in property <bool> show-empty-copy;
     in property <string> empty-copy;
 
@@ -42,16 +35,13 @@ export component MosaicTabHero inherits Rectangle {
     in-out property <string> filter;
     in property <int> blur-tick;
 
-    // Fires *after* the direction and arming have settled, so a host handler that clears its
-    // filter and calls into Rust can't be sequenced ahead of them.
+    // Fires after the direction and arming have settled, so a host handler calling into Rust
+    // can't run ahead of them.
     callback tab-selected(int);
     callback search-edited(string);
 
-    // --- The header width budget ------------------------------------------
-    //
-    // `page-w` is a **mirror** — a live `root.width` read feeding a child's size re-enters layout —
-    // seeded at the header row's own **floor**. The mount `Timer` is mandatory, `changed` not
-    // firing when the first layout settles directly on the final value.
+    // Mirrored, seeded at the header row's floor, as a wider seed draws tabs the panel can't seat,
+    // and re-read by the mount `Timer`, `changed` not firing when the first layout lands on it.
     property <length> page-w: 2 * Theme.pad-lg + header.row-floor;
     changed width => { self.page-w = self.width; }
 
@@ -63,19 +53,12 @@ export component MosaicTabHero inherits Rectangle {
         }
     }
 
-    // Derived rather than a literal, so growing the artwork or the bar can't leave the banner
-    // cropping its own contents. The row's height comes off the bar itself, through the header.
+    // Derived, so growing the artwork or the bar can't leave the banner cropping itself.
     out property <length> hero-height:
         2 * Theme.pad-lg + header.row-h + Theme.pad-md + Theme.hero-artwork;
 
-    // --- The bar's palette --------------------------------------------------
-    //
-    // The four brushes the header row paints with, mirrored so a late solve *moves* rather than
-    // steps — and it lands later here than on a detail hero, this page's solve riding the mosaic
-    // atlas compose. `hero-label` has a fifth reader, the band's own title, which paints the same
-    // tier and would otherwise step while the labels beside it eased. A plain `animate` and no
-    // `states` block: this band never morphs, so there is no crossing for a `change_time` to
-    // anchor. The bar itself must not ease these — see `tab-bar.slint`'s two floats.
+    // Mirrored so a late solve eases; it lands later here than on a detail, riding the mosaic
+    // compose. A plain `animate` rather than `states`: this band never morphs.
     property <brush> hero-label: HeroBackdrop.on-backdrop;
     property <brush> hero-active: HeroBackdrop.chrome;
     property <brush> hero-hover: HeroBackdrop.on-backdrop.transparentize(0.88);
@@ -85,9 +68,7 @@ export component MosaicTabHero inherits Rectangle {
         easing: ease-in-out;
     }
 
-    // --- Forwarded from the shared header ---------------------------------
-    //
-    // Re-published under the names the two curated pages read; argued in `tab-search-header.slint`.
+    // Under the names the two curated pages read.
     out property <NavEnterFrom> tab-enter-from <=> header.tab-enter-from;
     out property <bool> tab-anim-armed <=> header.tab-anim-armed;
 
@@ -103,9 +84,7 @@ export component MosaicTabHero inherits Rectangle {
     vertical-stretch: 0;
     height: root.hero-height;
 
-    // Behind everything else, and unconditionally shown: this band never stops painting a hero,
-    // where `LibraryTabBand` gates on its own `detail-open`. The gradient floor shows through when
-    // there is no blur image.
+    // Ungated: this band never stops painting a hero.
     HeroBackdropStack {
         x: 0; y: 0;
         width: 100%; height: 100%;
@@ -119,9 +98,8 @@ export component MosaicTabHero inherits Rectangle {
         padding: Theme.pad-lg;
         spacing: Theme.pad-md;
 
-        // The same row Settings mounts, which is why it takes brushes at all. Here it paints on the
-        // blur, so the bar takes `HeroBackdrop` tiers rather than its `Theme.*` defaults;
-        // `SearchBar` is the documented exception and keeps its own chrome.
+        // Hero tiers through the mirrors, the bar being unable to ease a brush, and never
+        // `Theme.*`: the accent has no contrast floor on a pinned band, where `chrome` clears 3:1.
         header := TabSearchHeader {
             tab-labels: root.tab-labels;
             tab-icons: root.tab-icons;
@@ -132,12 +110,7 @@ export component MosaicTabHero inherits Rectangle {
             filter-placeholder: root.filter-placeholder;
             blur-tick: root.blur-tick;
 
-            // All four through the eased mirrors above, never the tiers directly.
             label-color: root.hero-label;
-            // One input for the selected label, its FILL=1 icon and the underline, so it has to be
-            // a hero token like the other three: `Theme.accent` carries no contrast floor against a
-            // pinned band where `chrome` is solved to clear 3:1. The cost is that the selected label
-            // sits a tier below the idle ones — splitting the two means a second `TabBar` input.
             active-color: root.hero-active;
             hover-fill: root.hero-hover;
             divider-color: root.hero-divider;
@@ -146,7 +119,6 @@ export component MosaicTabHero inherits Rectangle {
             search-edited(t) => { root.search-edited(t); }
         }
 
-        // Artwork tile + title block.
         HorizontalLayout {
             vertical-stretch: 1;
             spacing: Theme.pad-lg;
@@ -163,7 +135,6 @@ export component MosaicTabHero inherits Rectangle {
                 }
             }
 
-            // Title, chips, and whatever action pills the host hands over.
             VerticalLayout {
                 horizontal-stretch: 1;
                 alignment: stretch;
@@ -171,11 +142,8 @@ export component MosaicTabHero inherits Rectangle {
 
                 Text {
                     vertical-stretch: 0;
-                    // Leading LRM keeps the title left-anchored under RTL.
                     text: "\u{200e}" + root.title;
-                    // `hero-label`, not the tier it mirrors: taken raw the title snaps to the new
-                    // solve while the tab labels beside it ease to the identical colour, and they
-                    // are one text tier.
+                    // The mirror, not the tier: the title and the tab labels are one text tier.
                     color: root.hero-label;
                     font-size: Theme.hero-title-size;
                     font-weight: Theme.page-title-weight;
@@ -184,8 +152,7 @@ export component MosaicTabHero inherits Rectangle {
                     overflow: elide;
                 }
 
-                // Which chips the band shows follows the tab, decided in `ui::hero_chips`. **An
-                // empty tab publishes none** and the line below takes over.
+                // An empty tab publishes no chips and the line below takes over.
                 HeroChipStrip { }
 
                 if root.show-empty-copy: Text {
@@ -198,8 +165,8 @@ export component MosaicTabHero inherits Rectangle {
 
                 Rectangle { vertical-stretch: 1; }
 
-                // After the spacer, so the pills sit on the band's floor beside the tile's
-                // bottom edge — the slack the chip strip's two-row cap is measured against.
+                // After the spacer, so the pills sit on the band's floor, the slack the chip
+                // strip's two-row cap is measured against.
                 @children
             }
         }

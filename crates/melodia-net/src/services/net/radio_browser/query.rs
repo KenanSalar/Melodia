@@ -1,42 +1,21 @@
-//! Request construction for the directory, and the only place its parameter
-//! names are spelled.
+//! Request construction, and the only place the directory's parameter names are spelled.
 //!
-//! Split from the sending half because the API drops a parameter it does not
-//! recognise instead of rejecting it: a misspelling is a filter that silently
-//! does nothing, and the only way to catch one is to assert on the names
-//! offline.
+//! Pure, because the API drops a parameter it doesn't recognise rather than refusing it: a
+//! misspelling is a filter that silently does nothing, caught only by asserting the names offline.
 
 use std::collections::BTreeMap;
 
 use melodia_core::entities::radio::{DEFAULT_PAGE_LIMIT, FacetKind, SearchOrder, StationSearch};
 
-/// Ceiling on the tag list, which is the one facet the directory does not curate.
-///
-/// Tags are free-form and user-entered, so this list is an order of magnitude
-/// past the others and grows without anyone approving an entry. Its own knob for
-/// that reason, and a ceiling rather than no limit at all because the size of the
-/// response is a third party's to decide.
-///
-/// **High enough to take the whole list, not just its head.** A tag the picker
-/// never fetched is one nothing can filter by and no scope pill can offer, and the
-/// tail is where a specific genre lives — the head is all general. What the picker
-/// *draws* out of it is a separate question, answered by
-/// `ui::radio::facets::PICKER_ROW_CAP`.
-///
-/// There is no "no ceiling" to raise this to: the endpoint answers a call carrying
-/// no `limit` with a default slice of its own, so a number is going to be sent
-/// whatever this says. Since the list outgrowing it would otherwise go unnoticed —
-/// the missing tags are simply never offered and no surface looks wrong —
-/// `fetch_facets` logs a list that comes back sitting exactly on it.
+/// Ceiling on the tag list, the one facet the directory doesn't curate and so an order of
+/// magnitude past the others. High enough to take the tail, where the specific genres live.
+/// There is no "no ceiling": the endpoint answers a missing `limit` with a slice of its own, so
+/// `fetch_facets` logs a list that comes back sitting on this.
 pub const TAG_FACET_LIMIT: u32 = 25_000;
 
-/// Ceiling for the curated facet lists, with room for them to grow.
-///
-/// Well clear of all three today. They are approved rather than typed, so they
-/// grow slowly and none is near it.
+/// For the curated facet lists, which grow slowly and are nowhere near it.
 pub const FACET_LIMIT: u32 = 2000;
 
-/// Query parameters for `/json/stations/search`.
 pub fn search_params(search: &StationSearch) -> BTreeMap<&'static str, String> {
     let mut params = BTreeMap::new();
 
@@ -49,9 +28,8 @@ pub fn search_params(search: &StationSearch) -> BTreeMap<&'static str, String> {
         params.insert("tagList", search.tags.join(","));
     }
     if search.bitrate_min > 0 {
-        // camelCase. Lowercased it is dropped rather than refused, and the page
-        // that comes back is unfiltered — 32 and 128 kbps stations under a
-        // 320 floor, which reads exactly like a filter that works.
+        // camelCase: lowercased it is dropped, not refused, and the unfiltered page reads exactly
+        // like a filter that works.
         params.insert("bitrateMin", search.bitrate_min.to_string());
     }
     if search.offset > 0 {
@@ -77,12 +55,8 @@ pub fn facet_path(kind: FacetKind) -> &'static str {
     }
 }
 
-/// Query parameters for a facet list.
-///
-/// Ordered by station count because the server's default is alphabetical, which
-/// on tags puts punctuation and typos ahead of `pop` and `rock`. The limit is
-/// not optional either: the tag list is capped server-side well below its own
-/// size, so omitting one takes an arbitrary alphabetical thousand.
+/// By station count, the server's alphabetical default putting punctuation and typos first on
+/// tags. The limit has to be sent: omitting it takes an arbitrary alphabetical slice.
 pub fn facet_params(kind: FacetKind) -> BTreeMap<&'static str, String> {
     let mut params = BTreeMap::new();
     params.insert("order", "stationcount".to_owned());
@@ -92,11 +66,8 @@ pub fn facet_params(kind: FacetKind) -> BTreeMap<&'static str, String> {
     params
 }
 
-/// The wire name for an order, and whether it reads best descending.
-///
-/// Direction belongs to the order rather than to the caller: every popularity
-/// order wants the top of the list first and alphabetical wants A first, so a
-/// separate flag could only ever be set one way per order.
+/// The wire name for an order and whether it reads best descending, which is the order's to say:
+/// popularity wants the top first and alphabetical wants A first.
 fn order_params(order: SearchOrder) -> (&'static str, bool) {
     match order {
         SearchOrder::Name => ("name", false),
@@ -107,7 +78,6 @@ fn order_params(order: SearchOrder) -> (&'static str, bool) {
     }
 }
 
-/// How many entries of a facet list to take.
 pub(super) fn facet_limit(kind: FacetKind) -> u32 {
     match kind {
         FacetKind::Tags => TAG_FACET_LIMIT,
@@ -115,25 +85,18 @@ pub(super) fn facet_limit(kind: FacetKind) -> u32 {
     }
 }
 
-/// Whether a facet list came back sitting on its ceiling, and so is likely cut short.
-///
-/// Its own function because the alternative is a comparison inside `fetch_facets` whose only
-/// report is a log line: nothing downstream can be asserted against, and driving the real fetch
-/// to a ceiling means serving [`TAG_FACET_LIMIT`] rows to watch a `>=`.
+/// Split out so the check is testable without serving [`TAG_FACET_LIMIT`] rows.
 pub(super) fn facet_list_is_capped(kind: FacetKind, received: usize) -> bool {
     received >= facet_limit(kind) as usize
 }
 
-/// The caller's page size, or the default where they left it unset.
-///
-/// Reachable from the sending half because it is also what a full page *is*:
-/// `search` reads its `has_more` off the raw response length against this.
+/// The caller's page size or the default, and so also what a full page *is*: `search` reads its
+/// `has_more` off the raw length against this.
 pub(super) fn page_limit(requested: u32) -> u32 {
     if requested == 0 { DEFAULT_PAGE_LIMIT } else { requested }
 }
 
-/// Add a filter, or leave it out entirely. A blank value is not a filter for the
-/// empty string; it is no filter at all.
+/// A blank value is no filter at all, not a filter for the empty string.
 fn insert_if_set(params: &mut BTreeMap<&'static str, String>, key: &'static str, value: &str) {
     if !value.is_empty() {
         params.insert(key, value.to_owned());

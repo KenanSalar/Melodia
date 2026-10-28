@@ -21,7 +21,7 @@ const HERO_BLUR: &str =
 ///
 /// Safe to `animate` where a shared component's brush input is not — both sides are two
 /// stops at 135deg and the pair has one writer, writing discretely, so nothing can restart
-/// the binding mid-flight. `.claude/rules/slint-pitfalls.md` has the case where it can.
+/// the binding mid-flight. A host easing the brush it hands over is what would.
 #[test]
 fn the_backdrop_floor_eases_with_the_layers_above_it() {
     // On the gradient and then the end of its statement, rather than the line under

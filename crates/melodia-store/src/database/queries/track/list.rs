@@ -8,25 +8,16 @@ use melodia_core::entities::browse::DirectoryTrack;
 use melodia_core::entities::track;
 use melodia_core::error::AppError;
 
-/// The `ORDER BY` body a whole-table fetch shares: the natural-ordering key built at scan time from
-/// title/artist/album.
+/// The `ORDER BY` body a whole-table fetch shares: the scan-time natural key.
 ///
-/// **Not a page's order**, which is its keyset's, and copying it into a batch-action query is the
-/// trap: `queries::track::entity_ids` owes agreement to the default of the page beside the card,
-/// and Artist and Genre Detail default to `"album"`, so `sort_key` taken from here queues a
-/// catalogue by title under a page that shows it by album.
-///
-/// What the clause is for is **determinism**: the in-memory comparator these rows are handed to
-/// appends `sort_key` as its tie-breaker and `sort_by_cached_key` is stable, so rows tied on it
-/// fall back to the order `SQLite` handed over. Dropping the clause would leave that to the query
-/// plan, and it is close to free, `idx_tracks_sort_key` being the same expression under the same
-/// collation, so this reads as an index scan rather than a sort.
+/// **Not a page's order**, which is its keyset's: copied into a batch-action query it would queue
+/// Artist and Genre Detail's `"album"` default by title. The clause is for **determinism**, the
+/// comparator these rows feed breaking ties on `sort_key` with a stable sort, and costs an index
+/// scan of `idx_tracks_sort_key` rather than a sort.
 pub(super) const TRACK_LIST_ORDER: &str = "sort_key COLLATE NOCASE ASC";
 
-/// Every track as a list row, in [`TRACK_LIST_ORDER`].
-///
-/// No list reads the whole table: a library-sized one holds a `keyset` and fetches its rows by
-/// id. What still wants every row at once is a check that holds an id query against them.
+/// Every track as a list row, in [`TRACK_LIST_ORDER`], for the checks that hold an id query
+/// against them; a list fetches its rows by id.
 pub async fn get_all_tracks_for_list(db: &DbPool) -> Result<Vec<track::TrackListRow>, AppError> {
     let cols = columns::TRACK_LIST.joined();
     let sql = format!("SELECT {cols} FROM tracks ORDER BY {TRACK_LIST_ORDER}");
@@ -42,29 +33,19 @@ pub(super) const LIKE_SEPARATOR: &str = "\\\\";
 #[cfg(not(windows))]
 pub(super) const LIKE_SEPARATOR: &str = "/";
 
-/// `dir_path` escaped for `LIKE … ESCAPE '\'` and terminated with [`LIKE_SEPARATOR`]: the prefix
-/// every "files under this directory" pattern is built from.
-///
-/// One home for the escaping, shared with [`super::entity_ids::track_ids_under_directory`]. A
-/// folder is named by the user, and `_` is `LIKE`'s single-character wildcard.
+/// `dir_path` escaped for `LIKE … ESCAPE '\'` and ended with [`LIKE_SEPARATOR`], the prefix every
+/// "files under this directory" pattern starts from: a user's folder name can hold `_` or `%`.
 pub(super) fn directory_like_prefix(dir_path: &str) -> String {
     let escaped = dir_path.replace('\\', "\\\\").replace('%', "\\%").replace('_', "\\_");
     format!("{escaped}{LIKE_SEPARATOR}")
 }
 
-/// Fetch tracks whose files live directly inside `dir_path`, not in subdirectories, each with
-/// its path. Browse matches a row to its file on disk by that path, and has to: `LIKE` folds
-/// ASCII case, so a sibling folder spelled in another case answers here too.
+/// The tracks directly inside `dir_path`, each with the path Browse matches its file by: `LIKE`
+/// folds ASCII case, so a sibling folder spelled in another case answers here too.
 ///
-/// **Platform invariant**: `tracks.file_path` is stored verbatim from `Path::to_string_lossy()` at
-/// scan time, so it carries the platform's native separator and the LIKE pattern below matches
-/// that. Pass `dir_path` in native form too — callers route through
-/// `melodia_core::utils::canonicalize_path`.
-///
-/// Query-plan note: `file_path` has a UNIQUE auto-index, but the `ESCAPE` clause disables
-/// `SQLite`'s prefix-`LIKE`→range-scan optimisation entirely. At realistic library sizes a one-off
-/// index scan per *navigation* isn't worth a generated `parent_dir` column and index, which would
-/// slow every insert. Revisit only if a profiler flags it at a much larger library size.
+/// `file_path` holds the native separator, so `dir_path` comes in native form through
+/// `canonicalize_path`. The `ESCAPE` clause rules out `SQLite`'s prefix range scan, and a scan per
+/// navigation doesn't justify a generated `parent_dir` column and index slowing every insert.
 pub async fn get_tracks_in_directory(
     db: &DbPool,
     dir_path: &str,
@@ -86,20 +67,12 @@ pub async fn get_tracks_in_directory(
     Ok(tracks)
 }
 
-/// The N most-recently-played tracks (list-view projection), newest first.
+/// The `limit` most recently played tracks, newest first, which the view re-sorts and filters in
+/// memory rather than re-querying.
 ///
-/// Ordering rides on `last_played` (RFC-3339 UTC, written by the play-count flusher /
-/// `update_play_count`), whose lexical order is chronological even though `chrono`'s `AutoSi`
-/// fractional seconds vary in width: the offset's `'+'` sorts below every digit, and `AutoSi` only
-/// drops trailing-zero groups. Rows without a `last_played` (never played) are excluded —
-/// index-backed by the partial `idx_tracks_last_played`. `id DESC` settles the plays one flush
-/// stamped together, and is the order that index's walk already hands them back in, so it costs
-/// no sort.
-///
-/// Returns the `TrackListRow` projection so the Recently-Played view can render
-/// through the shared `TrackList`; `last_played` itself is not selected (it is
-/// only the sort key). Membership is the top `limit` by recency — the view
-/// re-sorts/filters this set in memory, it never re-queries.
+/// RFC 3339 `last_played` sorts chronologically as text whatever width `AutoSi` gives the fraction,
+/// `+` sorting below every digit. The partial `idx_tracks_last_played` leaves out the never-played,
+/// and `id DESC` settles a flush's shared stamp in the order that index's walk returns anyway.
 pub async fn get_recently_played(
     db: &DbPool,
     limit: i64,

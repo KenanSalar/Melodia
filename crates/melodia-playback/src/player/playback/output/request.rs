@@ -92,7 +92,6 @@ pub enum Drive {
 }
 
 impl Drive {
-    /// The drive a polling toggle stands for.
     pub fn from_polling(polling: bool) -> Self {
         if polling { Self::Polling } else { Self::Events }
     }

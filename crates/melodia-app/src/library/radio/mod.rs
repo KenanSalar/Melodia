@@ -1,25 +1,15 @@
 //! Radio library API, and the only door the UI has onto stations.
 //!
-//! The stored table and the radio-browser.info directory answer through the same
-//! module rather than side by side, so a callback never has to know which one
-//! did, and so the toggle that turns radio off has one place to guard.
+//! The stored table and the radio-browser.info directory answer through one module, so a callback
+//! never learns which did and the off switch has one place to guard
+//! (`docs/adr/0015-radio-ships-off-guarded-at-the-facade.md`). The door is the module rather than
+//! this file: every submodule is re-exported here, and what stays is what all of them need.
 //!
-//! Writes here deliberately do not bump `library_changed`. Its subscribers
-//! are the library views, none of which shows a station; the Radio section
-//! refreshes through its own global.
+//! **`ensure_enabled` and `directory_client` may not move.** A submodule reaching
+//! `state.http_client()` directly is traffic a user who turned Radio off still pays;
+//! `crates/melodia/tests/radio_facade.rs` walks every file under this directory for it.
 //!
-//! **The door is the module, not this file.** Four submodules answer for the four things a
-//! station has — how it is authored, how it is played, where its logo comes from, and what the
-//! directory says about it — and every one of them is re-exported here, so a caller still writes
-//! `library::radio::play_station` and never learns which file answered. What stays in this file
-//! is what all four need: the off switch, the client behind it, and the stored-table getters that
-//! are exempt from both.
-//!
-//! **`ensure_enabled` and `directory_client` may not move.** The switch is enforced at the seam
-//! rather than per call site, so a submodule reaching `state.http_client()` directly is traffic a
-//! user who turned Radio off still pays. `crates/melodia/tests/radio_facade.rs` walks *every* file
-//! under this directory counting the reaches, which is what makes a fifth submodule covered by
-//! default.
+//! Writes here don't bump `library_changed`: none of its subscribers shows a station.
 
 mod authoring;
 mod directory;
@@ -38,8 +28,7 @@ pub use playback::{
     station_to_restore,
 };
 
-// `library::radio_files` composes these with its own write rather than going through the door
-// above — see the argument at each of their definitions.
+// `library::radio_files` composes these with its own write, argued at each definition.
 pub(super) use authoring::{resolve_station_name, validated_overrides};
 
 use crate::state::AppState;
@@ -47,21 +36,13 @@ use melodia_core::entities::radio;
 use melodia_core::error::AppError;
 use melodia_store::database::{DbPool, queries};
 
-/// How far back the recently-played station list reaches.
-///
-/// A station history has no natural end, so this is what bounds the fetch. The
-/// list is a way back to what you were just listening to rather than a record,
-/// so it is sized to a session or two of tuning around, not to everything ever
-/// played.
+/// How far back the recently-played station list reaches. It is a way back to what you were just
+/// listening to rather than a record, so it is sized to a session or two of tuning around.
 pub const RECENT_STATIONS_LIMIT: i64 = 50;
 
-/// A refusal when the user has switched Radio off.
-///
-/// **This is where "off" means no traffic.** D14 already made this module the only door
-/// onto the directory, so the switch is enforced here rather than at the sidebar row,
-/// which a stale callback or an in-flight fetch is already past. Stored stations stay
-/// readable through the getters below: hiding a feature is not deleting what the user
-/// kept, and nothing but the section itself asks for them.
+/// A refusal when the user has switched Radio off: **this is where "off" means no traffic**, the
+/// sidebar row being something a stale callback is already past. The getters below stay open,
+/// hiding a feature not being deleting what the user kept.
 pub(super) fn ensure_enabled(state: &AppState) -> Result<(), AppError> {
     if state.radio_enabled.get() {
         return Ok(());
@@ -69,12 +50,8 @@ pub(super) fn ensure_enabled(state: &AppState) -> Result<(), AppError> {
     Err(AppError::settings_msg("Radio is switched off"))
 }
 
-/// The shared client, reachable only past [`ensure_enabled`] — which is the point of
-/// spelling it as a seam rather than repeating the check beside each call.
-///
-/// Every outbound call this module makes takes it, including the logo download, whose host
-/// is one the directory named rather than the directory itself. The guard is about traffic,
-/// not about who is on the other end.
+/// The shared client, reachable only past [`ensure_enabled`]. The logo download takes it too, the
+/// guard being about traffic rather than about who answers.
 pub(super) fn directory_client(state: &AppState) -> Result<&reqwest::Client, AppError> {
     ensure_enabled(state)?;
     Ok(state.http_client())
@@ -95,8 +72,8 @@ pub async fn get_station(db: &DbPool, id: i64) -> Result<radio::RadioStation, Ap
     queries::radio::get_station_by_id(db, id).await
 }
 
-/// Persist a station, updating the row when the directory already knows it, and answer its id.
-/// Preserves everything the user did with it.
+/// Persist a station, updating the row the directory already knows, and answer its id. Keeps
+/// everything the user did with it.
 pub async fn save_station(db: &DbPool, station: &radio::NewRadioStation) -> Result<i64, AppError> {
     queries::radio::save_station(db, station).await
 }
@@ -105,36 +82,21 @@ pub async fn set_favorite(db: &DbPool, id: i64, favorite: bool) -> Result<(), Ap
     queries::radio::set_favorite(db, id, favorite).await
 }
 
-/// Drop a station out of the Favorites tab.
-///
-/// **Un-starring and deleting are the same button on two different rows.** A *directory* station
-/// with a play behind it is still in Recently Played and its history is not the star's to take —
-/// the argument [`set_directory_favorite`] already makes from the other side. One that was only
-/// ever starred is listed nowhere once the star goes, and Browse rewrites it from the directory
-/// the moment it is kept again. A hand-typed one has no directory to be rewritten from, so this
-/// is its delete either way — see [`is_listed`].
+/// Drop a station out of the Favorites tab, deleting the row if nothing else lists it. A directory
+/// station keeps its play history, which isn't the star's to take.
 pub async fn remove_from_favorites(db: &DbPool, id: i64) -> Result<(), AppError> {
     queries::radio::set_favorite(db, id, false).await?;
     delete_if_unlisted(db, id).await
 }
 
-/// Drop a station out of the Recently Played tab.
-///
-/// The mirror of [`remove_from_favorites`]: forget the plays, and keep the row while a star still
-/// lists it somewhere.
+/// Drop a station out of the Recently Played tab, keeping the row while a star still lists it.
 pub async fn remove_from_recent(db: &DbPool, id: i64) -> Result<(), AppError> {
     queries::radio::clear_play_history(db, id).await?;
     delete_if_unlisted(db, id).await
 }
 
-/// Delete a row no tab would list any more.
-///
-/// The table backs the two local tabs and nothing else, so a station neither of them shows is a
-/// row nothing can reach — including the user, who has just removed it from both.
-///
-/// **Every un-star owes this, not just the trash.** The star and the trash leave a station in the
-/// same place; [`set_directory_favorite`] deliberately doesn't decide, so the surface calling it
-/// has to, or a browse-and-unstar leaves a row behind on every pass.
+/// Delete a row neither local tab would list, which nothing could reach. **Every un-star owes
+/// this, not just the trash**: [`set_directory_favorite`] doesn't decide.
 pub async fn delete_if_unlisted(db: &DbPool, id: i64) -> Result<(), AppError> {
     let station = queries::radio::get_station_by_id(db, id).await?;
     if is_listed(&station) {
@@ -143,14 +105,9 @@ pub async fn delete_if_unlisted(db: &DbPool, id: i64) -> Result<(), AppError> {
     queries::radio::delete_station(db, id).await
 }
 
-/// Whether either local tab would still show a station: the star is Favorites' filter and the
-/// stamp is Recently Played's, so between them they are the whole of what a row is kept for.
-///
-/// **A hand-typed station is listed by its star alone**, whatever it has been played. No directory
-/// page names it, so the card offers no star to set (`starrable: station.uuid != ""`) and Browse
-/// cannot write the row back. Counting the stamp there leaves it in Recently Played with the one
-/// tab that could restore it unable to, which is the row-nothing-can-reach this predicate exists
-/// to prevent rather than a milder version of it.
+/// Whether either local tab would still show a station. **A hand-typed one is listed by its star
+/// alone**: its card offers no star to set (`starrable: station.uuid != ""`), so kept for its play
+/// stamp it could never get back into Favorites.
 fn is_listed(station: &radio::RadioStation) -> bool {
     if station.station_uuid.as_deref().is_none_or(str::is_empty) {
         return station.is_favorite;

@@ -1,10 +1,6 @@
-//! Wire the Settings page's Diagnostics card, and the toast that follows a crash.
-//!
-//! Everything `services::{logging, crash_report, diagnostics}` produces lands in
-//! one directory and is otherwise unreachable — a user launching from a
-//! `.desktop` entry or the Start Menu has no console and no reason to go looking
-//! in `~/.local/share`. This module is the whole of what surfaces it: two
-//! buttons, a switch and one notice.
+//! The Diagnostics card and the toast after a crash. Everything the logging, crash-report and
+//! bundle services write lands in one directory a user launching from a desktop entry has no
+//! console or reason to look in, and this is the whole of what surfaces it.
 
 use std::rc::Rc;
 
@@ -25,8 +21,7 @@ pub fn install(ui: &AppWindow, state: &AppState, notifications: &Rc<Notification
     wire_verbose_logging(ui, state);
 }
 
-/// Hand the logs directory to the desktop's file manager. The same callback the
-/// crash toast's action button reaches, hence the two buttons and one handler.
+/// Opens the logs directory, for the card's button and the crash toast's action alike.
 fn wire_open_log_folder(ui: &AppWindow, state: &AppState) {
     let runtime = state.runtime.clone();
     let logs_dir = state.paths.logs_dir.clone();
@@ -49,8 +44,7 @@ fn wire_save_report(ui: &AppWindow, state: &AppState, notifications: &Rc<Notific
     });
 }
 
-/// Ask where the bundle goes, build it, write it, and say which way it went.
-/// A cancelled picker is the ordinary case and says nothing.
+/// Asks where the bundle goes, writes it and says how that went. A cancel says nothing.
 async fn save_report(state: AppState, weak: Weak<AppWindow>, notifications: Rc<NotificationsUi>) {
     let dialog = file_dialog::parented(&weak, "Save Diagnostics Report")
         .set_file_name(services::diagnostics::suggested_file_name(Local::now()));
@@ -90,11 +84,9 @@ async fn save_report(state: AppState, weak: Weak<AppWindow>, notifications: Rc<N
     }
 }
 
-/// Apply the Verbose Logging switch live, then persist it.
-///
-/// Seeded with `if let Ok` rather than [`crate::ui::settings_bind::read_or_default`]
-/// so an unreadable file leaves the Slint-declared `false` — the same answer
-/// `logging::install` reached from the same read, so the two can't disagree.
+/// Seeded with `if let Ok` rather than [`crate::ui::settings_bind::read_or_default`], so an
+/// unreadable file leaves the Slint-declared `false`, the answer `logging::install` reached off
+/// the same read.
 fn wire_verbose_logging(ui: &AppWindow, state: &AppState) {
     if let Ok(settings) = services::settings::read_settings(&state.paths) {
         ui.global::<Settings>().set_verbose_logging(settings.diagnostics.verbose_logging);
@@ -102,8 +94,7 @@ fn wire_verbose_logging(ui: &AppWindow, state: &AppState) {
 
     let state = state.clone();
     ui.global::<Settings>().on_verbose_logging_changed(move |on| {
-        // Live first: a failed disk write must not undo what the user can
-        // already see working.
+        // Live first, so a failed write can't undo what the user already sees working.
         platform::logging::set_verbose(on);
         state.persist_blocking("persist verbose_logging", move |paths| {
             library::settings::set_verbose_logging(paths, on)
@@ -111,12 +102,9 @@ fn wire_verbose_logging(ui: &AppWindow, state: &AppState) {
     });
 }
 
-/// Announce a panic from the previous run, once.
-///
-/// Sticky rather than auto-dismissing: a crash notice the user was looking away
-/// for is a crash notice that did nothing. Runs synchronously here because it is
-/// one `read_dir` over a directory holding at most a handful of entries, and a
-/// marker write only when there is actually something to report.
+/// Announces a panic from the previous run, once. Sticky, since a notice the user looked away
+/// from did nothing, and synchronous, being one `read_dir` over a handful of entries and a
+/// marker write only when there is something to report.
 ///
 /// Called by `boot::ui_setup::install` rather than from [`install`], so a launch that opens the
 /// welcome card can hold it until the card closes. It must be **deferred and never skipped**:

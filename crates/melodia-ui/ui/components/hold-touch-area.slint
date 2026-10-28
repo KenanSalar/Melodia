@@ -56,7 +56,7 @@ export component HoldTouchArea {
             }
         }
         // `clicked` rather than Up: it runs first, so it still reads this press's flag, and only
-        // for an area that took the press (`slint-pitfalls.md`).
+        // for an area that took the press.
         clicked => {
             if (!root.hold-fired) {
                 root.clicked();

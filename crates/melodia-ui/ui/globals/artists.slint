@@ -1,6 +1,6 @@
 import { ArtistRow, ArtistGridRow, AlbumRow, TrackListRow, TrackColumns } from "../models.slint";
 
-// The Artist grid, on the `Albums` ownership contract.
+// On `Albums`' contract.
 export global Artists {
     in-out property <[ArtistGridRow]> grid-rows;
     // `-1` until fetched; see `Albums.total-count`.
@@ -14,16 +14,14 @@ export global Artists {
     callback apply-filter(string);
     callback request-sort(string /*field*/);
     callback open-artist(int /*artist_id*/);
-    // The `Albums.request-cover` contract: cache-only, a miss schedules and repaints on the bump.
+    // The `Albums.request-cover` contract.
     pure callback request-cover(string /*image_path*/, int /*generation*/) -> image;
     in property <int> covers-generation: 0;
     callback section-active-changed(bool);
 }
 
-// The Artist Detail view, on the `AlbumDetail` shape plus an `albums` list driving the
-// horizontal sub-section above the track list, and an `open-album` that navigates
-// cross-tab. **The column defaults invert Album Detail's** (`ui::track_list_view` has them) and
-// the default sort is by album, so tracks group naturally.
+// `AlbumDetail`'s shape plus the Albums strip above the tracks. Sorted by album by default, so the
+// tracks group.
 export global ArtistDetail {
     in-out property <int> artist-id: -1;
     // See `AlbumDetail.restoring`.
@@ -34,14 +32,13 @@ export global ArtistDetail {
 
     in-out property <TrackColumns> track-columns;
 
-    // Sorted in SQL, as Album Detail is.
     in-out property <string> sort-field: "album";
     in-out property <string> sort-dir: "asc";
 
     in-out property <[int]> selected-ids;
     in-out property <int> selection-anchor: -1;
 
-    // The `AlbumDetail` dual-slot contract, so switching artists never flashes.
+    // `AlbumDetail`'s two slots.
     in-out property <image> cover;
     in-out property <image> blur-img-a;
     in-out property <image> blur-img-b;
@@ -50,14 +47,10 @@ export global ArtistDetail {
 
     in-out property <bool> albums-collapsed: false;
 
-    // What the band's search box means while this detail is open, filtering **both** the
-    // track list and the Albums sub-section. Cleared on a fresh open, preserved across
-    // library-changed refreshes.
+    // As `AlbumDetail.filter`, narrowing the Albums strip too.
     in-out property <string> filter;
 
-    // `AlbumDetail.origin-nav-index`, so cross-section back-nav takes the same atomic
-    // flip-Nav-then-clear-id path — see the argument there for why a drill from a sibling
-    // tab records nothing at all.
+    // As `AlbumDetail.origin-nav-index`.
     in-out property <int> origin-nav-index: -1;
 
     callback close-detail();
@@ -73,14 +66,13 @@ export global ArtistDetail {
     callback request-sort(string /*field*/);
     callback toggle-column(string /*column_id*/);
 
-    // Rust flips `Nav.selected-index` to Albums *and* opens that album's detail.
+    // Rust moves to the Albums tab and opens that album.
     callback open-album(int /*album_id*/);
-    // **Borrows `AlbumsUi`'s grid tier** rather than keeping a cache of its own — which
-    // is why the Artists wiring releases it on both Artists section-leave and detail close.
+    // The shared grid tier, decoding a miss inline: the callback carries no generation to repaint
+    // on (`grid_prewarm::grid_cover_blocking`).
     pure callback request-album-cover(string /*artwork_path*/) -> image;
-    // Rust negates and persists, so Slint only fires the event.
+    // Rust negates and persists.
     callback toggle-albums-collapsed();
 
-    // Rust reloads the list's ids under the new needle and re-walks the Albums strip by name.
     callback filter-changed(string);
 }

@@ -1,23 +1,9 @@
-//! Material You coordinator task. Single tokio task that:
+//! Material You coordinator: derives a palette from the playing cover and hands it to the UI
+//! thread to paint.
 //!
-//! 1. Subscribes to `view_model_rx` (current artwork path) and `ui::appearance`'s kick
-//!    [`crate::state::Signal`] (theme / variant / style / system-theme changes).
-//! 2. Keeps a cached `(theme_id, dynamic_color_style, theme_variant)`
-//!    snapshot, re-read from `settings.json` only on kick wakes (every
-//!    write to those fields kicks after persisting). On any wake it
-//!    combines the snapshot with the current `os_state` and decides
-//!    whether to generate or clear Material You — view-model wakes (the
-//!    per-emit playback hot path) never touch the filesystem.
-//! 3. CPU-bound extraction + palette generation runs on
-//!    `tokio::task::spawn_blocking`. The source seed is cached in a bounded
-//!    `SeedCache` so prev/next/prev round-trips don't re-quantize the
-//!    same artwork.
-//! 4. Writes `(Palette, accent_hex)` back into `os_state.material_you`
-//!    and hands the result to `repaint_tx` for the UI thread to paint.
-//!
-//! Both inputs are `tokio::sync::watch` receivers, so concurrent bursts
-//! of clicks (e.g. user mashing the variant chip) auto-coalesce — the
-//! coordinator only ever observes the latest state on its next wakeup.
+//! The appearance settings are re-read only on a kick, every write to them kicking after it
+//! persists, so a view-model wake (the per-emit playback path) never touches the filesystem. Both
+//! inputs are `watch` receivers, so a burst of clicks coalesces to the latest state.
 
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -38,14 +24,8 @@ use melodia_core::themes::material3::MATERIAL3;
 use melodia_core::themes::{Palette, SystemColorState};
 use melodia_engine::player::engine::state::PlayerViewModelLight;
 
-/// Spawn the coordinator on the shared task lifecycle so the main shutdown
-/// sequence waits for any in-flight palette generation to settle before the
-/// runtime is torn down.
-///
-/// `repaint_tx` carries fresh `SystemColorState` snapshots to a UI-thread
-/// subscriber installed by `ui::appearance::install`. The coordinator
-/// never touches Slint state directly, keeping `tasks/` free of `ui::*`
-/// imports.
+/// `repaint_tx` carries each snapshot to `ui::appearance::install`'s subscriber, `tasks/` naming no
+/// `ui::*`.
 pub fn spawn(
     spawner: &TaskSpawner,
     state: AppState,
@@ -60,9 +40,7 @@ pub fn spawn(
     });
 }
 
-/// Cached "what we last applied" tuple. The coordinator bails before
-/// `spawn_blocking` if nothing relevant has changed — saves a quantize
-/// round-trip when the kick was triggered by an unrelated setting.
+/// What was last applied, so a kick from an unrelated setting skips the quantize.
 #[derive(Default)]
 struct LastApplied {
     artwork: Option<PathBuf>,
@@ -71,21 +49,14 @@ struct LastApplied {
     theme_id: Option<String>,
 }
 
-/// The three appearance fields `react` consumes, snapshotted from
-/// `settings.json` only on kick wakes. Every write to these fields is
-/// followed by a kick (kick-after-persist convention), so view-model
-/// wakes — the per-emit hot path: volume steps, seeks, play/pause —
-/// reuse the cached copy instead of paying a disk read + JSON parse
-/// per state emit.
+/// The three appearance fields `react` reads, refreshed only on a kick.
 struct AppearanceSnapshot {
     theme_id: String,
     dynamic_color_style: String,
     theme_variant: String,
 }
 
-/// Read the appearance fields off the blocking pool. Returns `None` on a
-/// failed read so the caller can retain its previous snapshot (transient
-/// failure) or bail until the next kick (no snapshot yet).
+/// `None` on a failed read, the caller keeping whatever snapshot it had.
 async fn read_appearance(state: &AppState) -> Option<AppearanceSnapshot> {
     let paths = Arc::clone(&state.paths);
     match tokio::task::spawn_blocking(move || library::settings::get_settings(&paths)).await {
@@ -116,15 +87,9 @@ async fn run(
 ) {
     let mut seed_cache = SeedCache::new();
     let mut last = LastApplied::default();
-
-    // Appearance snapshot, refreshed from disk only on kick wakes (every
-    // theme / variant / style write kicks after persisting). View-model
-    // wakes reuse it, so playback state emits never touch the filesystem.
     let mut appearance = read_appearance(&state).await;
 
-    // Drive once at startup so an app launch with style != "none" picks
-    // up the persisted artwork (queue restore seeds the view model
-    // before this task spawns).
+    // Once at startup, the restored queue having seeded the view model before this spawns.
     react(
         &os_state,
         &mut seed_cache,
@@ -144,8 +109,7 @@ async fn run(
             }
             res = kick_rx.changed() => {
                 if res.is_err() { break; }
-                // Keep the previous snapshot on a transient read failure —
-                // the next kick re-attempts.
+                // A failed read keeps the previous snapshot; the next kick retries.
                 if let Some(fresh) = read_appearance(&state).await {
                     appearance = Some(fresh);
                 }
@@ -165,10 +129,6 @@ async fn run(
     log::debug!("material_you coordinator stopped");
 }
 
-/// Single iteration: combine the cached appearance snapshot with the
-/// latest view-model + `os_state`, decide whether to generate/clear/skip,
-/// and publish the result through `repaint_tx` for the UI-thread
-/// subscriber to apply.
 async fn react(
     os_state: &Arc<RwLock<SystemColorState>>,
     seed_cache: &mut SeedCache,
@@ -178,14 +138,12 @@ async fn react(
     repaint_tx: &watch::Sender<SystemColorState>,
     cover_thumbs: &Arc<CoverThumbs>,
 ) {
-    // No snapshot yet (startup read failed) — nothing sensible to decide
-    // on; the next kick re-reads and re-drives.
+    // No snapshot yet: the startup read failed, and the next kick re-drives.
     let Some(appearance) = appearance else { return };
 
     let style = SchemeStyle::from_id(&appearance.dynamic_color_style);
     let theme_id = appearance.theme_id.clone();
 
-    // Resolve `is_dark` from the user's variant + OS signal.
     let os_theme = os_state.read().theme.clone();
     let is_dark = match appearance.theme_variant.as_str() {
         "dark" => true,
@@ -193,7 +151,6 @@ async fn react(
         _ => os_theme != "light", // "system" or anything unknown → OS says
     };
 
-    // Artwork path off the latest view-model snapshot.
     let artwork = view_model_rx
         .borrow()
         .as_ref()
@@ -201,7 +158,6 @@ async fn react(
         .and_then(|t| t.artwork_path.clone())
         .map(PathBuf::from);
 
-    // Decide.
     let should_clear = theme_id != MATERIAL3.id
         || style == SchemeStyle::None
         || artwork.as_ref().is_none_or(|p| !p.exists());
@@ -226,9 +182,7 @@ async fn react(
 
     let Some(artwork) = artwork else { return };
 
-    // Skip work if nothing relevant changed since the last successful
-    // generate. `material_you` lives on `os_state` so an OS theme tick
-    // that flipped `is_dark` while we were idle is caught here.
+    // `material_you` lives on `os_state`, so an OS theme flip while idle is caught here too.
     if last.artwork.as_ref() == Some(&artwork)
         && last.style == Some(style)
         && last.is_dark == Some(is_dark)
@@ -238,16 +192,10 @@ async fn react(
         return;
     }
 
-    // Reuse the RGB8 thumbnail `CoverThumbs` already decoded for the
-    // now-playing-bar / queue-panel rows rather than opening the artwork a
-    // second time — on large embedded covers the duplicate decode produced a
-    // multi-MB transient that glibc didn't fully return to the OS, surfacing
-    // as a ~30 MiB residual RSS bump whenever the current track was
-    // DnD-imported. Inside the seed cache's closure and inside the blocking
-    // task, both deliberately: a remembered seed needs no buffer at all, and
-    // a miss races `ui::shell::bridge::warm_vm_cover` for the same path, so
-    // the fallback is a full `decode_thumb_buffer` that has no business on a
-    // runtime worker.
+    // Off the RGB8 thumbnail `CoverThumbs` already holds rather than a second decode, whose
+    // transient glibc never fully returned. Inside the seed cache's closure, so a remembered seed
+    // needs no buffer, and on the blocking pool, since a miss races
+    // `ui::shell::bridge::warm_vm_cover` for the path and falls back to a full decode.
     let artwork_for_block = artwork.clone();
     let thumbs = cover_thumbs.clone();
     let mut tmp_cache = std::mem::take(seed_cache);
@@ -294,20 +242,14 @@ fn write_palette(os_state: &Arc<RwLock<SystemColorState>>, palette: Palette, acc
     guard.material_you = Some((palette, accent_hex));
 }
 
-/// Publish the latest `SystemColorState` snapshot for the UI-thread
-/// subscriber to consume. `watch::send` keeps only the most recent value,
-/// so a burst of generations during quick track skips collapses to one
-/// repaint instead of N — exactly the coalescing behaviour the old
-/// `invoke_from_event_loop` hop relied on implicitly.
+/// A `watch`, so a burst of generations during quick skips collapses to one repaint.
 fn publish_repaint(
     repaint_tx: &watch::Sender<SystemColorState>,
     os_state: &Arc<RwLock<SystemColorState>>,
 ) {
     let snapshot = os_state.read().clone();
     if let Err(e) = repaint_tx.send(snapshot) {
-        // Only fails when every receiver has dropped, i.e. the UI is
-        // tearing down. Logged at debug because it's the normal
-        // shutdown path.
+        // Every receiver gone, which is the normal shutdown path.
         log::debug!("material_you: repaint subscriber dropped: {}", describe(&e));
     }
 }

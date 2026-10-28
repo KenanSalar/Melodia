@@ -3326,20 +3326,12 @@ msgid "Version {} Available"
 msgstr "Version {} verfügbar"
 
 #: ui/views/settings/update-section.slint
-msgid "Updates managed by your package manager"
-msgstr "Aktualisierungen werden vom Paketmanager verwaltet"
+msgid "Updates are installed outside Melodia"
+msgstr "Aktualisierungen werden außerhalb von Melodia installiert"
 
 #: ui/views/settings/update-section.slint
-msgid "Re-run the latest .msi installer from the Releases page."
-msgstr "Führen Sie das neueste .msi-Installationsprogramm von der Releases-Seite erneut aus."
-
-#: ui/views/settings/update-section.slint
-msgid "Use brew upgrade melodia."
-msgstr "Verwenden Sie brew upgrade melodia."
-
-#: ui/views/settings/update-section.slint
-msgid "Use sudo dnf update melodia (or your distro equivalent)."
-msgstr "Verwenden Sie sudo dnf update melodia (oder das Äquivalent Ihrer Distribution)."
+msgid "Install the new version the same way you installed this one."
+msgstr "Installieren Sie die neue Version auf dieselbe Weise wie diese."
 
 #: ui/views/settings/update-section.slint
 msgid "Check for Updates"

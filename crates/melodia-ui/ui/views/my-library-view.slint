@@ -24,24 +24,13 @@ import { ArtistDetailBody } from "my-library/artist-detail.slint";
 import { GenreDetailBody } from "my-library/genre-detail.slint";
 import { PlaylistDetailBody } from "my-library/playlist-detail.slint";
 
-// My Library: five tabs over the views that used to be five sidebar entries. This file is the mount
-// sheet — the band, the grid geometry the four card tabs share, which body is on screen, and the
-// two tooltip frames the band and the pills publish anchors for.
-//
-// **The tab index is what routes, not the detail id.** A tab left with its detail open keeps the
-// id, so more than one `*Detail.*-id` can be `>= 0` at once and splitting on the id alone would
-// mount two.
+// My Library's mount sheet. The tab index routes, not the detail id: a tab left with its detail
+// open keeps the id, so several `*Detail.*-id` can be `>= 0` at once.
 export component MyLibraryView inherits Rectangle {
-    // Bumped by the band's `SearchBar`, settled 130 ms later — the list-view shape, where
-    // the cost being debounced is a model rebuild in Rust rather than Slint's own
-    // re-evaluation.
     property <int> filter-tick-pending;
 
-    // **Which of the nine branches is mounted, spelled once.** The body router, the band's
-    // hero facts and the pill rows all read these, because a divergence between any two of
-    // them paints one entity's banner over another's list. Private here rather than on
-    // `MyLibrary`: a binding belongs to the scope it is written in, so deriving it on the
-    // global would make `my-library.slint` the second globals file to import siblings.
+    // Which of the nine branches is mounted, spelled once so the router, the band and the pills
+    // can't disagree. Here rather than on `MyLibrary`, which would then import its siblings.
     property <bool> album-open:
         MyLibrary.tab-idx == MyLibrary.tab-albums && AlbumDetail.album-id >= 0;
     property <bool> artist-open:
@@ -53,29 +42,25 @@ export component MyLibraryView inherits Rectangle {
     property <bool> detail-open:
         root.album-open || root.artist-open || root.genre-open || root.playlist-open;
 
-    // **The four above are false for the whole of a boot restore**, its id landing only when the
-    // fetch behind it does, so the grid the mounted tab would otherwise show paints the wrong page
-    // until it swaps. Each arm carries the tab check the `*-open` arms do, so a grid branch reads
-    // this on its own and reduces to its own view's flag. Songs takes no term, having no detail.
+    // A boot restore's id lands only with its fetch, so until then this keeps the tab's grid from
+    // painting the wrong page. Each arm carries its tab check, so a grid branch reads it alone.
     property <bool> detail-restoring:
         (MyLibrary.tab-idx == MyLibrary.tab-albums && AlbumDetail.restoring)
         || (MyLibrary.tab-idx == MyLibrary.tab-artists && ArtistDetail.restoring)
         || (MyLibrary.tab-idx == MyLibrary.tab-genres && GenreDetail.restoring)
         || (MyLibrary.tab-idx == MyLibrary.tab-playlists && PlaylistDetail.restoring);
 
-    // **The arm the band's hero half paints, lagging the four above by one close.** Those flip
-    // on the frame the id clears, which is the frame the exit morph starts, so the ternaries
-    // below would spend the whole collapse on their last arm. Seeded by the binding and owned
-    // by the handler, `hero-t`'s idiom; the guard is `detail-open` rather than each arm's own
-    // value, which lets a cross-tab drill move them and a close leave all four alone.
+    // The arm the band's hero paints, lagging the four above by one close: those flip on the
+    // frame the exit morph starts, which would spend the whole collapse on the ternaries' last
+    // arm. Seeded by the binding and owned by the handlers, guarded on `detail-open` so a
+    // cross-tab drill moves them and a close leaves them alone.
     property <bool> hero-album: root.album-open;
     property <bool> hero-artist: root.artist-open;
     property <bool> hero-genre: root.genre-open;
     property <bool> hero-playlist: root.playlist-open;
 
-    // **All four on every latch, never one.** The ternaries below test them in order, so an
-    // arm left stale by a previous drill outranks the one actually open for the rest of the
-    // page mount. Latching the set is what keeps "which banner" a single answer.
+    // All four on every latch: the ternaries test them in order, so a stale arm from an earlier
+    // drill would outrank the one actually open.
     function latch-hero() {
         self.hero-album = root.album-open;
         self.hero-artist = root.artist-open;
@@ -83,12 +68,9 @@ export component MyLibraryView inherits Rectangle {
         self.hero-playlist = root.playlist-open;
     }
 
-    // **The idle band's sentence, held across an open** — `hero-*`'s mirror image, guard included.
-    // The band eases it out over the first half of the morph, so a drill has to fade the sentence
-    // that was on screen; bound live it re-reads the arriving tab, whose count is mid-rewind and
-    // then mid-fetch, so the line blanks and repopulates inside the fade. Seeded by the binding,
-    // owned by `latch-count`, which is unguarded so `init` can take ownership on a page mounting
-    // straight onto a grid. The guard is at the two call sites and is `!detail-open`.
+    // The idle band's sentence, held across an open as `hero-*` is: the band fades it over the
+    // morph's first half, and bound live it would re-read the arriving tab's count mid-rewind.
+    // `latch-count` is unguarded so `init` can take ownership; the guard sits at the call sites.
     property <string> live-count:
         MyLibrary.tab-idx == MyLibrary.tab-songs
             ? (Tracks.total-count >= 0
@@ -110,25 +92,17 @@ export component MyLibraryView inherits Rectangle {
         if (!root.detail-open) { root.latch-count(); }
     }
 
-    // **Both latches need a *write* to own their binding, and neither guard fires on a page that
-    // mounts already in the state it holds for.** A view entered straight onto a detail has never
-    // run `latch-hero` — `detail-open` is false on exactly the close that needs the hold — so the
-    // first back would follow the live binding through the whole collapse; `latch-count`'s
-    // complement guard strands a page mounted onto a grid the same way. Writing here moves
-    // nothing: `init` runs after the bindings resolve.
+    // A latch owns its binding only once written, and neither guard fires on a page mounting
+    // straight into the state it holds for: entered onto a detail, the first back would follow the
+    // live binding through the collapse. `init` runs after the bindings resolve, so nothing moves.
     init => {
         root.latch-hero();
         root.latch-count();
     }
 
-    // **May a mounting body animate at all.** The page's own `ViewTransition` is still in flight
-    // when its first body mounts, so a body moving into it is the same diagonal one level up.
-    // `tab-anim-armed` covers every arrival through the bar. The two that don't are armed below:
-    // a drill or close by `DetailArrival`, which leaves out a restore's landing, and a tab move
-    // that isn't a pick by `watched-tab-idx`, a cross-tab drill landing the id and the tab in
-    // **one** tick so `detail-open` never moves. Seeded by the binding and owned by the handlers,
-    // `hero-t`'s idiom; it re-disarms for free on the next entry, and `changed` skips a first
-    // evaluation.
+    // Whether a mounting body may animate, the page's own entrance still being in flight when its
+    // first body mounts. The bar arms it for a pick, `DetailArrival` for a drill or close, and
+    // `watched-tab-idx` for a tab move that isn't a pick.
     property <bool> body-anim-armed: band.tab-anim-armed;
     DetailArrival {
         open: root.detail-open;
@@ -152,11 +126,8 @@ export component MyLibraryView inherits Rectangle {
         if (root.detail-open) { root.latch-hero(); }
     }
 
-    // **The scope the page's one filter box describes changed.** Rust reseats the box from
-    // whichever surface is now mounted: a drill-in finds the detail's needle already
-    // cleared, a back out finds the grid's own still there — so the box can't read empty
-    // over a grid that is still filtered, or hold a grid needle over an unfiltered detail.
-    // Mirrors rather than `changed AlbumDetail.album-id`, which Slint rejects on a global.
+    // The surface under the filter box moved, so Rust reseats the box with that surface's own
+    // filter.
     property <int> watched-album-id: AlbumDetail.album-id;
     changed watched-album-id => { MyLibrary.detail-scope-changed(); }
     property <int> watched-artist-id: ArtistDetail.artist-id;
@@ -166,19 +137,14 @@ export component MyLibraryView inherits Rectangle {
     property <int> watched-playlist-id: PlaylistDetail.playlist-id;
     changed watched-playlist-id => { MyLibrary.detail-scope-changed(); }
 
-    // **A tab move is the other way the surface under the box changes.** A cross-tab drill
-    // and a Mouse-4/5 walk go through `persist-tab-idx` rather than `tab-changed`, so they
-    // don't clear a filter the user is walking back into — but without a reseat, walking
-    // back into a filtered tab re-fetches it through that needle under an empty box. A pick
-    // clears both sides before the change-tracker pass, so `sync_box` finds them equal and
-    // bails. The fade is armed here for those same two arrivals, and for the same reason.
+    // A cross-tab drill or a Mouse-4/5 walk moves the tab without a pick's clear, so it reseats
+    // the box too. A pick clears both sides first, which leaves `sync_box` nothing to do.
     property <int> watched-tab-idx: MyLibrary.tab-idx;
     changed watched-tab-idx => {
         root.body-anim-armed = true;
         MyLibrary.detail-scope-changed();
     }
 
-    // A click anywhere the band or a body doesn't claim gives the filter box up.
     TouchArea {
         clicked => { MyLibrary.blur-search-tick += 1; }
     }
@@ -188,14 +154,10 @@ export component MyLibraryView inherits Rectangle {
         fire() => { MyLibrary.filter-changed(MyLibrary.filter); }
     }
 
-    // One derivation for all four card tabs — mutually exclusive, same card shape. Measured
-    // off the body, whose width the layout fixes independently of the cards inside it. The
-    // gutter is declared here and handed to both the geometry and the grids, an `in`
-    // property not being readable back from outside the component declaring it.
+    // Declared here for the geometry and the grids both, an `in` property being unreadable from
+    // outside the component declaring it.
     property <length> grid-gap: 20px;
 
-    // Cards on the mounted grid's only row, the one thing the body width can't answer for itself.
-    // Songs is a track list, so it falls through to the width.
     property <int> grid-lone-row-cards:
         MyLibrary.tab-idx == MyLibrary.tab-albums
             ? (Albums.grid-rows.length == 1 ? Albums.grid-rows[0].albums.length : -1)
@@ -214,11 +176,9 @@ export component MyLibraryView inherits Rectangle {
         lone-row-cards: root.grid-lone-row-cards;
     }
 
-    // **The count goes to all four, the re-chunk only to the tab on screen.** Writing all
-    // four is what stops an unmounted grid entering at a stale column count — its fetch
-    // reads the property, not the callback. Invoking only the mounted one is what stops a
-    // resize rebuilding three models nobody is looking at. The gate is the tab and not
-    // the detail id: a detail closing has to find its grid already chunked to fit.
+    // The count goes to all four, so no grid's fetch enters at a stale one; the re-chunk only to
+    // the tab on screen. Gated on the tab rather than the detail id, so a detail closing finds its
+    // grid already chunked to fit.
     GridColumnsSync {
         computed-cols: geom.cols;
         seed(c) => {
@@ -237,15 +197,12 @@ export component MyLibraryView inherits Rectangle {
 
     VerticalLayout {
         band := LibraryTabBand {
-            // Inline literals: `@tr` folds msgids at codegen, so a Rust-seeded `[string]`
-            // renders untranslated. Order matches `MyLibrary.tab-*`.
+            // Order matches `MyLibrary.tab-*`.
             tab-labels: [@tr("Songs"), @tr("Albums"), @tr("Artists"), @tr("Genres"), @tr("Playlists")];
             tab-icons: ["music_note", "album", "person", "theater_comedy", "playlist_play"];
             tab-idx <=> MyLibrary.tab-idx;
-            // The bodies read the direction off `band.tab-enter-from`, never through
-            // `Nav.pending-enter-from` — that global belongs to the sidebar's own
-            // transition, and a write here would leave a stale `right`/`left` for
-            // whichever *page* mounts next.
+            // The bodies take their direction off `band.tab-enter-from`, never
+            // `Nav.pending-enter-from`, which a write here would leave stale for the next page.
             tab-selected(i) => { MyLibrary.tab-changed(i); }
 
             filter <=> MyLibrary.filter;
@@ -254,15 +211,10 @@ export component MyLibraryView inherits Rectangle {
 
             pill-natural-w: pill-ruler.preferred-width;
 
-            // The **latched** sentence, not the live ternary — see `live-count` above for
-            // what a drill does to a line that re-reads the arriving tab mid-fade. Every
-            // count in it is `>= 0`-guarded, and that is not optional: all five hold
-            // `ui::tab_bar::UNFETCHED_COUNT` until fetched and again after a tab leave,
-            // and a bare `-1` interpolates into the plural as "-1 albums".
+            // The latched sentence, not `live-count`.
             count-text: root.count-line;
 
-            // A detail's own list comes first, so the drill-in states what the box now
-            // filters. Artist Detail is the one that filters two things at once.
+            // A detail's arms first, so a drill-in states what the box now filters.
             filter-placeholder:
                 root.artist-open ? @tr("Filter tracks & albums…")
                 : root.detail-open ? @tr("Filter tracks…")
@@ -272,13 +224,10 @@ export component MyLibraryView inherits Rectangle {
                 : MyLibrary.tab-idx == MyLibrary.tab-genres ? @tr("Filter genres…")
                 : @tr("Filter playlists…");
 
-            // The band morphs into the open detail's banner, so every fact below is a four-arm
-            // ternary and no detail body owns a title, tile or chip strip of its own.
-            // **The hero facts read `hero-*`, everything else reads `*-open`**: which banner is
-            // painted has to survive the id clear; which body is mounted must not.
+            // The hero facts read `hero-*` and everything else `*-open`: which banner is painted
+            // has to survive the id clear, which body is mounted must not.
             detail-open: root.detail-open;
             back-clicked => { MyLibrary.back(); }
-            // The teardown the band's collapse defers — see its `hero-collapsed`.
             hero-collapsed => { MyLibrary.hero-collapsed(); }
 
             title:
@@ -286,8 +235,6 @@ export component MyLibraryView inherits Rectangle {
                 : root.hero-artist ? ArtistDetail.artist.name
                 : root.hero-genre ? GenreDetail.genre.name
                 : PlaylistDetail.playlist.name;
-            // Album's artist and Playlist's description; the other two heroes state
-            // nothing under the title and the band collapses the row on "".
             subtitle:
                 root.hero-album ? AlbumDetail.album.artist_name
                 : root.hero-playlist ? PlaylistDetail.playlist.description
@@ -299,9 +246,8 @@ export component MyLibraryView inherits Rectangle {
                 : root.hero-artist ? ArtistDetail.artist.image_path
                 : root.hero-playlist ? PlaylistDetail.playlist.artwork_path
                 : "";
-            // Genre Detail owns no cover, and Slint has no empty-`image` literal to fall
-            // through to — so the band gates on `artwork-path` instead, which is `""` on
-            // that arm. See its `has-cover`.
+            // Genre owns no cover and Slint has no empty `image`, so its arm lands on a
+            // sibling's and the band gates on `artwork-path` instead.
             cover:
                 root.hero-album ? AlbumDetail.cover
                 : root.hero-artist ? ArtistDetail.cover
@@ -312,11 +258,8 @@ export component MyLibraryView inherits Rectangle {
                 : root.hero-artist ? "person"
                 : root.hero-genre ? "theater_comedy"
                 : "playlist";
-            // Genres have no intrinsic image, so the tile paints from the two name-hashed
-            // stops on the row and matches the grid card exactly — genre recognition
-            // survives the drill-in. The wide backdrop is the *dimmer* pair, written into
-            // `HeroBackdrop.floor-*` by Rust's `open_genre`, which measures it and solves
-            // the scrim and foreground against it as an artwork-bearing detail does.
+            // The grid card's own name-hashed stops, so a genre stays recognisable across the
+            // drill-in.
             tile-bg: root.hero-genre
                 ? @linear-gradient(135deg,
                     GenreDetail.genre.tile_color_1,
@@ -326,11 +269,8 @@ export component MyLibraryView inherits Rectangle {
                 ? #ffffff.with-alpha(0.3)
                 : HeroBackdrop.placeholder;
 
-            // **`has-blur` is the gate, not the slot.** `GenreDetail` declares no blur
-            // quartet at all, and Slint has no empty-`image` literal to fall through to —
-            // so the Genre arm lands on a sibling's slot and `HeroBlurBackdrop` paints
-            // only its gradient floor, which is exactly what a procedural backdrop wants.
-            // Don't "fix" this by requiring the quartet of every detail.
+            // `has-blur` is the gate, not the slot: Genre declares no blur quartet, so its arm
+            // lands on a sibling's and paints only the floor, as a procedural backdrop should.
             blur-a:
                 root.hero-artist ? ArtistDetail.blur-img-a
                 : root.hero-playlist ? PlaylistDetail.blur-img-a
@@ -349,10 +289,7 @@ export component MyLibraryView inherits Rectangle {
                 : root.hero-playlist ? PlaylistDetail.has-blur
                 : false;
 
-            // The band's `@children` slot, in one piece. See `tab-pills.slint` for why
-            // the nine rows are a component instead of nine `if`s written here; the
-            // predicates come from this sheet so the pills and the body can't disagree
-            // about which branch is up.
+            // `tab-pills.slint` says why the rows are a component rather than `if`s here.
             pills := MyLibraryTabPills {
                 album-open: root.album-open;
                 artist-open: root.artist-open;
@@ -366,14 +303,9 @@ export component MyLibraryView inherits Rectangle {
             vertical-stretch: 1;
             clip: true;
 
-            // The band above is this page's spatial transition, so nothing here may move while
-            // it morphs — not even on the same axis, the two curves disagreeing enough that
-            // the sum briefly runs the wrong way. That is `slide: !band.morphing`, leaving the
-            // cross-fade Material 3 wants inside a container transform.
-            //
-            // Where the band stands still, the five tab bodies take the bar's left/right like
-            // the sibling pages; a detail is not a move along the bar, so the four keep
-            // `below`. `body-anim-armed` holds all nine still during the page's own entrance.
+            // Nothing slides while the band morphs, not even on the same axis, the two curves
+            // disagreeing enough that the sum runs the wrong way. A detail isn't a move along
+            // the bar, so the four keep `above`.
             if MyLibrary.tab-idx == MyLibrary.tab-songs: ViewTransition {
                 width: parent.width;
                 height: parent.height;
@@ -382,9 +314,6 @@ export component MyLibraryView inherits Rectangle {
                 slide: !band.morphing;
                 MyLibrarySongsTab { width: 100%; height: 100%; }
             }
-            // Each grid tab swaps grid ↔ detail on the predicate above, -1 being the
-            // grid — the same split these four had while they were separate sidebar
-            // sections, now stated once so the band and the pills follow it too.
             if MyLibrary.tab-idx == MyLibrary.tab-albums && !root.album-open && !root.detail-restoring: ViewTransition {
                 width: parent.width;
                 height: parent.height;
@@ -480,9 +409,8 @@ export component MyLibraryView inherits Rectangle {
         }
     }
 
-    // The pill row with every label shown, measured and never drawn: the band weighs the room
-    // beside the cover against it, the drawn row no longer reporting it once its labels drop. The
-    // same four predicates as the live row, so the two can't measure different branches.
+    // Measured, never drawn: the band weighs the room beside the cover against the labelled width,
+    // which the drawn row stops reporting once its labels close.
     pill-ruler := MyLibraryTabPills {
         x: 0px;
         y: 0px;
@@ -493,10 +421,7 @@ export component MyLibraryView inherits Rectangle {
         playlist-open: root.playlist-open;
     }
 
-    // Both frames are on a layer of their own, and for one reason: their hosts sit in the
-    // band, and Slint paints in declaration order, so anything the band owns is covered by
-    // the body underneath. Each publishes the rect it derives from the hovered element, so
-    // a tab or a pill that moves under a parked pointer keeps its tooltip anchored.
+    // Last, since the body is declared after the band and would cover a pill the band drew.
     TooltipFrame {
         x: band.absolute-position.x - root.absolute-position.x + band.tip-x;
         y: band.absolute-position.y - root.absolute-position.y + band.tip-y;

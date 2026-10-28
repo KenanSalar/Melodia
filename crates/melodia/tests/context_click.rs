@@ -11,7 +11,8 @@
 use std::collections::BTreeSet;
 
 use melodia_testkit::{
-    MIN_SLINT_SOURCES, UI_DIR, binding_value, block_after, blocks_named, stripped_sources,
+    MIN_SLINT_SOURCES, UI_DIR, binding_value, block_after, blocks_named, outside_strings,
+    stripped_sources,
 };
 
 /// The button every right-click menu answers to.
@@ -108,20 +109,26 @@ fn is_id_char(ch: char) -> bool {
 fn top_level(body: &str) -> String {
     let mut out = String::with_capacity(body.len());
     let mut depth = 0usize;
-    let mut in_string = false;
-    let mut escaped = false;
-    for ch in body.chars() {
-        let outer = depth == 0;
-        match ch {
-            '"' if !escaped => in_string = !in_string,
-            '{' if !in_string => depth += 1,
-            '}' if !in_string => depth = depth.saturating_sub(1),
+    let mut kept_from = 0;
+    for (at, byte) in outside_strings(body.as_bytes()) {
+        match byte {
+            b'{' => {
+                if depth == 0 {
+                    out.push_str(&body[kept_from..at]);
+                }
+                depth += 1;
+            }
+            b'}' if depth > 0 => {
+                depth -= 1;
+                if depth == 0 {
+                    kept_from = at + 1;
+                }
+            }
             _ => {}
         }
-        escaped = in_string && ch == '\\' && !escaped;
-        if outer && depth == 0 {
-            out.push(ch);
-        }
+    }
+    if depth == 0 {
+        out.push_str(&body[kept_from..]);
     }
     out
 }
@@ -146,10 +153,10 @@ fn only_the_shared_predicate_names_the_right_button() {
     );
 }
 
-/// An item lit by its own `has-hover` goes dark under the menu it raised (`slint-pitfalls.md`),
-/// and nothing marks what the menu is for. A host folds `is-open` into the one binding reading
-/// its raw hover, so a second raw read is a hover binding that went around it. Neither miss shows
-/// until a menu is open.
+/// An item lit by its own `has-hover` goes dark under the menu it raised, an open popup taking the
+/// hover, and nothing marks what the menu is for. A host folds `is-open` into the one binding
+/// reading its raw hover, so a second raw read is a hover binding that went around it. Neither miss
+/// shows until a menu is open.
 #[test]
 fn every_item_menu_host_reads_whether_its_menu_is_open() {
     let sources = stripped_sources(UI_DIR, "slint", MIN_SLINT_SOURCES);

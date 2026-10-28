@@ -3294,20 +3294,12 @@ msgid "Version {} Available"
 msgstr "Đã có phiên bản {}"
 
 #: ui/views/settings/update-section.slint
-msgid "Updates managed by your package manager"
-msgstr "Bản cập nhật do trình quản lý gói của bạn quản lý"
+msgid "Updates are installed outside Melodia"
+msgstr "Bản cập nhật được cài đặt bên ngoài Melodia"
 
 #: ui/views/settings/update-section.slint
-msgid "Re-run the latest .msi installer from the Releases page."
-msgstr "Chạy lại trình cài đặt .msi mới nhất từ trang Releases."
-
-#: ui/views/settings/update-section.slint
-msgid "Use brew upgrade melodia."
-msgstr "Dùng lệnh brew upgrade melodia."
-
-#: ui/views/settings/update-section.slint
-msgid "Use sudo dnf update melodia (or your distro equivalent)."
-msgstr "Dùng lệnh sudo dnf update melodia (hoặc lệnh tương đương trên bản phân phối của bạn)."
+msgid "Install the new version the same way you installed this one."
+msgstr "Hãy cài đặt phiên bản mới theo cùng cách bạn đã cài đặt phiên bản này."
 
 #: ui/views/settings/update-section.slint
 msgid "Check for Updates"

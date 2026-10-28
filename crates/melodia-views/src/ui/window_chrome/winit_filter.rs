@@ -1,41 +1,7 @@
-//! Winit `WindowEvent` filter installed by `window_chrome::install`.
-//!
-//! Ten reasons to subscribe:
-//!
-//! 1. **`MouseInput { Pressed, Left }`** over a `ResizeRing` grab or a drag region: an
-//!    OS-level resize or window move plus `PreventDefault`, bypassing the TouchArea-grab
-//!    issue the parent module's docs describe. The titlebar's double press toggles maximize
-//!    instead, Slint never seeing the pair (`drag_region`). `CursorMoved` is mirrored for it, a
-//!    press carrying no position.
-//! 2. **`MouseInput { Pressed, Back | Forward }`** — Mouse-4 / Mouse-5 into the nav
-//!    history, gated on no overlay being open so the buttons don't fight its input
-//!    context.
-//! 3. **`Resized`** — re-read `is_maximized`, so the maximize/restore icon stays in sync
-//!    with Win+↑ and window-tile shortcuts that bypass our buttons. Also the two frame readings:
-//!    the step a decoration change costs the client, which the miniplayer's exit edge allows for
-//!    once it drops the frame, and on Win32 the invisible borders it keeps transparent so the
-//!    window's edges stay put.
-//! 4. **`Focused(bool)`** — mirror OS focus into `Theme.window-focused`, and use the
-//!    transition to reconcile the tray-bridge's visibility shadow: raise on focus, ask
-//!    the OS about a minimize on focus loss (see [`schedule_minimize_probe`]).
-//! 5. **`DragEntered` / `DragMoved` / `DragDropped` / `DragLeft`**, the vendored winit fork's
-//!    file drag. Slint 1.18's winit backend delivers no cross-app drop, so this is the only path a
-//!    file drop arrives through, and the pointer each one carries is what routes it. See
-//!    [`file_drop`].
-//! 6. **`MouseWheel`**, for a nested `ListView` that swallows the wheel at its scroll edge. See
-//!    [`route_wheel`].
-//! 7. **`RedrawRequested`** and **`Moved`** — the Slint tick Win32's modal resize-and-move
-//!    loop parks winit out of; see `parked_loop`.
-//! 8. **`ThemeChanged`**, Windows only: a light/dark flip for a theme on its System
-//!    variant, re-read by `ui::appearance` rather than taken from the event, whose theme
-//!    also folds in high contrast, and a cue for the tray icon to re-read its taskbar.
-//! 9. **`Resized`**, **`CursorMoved`**, **`CursorEntered`** and **`MouseInput`** together, for
-//!    where a resize begins and where it is let go, which no one event reports. See
-//!    `resize_release`.
-//! 10. **`MouseInput { Pressed }`**, any button and whoever takes it: whether it landed on the
-//!     queue panel, which makes Escape, Ctrl+A and Delete the queue's, and a disarm of what an
-//!     in-window drag would carry, which **`Touch { Started }`** makes too, standing every drag
-//!     down until a mouse presses again. See [`claim_queue_keys`] and [`disarm_drag`].
+//! The winit `WindowEvent` filter, for what Slint sees too late or not at all: a left press the OS
+//! has to take over as a move or resize, a press a child took first, Mouse-4/5, the vendored fork's
+//! file drags, a wheel a nested `ListView` would swallow, and the tick a Win32 drag parks. Each arm
+//! argues itself at its handler.
 
 use std::cell::Cell;
 use std::path::PathBuf;
@@ -65,21 +31,14 @@ use super::geometry;
 use super::parked_loop;
 use super::resize_release::ResizeWatch;
 
-/// How long to wait after a focus loss before asking whether it was a minimize.
-///
-/// The window manager sets the minimized state and drops focus at about the same time
-/// and not reliably in that order — X11 publishes `_NET_WM_STATE_HIDDEN` on its own
-/// event stream, Win32 sends `WM_ACTIVATE` and `WM_SIZE` independently. Asking a moment
-/// later sidesteps the ordering question, for one deferred timer per focus loss.
+/// How long after a focus loss to ask whether it was a minimize: the WM sets the state and drops
+/// focus in no reliable order (X11 publishes `_NET_WM_STATE_HIDDEN` on its own stream, Win32 sends
+/// `WM_ACTIVATE` and `WM_SIZE` independently).
 const MINIMIZE_PROBE_DELAY: Duration = Duration::from_millis(250);
 
-/// Ask the OS whether a focus loss was really a minimize, and drop the visibility shadow
-/// if it was — bringing a minimize we didn't drive (the native titlebar's button, a
-/// taskbar click, "show desktop") to the same gates our own button reaches.
-///
-/// `winit::Window::is_minimized` answers `None` on Wayland, the protocol never telling a
-/// client it was minimized, so that case is left as it was and `ui::visualizer::pulse`
-/// covers it.
+/// Drops the visibility shadow if a focus loss was a minimize Melodia didn't drive (the native
+/// titlebar's button, the taskbar, "show desktop"). Wayland never tells a client it was minimized,
+/// so there `ui::visualizer::pulse` covers it.
 fn schedule_minimize_probe(weak: slint::Weak<AppWindow>) {
     slint::Timer::single_shot(MINIMIZE_PROBE_DELAY, move || {
         let Some(ui) = weak.upgrade() else { return };
@@ -90,22 +49,16 @@ fn schedule_minimize_probe(weak: slint::Weak<AppWindow>) {
     });
 }
 
-/// What the `MouseWheel` arm does with one event.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum WheelRoute {
-    /// Into the mounted composite view's own scroll math.
     Composite,
-    /// Leave it to Slint.
     Native,
 }
 
-/// Decides whether one wheel event belongs to the mounted composite view, whose nested
-/// `ListView` would otherwise swallow it at its scroll edge (argued at `CompositeScroll` in
-/// `globals/shell.slint`). Horizontal-dominant wheel stays native, that axis belonging to the
-/// strips' own scrollers.
-///
-/// Everything else reaches Slint as winit sent it. A touchpad gesture tracks the fingers and
-/// flings only when Slint sees its phases, so nothing here may re-send one.
+/// Sends vertical-dominant wheel over the mounted composite view to its own scroll math, its nested
+/// `ListView` otherwise swallowing it at the scroll edge (argued at `CompositeScroll` in
+/// `globals/shell.slint`). The rest reaches Slint as winit sent it: a touchpad gesture flings only
+/// when Slint sees its phases, so nothing here may re-send one.
 fn route_wheel(composite_hovered: bool, overlay_open: bool, dx: f32, dy: f32) -> WheelRoute {
     if composite_hovered && !overlay_open && dy != 0.0 && dy.abs() >= dx.abs() {
         return WheelRoute::Composite;
@@ -113,9 +66,8 @@ fn route_wheel(composite_hovered: bool, overlay_open: bool, dx: f32, dy: f32) ->
     WheelRoute::Native
 }
 
-/// Hands a left press to the OS as a window move or resize. A failure is logged and left at that:
-/// macOS answers `NotSupported` for a resize and resizes a borderless window at its own edges, and
-/// an unsupported move leaves the window where it is.
+/// Hands a left press to the OS as a window move or resize. A failure is only logged: macOS answers
+/// `NotSupported` for a resize and resizes a borderless window at its own edges.
 fn start_os_drag(
     w: &slint::Window,
     what: &str,
@@ -128,8 +80,7 @@ fn start_os_drag(
     });
 }
 
-/// The conversion the Slint backend makes for its own copy of a pointer event, so the two can't
-/// disagree.
+/// The Slint backend's own conversion, so the two can't disagree.
 fn to_logical(w: &slint::Window, position: PhysicalPosition<f64>) -> LogicalPosition {
     let l = position.to_logical::<f32>(f64::from(w.scale_factor()));
     LogicalPosition::new(l.x, l.y)
@@ -138,9 +89,7 @@ fn to_logical(w: &slint::Window, position: PhysicalPosition<f64>) -> LogicalPosi
 /// What the pointer is over that turns a left press into an OS window operation, each kept in
 /// step with Slint hover by a `WindowChrome` callback.
 pub(super) struct PressTargets {
-    /// Which drag region, if any.
     pub(super) drag_region: Rc<Cell<DragRegion>>,
-    /// Over one of `ResizeRing`'s grabs, and which way it resizes.
     pub(super) resize: Rc<Cell<Option<ResizeDirection>>>,
 }
 
@@ -148,7 +97,7 @@ pub(super) fn install(app: &AppWindow, state: &AppState, targets: PressTargets) 
     let PressTargets { drag_region, resize } = targets;
     let weak = app.as_weak();
     let state = state.clone();
-    // Where the pointer is, for the titlebar's double press below.
+    // A press carries no position, so the double press reads the last move's.
     let mut cursor_pos = LogicalPosition::default();
     let mut double_press = DoublePress::default();
     let resize_watch = ResizeWatch::new(app.as_weak());
@@ -196,9 +145,7 @@ pub(super) fn install(app: &AppWindow, state: &AppState, targets: PressTargets) 
                 ..
             } => nav_button(&weak, &state, *button),
             WindowEvent::Resized(_) => on_resized(w, &weak),
-            // X11/Win32/macOS deliver these. Wayland never does, a client there not knowing its
-            // own position: position restore is a no-op there anyway, but a drag pressed again
-            // inside the double-press interval still toggles maximize.
+            // Never on Wayland, so there a press straight after a move drag can still double it.
             WindowEvent::Moved(_) => {
                 double_press.moved();
                 let _ = w.with_winit_window(|ww| {
@@ -211,6 +158,8 @@ pub(super) fn install(app: &AppWindow, state: &AppState, targets: PressTargets) 
                 EventResult::Propagate
             }
             WindowEvent::Focused(focused) => on_focus(&weak, *focused),
+            // Re-read by `ui::appearance` rather than taken from the event, whose theme folds in
+            // high contrast.
             #[cfg(target_os = "windows")]
             WindowEvent::ThemeChanged(_) => {
                 let _ = weak.upgrade_in_event_loop(|ui| {
@@ -237,9 +186,8 @@ pub(super) fn install(app: &AppWindow, state: &AppState, targets: PressTargets) 
                 EventResult::Propagate
             }
             WindowEvent::MouseWheel { delta, .. } => on_mouse_wheel(w, &weak, *delta),
-            // The filter runs ahead of Slint's own dispatch, so the last `Resized` has already
-            // landed its size and `draw()` has not run yet: a handler firing here sees the frame
-            // it is about to be painted into.
+            // Ahead of Slint's dispatch, the last `Resized` has landed its size and `draw()` hasn't
+            // run, so a handler firing here sees the frame it's about to be painted into.
             WindowEvent::RedrawRequested => {
                 #[cfg(target_os = "windows")]
                 parked_loop::pump();
@@ -260,7 +208,6 @@ fn claim_queue_keys(weak: &slint::Weak<AppWindow>) {
     queue.set_keys_owned(queue.get_shown() && queue.get_pointer_in());
 }
 
-/// What a press came from, which decides whether it can start a drag.
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum Pointer {
     Mouse,
@@ -268,12 +215,9 @@ enum Pointer {
 }
 
 /// Empties what an in-window drag would carry, ahead of Slint's dispatch, so only the row this
-/// press lands on can arm it. A list's `DragArea` starts a drag from any press it contains, a gap
-/// between rows or a row's own button included, and no element sees all of those, so without this
-/// such a drag would carry the last row clicked. Here for the reason [`claim_queue_keys`] is.
-///
-/// It also says whether the press is a touch, and every `DragSource` stands down for one, so the
-/// list under a finger pans rather than the two fighting over the gesture.
+/// press lands on can arm it: a list's `DragArea` starts a drag from any press inside it, a gap or
+/// a row's button included, and without this would carry the last row clicked. A touch also stands
+/// every `DragSource` down, so the list under a finger pans rather than fighting it.
 fn disarm_drag(weak: &slint::Weak<AppWindow>, pointer: Pointer) {
     let Some(ui) = weak.upgrade() else { return };
     let drag = ui.global::<Drag>();
@@ -300,9 +244,8 @@ fn drag_press(
     EventResult::PreventDefault
 }
 
-/// Mouse-4 / Mouse-5 into the nav history. With an overlay up we `Propagate` instead, so Slint
-/// keeps its own input semantics — Esc and F already close Now Playing, and the dialog backdrop
-/// catches the dismissing click.
+/// Mouse-4/5 into the nav history, left to Slint while an overlay is up: Esc and F already close
+/// Now Playing, and the dialog backdrop takes the dismissing click.
 fn nav_button(weak: &slint::Weak<AppWindow>, state: &AppState, button: MouseButton) -> EventResult {
     let Some(ui) = weak.upgrade() else {
         return EventResult::Propagate;
@@ -316,14 +259,10 @@ fn nav_button(weak: &slint::Weak<AppWindow>, state: &AppState, button: MouseButt
 }
 
 fn on_resized(w: &slint::Window, weak: &slint::Weak<AppWindow>) -> EventResult {
-    // Into the live mirror while the winit window is still alive: shutdown
-    // reads the mirror, `with_winit_window` answering `None` once
-    // the event loop has returned.
     let (maximized, frame, margins) = w
         .with_winit_window(|ww| {
             let reading = geometry::WindowReading::take(ww);
             geometry::record(ww, reading);
-            // One-shot, on the first (synthetic, post-map) `Resized` only.
             geometry::ensure_on_screen(ww, reading);
             (
                 reading.is_maximized(),
@@ -332,11 +271,9 @@ fn on_resized(w: &slint::Window, weak: &slint::Weak<AppWindow>) -> EventResult {
             )
         })
         .unwrap_or((false, None, None));
-    // Synchronous, where everything below is posted: this filter runs ahead of Slint's
-    // own handling, so the size that arrives with this event is the first thing
-    // `MiniPlayerSwitch` measures against the exit edge. Posted, the allowance for the
-    // frame it has just dropped lands a beat after the decision that needed it, and the
-    // miniplayer swaps straight back out of the size the drop grew it to.
+    // Synchronous, unlike the rest: the filter runs ahead of Slint, so this size is the first
+    // `MiniPlayerSwitch` measures against the exit edge. Posted, the allowance lands after the
+    // decision that needed it and the miniplayer swaps straight back out.
     if let Some(frame) = frame
         && let Some(ui) = weak.upgrade()
     {
@@ -352,30 +289,24 @@ fn on_resized(w: &slint::Window, weak: &slint::Weak<AppWindow>) -> EventResult {
             chrome.set_frame_margin_right(margins.right);
             chrome.set_frame_margin_bottom(margins.bottom);
         }
-        // The cover tiers size themselves against the window, so this is the edge
-        // that re-derives them — see the handler in `boot::ui_setup`.
+        // The cover tiers size against the window (`boot::ui_setup`'s handler).
         chrome.invoke_display_changed();
     });
     EventResult::Propagate
 }
 
 fn on_focus(weak: &slint::Weak<AppWindow>, focused: bool) -> EventResult {
-    // `Focused(false)` alone is ambiguous, so ask the OS which — but only
-    // while we still believe the window is up: a tray hide and our own
-    // minimize button both lower the shadow first, and on X11 the answer
-    // costs a round-trip on the UI thread.
+    // Only while the shadow says the window is up: a tray hide and our minimize button lower it
+    // first, and on X11 the probe is a round trip on the UI thread.
     if !focused && crate::ui::shell::tray_bridge::is_window_visible() {
         schedule_minimize_probe(weak.clone());
     }
     let _ = weak.upgrade_in_event_loop(move |ui| {
         ui.global::<Theme>().set_window_focused(focused);
-        // Focus implies the surface is visible, covering the taskbar-restore
-        // path: the WM un-minimizes without going through any of our
-        // callbacks, so the shadow would stay stuck `false`.
+        // A taskbar restore un-minimizes through none of our callbacks.
         if focused {
             crate::ui::shell::tray_bridge::set_window_visible(&ui, true);
-            // The theme first: its repaint moves the palette the border's neutral is
-            // mixed from.
+            // The theme first: its repaint moves the palette the border's neutral is mixed from.
             #[cfg(target_os = "windows")]
             {
                 ui.global::<melodia_ui::WindowChrome>().invoke_recheck_system_theme();
@@ -413,13 +344,9 @@ fn on_file_drop(
     EventResult::Propagate
 }
 
-/// The OS / WM close path — the custom-titlebar button routes through
-/// `WindowChrome.on_close_window` instead. Always `PreventDefault` and act
-/// explicitly: the loop runs under `run_event_loop_until_quit`, where
-/// `CloseRequested` no longer auto-quits. The close-to-tray hide is deferred,
-/// running it inside a `WindowEvent` dispatch tripping Slint's "references to
-/// the window still exist" warning; `should_hide_to_tray` is false with no
-/// tray active, so this can't strand the user.
+/// The OS's close; the custom titlebar's button goes through `WindowChrome.close-window` instead.
+/// Under `run_event_loop_until_quit` a close no longer quits by itself. The tray hide is posted:
+/// run inside a `WindowEvent` dispatch, it trips Slint's "references to the window still exist".
 fn on_close_requested(weak: &slint::Weak<AppWindow>) -> EventResult {
     if crate::ui::shell::tray_bridge::should_hide_to_tray() {
         if let Err(e) = weak.upgrade_in_event_loop(|ui| {
@@ -433,8 +360,7 @@ fn on_close_requested(weak: &slint::Weak<AppWindow>) -> EventResult {
     EventResult::PreventDefault
 }
 
-/// Routing argued at [`route_wheel`]; the delta conversion mirrors the Slint
-/// winit backend exactly.
+/// The delta conversion is the Slint backend's, so a composite scroll moves as a native one does.
 fn on_mouse_wheel(
     w: &slint::Window,
     weak: &slint::Weak<AppWindow>,
@@ -451,17 +377,13 @@ fn on_mouse_wheel(
         return EventResult::Propagate;
     };
     let cs = ui.global::<CompositeScroll>();
-    // `hovered` can be stale-true where an overlay opened over a composite
-    // region with no pointer move, Slint clearing `has-hover` only on the
-    // next `MouseEvent::Exit`. Mirrors the Mouse-4/5 arm's own gate.
+    // `hovered` stays true under an overlay opened without a pointer move, Slint clearing
+    // `has-hover` only on the next exit.
     let overlay_open = crate::ui::nav_history::overlay_open(&ui);
     match route_wheel(cs.get_hovered(), overlay_open, dx, dy) {
         WheelRoute::Composite => {
-            // Accumulate rather than overwrite: the `changed wheel-tick`
-            // handler fires at most once per loop iteration, so several
-            // events before a re-eval would collapse to the last delta and
-            // under-scroll a fast flick. The view zeroes `wheel-dy` after
-            // applying, so this only sums within one un-applied frame.
+            // Summed, not overwritten: the `changed wheel-tick` handler runs at most once per loop
+            // pass, so a fast flick would collapse to its last delta. The view zeroes `wheel-dy`.
             cs.set_wheel_dy(cs.get_wheel_dy() + dy);
             cs.set_wheel_tick(cs.get_wheel_tick().wrapping_add(1));
             // Nothing paints either property, so nothing else asks for the

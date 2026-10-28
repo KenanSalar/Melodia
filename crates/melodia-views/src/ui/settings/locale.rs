@@ -1,18 +1,7 @@
-//! Language picker wiring for the Settings page.
-//!
-//! [`slint::select_bundled_translation`] is the source of truth for the active locale —
-//! one thread-local switch flipping every `@tr(...)` in the compiled tree on the next
-//! frame — so the `Settings` global carries only a `language-idx`.
-//!
-//! `install_locale` populates the name and code lists from
-//! [`melodia_core::entities::locale::SUPPORTED_LOCALES`] and seeds the index from the persisted
-//! code; `wire_language_changed` resolves a click back to a code, calls
-//! `select_bundled_translation` synchronously, updates the [`PersistedLocale`] shadow
-//! and spawns the disk write. Boot makes the same call once before `app.show()`, so
-//! the first frame already paints in the persisted language.
-//!
-//! Native-name labels are always rendered in their own script, never translated — the
-//! universal convention for language pickers.
+//! The language picker. [`slint::select_bundled_translation`] is the source of truth for the
+//! active locale, one switch re-rendering every `@tr` on the next frame, so `Settings` carries
+//! only a `language-idx`. Boot makes the same call before `app.show()`, so the first frame paints
+//! in the persisted language. Each name is in its own script and never translated.
 
 use std::rc::Rc;
 use std::sync::Arc;
@@ -52,11 +41,9 @@ const _: () = assert!(
     "LOCALE_NATIVE_NAMES must stay 1:1 with SUPPORTED_LOCALES"
 );
 
-/// Synchronous in-memory shadow of `settings.locale`, updated by the language-changed
-/// callback before it spawns the disk write —
-/// [`crate::ui::appearance::PersistedAccent`]'s shape, and the root `CLAUDE.md`'s
-/// sibling-callback rule. No sibling reads it yet; it is what stops the next one racing
-/// `read_settings` against an in-flight `mutate_settings`.
+/// The synchronous shadow of `settings.locale`, [`crate::ui::appearance::PersistedAccent`]'s shape:
+/// a sibling callback reading the field off disk can land before an in-flight write and read the
+/// old locale. No sibling reads it yet; it stops the next one racing that write.
 type PersistedLocale = Arc<parking_lot::Mutex<String>>;
 
 /// Hydrate the language lists, seed `language-idx` from the persisted locale, and wire
@@ -105,29 +92,21 @@ fn wire_language_changed(ui: &AppWindow, state: &AppState, shadow: PersistedLoca
             return;
         };
 
-        // Synchronous switch — re-renders every `@tr(...)` on the next
-        // paint. Idempotent and cheap; no need to short-circuit on equal
-        // current value.
+        // Idempotent and cheap, so an unchanged pick isn't short-circuited.
         if let Err(e) = slint::select_bundled_translation(code) {
             log::warn!("select_bundled_translation({code}): {}", describe(&e));
         }
 
-        // The switch above reaches every live `@tr` binding and nothing Rust rendered
-        // through a trampoline and stored. The band's chips are the one such surface that
-        // can outlive the page that published them — `clear_if_stale` deliberately keeps
-        // them while Now Playing covers a band, and clicking Settings from there leaves
-        // no gate edge to hand them back — so drop them rather than re-rendering: no band
-        // is mounted here, and every section-enter re-fetches and republishes.
+        // The switch reaches every live `@tr` binding and nothing Rust rendered and stored. The
+        // band's chips can outlive their page, `clear_if_stale` keeping them under Now Playing
+        // and Settings opened from there leaving no gate edge, so they go; every enter
+        // republishes.
         crate::ui::hero_chips::clear(&ui);
         s.locale_changed.bump();
 
-        // Keep `language-idx` in sync defensively — the dropdown's two-way
-        // bind already writes it, but a future code path could call the
-        // callback programmatically without touching the dropdown.
+        // The picker's binding writes it too; this covers a call that didn't come from it.
         ui.global::<Settings>().set_language_idx(idx_i32);
 
-        // Synchronous shadow update before the async write so any sibling
-        // reader sees the new code before the disk catches up.
         code.clone_into(&mut *shadow.lock());
 
         let code_owned = code.to_owned();

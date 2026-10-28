@@ -67,11 +67,8 @@ pub async fn create_playlist_with_tracks(
     Ok(playlist_id)
 }
 
-/// Create a smart (dynamic) playlist. Identical to [`create_playlist`] except
-/// `is_smart = TRUE` and `smart_criteria` holds the serialized
-/// [`melodia_core::entities::smart_criteria::SmartCriteria`] JSON. Smart playlists
-/// never get `playlist_items` rows — their membership is resolved live from the
-/// criteria (see [`crate::database::queries::smart_playlist`]).
+/// Creates a smart playlist, whose membership [`crate::database::queries::smart_playlist`] resolves
+/// live from `criteria_json` rather than from `playlist_items`.
 pub async fn create_smart_playlist(
     db: &DbPool,
     name: &str,
@@ -96,9 +93,7 @@ pub async fn create_smart_playlist(
     Ok(result)
 }
 
-/// Replace a smart playlist's rule set. Only `smart_criteria` (+ `updated_at`)
-/// change; name/description go through [`update_playlist`] like a regular
-/// playlist's.
+/// Replaces a smart playlist's rule set; its name and description go through [`update_playlist`].
 pub async fn update_smart_criteria(
     db: &DbPool,
     id: i64,
@@ -144,12 +139,8 @@ pub async fn get_playlist_by_id(db: &DbPool, id: i64) -> Result<playlist::Playli
         .ok_or_else(|| AppError::not_found("Playlist", id))
 }
 
-/// Just the smart-playlist verdict for a set of ids: `(id, is_smart, smart_criteria)`.
-///
-/// **The base table, not `playlist_stats`**, and the narrow projection is the point: the card
-/// menu's resolve asks this of every selected playlist purely to split the smart ones off, where
-/// `get_playlist_by_id` per id fetches the aggregate columns that view computes and throws them
-/// away. An id missing from the result is one deleted since the grid painted.
+/// `(id, is_smart, smart_criteria)` for each of `ids` still there, off the base table rather than
+/// `playlist_stats`: the card menu asks it of a whole selection only to split the smart ones off.
 pub async fn smart_criteria_for_playlists(
     db: &DbPool,
     ids: &[i64],
@@ -204,11 +195,8 @@ pub async fn update_playlist(
     }
 }
 
-/// Drop one or more playlists. Cascade handles `playlist_items`.
-///
-/// **Chunked rather than one statement per id**, [`super::track::set_favorite`]'s shape: the card
-/// menu's batch arm hands this a whole selection, and the write pool is one connection, so a loop
-/// over ids is that many serialised round trips.
+/// Deletes playlists, their items cascading. Chunked rather than a statement per id, since the
+/// card menu hands it a whole selection.
 pub async fn delete_playlists(db: &DbPool, ids: &[i64]) -> Result<(), AppError> {
     if ids.is_empty() {
         return Ok(());
@@ -242,9 +230,7 @@ pub async fn get_playlist_tracks(
     Ok(tracks)
 }
 
-/// Slim projection for M3U export — `file_path`, `file_hash`, title, artist,
-/// `duration_ms` in playlist order. Far cheaper than `get_playlist_tracks`
-/// (full `Track`) which the export path doesn't need.
+/// A playlist's M3U export rows, in playlist order.
 pub async fn get_playlist_tracks_for_export(
     db: &DbPool,
     playlist_id: i64,
@@ -274,7 +260,6 @@ pub async fn add_tracks_to_playlist(
 
     let mut tx = db.write().begin().await?;
 
-    // Get current max position within the transaction
     let max_pos: Option<i32> = sqlx::query_scalar::<_, Option<i32>>(
         "SELECT MAX(position) FROM playlist_items WHERE playlist_id = ?",
     )
@@ -285,7 +270,7 @@ pub async fn add_tracks_to_playlist(
     let start_position = max_pos.unwrap_or(-1) + 1;
     insert_items_tx(&mut tx, playlist_id, start_position, track_ids).await?;
 
-    // Renumber positions to close gaps from ignored duplicates
+    // Closes the gaps ignored duplicates leave.
     renumber_playlist_positions_tx(&mut tx, playlist_id).await?;
     update_playlist_thumbnail_and_timestamp_tx(&mut tx, playlist_id).await?;
 
@@ -301,7 +286,6 @@ async fn insert_items_tx(
     start_position: i32,
     track_ids: &[i64],
 ) -> Result<u64, AppError> {
-    // Batch INSERT — 4 columns per row, chunked within one statement's bind budget
     const COLS_PER_ROW: usize = 4;
     const CHUNK_SIZE: usize = crate::database::MAX_BINDS_PER_STATEMENT / COLS_PER_ROW;
 
@@ -338,8 +322,7 @@ pub async fn remove_tracks_from_playlist_batch(
 
     let mut tx = db.write().begin().await?;
 
-    // Chunk to stay within one statement's bind budget — one slot is the
-    // `playlist_id`, the rest are the `track_id` IN-list.
+    // One bind of each statement is the `playlist_id`.
     for chunk in track_ids.chunks(crate::database::MAX_BINDS_PER_STATEMENT - 1) {
         let placeholders = crate::database::placeholders(chunk.len());
         let sql = format!(
@@ -415,8 +398,7 @@ pub async fn move_playlist_tracks(
     Ok(())
 }
 
-/// Renumber positions within an existing transaction (used by `add_tracks_to_playlist`).
-/// Uses `ROW_NUMBER()` window function for O(N log N) instead of correlated subquery O(N²).
+/// Closes the gaps in a playlist's positions.
 async fn renumber_playlist_positions_tx(
     tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
     playlist_id: i64,
@@ -436,10 +418,8 @@ async fn renumber_playlist_positions_tx(
     Ok(())
 }
 
-/// Batch UPDATE positions from (id, position) pairs using a CASE expression.
-///
-/// Chunked because a reorder can hand over the whole playlist. Splitting is safe here, the
-/// positions being absolute and each chunk touching a disjoint id set.
+/// Writes `(id, position)` pairs in chunks, which is safe because the positions are absolute and
+/// each chunk touches its own ids.
 async fn batch_update_positions_pairs(
     tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
     pairs: &[(i64, i32)],
@@ -470,14 +450,8 @@ async fn batch_update_positions_pairs(
     Ok(())
 }
 
-/// For each playlist that contains at least one of `track_ids`, returns
-/// the number of distinct selection ids already in it. Backs the Add-to-
-/// Playlist picker dialog so full-overlap rows can be greyed out and
-/// partial-overlap rows can show a `2 of 4 already added` badge.
-///
-/// Chunked through `chunked_in_query` to stay inside `MAX_BINDS_PER_STATEMENT`;
-/// counts are summed across chunks because a playlist may appear in more
-/// than one chunk's result set.
+/// How many of `track_ids` each playlist already holds, for the Add-to-Playlist picker's greyed
+/// rows and "2 of 4 already added" badges. Summed across chunks, a playlist turning up in several.
 pub async fn count_tracks_in_playlists_for_selection(
     db: &DbPool,
     track_ids: &[i64],
@@ -503,7 +477,6 @@ pub async fn count_tracks_in_playlists_for_selection(
     Ok(map)
 }
 
-/// Sets a custom thumbnail path on the playlist.
 pub async fn set_playlist_custom_thumbnail(
     db: &DbPool,
     playlist_id: i64,

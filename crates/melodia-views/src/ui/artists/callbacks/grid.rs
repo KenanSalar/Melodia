@@ -1,5 +1,4 @@
-//! `Artists.*` grid callbacks: lazy cover lookup, re-chunk on column
-//! count, the filter and the sort, and the open-artist drill-in.
+//! `Artists.*` grid callbacks, wired as `albums/callbacks/grid.rs` argues.
 
 use std::sync::Arc;
 
@@ -17,7 +16,6 @@ use melodia_app::state::AppState;
 use melodia_core::error::describe;
 use melodia_ui::{AppWindow, ArtistDetail, Artists};
 
-/// Wire the `Artists` grid callbacks. See [`super::wire`].
 pub(super) fn wire(
     ui: &AppWindow,
     state: &AppState,
@@ -27,14 +25,11 @@ pub(super) fn wire(
     let artists = ui.global::<Artists>();
     let weak = ui.as_weak();
 
-    // Seed the grid's sort pill from the persisted `view_sort["artists"]`.
     if let Some(sort) = persisted_sort(view_state, view_id::ARTISTS) {
         artists.set_sort_field(SharedString::from(sort.field.as_str()));
         artists.set_sort_dir(SharedString::from(sort.dir.as_str()));
     }
 
-    // request-cover: lazy per-card cover lookup off the shared grid tier. `generation` is
-    // read for its effect on the binding, never its value.
     artists
         .on_request_cover(|path, _generation| crate::ui::grid_prewarm::grid_cover(path.as_str()));
 
@@ -46,7 +41,6 @@ pub(super) fn wire(
         });
     }
 
-    // A hidden grid reloads under the filter on its enter instead.
     {
         let s = state.clone();
         let au = artists_ui.clone();
@@ -77,9 +71,6 @@ pub(super) fn wire(
         });
     }
 
-    // open-artist: a card click. Fetches the detail header + albums +
-    // tracks and flips `ArtistDetail.artist-id >= 0`. Also stamps the
-    // Artists entry in `settings.last_detail_ids`.
     {
         let s = state.clone();
         let au = artists_ui.clone();
@@ -87,8 +78,6 @@ pub(super) fn wire(
         artists.on_open_artist(move |artist_id| {
             let id = i64::from(artist_id);
 
-            // Same-tab open: defensively zero any stale cross-section origin —
-            // see `albums::grid`'s copy for the path it guards against.
             if let Some(ui) = weak.upgrade() {
                 ui.global::<ArtistDetail>().set_origin_nav_index(-1);
             }

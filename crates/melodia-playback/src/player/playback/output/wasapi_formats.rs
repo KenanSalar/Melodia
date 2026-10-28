@@ -179,16 +179,11 @@ pub(super) fn sweep_offered(
 /// The ladder's rungs the device takes in any layout WASAPI can declare, at any channel count a
 /// claim for `shape` asks for.
 ///
-/// Any layout rather than the source's own ladder, because the set answers for the tracks after
-/// this one, whatever their format. A set wider than a later track's own costs that track a reopen
-/// at most, where a narrower one could keep it converted that a fresh claim would play at its rate.
-///
-/// A device taken or unplugged part way ends the sweep with its refusal, rather than answering a
-/// set short of the rates it had left to ask.
-///
-/// The rates are shared out across [`SWEEP_THREADS`] threads, `client`'s own among them. Proving a
-/// rate missing takes every layout at every channel count, one ask each, and the device answers
-/// asks from several threads at once.
+/// Any layout, because the set answers for later tracks whatever their format: too wide costs one
+/// a reopen at most, too narrow keeps one converted that a fresh claim would play at its rate. A
+/// device taken or unplugged part way ends the sweep with its refusal rather than a short set.
+/// Shared across [`SWEEP_THREADS`], since proving a rate missing takes an ask per layout and
+/// channel count, and the device answers several threads at once.
 fn offered_rates(
     client: &AudioClient,
     mix: &WaveFormat,
@@ -226,14 +221,12 @@ fn offered_rates(
 /// helper still opens a client of its own.
 const SWEEP_THREADS: usize = 4;
 
-/// The [`rates::LADDER`] rates the device takes, asked through `own` on the calling thread and
-/// through `helper` on each of the others, all working one queue.
+/// The [`rates::LADDER`] rates the device takes, asked through `own` here and `helper` on the other
+/// threads, all working one queue.
 ///
-/// A refusal anywhere stops every thread, and a helper that panics leaves the rate it held unasked,
-/// so either way the sweep is asked again through `own` alone, whose answer stands. A device that
-/// is busy, barred or gone refuses that run's first ask, while one refusing only asks made from
-/// several threads at once still answers in full. A helper that couldn't be started leaves its
-/// share of the queue to the threads that did start.
+/// A refusal anywhere, or a helper's panic, has the sweep asked again through `own` alone, whose
+/// answer stands: a busy, barred or gone device refuses that run's first ask, and one refusing only
+/// concurrent asks still answers in full. A helper that didn't start leaves its share to the rest.
 fn sweep_ladder(
     mut own: impl FnMut(SampleRate) -> Result<bool, ClaimError>,
     helper: impl Fn(&RateQueue) -> Result<Vec<u32>, ClaimError> + Sync,

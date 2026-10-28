@@ -1,11 +1,5 @@
-//! What the two curated heroes share.
-//!
-//! Favorites and Recently Played draw their banner from up to four covers where every
-//! other hero draws it from one. Composing that collage **once** is what collapses the
-//! difference: past [`compose_hero_pair`] each is an ordinary single-artwork hero and
-//! reuses the detail path whole — `apply_detail_artwork`, `write_crossfade_slot`,
-//! `release_hero_slots`. What is left here is the composition and the guard deciding
-//! whether to redo it.
+//! What the two curated heroes share: composing up to four covers into one banner, past which each
+//! is an ordinary single-artwork hero on the detail path, and the guard deciding when to recompose.
 
 use std::path::PathBuf;
 
@@ -18,11 +12,8 @@ use melodia_app::state::AppState;
 use melodia_artwork::media::image::artwork::compose_cover;
 use melodia_core::error::describe;
 
-/// [`compose_hero_pair`] on the blocking pool.
-///
-/// `None` only when the task itself failed, and the caller returns rather than publishing:
-/// an empty pair would blank the banner *and* claim the set, where leaving the
-/// [`MosaicGuard`] unclaimed lets the next tick try the same covers again.
+/// [`compose_hero_pair`] on the blocking pool. `None` only when the task failed, and the caller
+/// then returns rather than claim the set with an empty pair, so the next tick tries again.
 pub(crate) async fn compose_off_thread(
     state: &AppState,
     paths: Vec<String>,
@@ -37,16 +28,11 @@ pub(crate) async fn compose_off_thread(
     }
 }
 
-/// Compose up to four covers into one banner artwork, on the detail band's blur spec.
-///
-/// **Blocking** — the compose, the blur and the measurement are all CPU-bound. An empty
-/// list or one source that won't decode gives an empty pair, which the publisher spends as
-/// "no artwork" rather than as a failure.
+/// Composes up to four covers into one banner artwork. Blocking. No usable source gives an empty
+/// pair, which the publisher spends as no artwork rather than as a failure.
 fn compose_hero_pair(paths: &[String], blur: Option<BlurSpec>) -> DetailPair {
     let sources: Vec<PathBuf> = paths.iter().map(PathBuf::from).collect();
-    // Composed at the size the collage is *kept* at rather than at the persisted thumbnail's:
-    // `pair_from_image`'s first act is to reduce it to a `COVER_SIZE` tile, so a larger canvas
-    // costs a second resize of every source and reaches no surface.
+    // `COVER_SIZE`, the tile `pair_from_image` reduces it to; a larger canvas reaches no surface.
     let Some(canvas) = compose_cover(&sources, COVER_SIZE) else {
         return DetailPair::default();
     };
@@ -54,30 +40,22 @@ fn compose_hero_pair(paths: &[String], blur: Option<BlurSpec>) -> DetailPair {
         .map_or_else(DetailPair::default, Into::into)
 }
 
-/// The covers whose collage is on screen, so an unchanged top-4 costs no recompose — or `None`
-/// while nothing is claimed.
+/// The covers whose collage is on screen, so an unchanged top-4 costs no recompose.
 ///
-/// **"Nothing claimed" and "claimed nothing" are different answers, hence the `Option`.** A page
-/// whose set is empty still has to *publish* that, the seated accent being its honest colour.
-/// Collapsed onto a bare `Vec` the two states were one, so an empty set was never stale and the band
-/// kept whatever the last teardown had left in the shared globals.
-///
-/// **[`claim`](Self::claim) belongs past the section check, never beside the compose** — a set
-/// claimed ahead of a publish that then bails leaves every later refresh of those covers
-/// early-returning, and the banner sits on the bare gradient floor until the leave forgets it.
+/// `None` is nothing claimed, distinct from an empty set claimed, which still has to publish.
+/// [`claim`](Self::claim) belongs past the section check: a set claimed ahead of a publish that
+/// bails leaves every later refresh of those covers early-returning.
 #[derive(Default)]
 pub(crate) struct MosaicGuard(Mutex<Option<Vec<String>>>);
 
 impl MosaicGuard {
-    /// Whether `paths` differ from what the last publish claimed — the cheap skip, taken
-    /// before spending the blocking pool on a compose. Nothing claimed is stale against
-    /// anything, the empty set included.
+    /// Whether `paths` differ from the last claim, the cheap skip ahead of a compose.
     pub(crate) fn is_stale(&self, paths: &[String]) -> bool {
         self.0.lock().as_deref() != Some(paths)
     }
 
-    /// Claim `paths` as the collage on screen. `false` when the same set was already
-    /// claimed: two composes of one top-4 can be in flight and only the first should paint.
+    /// Claims `paths` as on screen; `false` when already claimed, so of two composes of one top-4
+    /// in flight only the first paints.
     #[must_use]
     pub(crate) fn claim(&self, paths: Vec<String>) -> bool {
         let mut last = self.0.lock();
@@ -88,9 +66,8 @@ impl MosaicGuard {
         true
     }
 
-    /// Forget what is painted, so the next enter recomposes. The section leave's, and
-    /// unconditional there: `release_section_state` bails once the user is already back, so
-    /// leaving the reset to it can strand the hero on the floor.
+    /// Forgets what is painted, so the next enter recomposes. Unconditional on the leave, since
+    /// `release_section_state` bails once the user is already back.
     pub(crate) fn forget(&self) {
         *self.0.lock() = None;
     }

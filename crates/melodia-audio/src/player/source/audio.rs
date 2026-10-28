@@ -1,9 +1,5 @@
-//! The sample vocabulary the DSP chain is written against.
-//!
-//! Every type here was `rodio`'s until the mixer became ours, and each is spelled the same way it
-//! was — `f32` samples, `NonZero` counts — so the chain that reads them did not have to change to
-//! stop naming that crate. What it buys is that the chain now describes itself: an [`AudioSource`]
-//! is something `playback::output` can pull, rather than something a dependency happens to accept.
+//! The sample vocabulary the DSP chain is written against, so an [`AudioSource`] is something
+//! `playback::output` can pull rather than something a dependency happens to accept.
 
 use std::fmt;
 use std::sync::Arc;
@@ -18,30 +14,22 @@ pub type ChannelCount = std::num::NonZero<u16>;
 /// Frames per second, per channel. Non-zero for the same reason: it is a divisor everywhere.
 pub type SampleRate = std::num::NonZero<u32>;
 
-/// What one stream of samples *is*: how many channels a frame holds, and how many frames a second.
-///
-/// Asked of a source, of the device, and of a decoded packet, which is three places that were each
-/// carrying their own pair before this. It lives here rather than in `playback::output::convert`
-/// because it is vocabulary — a converter is one of the things that reads a shape, not what a shape
-/// belongs to.
+/// What one stream of samples *is*, asked of a source, the device and a decoded packet alike.
+/// Vocabulary, so here rather than in `playback::output::convert`, which only reads one.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Shape {
     pub channels: ChannelCount,
     pub rate: SampleRate,
 }
 
-/// What a decoder produced before it became [`Sample`]s: the width it decoded at, and whether that
-/// was float.
-///
-/// The chain is `f32` from the decoder down, so this is the one place that says whether getting
-/// there cost anything.
+/// What a decoder produced before it became [`Sample`]s, the one place that says whether reaching
+/// `f32` cost anything.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct SourceFormat {
     pub bits: u8,
     pub float: bool,
-    /// Decoded from a lossy codec, so no path from here delivers the recording itself, only the
-    /// decoder's reconstruction of it. Lossy and float coincide often enough to be confused, and
-    /// a float WAV is neither.
+    /// Decoded from a lossy codec, so no path from here delivers the recording itself. Lossy and
+    /// float coincide often enough to be confused, and a float WAV is neither.
     pub lossy: bool,
 }
 
@@ -49,16 +37,15 @@ impl SourceFormat {
     /// What a source with nothing to say for itself reports.
     pub const F32: Self = Self { bits: 32, float: true, lossy: false };
 
-    /// Whether widening to [`Sample`] is exact: `f32` carries 24 bits of integer and any float
-    /// no wider than itself.
+    /// Whether widening to [`Sample`] is exact: `f32` carries 24 bits of integer and any float no
+    /// wider than itself.
     pub fn fits_sample(self) -> bool {
         let widest = if self.float { 32 } else { 24 };
         self.bits <= widest
     }
 }
 
-/// `16-bit`, `32-bit float`: the float matters, since a lossy track and a 32-bit integer file share
-/// a width and nothing else.
+/// `16-bit`, `32-bit float`: a lossy track and a 32-bit integer file share only a width.
 impl fmt::Display for SourceFormat {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}-bit", self.bits)?;
@@ -71,16 +58,12 @@ impl fmt::Display for SourceFormat {
 
 const NANOS_PER_SEC: u64 = 1_000_000_000;
 
-/// Frames of a source running at `rate` that `span` is worth, rounded **down**.
+/// Frames of a source at `rate` that `span` is worth, rounded **down**, with seconds and
+/// nanoseconds apart so a rate not dividing a second can't cost a frame.
 ///
-/// Seconds and nanoseconds separately, so a rate that does not divide a second evenly cannot cost
-/// the answer a frame the way a float round trip or a microsecond truncation would.
-///
-/// [`frames_to_duration`] is the way back but not an inverse: both floor, so a value off a frame
-/// boundary loses its remainder and a round trip loses it twice. The bound is one frame, downward
-/// — which is all the transport needs, every `Duration` it produces being a whole number of
-/// milliseconds, and dozens of frames at any rate. `melodia-playback`'s
-/// `player::playback::dsp::tests` pins both halves.
+/// [`frames_to_duration`] is the way back but not an inverse: both floor, so a round trip can lose
+/// up to a frame, downward, which the transport's whole-millisecond positions never notice.
+/// `melodia-playback`'s `player::playback::dsp::tests` pins both halves.
 pub fn frames_in(span: Duration, rate: SampleRate) -> u64 {
     let rate = u64::from(rate.get());
     let subsec = u64::from(span.subsec_nanos()) * rate / NANOS_PER_SEC;
@@ -94,21 +77,13 @@ pub fn frames_to_duration(frames: u64, rate: SampleRate) -> Duration {
     Duration::new(frames / rate, u32::try_from(nanos).unwrap_or(0))
 }
 
-/// `frames` as interleaved samples.
-///
-/// Saturating, because the only bound on a length read back out of a container is what fits a
-/// `u64`, and a corrupt one states whatever it likes.
-///
-/// The third term of the vocabulary this file is — frames, the time they play for, and the samples
-/// they occupy — which is why it sits beside its two siblings rather than beside its one caller.
+/// `frames` as interleaved samples, saturating: a length read out of a corrupt container states
+/// whatever it likes.
 pub fn interleaved(frames: u64, channels: ChannelCount) -> u64 {
     frames.saturating_mul(u64::from(channels.get()))
 }
 
 /// Why a [`AudioSource::try_seek`] could not land.
-///
-/// Two variants rather than rodio's five: the three it kept for its own bundled decoders describe
-/// decoders this tree does not have.
 #[derive(Debug, Clone, thiserror::Error)]
 pub enum SeekError {
     /// The source has nowhere to seek to — a live mount, or a wrapper over one.
@@ -122,10 +97,8 @@ pub enum SeekError {
     Other(Arc<dyn std::error::Error + Send + Sync + 'static>),
 }
 
-/// A pullable stream of interleaved samples that knows its own shape.
-///
-/// The `Send` is a supertrait rather than a bound at each use site because there is only one
-/// consumer and it is the audio callback thread: a source that cannot cross to it cannot play.
+/// A pullable stream of interleaved samples that knows its own shape. `Send` as a supertrait, its
+/// one consumer being the audio callback thread.
 pub trait AudioSource: Iterator<Item = Sample> + Send {
     /// Channels per frame. Constant for the life of the source — a mount whose shape changes under
     /// a reconnect ends instead, since the deck fixed its converter when the source was appended.
@@ -143,11 +116,9 @@ pub trait AudioSource: Iterator<Item = Sample> + Send {
     /// What the decoder at the bottom of this source produced. A wrapper forwards it.
     fn format(&self) -> SourceFormat;
 
-    /// Whether this source hands on anything other than the samples it pulled. A decoder never
-    /// does; a wrapper that can alter them answers for itself and forwards otherwise.
-    ///
-    /// Required rather than defaulted, as is [`Self::format`]: a wrapper that forgot to forward
-    /// would report a processed signal as untouched.
+    /// Whether this source hands on anything other than the samples it pulled. Required rather
+    /// than defaulted, as is [`Self::format`]: a wrapper that forgot to forward would report a
+    /// processed signal as untouched.
     fn dsp_engaged(&self) -> bool;
 
     /// How long the source runs for, when it is the kind of thing that ends.
@@ -161,15 +132,9 @@ pub trait AudioSource: Iterator<Item = Sample> + Send {
     /// decoder raised.
     fn try_seek(&mut self, pos: Duration) -> Result<(), SeekError>;
 
-    /// Give up anything the rest of the app reads *liveness* from, ahead of the drop.
-    ///
-    /// A spent source is freed away from the audio callback, which means it outlives the moment it
-    /// stopped playing. Whatever answers "is this deck still making sound" cannot wait for that:
-    /// the visualizer mixes every claimed ring, so a claim held until collection leaves a finished
-    /// track's tail in the window. Releasing is a counter decrement, and freeing is what gets
-    /// deferred.
-    ///
-    /// Default is nothing, which is right for every source that owns no such claim. A wrapper owes
-    /// a forward to whatever it wraps.
+    /// Gives up whatever the app reads *liveness* from, ahead of the drop. A spent source is freed
+    /// away from the audio callback and outlives its last sample, and the visualizer mixes every
+    /// claimed ring, so a claim held until collection leaves a finished track's tail in the window.
+    /// The default releases nothing; a wrapper forwards.
     fn release_claims(&mut self) {}
 }

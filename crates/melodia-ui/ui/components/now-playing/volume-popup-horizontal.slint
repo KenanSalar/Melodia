@@ -8,19 +8,12 @@ import { FocusLossWatcher } from "../focus-loss-watcher.slint";
 import { PopupDismissCatcher } from "../popup-dismiss-catcher.slint";
 import { VolumeTrigger } from "volume-trigger.slint";
 
-// `VolumePopup` rotated 90°, for the miniplayer, whose short strip and card clip
-// the vertical one. Same `SliderTrack` in the same `PopupSurface` chrome, laid
-// along the bottom with the shared `Tooltip` pill reading the percentage out
-// above the thumb.
-//
-// It flies out to the *left* of the trigger disc, into the title area, centred
-// on it: vertical room is the whole constraint being escaped, and the strip has
-// none of it to give.
+// `VolumePopup` turned on its side for the miniplayer, whose strip and card clip the vertical one.
+// It flies out left of the disc, into the title area, vertical room being what the strip lacks.
 export component VolumePopupHorizontal inherits Rectangle {
     in property <length> diameter: 36px;
     in property <length> icon-size: 22px;
-    // The trigger's ink only, its vertical sibling's argument: the flyout floats on `Theme.crust`
-    // and is not part of the surface behind the button.
+    // The trigger's only, for `VolumePopup`'s reason.
     in property <brush> trigger-fg: Theme.text;
     in property <brush> trigger-hover-fg: root.trigger-fg;
     in property <brush> trigger-hover-bg: Theme.surface0;
@@ -30,10 +23,8 @@ export component VolumePopupHorizontal inherits Rectangle {
     width: trigger.width;
     height: trigger.height;
 
-    // How long the flyout can be and still clear the window's own left edge, holding the gap it
-    // keeps from the disc on that side too. Slint answers an overhang by sliding the popup back
-    // inside the window rather than shortening it, so anything longer lands over the disc it flew
-    // out of, and a tiling window manager can hand the miniplayer less than its minimum width.
+    // Slint slides an overhanging popup back inside the window rather than shortening it, so
+    // anything longer lands over the disc it flew out of.
     private property <length> max-flyout-width:
         root.absolute-position.x - WindowChrome.shell-x - 2 * Theme.popup-gap;
 
@@ -50,14 +41,10 @@ export component VolumePopupHorizontal inherits Rectangle {
     }
 
     pop := PopupWindow {
-        // The popup's right edge sits just left of the disc and centres on it,
-        // which puts the slider chrome along the bottom at the disc's own Y and
-        // leaves the badge floating above.
         x: -self.width - Theme.popup-gap;
         y: (trigger.height - self.height) / 2;
-        // The vertical popup's slider length rotated, so one travel serves both. Floored as well
-        // as capped: the room left of the disc is what a window narrower than its own minimum
-        // takes away, and a negative width is not a shorter slider.
+        // The vertical slider's length. Floored too: a tiling window manager can hand the
+        // miniplayer less than its minimum, and a negative width is not a shorter slider.
         width: clamp(root.max-flyout-width, 96px, 180px);
         height: 72px;
         close-policy: close-on-click-outside;
@@ -66,8 +53,6 @@ export component VolumePopupHorizontal inherits Rectangle {
             close => { pop.close(); }
         }
 
-        // Catches clicks in the empty top strip. Declared before `chrome`, so
-        // the slider's own TouchArea still wins.
         PopupDismissCatcher {
             x: 0;
             y: 0;
@@ -83,9 +68,7 @@ export component VolumePopupHorizontal inherits Rectangle {
             height: 40px;
             pill: true;
 
-            // `SliderTrack.changed` fires per pixel of movement, so this gates
-            // on integer steps and a full drag costs at most 100 emits. Forgotten
-            // at the commit, for `VolumePopup`'s reason.
+            // Per step rather than per pixel, as in `VolumePopup`.
             property <int> last-emitted: -1;
             function emit-volume(v: int) {
                 if (v != self.last-emitted) {
@@ -101,8 +84,7 @@ export component VolumePopupHorizontal inherits Rectangle {
                 height: parent.height;
                 value: clamp(Player.vm.volume / 100, 0, 1);
                 show-max-stop: true;
-                // The seam mask has to match the surface behind it, and the
-                // default is the now-playing bar's.
+                // The surface behind it; the default is the now-playing bar's.
                 seam-mask-color: Theme.crust;
 
                 changed(v) => {
@@ -118,10 +100,7 @@ export component VolumePopupHorizontal inherits Rectangle {
             }
         }
 
-        // A zero-size anchor on the chrome's top edge, level with the thumb:
-        // `Tooltip` positions itself against a host *box*, and what this pill
-        // hangs off is a *point*. Reads `SliderTrack.thumb-cx` straight, so it
-        // follows the live thumb through a drag preview.
+        // A zero-size anchor over the live thumb, so the readout hangs off the value it shows.
         Rectangle {
             x: chrome.x + slider.x + slider.thumb-cx;
             y: chrome.y;
@@ -134,8 +113,6 @@ export component VolumePopupHorizontal inherits Rectangle {
                 host-height: 0px;
                 side: TooltipSide.above;
                 in-popup: true;
-                // No reveal delay — the readout has to be up on the frame the
-                // drag starts. Same hook `VolumeTrigger`'s keyboard readout takes.
                 force-shown: slider.dragging || slider.has-hover;
             }
         }

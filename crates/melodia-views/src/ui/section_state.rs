@@ -1,8 +1,5 @@
-//! Shared section-visibility state for the sidebar sections that cache.
-//!
-//! Nine views track the same small state machine around "is this section on screen, and
-//! is its cached data stale?". [`SectionState`] bundles the fields it needs, so each `*Ui`
-//! carries one cohesive unit rather than loose ones.
+//! The section-visibility state every caching view shares: is the section on screen, and is
+//! its cached data stale.
 
 use std::sync::atomic::{AtomicBool, Ordering};
 
@@ -35,13 +32,10 @@ pub struct SectionState {
 }
 
 impl SectionState {
-    /// A fresh state: not on screen, not dirty. `dirty` starts `false` so a boot pre-fetch
-    /// wins the first section-enter without re-fetching.
-    ///
-    /// **That only holds for a section whose pre-fetch fills everything it needs.** Browse
-    /// seeds `dirty` itself when the boot doesn't land on it, for the card view's cover tier,
-    /// which an off-screen prewarm releases rather than keeps. Every My Library tab seeds it
-    /// too when the launch leaves it hidden, the boot skipping its pre-fetch.
+    /// Not on screen, not dirty, so a boot pre-fetch wins the first enter without re-fetching.
+    /// **That holds only where the pre-fetch fills everything the section needs**: Browse seeds
+    /// `dirty` itself off its boot section, for the cover tier an off-screen prewarm releases,
+    /// and every My Library tab the launch leaves hidden seeds it, the boot skipping its fetch.
     pub fn new() -> Self {
         Self {
             active: AtomicBool::new(false),
@@ -137,32 +131,23 @@ impl Default for SectionState {
     }
 }
 
-/// Generate a view handle's delegating accessors over its `section: SectionState` field.
-///
-/// The four bodies are one line each and the argument for every one of them is on
-/// [`SectionState`] itself, so eight views were carrying eight restatements of it — three of
-/// which had already degraded to `/// See [the albums one]`.
+/// Generate a view handle's delegating accessors over its `section: SectionState` field, whose
+/// docs argue each.
 macro_rules! impl_section_state_helpers {
     ($Ui:ty) => {
         impl $Ui {
-            /// Mirror the section-visible flag, off this view's `section-active-changed`.
             pub fn set_section_active(&self, active: bool) {
                 self.section.set_active(active);
             }
 
-            /// Whether this section is currently on screen.
             pub fn section_active(&self) -> bool {
                 self.section.active()
             }
 
-            /// Mark the cached data stale. See [`SectionState::mark_dirty`] for why this is
-            /// written before the release task rather than by it.
             pub fn mark_dirty(&self) {
                 self.section.mark_dirty();
             }
 
-            /// Read-and-clear, deciding whether a section enter re-fetches.
-            /// See [`SectionState::take_dirty`].
             pub fn take_dirty(&self) -> bool {
                 self.section.take_dirty()
             }

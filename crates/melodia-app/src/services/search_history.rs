@@ -13,21 +13,15 @@ pub struct SearchHistory {
     pub queries: Vec<String>,
 }
 
-/// `parking_lot::Mutex` is correct here precisely because the lock is never
-/// held across an `.await` — each method clones a `SearchHistory` snapshot
-/// inside a sync block, drops the guard, then awaits the disk flush. The
-/// lock therefore needs only short, uncontended critical sections (the
-/// fast path is ~25 ns for `parking_lot`, vs ~200 ns for `tokio::sync::Mutex`
-/// even uncontended). Concurrent flushes still race on the JSON file, but
-/// `Vec<String>` snapshots are tiny and OS-level atomic-rename handles
-/// ordering.
+/// Each change snapshots under the lock and flushes after it, so concurrent flushes race on the
+/// file, harmlessly: every write is a whole snapshot, atomically renamed.
 pub struct SearchHistoryState {
     inner: Mutex<SearchHistory>,
     path: PathBuf,
 }
 
 impl SearchHistoryState {
-    /// Load from disk (or return empty) and return the managed handle.
+    /// Starts empty if the file is missing or unreadable.
     pub async fn init(paths: &Paths) -> Self {
         let path = paths.search_history_path.clone();
         let history: SearchHistory =

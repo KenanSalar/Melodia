@@ -1,35 +1,10 @@
-//! Wire the `Updater.*` Slint callbacks to backend tasks.
+//! The `Updater.*` callbacks: `check` and `install` run the backends in [`check`] and
+//! [`install`], `restart` hands off to `window_chrome::request_respawn_and_quit`, `skip`
+//! persists the offered version as skipped, and `auto-check-changed` persists the toggle.
 //!
-//! Five callbacks:
-//!
-//! - `Updater.check()` — manual "Check for Updates" button. The daily
-//!   task's check (`services::updater::run_check`), plus a visible error
-//!   and toast when it fails. Backend lives in [`check`].
-//! - `Updater.install()` — fires `services::updater::download_and_install`
-//!   on the tokio runtime. Progress writes flow back through
-//!   `upgrade_in_event_loop`. On success → `Updater.restart-needed=true` and
-//!   an Installed event onto the channel; on failure → `Updater.error-message`
-//!   and a Failed event; a dismissed elevation prompt hands the button back
-//!   with neither. On Windows a success rarely reports at all: Windows
-//!   Installer closes the app and reopens the new build. Backend lives in
-//!   [`install`].
-//! - `Updater.restart()` — hands off to
-//!   `ui::window_chrome::request_respawn_and_quit`, which arms the respawn
-//!   flag and quits the event loop (or keeps the app up and toasts, if the
-//!   binary it would relaunch has gone). `shutdown::respawn_if_requested`
-//!   (already last step of `main()`) then relaunches, using the path
-//!   `spawn_install` recorded via `ui::window_chrome::set_respawn_exe` on a
-//!   successful install — captured before the swap, while the path still
-//!   pointed at the live binary.
-//! - `Updater.skip()` — persists `available-version` into
-//!   `settings.updates.skipped_release`. Clears
-//!   `Updater.update-available` locally so the panel repaints to the
-//!   "up to date" state.
-//! - `Updater.auto-check-changed(bool)` — persists the toggle.
-//!
-//! The [`paint`] submodule holds the shared UI-thread painters the check and
-//! install backends call back through, the daily task reaching them via
-//! [`check_painter`].
+//! On Windows a successful install rarely reports at all, Windows Installer closing the app and
+//! reopening the new build. [`paint`] holds the UI-thread painters both backends call back
+//! through, the daily task reaching them via [`check_painter`].
 
 mod check;
 mod install;
@@ -63,7 +38,6 @@ pub fn wire(
     let updater = ui.global::<MelodiaUpdater>();
     let weak = ui.as_weak();
 
-    // ---- Updater.check ----
     {
         let state = state.clone();
         let weak = weak.clone();
@@ -73,7 +47,6 @@ pub fn wire(
         });
     }
 
-    // ---- Updater.install ----
     {
         let state = state.clone();
         let weak = weak.clone();
@@ -83,12 +56,10 @@ pub fn wire(
         });
     }
 
-    // ---- Updater.restart ----
     updater.on_restart(|| {
         crate::ui::window_chrome::request_respawn_and_quit();
     });
 
-    // ---- Updater.skip ----
     {
         let state = state.clone();
         let weak = weak.clone();
@@ -110,10 +81,8 @@ pub fn wire(
                     log::warn!("updater: set_skipped_release: {}", describe(&e));
                 }
             });
-            // Repaint the Settings → Updates panel to the "up to
-            // date" state so the user sees an immediate effect, and
-            // dismiss any still-visible "Update available" toast so the
-            // bottom-right matches the Settings panel.
+            // The panel repaints to "up to date" at once, and a still-visible Available toast
+            // goes with it.
             if let Some(ui) = weak.upgrade() {
                 let g = ui.global::<MelodiaUpdater>();
                 g.set_update_available(false);
@@ -123,7 +92,6 @@ pub fn wire(
         });
     }
 
-    // ---- Updater.auto-check-changed ----
     {
         let state = state.clone();
         updater.on_auto_check_changed(move |on| {

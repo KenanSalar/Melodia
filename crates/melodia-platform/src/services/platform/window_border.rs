@@ -1,19 +1,14 @@
-//! The colour Windows draws its own window borders in, for the outline a frameless window draws
-//! where that border would be.
+//! The colour Windows borders its windows in, for the outline a frameless window draws there.
 //!
-//! Windows paints a border in the accent colour only while "Show accent color on title bars and
-//! window borders" is on, and a neutral one otherwise. Both halves of that answer are in the DWM
-//! registry key: `ColorPrevalence` is the switch, and `AccentColor` the colour it applies.
-//!
-//! **Fails open**: a key or value that won't read answers `None`, the neutral border, which is what
-//! Windows draws whenever the accent isn't applied.
+//! The accent only while "Show accent color on title bars and window borders" is on, both halves
+//! in the DWM registry key: `ColorPrevalence` the switch, `AccentColor` the colour. **Fails open**
+//! to `None`, the neutral border Windows draws without the accent.
 
 use super::registry::read_user_dword;
 
 const DWM_KEY: &str = "Software\\Microsoft\\Windows\\DWM";
 
-/// Returns the accent colour Windows borders its windows in, as `0x00RRGGBB`, or `None` when the
-/// user has the accent off borders and they stay neutral.
+/// As `0x00RRGGBB`, or `None` with the accent off borders.
 pub fn accent_border_rgb() -> Option<u32> {
     accent_border(
         read_user_dword(DWM_KEY, "ColorPrevalence"),
@@ -21,7 +16,7 @@ pub fn accent_border_rgb() -> Option<u32> {
     )
 }
 
-/// The decision, apart from the registry: the accent applies only while the switch is exactly on.
+/// The decision apart from the registry: the accent applies only while the switch is exactly on.
 fn accent_border(prevalence: Option<u32>, accent_abgr: Option<u32>) -> Option<u32> {
     if prevalence != Some(1) {
         return None;
@@ -29,8 +24,7 @@ fn accent_border(prevalence: Option<u32>, accent_abgr: Option<u32>) -> Option<u3
     accent_abgr.map(rgb_from_abgr)
 }
 
-/// `AccentColor` is stored `0xAABBGGRR`. The alpha is always opaque there and the outline is drawn
-/// opaque, so it is dropped.
+/// `AccentColor` is stored `0xAABBGGRR`; the alpha is always opaque there, and dropped.
 fn rgb_from_abgr(abgr: u32) -> u32 {
     ((abgr & 0x00_00_00_FF) << 16) | (abgr & 0x00_00_FF_00) | ((abgr & 0x00_FF_00_00) >> 16)
 }

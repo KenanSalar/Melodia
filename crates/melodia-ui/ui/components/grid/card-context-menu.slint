@@ -7,40 +7,26 @@ import { ContextMenuPopup, CopyField, FavoriteMenuItem, MenuItem, MenuSeparator 
 import { TrackCopyFields } from "../track-copy-items.slint";
 
 // The right-click menu every entity card raises, and the only place its entries are mounted.
-//
-// `TrackContextMenu`'s contract, one layer over: **the host keeps the pointer position; this keeps
-// the menu.** What differs is that a card is a *set* of tracks, so the actions go through
-// `CardActions` with a kind and an id list and Rust resolves the set once, rather than each entry
-// naming a track callback.
-//
-// `card-kind` is what a host configures, and it both picks the per-kind entries and travels to
-// Rust as the token `EntityKind::from_token` parses.
+// `TrackContextMenu`'s contract one layer over, a card being a set of tracks: the actions go
+// through `CardActions` with a kind and ids, and Rust resolves the set once.
 export component CardContextMenu inherits Rectangle {
-    // "album" | "artist" | "genre" | "playlist" | "track" | "folder". Only "folder" is not an
-    // `EntityKind`: Browse routes those through its own global, a folder being a path.
+    // "album" | "artist" | "genre" | "playlist" | "track" | "folder", the last not an
+    // `EntityKind`: a folder is a path, routed through Browse's own callbacks.
     in property <string> card-kind;
     in property <int> card-id;
-    // Folder cards only.
     in property <string> card-path;
-    // Playlist cards only: gates the rules entry, which a manual playlist has no answer for.
-    // Rename and Edit Artwork are *not* gated on it. Both are well defined for a smart playlist
-    // and three other surfaces already offer them, the card's own hover buttons included, so
-    // gating here only made the menu disagree with the pencil sitting on the same card.
+    // Gates Edit Rules alone: Rename and Edit Artwork work on any playlist, as its buttons do.
     in property <bool> card-is-smart: false;
-    // Album cards only. 0 means no linkage and hides the entry.
+    // 0 hides the entry.
     in property <int> card-artist-id: 0;
-    // Whether this card's own favorite state is known, and what it is. A track card carries one,
-    // on the grids that draw its heart; an album, artist, genre or playlist is a set of tracks and
-    // has no single answer.
+    // Known for a track card on a grid drawing its heart; a set of tracks has no single answer.
     in property <bool> favorite-known: false;
     in property <bool> card-is-favorite: false;
 
     in property <bool> card-selected;
-    // The batch payload in multi mode, the host's own scope's selection.
     in property <[int]> effective-selection;
     in property <int> selection-count;
 
-    // Read by the host to route a batch action.
     out property <bool> multi-active: Selection.acts-on-set(root.card-selected, root.selection-count);
     out property <bool> is-open: pop.is-open;
 
@@ -48,22 +34,19 @@ export component CardContextMenu inherits Rectangle {
     property <bool> is-playlist: root.card-kind == "playlist";
     property <bool> is-folder: root.card-kind == "folder";
     property <bool> is-track: root.card-kind == "track";
-    // A folder is one path and never joins a selection, so its whole arm is single-target.
+    // A folder never joins a selection.
     property <bool> folder-single: root.is-folder && !root.multi-active;
-    // Rename and Edit Artwork: single-target, and a playlist's whatever its kind.
     property <bool> playlist-edits: root.is-playlist && !root.multi-active;
 
-    // **Only the kinds with more than one field to copy open a flyout.** The rest copy their one
-    // field from the row itself, and their menu holds no room for a column it never opens.
+    // Only a kind with more than one field opens a flyout, so the rest reserve no room for one.
     property <bool> has-flyout: root.is-track || root.card-kind == "album";
-    // A track card offers what a track row does; an album its own name and credit.
     property <[CopyField]> album-copy-fields: [
         { token: "name", label: @tr("Album"), icon: "album" },
         { token: "artist", label: @tr("Artist"), icon: "person" },
         { token: "artist-name", label: @tr("Artist - Album"), icon: "music_note" },
     ];
     property <bool> copy-open;
-    // Stored by `show-at`, not bound by the host: `TrackContextMenu`'s header says why.
+    // Stored by `show-at`, not bound (`TrackContextMenu`).
     property <length> at-x;
     property <length> at-y;
 
@@ -74,26 +57,19 @@ export component CardContextMenu inherits Rectangle {
         pop.show();
     }
 
-    // `TrackContextMenu.dismiss`: every entry closes the menu after acting, the popup's own policy
-    // being unable to spare the click that opens the flyout.
     function dismiss() {
         root.copy-open = false;
         pop.close();
     }
 
-    // Per-kind entries the host owns, because the grid already has these wired for its hover
-    // controls or its navigation.
+    // The grid's, already wired for its hover controls or navigation.
     callback rename();
     callback edit-artwork();
     callback edit-rules();
     callback delete-cards([int] /*playlist_ids*/);
-    // Take every card the grid is showing, and drop the whole set. No payload either way: the
-    // host owns the set.
     callback select-all();
     callback clear-selection();
-    // Track cards only. Their grids *do* play on activation, so Play over one of them has to mean
-    // what clicking it means, the whole displayed set from that track, rather than a queue of one.
-    // `TrackContextMenu` carries the same callback for the same reason.
+    // A track card's grid plays on activation, so Play over one means what clicking it means.
     callback play-single();
     callback open-folder(string /*path*/);
     callback play-folder(string /*path*/);
@@ -101,18 +77,16 @@ export component CardContextMenu inherits Rectangle {
     callback queue-folder(string /*path*/);
     callback reveal-folder(string /*path*/);
 
-    // `TrackContextMenu`'s reason for the pinned, zero-size root, measured here from the card.
+    // `TrackContextMenu`'s pinned, zero-size root, measured from the card.
     x: 0px;
     y: 0px;
     width: 0px;
     height: 0px;
 
-    // One popup per mounted card. The grids virtualize by row, so this stays a screenful of popups
-    // whatever the library size.
     pop := ContextMenuPopup {
         anchor-x: root.at-x;
         anchor-y: root.at-y;
-        // Off the root's position, which sits outside the popup and so still means the window.
+        // Off the root, which sits outside the popup and so still means the window.
         anchor-window-x: root.absolute-position.x + root.at-x;
         anchor-window-y: root.absolute-position.y + root.at-y;
         has-copy-flyout: root.has-flyout;
@@ -129,17 +103,11 @@ export component CardContextMenu inherits Rectangle {
             root.dismiss();
         }
 
-        // Computed once so every handler reads the same list.
         property <[int]> effective-ids: Selection.effective-ids(
             root.card-id, root.card-selected, root.selection-count, root.effective-selection);
 
-        // **Play stays in multi mode here, unlike the row menu.** There it is dropped
-        // because "play a selection" is ambiguous against "queue it"; on the entity grids
-        // nothing else plays at all — a card click opens the detail — so dropping it would
-        // remove what the selection is for.
-        //
-        // A lone track card is the exception, its grid playing on activation, and it goes
-        // through the host's own path rather than `CardActions`.
+        // Kept over a selection, unlike the row menu's: a card click opens the detail, so nothing
+        // else on a grid plays.
         MenuItem {
             label: @tr("Play");
             icon: "play_arrow";
@@ -191,16 +159,13 @@ export component CardContextMenu inherits Rectangle {
             }
         }
 
-        // The playlist entries below need a real track list, which a folder reaches only
-        // through Browse's own callbacks — so the whole block sits out for a folder card.
+        // A folder has no track list for these to take.
         if !root.is-folder: MenuSeparator {}
         if !root.is-folder: MenuItem {
             label: @tr("New Playlist…");
             icon: "add";
             clicked => {
-                // Unlike the row menu's, this can't fill `Dialog` inline: the opener wants
-                // the *track* ids, which only Rust knows. It sets its own `@tr` chrome and
-                // raises the card once they land.
+                // Not inline like the row menu's: only Rust knows the track ids.
                 CardActions.create-playlist-from(root.card-kind, pop.effective-ids);
                 root.dismiss();
             }
@@ -209,8 +174,7 @@ export component CardContextMenu inherits Rectangle {
             label: @tr("Add to Playlist");
             icon: "playlist_add";
             clicked => {
-                // A plain heading even over a selection: the count here is *cards*, and
-                // the track total only exists once Rust has resolved them.
+                // A plain heading: the count here is cards, the track total Rust's to resolve.
                 Dialog.prepare-add-to-playlist(@tr("Add to Playlist"));
                 CardActions.add-to-playlist(root.card-kind, pop.effective-ids);
                 root.dismiss();
@@ -218,7 +182,8 @@ export component CardContextMenu inherits Rectangle {
         }
 
         if !root.is-folder: MenuSeparator {}
-        // **One entry where the card's state is known**, the row menu's toggle.
+        // A toggle where the card's state is known, both directions where it isn't: a set of
+        // tracks can be half favourited.
         if root.favorite-known: FavoriteMenuItem {
             is-favorite: root.card-is-favorite;
             multi-active: root.multi-active;
@@ -229,12 +194,6 @@ export component CardContextMenu inherits Rectangle {
                 root.dismiss();
             }
         }
-        // **Two entries where it isn't.** An album, artist, genre or playlist is a set of
-        // tracks, so the state the row menu reads off `row-is-favorite` has no honest
-        // answer here: half a playlist favourited would make either label a lie, and
-        // resolving the truth means a query per menu open, per card. Both operations are
-        // well defined over a set whatever its mixture, so offering them retires the
-        // question rather than answering it.
         if !root.is-folder && !root.favorite-known: MenuItem {
             label: @tr("Add to Favorites");
             icon: "favorite";
@@ -267,9 +226,8 @@ export component CardContextMenu inherits Rectangle {
             }
         }
 
-        // Copy heads the group of entries that read the card rather than act on its
-        // tracks, the single-target ones below it. Every kind has it, so the separator
-        // above needs no gate. Not behind an `if`, the flyout lining up against its `y`.
+        // Every kind has Copy, so the separator needs no gate. Not behind an `if`, the flyout
+        // lining up against its `y`.
         MenuSeparator {}
         copy-row := MenuItem {
             label: root.has-flyout
@@ -316,7 +274,6 @@ export component CardContextMenu inherits Rectangle {
                 root.dismiss();
             }
         }
-        // The album card's one cross-tab entry, through the row menu's `Nav` trio.
         if !root.multi-active && root.card-artist-id != 0: MenuItem {
             label: @tr("Go to Artist");
             icon: "person";
@@ -326,13 +283,9 @@ export component CardContextMenu inherits Rectangle {
             }
         }
 
-        // The selection group. **Clear is gated on the scope holding a set rather than on
-        // this card being in it.** That is the row menu's gate and a grid cannot borrow
-        // it: a card has no second activation, so a set scrolled or filtered out of view
-        // leaves every visible card picking instead of opening, with no card left able to
-        // offer the way back. Both go through the host, five grids keeping their set on
-        // `CardSelection` while Browse keeps its cards' on `Browse`, its cards being its
-        // list rows.
+        // Clear is gated on the scope holding a set, not on this card being in it: a card has no
+        // second activation, so a set out of view leaves every visible card picking with none
+        // able to offer the way back.
         MenuSeparator {}
         MenuItem {
             label: @tr("Select all");
@@ -351,9 +304,7 @@ export component CardContextMenu inherits Rectangle {
             }
         }
 
-        // The playlist block mirrors the card's own hover trio, which stays: the buttons
-        // are the discoverable path and these are the right-click one. Mirrors it for a
-        // smart playlist too, the buttons being ungated there.
+        // The right-click path to the card's hover trio, smart playlists included.
         if root.is-playlist: MenuSeparator {}
         if root.playlist-edits: MenuItem {
             label: @tr("Rename…");

@@ -61,12 +61,8 @@ fn rung(rate: u32) -> Option<u16> {
     LADDER.iter().position(|&rung| rung == rate).map(|index| 1 << index)
 }
 
-/// The rate a fresh claim runs a device offering `offered` at for a `source` rate: the source's
-/// own where it is offered, else, where `fallback` lets the claim convert, the one
-/// [`device_rate_for`] picks, else none.
-///
-/// Also none for a source off the ladder, a 24 kHz MP3 say: the set has no bit for it, so it can't
-/// say whether a fresh claim would run the device at that rate itself.
+/// The source's own rate where offered, else [`device_rate_for`]'s pick where `fallback` lets the
+/// claim convert. `None` too for a source off the ladder, which the set has no bit for.
 pub(super) fn claim_rate(
     source: SampleRate,
     offered: RateSet,
@@ -81,12 +77,8 @@ pub(super) fn claim_rate(
     }
 }
 
-/// The rate to run a device at for a `source` rate it lacks, out of the rates it `offered`, or
-/// `None` where it offers none.
-///
-/// The source's family first: the lowest multiple above it, then the highest rate below it. Past
-/// those, the nearest of the rest, taking the higher of two equally near, which gives up less of
-/// the band.
+/// The source's family first, the lowest multiple above then the highest below; past those the
+/// nearest, the higher of two equally near giving up less of the band.
 pub(super) fn device_rate_for(source: SampleRate, offered: RateSet) -> Option<SampleRate> {
     let hz = source.get();
     let rates = || offered.rates();

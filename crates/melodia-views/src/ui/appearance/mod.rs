@@ -1,11 +1,5 @@
-//! Wiring for the Appearance section's Theme / Variant / Accent rows.
-//!
-//! Reads the persisted `theme_id` / `theme_variant` / `accent_color` from
-//! `melodia_app::services::settings`, populates the Slint `Settings` global, and applies
-//! the resolved palette via `theme_apply::apply()`. Three callbacks
-//! (`theme-changed` / `variant-changed` / `accent-changed`) update the
-//! global, repaint the Theme tokens, and persist the new selection on the
-//! tokio runtime so the JSON write doesn't block the UI thread.
+//! The four Settings cards facing the window, and the palette they paint: resolved by
+//! [`theme_apply`], written by [`theme_paint`], and reached only through [`apply_palette`].
 
 mod accent_picker;
 mod install;
@@ -36,28 +30,22 @@ use melodia_ui::{AppWindow, Settings};
 pub use install::install;
 pub use repaint::{apply_and_seed, repaint_from_settings};
 
-/// Handles returned by [`fn@install`] so boot can wire the Material You
-/// coordinator (`tasks::material_you`) without `appearance` having to
-/// reach across into the player view-model channel itself.
+/// What boot hands the Material You coordinator (`tasks::material_you`), so this module never
+/// reaches the player's view-model channel.
 pub struct AppearanceHandles {
-    /// Shared OS-state cache. The coordinator writes the dynamic Material
-    /// You palette into `material_you` and triggers a repaint by sending
-    /// a fresh snapshot through [`Self::repaint_tx`].
+    /// The OS state, whose `material_you` the coordinator writes before sending the snapshot
+    /// through [`Self::repaint_tx`].
     pub os_state: Arc<parking_lot::RwLock<SystemColorState>>,
-    /// Every appearance callback (theme / variant / accent / colour-style click) bumps this so
-    /// the coordinator wakes and re-evaluates against the latest settings snapshot.
+    /// Bumped by every appearance pick, so the coordinator re-evaluates against the settings just
+    /// written.
     pub kick: Signal,
-    /// Snapshot-style repaint channel — the Material You coordinator
-    /// publishes the fresh [`SystemColorState`] after each palette
-    /// generation; a UI-thread subscriber spawned inside [`fn@install`]
-    /// consumes the latest value and calls [`repaint_from_settings`].
+    /// Where the coordinator publishes each generated palette's state, for the UI-thread
+    /// subscriber [`fn@install`] spawns to repaint from.
     pub repaint_tx: watch::Sender<SystemColorState>,
 }
 
-/// Synchronous in-memory shadow of `settings.accent_color`. Updated by
-/// every appearance callback **before** it spawns the async disk write,
-/// and read by sibling callbacks that need to know the persisted accent
-/// without going through `library::settings::get_settings`.
+/// The synchronous shadow of `settings.accent_color`, written by every appearance callback before
+/// it spawns the write and read by its siblings in place of the file.
 pub(super) type PersistedAccent = Arc<parking_lot::Mutex<String>>;
 
 /// Read the OS appearance state once at startup, ahead of the first frame, so a System variant
@@ -92,23 +80,20 @@ pub(super) fn seed_theme_registry(ui: &AppWindow) {
     g.set_material3_idx(slot(&themes::material3::MATERIAL3));
 }
 
-/// Look up `theme_preferences[theme_id].last_static_accent` in the
-/// current settings.json. Returns `None` on read failure or when no
-/// static accent has been recorded yet — callers fall back to the
-/// theme's `default_accent`.
+/// The theme's recorded `last_static_accent`, `None` on a failed read or before one is recorded;
+/// callers fall back to the theme's `default_accent`.
 pub(super) fn read_last_static_accent(state: &AppState, theme_id: &str) -> Option<String> {
     library::settings::get_settings(&state.paths)
         .ok()
         .and_then(|s| s.last_static_accent(theme_id).map(str::to_owned))
 }
 
-/// Write the palette, then re-solve the two artwork-derived tiers and the window border against it.
+/// Writes the palette, then re-solves the two artwork-derived tiers and the window border against
+/// it.
 ///
-/// **The only place `theme_apply::apply` may be called from.** Both tiers are snapshots taken when a
-/// hero or a track landed, so a palette change reaches neither on its own — visibly, since the
-/// aurora's whole tier set is the theme's own and Now Playing republishes only on the next track.
-/// The border's swatches are shaded per variant and its System colour is mixed from the palette, so
-/// it owes the same.
+/// **The only place `theme_apply::apply` may be called from.** Both tiers are snapshots taken when
+/// a hero or a track landed, so a palette change reaches neither on its own, and the border's
+/// swatches and System colour come off the palette too.
 pub(super) fn apply_palette(
     ui: &AppWindow,
     theme_id: &str,
@@ -133,12 +118,9 @@ pub(super) fn persist(state: &AppState, theme_id: &str, variant_id: &str, accent
     });
 }
 
-/// Persist appearance + kick the Material You coordinator afterwards.
-/// The coordinator reads `settings.json` on wakeup; firing the kick
-/// before the disk write commits was racy — the coordinator could
-/// observe the *previous* theme / variant and "regenerate" against
-/// stale state. With the kick inside the same `spawn_blocking` task as
-/// the write, the coordinator always reads fresh settings on wake.
+/// Persists and then kicks the Material You coordinator, in one blocking task: the coordinator
+/// reads `settings.json` on waking, and a kick ahead of the write would regenerate against the
+/// previous pick.
 pub(super) fn persist_and_kick(
     state: &AppState,
     theme_id: &str,

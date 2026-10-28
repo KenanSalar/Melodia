@@ -1,12 +1,8 @@
-//! The lyrics directories, and the one call the app makes onto them.
+//! The lyrics directories, and the one call the app makes onto them. A caller gets a
+//! [`LyricsAnswer`] or nothing, never the service's wire shape or which service answered.
 //!
-//! A caller hands over the tags it has and gets a [`LyricsAnswer`] or nothing back, learning
-//! neither which service answered nor what its wire shape was. That is `radio_browser`'s split for
-//! its reason: the response types stay private to this tree, and what crosses is a domain answer.
-//!
-//! **The matcher is shared and the clients are not.** [`recording`] answers "is this row the
-//! recording we are holding tags for", which is a question about tags rather than about any one
-//! service, so a second provider takes it rather than copying it.
+//! [`recording`] is shared rather than per client: whether a row is the recording we hold tags
+//! for is a question about tags, not about any one service.
 
 mod lrclib;
 mod recording;
@@ -20,31 +16,19 @@ use melodia_core::error::AppError;
 
 use super::pacer::RequestPacer;
 
-/// The delay lrclib's own documentation asks clients to leave between requests, taken from the
-/// middle of the 200-500 ms range it names.
-///
-/// **Compliance rather than tuning.** The limiter behind the service is keyed on the client
-/// address, so one user is nowhere near the ceiling on their own and a headroom calculation would
-/// conclude this is unnecessary. What is not per-address is the ban: a client that misbehaves is
-/// blocked by `User-Agent`, which is every install of it at once. It also spaces the two requests
-/// a single lookup can make, which the same paragraph asks for by name.
+/// The middle of the 200–500 ms lrclib documents between requests. Compliance rather than tuning:
+/// its limiter is per address, so one user is nowhere near it, but a misbehaving client is banned
+/// by `User-Agent`, which is every install at once.
 const LRCLIB_REQUEST_INTERVAL: Duration = Duration::from_millis(350);
 
-/// A fresh pacer for the lyrics directory.
-///
-/// Handed out here so the interval stays beside the client it describes, and constructed by the
-/// caller so it is owned state rather than a `static` the tests cannot reset.
+/// The lyrics directory's pacer, for the caller to own.
 #[must_use]
 pub fn pacer() -> RequestPacer {
     RequestPacer::new(LRCLIB_REQUEST_INTERVAL)
 }
 
-/// Why a lookup produced no answer.
-///
-/// Two arms because they mean different things to the caller: one is the directory declining to
-/// serve us for a stated period, which nothing but waiting fixes, and the other is everything
-/// else. `AppError` cannot carry the period, and an error is never carried as a `String`, so this
-/// is the local error type that rule leaves room for.
+/// Why a lookup produced no answer. A refusal for a stated period stands apart because nothing
+/// but waiting fixes it, and `AppError` can't carry the period.
 #[derive(Debug)]
 pub enum LookupError {
     /// The directory asked us to stop, for this long where it said how long.
@@ -77,10 +61,8 @@ impl std::error::Error for LookupError {
     }
 }
 
-/// Ask the directory about one track.
-///
-/// The whole credit rather than its printed line, because the two endpoints want different halves
-/// of it: the signature asks with the credit as printed, the index with the name behind it.
+/// Asks the directory about one track. The whole credit, because the signature asks with its
+/// printed line and the index with the names behind it.
 pub async fn fetch(
     client: &reqwest::Client,
     pacer: &RequestPacer,

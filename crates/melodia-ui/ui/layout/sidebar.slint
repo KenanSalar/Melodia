@@ -8,22 +8,18 @@ import { NavRow } from "../components/nav-row.slint";
 import { OverlayScrollbar } from "../components/overlay-scrollbar.slint";
 import { EdgeResizeHandle, GrowEdge } from "../components/edge-resize-handle.slint";
 
-// Single nav row. Reads selected state from Nav, fires `select` on click.
 component SidebarItem inherits NavRow {
     in property <int> index;
 
     selected: Nav.selected-index == root.index;
     show-label: !Nav.sidebar-rail;
-    // On the rail, it centres the icon in the content row; expanded, it tracks a fraction of the
-    // sidebar width so icons drift outward as the user resizes.
+    // Expanded, a fraction of the width, so the icons drift outward as the sidebar is dragged.
     pad-left: Nav.sidebar-rail ? 4px : Nav.sidebar-expanded-w * 10%;
     pad-right: Nav.sidebar-rail ? 4px : Theme.pad-md;
     ease-padding: !Nav.sidebar-dragging;
 
-    // The rail hides the label, so the row hands `Nav` its identity and rect and
-    // `app-window.slint` paints the pill beside the rail — the global says why it can't be
-    // mounted here. **Published in both states**, so the tooltip is already armed when the
-    // sidebar folds to its rail under a parked pointer.
+    // `app-window.slint` paints the pill, for the reason the global gives. **Published expanded
+    // too**, so the tooltip is armed when the sidebar folds under a parked pointer.
     private property <bool> hover-mirror: root.has-hover;
     changed hover-mirror => {
         if (self.hover-mirror) {
@@ -36,22 +32,16 @@ component SidebarItem inherits NavRow {
         }
     }
 
-    // Closes Now Playing too — it sits over any section, so any nav click dismisses
-    // it. **A detail id is not reset here**: it belongs to that tab's state, so
-    // leaving and returning restores the last open one, and the band's back arrow is
-    // the only way out.
+    // **No detail id is reset here**: it belongs to its tab, so returning restores the last one.
     clicked => {
-        // Sidebar nav is always lateral, so the direction is set **before** the
-        // index write and the new branch drops in whatever the last one left behind.
+        // Before the index write, or the new branch enters from wherever the last nav left it.
         Nav.pending-enter-from = NavEnterFrom.above;
         Nav.now-playing-open = false;
         Nav.selected-index = root.index;
-        // Persisted, so a restart reopens on the same section.
         Nav.persist-selected-index(root.index);
     }
 }
 
-// Tiny separator between sidebar sections.
 component Divider inherits Rectangle {
     height: 1px;
     background: Theme.surface0;
@@ -76,9 +66,7 @@ export component Sidebar inherits Rectangle {
             height: 36px;
             background: transparent;
 
-            // The `SidebarItem` tooltip feed. The label is the action the click
-            // performs, and the tooltip only ever shows on a *collapsed* rail — so it
-            // reads "Expand" rather than mirroring the row's own text.
+            // The tooltip shows only on the rail, so it names the click's action, "Expand".
             property <bool> hover-mirror: collapse-touch.has-hover;
             changed hover-mirror => {
                 if (self.hover-mirror) {
@@ -92,8 +80,7 @@ export component Sidebar inherits Rectangle {
                 }
             }
 
-            // Animated alone, so the wobble fires on press and not while the sidebar
-            // width eases. Matches `SidebarItem`'s gentler shrink.
+            // Animated alone, so the wobble fires on press and not while the width eases.
             property <float> press-scale: collapse-touch.pressed ? 0.97 : 1.0;
             animate press-scale {
                 duration: collapse-touch.pressed ? 100ms : Theme.dur-med;
@@ -110,8 +97,7 @@ export component Sidebar inherits Rectangle {
                 background: collapse-touch.has-hover ? Theme.surface0 : transparent;
                 animate background { duration: Theme.dur-fast; easing: ease-in-out; enabled: !Theme.recoloring; }
                 HorizontalLayout {
-                    // `SidebarItem`'s padding, so this icon stays on the same vertical
-                    // line as the nav icons below it.
+                    // `SidebarItem`'s, keeping this icon in line with the nav icons.
                     padding-left: Nav.sidebar-rail ? 4px : Nav.sidebar-expanded-w * 10%;
                     padding-right: Nav.sidebar-rail ? 4px : Theme.pad-md;
                     spacing: Theme.pad-md;
@@ -143,15 +129,12 @@ export component Sidebar inherits Rectangle {
             }
         }
 
-        // Caps the sidebar's preferred height, so the content row stops claiming a tall
-        // slot and the now-playing bar keeps its own at small window heights. Both
-        // built-in scrollbars are off — the `OverlayScrollbar` at the root sits flush
-        // with the right edge instead — and **`content-width: self.width` locks the
-        // orthogonal axis**, so wheel events aren't hijacked into horizontal scroll.
+        // Caps the sidebar's preferred height, so the now-playing bar keeps its slot in a short
+        // window. `content-width: self.width` locks the other axis against a sideways wheel.
         nav-scroll := ScrollView {
             vertical-stretch: 1;
-            // The std ScrollView floors its own width, and a box layout holds a stretched child to
-            // that floor, so on the collapsed rail every row would draw wider than its column.
+            // Replaces the std ScrollView's width floor, which a column holds it to and the rail
+            // is narrower than.
             min-width: 0px;
             vertical-scrollbar-policy: always-off;
             horizontal-scrollbar-policy: always-off;
@@ -162,27 +145,20 @@ export component Sidebar inherits Rectangle {
 
                 Divider {}
 
-                // Top nav.
                 SidebarItem { index: 0; label: @tr("Search"); icon: "search"; }
                 SidebarItem { index: 1; label: @tr("Browse"); icon: "folder"; }
 
                 Divider {}
 
-                // **Recently Played keeps routing index 8 but renders here**, under
-                // Favorites: visual order follows source order rather than the index
-                // value, so placing it here avoids renumbering every tab below.
+                // **Recently Played keeps index 8 and renders here**: the order follows the
+                // source, so no persisted index moves.
                 SidebarItem { index: 2;  label: @tr("Favorites");       icon: "favorite";       }
                 SidebarItem { index: 8;  label: @tr("Recently Played"); icon: "history";        }
-                // Songs / Albums / Artists / Genres / Playlists are tabs of this one row
-                // now, and each kept the glyph it wore here — the page takes the library
-                // one Tracks used to have.
                 SidebarItem { index: 3;  label: @tr("My Library");      icon: "library_music";  }
 
-                // On its own past the divider: everything above it is the local library, and this
-                // is the one row that reaches the network. **The divider is gated too** — left
-                // unconditional it doubles against the one above Settings the moment the row goes.
-                // Two `if`s rather than a wrapper: an `if` takes a single element, and a wrapper
-                // would still claim this column's spacing.
+                // Past a divider, the one row that reaches the network. **The divider is gated
+                // too**, or it doubles against the one above Settings. Two `if`s, since a wrapper
+                // would still claim the column's spacing.
                 if Settings.radio-enabled: Divider {}
                 if Settings.radio-enabled: SidebarItem { index: 10; label: @tr("Radio"); icon: "radio"; }
             }
@@ -213,17 +189,13 @@ export component Sidebar inherits Rectangle {
         }
     }
 
-    // Flush with the sidebar's right edge, so it aligns with the panel boundary rather
-    // than stealing column space inside the padded layout, and aligned vertically with
-    // `nav-scroll` so it doesn't run through the Collapse toggle or the Settings row.
-    // Expanded, it insets by the resize handle's width to leave that hit-area on the
-    // very edge; on the rail, with no handle, it takes the edge itself.
+    // Flush with the sidebar's edge and level with `nav-scroll`. Expanded, it insets by the resize
+    // handle's width, leaving that hit-area on the very edge.
     OverlayScrollbar {
         x: parent.width - self.width
             - (Nav.sidebar-rail ? 0px : 4px);
         y: nav-scroll.absolute-position.y - root.absolute-position.y;
-        // Slimmer on the rail so the bar doesn't crowd the icons; the shared slot expanded,
-        // like every other view's.
+        // Slimmer on the rail, off the icons.
         width: Nav.sidebar-rail ? 6px : Theme.scrollbar-slot;
         height: nav-scroll.height;
         bar-thickness: Nav.sidebar-rail ? 4px : 8px;

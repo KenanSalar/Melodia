@@ -1,18 +1,9 @@
-//! The blocking Discord IPC transport: framed JSON over a local unix socket
-//! (Linux/macOS) or named pipe (Windows), run on a dedicated `std::thread`.
+//! The blocking Discord IPC transport: framed JSON over a unix socket, or a named pipe on
+//! Windows, on a thread of its own. Hand-rolled on `std` alone
+//! (`docs/adr/0024-discord-ipc-is-hand-rolled.md`), so should the reason lift this file deletes
+//! and [`super::model`] is untouched. Only [`connect`] touches the OS.
 //!
-//! `std` only — no new dependency, no `unsafe`. Hand-rolled rather than taken
-//! from `discord-rich-presence`, which pins `uuid ^0.8` against the tree's 1.x:
-//! a second copy of that crate is a steep price for a transport this size. If
-//! the pin lifts, this file deletes and [`super::model`] is untouched. The
-//! framing and payloads are pure (unit-tested over a `Vec<u8>`); only
-//! [`connect`] touches the OS. The socket-discovery table is lifted from
-//! `discord-rich-presence` (MIT) — the one part with real upstream value, so a
-//! new Discord packaging variant is a one-line addition here rather than a
-//! dependency bump.
-//!
-//! Wire frame: `[u32 LE opcode][u32 LE len][JSON body]`. Opcodes: 0 handshake,
-//! 1 frame, 2 close, 3 ping, 4 pong.
+//! Wire frame: `[u32 LE opcode][u32 LE len][JSON body]`.
 
 use std::io::{self, Read, Write};
 use std::sync::Arc;
@@ -41,37 +32,30 @@ const MAX_FRAME_LEN: u32 = 64 * 1024;
 const CONNECT_BACKOFF_MIN: Duration = Duration::from_secs(5);
 const CONNECT_BACKOFF_MAX: Duration = Duration::from_mins(1);
 
-/// Read deadline so a wedged Discord surfaces as an error → reconnect, rather
-/// than parking the worker thread forever. Unix only — a `std` named-pipe handle
-/// has no read-timeout API, so Windows inherits the blocking edge (survivable:
-/// only the next worker waits on it, and a Discord that wedged this one would
-/// wedge that one too).
+/// A wedged Discord surfaces as an error and a reconnect rather than a parked thread. Unix only:
+/// a `std` named pipe has no read timeout, which costs only the next worker a wait, and a Discord
+/// that wedged this one would wedge that one too.
 #[cfg(unix)]
 const READ_TIMEOUT: Duration = Duration::from_secs(2);
 
-/// A connected IPC endpoint. Both concrete types implement `Read + Write`, so
-/// the framing/worker code is generic over the platform.
+/// Both are `Read + Write`, so the framing and the worker never branch on the platform.
 #[cfg(unix)]
 pub(crate) type Connection = UnixStream;
 #[cfg(windows)]
 pub(crate) type Connection = std::fs::File;
 
-/// A request from the service to the worker. All four variants are used — the
-/// service sends `Enable`/`Disable` from the settings toggle and `Apply`/`Clear`
-/// from the detector task.
+/// `Enable` and `Disable` come off the settings toggle, `Apply` and `Clear` off the detector task.
 pub(crate) enum Command {
-    /// Feature turned on — start connecting (and repaint any held presence).
+    /// Start connecting, and repaint any held presence.
     Enable,
-    /// Feature turned off — clear the card and close the socket. The service drops the channel
-    /// right after, which ends the worker.
+    /// Clear the card and close the socket. The service drops the channel right after, which ends
+    /// the worker.
     Disable,
-    /// Show this card.
     Apply(Presence),
-    /// Remove the card (playback stopped) but stay connected.
+    /// Remove the card but stay connected.
     Clear,
 }
 
-/// Outcome of the connected serve loop.
 enum ServeOutcome {
     /// All senders dropped — end the worker.
     Exit,
@@ -81,11 +65,7 @@ enum ServeOutcome {
     Disconnected,
 }
 
-/// The worker entry point, run on the dedicated Discord thread. Owns the socket;
-/// never registered with the task tracker (at quit the socket simply closes,
-/// which makes Discord drop the card). Publishes connection state through
-/// `status`; connect/reconnect failures stay silent (logged), never a toast.
-/// `connect` opens the socket, [`connect`] in the app.
+/// A failure to connect stays in the log, never a toast. `connect` is [`connect`] in the app.
 pub(crate) fn run_worker(
     rx: &mpsc::Receiver<Command>,
     status: &Arc<StatusCell>,
@@ -125,8 +105,7 @@ pub(crate) fn run_worker(
         backoff = CONNECT_BACKOFF_MIN;
         status.set_connected(true);
 
-        // Repaint the held presence after a (re)connect — a Discord restart
-        // mid-song brings the card back.
+        // So a Discord restarted mid-song brings the card back.
         if let Some(presence) = &desired {
             let body = payload::set_activity_json(presence, pid, &next_nonce(pid, &mut nonce));
             if let Err(e) = send_frame_and_ack(&mut conn, &body) {
@@ -143,9 +122,8 @@ pub(crate) fn run_worker(
     }
 }
 
-/// Serve commands over a live connection until the socket dies or we're disabled.
-/// Latest-wins: after a blocking `recv`, any queued commands are drained so a
-/// burst of seeks/skips collapses into one write.
+/// Latest wins: what has queued behind a blocking `recv` drains with it, so a burst of skips is
+/// one write.
 fn serve(
     conn: &mut Connection,
     rx: &mpsc::Receiver<Command>,
@@ -154,11 +132,8 @@ fn serve(
     desired: &mut Option<Presence>,
     enabled: &mut bool,
 ) -> ServeOutcome {
-    // The card most recently written to the socket, diffed against `desired`
-    // after each command batch so an update that changes nothing visible (a lone
-    // `Enable`, or a re-applied identical card) doesn't spend an IPC write. Seeded
-    // from `desired` because the caller already repainted it on (re)connect, and
-    // cloned only when we actually send — far cheaper than cloning every command.
+    // Seeded from `desired`, which the caller has just repainted, so a batch that changes nothing
+    // visible (a lone `Enable`, an identical card) spends no write.
     let mut last_sent = desired.clone();
     loop {
         let Ok(cmd) = rx.recv() else {
@@ -186,7 +161,6 @@ fn serve(
     }
 }
 
-/// Result of waiting out a reconnect backoff.
 enum WaitOutcome {
     /// All senders dropped — exit the worker.
     Exit,
@@ -194,8 +168,7 @@ enum WaitOutcome {
     Continue,
 }
 
-/// Wait up to `timeout` for a command while disconnected, applying it if one
-/// arrives, so a `Disable`/`Apply` during backoff is handled promptly.
+/// A command landing mid-backoff is applied at once rather than after it.
 fn idle_wait(
     rx: &mpsc::Receiver<Command>,
     timeout: Duration,
@@ -213,9 +186,6 @@ fn idle_wait(
     }
 }
 
-/// After a failed connect or handshake: mark disconnected, wait out the current
-/// backoff (applying any command that lands during it), and grow the backoff on
-/// a plain timeout. `Exit` means all senders dropped — the caller ends the worker.
 fn wait_and_backoff(
     rx: &mpsc::Receiver<Command>,
     status: &Arc<StatusCell>,
@@ -243,7 +213,6 @@ fn handle_command(cmd: Command, desired: &mut Option<Presence>, enabled: &mut bo
     }
 }
 
-/// Apply any already-queued commands without blocking (latest state wins).
 fn drain_commands(
     rx: &mpsc::Receiver<Command>,
     desired: &mut Option<Presence>,
@@ -259,20 +228,16 @@ fn next_nonce(pid: u32, nonce: &mut u64) -> String {
     format!("{pid}-{nonce}")
 }
 
-/// Send the handshake and read Discord's `READY` dispatch. Connected once it
-/// returns `Ok`.
+/// Connected once Discord's `READY` has been read.
 fn handshake(conn: &mut Connection) -> io::Result<()> {
     write_frame(conn, OP_HANDSHAKE, &payload::handshake_json(DISCORD_APP_ID))?;
     read_reply(conn)?;
     Ok(())
 }
 
-/// Write a `FRAME` command and consume its one reply, keeping the
-/// one-reply-per-write socket accounting balanced. Discord answers a *rejected*
-/// `SET_ACTIVITY` with an `evt: "ERROR"` frame at the same opcode as a success,
-/// so a bad payload would otherwise look sent — surface it (log-only: a
-/// deterministic rejection can't be fixed by a retry, and dropping the
-/// connection over it would be worse).
+/// Reads the one reply each write gets, which keeps the socket's accounting balanced. Discord
+/// answers a rejected `SET_ACTIVITY` with `evt: "ERROR"` at a success's opcode, so it is logged
+/// here: a retry can't fix a deterministic rejection, and dropping the connection would be worse.
 fn send_frame_and_ack(conn: &mut Connection, body: &[u8]) -> io::Result<()> {
     write_frame(conn, OP_FRAME, body)?;
     let (_opcode, reply) = read_reply(conn)?;
@@ -280,8 +245,6 @@ fn send_frame_and_ack(conn: &mut Connection, body: &[u8]) -> io::Result<()> {
     Ok(())
 }
 
-/// Log a Discord `evt: "ERROR"` reply (code + message); a non-error or
-/// unparseable ACK is ignored.
 fn log_error_ack(reply: &[u8]) {
     let Ok(value) = serde_json::from_slice::<serde_json::Value>(reply) else {
         return;
@@ -298,9 +261,8 @@ fn log_error_ack(reply: &[u8]) {
     log::debug!("discord: activity rejected (code {code:?}): {message}");
 }
 
-/// Read frames until the command's reply arrives, echoing a stray `PING` as a
-/// `PONG` so an unsolicited ping isn't mistaken for the reply (which would
-/// desync the per-write accounting). A `CLOSE` is treated as a disconnect.
+/// Answers a stray `PING` rather than taking it for the reply, which would desync the
+/// accounting. A `CLOSE` is a disconnect.
 fn read_reply(conn: &mut Connection) -> io::Result<(u32, Vec<u8>)> {
     loop {
         let (opcode, body) = read_frame(conn)?;
@@ -314,8 +276,6 @@ fn read_reply(conn: &mut Connection) -> io::Result<(u32, Vec<u8>)> {
     }
 }
 
-/// Write one frame: LE opcode, LE length, body. Generic over the sink so it's
-/// exercised over a `Vec<u8>` in tests and the socket in production.
 fn write_frame(w: &mut impl Write, opcode: u32, body: &[u8]) -> io::Result<()> {
     let len = u32::try_from(body.len())
         .map_err(|_| io::Error::new(io::ErrorKind::InvalidInput, "frame body too large"))?;
@@ -325,9 +285,6 @@ fn write_frame(w: &mut impl Write, opcode: u32, body: &[u8]) -> io::Result<()> {
     w.flush()
 }
 
-/// Read one frame. A declared length above [`MAX_FRAME_LEN`] is a protocol
-/// desync → `InvalidData`, so a bogus header drops the connection rather than
-/// allocating on it.
 fn read_frame(r: &mut impl Read) -> io::Result<(u32, Vec<u8>)> {
     let mut op_bytes = [0u8; 4];
     let mut len_bytes = [0u8; 4];
@@ -343,9 +300,8 @@ fn read_frame(r: &mut impl Read) -> io::Result<(u32, Vec<u8>)> {
     Ok((opcode, body))
 }
 
-/// Discovery subdirs (relative to each base) where Discord exposes its socket,
-/// covering native, Flatpak (Discord + Vesktop) and Snap installs. Lifted from
-/// `discord-rich-presence` (MIT).
+/// Where the socket sits under each base for native, Flatpak (Discord and Vesktop) and Snap
+/// installs. Lifted from `discord-rich-presence` (MIT), so a new packaging is a line here.
 #[cfg(unix)]
 const SOCKET_SUBDIRS: &[&str] = &[
     "",
@@ -357,9 +313,7 @@ const SOCKET_SUBDIRS: &[&str] = &[
     "snap.discord-canary/",
 ];
 
-/// Runtime dirs to probe, in order — `XDG_RUNTIME_DIR` first, then the temp-dir
-/// env vars, then `/tmp`. Env-derived and fixed for the process's lifetime, so
-/// it's resolved once and shared rather than rebuilt on every reconnect probe.
+/// Read from the environment once rather than on every reconnect probe.
 #[cfg(unix)]
 fn socket_bases() -> &'static [String] {
     static BASES: std::sync::LazyLock<Vec<String>> = std::sync::LazyLock::new(|| {
@@ -374,8 +328,7 @@ fn socket_bases() -> &'static [String] {
     &BASES
 }
 
-/// Probe `discord-ipc-{0..10}` across every base/subdir and take the first that
-/// opens. `None` when Discord isn't running.
+/// `None` when Discord isn't running.
 #[cfg(unix)]
 pub(super) fn connect() -> Option<Connection> {
     use std::fmt::Write as _;
@@ -396,9 +349,8 @@ pub(super) fn connect() -> Option<Connection> {
     None
 }
 
-/// Windows named-pipe connect. `access_mode(0x3)` is `FILE_READ_DATA |
-/// FILE_WRITE_DATA` (the file-specific read/write pair a named pipe accepts) —
-/// **not** `GENERIC_READ | GENERIC_WRITE` (`0xC0000000`); do not "correct" it.
+/// `access_mode(0x3)` is `FILE_READ_DATA | FILE_WRITE_DATA`, the pair a named pipe accepts, and
+/// **not** `GENERIC_READ | GENERIC_WRITE` (`0xC0000000`); don't "correct" it.
 #[cfg(windows)]
 pub(super) fn connect() -> Option<Connection> {
     use std::os::windows::fs::OpenOptionsExt;

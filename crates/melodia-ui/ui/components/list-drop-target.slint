@@ -2,19 +2,17 @@ import { Theme } from "../theme.slint";
 import { Drag, DragOrigin } from "../globals/drag.slint";
 import { LiftedRun } from "../models.slint";
 
-// Takes a list's own rows back as a reorder, and where the host says so, what another list's drag
-// carries as an insert: a `DropArea` mounted over the list's viewport, so a drop's position is a
-// position in the list as drawn. Clicks and the wheel pass through it to the rows.
+// Takes a list's own rows back as a reorder and, where the host says so, another list's items as
+// an insert: a `DropArea` over the list's viewport, so a drop's position is a position in the list
+// as drawn. Clicks and the wheel pass through to the rows.
 //
-// Slots, not rows: slot K is the gap above row K, `[0, row-count]`, so below the last row and the
-// whole of an empty list are the end. For its own rows the slots inside and either side of the
-// lifted run leave it where it is, so they draw no line and move nothing. Picks scattered through
-// the list have no such slot, every drop gathering them.
+// Slots, not rows: slot K is the gap above row K, `[0, row-count]`, so below the last row and an
+// empty list are the end. The slots inside and either side of the lifted run move nothing and draw
+// no line; scattered picks have none, every drop gathering them.
 export component ListDropTarget inherits DropArea {
     in property <DragOrigin> origin;
-    // Whether it takes what other lists carry out, as a copy landing at the slot.
+    // Takes what other lists carry out, as a copy landing at the slot.
     in property <bool> takes-items: false;
-    // The list's pitch, which every row has.
     in property <length> row-height;
     in property <int> row-count;
     // The list's `content-y`, 0 at the top and negative scrolled down.
@@ -26,19 +24,17 @@ export component ListDropTarget inherits DropArea {
 
     // `to` is where the row lands once it has left `from`.
     callback reorder(int /*from*/, int /*to*/);
-    // The list's picks, gathered in front of row `slot`, as `Drag.payload.picks` says the drag
-    // lifted them.
+    // The list's picks, gathered in front of row `slot`.
     callback move-picks(int /*slot*/);
-    // Another list's items, landing in front of row `slot`. They are `Drag.payload.items`.
+    // `Drag.payload.items`, landing in front of row `slot`.
     callback dropped-items(int /*slot*/);
     // Positive scrolls down; the host clamps.
     callback scroll-by(length /*delta-y*/);
 
-    // A drag of another list's items is over the list, for the host to say what letting go does.
+    // Another list's items are over the list, for the host to say what letting go does.
     out property <bool> holds-items: root.has-drag && root.items-drag;
 
-    // How near an edge the pointer scrolls the list, and how far one tick takes it. A quarter of a
-    // short list, so the two bands leave it a middle to drop in.
+    // At most a quarter of a short list, so the two bands leave it a middle to drop in.
     property <length> edge-band: min(40px, root.height / 4);
     property <length> scroll-step: 6px;
 
@@ -47,10 +43,9 @@ export component ListDropTarget inherits DropArea {
         && Drag.payload.items.kind != "";
     property <int> lifted: Drag.payload.index;
 
-    // Written by the two callbacks, the only places a position arrives, and kept so the slot follows
-    // the content scrolling under a pointer at rest.
+    // Kept, so the slot follows the content scrolling under a pointer at rest.
     property <length> pointer-y;
-    // -1 in the top band, 1 in the bottom one. Set alongside the pointer rather than bound to the
+    // -1 in the top band, 1 in the bottom one. Written beside the pointer rather than bound to the
     // height: the timer reading it sits inside an `if` on every host, where a binding reaching a
     // layout property is evaluated inside the layout pass.
     property <int> edge;

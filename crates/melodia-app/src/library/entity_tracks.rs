@@ -1,9 +1,6 @@
-//! The tracks behind a set of entity cards — what every card right-click action operates on.
-//!
-//! One place that knows how an album, artist, genre or playlist becomes a track list, so the eight
-//! `CardActions` handlers each resolve through a single call rather than repeating the match.
-//! Browse's folder cards are deliberately absent: a folder is a path rather than an id, and the
-//! concept belongs to [`crate::library::browse`].
+//! The tracks behind a set of entity cards, which every card right-click action acts on: the one
+//! place that knows how an album, artist, genre or playlist becomes a track list. Browse's folder
+//! cards aren't here, a folder being a path rather than an id.
 
 use std::collections::{HashMap, HashSet};
 
@@ -42,8 +39,8 @@ impl EntityKind {
 /// Every track behind `ids`: the entities in the order they were asked for, each one's tracks in
 /// its own order, and no track twice.
 ///
-/// The dedupe is load-bearing rather than tidy — a track credited to two selected artists, or
-/// sitting in two selected playlists, should be queued once.
+/// The dedupe is load-bearing: a track credited to two selected artists, or in two selected
+/// playlists, is queued once.
 pub async fn track_ids_for(
     db: &DbPool,
     kind: EntityKind,
@@ -62,20 +59,14 @@ pub async fn track_ids_for(
     Ok(flatten_in_order(group_by_entity(pairs), ids))
 }
 
-/// Playlists split two ways, and which side an id falls on is one batched read: manual membership
-/// is a second batched read of `playlist_items`, while a smart playlist has no rows there at all
-/// and is resolved from its stored criteria, one query each. Only that last part is per-entity,
-/// a stored rule set being a query the database cannot union across playlists.
+/// Playlists split two ways in one batched read: manual membership is a second batched read of
+/// `playlist_items`, and each smart playlist resolves from its stored rules, a query the database
+/// can't union across playlists.
 ///
-/// **Those go out together**, `library::smart_playlists::fill_from_rules`'s shape: WAL lets them
-/// run side by side across the read pool, where awaiting each in turn put a grid's worth of them
-/// in series on the click path. **Each asks for ids rather than rows**, since running
-/// concurrently means the peak is every set at once: through the list projection that peak is
-/// every matched row of every playlist in the selection, for an answer that is one column of it.
-///
-/// An id the split read didn't return was deleted between the grid painting and the click, and a
-/// rule set the evaluator can't answer is logged where it fails. Either way the rest of the
-/// selection still acts: a menu that resolves nothing has only a log line to show for it.
+/// **Those go out together**, as `library::smart_playlists::fill_from_rules` does, WAL letting them
+/// run side by side, and **each asks for ids rather than rows**, the peak being every set at once.
+/// An id the split didn't return was deleted since the grid painted, and a rule set that fails is
+/// logged; either way the rest of the selection still acts.
 async fn playlist_track_ids(db: &DbPool, ids: &[i64]) -> Result<Vec<i64>, AppError> {
     let verdicts = queries::playlist::smart_criteria_for_playlists(db, ids).await?;
 

@@ -1,12 +1,8 @@
-//! Scan-time database operations: the three write transactions a library change lands in, and
-//! the upserts, track-row mutations and lookups they are built from.
+//! Scan-time database operations: the three write transactions a library change lands in, and the
+//! pieces they are built from.
 //!
-//! [`commit_scan`], [`commit_retag`] and [`apply_watch_batch`] each open, run and commit their own
-//! transaction, and are the only writes here a caller outside the crate can reach: every query that
-//! takes a transaction is `pub(crate)`, so no other crate can compose one. Of the building blocks,
-//! [`upserts`] handles find-or-create on artist / album / genre rows, [`name_cache`] keeps those
-//! answers for the span of a transaction, [`mutations`] holds every track-row write, [`lookups`]
-//! holds the read-side queries, and [`sort_key`] precomputes the `tracks.sort_key` column.
+//! [`commit_scan`], [`commit_retag`] and [`apply_watch_batch`] each own their transaction, and are
+//! the only writes here another crate can reach: every query taking a transaction is `pub(crate)`.
 
 mod finish;
 mod lookups;
@@ -42,12 +38,8 @@ pub struct ResolvedIds {
     pub folder_id: i64,
 }
 
-/// Resolve a path's library-folder + artist/album/genre rows, upserting any
-/// missing rows. Returns `None` (with a debug log under `context`) when the
-/// path is not inside any library folder — callers should short-circuit.
-///
-/// Shared by the file-event reconcile path and the tag-edit orchestrator: both
-/// need the same folder lookup + FK upsert sequence before writing a track row.
+/// Resolves a path's library folder and its artist, album and genre rows, upserting what's
+/// missing; `None`, logged under `context`, for a path outside every library folder.
 pub(crate) async fn resolve_track_context(
     tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
     path: &std::path::Path,
@@ -61,18 +53,14 @@ pub(crate) async fn resolve_track_context(
         return Ok(None);
     };
 
-    // The **first** credited name, not the whole credit line: an `artists` row named
-    // "X feat. Y" is the bug this replaced, and it was one every multi-artist file created.
+    // The **first** credited name: a row named "X feat. Y" is an artist nobody recorded under.
     let artist_name = meta.artist.primary_name();
     let album_name = meta.album.as_deref().unwrap_or("");
-    // The first genre for the same reason: `tracks.genre_id` is the primary one, and the rest
-    // reach the library through `track_genres`.
+    // The first genre too, the rest reaching the library through `track_genres`.
     let genre_name = meta.genres.primary().unwrap_or("");
 
     let artist_id = names.artist(tx, artist_name, 1).await?;
-    // Group the album by its album-artist (falling back to the track artist when no
-    // album-artist tag is present) so a per-track featured credit ("X & Y") doesn't
-    // split the album into a second row.
+    // The album groups by its album artist, so a per-track featured credit doesn't split it.
     let album_artist_name = album_artist_name_for(meta);
     let album_artist_id = if album_artist_name == artist_name {
         artist_id

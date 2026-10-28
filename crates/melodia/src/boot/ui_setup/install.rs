@@ -31,10 +31,8 @@ use super::subscribers::{
 use super::views::{UiHandles, install_library_settings_and_friends, install_views};
 use crate::boot::tasks::serve_file_opens;
 
-/// Install every surface, subscriber and boot-time task the window carries.
-///
-/// Nothing here has to outlive the call in `main`: every installed closure and subscriber holds
-/// its own clone of what it reads.
+/// Installs every surface, subscriber and boot-time task the window carries. Each closure holds
+/// its own clone of what it reads, so nothing here outlives the call.
 pub fn install_ui(
     app: &AppWindow,
     state: &AppState,
@@ -77,7 +75,6 @@ fn install_shell(
     ui::callbacks::wire_tags(app, state, &notifications);
 
     match ui::appearance::install(app, state) {
-        // After `appearance::install`, whose kick channel it subscribes to.
         Ok(h) => tasks::material_you::spawn(
             spawner,
             state.clone(),
@@ -113,9 +110,8 @@ fn install_player_surfaces(app: &AppWindow, state: &AppState, views: &UiHandles)
         .map_err(|e| AppError::io("position subscriber", e))?;
     ui::track_links::spawn_playing_links_subscriber(weak.clone(), state)
         .map_err(|e| AppError::io("playing-track links subscriber", e))?;
-    // Reads the same view model as the first of those, for the ICY titles a station announces.
-    // Beside them rather than inside `radio::install`, so every subscription to a player channel
-    // is spawned in one place.
+    // Here rather than in `radio::install`, so every player-channel subscriber is spawned in one
+    // place.
     ui::radio::install_history(weak, &views.radio_ui, &state.sinks)
         .map_err(|e| AppError::io("station history subscriber", e))?;
 
@@ -123,14 +119,11 @@ fn install_player_surfaces(app: &AppWindow, state: &AppState, views: &UiHandles)
         log::warn!("queue_panel::install: {}", describe(&e));
     }
 
-    // Now Playing owns its own small `(cover, blur)` tier, separate from
-    // `cover_thumbs`.
     let np_artwork = Arc::new(ui::now_playing_artwork::NowPlayingArtwork::new(
         ui::now_playing_artwork::blur_spec(app),
     ));
     match ui::now_playing::install(app, state, &views.cover_thumbs, &np_artwork) {
-        // Needs `np_state` for the up-next subscriber gate; without it the gate
-        // would flip nothing visible.
+        // The miniplayer takes `np_state` for its up-next gate.
         Ok(np_state) => {
             if let Err(e) = ui::shell::mini_player::install(app, state, &np_state) {
                 log::warn!("mini_player::install: {}", describe(&e));
@@ -169,8 +162,6 @@ fn install_notices(
     install_audio_device_lost_subscriber(state, weak.clone(), notifications.clone())?;
     install_artwork_restore_subscriber(state, weak.clone(), notifications.clone())?;
 
-    // The support links, plus the one-time support toast a few minutes into
-    // whichever early launch is the fifth. Counts this launch either way.
     ui::support::install(app, state, notifications.clone())?;
 
     install_toast_bridge(weak.clone(), notifications.clone())?;
@@ -186,10 +177,8 @@ fn install_updater_and_onboarding(
     notifications: &Rc<NotificationsUi>,
 ) {
     let weak = app.as_weak();
-    // One `watch` carries backend events from the daily task and the `Updater.*`
-    // callbacks to the UI-thread subscriber that toasts them. The daily task
-    // spawns only where the install path is user-writable; system-managed
-    // installs go through the OS package manager instead.
+    // One `watch` carries the daily task's and the `Updater.*` callbacks' events to the
+    // subscriber that toasts them.
     let (updater_event_tx, updater_event_rx) =
         watch::channel::<Option<services::updater::UpdaterEvent>>(None);
     ui::settings::updater_settings::install_event_subscriber(
@@ -199,15 +188,9 @@ fn install_updater_and_onboarding(
     );
     ui::callbacks::wire_updater(app, state, notifications, &updater_event_tx);
 
-    // The first-run card, opened only if this install hasn't seen the current revision. After
-    // `hydrate_ui_from_settings`, so a deep link out of it isn't racing the boot's own nav and tab
-    // writes, and before `app.show()`, like everything else that seeds a Slint property.
-    //
-    // The two surfaces that would otherwise land on top of it wait in this closure: the first
-    // thirty seconds shouldn't be three stacked surfaces. Held rather than skipped — the crash
-    // notice consumes its marker as it fires — and it runs immediately on every launch that opens
-    // no card. Deferring a *daily* check by the length of a welcome card costs nothing. The Ko-fi
-    // prompt can't collide, being spent on the fifth launch behind a two-minute delay.
+    // After `hydrate_ui_from_settings`, so a deep link out of the card doesn't race the boot's own
+    // nav and tab writes. The crash notice and the update check wait in this closure until the
+    // card closes rather than stacking on it; a launch with no card runs it at once.
     let deferred_spawner = spawner.clone();
     let deferred_state = state.clone();
     let deferred_notifications = notifications.clone();
@@ -220,9 +203,8 @@ fn install_updater_and_onboarding(
             );
         }
 
-        // Only the install shape gates the spawn — those two can't change while the process
-        // lives. The auto-check switch is read per tick instead, the welcome card and
-        // Settings ▸ Updates both offering it after this point.
+        // Gated only on the install's shape, which can't change while running. The auto-check
+        // switch is read per tick, the welcome card offering it after this point.
         if services::updater::is_available() && !platform::install_kind::is_system_install() {
             tasks::updater_daily::spawn(
                 &deferred_spawner,
@@ -249,19 +231,14 @@ fn install_platform_hooks(
     settings: Option<&SettingsData>,
     file_open_listener: Option<platform::single_instance::Listener>,
 ) {
-    // Independent of the daily check: the in-attempt prune only fires on the
-    // next install click, so a cancelled install leaves a verified package in
-    // the staging dir forever for a user who never clicks again. The grace
-    // matches `updater_daily::STARTUP_DELAY`, giving the launch scan and
-    // DB pre-fetch first claim on the disk.
+    // Independent of the daily check, or a cancelled install's package stays staged until the
+    // next install click. The delay matches `updater_daily::STARTUP_DELAY`, leaving the launch
+    // scan the disk first.
     state.runtime.spawn(async {
         tokio::time::sleep(std::time::Duration::from_secs(30)).await;
         services::updater::prune_stale_staging().await;
     });
 
-    // Tarball installs only — RPM/DEB own those files through their manifests
-    // and AppImage bundles them. The BLAKE3 compare means the common case is a
-    // stat plus a 3 KB hash and no write. Gating rationale in the module.
     #[cfg(target_os = "linux")]
     state.runtime.spawn_blocking(|| {
         if let Err(e) = platform::desktop_integration::refresh_user_install() {
@@ -269,16 +246,13 @@ fn install_platform_hooks(
         }
     });
 
-    // Restart-gated through the `restart-tray` Dialog, so this startup read is
-    // the single gate; off, there is no D-Bus connection, ksni thread or
-    // receiver task at all. `install` is cross-platform — Linux creates the
-    // StatusNotifierItem eagerly, Win/mac defer onto the event loop.
+    // The one gate, the setting being restart-gated: off, there is no tray connection, thread or
+    // task at all.
     if settings.is_some_and(|s| s.tray.tray_enabled) {
         ui::shell::tray_bridge::install(spawner, state, app);
     }
 
-    // Answer the launches queued on the socket claimed back at boot — here
-    // rather than beside the claim, a forwarded track needing a window to raise.
+    // Here rather than beside the boot's claim: a forwarded launch raises the window.
     if let Some(listener) = file_open_listener {
         serve_file_opens(state, app, listener);
     }
@@ -290,9 +264,8 @@ fn install_platform_hooks(
     }
 }
 
-/// SMTC needs a real `HWND`, which exists only once the window is shown, so
-/// `AppState::init` left the handle inert (souvlaki panics on a null one).
-/// Posting to the event loop runs this on the first iteration, past the show.
+/// Attaches SMTC on the loop's first pass, once the window is shown: it needs a real `HWND`, and
+/// souvlaki panics on a null one.
 #[cfg(target_os = "windows")]
 fn attach_media_controls_after_show(app: &AppWindow, state: &AppState) {
     let Some(mc) = state.media_controls.clone() else { return };
@@ -304,8 +277,7 @@ fn attach_media_controls_after_show(app: &AppWindow, state: &AppState) {
         match ui::window_chrome::win32_hwnd(&app) {
             Some(hwnd) => {
                 if mc.attach_smtc(hwnd) {
-                    // `sync()` no-op'd while the controls were inert, so the
-                    // OS panel is still empty.
+                    // `sync()` skipped every change while inert, leaving the OS panel empty.
                     melodia_engine::player::engine::state::with_state_emit(
                         &player_state,
                         &sinks,
@@ -322,14 +294,8 @@ fn attach_media_controls_after_show(app: &AppWindow, state: &AppState) {
     }
 }
 
-/// Boot's `theme_apply::apply` ran inside `appearance::install`, where the DWM
-/// hook no-op'd with no HWND yet. By the time this one-shot fires the window
-/// is up and the palette is resolved; every later change drives DWM from
-/// `theme_paint`'s write.
-///
-/// The same closure pushes the embedded icon onto the winit window — the
-/// taskbar reads it out of the EXE directly, but the *caption* icon comes
-/// from the WNDCLASS, which winit registers with `hIcon: 0`.
+/// Repeats the DWM caption paint the boot's theme apply made with no `HWND` yet, and sets the
+/// caption icon. Every later palette change reaches DWM through `theme_paint`.
 #[cfg(target_os = "windows")]
 fn polish_titlebar_after_show(app: &AppWindow) {
     let weak = app.as_weak();
@@ -342,9 +308,8 @@ fn polish_titlebar_after_show(app: &AppWindow) {
     }
 }
 
-/// Push the embedded EXE icon onto the winit window. Windows auto-binds it to
-/// the taskbar but not the caption, whose WNDCLASS winit registers with
-/// `hIcon: 0`. A failure just leaves the generic icon.
+/// Puts the EXE's embedded icon on the caption, whose WNDCLASS winit registers with `hIcon: 0`;
+/// the taskbar reads the EXE itself.
 #[cfg(target_os = "windows")]
 fn install_window_icon(app: &AppWindow) {
     use slint::winit_030::WinitWindowAccessor;

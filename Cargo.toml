@@ -286,13 +286,11 @@ ksni = { version = "0.3.6", default-features = false, features = ["blocking", "a
 libc = "0.2.190"
 
 # Windows
-# `MoveFileExW(MOVEFILE_DELAY_UNTIL_REBOOT)` in `updater/install/swap.rs`, for when
-# `Melodia.exe.old` is still loaded, `GetUserDefaultLocaleName`, the DWM accent
-# values `window_border` reads out of the registry, and the exclusive output's
-# WASAPI error codes and MMCSS registration. Declarations from here rather than a
-# hand-rolled `extern` block only review can keep true.
+# `GetUserDefaultLocaleName`, the DWM accent values `window_border` reads out of
+# the registry, and the exclusive output's WASAPI error codes and MMCSS
+# registration. Declarations from here rather than a hand-rolled `extern` block
+# only review can keep true.
 windows-sys = { version = "0.61.2", features = [
-    "Win32_Storage_FileSystem",
     "Win32_Graphics_Dwm",
     "Win32_Foundation",
     "Win32_Globalization",

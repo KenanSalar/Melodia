@@ -9,7 +9,6 @@ import { PopupFit } from "../../components/popup-fit.slint";
 import { PopupSurface } from "../../components/popup-surface.slint";
 import { SearchBar } from "../../components/search-bar.slint";
 
-// One option row in the picker. Unexported — useful nowhere else.
 component FacetOption inherits Rectangle {
     in property <string> label;
     in property <int> count;
@@ -37,9 +36,7 @@ component FacetOption inherits Rectangle {
             font-size: Theme.font-size-md;
             overflow: elide;
         }
-        // The bitrate floors are ours rather than the directory's, so they arrive with no count at
-        // all. Suppressed here rather than at that mount, and an `if` rather than `visible` — a
-        // hidden child still claims the row's spacing.
+        // The bitrate floors are ours, so they arrive uncounted.
         if root.count > 0: Text {
             horizontal-stretch: 0;
             text: root.count;
@@ -54,20 +51,13 @@ component FacetOption inherits Rectangle {
     }
 }
 
-// One filter chip over the Browse grid, and the picker behind it.
-//
-// Five mounts, four of them over a directory facet list Rust fetches on first open and one — the
-// minimum bitrate — over a fixed list the host hands in. That is what the `[RadioFacetRow]` input
-// is for: the component knows nothing about where its options came from, so the bitrate chip needs
-// no second component and no fetch.
-//
-// The needle goes to Rust rather than filtering here, because Slint rejects an inline
-// `for … : if …` and a country list runs to a few hundred entries.
+// A filter chip over the Browse grid and the picker behind it. The options are an input, so the
+// bitrate chip's fixed list needs no second component and no fetch. The needle goes to Rust, Slint
+// rejecting an inline `for … : if …` and a country list running to hundreds.
 export component FacetChip inherits Rectangle {
     in property <int> kind;
-    // The chip's own name, shown while nothing is picked.
     in property <string> label;
-    // The picked entry's display name. Empty means nothing is picked.
+    // Empty means nothing is picked.
     in property <string> value;
     in property <[RadioFacetRow]> options;
     in property <bool> loading: false;
@@ -82,18 +72,15 @@ export component FacetChip inherits Rectangle {
     callback cleared(int /*kind*/);
 
     property <bool> is-set: root.value != "";
-    // Spelled once because the filter box's slot is this number less the surface's padding, and a
-    // hand-derived second copy is what left the box floating in a gutter.
+    // Named, the filter box's slot being this less the surface's padding.
     property <length> popup-w: 320px;
     // The picker's height wherever the window has room for it; the list scrolls inside either way.
     property <length> popup-h: 380px;
-    // Between the chip and its picker, on whichever side the picker opens.
     property <length> popup-gap: 4px;
 
     height: 32px;
-    // **Never a bound `width`** — a root's is reported as both `min` and `max`, so five chips of
-    // locale-sized labels would become a floor under the window's own resize. Spelled as the
-    // split instead: no floor, content width where there is room, and the label elides below it.
+    // Never a bound `width`, which is reported as both `min` and `max`: five locale-sized labels
+    // would floor the window's resize.
     min-width: 0px;
     preferred-width: chip.preferred-width;
     max-width: chip.preferred-width;
@@ -133,14 +120,9 @@ export component FacetChip inherits Rectangle {
     }
 
     popup := PopupWindow {
-        // Under the chip, or above it where below is short and above has more room, capped at that
-        // side's room (`PopupFit`). Both dimensions are spelled because the body scrolls — a popup
-        // sized by its content would grow to the whole list.
-        //
-        // **Trailing edges aligned rather than leading ones.** The strip sits at the band's right,
-        // where a left-anchored picker runs past the window and `place_popup` clamps it flush to
-        // that edge, gutterless and no longer under the chip that opened it. The room is to the
-        // left, and `ColumnTogglePopup` answers the same clamp the same way.
+        // Both dimensions spelled, a popup sized by its scrolling body growing to the whole list.
+        // Trailing edges aligned: the strip sits at the band's right, where a left-anchored picker
+        // is clamped flush to the window and off its chip, as `ColumnTogglePopup` answers too.
         property <length> above-y: root.absolute-position.y - root.popup-gap;
         property <length> below-y: root.absolute-position.y + chip.height + root.popup-gap;
         property <bool> opens-above:

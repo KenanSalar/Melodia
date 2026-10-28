@@ -1,7 +1,5 @@
-//! The directory grid's own wiring: what a column change, a load-more and a logo lookup do.
-//!
-//! The card *actions* are not here — they are the same three on every tab, and live in
-//! [`super::stations`].
+//! The directory grid's own wiring; the card actions, the same on every tab, are
+//! [`super::stations`]'s.
 
 use std::sync::Arc;
 
@@ -16,9 +14,8 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, radio_ui: &Arc<RadioUi>) {
     let weak = ui.as_weak();
 
     {
-        // A resize re-chunks the same stations; nothing is re-fetched, the column count being a
-        // property of the window rather than of the query. One count for three grids, so this
-        // asks the mounted tab rather than being gated on Browse in the `.slint`.
+        // A resize re-chunks the same stations without a fetch. One count serves three grids, so
+        // this asks the mounted tab.
         let ru = radio_ui.clone();
         let weak = weak.clone();
         g.on_columns_changed(move |_| {
@@ -51,8 +48,6 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, radio_ui: &Arc<RadioUi>) {
     }
 
     {
-        // The card's lazy logo lookup: cache-only while the generation is `0`, scheduling past
-        // it, and never decoding on this thread.
         let ru = radio_ui.clone();
         g.on_request_logo(move |artwork_path, generation| {
             covers::logo_cover(&ru, &artwork_path, generation)

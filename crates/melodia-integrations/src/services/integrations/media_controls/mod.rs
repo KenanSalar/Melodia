@@ -1,9 +1,9 @@
 //! OS media controls: MPRIS on Linux, SMTC on Windows, `MediaPlayer` on macOS.
 //!
-//! `cfg`-split, with this module the shared façade. Linux serves MPRIS itself rather than through
-//! souvlaki, whose `Position` is whatever it was last pushed: keeping that current means pushing
-//! on a timer, and every push re-announces `PlaybackStatus`, which KDE Connect forwards to each
-//! paired phone as a packet.
+//! `cfg`-split behind this façade. Linux serves MPRIS itself rather than through souvlaki, whose
+//! `Position` is whatever it was last pushed: keeping that current means pushing on a timer, and
+//! every push re-announces `PlaybackStatus`, which a phone bridge forwards to each paired phone
+//! as a packet.
 
 use std::sync::Arc;
 
@@ -29,8 +29,6 @@ pub use souvlaki_backend::MediaControlsHandle;
 /// key presses rather than memory.
 const EVENT_CHANNEL_CAPACITY: usize = 32;
 
-/// Initialize the OS media controls and the channel their commands arrive on.
-///
 /// A handle that could not reach the OS is an inert no-op rather than an error: a headless
 /// session or a missing bus leaves playback exactly as usable.
 pub fn init_media_controls() -> (MediaControlsHandle, mpsc::Receiver<PlayerEvent>) {
@@ -38,11 +36,8 @@ pub fn init_media_controls() -> (MediaControlsHandle, mpsc::Receiver<PlayerEvent
     (MediaControlsHandle::new(tx), rx)
 }
 
-/// Spawn a background task that feeds OS media control commands into the application's
-/// `EventSink`.
-///
-/// The channel decouples the OS callback thread from the player state — the callback never
-/// blocks on `PlayerState` or `MediaControlsHandle` locks, avoiding deadlocks.
+/// The channel keeps the OS callback thread off the `PlayerState` and handle locks, which it
+/// could otherwise deadlock on.
 pub fn spawn_event_receiver(
     tracker: &TaskTracker,
     shutdown_token: CancellationToken,

@@ -1,23 +1,18 @@
 //! The endpoint's own volume control, as the [`VolumeControl`] a WASAPI claim carries the level on.
 //! Taking it, following it and giving it back is [`hardware_volume`]'s.
 //!
-//! **Only a control in hardware.** On an endpoint without one the audio engine applies the volume,
-//! and an exclusive stream bypasses the engine, so setting it would change nothing heard. The
-//! meter's hardware-support query answers that through `wasapi`'s safe half, so such a device never
-//! reaches the calls below.
+//! **Only a control in hardware.** Without one the audio engine applies the volume, and an
+//! exclusive stream bypasses the engine, so such a device never reaches the calls below.
 //!
-//! **The level is Windows' own percentage**, not dB. That percentage is Windows' audio taper over
-//! the device's dB range rather than the voices' linear gain, so a position sounds a little
-//! different here than with the voices carrying it; set in dB instead, the two sliders disagree at
-//! every position but the ends.
+//! **The level is Windows' own percentage**, not dB, so the system's slider and Melodia's agree at
+//! every position. It is Windows' audio taper rather than the voices' linear gain, so a position
+//! sounds a little different here than with the voices carrying it.
 //!
-//! **Polled rather than subscribed to**, for the moves the system makes: a subscription means
-//! implementing `IAudioEndpointVolumeCallback` and reading the notification through a raw pointer,
-//! more `unsafe` for no gain, on a COM worker thread rather than the writer's.
+//! **Polled rather than subscribed to**: a subscription means implementing
+//! `IAudioEndpointVolumeCallback` and reading it through a raw pointer, more `unsafe` for no gain.
 //!
-//! **Every call is made on `wasapi-out`**, which entered the MTA first, like the rest of the
-//! backend. The interface comes from the `windows` crate: `wasapi` wraps none of it and keeps its
-//! `IMMDevice` to itself.
+//! **Every call is made on `wasapi-out`**, in the MTA. The interface comes from the `windows`
+//! crate, since `wasapi` wraps none of it and keeps its `IMMDevice` to itself.
 //!
 //! [`hardware_volume`]: super::hardware_volume
 
@@ -36,10 +31,6 @@ pub(super) struct EndpointControl(IAudioEndpointVolume);
 
 /// The hardware control of the endpoint `id`, set to `volume` unless the system had it quieter, or
 /// `None` where it has none.
-///
-/// # Errors
-///
-/// What the device answered when asked for the control, its level or a new one.
 pub(super) fn take(
     device: &Device,
     id: &str,
@@ -65,7 +56,6 @@ impl VolumeControl for EndpointControl {
         unsafe { self.0.GetMasterVolumeLevelScalar() }
     }
 
-    /// Set the device's level as the percentage Windows shows for it over 100.
     #[allow(
         unsafe_code,
         reason = "COM call to SetMasterVolumeLevelScalar with a null event context, which the API takes as none."

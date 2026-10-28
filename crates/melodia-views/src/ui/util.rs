@@ -78,36 +78,29 @@ impl StringPool {
 }
 
 /// Saturating `i64 → i32`: Slint's generated models use `i32` ids, the DB `i64`.
-/// Real ids never overflow; saturating keeps the conversion total.
 pub fn clamp_i64_to_i32(v: i64) -> i32 {
     i32::try_from(v).unwrap_or(if v < 0 { i32::MIN } else { i32::MAX })
 }
 
-/// Saturating `usize → i32` for a collection length. A library that overflows an
-/// `i32` has bigger problems than a wrong stats line, so saturate rather than wrap.
+/// Saturating `usize → i32` for a collection length.
 pub fn len_as_i32(len: usize) -> i32 {
     i32::try_from(len).unwrap_or(i32::MAX)
 }
 
-/// Saturating `u32 → i32` for a tally on its way into a gettext plural. Same
-/// argument as [`len_as_i32`]; the input type is what differs, the counts that
-/// reach a toast being accumulated as `u32`.
+/// Saturating `u32 → i32`, for a tally on its way into a gettext plural.
 pub fn count_as_i32(n: u32) -> i32 {
     i32::try_from(n).unwrap_or(i32::MAX)
 }
 
-/// Hz → "44.1 kHz" / "48 kHz" (drops a trailing ".0").
-///
-/// Here rather than beside either reader: the Now Playing chip row and the Edit-Tags Summary tab
-/// state the same technical facts, and two copies of the rounding is how one of them comes to
-/// round differently.
+/// Hz → "44.1 kHz" / "48 kHz". One copy for the Now Playing chips and the Edit Tags Summary, so
+/// the two can't come to round differently.
 pub fn format_sample_rate(hz: i32) -> String {
     let khz = f64::from(hz) / 1000.0;
     if khz.fract().abs() < f64::EPSILON { format!("{khz:.0} kHz") } else { format!("{khz:.1} kHz") }
 }
 
-/// Channel count → "Mono" / "Stereo" / "N channels". Technical terms left
-/// untranslated for v1 (built in Rust; Slint's `@tr` only covers literals).
+/// Channel count → "Mono" / "Stereo" / "N channels", untranslated: built in Rust, where `@tr`
+/// can't reach.
 pub fn format_channels(n: i32) -> String {
     match n {
         1 => "Mono".to_owned(),

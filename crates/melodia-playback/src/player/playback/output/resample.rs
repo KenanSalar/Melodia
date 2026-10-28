@@ -1,17 +1,10 @@
-//! The band-limited kernel [`super::convert::Converter`] interpolates with.
+//! The band-limited kernel [`super::convert::Converter`] interpolates with: a windowed sinc
+//! tabulated once per process, linear between rows ([`PHASES`]).
 //!
-//! A windowed sinc, tabulated once for the process and read by every converter: evaluating the
-//! sine and the window per tap per output frame would cost far more than the lookup. Between two
-//! rows of the table the kernel is linear, which is what [`PHASES`] is sized against.
-//!
-//! **Each output frame is scaled by its weights' own sum**, so the kernel's gain at DC is exactly
-//! one whatever the phase. Left to the table, the sum drifts a little from phase to phase, and a
-//! phase that cycles at a fixed ratio turns that drift into a faint tone.
-//!
-//! **Downsampling stretches the kernel** rather than keeping its length and lowering the cutoff, so
-//! the transition band stays a fixed fraction of the *output's* Nyquist. The cost grows with the
-//! stretch, which is why it stops at [`MAX_STRETCH`]: past it the kernel is as wide as it gets and
-//! only the cutoff keeps falling.
+//! Each output frame is scaled by its weights' own sum, or the phase-to-phase drift at a fixed
+//! ratio turns into a faint tone. Downsampling stretches the kernel rather than lowering its
+//! cutoff, keeping the transition band a fixed fraction of the output's Nyquist, up to
+//! [`MAX_STRETCH`], past which only the cutoff falls.
 
 use std::f64::consts::PI;
 use std::ops::Range;
@@ -80,7 +73,6 @@ fn stretch(step: f64) -> f64 {
     step.clamp(1.0, count(MAX_STRETCH))
 }
 
-/// `n` as a float. Every caller passes a tap or table index, which `f64` holds exactly.
 #[expect(clippy::cast_precision_loss, reason = "tap and table indices are exact in f64")]
 fn count(n: usize) -> f64 {
     n as f64

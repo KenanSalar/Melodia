@@ -1,11 +1,6 @@
-//! The scan pipeline's boundary values: what a walk found, what a file's tags said, and what the
-//! database already holds for it.
-//!
-//! None of the three carries `FromRow` — [`super::search`] states the rule they follow, that a
-//! value assembled by hand rather than decoded from a row is a boundary type rather than a row
-//! type. They live here because the store's two halves both name them: `media/` produces
-//! [`ExtractedMetadata`] and [`ScannedFile`] and consumes [`ExistingTrackSummary`], while
-//! `database/queries/scan` does the reverse.
+//! The scan pipeline's boundary values, assembled rather than decoded, so none carries `FromRow`.
+//! Here because the store's two halves both name them: `media/` produces [`ExtractedMetadata`]
+//! and [`ScannedFile`] and reads [`ExistingTrackSummary`], and `database/queries/scan` the reverse.
 
 use std::path::PathBuf;
 
@@ -30,12 +25,9 @@ pub struct ScannedFile {
     pub metadata: ExtractedMetadata,
 }
 
-/// What a file says about the release it belongs to, rather than about itself.
-///
-/// Its own struct because `upsert_album` is the single consumer of all of it: one argument that
-/// cannot be passed in the wrong order, over seven adjacent `Option<String>`s that can. Every
-/// field lands under `COALESCE(excluded.x, albums.x)`, so the first track of a release carrying
-/// one wins and a later track missing it does not blank it.
+/// What a file says about its release, one argument for `upsert_album` rather than seven adjacent
+/// `Option<String>`s. The first track carrying a field wins, and a later one missing it doesn't
+/// blank it.
 #[derive(Debug, Clone, Default)]
 pub struct ReleaseTags {
     pub label: Option<String>,
@@ -53,12 +45,8 @@ pub struct ReleaseTags {
     pub is_compilation: bool,
 }
 
-/// The filing order a file asks for, where it asks for one.
-///
-/// Grouped rather than flat for the reason four adjacent same-typed `Option<String>`s are a
-/// hazard: a bind landing one slot over is invisible, and "The Beatles" filed under T instead of B
-/// is exactly the symptom these exist to prevent. Each falls back to the locally derived sort key
-/// when absent, so a library whose files carry none behaves as it does today.
+/// The filing order a file asks for, grouped so a bind landing one slot over can't file "The
+/// Beatles" under T. Each falls back to the locally derived sort key.
 #[derive(Debug, Clone, Default)]
 pub struct SortTags {
     pub artist: Option<String>,
@@ -91,9 +79,8 @@ pub struct ExtractedMetadata {
     pub disc_total: Option<i32>,
     pub disc_subtitle: Option<String>,
     pub subtitle: Option<String>,
-    /// Whole release date, and the year derived from it. Both, because `year` is what every
-    /// existing index, `ORDER BY` and smart-playlist rule is built on, and the month and day are
-    /// what the reader used to throw away.
+    /// The whole date beside the derived `year`, which every index, `ORDER BY` and smart-playlist
+    /// rule is built on.
     pub release_date: Option<String>,
     pub year: Option<i32>,
     pub original_date: Option<String>,

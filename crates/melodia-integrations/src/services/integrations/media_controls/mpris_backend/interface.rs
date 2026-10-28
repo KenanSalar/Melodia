@@ -22,7 +22,6 @@ use crate::services::integrations::media_controls::{cover_url, forward};
 /// never published.
 const TRACK_ID: ObjectPath<'static> = ObjectPath::from_static_str_unchecked("/");
 
-/// `org.mpris.MediaPlayer2`.
 pub(super) struct Root;
 
 #[expect(clippy::unused_self, reason = "zbus dispatches every member through a receiver")]
@@ -69,7 +68,6 @@ impl Root {
     }
 }
 
-/// `org.mpris.MediaPlayer2.Player`.
 pub(super) struct Player {
     pub(super) published: Arc<Mutex<Published>>,
     pub(super) events: mpsc::Sender<PlayerEvent>,
@@ -296,7 +294,6 @@ pub(super) fn micros(ms: u64) -> i64 {
     i64::try_from(ms.saturating_mul(1000)).unwrap_or(i64::MAX)
 }
 
-/// The spec's name for a repeat mode.
 fn as_loop_status(mode: RepeatMode) -> &'static str {
     match mode {
         RepeatMode::Off => "None",

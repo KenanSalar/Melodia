@@ -1,14 +1,6 @@
-//! A process-wide one-way channel whose sender producers reach without carrying a handle.
-//!
-//! Each bridge used to carry its own copy of the same three pieces: a `OnceLock` sender, a send
-//! that no-ops when nothing installed one, and an install that hands the receiver back. What
-//! differs between them is only the consumer, so that half stays at each site: the play-count
-//! flusher and the artwork restore spawn their own, and the toast bridge hands its receiver to a
-//! UI-thread task.
-//!
-//! Producers are dependency-free by construction: the event type is theirs and nothing here
-//! reaches the consumer's world. That is what lets `tasks/` and `player/` raise a toast without
-//! importing `ui`.
+//! A process-wide one-way channel producers reach without carrying a handle, each site keeping
+//! its own consumer. The event type is the producer's, so nothing here reaches the consumer's
+//! world.
 
 use std::sync::OnceLock;
 
@@ -24,19 +16,14 @@ impl<E> EventBridge<E> {
         Self { sender: OnceLock::new() }
     }
 
-    /// Claim the bridge and hand back the receiver to drain.
-    ///
-    /// `None` once something already holds it: the first receiver owns delivery, so a second
-    /// install is a no-op rather than a silent hand-over.
+    /// `None` once something holds it: the first receiver owns delivery.
     pub fn install(&self) -> Option<UnboundedReceiver<E>> {
         let (tx, rx) = mpsc::unbounded_channel();
         self.sender.set(tx).ok().map(|()| rx)
     }
 
-    /// Queue an event from any thread. `false` when nothing is installed.
-    ///
-    /// A send to a closed channel is dropped and still reports `true` — the consumer having shut
-    /// down is not the same as never having existed, and only the second is worth a fallback.
+    /// `false` when nothing is installed. A closed channel still reports `true`: a consumer that
+    /// shut down isn't one that never existed, and only the second is worth a fallback.
     pub fn send(&self, event: E) -> bool {
         let Some(tx) = self.sender.get() else {
             return false;

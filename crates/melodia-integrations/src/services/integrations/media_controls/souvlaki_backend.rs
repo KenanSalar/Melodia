@@ -19,31 +19,25 @@ use super::{cover_url, forward};
 /// updates, so this only has to keep the two from visibly diverging.
 const TIMELINE_REFRESH: Duration = Duration::from_secs(5);
 
-/// Wrapper around souvlaki's `MediaControls`.
-/// `Option` allows graceful degradation when OS media controls are unavailable.
+/// `controls` is `None` wherever the OS controls are unavailable, leaving the handle an inert
+/// no-op.
 pub struct MediaControlsHandle {
     inner: std::sync::Mutex<MediaControlsInner>,
 }
 
 struct MediaControlsInner {
     controls: Option<MediaControls>,
-    /// Retained on Windows so the deferred `attach_smtc` can wire souvlaki's
-    /// event callback into the same channel `spawn_event_receiver` drains.
-    /// SMTC can't be built until the OS window — and its `HWND` — exists,
-    /// which is well after `AppState::init`.
+    /// Kept for `attach_smtc`, which wires the late controls into the same channel.
     #[cfg(target_os = "windows")]
     event_tx: mpsc::Sender<PlayerEvent>,
-    /// Last-synced state to avoid redundant SMTC calls on queue-only changes.
     published: Published,
     last_timeline_push: Option<Instant>,
 }
 
 impl MediaControlsHandle {
-    /// macOS creates the controls eagerly, since it needs no window handle. On Windows,
-    /// souvlaki's SMTC backend `expect`s a non-null `HWND` in `PlatformConfig` and panics without
-    /// one; no OS window exists at `AppState::init` time, so creation is deferred to
-    /// `attach_smtc`, called from the event loop once the Slint window is shown. Until then — and
-    /// wherever init fails — the handle is an inert no-op.
+    /// macOS creates the controls eagerly. On Windows souvlaki's SMTC backend panics without a
+    /// non-null `HWND`, and no window exists at `AppState::init`, so the controls wait for
+    /// `attach_smtc` once the Slint window is shown.
     pub(super) fn new(tx: mpsc::Sender<PlayerEvent>) -> Self {
         #[cfg(not(target_os = "windows"))]
         let controls = {
@@ -72,8 +66,6 @@ impl MediaControlsHandle {
     }
 }
 
-/// Build souvlaki controls and attach the event callback, folding any failure
-/// into `None` with a warning. A `None` result leaves the handle an inert no-op.
 fn try_create_controls(
     hwnd: Option<*mut std::ffi::c_void>,
     tx: mpsc::Sender<PlayerEvent>,
@@ -89,19 +81,10 @@ fn try_create_controls(
 
 #[cfg(target_os = "windows")]
 impl MediaControlsHandle {
-    /// Attach Windows System Media Transport Controls now that the OS window —
-    /// and therefore a valid `HWND` — exists. Called from the event loop once
-    /// the Slint window is shown (see `boot::ui_setup::install`).
-    ///
-    /// Returns `true` only when this call newly attached the controls.
-    /// Idempotent: a call made when controls already exist (or when souvlaki
-    /// fails to build them) returns `false` without rebuilding. The caller
-    /// uses a `true` result to push a one-off state re-sync — `sync()` no-op'd
-    /// every call while the handle was inert, so nothing has reached the OS
-    /// panel yet.
+    /// `true` only when this call attached the controls, the caller's cue to re-sync: nothing
+    /// reached the panel while the handle was inert.
     #[must_use]
     pub fn attach_smtc(&self, hwnd: *mut std::ffi::c_void) -> bool {
-        // Clone the event sender under a short lock; bail if SMTC is already up.
         let tx = {
             let guard = self.inner.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
             if guard.controls.is_some() {
@@ -110,15 +93,14 @@ impl MediaControlsHandle {
             guard.event_tx.clone()
         };
 
-        // Build off-lock — `MediaControls::new` does COM/SMTC setup that should
-        // not serialise behind `sync()` calls arriving from playback threads.
+        // Off the lock: COM and SMTC setup shouldn't hold up `sync()` from playback threads.
         let Some(controls) = try_create_controls(Some(hwnd), tx) else {
             return false;
         };
 
         let mut guard = self.inner.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
         if guard.controls.is_some() {
-            // Lost a race with another `attach_smtc` — drop the spare controls.
+            // Lost a race with another `attach_smtc`.
             return false;
         }
         guard.controls = Some(controls);
@@ -156,15 +138,13 @@ fn translate_event(event: MediaControlEvent) -> Option<PlayerEvent> {
             Some(PlayerEvent::SeekTo(u64::try_from(pos.as_millis()).unwrap_or(u64::MAX)))
         }
         MediaControlEvent::SetVolume(vol) => Some(PlayerEvent::SetVolume(amplitude_to_volume(vol))),
-        // Relative seeks need current position; revisit when the library API lands a
-        // SeekRelative variant or the sink can resolve it from state.
+        // Relative seeks need the current position, which no `PlayerEvent` resolves.
         MediaControlEvent::Seek(_) | MediaControlEvent::SeekBy(_, _) => {
             log::debug!("Relative seek media event ignored (needs library API support)");
             None
         }
         MediaControlEvent::Raise | MediaControlEvent::Quit => {
-            // Window control needs a Slint window handle, which this layer
-            // deliberately doesn't hold — see the `EventSink` split.
+            // Window control needs a Slint handle this layer deliberately doesn't hold.
             log::debug!("Window control media event ignored");
             None
         }

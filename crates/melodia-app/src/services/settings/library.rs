@@ -2,14 +2,9 @@
 
 use serde::{Deserialize, Serialize};
 
-/// Library-management toggles.
-///
-/// Two default-on switches, both because the off state is the surprising one.
-/// `folder_watching_enabled`: every consumer player auto-watches with no toggle at
-/// all, and watching off lands in a stale-UI failure mode a user can't diagnose —
-/// the toggle survives as an escape valve for the inotify watch budget on huge
-/// libraries. `write_ratings_to_tags`: a star that lives only in this database is
-/// one a library rebuild loses and no other player can see.
+/// Two switches ship on because off is the surprising state. Unwatched folders go stale in a way a
+/// user can't diagnose, the toggle surviving for a huge library's inotify budget; and a star kept
+/// only in the database is lost to a rebuild and invisible to other players.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
 #[expect(
@@ -18,35 +13,18 @@ use serde::{Deserialize, Serialize};
 )]
 pub struct LibraryFlags {
     pub folder_watching_enabled: bool,
-    /// Whether the artwork store has been brought inside its size bounds once.
-    ///
-    /// Normalization happens at the writer, so it only ever reaches newly-scanned files —
-    /// `scanner::track_is_current` guarantees an unchanged track's artwork is never re-derived.
-    /// A pass over what is already there is therefore one-shot rather than continuous, and
-    /// marked here rather than inferred, there being no cheap way to ask the store whether it
-    /// has been swept short of reading every file in it.
+    /// Whether the artwork store has been brought inside its size bounds. The writer bounds new
+    /// files only, `scanner::track_is_current` skipping unchanged ones, so the pass over the rest
+    /// is one-shot and marked here, the store having no cheap way to say it was swept.
     pub artwork_store_normalized: bool,
-    /// Whether a star set here is also written into the file's own tag.
-    ///
-    /// On, the rating is portable — other players read it, and it survives a library rebuild or
-    /// a move to another machine, which is the whole reason the column alone was not enough.
-    /// The cost is that a one-click action rewrites the file, so it is a switch rather than an
-    /// assumption.
+    /// Whether a star set here is written into the file's tag too. A switch, since it makes a
+    /// click rewrite the file.
     pub write_ratings_to_tags: bool,
-    /// Whether the ratings already sitting in this library's files have been read in once.
-    ///
-    /// `scanner::track_is_current` skips an unchanged file outright, so a library scanned before
-    /// ratings were read stays unrated no matter how many times it is rescanned. The sweep that
-    /// fixes that is one-shot, and marked here rather than inferred — an unrated row is
-    /// indistinguishable from one the user deliberately cleared.
+    /// Whether the files' own ratings have been read in once, `track_is_current` skipping an
+    /// unchanged file. Marked, since an unrated row can't be told from one the user cleared.
     pub ratings_imported_from_tags: bool,
-    /// Whether the tags this library's files carry have been re-read once since the ingest
-    /// widened.
-    ///
-    /// The migrations seed what the database already knew — one artist credit per track, one
-    /// genre, a composer — and that is every name a library indexed before them holds. Everything
-    /// the reader gained since is in the files, and `scanner::track_is_current` will never re-read
-    /// them on its own.
+    /// Whether the files' tags have been re-read since the ingest widened: the migrations seeded
+    /// only what the database knew, and `track_is_current` never re-reads on its own.
     pub tags_backfilled: bool,
 }
 

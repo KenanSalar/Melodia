@@ -39,14 +39,9 @@ pub fn install_radio(ui: &AppWindow, state: &AppState) {
     }
 
     {
-        // No refetch behind it: the filter applies to the next page rather than re-thinning
-        // the one on screen, so a flip mid-browse takes effect at the next search or
-        // load-more. Re-running the query here would discard the user's paging to change
-        // which stations are offered, not whether any of them play.
-        //
-        // The chip lists are dropped rather than left, because `FacetIndex::prime` skips a list
-        // it already holds: without this the Format chip would keep offering the pre-flip set for
-        // the rest of the session.
+        // No refetch: the filter takes effect at the next search or load-more, a re-run
+        // discarding the user's paging. The chip lists go, `FacetIndex::prime` skipping a list it
+        // holds, or the Format chip would offer the pre-flip set all session.
         let s = state.clone();
         let weak = ui.as_weak();
         g.on_radio_hide_segmented_changed(move |hide| {

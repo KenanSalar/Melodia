@@ -1,14 +1,8 @@
 //! Where a station's logo comes from, and the answer table that stops it being asked for twice.
 //!
-//! Three sources in order of cost: a path an earlier session already recorded, the `favicon_url`
-//! the row carries, and the station's own site. The table is what makes the store a cache — a
-//! logo's file is named by a hash of its own bytes, so nothing can know a URL's path without
-//! downloading the bytes first, and before the table a re-browse re-fetched every logo on the page
-//! and rewrote the identical file.
-//!
-//! **The constants here are retention policy rather than tuning**, each argued at its own
-//! definition. What they share is that a miss costs a request and a hit costs nothing, so they are
-//! about not asking a dead host on a schedule rather than about bandwidth.
+//! Three sources in order of cost: a path an earlier session recorded, the row's `favicon_url`,
+//! and the station's own site. **The constants are retention policy rather than tuning**: a miss
+//! costs a request and a hit costs nothing, so they are about not asking a dead host on a schedule.
 
 use crate::state::AppState;
 use melodia_artwork::media::image::logo_tile;
@@ -21,13 +15,8 @@ use super::directory_client;
 
 /// Fetch a station's logo into the radio-logo store, returning where it landed.
 ///
-/// Through the same seam as the directory calls: "off" has to mean no traffic, and a logo
-/// download is traffic whoever is serving it.
-///
 /// `Ok(None)` is a usable answer with no logo in it (not an image, an unsupported container, or
-/// too small to draw); `Err` is a failure worth retrying later. Callers memoize both, so the
-/// distinction is what separates a debug line from a warning rather than what separates a retry
-/// from a give-up.
+/// too small to draw); `Err` is a failure worth retrying later.
 pub async fn fetch_logo(
     state: &AppState,
     favicon_url: &str,
@@ -46,8 +35,8 @@ pub async fn fetch_logo(
 /// host down for an afternoon is asked again the next time the user opens Radio.
 const LOGO_MISS_BACKOFF_HOURS: i64 = 24;
 
-/// Ceiling on that multiplier. Past it the schedule stops escalating, a week between attempts
-/// already rounding to never for anyone but a user who leaves the app open.
+/// Ceiling on that multiplier: a week between attempts already rounds to never for anyone but a
+/// user who leaves the app open.
 const LOGO_MISS_MAX_ATTEMPTS: i64 = 7;
 
 /// Age past which a miss is dropped rather than escalated further. Deliberately clear of
@@ -55,30 +44,17 @@ const LOGO_MISS_MAX_ATTEMPTS: i64 = 7;
 /// suppresses anything.
 const LOGO_MISS_MAX_AGE_DAYS: i64 = 30;
 
-/// How long a cached browse logo is kept without being asked for again.
-///
-/// The staleness half of the retention rule, and it dates from when the logo was *fetched* rather
-/// than when it was last drawn — nothing on the read path writes, and Linux mount options make
-/// access times a thing that may or may not exist. So a station browsed every week still re-fetches
-/// once a fortnight, which is the price of not tracking reads and is one request.
+/// How long a cached browse logo is kept without being asked for again, dated from its fetch:
+/// nothing on the read path writes, and access times depend on mount options.
 const LOGO_CACHE_MAX_AGE_DAYS: i64 = 14;
 
-/// Ceiling on what cached browse logos may occupy.
-///
-/// **The bound that actually holds.** A TTL alone lets the store run up as far as the user's own
-/// browsing rate takes it — a directory page is fifty stations and most of them carry a logo — and
-/// a station scrolled past is worth keeping only while it is cheap. Sized so a heavy session's
-/// worth of pages survives and a month of them does not.
-///
-/// **A bound on the cache, not on the disk.** Every hit row is billed, a kept station's among
-/// them, and what the cap evicts is the row: the file behind one survives on
-/// `radio_stations.artwork_path` and is drawn from the column rather than from here.
+/// Ceiling on cached browse logos, sized so a heavy session's pages survive and a month's don't.
+/// **A bound on the cache, not on the disk**: it evicts rows, and a kept station's file survives on
+/// `radio_stations.artwork_path`.
 const LOGO_CACHE_MAX_BYTES: i64 = 32 * 1024 * 1024;
 
-/// What this install already knows about each of `favicon_urls`.
-///
-/// Asked about the page in hand rather than about the table, which has no bound worth reading
-/// whole — see the query's own note.
+/// What this install already knows about each of `favicon_urls`. Asked about the page in hand,
+/// the table having no bound worth reading whole.
 pub async fn logo_answers(
     db: &DbPool,
     favicon_urls: &[String],
@@ -86,22 +62,14 @@ pub async fn logo_answers(
     queries::radio::logo_answers(db, favicon_urls).await
 }
 
-/// Whether a stored answer is still suppressing its URL at `now`.
-///
-/// The clock comparison lands here rather than in the `WHERE`: the placeholder list is what
-/// `chunked_in_query` binds and a second parameter would have to ride ahead of it. Still a string
-/// comparison against the same `to_rfc3339` shape both sides are written in.
+/// Whether a stored answer still suppresses its URL at `now`. Compared here, a second bind in the
+/// `WHERE` having to ride ahead of the placeholder list `chunked_in_query` binds.
 fn answer_is_suppressed(answer: &radio::StoredLogoAnswer, now: &str) -> bool {
     answer.retry_after.as_deref().is_some_and(|retry_after| retry_after > now)
 }
 
-/// Hold the answer table to its two bounds, dropping the rows that fall outside them.
-///
-/// The files those rows named become unreferenced by dropping, so the store follows on the next
-/// sweep rather than being touched here — see the query's own note.
-///
-/// Not behind the switch: there is no network behind it, and its caller is a maintenance pass
-/// rather than a user asking.
+/// Hold the answer table to its two bounds; the files dropped rows named go on the next sweep. Not
+/// behind the switch, there being no network behind it.
 pub async fn prune_logo_answers(db: &DbPool) -> Result<u64, AppError> {
     let now = chrono::Utc::now();
     let miss_cutoff = now - chrono::TimeDelta::try_days(LOGO_MISS_MAX_AGE_DAYS).unwrap_or_default();
@@ -115,18 +83,10 @@ pub async fn prune_logo_answers(db: &DbPool) -> Result<u64, AppError> {
     .await
 }
 
-/// Carry one URL's answer back to the table the next session reads, whichever it was.
-///
-/// **The one writer of an outcome**, and the reason the two `note_logo_*` halves below it are
-/// private: both fetch paths — this module's own single-URL repair and `ui::radio::logos`' page
-/// burst — owe exactly this pair, and had a copy each down to the debug line.
-///
-/// A hit stores its path, which is what lets that session draw the logo without asking; it also
-/// clears whatever backoff the URL had earned, or a host that recovered would stay suppressed
-/// until a schedule from when it was down finally ran out.
-///
-/// Failing to record is a debug line rather than an error: the row is an optimization over asking
-/// again, and asking again is exactly what its absence causes.
+/// Carry one URL's answer back to the table the next session reads: **the one writer of an
+/// outcome**, for this module's repair and `ui::radio::logos`' page burst alike. A hit also clears
+/// the URL's backoff, or a recovered host would stay suppressed. Failing to record is a debug line,
+/// the row only saving a request.
 pub async fn record_logo_outcome(db: &DbPool, favicon_url: &str, logo: Option<&StoredLogo>) {
     let recorded = match logo {
         Some(logo) => note_logo_hit(db, favicon_url, logo).await,
@@ -137,7 +97,6 @@ pub async fn record_logo_outcome(db: &DbPool, favicon_url: &str, logo: Option<&S
     }
 }
 
-/// How long a URL that has missed `attempts` times is left alone.
 fn miss_backoff_hours(attempts: i64) -> i64 {
     LOGO_MISS_BACKOFF_HOURS * attempts.min(LOGO_MISS_MAX_ATTEMPTS)
 }
@@ -161,8 +120,7 @@ async fn note_logo_miss(db: &DbPool, favicon_url: &str) -> Result<(), AppError> 
 /// Record where `favicon_url`'s logo landed, so the next session draws it without asking.
 ///
 /// **This is what makes the store a cache.** The file is named by a hash of its own bytes, so
-/// nothing can know a URL's path without downloading the bytes first; without the row, every
-/// browsed logo was re-fetched on every launch and rewritten identically.
+/// nothing can know a URL's path without downloading them first.
 async fn note_logo_hit(db: &DbPool, favicon_url: &str, logo: &StoredLogo) -> Result<(), AppError> {
     queries::radio::record_logo_hit(
         db,
@@ -179,27 +137,17 @@ pub async fn set_artwork(db: &DbPool, id: i64, artwork_path: Option<&str>) -> Re
     queries::radio::set_artwork(db, id, artwork_path).await
 }
 
-/// Whether a stored artwork path still names a file.
-///
-/// **A path outlives its file more easily than a row outlives its path.** The store is swept
-/// against the columns that reference it, so a logo kept under a data root this build no longer
-/// opens looks like an orphan to whichever install sweeps next, and the row is left pointing at
-/// nothing. A reader that trusts the column paints an empty tile forever, since nothing in the
-/// fetch path ever looks at a station that already has an answer.
+/// Whether a stored artwork path still names a file. A logo under a data root another install
+/// sweeps can be gone, and trusting the column paints an empty tile the fetch path never revisits.
 pub fn artwork_is_present(artwork_path: Option<&str>) -> bool {
     artwork_path.is_some_and(|path| !path.is_empty() && std::path::Path::new(path).exists())
 }
 
-/// Ask one logo URL, and carry the answer back into the answer table.
+/// Ask one logo URL, consulting the stored answer first, and carry what comes back into the table.
 ///
-/// **The stored answer is consulted first, hit as well as miss.** The table holds where a URL's
-/// bytes landed precisely so nothing has to download them to find out, and a repair that went
-/// straight to the socket spent a request re-deriving a path the row beside it already had.
-///
-/// **`Ok(None)` earns a backoff and an `Err` does not.** The two mean different things — one is
-/// the host saying it has nothing usable, the other is not reaching the host at all — and
-/// persisting a transport failure would suppress a perfectly good logo for a day over a moment
-/// offline. `ui::radio::logos` splits them the same way on the browse path.
+/// **`Ok(None)` earns a backoff and an `Err` does not**: one is the host saying it has nothing
+/// usable, the other is not reaching it, and persisting that would suppress a good logo for a day
+/// over a moment offline. `ui::radio::logos` splits them the same way.
 pub(super) async fn ask_logo_url(state: &AppState, seed: &AnswerSeed, url: &str) -> Option<String> {
     match stored_answer(&state.db, seed, url).await {
         LogoAnswer::Hit(path) => return Some(path),
@@ -217,11 +165,8 @@ pub(super) async fn ask_logo_url(state: &AppState, seed: &AnswerSeed, url: &str)
     logo.map(|logo| logo.path)
 }
 
-/// What an earlier session already settled about one URL.
-///
-/// Public because the browse page asks the same question of the same rows and used to answer it
-/// inline, with the two arms in the opposite order — correct only while the row invariant below
-/// holds, and nothing but a comment said it did.
+/// What an earlier session already settled about one URL. Public so the browse page asks it
+/// through [`classify_logo_answer`] rather than deciding it a second time.
 pub enum LogoAnswer {
     /// A stored file still on disk, so there is nothing to ask.
     Hit(String),
@@ -233,25 +178,20 @@ pub enum LogoAnswer {
 
 /// Stored answers already in hand, so a pass over many stations asks once rather than per station.
 ///
-/// **The heal pass is who wants it.** Each station it looks at settles against the answer table
-/// twice before it reaches the network — the URL its row carries, then its site — and a URL at a
-/// time those go through the batching helper as one-element queries, which rebuild their SQL and
-/// prepare non-persistent. The browse side already asks for a whole page at once.
-///
-/// [`Self::unseeded`] is the honest answer for a caller holding one URL: every lookup misses and
-/// falls through to the query it would have made anyway.
+/// **The heal pass is who wants it.** Each station settles against the table twice before the
+/// network, its row's URL then its site, and one URL at a time those are one-element batched
+/// queries that rebuild their SQL and prepare non-persistent.
 #[derive(Default)]
 pub struct AnswerSeed(std::collections::HashMap<String, radio::StoredLogoAnswer>);
 
 impl AnswerSeed {
-    /// For a caller settling a single URL, where one query is the whole cost either way.
+    /// For a caller settling a single URL: every lookup falls through to its own query.
     #[must_use]
     pub fn unseeded() -> Self {
         Self::default()
     }
 
-    /// Every stored answer among `urls`, in one query. Duplicates and blanks cost nothing —
-    /// stations routinely share a site, and a row with no logo URL contributes none.
+    /// Every stored answer among `urls`, in one query. Duplicates and blanks cost nothing.
     pub async fn for_urls(db: &DbPool, urls: &[String]) -> Self {
         let Ok(answers) = logo_answers(db, urls).await else {
             return Self::default();
@@ -261,12 +201,7 @@ impl AnswerSeed {
 }
 
 /// The stored answer for `url`, from `seed` where it holds one and from its own query otherwise.
-///
-/// One query either way, because a second would ask the same row the same thing. A hit whose file
-/// is gone is [`LogoAnswer::Unknown`]: the store is swept against the columns that reference it, and
-/// a path naming nothing paints an empty tile where the monogram was the honest answer.
-/// Narrowed to the pool it reaches, like [`record_logo_outcome`], so the seed's whole reason
-/// for existing can be read against a table holding nothing.
+/// Takes the pool rather than the state so a test can read the seed against an empty table.
 async fn stored_answer(db: &DbPool, seed: &AnswerSeed, url: &str) -> LogoAnswer {
     if let Some(answer) = seed.0.get(url) {
         return classify_logo_answer(answer, &melodia_core::utils::now_rfc3339());
@@ -279,9 +214,9 @@ async fn stored_answer(db: &DbPool, seed: &AnswerSeed, url: &str) -> LogoAnswer 
     answers.first().map_or(LogoAnswer::Unknown, |answer| classify_logo_answer(answer, &now))
 }
 
-/// What one stored row says. The two arms are mutually exclusive on the row — a hit carries no
-/// `retry_after` and a miss carries no path — so the order is only what reads most directly, and
-/// the one place it is decided is here.
+/// What one stored row says. A hit carries no `retry_after` and a miss no path, so the arms can't
+/// overlap; a hit whose file has been swept is [`LogoAnswer::Unknown`], the monogram being the
+/// honest answer there.
 #[must_use]
 pub fn classify_logo_answer(answer: &radio::StoredLogoAnswer, now: &str) -> LogoAnswer {
     if answer_is_suppressed(answer, now) {
@@ -295,19 +230,13 @@ pub fn classify_logo_answer(answer: &radio::StoredLogoAnswer, now: &str) -> Logo
 
 /// The site a station's logo is discovered from, and the key its answer is memoized under.
 ///
-/// **A newtype over the `reqwest::Url` rather than the URL itself**, so a caller can hold one
-/// without naming the transport crate. `ui::radio::logos` builds a page's worth of these per
-/// browse and was the whole of the UI layer that reached for `reqwest`; the facade is meant to be the
-/// seam that ends at HTTP, and a `Vec<reqwest::Url>` in a view slice is that seam leaking.
-///
-/// The backoff, the session memo and the fetch all have to agree on one spelling of "this
-/// station's site", which is what [`Self::as_str`] is — and there is only ever one place it is
-/// derived.
+/// A newtype so `ui::radio::logos` can hold a page's worth without naming `reqwest`, the facade
+/// being the seam that ends at HTTP. [`Self::as_str`] is the one spelling of "this station's site"
+/// the backoff, the session memo and the fetch agree on.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct SiteOrigin(reqwest::Url);
 
 impl SiteOrigin {
-    /// The key every one of the three agrees on.
     pub fn as_str(&self) -> &str {
         self.0.as_str()
     }
@@ -319,15 +248,9 @@ pub fn site_origin(homepage: &str, stream_url: &str) -> Option<SiteOrigin> {
     melodia_net::media::fetch::logo_discovery::origin_for(homepage, stream_url).map(SiteOrigin)
 }
 
-/// Give a kept station with no usable logo another chance at one, and point its row at what lands.
-///
-/// Two sources, in order: the logo URL the row carries, then whatever the station's own site
-/// advertises. Returns the store path that landed, so a caller can patch the row it holds.
-///
-/// **Both come off the resolvers, so a field the user filled in is what this asks about.** That is
-/// the whole payoff of letting them record a website for an entry the directory left blank: the
-/// site they named is the one read for a `<link rel="icon">`, and a station that had no logo and
-/// no way to get one now has both.
+/// Give a kept station with no usable logo another chance at one, and point its row at what lands:
+/// the row's logo URL, then what its site advertises, read through the resolvers so a website the
+/// user typed is the one asked.
 pub async fn heal_station_logo(
     state: &AppState,
     seed: &AnswerSeed,
@@ -344,13 +267,8 @@ pub async fn heal_station_logo(
     adopted(&state.db, station.id, path).await
 }
 
-/// Every URL [`heal_station_logo`] settles against the answer table before it reaches the network,
-/// for a whole pass over `stations`.
-///
-/// **The two it can name in advance, and not the third.** A logo the station's own site turns out
-/// to advertise is only known once that document has been read, so it keeps its own lookup; these
-/// two are on the row already. Kept here beside the function whose order it mirrors, so the pair
-/// cannot drift apart.
+/// The URLs [`heal_station_logo`] settles against the table before the network, in its order. Not
+/// the logo a site advertises, known only once its page has been read.
 #[must_use]
 pub fn heal_seed_urls(stations: &[radio::RadioStation]) -> Vec<String> {
     let mut urls = Vec::with_capacity(stations.len() * 2);
@@ -364,15 +282,9 @@ pub fn heal_seed_urls(stations: &[radio::RadioStation]) -> Vec<String> {
     urls
 }
 
-/// The logo a station's own site advertises, past the backoff that rides on the site.
-///
-/// **The backoff is on the site, not on whichever icon it named this time**: re-reading the
-/// document is the expensive half, and a site with nothing to advertise will not have grown
-/// something by the next refresh.
-///
-/// Costs a page fetch on top of the download, which is why the browse side asks only about a
-/// result narrow enough to be the station the user typed — a directory page would pay one for the
-/// third of its rows that carry no logo field.
+/// The logo a station's own site advertises. **The backoff rides on the site**, re-reading its
+/// page being the expensive half, which is also why browse asks only about a result narrow enough
+/// to be the station the user typed.
 pub async fn discover_site_logo(
     state: &AppState,
     seed: &AnswerSeed,
@@ -383,8 +295,7 @@ pub async fn discover_site_logo(
         LogoAnswer::Suppressed => return None,
         LogoAnswer::Unknown => {}
     }
-    // The discovered URL is not one the seed could have named — the document had to be read first
-    // — so this one settles on its own query.
+    // The seed couldn't have named the discovered URL, so it settles on its own query.
     let landed = match discover_logo_url(state, &origin.0).await {
         Some(url) => ask_logo_url(state, &AnswerSeed::unseeded(), &url).await,
         None => None,
@@ -406,14 +317,12 @@ pub(super) async fn adopted(db: &DbPool, id: i64, path: String) -> Option<String
     }
 }
 
-/// Record that a site advertised nothing usable.
 async fn note_site_miss(db: &DbPool, origin: &str) {
     if let Err(e) = note_logo_miss(db, origin).await {
         log::debug!("radio: site outcome not recorded: {}", melodia_core::error::describe(&e));
     }
 }
 
-/// What a station's own site says its logo is, past the switch that turns Radio off.
 async fn discover_logo_url(state: &AppState, origin: &reqwest::Url) -> Option<String> {
     let client = directory_client(state).ok()?;
     match melodia_net::media::fetch::logo_discovery::icon_url(client, origin).await {

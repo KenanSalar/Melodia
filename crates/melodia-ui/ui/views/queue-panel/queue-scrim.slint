@@ -9,7 +9,7 @@ export component QueueScrim {
     animate t { duration: Theme.dur-med; easing: ease-in-out; }
 
     // Behind an `if` rather than faded to nothing, a fill bound to stay transparent still costing
-    // a path every frame (`slint-pitfalls.md`).
+    // a path every frame.
     if root.t > 0: Rectangle {
         width: root.width;
         height: root.height;

@@ -1,16 +1,6 @@
-//! Wire loudness normalization to Rust: the `ReplayGain` card on Settings ▸ Effects and the
-//! overflow menu's dialog, both driving the one `ReplayGain` global.
-//!
-//! Seeds the `ReplayGain` global from `settings.json` at startup (enabled flag,
-//! mode index, preamp, prevent-clipping) and registers the callbacks.
-//! Each follows the two-phase shape (mirroring [`crate::ui::equalizer`]): apply
-//! to the live playback engine synchronously, then persist on the blocking pool.
-//! The preamp uses the live `set-preamp` / release `commit-preamp` split, like
-//! the EQ preamp and volume.
-//!
-//! `ReplayGain` master state lives on the playback engine's lock-free shared cell,
-//! not the `PlayerState` machine, so the runtime apply goes through the
-//! infallible `library::playback::player_set_replaygain_*` helpers.
+//! Loudness normalization's wiring: the `ReplayGain` card on Settings ▸ Effects and the overflow
+//! menu's dialog both drive the one `ReplayGain` global, in [`crate::ui::equalizer`]'s shape,
+//! the preamp taking the live `set-preamp` / release `commit-preamp` split.
 
 use slint::ComponentHandle;
 
@@ -21,8 +11,6 @@ use melodia_playback::player::playback::replaygain::{self, RgMode};
 use melodia_ui::{AppWindow, ReplayGain};
 
 pub fn install_replaygain(ui: &AppWindow, state: &AppState) {
-    // A missing / unreadable file falls back to the inert defaults (off, Album,
-    // 0 dB, prevent-clipping on).
     let flags = read_or_default(state, "replaygain").replaygain;
     let mode = RgMode::from_settings_str(&flags.rg_mode);
 
@@ -32,13 +20,10 @@ pub fn install_replaygain(ui: &AppWindow, state: &AppState) {
     rg.set_preamp(replaygain::clamp_rg_preamp(flags.rg_preamp));
     rg.set_prevent_clipping(flags.rg_prevent_clipping);
 
-    // Seed the dB ranges from the DSP constants so Rust stays the single source
-    // of truth (the preamp slider reads these). Runs at boot, before the card
-    // or the dialog can mount.
+    // The slider's range is the DSP's constants, seeded before either surface can mount.
     rg.set_min_preamp(replaygain::RG_MIN_PREAMP_DB);
     rg.set_max_preamp(replaygain::RG_MAX_PREAMP_DB);
 
-    // set-enabled — live toggle + persist.
     rg.on_set_enabled(toggle_binding(
         state,
         "persist rg_enabled",
@@ -46,7 +31,7 @@ pub fn install_replaygain(ui: &AppWindow, state: &AppState) {
         library::settings::set_replaygain_enabled,
     ));
 
-    // set-mode — Track / Album (chip index 0 / 1). Apply live + persist.
+    // Track / Album, chip index 0 / 1.
     {
         let state = state.clone();
         rg.on_set_mode(move |idx| {
@@ -58,7 +43,6 @@ pub fn install_replaygain(ui: &AppWindow, state: &AppState) {
         });
     }
 
-    // set-prevent-clipping — apply live + persist.
     rg.on_set_prevent_clipping(toggle_binding(
         state,
         "persist rg_prevent_clipping",
@@ -66,8 +50,6 @@ pub fn install_replaygain(ui: &AppWindow, state: &AppState) {
         library::settings::set_replaygain_prevent_clipping,
     ));
 
-    // set-preamp — live preamp change during a drag: apply to the player and
-    // update the property so the slider's dB readout tracks. No disk write.
     {
         let state = state.clone();
         let weak = ui.as_weak();
@@ -80,7 +62,6 @@ pub fn install_replaygain(ui: &AppWindow, state: &AppState) {
         });
     }
 
-    // commit-preamp — drag release: persist the preamp.
     {
         let state = state.clone();
         rg.on_commit_preamp(move |db| {

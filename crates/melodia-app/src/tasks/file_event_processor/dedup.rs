@@ -5,17 +5,9 @@ use std::path::PathBuf;
 
 use melodia_store::media::ingest::watcher::FileEvent;
 
-/// Deduplicate events within a batch using priority rules:
-/// - Created + Removed for same path → cancel both
-/// - Created + Modified for same path → keep only Created
-/// - Multiple Modified for same path → keep only one
-/// - Renamed target + Modified → keep only Renamed
-///
-/// The map stores `DedupKind` (no path) keyed by `PathBuf`, so each
-/// event's path moves into the map exactly once instead of being cloned
-/// twice (once for the key, once into the stored event). For `Renamed`
-/// the `from` path lives inside the kind variant; the `to` path is the
-/// map key.
+/// Collapses a batch to one event per path: a create then a remove cancel, a remove then a create
+/// is a modify, and a create or a rename absorbs any modify. The path is the map key, so it moves
+/// in once rather than being cloned for a key and a stored event.
 pub(super) fn deduplicate_events(events: Vec<FileEvent>) -> Vec<FileEvent> {
     enum DedupKind {
         Created,
@@ -24,9 +16,7 @@ pub(super) fn deduplicate_events(events: Vec<FileEvent>) -> Vec<FileEvent> {
         Renamed { from: PathBuf },
     }
 
-    // Kernel told us it dropped events somewhere in this batch — any per-file
-    // event we collected is potentially stale. Collapse the whole batch to a
-    // single RescanNeeded so the caller reconciles against disk instead.
+    // An overflow makes every per-file event suspect, so the caller reconciles against disk.
     if events.iter().any(|e| matches!(e, FileEvent::RescanNeeded)) {
         return vec![FileEvent::RescanNeeded];
     }

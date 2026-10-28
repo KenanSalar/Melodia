@@ -1,19 +1,13 @@
 import { Theme } from "../../theme.slint";
 
-// A list row's hover and selection fill, for the track rows and the queue rows alike. Per-corner
-// radii merge contiguous selected rows into one pill; an unselected row always rounds both ends, so
-// a hover-only pill keeps the shape of a single-row one. Selection is a faint accent overlay that
-// brightens on hover, and an unselected row hovers to `surface0`.
-//
-// **The host mounts it only while it paints**, behind `if selected || hovered`: a transparent
-// rounded rectangle still builds its paths on every frame, and a list at rest is almost all such
-// rows.
+// A list row's hover and selection fill, track and queue rows alike. Per-corner radii merge
+// contiguous selected rows into one pill. The host mounts it only while it paints, so an idle row
+// holds no item for the renderer to visit.
 export component SelectionPill inherits Rectangle {
     in property <bool> selected;
     in property <bool> hovered;
     in property <bool> prev-selected;
     in property <bool> next-selected;
-    // A dimmed host's fade, handed down so the host needs no `opacity`.
     in property <float> fade: 1.0;
 
     border-top-left-radius: (root.selected && root.prev-selected) ? 0 : Theme.radius-md;

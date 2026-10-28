@@ -13,15 +13,9 @@ import { FavoritesArtistsTab } from "favorites/artists-tab.slint";
 import { FavoritesMostPlayedTab } from "favorites/most-played-tab.slint";
 import { FavoritesSongsTab } from "favorites/songs-tab.slint";
 
-// A **pinned** hero banner — the shared `MosaicTabHero`, carrying the `TabBar` and the filter
-// `SearchBar` over the mosaic, title and chips — above three mutually exclusive sub-views: the
-// Songs `TrackList`, and the Most Played and Favorite Artists card grids. Only the body scrolls, so
-// the tabs stay reachable. Albums are deliberately absent, being reachable through the Albums tab.
-//
-// **Each tab owns exactly one scroller**, which is why this view mounts plain `OverlayScrollbar`s
-// rather than `CompositeScrollbars`: a nested `ListView` swallows the wheel at its own edge instead
-// of bubbling, and one scroller per tab retires that whole problem along with the hover sentinel
-// and the two-way `content-y` binding that opts out of Slint's out-of-bounds correction.
+// A pinned `MosaicTabHero` over three tabs, only the body scrolling so the tabs stay reachable.
+// Albums are absent on purpose, the Albums tab reaching them. Each tab owns one scroller under
+// plain `OverlayScrollbar`s, which keeps the page off the composite.
 export component FavoritesView inherits Rectangle {
     property <int> filter-tick-pending: 0;
 
@@ -30,23 +24,14 @@ export component FavoritesView inherits Rectangle {
         fire() => { Favorites.filter-changed(Favorites.filter); }
     }
 
-    // Catches any click no inner TouchArea consumes and bumps the blur tick, which the
-    // SearchBar watches to clear focus.
     TouchArea {
         clicked => { Favorites.blur-search-tick += 1; }
     }
 
-    // Shared by both grid tabs — mutually exclusive, same card shape, so one derivation
-    // and one `columns` push covers both. Measured off the body, whose width the layout
-    // fixes independently of the cards inside it.
-    //
-    // The gutter is the host's choice, so it lives here and is handed to both the
-    // geometry and the grids — an `in` property isn't readable back from outside the
-    // component declaring it.
+    // Declared here for the geometry and the grids both, an `in` property being unreadable from
+    // outside the component declaring it.
     property <length> grid-gap: 20px;
 
-    // Cards on the mounted grid's only row, the one thing the body width can't answer for itself.
-    // Songs is a track list, so it falls through to the width.
     property <int> grid-lone-row-cards:
         Favorites.tab-idx == Favorites.tab-most-played
             ? (Favorites.most-played-rows.length == 1
@@ -85,16 +70,14 @@ export component FavoritesView inherits Rectangle {
 
             title: @tr("Favorites");
             filter-placeholder: root.filter-placeholder;
-            // Only the Songs tab states its emptiness as a sentence — the two
-            // grids each paint a `GridEmptyState`, which says it better.
+            // The grids say it through their own `GridEmptyState`.
             show-empty-copy: Favorites.tab-idx == Favorites.tab-songs
                 && Favorites.track-count == 0;
             empty-copy: @tr("No favorites yet");
 
-            // Clamped, unlike every other reader of this count: `MosaicHeroTile` picks its fallback
-            // glyph on `== 0`, so the not-yet-fetched `-1` draws the generic placeholder note where
-            // the page's own glyph belongs — what a section re-enter shows while the collage, cleared
-            // on the same tick this count is, is still empty.
+            // Clamped, unlike every other reader of this count: `MosaicHeroTile` picks its glyph
+            // on `== 0`, so an unfetched `-1` would draw the placeholder note where the page's
+            // own glyph belongs while a re-entered section's collage is still empty.
             mosaic-count: max(Favorites.track-count, 0);
             mosaic-cover: Favorites.cover;
             empty-glyph: "favorite";
@@ -110,20 +93,13 @@ export component FavoritesView inherits Rectangle {
 
             search-edited(t) => { root.filter-tick-pending += 1; }
             tab-selected(i) => {
-                // A Songs filter carried into the Artists grid would silently
-                // hide cards. Rust drops its own shadow in `tab-changed`; this
-                // only moves the Slint side.
+                // Rust drops its own needle in `tab-changed`; this clears the box.
                 Favorites.filter = "";
                 Favorites.blur-search-tick += 1;
                 Favorites.tab-changed(i);
             }
 
-            // Songs gets the full pill — Shuffle and the column toggle; Most
-            // Played a Shuffle scoped to what its grid shows. Favorite
-            // Artists gets neither, since shuffling and track columns mean
-            // nothing over a list of artists, and carries the entity grids' sort
-            // row instead. **Most Played has no sort row on purpose**: its title
-            // names its own ordering.
+            // Most Played has no sort row on purpose, its title naming its own ordering.
             if Favorites.tab-idx == Favorites.tab-songs
                 && Favorites.track-count > 0: HorizontalLayout {
                 vertical-stretch: 0;
@@ -158,10 +134,7 @@ export component FavoritesView inherits Rectangle {
                 }
             }
 
-            // The two fields are exactly what a card shows — its title and its
-            // subtitle — so an ordering is always visibly justified. The
-            // flip-or-reset is Rust's, through the shared helper every sort row
-            // uses.
+            // The two fields a card shows, so an ordering is always visibly justified.
             if Favorites.tab-idx == Favorites.tab-artists
                 && Favorites.artist-count > 0: HorizontalLayout {
                 vertical-stretch: 0;
@@ -177,17 +150,13 @@ export component FavoritesView inherits Rectangle {
             }
         }
 
-        // One tab mounted at a time, each owning its own scroller and its own overlay
-        // scrollbars. **The bars live inside their branch** because Slint can't read an
-        // id declared inside an `if` from outside it — which is also why each branch
-        // wraps its own `ViewTransition` rather than the body wrapping one: the slide
-        // has to carry the scrollbars with the content, and the whole thing is destroyed
-        // and rebuilt anyway. The `clip` contains the slide's overshoot.
+        // Each branch carries its scrollbars, an id inside an `if` being unreadable outside it,
+        // and so its own `ViewTransition` to slide them with the content. The `clip` holds the
+        // slide's overshoot.
         body := Rectangle {
             vertical-stretch: 1;
             clip: true;
 
-            // --- Songs ------------------------------------------------------
             if Favorites.tab-idx == Favorites.tab-songs: ViewTransition {
                 width: parent.width;
                 height: parent.height;
@@ -200,7 +169,6 @@ export component FavoritesView inherits Rectangle {
                 }
             }
 
-            // --- Most Played ------------------------------------------------
             if Favorites.tab-idx == Favorites.tab-most-played: ViewTransition {
                 width: parent.width;
                 height: parent.height;
@@ -217,7 +185,6 @@ export component FavoritesView inherits Rectangle {
                 }
             }
 
-            // --- Favorite Artists -------------------------------------------
             if Favorites.tab-idx == Favorites.tab-artists: ViewTransition {
                 width: parent.width;
                 height: parent.height;
@@ -236,10 +203,7 @@ export component FavoritesView inherits Rectangle {
         }
     }
 
-    // On a layer of its own. It can't hang off the tab: the bar sits in the hero, and
-    // Slint paints in declaration order, so anything the hero owns is covered by the
-    // body underneath. The band publishes the rect it derives from the hovered *index*,
-    // so a tab that moves under a parked pointer keeps its tooltip anchored.
+    // Last, since the body is declared after the hero and would cover its tab bar's pill.
     TooltipFrame {
         x: hero.absolute-position.x - root.absolute-position.x + hero.tip-x;
         y: hero.absolute-position.y - root.absolute-position.y + hero.tip-y;

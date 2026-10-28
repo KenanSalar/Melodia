@@ -1,10 +1,6 @@
-//! Scrobbling service: Last.fm + `ListenBrainz` "now playing" + scrobble
-//! submission, fully decoupled from the player state machine.
-//!
-//! Owns the credential/enabled shadow and the durable offline queue (loaded at
-//! boot, persisted on change), the submitter-wake `Notify`, and the shared lazy
-//! `reqwest::Client`. `update_now_playing` / `enqueue_scrobble` / `submit_pending`
-//! are driven by the [`detector`] state machine and the `tasks::scrobble` loops.
+//! Last.fm and `ListenBrainz`: now-playing, the durable listen and love queue, and the drain that
+//! submits it. A read-only tap on the player (`docs/adr/0023-scrobbling-is-a-read-only-tap.md`):
+//! [`detector`] and [`live_detector`] decide, and `tasks::scrobble` drives them and calls in here.
 
 pub mod credentials;
 pub mod detector;
@@ -37,80 +33,59 @@ use providers::lastfm;
 use providers::listenbrainz;
 use status::build_status;
 
-/// In-memory shadow of the persisted credentials + enabled flags. Guarded by an
-/// `RwLock` so the detector, submitter, and love-sync read connection/enabled
-/// state synchronously without touching disk. The service's async methods drop
-/// this guard before any `.await` (the disk write rides `spawn_blocking`), so the
-/// lock is never held across an await point.
+/// The persisted credentials and flags, mirrored so the detector, submitter and love sync read
+/// them without touching disk. The guard is never held across an `.await`.
 struct ScrobbleRuntime {
     credentials: ScrobbleCredentials,
     flags: ScrobbleFlags,
 }
 
 impl ScrobbleRuntime {
-    /// Whether Last.fm could be reached right now: this build shipped app keys
-    /// and a session is stored. Named `reachable` (not `connected`) to keep it
-    /// distinct from [`ProviderStatus::connected`], which is creds-only.
+    /// App keys shipped and a session stored. Not `connected`, which [`ProviderStatus`] spells
+    /// for the session alone.
     fn lastfm_reachable(&self) -> bool {
         lastfm::is_configured() && self.credentials.lastfm.is_some()
     }
 
-    /// Whether `ListenBrainz` could be reached right now (needs no app keys —
-    /// the per-user token is the whole credential).
+    /// The user's token is the whole credential; there are no app keys.
     fn listenbrainz_reachable(&self) -> bool {
         self.credentials.listenbrainz.is_some()
     }
 
-    /// Reachable **and** the Last.fm scrobble toggle is on.
     fn lastfm_scrobble_ready(&self) -> bool {
         self.lastfm_reachable() && self.flags.lastfm_enabled
     }
 
-    /// Reachable **and** the `ListenBrainz` scrobble toggle is on.
     fn listenbrainz_scrobble_ready(&self) -> bool {
         self.listenbrainz_reachable() && self.flags.listenbrainz_enabled
     }
 
-    /// Reachable **and** the Last.fm love toggle is on.
     fn lastfm_love_armed(&self) -> bool {
         self.lastfm_reachable() && self.flags.lastfm_love_enabled
     }
 
-    /// Reachable **and** the `ListenBrainz` love toggle is on. Callers that queue
-    /// a love add the per-track `recording_mbid.is_some()` gate themselves (LB
-    /// feedback keys on it).
+    /// Callers queueing a love also skip a track with no `recording_mbid`, which feedback keys on.
     fn listenbrainz_love_armed(&self) -> bool {
         self.listenbrainz_reachable() && self.flags.listenbrainz_love_enabled
     }
 }
 
-/// Owns the scrobble credential/enabled shadow and the durable offline queue.
 /// Held as `Arc<ScrobbleService>` on the app's `AppState`.
 pub struct ScrobbleService {
     runtime: RwLock<ScrobbleRuntime>,
     queue: Mutex<ScrobbleQueue>,
     creds_path: PathBuf,
     queue_path: PathBuf,
-    /// Wakes the submitter task when a scrobble is enqueued.
     notify: Notify,
-    /// The same lazy `OnceLock` as `AppState`'s client, so the
-    /// whole app shares one connection pool built on first request.
+    /// `AppState`'s lazy client, so the whole app shares one connection pool.
     http: Arc<OnceLock<Client>>,
-    /// Where the `ListenBrainz` calls go. Always [`listenbrainz::LB_API_BASE`] in the app; the
-    /// submitter's suites swap it for a local server through [`Self::with_listenbrainz_base`].
+    /// [`listenbrainz::LB_API_BASE`] everywhere but the submitter's suites.
     listenbrainz_base: String,
-    /// Publishes a fresh [`ScrobbleStatus`] whenever the credentials or enabled
-    /// flags change, so the settings UI stays truthful for connect/disconnect
-    /// *and* the submitter's auto-disconnect (invalid Last.fm session /
-    /// `ListenBrainz` token) without polling.
     status_tx: watch::Sender<ScrobbleStatus>,
 }
 
 impl ScrobbleService {
-    /// Load credentials + queue from disk and seed the shadow with the enabled
-    /// flags already read from `settings.json`. Infallible like
-    /// `services::search_history::SearchHistoryState::init`: a missing
-    /// or corrupt file falls back to empty (logged) so boot never fails here.
+    /// Infallible, so boot never fails here: an unreadable file loads empty.
     pub fn init(paths: &Paths, flags: &ScrobbleFlags, http: Arc<OnceLock<Client>>) -> Self {
         let credentials = credentials::load(&paths.scrobble_credentials_path).unwrap_or_default();
         let queue = ScrobbleQueue::load(&paths.scrobble_queue_path).unwrap_or_default();
@@ -127,8 +102,8 @@ impl ScrobbleService {
         }
     }
 
-    /// Point the `ListenBrainz` calls at `base` instead of the public API, so the drain's suite
-    /// can drive it against a local server. Consuming, so a seated `Arc` can't reach it.
+    /// Points the `ListenBrainz` calls at a local server. Consuming, so a seated `Arc` can't
+    /// reach it.
     #[cfg(test)]
     #[must_use]
     pub(crate) fn with_listenbrainz_base(mut self, base: String) -> Self {
@@ -136,31 +111,24 @@ impl ScrobbleService {
         self
     }
 
-    /// A cheap snapshot of connection + enabled state for the settings UI.
     pub fn status(&self) -> ScrobbleStatus {
         let runtime = self.runtime.read();
         build_status(&runtime.credentials, &runtime.flags)
     }
 
-    /// Subscribe to status changes. The settings UI drives its rows off this so
-    /// a background auto-disconnect is reflected without reopening the section.
+    /// What the settings rows follow, so an auto-disconnect shows without reopening the section.
     pub fn subscribe_status(&self) -> watch::Receiver<ScrobbleStatus> {
         self.status_tx.subscribe()
     }
 
-    /// Mirror the enabled flags into the shadow after a setter has persisted
-    /// them to `settings.json`, keeping synchronous readers current, then
-    /// publish the fresh status.
+    /// Mirrors flags a setter has already persisted to `settings.json`.
     pub fn set_flags(&self, flags: ScrobbleFlags) {
         self.runtime.write().flags = flags;
         self.status_tx.send_replace(self.status());
     }
 
-    /// Apply a credential change to the shadow, publish the fresh status, then
-    /// persist the credential file — the shared body of the two public setters.
-    /// The status is published from the in-memory shadow regardless of the disk
-    /// write, so a failed persist still surfaces the applied state (matching the
-    /// apply-then-persist convention elsewhere).
+    /// Publishes the change before writing it, so a failed persist still shows the state the
+    /// user asked for.
     async fn persist_credentials_change(
         &self,
         update: impl FnOnce(&mut ScrobbleCredentials),
@@ -171,9 +139,6 @@ impl ScrobbleService {
             runtime.credentials.clone()
         };
         self.status_tx.send_replace(self.status());
-        // The credential JSON write is blocking `std::fs` (+ a chmod) — offload it
-        // so a connect/disconnect never stalls a tokio worker. The shadow + status
-        // are already applied above, so a failed write still surfaces the state.
         let path = self.creds_path.clone();
         match tokio::task::spawn_blocking(move || credentials::save(&path, &snapshot)).await {
             Ok(result) => result,
@@ -181,7 +146,7 @@ impl ScrobbleService {
         }
     }
 
-    /// Connect / disconnect Last.fm. Passing `None` disconnects.
+    /// `None` disconnects.
     pub async fn set_lastfm_credentials(
         &self,
         credentials: Option<LastfmCredentials>,
@@ -189,7 +154,7 @@ impl ScrobbleService {
         self.persist_credentials_change(move |creds| creds.lastfm = credentials).await
     }
 
-    /// Connect / disconnect `ListenBrainz`. Passing `None` disconnects.
+    /// `None` disconnects.
     pub async fn set_listenbrainz_credentials(
         &self,
         credentials: Option<ListenBrainzCredentials>,
@@ -197,15 +162,13 @@ impl ScrobbleService {
         self.persist_credentials_change(move |creds| creds.listenbrainz = credentials).await
     }
 
-    /// Number of listens + loves still queued for submission. The submitter loop
-    /// re-drains while this is non-zero, so loves must count here too.
+    /// Loves count too: the submitter re-drains while this is non-zero.
     pub fn queued_len(&self) -> usize {
         let queue = self.queue.lock();
         queue.items.len() + queue.loves.len()
     }
 
-    /// Append a scrobble to the durable queue and persist it. The submitter's
-    /// `enqueue_scrobble` enriches and wakes on top of this primitive.
+    /// Queues and persists without waking the submitter, which [`Self::enqueue_track`] adds.
     pub async fn push_scrobble(&self, item: QueuedItem) -> AppResult<()> {
         let snapshot = {
             let mut queue = self.queue.lock();
@@ -215,11 +178,7 @@ impl ScrobbleService {
         self.save_queue(snapshot).await
     }
 
-    /// Persist a queue snapshot off the async runtime: the JSON write is blocking
-    /// `std::fs`, so it rides `spawn_blocking` rather than stalling a tokio worker.
-    /// The in-memory mutation already happened under the lock by the time this is
-    /// called, so the snapshot is owned and `self` isn't captured. Propagates the
-    /// write result; `submit::persist_queue` is the best-effort (log-only) wrapper.
+    /// Propagates the write's result; `submit::persist_queue` is the log-only form.
     async fn save_queue(&self, snapshot: ScrobbleQueue) -> AppResult<()> {
         let path = self.queue_path.clone();
         match tokio::task::spawn_blocking(move || snapshot.save(&path)).await {
@@ -228,32 +187,18 @@ impl ScrobbleService {
         }
     }
 
-    /// Whether a favorite toggle should be mirrored to any provider right now —
-    /// the cheap gate `library::favorites` checks before doing per-track DB
-    /// lookups. True when at least one provider's love toggle is on and can
-    /// receive a love: Last.fm (love on + this build shipped keys + connected) or
-    /// `ListenBrainz` (love on + connected).
+    /// The cheap gate `library::favorites` checks before its per-track row reads.
     pub fn love_sync_active(&self) -> bool {
         let runtime = self.runtime.read();
         runtime.lastfm_love_armed() || runtime.listenbrainz_love_armed()
     }
 
-    /// Enrich a single DB row into a durable love/unlove and wake the submitter —
-    /// the one-track case of [`Self::enqueue_loves`], which owns the per-provider
-    /// arming and the `ListenBrainz` MBID gate. A no-op when the row can't be built
-    /// or no provider wants it.
     pub async fn enqueue_love(&self, row: &ScrobbleRow, loved: bool) -> AppResult<()> {
         self.enqueue_loves(std::slice::from_ref(row), loved).await
     }
 
-    /// Queue a love/unlove for a multi-track favorite toggle under a **single**
-    /// queue lock + save + submitter wake, instead of one persist per id — the
-    /// primitive [`Self::enqueue_love`] delegates its single-row case to. Arms a
-    /// provider per row only when it can receive the love: Last.fm when its love
-    /// toggle is armed; `ListenBrainz` additionally gated on a `recording_mbid`
-    /// (LB feedback keys on it, so untagged tracks skip LB). `push_love` still
-    /// coalesces a repeat toggle of the same track; `loved` carries un-favorites
-    /// too. A no-op when love-sync is off or no row wants any provider.
+    /// Queues a favorite toggle's loves, or unloves, under one lock, save and wake rather than
+    /// one persist per row.
     pub async fn enqueue_loves(&self, rows: &[ScrobbleRow], loved: bool) -> AppResult<()> {
         let (lastfm_armed, listenbrainz_armed) = {
             let runtime = self.runtime.read();
@@ -269,7 +214,6 @@ impl ScrobbleService {
                 let Some(track) = ScrobbleTrack::from_row(row) else {
                     continue;
                 };
-                // LB feedback keys on the recording MBID — skip untagged tracks.
                 let listenbrainz_remaining = listenbrainz_armed && track.recording_mbid.is_some();
                 if !lastfm_armed && !listenbrainz_remaining {
                     continue;
@@ -292,8 +236,7 @@ impl ScrobbleService {
         Ok(())
     }
 
-    /// Whether `target`'s love toggle can receive loves right now — the cheap
-    /// gate the retroactive favorite backfill checks before fetching favorites.
+    /// The gate the favorite backfill checks before fetching favorites.
     pub fn love_target_armed(&self, target: LoveTarget) -> bool {
         let runtime = self.runtime.read();
         match target {
@@ -302,12 +245,8 @@ impl ScrobbleService {
         }
     }
 
-    /// Retroactively queue a love for every favorite `row`, armed for **only**
-    /// `target` (so connecting one provider doesn't re-love everything on the
-    /// other). Batches the whole set into a single queue lock + save + submitter
-    /// wake, unlike per-track [`Self::enqueue_love`]. `ListenBrainz` skips rows
-    /// without a `recording_mbid` (it keys on that). Returns how many loves were
-    /// actually queued. A no-op returning `Ok(0)` when `target` isn't armed.
+    /// Queues a love for every favorite in `rows`, for `target` alone, returning how many were
+    /// queued.
     pub async fn backfill_loves(
         &self,
         rows: &[ScrobbleRow],
@@ -325,7 +264,6 @@ impl ScrobbleService {
                 };
                 let (lastfm_remaining, listenbrainz_remaining) = match target {
                     LoveTarget::Lastfm => (true, false),
-                    // LB feedback keys on the recording MBID — skip untagged tracks.
                     LoveTarget::ListenBrainz if track.recording_mbid.is_some() => (false, true),
                     LoveTarget::ListenBrainz => continue,
                 };
@@ -347,29 +285,22 @@ impl ScrobbleService {
         Ok(queued)
     }
 
-    /// The shared lazy `reqwest::Client`, built on first use. Clones are cheap —
-    /// a `reqwest::Client` is `Arc`-backed and shares the connection pool.
     fn client(&self) -> Client {
         self.http.get_or_init(build_http_client).clone()
     }
 
-    /// Await the next submitter wake (a scrobble was enqueued).
+    /// Resolves at the next enqueue.
     pub async fn notified(&self) {
         self.notify.notified().await;
     }
 
-    /// Whether a now-playing or a listen would reach any provider right now: the cheap gate the
-    /// detector checks before its per-track row read, as [`Self::love_sync_active`] is for
-    /// favorites.
+    /// The cheap gate the detector checks before its per-track row read.
     pub fn scrobbling_active(&self) -> bool {
         let runtime = self.runtime.read();
         runtime.lastfm_scrobble_ready() || runtime.listenbrainz_scrobble_ready()
     }
 
-    /// Fire-and-forget "now playing" to every connected + enabled provider.
-    /// Ephemeral — never queued or retried, since a missed update is
-    /// inconsequential. Reads the shadow synchronously (never held across
-    /// `.await`), then spawns one POST per provider on the ambient runtime.
+    /// Fire-and-forget on the ambient runtime, never queued or retried: a missed one costs nothing.
     pub fn update_now_playing(&self, track: ScrobbleTrack) {
         let (lastfm_creds, lb_creds) = {
             let runtime = self.runtime.read();
@@ -411,7 +342,7 @@ impl ScrobbleService {
         }
     }
 
-    /// Enrich a DB row into a durable scrobble. A no-op when the row can't be scrobbled.
+    /// A no-op when the row can't be scrobbled.
     pub async fn enqueue_scrobble(&self, row: &ScrobbleRow, timestamp: i64) -> AppResult<()> {
         match ScrobbleTrack::from_row(row) {
             Some(track) => self.enqueue_track(track, timestamp).await,
@@ -419,10 +350,7 @@ impl ScrobbleService {
         }
     }
 
-    /// Queue a durable scrobble and wake the submitter. Sets a provider's "needs
-    /// submitting" flag only when that provider is currently connected + enabled (a
-    /// flag for a disconnected provider would never clear and would pin the item
-    /// through `retain_pending`). A no-op when no provider wants it.
+    /// Flags only the providers ready now, and is a no-op where none is.
     pub async fn enqueue_track(&self, track: ScrobbleTrack, timestamp: i64) -> AppResult<()> {
         let (lastfm_remaining, listenbrainz_remaining) = {
             let runtime = self.runtime.read();
@@ -443,9 +371,8 @@ impl ScrobbleService {
     }
 }
 
-// Inline so the fixtures can be a sibling module the submit drain's suite reaches too, which is
-// the shape `player/source/mod.rs` already uses for the helpers its crate's suites share. The
-// test bodies still live in their own files.
+// Inline so the fixtures are a sibling the submit drain's suite reaches too; the bodies stay in
+// their own files.
 #[cfg(test)]
 pub(crate) mod tests {
     pub(crate) mod helpers;

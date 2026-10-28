@@ -1,14 +1,10 @@
-//! Ending a live connection that has gone quiet, so the feed thread's reconnect is the only one.
+//! Ends a live connection that has gone quiet, so the feed thread's reconnect is the only one.
 //!
-//! stream-download's own answer to a stall is to re-request the mount and append the new response
-//! to the old bytes. Icecast restarts its metadata interval on every response, so the
-//! `IcyMetadataReader` above the join keeps counting the old one: it strips audio as metadata and
-//! hands the real blocks to the decoder, and MP3 resyncs past each one without ever ending. So that
-//! timer is off and this watch cancels the download instead. The blocking read fails, the decoder
-//! ends, and the feed loop opens the station afresh into the same ring.
-//!
-//! The cancel is also the only thing that wakes a feed thread parked on a read, so a station
-//! stopped mid-outage lets go of its connection without waiting for the network to come back.
+//! stream-download's own answer to a stall re-requests the mount and appends the new response to
+//! the old bytes, but Icecast restarts its metadata interval per response, so the metadata reader
+//! keeps counting the old one and hands audio over as metadata. So that timer is off and this
+//! cancels the download instead, which is also the only thing that wakes a feed thread parked on a
+//! read.
 
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -21,16 +17,12 @@ use tokio_util::sync::CancellationToken;
 use super::prebuffer::StreamShared;
 use super::stream_source::ABANDON_POLL;
 
-/// How long a connection may deliver nothing before it is treated as lost.
-///
 /// Long enough to ride out a drop TCP survives, short enough that the reconnect starts while the
-/// decoded ring still holds audio. The cancel fails the reader before it serves what is already
-/// buffered, so compressed audio it had not reached is dropped: the price of a clean restart over
-/// a spliced one. Delivery also stops when the reader stops draining a full buffer, which is a
-/// connection worth renewing too: what it holds is that far behind live.
+/// ring still holds audio. The cancel drops compressed audio the reader hadn't reached, the price
+/// of a clean restart over a spliced one. A reader that stops draining a full buffer stops delivery
+/// too, and that connection is worth renewing: it is that far behind live.
 const STALL_TIMEOUT: Duration = Duration::from_secs(5);
 
-/// Watches one connection's delivery and ends it once it stalls or its source is dropped.
 pub(super) struct StallWatch {
     /// The stream position stream-download last reported writing.
     delivered: Arc<AtomicU64>,
@@ -54,7 +46,7 @@ impl StallWatch {
             })
     }
 
-    /// Watches the download behind `token` until it ends, cancelling it if it stalls first.
+    /// Cancels the download behind `token` if it stalls or its source is dropped first.
     pub(super) fn spawn(self, token: CancellationToken, shared: Arc<StreamShared>) {
         tokio::spawn(self.run(token, shared));
     }

@@ -1,8 +1,6 @@
-//! Import and export of the kept station list.
-//!
-//! Wired from boot's `install_ui` rather than from the slice's `install`, because the completion
-//! toasts need the notifications stack and that does not exist yet at install time — the same
-//! constraint `ui::playlists::wire_files` carries, and the same shape.
+//! Import and export of the kept station list, wired from boot's `install_ui` as
+//! `ui::playlists::wire_files` is: the completion toasts need a notifications stack that doesn't
+//! exist at install time.
 
 use std::path::PathBuf;
 use std::rc::Rc;

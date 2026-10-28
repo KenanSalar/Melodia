@@ -3,11 +3,7 @@ import { FolderListRow } from "../models.slint";
 // `state::ScanPhase` plus the idle state the Rust side spells as an empty channel.
 export enum ScanPhase { idle, discovering, reading, finishing, stopping }
 
-// LibrarySettings: drives the Library Folders section of Settings. The
-// `folders` model is owned by Rust (`Rc<VecModel<FolderListRow>>` rebuilt
-// on each refresh in `crates/melodia-views/src/ui/settings/library_settings.rs`) and pushed in via
-// `set_folders(ModelRc::from(...))`. Scan-progress fields are patched by a
-// `slint::spawn_local` subscriber on `state.scan`.
+// Owned by `ui::settings::library_settings`.
 export global LibrarySettings {
     in-out property <[FolderListRow]> folders;
     in-out property <ScanPhase> scan-phase: ScanPhase.idle;

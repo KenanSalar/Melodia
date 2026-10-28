@@ -1,22 +1,12 @@
-//! Browser-style in-memory back/forward navigation history, tracking the user's path
-//! across sidebar-tab switches and detail open/close, walked by Mouse-4 / Mouse-5.
+//! Browser-style back/forward history across section, tab and detail changes, walked by
+//! Mouse-4 / Mouse-5. In memory only: `boot::ui_setup::views::install_views` seeds the
+//! landing entry each launch.
 //!
-//! [`NavEntry`] is a snapshot of the *visible state* — a section, the tab within it for
-//! a section built out of tabs, and the optional detail id open there. [`NavHistory`] is
-//! a linear stack with a cursor, where user-initiated navigation truncates the forward
-//! portion, as the HTML5 History API does.
-//!
-//! Recording happens at each user-action call site. The replay path drives the same
-//! callbacks, so a single `suppress` flag keeps a replay-triggered callback from
-//! re-pushing the entry it just walked to. It is a plain bool rather than a counter, so
-//! **the two regions it guards must not nest**: `replay`'s own synchronous step, and the
-//! [`PendingNav`] a cross-view walk defers into the destination `open_*`'s hook, which
-//! lands a section flip — and so a `record_current` — long after that step returned.
-//! [`PendingNav::apply`] and [`PendingNav::apply_deferred`] are that split.
-//!
-//! Not persisted: each launch starts empty. `boot::ui_setup::views::install_views` seeds one
-//! entry for the section landed on, and any persisted detail's async open records itself
-//! on the way in.
+//! Recording happens at each user-action call site, and a replay drives those same
+//! callbacks, so `suppress` keeps one from re-pushing the entry it just walked to. It is a
+//! bool rather than a counter, so **the two regions it guards must not nest**: `replay`'s
+//! own synchronous step, and the [`PendingNav`] a cross-view walk defers into the
+//! destination `open_*`'s hook ([`PendingNav::apply`] and [`PendingNav::apply_deferred`]).
 
 use std::collections::VecDeque;
 use std::future::Future;
@@ -36,13 +26,9 @@ use melodia_ui::{AppWindow, Dialog, MyLibrary, Nav, NavEnterFrom, Queue, Radio};
 
 const HISTORY_CAP: usize = 24;
 
-/// One snapshot of the visible state. `detail_id == None` means the section's grid or
-/// list is showing, `Some(id)` its detail view.
-///
-/// **A section alone stopped identifying a view when the five library pages became tabs
-/// of one.** `tab` is the second half — `MyLibrary.tab-idx` inside section 3,
-/// [`crate::ui::my_library::NO_TAB`] everywhere else. Without it a Songs → Albums move
-/// duplicates the entry it followed and `record`'s dedup drops it.
+/// One snapshot of the visible state; `detail_id == None` is the section's grid or list.
+/// `tab` is `MyLibrary.tab-idx` inside section 3 and [`crate::ui::my_library::NO_TAB`]
+/// elsewhere, without which a Songs → Albums move would dedup against the entry before it.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub struct NavEntry {
     pub section: i32,
@@ -50,7 +36,6 @@ pub struct NavEntry {
     pub detail_id: Option<i64>,
 }
 
-/// Linear back/forward stack with a cursor. See module docs.
 pub struct NavHistory {
     entries: VecDeque<NavEntry>,
     cursor: usize,
@@ -62,12 +47,11 @@ impl NavHistory {
         Self { entries: VecDeque::with_capacity(HISTORY_CAP), cursor: 0, suppress: false }
     }
 
-    /// Push a new entry at `cursor + 1`, truncating any forward history. A no-op while a
-    /// replay is in flight; consecutive duplicates collapse.
+    /// Pushes `entry` past the cursor, dropping any forward history, as the HTML5 History
+    /// API does. Consecutive duplicates collapse, and nothing is taken mid-replay.
     ///
-    /// Returns whether the entry was taken, which is what [`record_current`] logs on:
-    /// the eleven hooks fire two or three times per move, so an unconditional line reads
-    /// as a stutter rather than as a navigation.
+    /// Returns whether it was taken, which is what [`record_current`] logs on: one move
+    /// fires its hooks two or three deep, and a line per hook reads as a stutter.
     pub fn record(&mut self, entry: NavEntry) -> bool {
         if self.suppress {
             return false;
@@ -80,7 +64,6 @@ impl NavHistory {
         if self.entries.get(self.cursor) == Some(&entry) {
             return false;
         }
-        // User-initiated navigation invalidates the forward stack.
         self.entries.truncate(self.cursor + 1);
         self.entries.push_back(entry);
         if self.entries.len() > HISTORY_CAP {
@@ -90,8 +73,7 @@ impl NavHistory {
         true
     }
 
-    /// Move cursor one step back; return the entry now under the cursor,
-    /// or `None` if already at the start.
+    /// Steps the cursor back, returning the entry it lands on.
     pub fn back(&mut self) -> Option<NavEntry> {
         if self.cursor == 0 {
             return None;
@@ -100,8 +82,7 @@ impl NavHistory {
         self.entries.get(self.cursor).copied()
     }
 
-    /// Move cursor one step forward; return the entry now under the
-    /// cursor, or `None` if already at the end.
+    /// Steps the cursor forward, returning the entry it lands on.
     pub fn forward(&mut self) -> Option<NavEntry> {
         if self.cursor + 1 >= self.entries.len() {
             return None;
@@ -110,13 +91,8 @@ impl NavHistory {
         self.entries.get(self.cursor).copied()
     }
 
-    /// Drop every entry for a section the user can no longer reach, pulling the cursor
-    /// back past the ones that fell before it.
-    ///
-    /// Switching Radio off is the only caller, and it is what actually moves the user off
-    /// nav 10: the row and the router branch both go, but the walk would still land there
-    /// on a panel with nothing mounted in it. Cheaper than teaching every replay to
-    /// re-check whether its destination still exists.
+    /// Drops every entry for a section the user can no longer reach. Switching Radio off is
+    /// the caller: the walk would otherwise land on a panel with nothing mounted in it.
     pub fn forget_section(&mut self, section: i32) {
         let dropped_before_cursor =
             self.entries.iter().take(self.cursor + 1).filter(|e| e.section == section).count();
@@ -131,9 +107,8 @@ impl NavHistory {
         self.suppress = on;
     }
 
-    /// The entry the cursor is on, or `None` if the history is empty. Read by
-    /// [`spawn_open_detail`]'s future to bail when a newer replay has already moved the
-    /// cursor past the target it was scheduled to fulfil.
+    /// The entry under the cursor. [`spawn_open_detail`]'s future reads it to bail once a
+    /// newer replay has moved past its target.
     pub fn current(&self) -> Option<NavEntry> {
         self.entries.get(self.cursor).copied()
     }
@@ -160,15 +135,11 @@ impl Default for NavHistory {
     }
 }
 
-/// The visible detail id for `(section, tab)`, or `None` if that view has no detail
-/// concept or its detail is closed. Past the My Library check everything is
-/// [`my_library::detail_id_for`] — which takes the tab rather than reading the mounted one
-/// precisely so this caller can ask about a *recorded* entry's tab.
+/// The visible detail id for `(section, tab)`. [`my_library::detail_id_for`] takes the tab
+/// rather than reading the mounted one so a *recorded* entry's tab can be asked about.
 ///
-/// **Radio's detail is walkable only where it has a row.** A browsed station is a directory
-/// answer with a shelf life and `id == 0`, so there is nothing for a later replay to reopen
-/// it by; the walk steps over it to the tab it was opened from, which is where the station
-/// still is.
+/// Radio's detail is walkable only where the station has a row: a browsed one is a
+/// directory answer with `id == 0`, so the walk steps over it to the tab it was opened from.
 fn current_detail_id_for(ui: &AppWindow, section: i32, tab: i32) -> Option<i64> {
     if section == NAV_RADIO {
         let g = ui.global::<Radio>();
@@ -183,31 +154,23 @@ fn current_detail_id_for(ui: &AppWindow, section: i32, tab: i32) -> Option<i64> 
     my_library::detail_id_for(ui, tab_from_index(&ui.global::<MyLibrary>(), tab))
 }
 
-/// Record an arbitrary snapshot, for the detail open/close hooks where the new state is
-/// known at the call site.
+/// Records `entry`, for the hooks that know the new state at the call site.
 pub fn record(entry: NavEntry) {
     nav().history().record(entry);
 }
 
-/// Record the current visible state by reading globals, for the hooks that fire once the
-/// *new* state is already there.
+/// Records the visible state off the globals, for the hooks that fire once it has landed.
 pub fn record_current(ui: &AppWindow) {
     let section = ui.global::<Nav>().get_selected_index();
     let tab = tab_of_section(ui, section);
     let detail_id = current_detail_id_for(ui, section, tab);
-    // Only what the history took: the eleven hooks fire two or three deep for one click,
-    // and logging each reads as a stutter rather than a navigation.
     if nav().history().record(NavEntry { section, tab, detail_id }) {
         view_tag::log_current(ui);
     }
 }
 
-/// Walk one step back or forward and drive the UI into the new state, under
-/// `set_suppress(true)` so the transition hooks it triggers don't re-record. Suppress is
-/// cleared after the synchronous portion — but a cross-view walk into a detail defers
-/// its navigation into the destination `open_*`'s hook, which lands a section flip long
-/// after that, so [`PendingNav::apply_deferred`] re-arms the flag around itself. The two
-/// regions must not nest; see the module docs.
+/// Walks one step and drives the UI into the entry it lands on, with recording suppressed
+/// (module docs).
 pub fn replay(state: &AppState, ui: &AppWindow, going_back: bool) {
     let target = {
         let mut hist = nav().history();
@@ -222,8 +185,7 @@ pub fn replay(state: &AppState, ui: &AppWindow, going_back: bool) {
     let current_detail = current_detail_id_for(ui, current_section, current_tab);
     let direction = if going_back { NavEnterFrom::Left } else { NavEnterFrom::Right };
 
-    // Its own line because a replay suppresses recording, so this is otherwise
-    // the one navigation leaving no trace.
+    // A replay records nothing, so this is its only trace.
     log::debug!(
         "nav: history {} → section {} tab {} detail {:?}",
         if going_back { "back" } else { "forward" },
@@ -245,17 +207,9 @@ pub fn replay(state: &AppState, ui: &AppWindow, going_back: bool) {
             direction,
         );
     } else {
-        // A different *view* — a My Library tab move, a section switch, or both. Four
-        // things are owed either way: tear down whatever the leaving view has open so
-        // its release and persist side-effects run, mark the direction, land on the
-        // target tab, and put the section where the target names.
-        //
-        // **Whether those run now or later turns on whether a detail is coming.**
-        // `my-library-view.slint`'s body router is a pure function of `(tab-idx, the
-        // four ids)` with no third state, and the id lands a DB fetch plus an artwork
-        // decode after the tab would — so a tab written here mounts the destination's
-        // *grid* for the length of that fetch. Handed to `open_*_with`'s hook instead,
-        // both land in one UI-thread tick and the router only ever sees the detail.
+        // With a detail coming, the navigation waits for `open_*_with`'s hook: the body
+        // router in `my-library-view.slint` would otherwise mount the destination's grid
+        // for the length of the fetch.
         let pending = PendingNav {
             from: current_detail.is_some().then_some((current_section, current_tab)),
             section: target.section,
@@ -265,7 +219,6 @@ pub fn replay(state: &AppState, ui: &AppWindow, going_back: bool) {
         if let Some(id) = target.detail_id {
             spawn_open_detail(state, ui, target.section, target.tab, id, direction, Some(pending));
         } else {
-            // Nothing to wait for — the destination view *is* the grid.
             pending.apply(ui);
         }
     }
@@ -284,16 +237,14 @@ fn apply_same_view(
 ) {
     match (current, target) {
         (Some(_), None) => invoke_close_detail(ui, section, tab),
-        // No navigation to defer — the view the detail belongs to is already the one
-        // on screen, so the hook has nothing to land and `open_*` marks for itself.
+        // Already on the detail's view, so nothing to defer; `open_*` marks for itself.
         (_, Some(id)) => spawn_open_detail(state, ui, section, tab, id, direction, None),
         (None, None) => crate::ui::nav_transition::mark(ui, direction),
     }
 }
 
-/// The navigation a cross-view replay owes, deferred so it lands in the same UI-thread
-/// tick as the destination detail's id rather than a fetch ahead of it. The call site in
-/// [`replay`] says why the two must share a tick.
+/// The navigation a cross-view replay owes, deferred to land in the same tick as the
+/// destination detail's id.
 #[derive(Clone, Copy)]
 struct PendingNav {
     /// The view being left, when it has a detail to close.
@@ -304,24 +255,17 @@ struct PendingNav {
 }
 
 impl PendingNav {
-    /// Land it. For [`replay`]'s own synchronous arm, which is already inside
-    /// the suppression — the deferred callers take [`Self::apply_deferred`].
+    /// For [`replay`]'s synchronous arm, already inside the suppression.
     fn apply(self, ui: &AppWindow) {
         if let Some((section, tab)) = self.from {
             invoke_close_detail(ui, section, tab);
         }
-        // **After the close**, which runs `mark_drill_back` and would otherwise clobber
-        // the direction `open_*` marked a few statements above this hook.
+        // After the close, whose `mark_drill_back` would clobber the direction.
         crate::ui::nav_transition::mark(ui, self.direction);
-        // Before the section flip, so the page mounts on the tab it is meant to be on
-        // rather than on whichever one it was left at.
+        // Before the section flip, so the page mounts on its target tab.
         persist_tab(ui, self.tab);
-        // **Read the index live, after the close.** "Did this walk cross a section" is a
-        // different question from "is the section where the target names", and only the
-        // second is the flip's: a detail opened by a cross-section drill carries an
-        // `origin-nav-index` and closing it *restores that section*, so a same-section
-        // walk out of one has already left the page by now. The live read still skips
-        // the redundant persist on an ordinary same-section move.
+        // Read live, after the close: closing a detail a cross-section drill opened restores
+        // its origin section, so a same-section walk out of one has already left the page.
         let nav = ui.global::<Nav>();
         if nav.get_selected_index() != self.section {
             nav.set_selected_index(self.section);
@@ -329,21 +273,17 @@ impl PendingNav {
         }
     }
 
-    /// The deferred form, for the two callers that run after [`replay`] has returned:
-    /// the `open_*` hook and [`Self::land`]. Suppression is dropped by then and the
-    /// section flip inside reaches the sidebar hook's `record_current`, which would push
-    /// the entry the walk just walked *to*. `record`'s dedup swallows it today;
-    /// re-arming is two lines and stops the fix resting on that.
+    /// For the `open_*` hook and [`Self::land`], which run after [`replay`] has returned.
+    /// Re-arms suppression, or the section flip's `record_current` would push the entry
+    /// just walked to and leave the walk resting on `record`'s dedup.
     fn apply_deferred(self, ui: &AppWindow) {
         nav().history().set_suppress(true);
         self.apply(ui);
         nav().history().set_suppress(false);
     }
 
-    /// Land it on an event-loop hop of its own, for the paths where the open never ran
-    /// or failed. Without it a press against a deleted playlist — or one arriving before
-    /// the view handles are wired — does nothing at all, the whole navigation having
-    /// been handed to a hook that never fires.
+    /// Lands it on an event-loop hop of its own, for an open that never ran or failed and
+    /// would otherwise swallow the press.
     fn land(self, weak: &Weak<AppWindow>) {
         let _ = weak.upgrade_in_event_loop(move |ui| self.apply_deferred(&ui));
     }
@@ -364,22 +304,16 @@ fn invoke_close_detail(ui: &AppWindow, section: i32, tab: i32) {
     crate::ui::my_library::close_open_detail(ui, tab);
 }
 
-/// Schedule the tab's `open_*` future, bailing at the start if a newer replay has
-/// already advanced the cursor past `expected`.
+/// Schedules the tab's `open_*`, bailing at the start if a newer replay has moved the
+/// cursor past the target: spam-clicked faster than the fetch, Mouse-4/5 would otherwise
+/// leave a stale `*-id` to pop a phantom detail on the next visit. A press landing after
+/// the open starts awaiting still races, short of a cancellation token through `open_*`.
 ///
-/// That bail closes the spam-click window: pressed faster than the DB fetch returns,
-/// Mouse-4/5 would otherwise leave a stale `*-id` on the destination global — invisible
-/// while another section is selected, ready to pop a phantom detail on the next visit. A
-/// residual race remains for a press landing *after* the future starts awaiting, which
-/// would need a real cancellation token plumbed through `open_*`.
-///
-/// `pending` is the cross-view navigation, handed to the `open_*_with` hook so it shares
-/// a tick with the id write; `None` when the target is the view already on screen.
-/// **Every path that can still open something and doesn't reach the hook has to land it
-/// instead**, or the press is silently swallowed — that is the missing-handle bail and
-/// each open's `Err` arm. Three paths deliberately land nothing: the newer-replay bail,
-/// where a later replay already owns the screen, and the two guards below, a
-/// non-My-Library section and the Songs tab owning no detail at all.
+/// `pending` is the cross-view navigation, handed to the `open_*_with` hook so it shares a
+/// tick with the id write. **A path that can still open something and misses the hook lands
+/// it instead** (a missing handle, a failed open), or the press is swallowed. The
+/// newer-replay bail and the two guards, a section with no detail and the Songs tab, land
+/// nothing.
 fn spawn_open_detail(
     state: &AppState,
     ui: &AppWindow,
@@ -392,8 +326,6 @@ fn spawn_open_detail(
     if section != NAV_MY_LIBRARY && section != NAV_RADIO {
         return;
     }
-    // `weak` is consumed by whichever `open_*_with` runs; `ReplayOpen::fallback` is what is
-    // left to land the navigation on if it never gets there.
     let weak: Weak<AppWindow> = ui.as_weak();
     let replay = |label| ReplayOpen {
         expected: NavEntry { section, tab, detail_id: Some(id) },
@@ -402,8 +334,8 @@ fn spawn_open_detail(
         label,
     };
     if section == NAV_RADIO {
-        // Only a kept station is ever recorded, so the id is the whole handle: `StationRef::is_kept`
-        // splits on it, and `open_station_with` fills the uuid in off the row it resolves.
+        // Only a kept station is recorded, so the id is the whole handle; `open_station_with`
+        // fills the uuid in off the row it resolves.
         let station = crate::ui::radio::StationRef { id, uuid: String::new() };
         let handle = nav().handles().radio.lock().clone();
         spawn_open(state, handle, replay("open_station"), move |s, ru| async move {
@@ -445,9 +377,8 @@ fn spawn_open_detail(
     }
 }
 
-/// One replay's open: the entry it must still be current against when it starts, the
-/// navigation it owes, and the handle to land that navigation on if the open never reaches
-/// its hook.
+/// One replay's open: the entry it must still be current against, the navigation it owes,
+/// and the handle to land that on if the open never reaches its hook.
 struct ReplayOpen {
     expected: NavEntry,
     pending: Option<PendingNav>,
@@ -456,9 +387,7 @@ struct ReplayOpen {
     label: &'static str,
 }
 
-/// Run `open` behind the newer-replay bail. The missing-handle bail and a failed open each land
-/// the pending navigation, being the two paths that can still open something and don't reach
-/// the hook.
+/// Runs `open` behind the newer-replay bail, landing `pending` wherever it misses the hook.
 fn spawn_open<H, Fut>(
     state: &AppState,
     handle: Option<Arc<H>>,
@@ -486,8 +415,7 @@ fn spawn_open<H, Fut>(
     });
 }
 
-/// The `on_applied` hook the four `open_*_with` calls share — a no-op when the
-/// replay has no navigation to defer.
+/// The `on_applied` hook every `open_*_with` call here shares.
 fn pending_hook(pending: Option<PendingNav>) -> impl FnOnce(&AppWindow) + Send + 'static {
     move |ui: &AppWindow| {
         if let Some(pending) = pending {
@@ -496,30 +424,23 @@ fn pending_hook(pending: Option<PendingNav>) -> impl FnOnce(&AppWindow) + Send +
     }
 }
 
-/// [`PendingNav::land`] over the same `Option`, so the bails read as one line.
 fn land_pending(pending: Option<PendingNav>, weak: &Weak<AppWindow>) {
     if let Some(pending) = pending {
         pending.land(weak);
     }
 }
 
-/// Whether Now Playing, a modal dialog or the floating queue is up. Mouse-4/5 gate on it:
-/// overlays have their own input contexts, Esc and F closing them, and absorbing browser-style
-/// nav while one is up would surprise the user. The docked queue panel is not one, sitting
-/// beside the page it would navigate.
+/// Whether Now Playing, a modal dialog or the floating queue is up, each owning its own
+/// input, so Mouse-4/5 stand down. The docked queue panel sits beside the page and doesn't
+/// count.
 pub fn overlay_open(ui: &AppWindow) -> bool {
     ui.global::<Nav>().get_now_playing_open()
         || ui.global::<Dialog>().get_open()
         || ui.global::<Queue>().get_floating()
 }
 
-/// Per-section UI-handle registry, filled at startup by each `wire_*` once its
-/// `Arc<*Ui>` exists and read by the replay's `open_*` dispatch.
-/// `Mutex<Option<…>>` so it can be populated lazily during boot rather than threading
-/// the handles through every callback.
-///
-/// Named for the *sections* it registers rather than for the handles, `boot::ui_setup::views`
-/// having its own unrelated `UiHandles` that this used to collide with.
+/// The view handles the replay's `open_*` dispatch reads, filled by each `wire_*` once its
+/// `Arc<*Ui>` exists rather than threaded through every callback.
 #[derive(Default)]
 pub struct SectionHandles {
     pub albums: Mutex<Option<Arc<crate::ui::albums::AlbumsUi>>>,
@@ -529,10 +450,8 @@ pub struct SectionHandles {
     pub radio: Mutex<Option<Arc<crate::ui::radio::RadioUi>>>,
 }
 
-/// Everything browser-style navigation needs, owned by the view layer.
-///
-/// Both halves sat on `AppState` and were the only reason it named anything under `ui::`. That
-/// edge is the one no dependency direction survives, `src/ui/` reaching `state` from 138 places.
+/// Everything browser-style navigation needs, owned by the view layer so `AppState` names
+/// nothing under `ui::`.
 #[derive(Default)]
 pub struct Navigation {
     history: Mutex<NavHistory>,
@@ -540,7 +459,6 @@ pub struct Navigation {
 }
 
 impl Navigation {
-    /// The back/forward stack. In-memory only — reset on each launch.
     pub fn history(&self) -> parking_lot::MutexGuard<'_, NavHistory> {
         self.history.lock()
     }
@@ -550,16 +468,12 @@ impl Navigation {
     }
 }
 
-/// The one navigation state this process has.
-///
-/// A static rather than a value threaded from `boot`, because reaching it from the twelve
-/// `'static` callbacks that record and the five `open_*_with` futures that land would mean a
-/// parameter on about fifty functions to arrive at a value there is exactly one of — the same
-/// bargain `utils::toast`'s bridge and `window_chrome`'s geometry statics already take. It
-/// carries no `AppState`, so nothing here can grow a second way to reach the app layer.
+/// A static rather than a value threaded from `boot`: the `'static` callbacks that record
+/// and the `open_*_with` futures that land would each need a parameter for a value there is
+/// exactly one of.
 static NAVIGATION: LazyLock<Navigation> = LazyLock::new(Navigation::default);
 
-/// The process's navigation state. Fresh on first use, so there is no install to order.
+/// The process's navigation state, fresh on first use, so there is no install to order.
 pub fn nav() -> &'static Navigation {
     &NAVIGATION
 }

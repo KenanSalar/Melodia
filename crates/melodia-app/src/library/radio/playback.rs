@@ -1,8 +1,4 @@
 //! Putting a station on the deck, and the row bookkeeping that goes with it.
-//!
-//! **A play writes the row before it opens the socket.** Both doors below reach the same
-//! [`keep_station`], because a station the user chose has to reach the recents list whether or not
-//! it was reachable today — a station that is down is exactly the one they will want to find again.
 
 use std::sync::Arc;
 
@@ -21,17 +17,11 @@ pub async fn mark_played(db: &DbPool, id: i64) -> Result<(), AppError> {
     queries::radio::mark_played(db, id).await
 }
 
-/// Write down what the mount that just opened actually serves, where it says anything.
+/// Write down the codec the open mount actually serves, which only the decoder can tell: the
+/// directory's `codec` names the container. Its own column, a re-import rewriting the directory's.
 ///
-/// The open is the only moment that answer exists. The directory's `codec` column names the
-/// container, so an Ogg station reads `OGG` whether it carries Vorbis, Opus or FLAC, and the
-/// response's content type says the same; the decoder is what can tell them apart. It lands in
-/// `probed_codec` rather than over the directory's own column, which a re-import rewrites.
-///
-/// **Last, once the stream is playing.** It is a write-pool `UPDATE`, so anywhere earlier it sits
-/// between the open and the first sample behind whatever else holds that pool. Failure is logged
-/// and swallowed: a display string is not worth ending a tune over. `station_id` is `0` for a
-/// station with no row of its own, which would match nothing.
+/// **Last, once the stream plays**: anywhere earlier, a write-pool `UPDATE` sits between the open
+/// and the first sample. `station_id` is `0` for a station with no row of its own.
 pub async fn record_probed_codec(db: &DbPool, station: &RadioNowPlaying, codec: &str) {
     if codec.is_empty() || station.station_id == 0 {
         return;
@@ -43,33 +33,22 @@ pub async fn record_probed_codec(db: &DbPool, station: &RadioNowPlaying, codec: 
 
 /// Tune to a stored station, counting the play ahead of the connect.
 ///
-/// The count goes in even if the stream turns out to be unreachable: it records that the user
-/// chose the station, which is what orders the recents list, and a station that is down today is
-/// exactly the one they will want to find again. Hence the ordering — counting afterwards would
-/// make the row conditional on the server being up.
+/// **The count goes in even if the stream is unreachable**: a station that is down today is
+/// exactly the one the user will want to find in the recents list again.
 pub async fn play_station(state: &AppState, id: i64) -> Result<(), AppError> {
     ensure_enabled(state)?;
     let mut station = get_station(&state.db, id).await?;
     mark_played(&state.db, id).await?;
-    // The row was read before the count went in, and this play is one the Now-Playing surfaces
-    // should already be stating. `mark_played` is `play_count + 1`, so this is the new value
-    // rather than a guess at it.
+    // Read before the count went in; `mark_played` is `play_count + 1`, so this is the new value.
     station.play_count += 1;
     let now_playing = std::sync::Arc::new(RadioNowPlaying::from(&station));
-    // Every play passes through here, whichever surface started it, so the directory's own
-    // count is reported once and in one place rather than at each caller.
+    // Every play passes through here, so the directory's count is reported in one place.
     spawn_click(state, station.station_uuid.as_deref());
     playback::player_play_station(&state.playback_ctx(), &now_playing).await
 }
 
-/// The station a restart should put back on the deck, or nothing.
-///
-/// Guarded like a play rather than like a getter: what comes back goes on a Now-Playing surface
-/// with a button that opens a socket, which is what D15's switch is about.
-///
-/// Silent on every miss — radio switched off since, or a row removed from both tabs and swept.
-/// Nothing has been asked for at this point in the boot, so there is nothing to report to
-/// somebody who may not have been thinking about the station at all.
+/// The station a restart should put back on the deck, or nothing. Guarded like a play rather than
+/// like a getter, what comes back going on a surface with a button that opens a socket.
 pub async fn station_to_restore(state: &AppState, id: i64) -> Option<Arc<RadioNowPlaying>> {
     ensure_enabled(state).ok()?;
     match get_station(&state.db, id).await {
@@ -81,16 +60,9 @@ pub async fn station_to_restore(state: &AppState, id: i64) -> Option<Arc<RadioNo
     }
 }
 
-/// Write a browsed station into the table, which is what makes it the user's.
-///
-/// Directory results are otherwise never persisted (D3), so this is the crossing, and both of
-/// the things that count as keeping a station go through it.
-///
-/// **The logo write follows the fetched URL, not the stored file.** `save_station`'s conflict
-/// clause deliberately leaves `artwork_path` alone, which is right for a re-import that changed
-/// nothing else and wrong for a station whose logo moved: the caller fetched from the
-/// `favicon_url` in hand, so pointing the row at what that returned is what stops a moved logo
-/// showing the old one forever.
+/// Write a browsed station into the table, the one crossing from a directory answer to a row.
+/// **The logo write follows the fetched URL**: `save_station`'s conflict clause leaves
+/// `artwork_path` alone, so a station whose logo moved would keep showing the old one.
 async fn keep_station(
     db: &DbPool,
     station: &radio::DirectoryStation,
@@ -103,10 +75,8 @@ async fn keep_station(
     Ok(id)
 }
 
-/// Keep or release a browsed station, writing its row on the way in.
-///
-/// Un-favoriting leaves the row: it may carry a play history, and deciding whether an unstarred
-/// never-played station is worth deleting belongs with the surface that lists them.
+/// Keep or release a browsed station, writing its row on the way in. Un-favoriting leaves the row,
+/// whether to delete it being [`super::delete_if_unlisted`]'s call.
 pub async fn set_directory_favorite(
     db: &DbPool,
     station: &radio::DirectoryStation,
@@ -129,12 +99,8 @@ pub async fn play_directory_station(
     play_station(state, id).await
 }
 
-/// Tell the directory a station was played, if the user left that on.
-///
-/// Detached rather than awaited: the click is the directory's business and the listener's is the
-/// audio, so a slow mirror must not sit between the click and the connect. Failures are a debug
-/// line — there is nothing for a user to do about one, and the call is deduplicated server-side
-/// so a repeat is not an error either.
+/// Tell the directory a station was played, if the user left that on. Detached, so a slow mirror
+/// never sits between the click and the connect.
 fn spawn_click(state: &AppState, station_uuid: Option<&str>) {
     let Some(uuid) = click_uuid(state.radio_send_clicks.get(), station_uuid) else {
         return;
@@ -150,10 +116,8 @@ fn spawn_click(state: &AppState, station_uuid: Option<&str>) {
     });
 }
 
-/// The uuid a play reports to the directory, or `None` where nothing is reported.
-///
-/// Both refusals matter: the setting is the user's, and a station with no uuid — hand-typed, or a
-/// row carrying the empty string — names nothing the directory could count.
+/// The uuid a play reports to the directory, or `None`: the setting is off, or the station is
+/// hand-typed (no uuid, or an empty one) and names nothing the directory could count.
 fn click_uuid(send_clicks: bool, station_uuid: Option<&str>) -> Option<&str> {
     if !send_clicks {
         return None;

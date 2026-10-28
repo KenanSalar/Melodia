@@ -4,9 +4,9 @@
 //! Also for what a scroller does with a *drag*, which lands here rather than beside itself
 //! because it is answered on the same two elements by the same block walk.
 //!
-//! `CLAUDE.md` states the rule — both policies `always-off` on every scroller, with a
-//! sibling `OverlayScrollbar` pinned by absolute coordinates — because std-widgets' bar
-//! paints inside padded containers and can't be reskinned. A drifted scroller reads as a
+//! The rule is both policies `always-off` on every scroller, with a sibling
+//! `OverlayScrollbar` pinned by absolute coordinates, because std-widgets' bar paints
+//! inside padded containers and can't be reskinned. A drifted scroller reads as a
 //! different app the moment its content overflows, and looks fine in the file it lives in.
 //!
 //! Two checks, because the two failures are different shapes. A wrong *value* is the one
@@ -15,7 +15,8 @@
 //! is exactly the arrangement both composite views have.
 
 use melodia_testkit::{
-    MIN_SLINT_SOURCES, UI_DIR, blocks_named, normalize_ws as normalized, stripped_sources,
+    MIN_SLINT_SOURCES, UI_DIR, blocks_named, normalize_ws as normalized, outside_strings,
+    stripped_sources,
 };
 
 /// The elements both block walks recognise. `Flickable` is deliberately absent, and
@@ -94,24 +95,19 @@ fn own_property<'a>(body: &'a str, key: &str) -> Vec<&'a str> {
     let bytes = body.as_bytes();
     let mut out = Vec::new();
     let mut depth = 0usize;
-    let mut in_string = false;
-    let mut i = 0;
-    while i < bytes.len() {
-        match bytes[i] {
-            b'\\' if in_string => i += 1,
-            b'"' => in_string = !in_string,
-            b'{' if !in_string => depth += 1,
-            b'}' if !in_string => depth = depth.saturating_sub(1),
-            _ if depth == 0 && !in_string => {
-                if bytes[i..].starts_with(key.as_bytes())
-                    && let Some(end) = body[i..].find(';').map(|rel| rel + i)
+    for (at, byte) in outside_strings(bytes) {
+        match byte {
+            b'{' => depth += 1,
+            b'}' => depth = depth.saturating_sub(1),
+            _ if depth == 0 => {
+                if bytes[at..].starts_with(key.as_bytes())
+                    && let Some(end) = body[at..].find(';').map(|rel| rel + at)
                 {
-                    out.push(body[i + key.len()..end].trim());
+                    out.push(body[at + key.len()..end].trim());
                 }
             }
             _ => {}
         }
-        i += 1;
     }
     out
 }
@@ -156,7 +152,7 @@ fn every_scroller_opts_out_of_the_stock_scrollbar() {
     assert!(
         offenders.is_empty(),
         "every ScrollView/ListView must turn both stock scrollbars off and mount an \
-         OverlayScrollbar instead (CLAUDE.md, Slint Conventions):\n{}",
+         OverlayScrollbar instead, std-widgets' bar painting inside padded containers:\n{}",
         offenders.join("\n")
     );
 }
@@ -305,7 +301,7 @@ fn no_scrollbar_policy_asks_for_the_stock_bar() {
     assert!(
         offenders.is_empty(),
         "the only scrollbar in the tree is OverlayScrollbar, so every policy reads \
-         `{OPT_OUT}` (CLAUDE.md, Slint Conventions):\n{}",
+         `{OPT_OUT}`:\n{}",
         offenders.join("\n")
     );
 }

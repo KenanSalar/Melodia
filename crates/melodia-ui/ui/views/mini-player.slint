@@ -9,88 +9,62 @@ import { MiniBackdrop } from "../components/mini-player/mini-backdrop.slint";
 import { MiniCaptionsRow } from "../components/mini-player/mini-captions.slint";
 import { MiniTransport, MiniTrailingControls, MiniTimeline } from "../components/mini-player/mini-controls.slint";
 
-// Compact miniplayer replacing the full UI once the window shrinks past the
-// responsive threshold. `MiniPlayer.active` (derived at the `AppWindow` root)
-// arms it; `MiniPlayer.layout` says how far its one layout has grown: the controls on the title's
-// line, under it, or with a panel below.
+// Replaces the full UI once the window shrinks past the threshold, and a window size is the only
+// way in or out: the Full Player caption leaves by resizing the window.
 //
-// A window size is the only way in *and* out. The Full Player caption leaves by resizing the
-// window, and a double press on the bare drag region only moves it.
-//
-// Every interactive control stays 8 px clear of the window edges, where
-// `ResizeRing`'s grabs sit above this view, so the cursor keeps showing the
-// resize affordance instead of flickering hover. The corner grabs grow with the
-// window radius and reach past that inset on the rounder presets. The captions row is the
-// exception, sitting where the titlebar's does, so everything in it rides that row's centreline
-// rather than this inset; argued at its mount.
+// Every control stays clear of the window edges, where `ResizeRing`'s grabs sit above this view,
+// so the cursor keeps the resize affordance rather than flickering hover. The corner grabs outgrow
+// that inset on the rounder presets. The captions row is the exception, argued at its mount.
 export component MiniPlayerView inherits Rectangle {
     background: Theme.mantle;
-    // Doubles as resize-ring breathing room: the ring's TouchAreas sit above
-    // this component, and the inset preserves their hit zones at all four edges.
     private property <length> edge-pad: 4px;
 
-    // The switch the whole view repaints on, and how long the repaint takes. **The pace is the
-    // stacks' own**: both drain on `Theme.dur-med` with this easing, so a foreground crossing on
-    // anything else would land early or late against the backdrop behind it.
+    // The stacks' own pace, so the foreground crosses with the backdrop behind it.
     private property <bool> on-backdrop: MiniPlayer.backdrop-shown;
     private property <duration> recolor: Theme.dur-med;
 
-    // Every leaf that would otherwise read a `Theme.*` brush takes one of these instead, each on the
-    // backdrop matching what the same kind of element paints in Now Playing. Answered once rather
-    // than per site: on the blur arm the floor is solved dark under a solved-light foreground, so a
-    // site left on the theme's ink vanishes on a light palette, and one site answering differently
-    // from its neighbour is invisible until someone switches theme.
-    //
-    // **Each brush is eased exactly once, and this block is where for every leaf that paints it
-    // straight.** The two leaves that ease their own colours, `IconButton` and the scrollbar, take
-    // the stepped answer and `recolor` instead: a brush eased here that one of them eases too
-    // restarts its curve on every frame of this one, `slint-pitfalls.md`'s shared-brush entry.
+    // Every leaf that would read a `Theme.*` brush takes one of these, matching what the same
+    // element paints in Now Playing: answered once, since one site left on the theme's ink vanishes
+    // on a light palette. Each is eased here, once. The two leaves that ease their own colours,
+    // `IconButton` and the scrollbar, take `on-backdrop` and `recolor` instead, a brush eased twice
+    // restarting its curve every frame.
     private property <brush> ink: root.on-backdrop ? Player.np-on-backdrop : Theme.text;
     private property <brush> ink-muted: root.on-backdrop ? Player.np-on-backdrop-muted : Theme.subtext0;
-    // Up Next's artist and duration, which off the backdrop take `Theme.text` like every row list
-    // rather than the muted line under a title.
+    // Off the backdrop Up Next's secondary columns take `Theme.text`, as every row list does.
     private property <brush> list-muted: root.on-backdrop ? Player.np-on-backdrop-muted : Theme.text;
     private property <brush> row-hover: root.on-backdrop ? Player.np-accent-pill : Theme.surface0;
     private property <brush> empty-glyph:
         root.on-backdrop ? Player.np-on-backdrop-muted.transparentize(0.5) : Theme.surface2;
     private property <brush> accent: root.on-backdrop ? Player.np-accent-bright : Theme.accent;
-    // The artwork placeholder, as `NowPlayingCover` draws it on the backdrop: a faint recess and a
-    // quiet glyph rather than an accent slab, which a wash already carries colour enough for.
+    // On the backdrop, `NowPlayingCover`'s faint recess rather than an accent slab, the wash
+    // already carrying colour enough.
     private property <brush> tile-fill:
         root.on-backdrop ? Player.np-on-backdrop.transparentize(0.92) : Theme.accent.with-alpha(0.15);
     private property <brush> tile-glyph:
         root.on-backdrop ? Player.np-on-backdrop-muted.transparentize(0.5) : Theme.accent;
-    // The live pill, as Now Playing's chips paint it: their own fill tier and a lettering tier held
-    // to the text bar, rather than the chrome glyph colour.
     private property <brush> chip-fill:
         root.on-backdrop ? Player.np-chip-fill : Theme.accent.with-alpha(0.18);
     private property <brush> chip-label: root.on-backdrop ? Player.np-chrome-text : Theme.accent;
-    // The seam mask is a stadium painted in whatever sits *behind* the slider, so it only works
-    // over a flat surface. A backdrop is washes over a gradient, or a blurred cover under a scrim,
-    // and no one colour matches either — a mask there is a flat blob that moves with the thumb.
-    // Clear instead, which leaves the two bars meeting at their own rounded ends: the thumb covers
-    // that join at rest, and the expressive gap is worth less than the blob costs. **Mantle at no
-    // alpha rather than `transparent`**, the ease running in straight RGBA: toward rgba(0,0,0,0)
+    // The seam mask is a stadium in the colour behind the slider, so over a backdrop it is a blob
+    // moving with the thumb; it clears there and the bars meet at their own rounded ends. Mantle at
+    // no alpha rather than `transparent`, the ease running in straight RGBA: toward rgba(0,0,0,0)
     // the mask darkens on its way out.
     private property <brush> seam-mask:
         root.on-backdrop ? Theme.mantle.transparentize(1.0) : Theme.mantle;
-    // The seek track's unplayed half. Now Playing draws no slider, so this is the lyrics switch's
-    // resting track, the one track that view lays on the backdrop.
+    // Now Playing has no slider, so this takes the lyrics switch's resting track.
     private property <brush> track:
         root.on-backdrop ? Player.np-accent-bright.transparentize(0.76) : Theme.surface1;
-    // The play glyph, punched out of the disc above it, and a KDE caption's out of its lit disc, which
-    // lands on the same brush over the backdrop. `ink-on` rather than the mantle the bar's copy uses:
-    // on the backdrop the disc is the solved accent, whose brightness is the cover's to decide, so
-    // the glyph has to be picked against it rather than against a surface.
+    // The play glyph and a lit KDE caption's. `ink-on` rather than the bar's mantle: on the
+    // backdrop the disc is the solved accent, whose brightness is the cover's to decide.
     private property <brush> disc-ink:
         root.on-backdrop ? Theme.ink-on(Player.np-accent-bright) : Theme.mantle;
-    // The standard captions' glyph at rest. A caption eases only its hover, so this one is eased
-    // here. Off the backdrop it keeps the titlebar's own dimming on an unfocused window.
+    // Eased here, a caption easing only its hover. Off the backdrop it keeps the titlebar's
+    // unfocused dimming.
     private property <brush> caption-ink: root.on-backdrop
         ? Player.np-accent-dim
         : (Theme.window-focused ? Theme.text : Theme.overlay1);
-    // On the backdrop these read the `Player` tier, written once a track, so only the theme arm
-    // stands down for a palette fade.
+    // Only the theme arm stands down for a palette fade, the `Player` tier being written once a
+    // track.
     animate ink, ink-muted, list-muted, row-hover, empty-glyph, accent, tile-fill, tile-glyph,
         chip-fill, chip-label, seam-mask, track, disc-ink, caption-ink {
         duration: root.recolor;
@@ -98,8 +72,7 @@ export component MiniPlayerView inherits Rectangle {
         enabled: root.on-backdrop || !Theme.recoloring;
     }
 
-    // The artist line's sizes in the card and on the strip. A pair of its own rather than the
-    // title's ratio, which shrinks a line this small past reading.
+    // Its own pair rather than the title's ratio, which shrinks a line this small past reading.
     private property <length> subtitle-card-size: 11px;
     private property <length> subtitle-strip-size: 10px;
 
@@ -107,15 +80,13 @@ export component MiniPlayerView inherits Rectangle {
         return round((strip + (card - strip) * stack.title-grow) / Theme.text-size-step)
             * Theme.text-size-step;
     }
-    // The card end of that travel, itself grown over `MiniPlayer.room-grow`: the two are
-    // continuous, `title-grow` reaching 1 exactly where the artwork's remaining travel begins, so
-    // a line reads `grown-size(strip, roomy-size(card, roomy))` and steps once from end to end.
+    // The card end of that travel, grown on over `MiniPlayer.room-grow`. The two are continuous,
+    // `title-grow` reaching 1 where the artwork's remaining travel begins.
     pure function roomy-size(card: length, roomy: length) -> length {
         return card + (roomy - card) * MiniPlayer.room-grow;
     }
-    // The highest the title's line sits down the artwork in the card, as a share of it. A centred
-    // pair rides up to the window's top as the artwork shrinks, and the text stops reading as beside
-    // the cover.
+    // How high the card's title line may ride, as a share of the artwork: a centred pair otherwise
+    // climbs to the window's top as the artwork shrinks and stops reading as beside the cover.
     private property <float> line-share: 0.3;
 
     backdrop := MiniBackdrop {
@@ -126,12 +97,8 @@ export component MiniPlayerView inherits Rectangle {
         fade-duration: root.recolor;
     }
 
-    // Window-move drag region. Mini hides the `CustomTitleBar`, so without this
-    // the window can't be moved at all. It covers the whole area at z-bottom
-    // and every control sits above it — Slint dispatches to the topmost
-    // TouchArea, so `has-hover` only goes true over empty space. Same
-    // `drag-region-changed` → winit press-intercept path as
-    // `custom-titlebar.slint`, under its own name so a double press only moves it.
+    // With no titlebar this is how the window moves. Under every control, so its hover is true
+    // only over empty space; reported under its own name so a double press only moves it.
     drag-region := TouchArea {
         x: 0;
         y: 0;
@@ -144,36 +111,27 @@ export component MiniPlayerView inherits Rectangle {
         }
     }
 
-    // Strip, card and column, **one mount that grows rather than three that swap**: the artwork
-    // beside the title and controls, the timeline under both, the window's captions above and, in
-    // the column, a panel below.
-    //
-    // **Each part opens into the height the one before it leaves**: the artwork up to its size,
-    // then the captions row, then the panel. Nothing arrives or leaves with height of its own to
-    // claim, so the block never jumps, and it stays top-aligned for the same reason. Below the
-    // card the artwork's last stretch carries the controls up onto the title's line.
+    // Strip, card and column are one mount that grows rather than three that swap. Each part opens
+    // into the height the one before it leaves (the artwork, then the captions row, then the
+    // panel), so nothing arrives with height of its own to claim and the block never jumps. Below
+    // the card the artwork's last stretch carries the controls up onto the title's line.
     stack := VerticalLayout {
-        // What the artwork shares the window's height with: the edges and the timeline under it.
         property <length> art-rows: 2 * root.edge-pad + timeline-gap.preferred-height
             + timeline.preferred-height;
-        // How far the controls have come up onto the title's line, over the artwork's travel from
-        // `stacked-art` down to its floor. **Off the height the artwork is sized by rather than
-        // eased**, so they move with the drag and at no other time.
+        // Off the height the artwork is sized by rather than eased, so the controls rise with the
+        // drag and at no other time.
         property <float> inline-t: clamp((MiniPlayer.stacked-art - (root.height - self.art-rows))
             / (MiniPlayer.stacked-art - MiniPlayer.art-floor), 0, 1);
-        // The text shrinks to the strip's size over the same travel.
         property <float> title-grow: 1 - self.inline-t;
         // The title makes the controls' room over the first eighth of their rise, before they reach
         // the bottom of its line.
         property <float> title-lead: min(1.0, self.inline-t * 8);
 
-        // How far the captions row is open: what the artwork and the timeline leave, up to all of it.
         property <length> captions-shown: clamp(
             root.height - self.art-rows - head.preferred-height, 0px, MiniPlayer.captions-height);
 
-        // Any room for the list under the block. Measured off the block rather than a fixed
-        // height, a narrow window's artwork stopping short of its cap and freeing the room that
-        // much sooner.
+        // Off the block rather than a fixed height: a narrow window's artwork stops short of its
+        // cap and frees the room sooner.
         property <bool> shows-panel: MiniPlayer.layout == MiniLayout.column
             && root.height - 2 * root.edge-pad - block.preferred-height > MiniPlayer.panel-gap;
 
@@ -184,9 +142,8 @@ export component MiniPlayerView inherits Rectangle {
             vertical-stretch: 0;
             spacing: 0;
 
-            // Over the head, so a caption's tooltip lands on the title rather than under it. The
-            // head's own pills never reach up here: the controls rise near the top only once the
-            // row has closed.
+            // Over the head, so a caption's tooltip lands on the title. The head's pills never
+            // reach up here, the controls rising near the top only once the row has closed.
             MiniCaptionsRow {
                 z: 2;
                 open-height: stack.captions-shown;
@@ -202,14 +159,9 @@ export component MiniPlayerView inherits Rectangle {
                 spacing: Theme.pad-sm;
                 padding-left: Theme.pad-xs;
 
-                // **The block's only slack, which is what keeps every control on screen.** Sized
-                // to the smallest of the cap, the width the controls leave it and the height the
-                // timeline leaves it, so the tile fills the slot and sits flush with the title.
-                // Floored at the strip's thumbnail, below which the timeline's gap gives instead.
-                //
-                // **A plain `Rectangle` with the tile placed by `x` and `y`**, Now Playing's cover
-                // slot and for its reason: a centring layout folds the tile's fixed size into the
-                // slot's minimum, and the slot stops being able to give.
+                // The block's only slack, which keeps every control on screen. Floored at the
+                // strip's thumbnail, below which the timeline's gap gives instead. A plain
+                // `Rectangle` with the tile placed by `x`/`y`, for Now Playing's cover-slot reason.
                 Rectangle {
                     property <length> size: max(0px, min(MiniPlayer.art-cap,
                         root.width - 2 * root.edge-pad - Theme.pad-xs - Theme.pad-sm
@@ -234,29 +186,24 @@ export component MiniPlayerView inherits Rectangle {
                     }
                 }
 
-                // The title with the controls under it, or beside it on the strip. **Placed by `x`
-                // and `y` rather than laid out**, a layout only being able to jump between the two,
-                // so its bounds are spelled: hand-placed children fold nothing into them.
+                // The title over the controls, or beside them on the strip. Placed by `x`/`y`, a
+                // layout only being able to jump between the two, so its bounds are spelled:
+                // hand-placed children fold nothing into them.
                 info := Rectangle {
                     property <length> titles-h: titles.preferred-height;
                     property <length> cluster-h: cluster.preferred-height;
-                    // The card centres the pair, the gap between taking a third of any surplus up
-                    // to `pad-md`.
                     property <length> stacked-gap: clamp(Theme.pad-xs
                         + (self.height - self.titles-h - Theme.pad-xs - self.cluster-h) / 3,
                         Theme.pad-xs, Theme.pad-md);
                     property <length> stacked-top:
                         (self.height - self.titles-h - self.stacked-gap - self.cluster-h) / 2;
-                    // The middle of the card's title line, held down to `line-share` of the
-                    // artwork where the centred pair would lift it higher.
                     property <length> card-line: max(self.stacked-top + self.titles-h / 2,
                         self.height * root.line-share);
-                    // The controls under that title, pushed down by it and held inside the row.
                     property <length> card-cluster-y: min(self.height - self.cluster-h,
                         max(self.stacked-top + self.titles-h + self.stacked-gap,
                             self.card-line + self.titles-h / 2 + Theme.pad-xs));
-                    // The middle of the title's line, coming down from the card's to the middle of
-                    // the row as the controls rise, so they meet it wherever it is.
+                    // Comes down to the row's middle as the controls rise, so they meet the title
+                    // wherever it is.
                     property <length> line-center: self.card-line
                         + (self.height / 2 - self.card-line) * stack.inline-t;
                     property <length> stacked-min-width: max(titles.min-width, cluster.min-width);
@@ -267,17 +214,16 @@ export component MiniPlayerView inherits Rectangle {
                     property <length> inline-min-height: max(self.titles-h, self.cluster-h);
 
                     horizontal-stretch: 1;
-                    // Its floor, clamped up to its real minimum by the layout: asking for more
-                    // would have the shrink pass take width from these controls alongside the
-                    // artwork.
+                    // The layout clamps this up to the minimum; asking for more would have the
+                    // shrink pass take width from the controls alongside the artwork.
                     preferred-width: 0px;
                     min-width: self.stacked-min-width
                         + (self.inline-min-width - self.stacked-min-width) * stack.title-lead;
                     min-height: self.stacked-min-height
                         + (self.inline-min-height - self.stacked-min-height) * stack.inline-t;
 
-                    // No clip: bounded, the elide already stops the text, and a scissor at the
-                    // line box cuts the marks above and below it.
+                    // No clip: the elide already stops the text, and a scissor at the line box
+                    // cuts the marks above and below it.
                     titles := VerticalLayout {
                         x: 0;
                         y: parent.line-center - self.height / 2;
@@ -302,8 +248,6 @@ export component MiniPlayerView inherits Rectangle {
                         }
                     }
 
-                    // At the right edge in both arrangements, so only its `y` moves: from under the
-                    // title up onto its line.
                     cluster := HorizontalLayout {
                         property <length> inline-y: parent.line-center - self.height / 2;
 
@@ -345,26 +289,18 @@ export component MiniPlayerView inherits Rectangle {
 
         if !stack.shows-panel: Rectangle { vertical-stretch: 1; }
 
-        // Both arms are shared with the full-screen view, and `up_next.rs` keeps the list's rows
-        // fed while mini is up.
-        //
-        // **Two arms rather than three**: a station keeps Up Next here, where the full view swaps
-        // in a panel describing the stream. There is no room for that panel under the artwork, and
-        // the queue underneath a station is still what the controls above act on.
-        //
-        // **Its preferred height is its floor on purpose.** The shrink pass takes height from every
-        // row with room between the two, so a panel asking for more would give ground alongside
-        // the artwork, where the artwork is meant to give first. Everything past the floor still
-        // comes to it through the stretch.
+        // Two arms rather than Now Playing's three: no room for the station panel under the
+        // artwork, and the queue under a station is still what the controls act on. The preferred
+        // height is the floor on purpose, so the shrink pass takes from the artwork first; the
+        // stretch hands the panel the rest.
         if stack.shows-panel: VerticalLayout {
             min-height: MiniPlayer.panel-gap;
             preferred-height: MiniPlayer.panel-gap;
             vertical-stretch: 1;
             padding-top: MiniPlayer.panel-gap;
 
-            // **Clipped here**, Up Next clipping itself: the sheet's empty state is centred on the
-            // panel rather than inside its scroller, so a panel shorter than the message would
-            // paint it over the timeline.
+            // Clipped here, unlike Up Next: the sheet's empty state centres on the panel rather
+            // than in its scroller, so a short panel would paint it over the timeline.
             if !Player.vm.has_station && Lyrics.enabled: LyricsPanel {
                 clip: true;
                 vertical-stretch: 1;

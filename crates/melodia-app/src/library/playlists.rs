@@ -62,9 +62,8 @@ pub async fn add_to_playlist(
     queries::playlist::add_tracks_to_playlist(db, playlist_id, &track_ids).await
 }
 
-/// For the Add-to-Playlist picker dialog: per-playlist count of how many
-/// of the given `track_ids` are already in that playlist. Playlists with
-/// zero overlap are omitted from the map.
+/// For the Add-to-Playlist picker: how many of `track_ids` each playlist already holds, playlists
+/// with none omitted.
 pub async fn count_tracks_in_playlists_for_selection(
     db: &DbPool,
     track_ids: Vec<i64>,
@@ -89,14 +88,9 @@ pub async fn move_playlist_tracks(
     queries::playlist::move_playlist_tracks(db, playlist_id, &track_ids, to).await
 }
 
-/// How many distinct covers the Edit-Artwork mosaic picker offers.
-///
-/// The picker's grid is a plain repeater, not a virtualized list, so each
-/// candidate is a live tile with its own decoded cover — a playlist
-/// spanning hundreds of albums would otherwise mount hundreds of them
-/// into a 160 px window and thrash the cover LRU. The user picks at most
-/// four, and the window shows about a dozen at a time, so this is far
-/// more scrolling than the choice needs.
+/// How many distinct covers the Edit-Artwork mosaic picker offers. Its grid is a plain repeater,
+/// each candidate a live tile with a decoded cover, so a playlist spanning hundreds of albums would
+/// thrash the cover LRU, for a pick of at most four.
 const MOSAIC_CANDIDATE_LIMIT: i64 = 60;
 
 /// The covers the Edit-Artwork picker offers for the playlist `scope` lists.
@@ -165,12 +159,8 @@ async fn import_into_playlist(
     playlist_id: i64,
     file_paths: &[String],
 ) -> Result<ImportToPlaylistResult, AppError> {
-    // `import_and_summarize` gives us title metadata in the same
-    // round-trip, so we can sort the dropped batch alphabetically
-    // (natord-aware) before persisting playlist positions — matches
-    // `queue_import_files`'s ordering so a drop of "9.mp3, 10.mp3,
-    // foo.mp3" always lands as "9, 10, foo" inside the playlist
-    // instead of whatever order the filesystem / DB returned.
+    // Sorted as `queue_import_files` sorts a drop, so "9.mp3, 10.mp3" lands as 9 then 10 rather
+    // than in whatever order the filesystem returned.
     let mut result = import_and_summarize(db, artwork_dir, cover_cache, file_paths).await?;
 
     let added_count = if result.summaries.is_empty() {

@@ -1,6 +1,5 @@
-//! Linux tray backend — a `StatusNotifierItem` published over D-Bus via
-//! [`ksni`]. ksni runs the SNI service on its own thread (the `blocking`
-//! API), so nothing here touches the Slint event loop or the tokio runtime.
+//! The Linux tray, a `StatusNotifierItem` over [`ksni`], whose blocking API runs the service on a
+//! thread of its own, so nothing here touches the event loop or the runtime.
 
 use ksni::menu::{MenuItem, StandardItem};
 use ksni::{Icon, ToolTip};
@@ -10,10 +9,8 @@ use melodia_core::error::describe;
 
 use super::{TrayAction, TraySnapshot};
 
-/// ksni [`Tray`](ksni::Tray) implementation. Holds the latest render snapshot
-/// plus the channel back to `ui::shell::tray_bridge`. Menu callbacks `try_send`
-/// `TrayAction`s — non-blocking, so the D-Bus thread never stalls on a full
-/// channel (it just drops the action, which a human clicker cannot trigger).
+/// Menu callbacks `try_send`, so the D-Bus thread never stalls on a full channel; it drops the
+/// action instead, which no human clicking can trigger.
 struct MelodiaTray {
     snapshot: TraySnapshot,
     icon: Vec<Icon>,
@@ -21,7 +18,6 @@ struct MelodiaTray {
 }
 
 impl MelodiaTray {
-    /// Build one menu row that emits `action` on click.
     fn action_item(label: &str, action: TrayAction) -> MenuItem<Self> {
         Self::action_item_enabled(label, action, true)
     }
@@ -63,7 +59,7 @@ impl ksni::Tray for MelodiaTray {
         }
     }
 
-    /// Left-click on the icon toggles the main window.
+    /// A left click on the icon.
     fn activate(&mut self, _x: i32, _y: i32) {
         if let Err(e) = self.action_tx.try_send(TrayAction::ShowHideWindow) {
             log::warn!("tray: dropped activate (channel full): {}", describe(&e));
@@ -72,7 +68,6 @@ impl ksni::Tray for MelodiaTray {
 
     fn menu(&self) -> Vec<MenuItem<Self>> {
         vec![
-            // Disabled track-label row.
             StandardItem {
                 label: self.snapshot.menu_track_label(),
                 enabled: false,
@@ -90,9 +85,8 @@ impl ksni::Tray for MelodiaTray {
     }
 }
 
-/// Live handle to the running Linux tray. `Send` (ksni's `blocking::Handle`
-/// is `Send`), so `ui::shell::tray_bridge` can own it from a background tokio task.
-/// Dropping it shuts the SNI service down, removing the icon.
+/// `Send`, so `ui::shell::tray_bridge` owns it from a background task. Dropping it removes the
+/// icon.
 pub struct LinuxTray {
     handle: ksni::blocking::Handle<MelodiaTray>,
     /// The panel the icon was last painted for, so a recheck that finds it unchanged sets nothing.
@@ -100,7 +94,6 @@ pub struct LinuxTray {
 }
 
 impl LinuxTray {
-    /// Push a fresh snapshot — re-publishes the tooltip + menu over D-Bus.
     pub fn update(&self, snapshot: &TraySnapshot) {
         let snapshot = snapshot.clone();
         self.handle.update(move |tray| {
@@ -108,7 +101,7 @@ impl LinuxTray {
         });
     }
 
-    /// Repaint the icon for the panel it sits on, if that changed since it was last painted.
+    /// Repaints the icon only where the panel changed since it was last painted.
     pub fn set_on_light_panel(&mut self, on_light_panel: bool) {
         if self.on_light_panel == on_light_panel {
             return;
@@ -122,14 +115,12 @@ impl LinuxTray {
 
 impl Drop for LinuxTray {
     fn drop(&mut self) {
-        // Fire-and-forget: the shutdown request is queued to the service
-        // thread, which drops the SNI registration and removes the icon.
+        // Queued to the service thread, which drops the registration and the icon with it.
         let _ = self.handle.shutdown();
     }
 }
 
-/// Convert tightly-packed RGBA8 into the ARGB32 (network byte order) layout
-/// ksni's `Icon` expects: `[r,g,b,a]` rotated right by one → `[a,r,g,b]`.
+/// The network-byte-order ARGB32 ksni's `Icon` takes.
 fn rgba_to_argb(mut rgba: Vec<u8>) -> Vec<u8> {
     for px in rgba.chunks_exact_mut(4) {
         px.rotate_right(1);
@@ -137,7 +128,7 @@ fn rgba_to_argb(mut rgba: Vec<u8>) -> Vec<u8> {
     rgba
 }
 
-/// The embedded icon, painted for the panel it sits on. Empty if the asset won't decode.
+/// Empty if the asset won't decode.
 fn icon_for(on_light_panel: bool) -> Vec<Icon> {
     super::decode_icon()
         .and_then(|(w, h, mut rgba)| {
@@ -154,8 +145,7 @@ fn icon_for(on_light_panel: bool) -> Vec<Icon> {
         .unwrap_or_default()
 }
 
-/// Spawn the `StatusNotifierItem` service. Returns `None` when the session has
-/// no SNI host (vanilla GNOME) or no D-Bus — the app then runs without a tray.
+/// `None` with no SNI host, as on vanilla GNOME, or no D-Bus.
 pub fn init(action_tx: mpsc::Sender<TrayAction>, on_light_panel: bool) -> Option<LinuxTray> {
     use ksni::blocking::TrayMethods;
 

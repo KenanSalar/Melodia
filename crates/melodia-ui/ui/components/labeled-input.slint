@@ -2,10 +2,7 @@ import { Theme } from "../theme.slint";
 import { FieldFrame, FieldLabel } from "field-frame.slint";
 import { SingleLineInput } from "single-line-input.slint";
 
-// Label plus text input for dialog forms, at a form-sized fixed height.
-//
-// `text` is two-way bound so the host sees edits live; `accepted` fires on Enter
-// for the confirm path.
+// A caption over a two-way text field, for dialog forms.
 export component LabeledInput inherits VerticalLayout {
     in property <string> label;
     in property <string> placeholder;

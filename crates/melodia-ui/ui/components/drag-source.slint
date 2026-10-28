@@ -1,20 +1,14 @@
 import { Drag, DragItems, DragOrigin } from "../globals/drag.slint";
 import { LiftedRun } from "../models.slint";
 
-// A list's drag: a `DragArea` round its `ListView`, one per list.
-//
-// **Never inside a row.** The runtime holds the source weakly and reports `drag-finished` only to
-// one that still exists, and a `ListView` destroys a row rather than recycling it, so a row that
-// scrolled out, was rebuilt under the drag or was moved by the reorder itself would never hear its
-// drag end. Round the list it outlives all of those.
-//
-// It takes the press at 8 px and sends the rows a cancel, so a drag lands no click. The rows report
-// their press through `arm` or `arm-items`, which `Drag.payload` argues, and a press that carries
-// the list's picks adds `lift-picks`.
+// A list's drag: a `DragArea` round its `ListView`, **never inside a row**, which can be destroyed
+// before its drag ends. It takes the press at 8 px and sends the rows a cancel, so a drag lands
+// no click. Rows report their press through `arm` or `arm-items` (`Drag.payload` argues which),
+// and a press carrying the list's picks adds `lift-picks`.
 export component DragSource inherits DragArea {
     in property <DragOrigin> origin;
 
-    // This list's drag lifted every picked row, each of which dims as `lifts` dims the pressed one.
+    // Every picked row dims while this holds, as `lifts` dims the pressed one.
     out property <bool> lifting-picks: root.dragging && Drag.payload.origin == root.origin
         && Drag.payload.picks;
 
@@ -28,8 +22,8 @@ export component DragSource inherits DragArea {
         Drag.live = self.dragging;
     }
 
-    // Behind the list. A `DragArea` takes every left press its children don't, so without this a
-    // click on the empty space reaches nothing behind it.
+    // Behind the list: a `DragArea` takes every left press its children don't, so a click on the
+    // empty space would otherwise reach nothing.
     TouchArea {
         clicked => { root.background-clicked(); }
     }
@@ -46,7 +40,6 @@ export component DragSource inherits DragArea {
         Drag.lift-picks(run);
     }
 
-    // Whether row `index` is the one this list's drag lifted, for the row to dim.
     public pure function lifts(index: int) -> bool {
         return root.dragging && Drag.payload.origin == root.origin && Drag.payload.index == index;
     }

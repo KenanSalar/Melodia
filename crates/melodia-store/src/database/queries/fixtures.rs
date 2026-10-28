@@ -23,8 +23,7 @@ use {
     melodia_core::utils::needle::Needle,
 };
 
-/// Create a default `ExtractedMetadata` with sensible test values.
-/// Override fields as needed after calling this.
+/// A default `ExtractedMetadata` with test values, to override field by field.
 pub fn make_test_metadata(title: &str) -> ExtractedMetadata {
     ExtractedMetadata {
         title: title.to_owned(),
@@ -80,8 +79,7 @@ pub fn make_test_metadata(title: &str) -> ExtractedMetadata {
     }
 }
 
-/// Insert a test track with full scan workflow (upsert artist/album/genre + insert).
-/// Returns the track ID.
+/// Inserts a test track through the scan's own upserts, returning its id.
 pub async fn insert_test_track(
     db: &DbPool,
     file_path: &str,
@@ -98,13 +96,9 @@ pub async fn insert_test_track(
     insert_tagged_track(db, file_path, &meta).await
 }
 
-/// Insert a track from a prepared [`ExtractedMetadata`], resolving its rows the way
-/// `queries::scan::resolve_track_context` does.
-///
-/// The multi-value half of a tag — a guest credit, a second genre, a role credit — has no shape in
-/// [`insert_test_track`]'s flat arguments, and the join tables every stat is now counted off are
-/// written from exactly that half. Everything but the folder is the scan's own path; `folder_id`
-/// is the seeded 1, since no fixture stages a path a library folder actually contains.
+/// Inserts a track from a prepared [`ExtractedMetadata`], resolving its rows as
+/// `queries::scan::resolve_track_context` does, for the guest credits, second genres and role
+/// credits [`insert_test_track`]'s flat arguments can't carry. `folder_id` is the seeded 1.
 pub async fn insert_tagged_track(
     db: &DbPool,
     file_path: &str,
@@ -217,11 +211,8 @@ pub(crate) async fn listed_favorite_artists(db: &DbPool) -> Result<Vec<FavoriteA
 /// Create a test pool pre-seeded with a folder and 3 tracks.
 pub async fn setup_seeded_db() -> Result<DbPool, AppError> {
     let db = DbPool::test_pool().await?;
-
-    // Insert a folder
     queries::folder::insert_folder(&db, "/music", true).await?;
 
-    // Insert 3 tracks
     insert_test_track(&db, "/music/track1.mp3", "Alpha Song", "Artist A", "Album One", "Rock")
         .await?;
     insert_test_track(&db, "/music/track2.mp3", "Beta Song", "Artist B", "Album Two", "Pop")

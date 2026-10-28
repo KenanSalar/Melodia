@@ -1,6 +1,5 @@
-//! The Add-to-Playlist picker: its opener, the multi-select plumbing (toggle +
-//! "Select all", with fully-contained playlists unselectable) and the add-tracks
-//! commit fired by the accept dispatcher.
+//! The Add-to-Playlist picker: its opener, its picks, a playlist already holding every pending
+//! track being unpickable, and the commit.
 
 use std::collections::HashMap;
 use std::rc::Rc;
@@ -33,11 +32,8 @@ pub(super) fn wire(
     wire_add_tracks_to_selected(ui, state, playlists_ui, notifications);
 }
 
-/// The track row's "Add to Playlist" entry (single-row or multi-select). Runs
-/// two short SELECTs in parallel (full playlist list + per-playlist overlap
-/// counts for the selection), builds `PlaylistPickRow`s, then opens the dialog
-/// already populated. `exclude-playlist-id >= 0` is the open Playlist Detail id
-/// from the row, so the current playlist doesn't appear as a target.
+/// The row menu's Add to Playlist, over one row or a selection, which opens the dialog already
+/// filled. `exclude_id` is the open Playlist Detail's, so a playlist isn't offered to itself.
 fn wire_request_add_to_playlist(ui: &AppWindow, state: &AppState) {
     let s = state.clone();
     let weak = ui.as_weak();
@@ -88,17 +84,10 @@ fn pick_rows(
     playlist_stats
         .into_iter()
         .filter(|p| p.id != exclude)
-        // Smart playlists derive membership from rules — adding
-        // tracks would write orphan `playlist_items` rows that
-        // never surface. Exclude them as targets (same gate as
-        // reorder / remove / file-drop).
+        // A smart playlist never reads the `playlist_items` rows an add would write.
         .filter(|p| !p.is_smart)
         .filter_map(|p| {
-            // Skip rows whose i64 playlist id can't fit in the
-            // Slint-side i32 (`PlaylistPickRow.id`). The picker's
-            // toggle / commit route back into Rust by that id
-            // (`Playlists.toggle-add-pick` / `add-tracks-to-selected`)
-            // — surfacing a row with a clamped id would mis-target.
+            // The toggle and the commit route back by this id, so a clamped one would mis-target.
             let id = i32::try_from(p.id).ok().or_else(|| {
                 log::warn!(
                     "playlists::request_add_to_playlist: playlist id {} overflows i32 — skipping",
@@ -112,16 +101,12 @@ fn pick_rows(
                 name: SharedString::from(p.name.as_str()),
                 artwork_path: opt_shared(p.thumbnail_path.as_deref()),
                 contained_count: contained,
-                // Multi-select: start with nothing ticked; the
-                // user opts in per playlist (or via "Select all").
                 selected: false,
             })
         })
         .collect()
 }
 
-/// Flip one enabled row's `selected`, then recompute the header's select-all +
-/// count. Disabled (fully-contained) rows no-op.
 fn wire_toggle_add_pick(ui: &AppWindow) {
     let weak = ui.as_weak();
     ui.global::<Playlists>().on_toggle_add_pick(move |id| {
@@ -139,8 +124,6 @@ fn wire_toggle_add_pick(ui: &AppWindow) {
     });
 }
 
-/// Set every *enabled* row's `selected` to `sel` (fully-contained rows stay
-/// unselectable).
 fn wire_set_all_add_picks(ui: &AppWindow) {
     let weak = ui.as_weak();
     ui.global::<Playlists>().on_set_all_add_picks(move |sel| {
@@ -158,11 +141,8 @@ fn wire_set_all_add_picks(ui: &AppWindow) {
     });
 }
 
-/// Fired by the accept dispatcher. Read the selected (enabled) playlist ids +
-/// pending tracks synchronously (the dialog closes + clears its model right
-/// after this returns), then add the tracks into each selected playlist,
-/// refresh, and toast a summary. Runs on the UI thread (`spawn_local` +
-/// `Compat`) because the `Rc<NotificationsUi>` isn't `Send`.
+/// The accept dispatcher's commit. The picks are read synchronously, the dialog clearing its model
+/// as this returns.
 fn wire_add_tracks_to_selected(
     ui: &AppWindow,
     state: &AppState,
@@ -195,7 +175,7 @@ fn wire_add_tracks_to_selected(
         let _ = slint::spawn_local(Compat::new(async move {
             let added = add_to_each(&s, &pids, &track_ids).await;
             if added == 0 {
-                // Total failure (rare — a DB error on every playlist) is logged per playlist.
+                // Each failure was logged per playlist.
                 return;
             }
             refresh_after_edit(&s, &pu, weak.clone(), &pids, "playlists::add_tracks_to_selected")

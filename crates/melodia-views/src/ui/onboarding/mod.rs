@@ -1,16 +1,11 @@
-//! The first-run welcome card.
+//! The first-run welcome card, at the `ui/` root because no page owns it, the way none owns
+//! `sleep_timer`. It takes `(&AppWindow, &AppState)` rather than a `ViewCtx`, needing neither the
+//! cover tier nor `views.json`.
 //!
-//! In `ui/` at the root rather than under `settings/`: the card is owned by no page, the way
-//! `sleep_timer` and `equalizer` are. It takes `(&AppWindow, &AppState)` for the same reason —
-//! `ViewCtx` carries the cover tier and `views.json` that the ten nav sections need and this
-//! doesn't.
-//!
-//! **Rust owns the mount and unmount timing.** The overlay is `if`-mounted on
-//! `Onboarding.mounted`, so a `changed` handler inside it watching either of these globals would
-//! stay registered against a property that outlives its own branch and panic the next time it
-//! moves — which re-running the card does to both. So the two edges are `slint::Timer::single_shot`
-//! here instead: one frame after `mounted` to raise `open` and give `animate` an edge to run on,
-//! and one fade later to drop the branch.
+//! **Rust owns the mount and unmount timing**, since nothing under `components/onboarding/` may
+//! carry a `changed` handler: the branch drops on close, so a tracker on anything outside it
+//! survives the first open and panics on the second. One frame after `mounted` raises `open`,
+//! giving `animate` an edge, and one fade later drops the branch.
 
 use std::cell::RefCell;
 use std::rc::Rc;
@@ -24,15 +19,13 @@ use slint::ComponentHandle;
 mod callbacks;
 mod music_folder;
 
-/// Work boot hands over to run once the card is gone, or immediately if it never opens.
+/// What boot holds until the card is gone, or runs at once if it never opens: the update toast and
+/// the crash notice, so a first launch isn't three stacked surfaces. **Deferred, not suppressed**:
+/// the crash notice consumes its marker when it fires.
 ///
-/// The first thirty seconds shouldn't be three stacked surfaces, so the update toast and the crash
-/// notice wait behind the card. **Deferred, not suppressed**: the crash notice consumes its marker
-/// when it fires, so skipping it loses the report.
-///
-/// A type rather than a bare `Option` because the once-ness is the contract, and holding an
-/// `FnOnce` behind a `take` is what makes a second run unrepresentable: `dismiss` is an `Fn` a
-/// stray second Escape can re-enter, and running this twice spawns a second daily updater task.
+/// A type rather than a bare `Option`, the `FnOnce` behind a `take` making a second run
+/// unrepresentable: `dismiss` is an `Fn` a stray second Escape can re-enter, and a second run
+/// spawns a second daily updater task.
 pub(super) struct DeferredOnce {
     work: RefCell<Option<Box<dyn FnOnce()>>>,
 }

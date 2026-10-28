@@ -36,8 +36,8 @@ pub fn install(
     schedule_prompt(ui, state, notifications)
 }
 
-/// Open each support page in the system browser. [`launcher::open_target`] owns the hop
-/// off the UI thread — `open::that_detached` still forks and execs a child launcher.
+/// Open each support page in the system browser, [`launcher::open_target`] owning the hop off
+/// the UI thread.
 fn wire_support_links(ui: &AppWindow, state: &AppState) {
     let settings = ui.global::<Settings>();
 
@@ -52,17 +52,13 @@ fn wire_support_links(ui: &AppWindow, state: &AppState) {
     });
 }
 
-/// Count this launch and, if it is the one that asks, raise the toast a couple of minutes
-/// in. Runs on the UI thread so it can hold the `Rc<NotificationsUi>` and resolve the
-/// strings through `Settings` at push time — the locale active when the toast appears, not
-/// at boot.
+/// Count this launch and, if it is the one that asks, raise the toast a couple of minutes in,
+/// on the UI thread so its strings resolve in the locale active when it appears.
 ///
-/// The two writes are deliberately not one. The count lands at boot, so a launch is a
-/// launch however short; the *seen* flag lands beside the `show`, so a session that ends
-/// inside the delay leaves the prompt for the next one instead of spending it on nobody.
-/// Neither is tied to the dismiss — a toast the user closes must not come back. That
-/// second write goes through `persist_blocking`, which swallows a failure, so a read-only
-/// config directory shows the toast again next launch.
+/// The two writes are deliberately not one: the count lands at boot, so a launch is a launch
+/// however short, and the *seen* flag beside the `show`, so a session ending inside the delay
+/// leaves the prompt for the next. Neither waits on the dismiss. The second swallows a failure,
+/// so a read-only config directory shows the toast again next launch.
 fn schedule_prompt(
     ui: &AppWindow,
     state: &AppState,

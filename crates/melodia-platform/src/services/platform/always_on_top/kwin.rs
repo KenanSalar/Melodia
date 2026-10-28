@@ -1,13 +1,7 @@
-//! `KWin` backend for always-on-top. `KWin` has no direct D-Bus method to
-//! set `keepAbove` on a window, so both directions go through the
-//! `/Scripting` interface. [`set_always_on_top`] ships a one-shot script that
-//! walks `workspace.stackingOrder`, matches the client by PID, and flips its
-//! `keepAbove` flag. [`watch_keep_above`] leaves one running that reports
-//! every change to that flag back, whoever made it.
-//!
-//! We use `zbus::blocking::*` exclusively (CLAUDE.md "zbus footgun"). To
-//! avoid blocking the tokio runtime, the whole body runs inside
-//! `tokio::task::spawn_blocking`.
+//! `KWin` backend for always-on-top. `KWin` has no D-Bus method for `keepAbove`, so both
+//! directions are scripts: [`set_always_on_top`] runs a one-shot that flips our window's flag, and
+//! [`watch_keep_above`] leaves one running that reports every change to it back. `zbus::blocking`
+//! inside `spawn_blocking`, per the zbus footgun.
 
 use std::path::Path;
 
@@ -50,9 +44,8 @@ for (var i = 0; i < clients.length; i++) {{
         let conn = session_connection()?;
         let script_obj_path = load_and_run(&conn, &script_path, PIN_PLUGIN)?;
 
-        // Stopped and unloaded straight after `run`. `KWin` reads the file on a worker thread once
-        // `run` returns and a stop deletes the script with it, so this leans on a one-line read
-        // beating the next two round trips.
+        // `KWin` reads the file on a worker thread after `run` returns, and a stop deletes the
+        // script, so this leans on a one-line read beating the next two round trips.
         let _ = conn.call_method(
             Some(KWIN_SERVICE),
             &script_obj_path,
@@ -70,8 +63,7 @@ for (var i = 0; i < clients.length; i++) {{
     .map_err(|e| AppError::window("KWin pin task panicked", e))?
 }
 
-/// Leave a script running in `KWin` that sends every change to our window's `keepAbove` to
-/// `reports`. Nothing else tells a client when `KWin`'s own keep-above titlebar button moves it.
+/// Nothing else tells a client when `KWin`'s own keep-above titlebar button moves the pin.
 pub async fn watch_keep_above(
     data_dir: &Path,
     reports: watch::Sender<bool>,
@@ -90,8 +82,7 @@ pub async fn watch_keep_above(
             .at(REPORT_PATH, KeepAboveReports { reports })
             .map_err(|e| AppError::window("Failed to serve keep-above reports", e))?;
 
-        // The file stays: `KWin` reads it on a worker thread after `run` returns, and this script
-        // is never stopped to make the wait worth it.
+        // The file stays, `KWin` reading it after `run` returns and this script never stopping.
         std::fs::write(&script_path, keep_above_script(std::process::id(), &bus_name))
             .map_err(|e| AppError::window("Failed to write KWin script", e))?;
 
@@ -101,7 +92,6 @@ pub async fn watch_keep_above(
     .map_err(|e| AppError::window("KWin keep-above watch task panicked", e))?
 }
 
-/// The receiving end of the watcher script's `callDBus`.
 struct KeepAboveReports {
     reports: watch::Sender<bool>,
 }
@@ -145,8 +135,7 @@ fn keep_above_plugin(data_dir: &Path) -> String {
     format!("melodia_keep_above_{}", &digest.to_hex()[..16])
 }
 
-/// Load `script_path` as `plugin`, replacing a script already loaded under that name, and start
-/// it. Returns the script's object path.
+/// Replaces a script already loaded under `plugin`.
 fn load_and_run(
     conn: &zbus::blocking::Connection,
     script_path: &Path,
@@ -179,7 +168,6 @@ fn load_and_run(
     Ok(script_obj_path)
 }
 
-/// Unload the script loaded as `plugin`, if there is one.
 fn unload(conn: &zbus::blocking::Connection, plugin: &str) {
     let _ = conn.call_method(
         Some(KWIN_SERVICE),

@@ -10,61 +10,45 @@ import { TrackListRowItem } from "track-list-row.slint";
 import { DragSource } from "../drag-source.slint";
 import { ListDropTarget } from "../list-drop-target.slint";
 
-// The reusable track table: a column header over a virtualized list body. Every view with a track
-// list embeds it, each owning its own column state and persistence. The columns always fit the
-// width they are given, shrinking rather than dropping out, so nothing here pans sideways.
+// The track table every list view embeds, each owning its column state. The columns always fit
+// the width, shrinking rather than dropping out, so nothing pans sideways.
 //
-// Rows drag out as what Add to Queue on them would take. **A list that takes its own rows back
-// names itself in `origin`**, Playlist Detail being the one that does: a `ListDropTarget` over the
-// rows hands it `reorder` and `move-picks` while `reorder-enabled`, a reorder being ambiguous in
-// any sort but the insertion one, and the copy out carries on either way.
+// A list that takes its own rows back names itself in `origin` (Playlist Detail), and reorders
+// only while `reorder-enabled`, a reorder being ambiguous in any sort but the insertion one.
 //
-// **Overlay scrollbars are not mounted inside it.** The viewport metrics are exposed as `out`
-// properties with a clamping setter, so a host can mount its own at its root and have them sit flush
-// against the panel's rounded edges rather than inside whatever padding it applies here.
-//
-// The contract: `rows` is the model to swap; `columns` is `in-out`, so a divider drag or the
-// column popup writes host state synchronously; the sort pair is a pure input driving the header
-// chevron, with clicks emitting `request-sort`; and `playing-track-id` flips that row's cells to
-// accent — usually the player's, but this file reads no page global.
+// The host mounts the scrollbar, so it sits flush with the panel's edge rather than inside this
+// padding (`TrackListScrollbars`).
 export component TrackList inherits Rectangle {
     in property <[TrackListRow]> rows;
 
+    // `in-out`, so a divider drag or the column popup writes host state synchronously.
     in-out property <TrackColumns> columns;
 
-    // Measured from this element's own edges, which on every page but Search's column are the
-    // content panel's, with the page's scrollbar at the right one.
+    // From this element's edges, which on every page but Search's column are the content panel's.
     in property <length> inset-left: Theme.track-list-inset;
     in property <length> inset-right: Theme.scrollbar-slot;
 
-    // Resolved once and handed to the header and every row, so no two of them can disagree about
-    // where a column is.
+    // Resolved once for the header and every row, so none can disagree about where a column is.
     property <TrackColumnLayout> layout: TrackColumnSizing.resolve(root.columns,
         root.width - root.inset-left - root.inset-right, Theme.pad-sm);
 
-    // Forwarded to every row: `"index"` is the row position, `"track_number"` the real
-    // album track number.
     in property <string> number-mode: "index";
 
-    // Sort indicator (passive; the host owns the actual sort state).
+    // Drives the header's chevron; the host owns the sort.
     in property <string> sort-field;
     in property <string> sort-dir;
 
-    // `false` makes the headers plain labels — no click, no `request-sort`, no hover
-    // affordance — while **resizing and the column popup keep working**. Recently Played
-    // is the one host that sets it, its recency order being the point of the page.
+    // `false` makes the headers plain labels while resizing and the column popup keep working.
     in property <bool> sortable: true;
 
-    // Now-playing highlight.
     in property <int> playing-track-id;
 
     in property <DragOrigin> origin: DragOrigin.none;
     in property <bool> reorder-enabled: false;
-    // Only a list with an origin of its own dims what its drag lifted, a sort that retires the move
-    // included; a drag out of any other leaves its rows as they are.
+    // Only a list with an origin of its own dims what its drag lifted.
     property <bool> reorderable: root.origin != DragOrigin.none;
-    // `none` is also what a disarmed or revoked drag carries, so a list with no origin of its own
-    // would take that payload as its own row.
+    // `none` is also what a disarmed drag carries, so a list without an origin would take that
+    // payload as its own row.
     property <bool> moves-rows: root.reorderable && root.reorder-enabled;
 
     pure function in-travel(y: length) -> length {
@@ -73,7 +57,6 @@ export component TrackList inherits Rectangle {
 
     callback request-sort(string /*field*/);
     callback play-row(int /*track_id*/, int /*index*/);
-    // Batch-shaped: one element in single-row mode, the whole selection in multi.
     callback play-next([int]);
     callback add-to-queue([int]);
     callback toggle-row-favorite([int] /*track_ids*/, bool /*new_state*/);
@@ -84,32 +67,24 @@ export component TrackList inherits Rectangle {
     callback request-blur-search();
     callback reorder(int /*from*/, int /*to*/);
     callback move-picks(int /*slot*/);
-    // Where the picked rows sit, which only the host's Rust can say of a list it pages.
+    // Only the host's Rust can say where the picks sit in a list it pages.
     callback picked-run() -> LiftedRun;
     callback remove-from-playlist([int] /*track_ids*/);
 
-    // Plumbed straight through to every row; `TrackListRowItem` has the vocabulary.
     in property <string> view-context;
     in property <int> current-playlist-id: 0;
     in property <[int]> view-selected-ids;
 
-    // Read by the host to drive its scrollbar, written back through the setter. **A
-    // property-plus-callback pair rather than `<=>`**: Slint can't two-way bind through
-    // a sign flip, and the inner ids aren't visible at the host's scope. Positive here
-    // means "scrolled by N pixels", where the list stores the same as a non-positive
-    // viewport offset, so the boundary negates.
-    //
-    // `body-y` lets the host align its vertical bar with the list body, skipping the
-    // column header band; it is relative to this component's own root.
+    // A property and a setter rather than `<=>`, which can't bind through the sign flip: positive
+    // here is N px scrolled. `body-y` skips the header band, relative to this root.
     out property <length> v-visible-height: inner-list.visible-height;
     out property <length> v-viewport-height: inner-list.content-height;
     out property <length> v-offset: -inner-list.content-y;
     out property <length> body-y: inner-list.absolute-position.y - root.absolute-position.y;
     out property <length> body-height: inner-list.height;
 
-    // Tall enough for every row with no inner travel, for a host sizing the list to what it holds:
-    // header, the spacing under it, and the rows, floored at one so a header still shows over none.
-    // Reads no geometry, so the list's own `height` may bind to it.
+    // For a host sizing the list to what it holds, floored at one row. Reads no geometry, so the
+    // list's own `height` may bind to it.
     out property <length> content-height: Theme.track-header-h + Theme.pad-xs
         + max(1, root.rows.length) * Theme.track-row-pitch(root.columns.show_artwork);
 
@@ -138,21 +113,16 @@ export component TrackList inherits Rectangle {
             allow-move: root.moves-rows;
             background-clicked => { root.request-blur-search(); }
 
-            // Both built-in scrollbars are off; the host mounts its own, per the metrics above.
             inner-list := ListView {
                 width: 100%;
                 height: 100%;
                 vertical-scrollbar-policy: always-off;
                 horizontal-scrollbar-policy: always-off;
-                // A drag and a drag-pan are one gesture and only one element can own it. Stated
-                // rather than inherited, the default being the style's to pick;
-                // `station-grid.slint` argues it.
+                // A drag and a drag-pan are one gesture.
                 mouse-drag-pan-enabled: false;
                 for r[idx] in root.rows: TrackListRowItem {
                     row-data: r;
                     row-index: idx;
-                    // Drives the per-corner radius gating, so contiguous selected rows
-                    // merge into one pill.
                     prev-selected: idx > 0 && root.rows[idx - 1].selected;
                     next-selected: idx < root.rows.length - 1 && root.rows[idx + 1].selected;
                     columns: root.columns;
@@ -192,7 +162,6 @@ export component TrackList inherits Rectangle {
         }
     }
 
-    // Over the list's viewport, which the layout above places.
     ListDropTarget {
         x: inner-list.absolute-position.x - root.absolute-position.x;
         y: inner-list.absolute-position.y - root.absolute-position.y;

@@ -70,9 +70,8 @@ export component EqBandSlider inherits Rectangle {
         y: root.fill-top;
         width: root.track-w;
         height: root.fill-h;
-        // Both axes: `fill-h` shrinks to nothing at 0 dB, and FemtoVG clamps a
-        // corner's x- and y-radii independently, so a width-only radius would
-        // pinch the fill into a lens as it emerges from centre.
+        // Both axes: `fill-h` shrinks to nothing at 0 dB, so the fill emerging from
+        // centre can't carry a width-only radius.
         border-radius: min(self.width, self.height) / 2;
         background: root.is-disabled ? Theme.overlay0 : Theme.accent;
     }

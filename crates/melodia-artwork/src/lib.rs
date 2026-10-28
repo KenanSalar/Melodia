@@ -1,11 +1,6 @@
 //! Decode, resize, the content-addressed artwork store, the thumbnail cache and the palette
-//! extraction over it.
-//!
-//! The tier the other two halves of `media/` lean on, and it points at nothing but core. Its one
-//! renderer-adjacent dependency is `slint`'s `SharedPixelBuffer` — a refcounted pixel buffer, the
-//! same category of thing as `bytes::Bytes`, and never the event loop or a widget. The argument
-//! for that, and for the two alternatives that cost more than they save, is in
-//! `docs/adr/0033-artwork-depends-on-slint.md`.
+//! extraction over it. It names nothing but core, plus `slint`'s `SharedPixelBuffer` as a plain
+//! refcounted buffer, never the event loop: `docs/adr/0033-artwork-depends-on-slint.md`.
 
 pub mod media {
     pub mod image;

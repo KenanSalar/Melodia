@@ -1,20 +1,12 @@
 //! What the typed needle could mean besides a station name.
 //!
-//! The directory has no free-text search: `name`, `tag`, `country`, `language`, `codec` and
-//! `bitrateMin` are separate parameters that AND together, so a box meaning "all of them" would
-//! have to fan a settled keystroke out into four concurrent requests and merge them. This is the
-//! cheaper half of that trade — the box keeps meaning `name`, and anything else the needle could
-//! be is *offered* as a scope the user takes in one click.
+//! The directory's parameters AND together and none is free text, so rather than fan a keystroke
+//! out into four requests the box keeps meaning `name` and anything else the needle could be is
+//! *offered* as a scope. Matching is a local walk over the lists [`super::facets::prime`] holds.
 //!
-//! **Matching is local and costs no traffic.** [`super::facets::prime`] holds the four lists
-//! resident, and everything below is a walk over them.
-//!
-//! Two shapes have no list to be matched against, and are read off the needle instead. A
-//! **bitrate** is a bare integer in the kbps band. A **frequency** is the harder case and the
-//! reason [`Suggestion::count`] is optional: the resident tag list is capped to the most-used
-//! entries, and a dial position is a tag only one station's own listeners use, so it sits far
-//! below that cut — the pill offers the raw needle as a tag scope, with no count because nothing
-//! has asked the directory for one.
+//! Two shapes are read off the needle instead: a **bitrate**, a bare integer in the kbps band, and
+//! a **frequency**, a tag too rare for the capped tag list, offered raw with no count, which is
+//! why [`Suggestion::count`] is optional.
 
 use std::sync::Arc;
 
@@ -29,8 +21,7 @@ use melodia_ui::{AppWindow, Radio, RadioSuggestionRow};
 use super::facets::{self, ChipFilter, FacetIndex};
 use super::{RadioTab, RadioUi, browse, mounted_tab};
 
-/// Below this a needle names too much to be a scope — a single letter matches a third of the
-/// country list, and the row would fill with noise while the user is still typing.
+/// Below this a needle names too much to be a scope, and the row fills with noise mid-typing.
 const MIN_NEEDLE_LEN: usize = 2;
 
 /// The advertised-bitrate band worth offering a floor in. Below the low end a number is a name
@@ -46,23 +37,18 @@ pub(super) struct Suggestion {
     pub name: String,
     /// The chip's second value: a country's ISO code, a bitrate's floor, empty for the rest.
     pub code: String,
-    /// Stations carrying it, or `None` where the needle was synthesized rather than matched and
-    /// there is no count to state.
+    /// Stations carrying it, or `None` for a synthesized scope with no count to state.
     pub count: Option<i64>,
 }
 
-/// Everything the needle could mean besides a name, best first: at most one shape and one match
-/// per facet list, so five at the most.
-///
-/// `active` is the query already on screen, and it is here to suppress a scope that query is
-/// already filtered by — an offer to do what has been done reads as a filter that failed.
+/// Everything the needle could mean besides a name, best first: a shape and one match per list at
+/// most. A scope `active` already applies is left out, an offer of what's done reading as failed.
 pub(super) fn suggestions(
     needle: &Needle,
     lists: &FacetIndex,
     active: &StationSearch,
 ) -> Vec<Suggestion> {
-    // Characters, not bytes: a two-character CJK needle is six bytes and is not the noise this
-    // floor is for.
+    // Characters, not bytes, so a two-character CJK needle counts as two.
     if needle.as_str().chars().count() < MIN_NEEDLE_LEN {
         return Vec::new();
     }
@@ -74,30 +60,25 @@ pub(super) fn suggestions(
         }
     }
 
-    // Exact before partial, then by how many stations carry it. A partial match on a huge facet
-    // is still less likely to be what was meant than an exact one on a small facet.
+    // Exact before partial, then by station count.
     found.sort_by(|a, b| b.0.cmp(&a.0).then(b.1.count.cmp(&a.1.count)));
 
-    // **The shape leads**, being read first. A facet match is a guess at what the needle names; a
-    // shape is a fact about the needle itself, and for a frequency it is the only pill that
-    // reaches those stations at all.
+    // The shape leads: a fact about the needle rather than a guess, and for a frequency the only
+    // way to those stations.
     let mut out: Vec<Suggestion> = typed_shape(needle, active).into_iter().collect();
     out.extend(found.into_iter().map(|(_, s)| s));
     out
 }
 
-/// The one entry of a facet list worth offering, and whether the needle named it exactly.
-///
-/// One per chip rather than the whole match set: five near-identical country pills say nothing the
-/// chip's own picker does not say better, and each pill in the row is a different *kind* of answer.
+/// The one entry of a facet list worth offering, and whether the needle named it exactly; one per
+/// chip, the chip's own picker showing the rest better.
 fn best_match(
     needle: &Needle,
     chip: ChipFilter,
     facets: &[Facet],
     active: &StationSearch,
 ) -> Option<(bool, Suggestion)> {
-    // The tail of a `hidebroken` list carries facets every station of which was filtered out, and
-    // a scope with nothing behind it is a click that guarantees an empty grid.
+    // A `hidebroken` list's tail holds facets with no stations left behind them.
     facets
         .iter()
         .filter(|facet| !facet.name.is_empty() && facet.station_count > 0)
@@ -106,8 +87,7 @@ fn best_match(
         .map(|facet| (facets::equals_needle(Some(chip), facet, needle), facet))
         .max_by(|a, b| a.0.cmp(&b.0).then(a.1.station_count.cmp(&b.1.station_count)))
         .map(|(exact, facet)| {
-            // Through the same pair a picker row carries, so a scope taken from a pill and one
-            // taken from the chip send the directory the same value under the same label.
+            // Through a picker row's pair, so a pill and the chip send the same value.
             let (label, code) = facets::drawn_as(Some(chip), facet);
             (
                 exact,
@@ -121,15 +101,12 @@ fn best_match(
         })
 }
 
-/// Whether the query on screen already carries this exact scope.
-///
-/// Compared against the field [`super::facets::apply_pick`] writes for that chip, so the two
-/// cannot disagree about what "already applied" means.
+/// Whether the query already carries this scope, read off the field
+/// [`super::facets::apply_pick`] writes for the chip.
 fn already_filtered_by(chip: ChipFilter, facet: &Facet, active: &StationSearch) -> bool {
     match chip {
-        // Held as the code, `countrycode` being the endpoint's only code-keyed parameter, which is
-        // also why this takes the whole `Facet`. The emptiness guard is load-bearing: an
-        // unfiltered query and a facet carrying no code would otherwise read as a match.
+        // Held as the code. Without the emptiness guard an unfiltered query and a codeless facet
+        // would match.
         ChipFilter::Country => {
             !active.country_code.is_empty()
                 && facet.code.as_deref().is_some_and(|code| code == active.country_code)
@@ -143,15 +120,12 @@ fn already_filtered_by(chip: ChipFilter, facet: &Facet, active: &StationSearch) 
     }
 }
 
-/// The scope a needle's own shape asks for, where no facet list can answer.
-///
-/// At most one: the two shapes are mutually exclusive by construction, a frequency carrying the
-/// separator a bitrate must not have.
+/// The scope a needle's own shape asks for, where no list can answer: at most one, a frequency
+/// carrying the separator a bitrate can't.
 fn typed_shape(needle: &Needle, active: &StationSearch) -> Option<Suggestion> {
     let text = needle.as_str();
     if let Some(freq) = frequency(text) {
-        // Offered even where a tag is already picked: the picked one is a genre and this is a
-        // number, so replacing it is exactly what the click is for.
+        // Offered over a picked tag too, which is a genre; replacing it is the click's point.
         return Some(Suggestion {
             chip: ChipFilter::Tag,
             name: freq,
@@ -168,11 +142,8 @@ fn typed_shape(needle: &Needle, active: &StationSearch) -> Option<Suggestion> {
     })
 }
 
-/// A broadcast frequency as a station's tags spell one: two or three digits, a decimal separator,
-/// one or two more. `92.1`, `101,5`.
-///
-/// Handed back rather than merely recognised because the comma spelling has to reach the tag as a
-/// point — the directory's own tags are written `92.1 fm` whatever the locale that typed them.
+/// A broadcast frequency as a station's tags spell one (`92.1`, `101,5`), handed back with a
+/// point, the directory writing `92.1 fm` whatever the locale.
 fn frequency(text: &str) -> Option<String> {
     let (whole, fraction) = text.split_once(['.', ','])?;
     let digits = |part: &str, range: std::ops::RangeInclusive<usize>| {
@@ -181,19 +152,14 @@ fn frequency(text: &str) -> Option<String> {
     (digits(whole, 2..=3) && digits(fraction, 1..=2)).then(|| format!("{whole}.{fraction}"))
 }
 
-/// A bare integer inside the kbps band, which is the only number that can mean a bitrate. Anything
-/// carrying a separator was a frequency and never reaches here.
+/// A bare integer inside the kbps band, the only number that can mean a bitrate.
 fn bitrate(text: &str) -> Option<u32> {
     let kbps: u32 = text.parse().ok()?;
     (MIN_BITRATE_KBPS..=MAX_BITRATE_KBPS).contains(&kbps).then_some(kbps)
 }
 
-/// Recompute the pill row from whatever Browse is currently asking for.
-///
-/// A walk of four resident lists, so it is cheap enough to run from anything that can move what
-/// the box means: a settled keystroke, a facet list landing, the mounted tab or detail changing
-/// under it. Reading the query rather than taking a needle is what lets every one of those call it
-/// without knowing which.
+/// Recomputes the pill row from what Browse is asking for. Cheap, and reading the query rather
+/// than taking a needle, so anything that moves what the box means can call it.
 pub(super) fn refresh(ui: &AppWindow, radio_ui: &Arc<RadioUi>) {
     let g = ui.global::<Radio>();
     let rows = if offers_scopes(&g) {
@@ -209,9 +175,8 @@ pub(super) fn refresh(ui: &AppWindow, radio_ui: &Arc<RadioUi>) {
     replace_rows(&g.get_suggestions(), rows, "radio::suggest");
 }
 
-/// Whether the page is somewhere a scope pill would mean anything: Browse, with no station page
-/// over it. The other two tabs filter rows already in hand, where the needle is not a query and
-/// there is no second field to offer.
+/// Whether a scope pill means anything here: Browse with no station page over it, the other tabs
+/// filtering rows already in hand.
 fn offers_scopes(g: &Radio<'_>) -> bool {
     !g.get_detail_open() && mounted_tab(g) == RadioTab::Browse
 }
@@ -227,12 +192,8 @@ fn to_row(g: &Radio<'_>, suggestion: &Suggestion) -> RadioSuggestionRow {
     }
 }
 
-/// Take a suggestion: fill its chip and empty the box, in one query edit.
-///
-/// **One edit, not two.** The needle and the chip filter the same request, so applying the scope
-/// while leaving the name behind asks for stations that are both named *turkish* and in Turkish —
-/// reliably nothing. Two separate [`browse::edit_query`] calls would each fetch, and the first
-/// would fetch exactly that empty page.
+/// Takes a suggestion: fills its chip and empties the box in **one** [`browse::edit_query`], the
+/// needle and the chip filtering the same request, so two edits would fetch an empty page first.
 pub(super) fn apply(
     ui: &AppWindow,
     state: &AppState,
@@ -256,14 +217,9 @@ pub(super) fn apply(
     refresh(ui, radio_ui);
 }
 
-/// Take the only scope on offer, where the name search found nothing.
-///
-/// The 1:1 rule, and **both halves are the test**: one scope offered, and an empty page for it to
-/// displace. A needle that found stations is a name search that worked, and choosing between two
-/// scopes is the user's — so the pills stay pills in every other case.
-///
-/// Terminates without a guard: adopting empties the needle, so the query this triggers offers no
-/// scopes of its own however few stations come back.
+/// Takes the only scope on offer where the name search found nothing; both halves are the test, a
+/// choice between two scopes being the user's. Adopting empties the needle, so the query it
+/// triggers offers nothing and there is no loop.
 pub(super) fn adopt_only_scope(ui: &AppWindow, state: &AppState, radio_ui: &Arc<RadioUi>) {
     let g = ui.global::<Radio>();
     let offered = g.get_suggestions();
@@ -279,13 +235,8 @@ pub(super) fn adopt_only_scope(ui: &AppWindow, state: &AppState, radio_ui: &Arc<
     apply(ui, state, radio_ui, only.kind, &only.name, &only.code);
 }
 
-/// Whether a scope is one an empty page may take on the user's behalf.
-///
-/// **A bitrate floor is not**, being the one scope that is a guess about digits rather than
-/// something a list confirmed: `128` is as likely to be part of a station's name, and answering a
-/// search for one with every station at 128 kbps and up is further from the intent than the empty
-/// page. Its sibling shape stays in — a frequency reaches those stations through nothing else,
-/// which is the case the rule was written for.
+/// Whether an empty page may take a scope on the user's behalf. Not a bitrate floor, a guess about
+/// digits a name could hold (`128`); a frequency reaches its stations through nothing else.
 fn adoptable(chip: ChipFilter) -> bool {
     chip != ChipFilter::BitrateMin
 }

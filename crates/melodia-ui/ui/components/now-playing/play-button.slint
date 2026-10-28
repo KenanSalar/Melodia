@@ -3,31 +3,21 @@ import { MaterialIcon } from "../material-icon.slint";
 import { Tooltip } from "../tooltip.slint";
 import { HoldTouchArea } from "../hold-touch-area.slint";
 
-// The now-playing bar's play / pause button: its hover-scale disc, glyph, hit
-// area and tooltip, the ring a hold fills, plus the optional Equalizer overlay.
-//
-// That overlay drives all four bars off one shared phase counter rather than an
-// `animate height` each. Slint re-evaluates every active `animate` per vsync
-// frame, so four concurrent height animations interpolate hundreds of times a
-// second; a parabolic `4 * p * (1 - p)` off the counter is one math binding per
-// bar per tick. While it runs the glyph is hidden so the bars stand in its
-// place, and a pause falls back to the glyph.
+// The now-playing bar's play / pause button, with the ring a hold fills and the optional
+// Equalizer overlay. The overlay's four bars ride one shared phase counter rather than an
+// `animate` each, every running one re-evaluated per frame.
 export component PlayButton inherits Rectangle {
     in property <bool>   is-playing;
-    // The one glyph that shows a state rather than the click's action: a stop drawn as a play
-    // arrow reads as a pause.
+    // The one glyph showing a state rather than the click's action: a stop drawn as a play arrow
+    // reads as a pause.
     in property <bool>   is-stopped;
     in property <int>    animation-mode;        // 0 None | 1 Equalizer
     in property <length> wrapper-d: 38px;
     in property <length> icon-size: wrapper-d * 0.5;
-    // Defaults to the surface under the button, so the glyph reads as a hole
-    // punched in the disc rather than as a second colour. The now-playing bar
-    // overrides it with its own background expression, which is what carries
-    // the KDE unfocused tint through.
+    // The surface under the button, so the glyph reads as a hole punched in the disc. The bar
+    // passes its own, which carries the KDE unfocused tint.
     in property <brush>  icon-color: Theme.mantle;
-    // The disc itself. Its own input for `icon-color`'s reason: on an artwork backdrop the
-    // accent is solved against what the cover measured, and the theme's would be the one
-    // colour on that surface the record had no say in.
+    // On an artwork backdrop the host hands over the accent solved against the cover.
     in property <brush>  disc-color: Theme.accent;
     // Off at zero; see `HoldTouchArea`.
     in property <duration> hold-delay: 0ms;
@@ -38,28 +28,23 @@ export component PlayButton inherits Rectangle {
     height: wrapper-d;
     background: transparent;
 
-    // A hold that fires lets go of the press shrink there and then, so the stop shows while the
-    // pointer is still down rather than on the release.
+    // A fired hold lets go of the press shrink at once, so the stop shows while the pointer is down.
     property <bool> held-down: pp-touch.pressed && !pp-touch.hold-fired;
 
-    // The ring holds off until a press has outlasted a click, so a pause never flashes it, then
-    // fills over what is left of the hold and lands as the stop fires.
+    // Held off until a press outlasts a click, so a pause never flashes it.
     property <duration> ring-delay: 250ms;
     property <float> ring-progress: root.hold-delay > root.ring-delay
         ? clamp((pp-touch.hold-progress * root.hold-delay - root.ring-delay)
             / (root.hold-delay - root.ring-delay), 0, 1)
         : 0;
 
-    // A press clamps to 100 ms; anything else runs the expressive overshoot at
-    // the standard medium duration.
     property <length> disc-d: root.wrapper-d *
         (root.held-down ? 0.9 : (pp-touch.has-hover ? 1.05 : 1.0));
 
     property <bool> equalizer-active: root.is-playing && root.animation-mode == 1;
 
-    // One 30 fps Timer bumps four phase counters, each on its own period so the
-    // bars never march in step. The starting frames are staggered — low, peak,
-    // mid-climb, mid-descend — so the first paint isn't a flat line.
+    // A period each, so the bars never march in step, and staggered starts, so the first paint
+    // isn't a flat line.
     property <int> bar1-cycle: 22;
     property <int> bar2-cycle: 17;
     property <int> bar3-cycle: 25;
@@ -84,7 +69,6 @@ export component PlayButton inherits Rectangle {
         }
     }
 
-    // Accent disc, then the glyph or the bars.
     pp-disc := Rectangle {
         width: root.disc-d;
         height: root.disc-d;
@@ -97,8 +81,6 @@ export component PlayButton inherits Rectangle {
             easing: cubic-bezier(0.34, 1.56, 0.64, 1);
         }
 
-        // Hidden rather than unmounted: the bars below are a fixed-size overlay
-        // and claim no layout of their own either way.
         MaterialIcon {
             visible: !root.equalizer-active;
             name: root.is-playing ? "pause" : (root.is-stopped ? "stop" : "play_arrow");
@@ -107,8 +89,7 @@ export component PlayButton inherits Rectangle {
             icon-color: root.icon-color;
         }
 
-        // Anchored to the disc's bottom edge, so the bars grow up from a
-        // baseline the way an analyzer's do.
+        // The bars grow up from a baseline, as an analyzer's do.
         if root.equalizer-active: Rectangle {
             property <length> bar-area-w: 14px;
             property <length> bar-area-h: root.icon-size;
@@ -118,8 +99,6 @@ export component PlayButton inherits Rectangle {
             y: (parent.height - self.height) / 2;
             background: transparent;
 
-            // The parabola peaks at p=0.5 and returns to 0 at either end — one
-            // multiply per bar per tick, and no `animate` engine involved.
             Rectangle {
                 property <float> phase: 1.0 * root.bar1-frame / root.bar1-cycle;
                 property <float> wave: 4.0 * phase * (1.0 - phase);
@@ -162,8 +141,7 @@ export component PlayButton inherits Rectangle {
             }
         }
 
-        // The hold filling up, clockwise from twelve o'clock in the glyph's ink, between the glyph
-        // and the disc's edge. Short of a full turn, where an arc's two ends meet and it draws
+        // Clockwise from twelve. Short of a full turn, where an arc's two ends meet and it draws
         // nothing; the hold fires there anyway.
         if root.ring-progress > 0: Path {
             property <float> radius: 38;
@@ -178,8 +156,7 @@ export component PlayButton inherits Rectangle {
             fit: fill;
             stroke: root.icon-color;
             stroke-width: 2px;
-            // Numbers go in unlocalized, a bare `+` writing the translation's decimal separator,
-            // which the path parser rejects.
+            // Unlocalized, or a locale's decimal comma breaks the path.
             commands: "M 50 " + (50 - self.radius).to-string-unlocalized()
                 + " A " + self.radius.to-string-unlocalized() + " "
                 + self.radius.to-string-unlocalized() + " 0 "

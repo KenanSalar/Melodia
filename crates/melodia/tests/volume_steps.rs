@@ -35,8 +35,8 @@ fn no_volume_step_skips_the_step_tick() {
 }
 
 /// **`Player.wheel-volume` accepts every event, an empty one included.** A `TouchArea` whose
-/// `scroll-event` rejects drops `has-hover` until the pointer moves (`slint-pitfalls.md`), and the
-/// empty-delta return reads like one to hand on to whatever scrolls underneath.
+/// `scroll-event` rejects drops `has-hover` until the pointer moves, and the empty-delta return
+/// reads like one to hand on to whatever scrolls underneath.
 #[test]
 fn the_volume_wheel_never_rejects_an_event() {
     let player = strip_line_comments(PLAYER);

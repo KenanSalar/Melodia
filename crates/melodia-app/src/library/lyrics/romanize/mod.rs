@@ -1,23 +1,12 @@
 //! The sung words in Latin letters, for a reader who cannot sound out the script they are in.
 //!
-//! **Three engines, and which one answers is decided per run rather than per crate.** `uroman`
-//! reads about a hundred scripts and is the general case. The two exceptions are the two scripts
-//! this feature exists for, and both were measured against the spelling the lyric sites publish
-//! before being written:
+//! **Three engines, chosen per run** (`docs/adr/0039-romanization-runs-three-engines.md`): our
+//! Revised Romanization for Hangul, `kakasi` for a Japanese sheet and `uroman` for the rest.
+//! Whether Han is Japanese is a question about the whole sheet, kana being the only evidence and a
+//! line able to carry none while its sheet does, which is why [`apply`] takes all of it.
 //!
-//! - **Hangul is ours**, because uroman spells ㅊ `c` and the tense consonants `gg`/`dd`/`bb`, so
-//!   꽃 came back `ggoc` against Revised Romanization's `kkot`. Ten of eighteen common words were
-//!   wrong. RR is arithmetic on the syllable block and needs no dictionary, so there is nothing to
-//!   trade for it.
-//! - **Japanese is `kakasi`**, because uroman carries no Japanese readings at all and romanizes
-//!   kanji as Mandarin: 世界 comes back `shijie` where the sheet wants `sekai`. Kana is the only
-//!   thing that tells kanji from hanzi, and a line can carry none while its sheet does, which is
-//!   why [`apply`] takes the whole sheet and settles the question once for all of it.
-//!
-//! **A Latin sheet costs one `is_ascii` pass and no engine call.** The rest runs inside the
-//! resolver's `spawn_blocking`, once per track change, so nothing here is on the UI thread. What
-//! it produces is stored per line and filtered at draw time, which is what makes the toggle
-//! instant.
+//! Runs inside the resolver's `spawn_blocking`. The result is stored per line and filtered at draw
+//! time, which is what makes the toggle instant.
 
 mod hangul;
 mod japanese;
@@ -28,25 +17,17 @@ use melodia_core::entities::lyrics::LyricLine;
 use unicode_script::{Script, UnicodeScript};
 use uroman::{Uroman, rom_format};
 
-/// Cyrillic letters drawn like ASCII ones, both cases.
-///
-/// Uploaded sheets sometimes type English with these, and the line then carries a Cyrillic script
-/// for [`needs_romanization`] to find. Without the guard a reader gets a nonsense second line
-/// under a lyric they could already read.
+/// Cyrillic letters drawn like ASCII ones, both cases, which uploaded sheets sometimes type English
+/// with.
 const HOMOGLYPHS: [char; 32] = [
     'а', 'в', 'е', 'к', 'м', 'н', 'о', 'р', 'с', 'т', 'у', 'х', 'і', 'ј', 'ѕ', 'ԁ', 'А', 'В', 'Е',
     'К', 'М', 'Н', 'О', 'Р', 'С', 'Т', 'У', 'Х', 'І', 'Ј', 'Ѕ', 'Ԁ',
 ];
 
 /// Fill in each line's romanization, where its script wants one.
-///
-/// Takes the sheet rather than a line because whether its Han characters are Japanese is a
-/// question about the sheet: kana is the only evidence, and the line carrying it need not be the
-/// line being romanized.
 pub(super) fn apply(lines: &mut [LyricLine]) {
-    // The resolver asks this too, to decide whether the sheet is worth the trip to the blocking
-    // pool, so in production it is answered before the hop. Kept for a direct caller: past it
-    // every line walks kakasi's sniffer.
+    // The resolver asks this before the hop. Kept for a direct caller: past it every line walks
+    // kakasi's sniffer.
     if lines.iter().all(|line| line.text.is_ascii()) {
         return;
     }
@@ -57,10 +38,8 @@ pub(super) fn apply(lines: &mut [LyricLine]) {
     }
 }
 
-/// The romanization to draw under `line`, or `None` where there is nothing to add.
-///
-/// The equality at the end is the second net under [`needs_romanization`]: a line an engine hands
-/// back unchanged has nothing to say, and drawing it twice is worse than not drawing it.
+/// The romanization to draw under `line`, or `None` where it would add nothing, an engine handing
+/// the line back unchanged included.
 fn romanize_line(line: &str, sheet_is_japanese: bool) -> Option<String> {
     if !needs_romanization(line) || is_latin_in_disguise(line) {
         return None;
@@ -71,12 +50,9 @@ fn romanize_line(line: &str, sheet_is_japanese: bool) -> Option<String> {
     (!romanized.is_empty() && romanized != line.trim()).then(|| romanized.to_owned())
 }
 
-/// Whether the line is written in a script worth sounding out.
-///
-/// The Unicode `Script` property rather than a range table of our own, which is the copy that goes
-/// stale each Unicode release. `Common` and `Inherited` are punctuation, digits and combining
-/// marks, and `Unknown` is a codepoint nothing can read, so an accented Latin line answers `false`
-/// and grows no pointless `Como` under its `Cómo`.
+/// Whether the line is written in a script worth sounding out, by the Unicode `Script` property
+/// rather than a range table that goes stale each release. An accented Latin line is Latin,
+/// `Common` and `Inherited` throughout, so its `Cómo` grows no `Como`.
 fn needs_romanization(line: &str) -> bool {
     !line.is_ascii()
         && line.chars().any(|letter| {
@@ -87,10 +63,8 @@ fn needs_romanization(line: &str) -> bool {
         })
 }
 
-/// Whether the line is ASCII text typed with lookalike letters rather than a script of its own.
-///
-/// Both halves are load-bearing: every non-ASCII letter has to be a lookalike, and a real ASCII
-/// letter has to sit beside them, so a genuinely Russian line is untouched.
+/// Whether the line is ASCII text typed with lookalike letters. Every non-ASCII letter has to be a
+/// lookalike and a real ASCII one has to sit beside them, so a Russian line is untouched.
 fn is_latin_in_disguise(line: &str) -> bool {
     let mut ascii = false;
     let mut disguised = false;
@@ -106,12 +80,9 @@ fn is_latin_in_disguise(line: &str) -> bool {
     ascii && disguised
 }
 
-/// Everything that is not a Japanese sheet: our Hangul, and uroman for the rest.
-///
-/// Split into runs rather than handed over whole because Hangul is the one script here with a
-/// better answer than uroman's. Splitting costs uroman no context: what separates two Hangul runs
-/// is spaces, punctuation and the occasional Latin word, none of which reads differently for
-/// having a syllable beside it.
+/// Everything that is not a Japanese sheet: our Hangul, and uroman for the runs between. Splitting
+/// costs uroman no context, the spaces, punctuation and Latin between Hangul runs reading the same
+/// without a syllable beside them.
 fn other_scripts(line: &str) -> String {
     let mut out = String::with_capacity(line.len() * 2);
     let mut rest = line;
@@ -134,13 +105,8 @@ fn other_scripts(line: &str) -> String {
     out
 }
 
-/// What sits between two Hangul runs, romanized only if there is anything to romanize.
-///
-/// **The gaps between Korean words are runs**, so without the ASCII bail a Korean sheet walks
-/// uroman's lattice once per space and pages a multi-megabyte archive in to be told that a space
-/// is a space. Latin romanizes to itself, so skipping is the same answer for less: a sheet with
-/// nothing but Hangul and English in it never touches uroman at all, and its dictionary stays
-/// where it was compiled.
+/// What sits between two Hangul runs. **An ASCII run never reaches uroman**: every space between
+/// Korean words is one, and asking pages uroman's archive in to be told a space is a space.
 fn push_between_hangul(run: &str, out: &mut String) {
     if run.is_ascii() {
         out.push_str(run);
@@ -149,19 +115,11 @@ fn push_between_hangul(run: &str, out: &mut String) {
     push_uroman(run, out);
 }
 
-/// uroman over one run, with a stretch of Han spaced a syllable at a time.
-///
-/// Chinese writes no spaces, so uroman joins a whole run of Han into one word and a line of it
-/// comes back as an unreadable blob. The `Edges` format is the same answer carrying each piece's
-/// source span, which is what lets the syllables be split apart without a second pass over the
-/// text or a second engine to do it with.
-///
-/// Deliberately no language hint. uroman takes an ISO 639-3 code and carries rules for twenty-odd
-/// of them, but nothing upstream of here knows what language a sheet is in, and a wrong hint is
-/// worse than none.
+/// uroman over one run, with Han spaced a syllable at a time: Chinese writes no spaces, so uroman
+/// joins a run of it into one blob, and the `Edges` format's source spans are what find the
+/// syllables. No language hint, nothing upstream knowing the sheet's and a wrong one being worse.
 fn push_uroman(run: &str, out: &mut String) {
-    // A handle over a process-wide archive rather than a construction; the crate documents it as
-    // free, and threading one through would read as though it were not.
+    // A handle over a process-wide archive, which the crate documents as free to make.
     let edges = Uroman::new().romanize_string::<rom_format::Edges>(run, None).to_edges();
     let letters: Vec<char> = run.chars().collect();
 
@@ -175,10 +133,8 @@ fn push_uroman(run: &str, out: &mut String) {
     }
 }
 
-/// Whether the character at `at` is Han.
-///
-/// A position past either end is not, which is what lets a caller step off the front with
-/// `wrapping_sub` and read "nothing there" rather than wrapping onto the last character.
+/// Whether the character at `at` is Han. Past either end it isn't, so a caller can step off the
+/// front with `wrapping_sub`.
 fn is_han_at(letters: &[char], at: usize) -> bool {
     letters.get(at).is_some_and(|letter| letter.script() == Script::Han)
 }

@@ -4,18 +4,15 @@ import { Player } from "../../globals/player.slint";
 import { TrackList } from "../../components/track-list/track-list.slint";
 import { TrackListScrollbars } from "../../components/track-list-scrollbars.slint";
 
-// The album's track list, and nothing above it: the banner is `LibraryTabBand`, which the
-// mount sheet grows into this album's hero, and the action pills are `tab-pills.slint`'s.
-// The filter box is the page's one box, so every blur here bumps `MyLibrary`'s tick rather
-// than a channel of its own.
+// The album's track list and nothing above it: the banner is the band's and the action pills are
+// `tab-pills.slint`'s. The filter box is the page's one box, so a blur bumps `MyLibrary`'s tick.
 export component AlbumDetailBody inherits Rectangle {
-    // Catches any click no inner TouchArea consumes and gives the band's box up.
     TouchArea {
         clicked => { MyLibrary.blur-search-tick += 1; }
     }
 
-    // Full-bleed: the header sits flush under the band, the list insets its own sides, and a
-    // bottom pad would sit *outside* the list's viewport and read as a dead strip.
+    // Full-bleed: the list insets its own sides, and a bottom pad would be a dead strip outside
+    // its viewport.
     tl := TrackList {
         width: 100%;
         height: 100%;
@@ -39,11 +36,9 @@ export component AlbumDetailBody inherits Rectangle {
         select-row(idx, id, sh, ct) => { AlbumDetail.select-row(idx, id, sh, ct); }
         select-all => { AlbumDetail.select-all(); }
         clear-selection => { AlbumDetail.clear-selection(); }
-        // A click in the track list blurs the band's SearchBar.
         request-blur-search => { MyLibrary.blur-search-tick += 1; }
     }
 
-    // At the view root, flush with the content panel's rounded edges.
     TrackListScrollbars {
         x: 0; y: 0; width: 100%; height: 100%;
         list-y: tl.absolute-position.y - root.absolute-position.y;

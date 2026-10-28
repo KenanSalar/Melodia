@@ -1,14 +1,12 @@
 //! Holds the browsed-logo cache to its bounds, and retires the files that fall out of it.
 //!
-//! **Two halves that have to run in this order and nowhere else.** `library::radio` decides which
-//! answers are still worth keeping and drops the rest, which is what stops referencing their files;
-//! [`super::artwork_sweep`] then retires whatever no column names. Reversed, the sweep would see
-//! every dropped row's file still referenced and the store would never shrink.
+//! **Prune, then sweep, in that order only.** `library::radio` drops the answers no longer worth
+//! keeping, which stops their files being referenced, and [`super::artwork_sweep`] retires what no
+//! column names. Reversed, every dropped row's file still counts as referenced and the store never
+//! shrinks.
 //!
-//! **Run when Radio is done with rather than after a scan.** The store only grows while the page
-//! is open, so a leave is exactly when it stops — where the artwork sweep's own trigger is a
-//! library scan, which a user who browses radio and never touches their music folders may not run
-//! for weeks.
+//! **Run on a Radio leave rather than after a scan**: the store grows only while the page is open,
+//! and a user who only browses radio may not scan for weeks.
 
 use crate::library;
 use crate::state::AppState;
@@ -17,11 +15,7 @@ use melodia_core::config::Paths;
 use melodia_core::error::{AppError, describe};
 use melodia_store::database::DbPool;
 
-/// Prune the answer table and sweep the store behind it, in the background.
-///
-/// Detached rather than awaited: the caller is a section leave, and one query plus a directory
-/// listing is maintenance nothing on screen is waiting for. Tracked, so a shutdown landing
-/// mid-sweep waits for the unlinks rather than tearing the runtime down under them.
+/// Detached, the caller being a section leave, and tracked, so a shutdown waits for the unlinks.
 pub fn spawn(spawner: &TaskSpawner, state: &AppState) {
     let state = state.clone();
     spawner.spawn(async move {

@@ -1,20 +1,16 @@
-//! Scrobble detection for a station, beside [`super::detector`] rather than inside it because the
-//! two answer "was this heard" from different evidence. A track has a length and a position to
-//! measure a play against; a stream has neither, only the moments its announcement changes.
+//! Scrobble detection for a station, apart from [`super::detector`] because a stream has no length
+//! or position to measure a play against, only the moments its announcement changes. Pure too.
 //!
 //! **A song counts only when it was heard from one announcement to the next**, uninterrupted and
 //! for longer than [`MIN_TRACK_MS`]. The song playing when a station is tuned, or when a paused one
-//! reconnects, started before we were listening, and nothing on the wire says how much of it was
-//! missed, so it gets a now-playing and never a scrobble. Pause closes the stream, so any stretch
-//! out of `playing` is the same interruption. A line naming no artist is a jingle or an ad as far as
-//! both services are concerned, and ends the song before it without starting one.
-//!
-//! Pure like its sibling: the view model, the clock and the setting come in as values.
+//! reconnects, started before we were listening, and nothing on the wire says how much was missed,
+//! so it gets a now-playing and never a scrobble. Pause closes the stream, so any stretch out of
+//! `playing` is the same interruption. A line naming no artist is a jingle or an ad to both
+//! services, and ends the song before it without starting one.
 
 use crate::services::integrations::scrobble::model::{MIN_TRACK_MS, ScrobbleTrack};
 use melodia_engine::player::engine::state::PlayerViewModelLight;
 
-/// What the task must act on.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum LiveEffect {
     NowPlaying(ScrobbleTrack),
@@ -30,9 +26,9 @@ pub enum LiveEffect {
 struct Heard {
     stream_url: String,
     line: Option<String>,
-    /// Whether the station has sent a line since tuning in. Kept apart from `line`, because
-    /// plenty of stations blank their title between songs, and the song after the blank still
-    /// started while we were listening.
+    /// Whether the station has sent a line since tuning in. Apart from `line` because plenty of
+    /// stations blank their title between songs, and the song after the blank still started
+    /// while we were listening.
     announced: bool,
 }
 
@@ -57,8 +53,8 @@ impl LiveDetector {
         Self::default()
     }
 
-    /// React to a published view model. `enabled` is the user's setting, read per call so turning
-    /// it off mid-song drops that song rather than scrobbling it once back on.
+    /// `enabled` is the user's setting, read per call so turning it off mid-song drops that song
+    /// rather than scrobbling it once back on.
     pub fn on_view_model(
         &mut self,
         vm: Option<&PlayerViewModelLight>,
@@ -78,9 +74,8 @@ impl LiveDetector {
             return Vec::new();
         }
 
-        // A turnover only once this same station has announced something: the first line after
-        // tuning in names a song that was already under way. A song another station's line
-        // displaced was cut off rather than finished, so it is dropped.
+        // A song another station's line displaced was cut off rather than finished, so it is
+        // dropped.
         let turnover = same_station.is_some_and(|last| last.announced);
         let announced = radio.announcement().map(ScrobbleTrack::heard_on_air);
         let mut effects = Vec::new();

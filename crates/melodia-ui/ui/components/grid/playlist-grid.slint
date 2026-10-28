@@ -6,10 +6,7 @@ import { CardCell } from "card-cell.slint";
 import { DragSource } from "../drag-source.slint";
 import { IconButton } from "../icon-button.slint";
 
-// Virtualized playlist-card grid, `AlbumGrid`'s shape: Rust hands it rows of
-// `columns` cards, covers come lazily off the host's
-// `request-cover`, and the host mounts the scrollbar through the `v-*` contract.
-// Only a mounted card evaluates its cover binding, so the model stays pure data.
+// The virtualized playlist grid, `AlbumGrid`'s shape.
 export component PlaylistGrid inherits Rectangle {
     in property <[PlaylistGridRow]> rows;
     in property <length> card-width: 180px;
@@ -19,17 +16,14 @@ export component PlaylistGrid inherits Rectangle {
 
     callback open-playlist(int /*playlist_id*/);
     callback request-blur-search();
-    // Fired by the card's hover-revealed icons **and** by its right-click menu; the view routes
-    // each one. The two paths are deliberate: the buttons are the discoverable affordance, the
-    // menu is the right-click one, and both land on the same handler.
+    // Raised by the card's hover trio and its menu alike, both landing on one handler.
     callback delete-playlist(int /*playlist_id*/);
     callback edit-playlist-artwork(int /*playlist_id*/);
     callback rename-playlist(int /*playlist_id*/);
-    // Menu-only, having no room on the card: the batch delete and the smart-rules editor.
+    // Menu-only, having no room on the card.
     callback delete-playlists([int] /*playlist_ids*/);
     callback edit-playlist-rules(int /*playlist_id*/);
-    // Bumped by the host once a scheduled decode batch lands; the card's binding reads it so a
-    // `pure` callback re-runs. See `AlbumGrid`.
+    // The repaint token: bumped as decodes land, so the `pure` cover lookup re-runs.
     in property <int> covers-generation: 0;
     pure callback request-cover(string /*artwork_path*/, int /*generation*/) -> image;
 
@@ -39,7 +33,6 @@ export component PlaylistGrid inherits Rectangle {
     callback set-v-offset(length);
     set-v-offset(o) => { list.content-y = -o; }
 
-    // Cards drag out as what Add to Queue on them would take, a smart playlist's rules included.
     src := DragSource {
         width: 100%;
         height: 100%;
@@ -51,8 +44,7 @@ export component PlaylistGrid inherits Rectangle {
             height: 100%;
             vertical-scrollbar-policy: always-off;
             horizontal-scrollbar-policy: always-off;
-            // A card click and a drag-pan are one gesture, and the default is the style's to
-            // pick; argument on `views/radio/station-grid.slint`.
+            // The style's default too, pinned: a drag-pan takes any press that drifts.
             mouse-drag-pan-enabled: false;
 
             for grid-row in root.rows: Rectangle {
@@ -91,14 +83,10 @@ export component PlaylistGrid inherits Rectangle {
                             cover: root.request-cover(playlist.artwork_path,
                                 root.covers-generation);
                             fallback-icon: "playlist";
-                            // A pronounced zoom on the placeholder, as on the other
-                            // grids; real artwork stays gentle so a cover doesn't
-                            // jitter inside the tile clip on hover.
+                            // Real artwork stays gentle so a cover doesn't jitter in the clip.
                             cover-scale-hover: playlist.artwork_path == "" ? 1.15 : 1.04;
                             title: playlist.name;
-                            // Each segment translates on its own; the separator is
-                            // punctuation. An empty playlist drops the duration rather
-                            // than trailing a zero.
+                            // An empty playlist drops the duration rather than trailing a zero.
                             subtitle: playlist.track_count > 0
                                 ? @tr("{n} track" | "{n} tracks" % playlist.track_count)
                                     + " · " + Theme.format-duration(playlist.total_duration_ms)
@@ -110,25 +98,15 @@ export component PlaylistGrid inherits Rectangle {
                             selected: cell.selected;
                             selection-live: cell.selection-live;
                             select-clicked(shift, ctrl) => { cell.pick(shift, ctrl); }
-                            // The cell by id rather than `parent`: inside an `EntityCard` mount
-                            // `parent` is the card, not the square the overlay slot draws in, and
-                            // `crates/melodia/tests/entity_card_overlay.rs` bans the word here
-                            // outright rather than trying to tell a position from a write.
+                            // By id: `entity_card_overlay.rs` bans `parent` inside this mount.
                             context-requested(x, y) => { cell.open-menu(x, y); }
                             menu-open: cell.menu-open;
                             pressed => {
                                 src.arm-items(-1, cell.drag-items(playlist.name, self.cover));
                             }
 
-                            // The hover-revealed CRUD trio. **The card's slot rather than the
-                            // card itself**: it lived in `EntityCard` once, where every other host
-                            // raising the flag drew all three on top of its own controls.
-                            //
-                            // **Framed off `card.tile-size`, never off `parent`.** These sit in
-                            // the card's overlay square, but a `@children` element resolves names
-                            // where it is *written*, so `parent` here is the `EntityCard` — its
-                            // full height, not the square — and the source reads correctly either
-                            // way.
+                            // The hover trio, in the card's slot and framed off `tile-size`, never
+                            // `parent`, which in the slot is the whole card.
                             show-overlay-actions: true;
                             overlay-hovered: delete_btn.has-hover
                                 || artwork_btn.has-hover

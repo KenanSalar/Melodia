@@ -1,11 +1,5 @@
-//! Everything that opens a socket: the shared HTTP primitives, the four artwork and logo
-//! fetchers, the radio directory client and the blocklist in front of it.
-//!
-//! `http_url` and `read_capped` are the two primitives every fetch shares, and the reason this
-//! is a crate rather than a directory: a URL from outside the app is *parsed* rather than
-//! prefix-tested, and a body is streamed under a cap rather than allocated and measured after.
-//! Both are violable from any file and neither fails visibly, so the corpus walks in
-//! `crates/melodia/tests/net_primitives.rs` hold them.
+//! Everything that opens a socket: the shared HTTP primitives in `services::net`, the radio and
+//! lyrics directory clients, and the artwork and logo fetchers.
 
 pub mod services {
     pub mod net;

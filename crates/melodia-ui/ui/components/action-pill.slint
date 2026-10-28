@@ -2,21 +2,14 @@ import { Theme } from "../theme.slint";
 import { MaterialIcon } from "material-icon.slint";
 import { Tooltip } from "tooltip.slint";
 
-// The rounded near-opaque chip hosting a row of pill segments; callers compose
-// `PillButton` / `PillDivider` inside it.
-//
-// Each primitive below is a 32 px root, the pill's full height, over shorter chrome left
-// unplaced: a plain parent centres a sized child, so no layout is needed for it.
+// The near-opaque chip hosting a row of `PillButton`s and `PillDivider`s. Each of those is a 32 px
+// root over shorter, unplaced chrome, a plain parent centring a sized child.
 export component ActionPill inherits Rectangle {
     height: 32px;
     border-radius: self.height / 2;
-    // The same fill the hero's back button takes, so the two read as one family where
-    // they sit side by side over a blur.
+    // The hero back button's fill, so the two read as one family over a blur.
     background: Theme.floating-chrome-bg;
-    // The `popup-surface.slint` chrome convention. It keeps the pill legible over a hero
-    // blur whose dominant colour happens to match the fill — which the fill's
-    // translucency only sharpens — and paints inside the layout box, so it shifts no
-    // child.
+    // `PopupSurface`'s rim, which keeps the pill legible over a blur matching its fill.
     border-width: 1px;
     border-color: Theme.surface2;
     width: layout.preferred-width;
@@ -30,64 +23,48 @@ export component ActionPill inherits Rectangle {
     }
 }
 
-// The pill-styled button: text-only, icon-only or both. The default home for any interactive
-// segment inside an `ActionPill`, and for any standalone secondary action wanting the same chip
-// chrome. **The hover fill is fully opaque on purpose** — lifting out of a translucent pill is what
-// makes the hover read.
+// The chip-chrome button, for a segment of an `ActionPill` or a standalone secondary action. **The
+// hover fill is opaque on purpose**: lifting out of a translucent pill is what makes it read.
 //
-// **`danger: true` keeps the same chrome as any other pill.** A permanent red fill read as
-// over-prominent for an inline action row, so at rest it looks identical and only the hover tints
-// the icon *and* label to `Theme.danger`. `icon-size` corrects a glyph whose optical weight is off
-// at the default, and `icon-filled` selects the filled Material Symbols variant.
+// **`danger: true` keeps the chrome**, a permanent red fill being too loud in an inline row: only
+// the hover tints the icon and label.
 export component PillButton inherits Rectangle {
     in property <string> text: "";
     in property <string> icon: "";
     in property <length> icon-size: 14px;
     in property <bool> icon-filled: false;
     in property <bool> danger: false;
-    // Marks the current sort field in a row of sort pills, as the track-list header
-    // marks its active column.
+    // The current sort field, as the track-list header marks its column.
     in property <bool> active: false;
-    // Reserves room for a trailing chevron **always**, so the label's x doesn't shift
-    // when a sort pill is clicked; `sort-direction` picks the glyph, an empty string
-    // leaving the slot transparent. **Never concatenate Unicode arrows into `text`** —
-    // a character Vazirmatn lacks pulls a fallback font whose line box pushes the
-    // patched glyphs off centre.
+    // Holds the chevron's room **always**, so the label doesn't shift when a sort pill is clicked.
+    // **Never put arrows in `text`**: a glyph Vazirmatn lacks pulls a fallback font off centre.
     in property <bool> reserve-sort-slot: false;
     in property <string> sort-direction: "";
     in property <string> tooltip-text: "";
-    // 0 labelled, 1 the glyph alone with the label moved to the tooltip, for a row short of room.
-    // A scalar rather than a bool, so the label closes onto its glyph the way a compact tab's
-    // does. A text-only pill has nothing to stand in and ignores it.
+    // 0 labelled, 1 the glyph alone with the label moved to the tooltip, a scalar so the label
+    // closes as a compact tab's does. A text-only pill ignores it.
     in property <float> compact-t: 0.0;
-    // Suppresses the in-tree tooltip so a host can paint one on a higher layer, needed
-    // wherever later-painted sibling content would occlude it. `hovered` is exposed so
-    // the host can drive that overlay.
+    // For a host drawing the tooltip on a higher layer, off `hovered`.
     in property <bool> tooltip-overlay: false;
     out property <bool> hovered: touch.has-hover;
-    // For a popup trigger, bound to its popup's `is-open`: `has-hover` drops the moment the popup
-    // takes the pointer, so hover alone would leave the pill dark under an open popup.
+    // For a popup trigger, bound to its popup's `is-open`, the popup taking the hover.
     in property <bool> force-bg: false;
     callback clicked();
 
-    // What the label keeps of its slot. Its ink is gone by the time the slot is half closed, so
-    // the clip never shows a half-eaten word: `TabBarCell`'s bias, off the same source rather than
-    // eased on its own, which would phase-lag.
+    // `TabBarCell`'s bias: the ink is gone by the time the slot is half closed.
     property <float> open: root.icon == "" ? 1.0 : 1.0 - root.compact-t;
     property <float> label-alpha: clamp(1.0 - (1.0 - root.open) * 2.0, 0.0, 1.0);
 
-    // `out` so a host drawing the pill on a higher layer asks this rather than restating the
-    // test beside its own frame. The alignment below is the same rule on the other mount.
+    // Published so a top-layer host asks this rather than restating the test.
     out property <bool> icon-only:
         root.icon != "" && (root.text == "" || root.label-alpha == 0.0);
-    // The same for the text: a dropped label is the tooltip unless the pill names one of its own.
+    // A dropped label is the tooltip unless the pill names one of its own.
     out property <string> tip-text: root.tooltip-text != ""
         ? root.tooltip-text
         : (root.icon-only ? root.text : "");
 
-    // One ink for the glyph and the label. Danger tints red only on hover; otherwise accent when
-    // active. **Eased here and faded downstream**: folding the label's fade into an eased brush
-    // would restart the ease on every frame of a compact morph.
+    // **Eased here and faded downstream**: the label's fade folded into an eased brush would
+    // restart the ease on every frame of a compact morph.
     property <brush> ink: root.danger
         ? (touch.has-hover ? Theme.danger : Theme.text)
         : (root.active ? Theme.accent : Theme.text);
@@ -98,18 +75,15 @@ export component PillButton inherits Rectangle {
 
     chrome := Rectangle {
         height: 28px;
-        // Square once only the glyph is left, so the hover reads as a round button; otherwise it
-        // grows to fit its content, and a closing label shrinks it onto the square.
+        // Square once only the glyph is left, so the hover reads as a round button.
         width: max(self.height, layout.preferred-width);
         border-radius: self.height / 2;
-        // One chrome for both; danger only re-tints on hover, through `ink`.
         background: (touch.has-hover || root.force-bg)
             ? Theme.surface1
             : transparent;
         animate background { duration: Theme.dur-fast; easing: ease-in-out; enabled: !Theme.recoloring; }
 
-        // Padding and spacing close with the label, so the glyph glides to the middle with no
-        // arithmetic of its own.
+        // Padding and spacing close with the label, so the glyph glides to the middle.
         layout := HorizontalLayout {
             padding-left: root.text == "" ? 0px : 10px * root.open;
             padding-right: root.text == "" ? 0px : 10px * root.open;
@@ -117,25 +91,18 @@ export component PillButton inherits Rectangle {
             alignment: center;
             cross-axis-alignment: center;
 
-            // A balance slot mirroring the trailing arrow. The chrome binds its
-            // width to the layout's preferred, so without one, centring the
-            // text-plus-arrow pair as a group pushes the label left of centre.
+            // Balances the trailing arrow, so the label stays centred in the chrome.
             if root.reserve-sort-slot: Rectangle { width: 16px; }
 
-            // `MaterialIcon` pins the glyph in a collapsed em-box, so centring the box
-            // lands the glyph at the chrome's centre.
             if root.icon != "": MaterialIcon {
                 name: root.icon;
                 icon-size: root.icon-size;
                 filled: root.icon-filled;
                 icon-color: root.ink;
             }
-            // **Always mounted** with a label, and closed by shrinking its slot to nothing, as a
-            // compact tab's is. Rectangular so it lowers to a scissor, as tall as the chrome so
-            // marks reaching past the line box keep their slack, the label eliding so its own line
-            // box doesn't cut them first, and pinned left so the clip eats the tail. The patched
-            // Vazirmatn metrics land the glyph mass at the line-box centre, so centring the line
-            // box is enough.
+            // **Always mounted** with a label and closed by its slot, as a compact tab's is.
+            // Rectangular so the clip is a scissor, as tall as the chrome so marks past the line
+            // box keep their slack, and the label elides so its own line box doesn't cut them.
             if root.text != "": Rectangle {
                 clip: true;
                 width: lbl.preferred-width * root.open;
@@ -151,8 +118,7 @@ export component PillButton inherits Rectangle {
                     overflow: elide;
                 }
             }
-            // Always rendered when reserved, so the chrome's width doesn't depend on
-            // whether the pill is active; transparent with no direction.
+            // Mounted while reserved, so the width doesn't follow `active`.
             if root.reserve-sort-slot: MaterialIcon {
                 name: root.sort-direction == "asc"
                     ? "arrow_drop_up"
@@ -169,10 +135,7 @@ export component PillButton inherits Rectangle {
             hovered: touch.has-hover && !root.tooltip-overlay;
             host-width: chrome.width;
             host-height: chrome.height;
-            // 28 px of chrome under a label several times that leaves the centred arm
-            // nothing to centre against, and these chips sit at the panel's right edge,
-            // so the overhang is what the window clamp catches. A labelled pill is wide
-            // enough to carry its own.
+            // 28 px of chrome leaves a centred label nothing to centre against.
             align-end: root.icon-only;
         }
 
@@ -183,7 +146,6 @@ export component PillButton inherits Rectangle {
     }
 }
 
-// The hairline separating segments inside an `ActionPill`.
 export component PillDivider inherits Rectangle {
     height: 32px;
     width: 1px;
@@ -191,8 +153,6 @@ export component PillDivider inherits Rectangle {
     Rectangle {
         width: 1px;
         height: 18px;
-        // Alpha in the brush, never `opacity` — free on a childless rect like
-        // this one, and a layer that crops its subtree's ink on anything else.
         background: Theme.surface2.with-alpha(0.5);
     }
 }

@@ -1,14 +1,9 @@
 use melodia_core::error::AppError;
 
-// ── Trigger SQL constants ───────────────────────────────────────────────────
-// Must stay in sync with the stats triggers in
-// migrations/20260910000000_tag_vocabulary.sql, which is where all nine now live — the three
-// `tracks_stats_*` in its second half, the six join-table ones in its first.
-//
-// The artist and genre arms live on the three join tables rather than on `tracks`: both sets of
-// counts mean "credited on" now, and a track carries a list rather than one name. What a `tracks`
-// row can still move by itself is the duration, hence the two duration arms left in the update
-// trigger.
+// Must match the stats triggers `migrations/20260910000000_tag_vocabulary.sql` creates: the three
+// `tracks_stats_*` in its second half, the six join-table ones in its first. The artist and genre
+// counts mean "credited on", so their arms sit on the join tables, and only the duration still
+// moves with a `tracks` row.
 
 const CREATE_TRACKS_STATS_INSERT: &str = r"
 CREATE TRIGGER IF NOT EXISTS tracks_stats_insert AFTER INSERT ON tracks BEGIN
@@ -232,15 +227,11 @@ const STATS_TRIGGERS: [(&str, &str); 9] = [
     ("album_artists_stats_delete", CREATE_ALBUM_ARTISTS_STATS_DELETE),
 ];
 
-/// Drop the stats-maintenance triggers so bulk inserts skip per-row overhead. Call
-/// [`enable_stats_triggers`] and [`recalculate_all_stats`] after the bulk operation completes.
+/// Drops the stats triggers so a bulk ingest skips their per-row cost, [`enable_stats_triggers`]
+/// and [`recalculate_all_stats`] following it. Safe in a transaction, whose rollback restores them.
 ///
-/// **`tracks_credits_cleanup` and `albums_credits_cleanup` are deliberately not in that set.**
-/// They stand in for the `ON DELETE CASCADE` the credit tables don't have, so dropping them
-/// wouldn't cost a stat, it would make a track undeletable.
-///
-/// Safe inside a transaction — `SQLite` DDL is transactional, so a rollback
-/// restores the triggers automatically.
+/// **`tracks_credits_cleanup` and `albums_credits_cleanup` stay**: they stand in for the
+/// `ON DELETE CASCADE` the credit tables lack, so dropping them would make a track undeletable.
 pub(crate) async fn disable_stats_triggers(
     tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
 ) -> Result<(), AppError> {
@@ -253,7 +244,7 @@ pub(crate) async fn disable_stats_triggers(
     Ok(())
 }
 
-/// Recreate the stats-maintenance triggers dropped by [`disable_stats_triggers`].
+/// Recreates what [`disable_stats_triggers`] dropped.
 pub(crate) async fn enable_stats_triggers(
     tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
 ) -> Result<(), AppError> {
@@ -263,14 +254,12 @@ pub(crate) async fn enable_stats_triggers(
     Ok(())
 }
 
-/// Recalculate all denormalized stats (`track_count`, `total_duration_ms`,
-/// `album_count`) on artists, albums, and genres from scratch.
-///
-/// Run this after a bulk ingest with triggers disabled.
+/// Recalculates every denormalized count and duration from scratch, after a bulk ingest with the
+/// triggers off.
 pub(crate) async fn recalculate_all_stats(
     tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
 ) -> Result<(), AppError> {
-    // Artists: all three off the credit tables, which is where "how many" now lives.
+    // Artists: all three off the credit tables.
     sqlx::query(
         "UPDATE artists SET
             track_count = COALESCE((SELECT COUNT(*) FROM track_artists WHERE artist_id = artists.id), 0),
@@ -280,7 +269,6 @@ pub(crate) async fn recalculate_all_stats(
     .execute(&mut **tx)
     .await?;
 
-    // Albums: track_count, total_duration_ms
     sqlx::query(
         "UPDATE albums SET
             track_count = COALESCE((SELECT COUNT(*) FROM tracks WHERE album_id = albums.id), 0),
@@ -289,7 +277,7 @@ pub(crate) async fn recalculate_all_stats(
     .execute(&mut **tx)
     .await?;
 
-    // Genres: both off `track_genres`, which is where "how many" now lives.
+    // Genres: both off `track_genres`.
     sqlx::query(
         "UPDATE genres SET
             track_count = COALESCE((SELECT COUNT(*) FROM track_genres WHERE genre_id = genres.id), 0),

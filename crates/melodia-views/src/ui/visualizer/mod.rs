@@ -1,23 +1,18 @@
-//! Wire the Now-Playing audio visualizer to Rust.
+//! The Now-Playing visualizer's Rust half: the `Visualizer` global's seed and callbacks, the
+//! per-frame analysis being [`frame`]'s.
 //!
-//! Seeds the `Visualizer` global from `settings.json` and owns its callbacks; the
-//! per-frame analysis is [`frame`]. The contract spanning this directory, the `.slint`
-//! strip and both style pickers is `.claude/rules/visualizer.md`.
+//! The bars frame's two real FFTs are cheap enough for the UI thread, which spares a third thread
+//! and a second shared cell.
 //!
-//! The bars frame runs two real FFTs and stays comfortably sub-millisecond, so the render loop
-//! sits on the UI thread rather than paying for a third thread and a second shared cell.
+//! The mount tree can't gate the producer, so this is the sole writer of the tap's arm state:
+//! `set-active` (the mount), `tick` (the steady state) and `window-hidden` (the one case the tick
+//! can't cover, that signal stopping the Timer the tick runs off). Two gaps leave the tap armed
+//! with nothing to feed it, which costs nothing: a pause on a settled drawing stops the Timer as a
+//! hide does, and a strip mounting over a stopped player has no tick to refine the arm.
 //!
-//! What the mount tree *can't* gate is the producer, so this module is the sole writer of the
-//! tap's arm state, from three places on the UI thread: `set-active` (the mount boundary), `tick`
-//! (the steady state) and `window-hidden` (the one case the tick can't cover, the same signal
-//! stopping the Timer it runs off). Two benign gaps, both leaving the tap armed with no audio to
-//! feed it, which costs nothing: a pause landing on an already-settled drawing stops the Timer the
-//! way a hide does, and a strip mounting over a stopped player has no tick to refine the arm.
-//!
-//! Nor can it gate a window still *open* but not being shown, Slint `Timer`s firing off an event
-//! loop that survives a close-to-tray hide. The two signals stay apart because they carry
-//! different weight: [`tray_bridge::is_window_visible`] is the OS saying so and safe to stop the
-//! Timer on, where [`pulse::frames`] is inferred and only slows it.
+//! Nor can the mount tree gate a window open but not shown, Slint timers surviving a close-to-tray
+//! hide. [`tray_bridge::is_window_visible`] is the OS saying so and stops the Timer;
+//! [`pulse::frames`] is inferred and only slows it.
 
 mod frame;
 mod pulse;
@@ -42,15 +37,13 @@ const STYLE_BARS: &str = "bars";
 const STYLE_WAVEFORM: &str = "waveform";
 const STYLE_MIRRORED: &str = "mirrored";
 
-/// Ticks without a painted frame before the tick concludes nobody is looking. Ticks rather than a
-/// clock, so a long pause — which stops the Timer entirely — doesn't come back reading "no frames
-/// in minutes". Deliberately generous: a false trip re-arms the tap and leaves the drawing ramping
-/// back in from silence.
+/// Ticks without a painted frame before the tick concludes nobody is looking. Ticks, not a clock,
+/// so a pause that stops the Timer doesn't come back reading minutes; generous, since a false trip
+/// re-arms the tap and ramps the drawing back in from silence.
 const FRAME_STALL_TICKS: u32 = 60;
 
-/// The two flags a strip at rest carries. Named rather than spelled inline at
-/// [`publish_resting`], which is the one place a drawing is declared settled without a frame
-/// having decided it.
+/// Named for [`publish_resting`], the one place a drawing is declared settled without a frame
+/// deciding it.
 const RESTING_IDLE: bool = true;
 const RESTING_DORMANT: bool = false;
 
@@ -127,9 +120,8 @@ struct Frame {
     bars_moved: bool,
 }
 
-/// Only the mounted style's half — the other one's consumer isn't in the tree to read it. The
-/// two flags are value-compared by `Property::set`, so writing them every tick costs a
-/// comparison rather than a repaint.
+/// Only the mounted style's half, the other's consumer not being in the tree. `Property::set`
+/// compares, so the two flags cost a comparison per tick rather than a repaint.
 fn publish_frame(global: &Visualizer, frame: Frame) {
     if let Some(path) = frame.wave_path {
         global.set_wave_path(path);
@@ -213,12 +205,11 @@ impl FrameWatch {
     }
 }
 
-/// Style keys in picker order. Two things mirror this **by position** and the compiler checks
-/// neither: the `viz-style-names` `@tr` array in `components/now-playing/flyout-presets.slint`,
-/// and the branch in `visualizer-strip.slint` that mounts on the key. A third mirror is
-/// [`melodia_app::services::settings::DEFAULT_VIZ_STYLE`], which has to be the key at index 0
-/// — where both fallbacks below land — and stays a separate literal, a test pinning the two
-/// together only being able to fail if they are two.
+/// Style keys in picker order, mirrored **by position**, unchecked by the compiler, in the
+/// `viz-style-names` `@tr` array in `components/now-playing/flyout-presets.slint` and the branch
+/// `visualizer-strip.slint` mounts on the key. [`melodia_app::services::settings::DEFAULT_VIZ_STYLE`]
+/// has to be index 0, where both fallbacks below land, and stays its own literal so the test
+/// pinning the two can fail.
 const STYLES: [&str; 3] = [STYLE_BARS, STYLE_MIRRORED, STYLE_WAVEFORM];
 
 /// Picker index for a persisted key. An unrecognized key — a hand-edited file, or one written by a
@@ -255,16 +246,12 @@ fn publish_style(global: &Visualizer, index: usize) {
     global.set_style_idx(i32::try_from(index).unwrap_or_default());
 }
 
-/// The drawing a strip nobody is watching mounts on: the flat figure a decayed trace settles to,
-/// with the two flags that say so — built by the code the live path uses, so it can't drift from
-/// what a decay lands on.
+/// The drawing a strip nobody watches mounts on, built by the live path's code so it can't drift
+/// from what a decay lands on. Only the trace: the bars, asked for with no session behind them,
+/// already answer their rest.
 ///
-/// **Only the trace.** The bars are asked for with the strip's geometry, and with no session
-/// behind them the answer is already their rest.
-///
-/// The session-end call is the load-bearing one: the strip's Timer runs on
-/// `(playing && window-shown) || !idle`, so a strip remounting over a *paused* player never ticks
-/// and whatever the last session left would sit there until playback resumed.
+/// Load-bearing at session end: the strip's Timer runs on `(playing && window-shown) || !idle`, so
+/// a strip remounting over a paused player never ticks and would keep the last session's frame.
 fn publish_resting(global: &Visualizer) {
     global.set_wave_path(SharedString::from(resting_wave_path().as_str()));
     global.set_idle(RESTING_IDLE);
@@ -279,8 +266,7 @@ fn resting_wave_path() -> String {
     path
 }
 
-/// Shared between the tick that builds it and the `set-active` that drops it. Both run on the UI
-/// thread, and the tick's borrow never outlives one frame.
+/// Built by the tick, dropped by `set-active`; the tick's borrow never outlives one frame.
 type SessionSlot = Rc<RefCell<Option<Session>>>;
 
 pub fn install_visualizer(ui: &AppWindow, state: &AppState) {
@@ -375,8 +361,6 @@ fn wire_set_active(ui: &AppWindow, state: &AppState, session: &SessionSlot) {
             return;
         }
         *session.borrow_mut() = None;
-        // A strip remounting over a paused player never ticks, so hand back the rest a fresh
-        // `Session` shadows — or the next open comes up on the frame this one ended on.
         if let Some(ui) = weak.upgrade() {
             publish_resting(&ui.global::<Visualizer>());
         }

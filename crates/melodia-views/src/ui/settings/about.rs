@@ -1,11 +1,5 @@
-//! Wire the Settings page's About section.
-//!
-//! Registers `Settings.open-repository`, whose URL is `CARGO_PKG_REPOSITORY` so the link
-//! tracks the canonical repo with no hardcoded string. The launch goes through
-//! [`crate::ui::launcher::open_target`], which owns the hop off the UI thread.
-//!
-//! The version shown in the About card is *not* set here — it rides on
-//! `MelodiaUpdater.current-version`, seeded by [`super::updater_settings`].
+//! The About card's repository link, `CARGO_PKG_REPOSITORY` so it follows the canonical repo. The
+//! version it shows is `MelodiaUpdater.current-version`, which [`super::updater_settings`] seeds.
 
 use slint::ComponentHandle;
 

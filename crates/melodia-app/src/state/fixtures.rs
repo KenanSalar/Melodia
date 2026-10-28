@@ -1,20 +1,14 @@
 //! What the library suites build over: a data root with settings already written, and a
 //! [`PlaybackContext`] with no audio device under it.
 //!
-//! `#[cfg(test)] pub(crate)` rather than the `#[doc(hidden)] pub` its two namesakes in
-//! `melodia-store` and `melodia-engine` carry: those are visible because a `cfg(test)` item cannot
-//! cross a crate boundary and each has a reader on the other side of one. This has none.
+//! `#[cfg(test)] pub(crate)`, unlike its namesakes in `melodia-store` and `melodia-engine`, which
+//! have readers across the crate boundary a `cfg(test)` item can't cross. `AppState::init` opens
+//! the card, so the engine here sits on `output::mixer::pair`, a mixer with no device between its
+//! halves.
 //!
-//! `AppState::init` opens the card, so nothing below `headless.rs` can build the real thing. What
-//! `PlaybackContext` needs is a `PlaybackEngine`, and `output::mixer::pair` builds a mixer with no
-//! device between its halves, which is the same seam `crates/melodia/tests/crossfade.rs` drives
-//! the whole DSP chain through.
-//!
-//! **A thread stands in for the audio callback**, because half the transport waits on one:
-//! `Voice::clear` blocks until its command is serviced, so a second `play_media` or any stop over
-//! a deck that holds a source would spend `output::voice::SERVICE_TIMEOUT` against a mixer nobody
-//! pulls. Pulling also drains what is playing, which no assertion here reads: `PlayerState` is
-//! what these suites are about, and the audio thread never touches it.
+//! **A thread stands in for the audio callback**, `Voice::clear` blocking until its command is
+//! serviced: without one, a second `play_media` or a stop over a loaded deck would spend
+//! `output::voice::SERVICE_TIMEOUT` against a mixer nobody pulls.
 
 use std::num::NonZero;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -38,22 +32,18 @@ use melodia_store::database::queries::fixtures::insert_test_track;
 use melodia_store::database::{DbPool, queries};
 use melodia_testkit::ASSETS_DIR;
 
-/// The shape the device-free mixer is brought to. Nothing listens, so these only have to be a
-/// shape a `Converter` accepts and a decoder can be resampled to.
+/// The device-free mixer's shape. Nothing listens, so any a `Converter` accepts will do.
 const TEST_RATE: u32 = 44_100;
 const TEST_CHANNELS: u16 = 2;
 
-/// Frames the stand-in callback asks for per pass. A real host period, so a source retires in a
-/// plausible number of passes rather than in one.
+/// Frames the stand-in callback asks for per pass: a real host period.
 const BLOCK_FRAMES: usize = 1024;
 
-/// How long the stand-in callback idles between passes. Well inside `SERVICE_TIMEOUT`, which is
-/// what a control op waiting on it has to land in.
+/// How long the stand-in callback idles between passes, well inside `SERVICE_TIMEOUT`.
 const CALLBACK_IDLE: Duration = Duration::from_millis(1);
 
-/// The publish half `with_state_emit` takes, for a body narrowed far enough not to need an engine
-/// under it. Nothing subscribes unless the caller does; a `watch` send with no receivers is a
-/// no-op, which is what these channels are here to be until one asks.
+/// The publish half `with_state_emit` takes, for a body that needs no engine. A send with no
+/// receivers is a no-op until a caller subscribes.
 pub(crate) fn test_sinks() -> PlayerSinks {
     let (view_model, _) = watch::channel(None);
     let (queue, _) = watch::channel(None);
@@ -63,12 +53,10 @@ pub(crate) fn test_sinks() -> PlayerSinks {
 
 /// A data root nothing else writes to, with `settings.json` already on disk.
 ///
-/// Seeded rather than left empty because `read_settings` answers a missing file with
-/// `SettingsData::default()`, which reaches `XDG_CURRENT_DESKTOP` and all four locale variables
-/// through its serde defaults — a read racing the sibling suites that mutate them. One write under
-/// `reading_env` settles it for every later read: `write_settings` skips no field, so nothing
-/// downstream parses a default. Not callable from inside a `with_env_var` body, the lock being
-/// held by both and reentrant in neither.
+/// Seeded because a missing file reads as `SettingsData::default()`, whose serde defaults reach the
+/// environment the sibling suites mutate. Written once under `reading_env`, every field included,
+/// so nothing later parses a default. Not callable inside a `with_env_var` body: both take the one
+/// env lock, which isn't reentrant.
 pub(crate) fn seeded_root() -> Result<(TempDir, Paths), AppError> {
     seeded_root_with(|_| {})
 }
@@ -109,8 +97,7 @@ impl TestPlayback {
         let paths = Paths::rooted_at(tmp.path().to_path_buf());
         paths.create_dirs()?;
 
-        // The floors are unreachable, both arguments being literals, and they are what keeps the
-        // fixture clear of an `unwrap` the tree does not allow anywhere.
+        // Unreachable floors, both arguments being literals, in place of an `unwrap`.
         let device = Shape {
             channels: NonZero::new(TEST_CHANNELS).unwrap_or(NonZero::<u16>::MIN),
             rate: NonZero::new(TEST_RATE).unwrap_or(NonZero::<u32>::MIN),
@@ -148,12 +135,8 @@ impl TestPlayback {
     }
 
     /// `count` playable files under the fixture's root, with rows pointing at them, returning
-    /// their ids in queue order.
-    ///
-    /// Real copies of `silence.mp3` because `execute_actions` pre-flights every `PlayMedia` with
-    /// `Path::exists` and auto-skips past a file that is not there — a queue of rows pointing at
-    /// nothing walks itself to the end and stops, which is a different test from any written
-    /// against this.
+    /// their ids in queue order. Real copies of `silence.mp3`, because `execute_actions` skips a
+    /// `PlayMedia` whose file isn't there and a queue of missing files walks itself to the end.
     pub(crate) async fn stage_playable(&self, count: usize) -> Result<Vec<i64>, AppError> {
         let dir = self.tmp.path().join("music");
         std::fs::create_dir_all(&dir)?;
@@ -187,8 +170,7 @@ impl Drop for TestPlayback {
             return;
         };
         callback.stop.store(true, Ordering::Relaxed);
-        // A thread that panicked has already failed the test through whatever it was servicing;
-        // there is nothing useful to say about it from a destructor.
+        // A panicked thread has already failed the test through whatever it was servicing.
         let _ = callback.thread.join();
     }
 }

@@ -1,38 +1,31 @@
 import { Theme } from "../theme.slint";
 import { SliderPointer } from "slider-pointer.slint";
 
-// Horizontal M3 Expressive slider — twin slim bars meeting at the thumb, a parent-background
-// stadium masking the seam, and a vertical-pill thumb that shrinks along the value axis on press.
-// `volume-popup`'s slider rotated 90°. The mask colour MUST match the parent surface, hence the
-// property: volume's is `Theme.crust` only because its `PopupSurface` paints crust, where the
-// now-playing bar paints `mantle` / `mantle-unfocused`.
+// Horizontal M3 Expressive slider: two slim bars meeting at the thumb, a stadium in the parent's
+// background masking the seam, and a pill thumb that narrows on press. The volume popup's slider
+// turned 90°. **The mask colour must match the surface under it**, hence the input.
 export component SliderTrack inherits Rectangle {
     in property <float> value;          // bound source-of-truth (0..1)
     in property <bool>  is-disabled: false;
     in property <brush> seam-mask-color: Theme.mantle;
-    // The filled bar, the thumb and the max-end dot, which are one colour. Taken as inputs for the
-    // seam mask's reason one line up: a host painting on an artwork backdrop has a solved accent of
-    // its own, and the theme's would be the only foreign colour on that surface.
+    // The filled bar, the thumb and the max-end dot. An input because a host on an artwork backdrop
+    // has a solved accent of its own, beside which the theme's would be the one foreign colour.
     in property <brush> fill-color: Theme.accent;
     in property <brush> track-color: Theme.surface1;
-    // Volume's max-end dot, mirroring the vertical popup's top-end one.
+    // Volume's max-end dot, mirroring the vertical popup's.
     in property <bool>  show-max-stop: false;
 
-    // Gated on movement, so a no-move grab inside the mask doesn't flip the
-    // visuals and the time text into drag mode.
+    // Gated on movement, so a no-move grab doesn't flip the host into drag mode.
     out property <bool>  dragging: touch.dragging;
     out property <float> drag-value: touch.drag-value;    // valid only while dragging
-    // So a host can gate a floating badge on hover without wrapping this in an
-    // outer TouchArea, which would steal the pointer events.
+    // So a host can gate a badge on hover without an outer TouchArea stealing the pointer.
     out property <bool>  has-hover: touch.has-hover;
 
     callback changed(float);
     callback committed(float);
-    // The pointer's own, for `IconButton`'s reason: only the area tracking the hover can take the
-    // wheel and keep it.
+    // Only the area tracking the hover can take the wheel and keep it.
     callback scroll-event(PointerScrollEvent) -> EventResult;
 
-    // Tall enough to host the 24 px vertical thumb without clipping.
     min-height: 24px;
     background: transparent;
 
@@ -41,25 +34,18 @@ export component SliderTrack inherits Rectangle {
 
     private property <length> track-h: 4px;
     private property <length> thumb-h: 24px;
-    // M3 Expressive: press shrinks the thumb along the value axis.
     private property <length> thumb-w: touch.pressed ? 2px : 4px;
-    // Wider than the thumb, so the seam gap visibly widens on each side as the
-    // thumb shrinks under press — the active track absorbs the freed pixels.
+    // Wider than the thumb, so the seam gap widens on each side as the thumb narrows.
     private property <length> thumb-bg-w: 12px;
     private property <length> thumb-bg-h: 24px;
-    // The dot seats inside the inactive bar's rounded end. `stop-margin` is the
-    // vertical popup's far-edge gap expressed as a margin from the right edge
-    // rather than as a coordinate.
+    // The dot seats inside the inactive bar's rounded end.
     private property <length> stop-d: 4px;
     private property <length> stop-margin: 3px;
 
     private property <float>  frac: clamp(root.shown-value, 0, 1);
     private property <length> track-cy: root.height / 2;
-    // Centred against the *rest* thumb width, not the live animated one: a
-    // width-dependent term pins one edge at the extremes, so at frac=0 only the
-    // right edge moves inward under press and the shrink reads as lopsided. The
-    // 12 px mask hides the 1 px of overflow past the track ends. `out` so a host
-    // can pin a badge to the thumb without re-deriving this.
+    // Off the *rest* thumb width, not the animated one, which would pin one edge at the extremes and
+    // make the press shrink lopsided. The mask hides the pixel of overflow past the ends.
     out property <length> thumb-cx: root.frac * (root.width - 4px) + 2px;
     private property <length> thumb-x: root.thumb-cx - root.thumb-w / 2;
     private property <length> active-w: root.thumb-cx;
@@ -67,7 +53,6 @@ export component SliderTrack inherits Rectangle {
 
     animate thumb-w { duration: 200ms; easing: cubic-bezier(0.2, 0, 0, 1); }
 
-    // Active bar — masked at the seam end so it reads as one bar under the thumb.
     Rectangle {
         x: 0;
         y: root.track-cy - root.track-h / 2;
@@ -86,8 +71,7 @@ export component SliderTrack inherits Rectangle {
         background: root.track-color;
     }
 
-    // Never faded — the mask paints after it, so the dot simply disappears
-    // behind the thumb as it reaches the end.
+    // Under the mask, so the dot disappears behind the thumb as it reaches the end.
     if root.show-max-stop: Rectangle {
         x: root.width - root.stop-margin - root.stop-d;
         y: root.track-cy - root.stop-d / 2;
@@ -97,8 +81,7 @@ export component SliderTrack inherits Rectangle {
         background: root.is-disabled ? Theme.overlay0 : root.fill-color;
     }
 
-    // Parent-background stadium hiding the bar seam — after the bars, before
-    // the thumb.
+    // The seam mask: after the bars, before the thumb.
     Rectangle {
         x: root.thumb-cx - root.thumb-bg-w / 2;
         y: root.track-cy - root.thumb-bg-h / 2;
@@ -108,11 +91,9 @@ export component SliderTrack inherits Rectangle {
         background: root.seam-mask-color;
     }
 
-    // On top of the mask, so the seam-cover itself stays invisible.
     Rectangle {
-        // Snapped, not eased: easing a binding off the position ticks phase-lags
-        // the source, and repaints the thumb plus everything it overlaps for the
-        // length of the curve, once per tick.
+        // Snapped, not eased: easing off the position ticks phase-lags the source and repaints
+        // everything the thumb overlaps for the length of the curve, once per tick.
         x: root.thumb-x;
         y: root.track-cy - root.thumb-h / 2;
         width: root.thumb-w;
@@ -121,7 +102,7 @@ export component SliderTrack inherits Rectangle {
         background: root.is-disabled ? Theme.overlay0 : root.fill-color;
     }
 
-    // The mask region is the grab band, being the thumb as the eye reads it.
+    // The mask is the grab band, being the thumb as the eye reads it.
     touch := SliderPointer {
         enabled: !root.is-disabled;
         thumb-center: root.thumb-cx;

@@ -5,16 +5,12 @@ import { Tracks } from "../../globals/tracks.slint";
 import { TrackListScrollbars } from "../../components/track-list-scrollbars.slint";
 import { TrackList } from "../../components/track-list/track-list.slint";
 
-// The Songs tab: the whole library as a `TrackList`, with its own overlay scrollbars.
-// No inputs — everything it reads is on a global. The scrollbars live here rather than
-// at the mount site because Slint can't read an id declared inside an `if` from outside
-// it, which is also what makes a per-tab file the natural boundary.
+// A file of its own so the scrollbars can sit beside the list, an id inside the mount's `if` being
+// unreadable from outside it.
 export component MyLibrarySongsTab inherits Rectangle {
     HorizontalLayout {
-        // Never the bottom. A bottom pad sits outside the list's viewport and reads as a
-        // dead strip of page background above the panel border, with the last row clipped
-        // against the viewport edge rather than scrolling clear of it. The sides are the
-        // list's own.
+        // Top only: a bottom pad is a dead strip outside the list's viewport, and the sides are
+        // the list's own.
         padding-top: Theme.pad-md;
 
         tl := TrackList {
@@ -39,7 +35,6 @@ export component MyLibrarySongsTab inherits Rectangle {
             select-row(idx, id, sh, ct) => { Tracks.select-row(idx, id, sh, ct); }
             select-all => { Tracks.select-all(); }
             clear-selection => { Tracks.clear-selection(); }
-            // The page's one filter box, not this view's retired own.
             request-blur-search => { MyLibrary.blur-search-tick += 1; }
         }
     }

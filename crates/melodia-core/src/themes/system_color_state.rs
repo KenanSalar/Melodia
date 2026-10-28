@@ -1,35 +1,22 @@
-//! OS appearance signals consumed by `apply()`. Carries the XDG portal
-//! `color-scheme` value, the parsed KDE `kdeglobals` palette (Linux only),
-//! and the latest Material You dynamic palette + accent generated from the
-//! currently-playing track's album art by `tasks::material_you`.
+//! The appearance signals `apply()` merges into the painted brushes.
 
 use super::palette::Palette;
 
-/// Bundled OS appearance signals consumed by `apply()`. `theme` mirrors the
-/// XDG portal `color-scheme` value (`"dark"` / `"light"`); on Linux KDE
-/// sessions `kde_palette` carries the parsed `kdeglobals` colours so the
-/// KDE Breeze theme can override its static Light/Dark palette with live
-/// OS colours when the user picks the System variant.
-///
-/// `material_you` is **not** an OS signal — it's the latest palette + accent
-/// generated from the currently-playing track's album art by
-/// `tasks::material_you`. Lives here so the same `apply()` plumbing that
-/// already merges OS signals into the painted brushes can also merge in
-/// the dynamic palette without inventing a parallel pipeline.
+/// `theme` mirrors the portal's `color-scheme`, and `kde_palette` the parsed `kdeglobals` a KDE
+/// System variant paints from. `material_you` is no OS signal, but the palette and accent
+/// `tasks::material_you` derived from the playing cover, riding the same merge rather than a
+/// parallel pipeline.
 #[derive(Debug, Clone)]
 pub struct SystemColorState {
     pub theme: String,
     #[cfg(target_os = "linux")]
     pub kde_palette: Option<super::kde::KdeColorPalette>,
-    /// `(palette, accent_hex)` produced by the Material You coordinator.
-    /// `Palette` is `Copy` (32 bytes), so this slot is essentially free
-    /// to clone alongside the rest of the state.
+    /// `(palette, accent_hex)`.
     pub material_you: Option<(Palette, u32)>,
 }
 
 impl SystemColorState {
-    /// Conservative default used at startup before the XDG portal answers
-    /// and on platforms that don't surface a system appearance signal.
+    /// Before the portal answers, and where no system appearance is surfaced.
     pub fn unknown() -> Self {
         Self {
             theme: "dark".to_owned(),

@@ -1,31 +1,20 @@
-//! Case- and accent-folding, for comparing two strings a human would call the same.
-//!
-//! **What it does, not why any caller wants it.** Two unrelated questions fold text here — whether
-//! a typed needle appears in a row, and whether a lyrics directory's row names the recording that
-//! is playing — and they answer to different authorities. Each argues its own reason where it asks;
-//! what they share is one implementation, so a fix to the mechanics cannot land on half of them.
+//! Case- and accent-folding, for two strings a human would call the same. Two unrelated questions
+//! fold here, each arguing its reason where it asks; sharing one implementation keeps a fix from
+//! landing on half of them.
 
 use unicode_normalization::UnicodeNormalization;
 use unicode_normalization::char::is_combining_mark;
 
-/// The ASCII half of [`push_folded`]'s rule, spelled once so the general path here and a
-/// caller's own byte walk cannot answer a NUL differently. `ui::row_match` has such a walk: an
-/// all-ASCII needle over an all-ASCII row never leaves the bytes, and folding through this is
-/// what keeps that shortcut equal to the long way round.
+/// The ASCII half of [`push_folded`]'s rule, spelled once so a caller's own byte walk
+/// (`ui::row_match`) can't answer a NUL differently from the long way round.
 #[must_use]
 pub const fn fold_ascii_byte(b: u8) -> u8 {
     if b == 0 { b' ' } else { b.to_ascii_lowercase() }
 }
 
-/// Append `s` to `out`, case- and accent-folded: NFD, combining marks dropped, lowercased.
-///
-/// `is_combining_mark` is `General_Category=Mark`, so this reaches the Indic spacing marks and the
-/// kana voicing marks as well as the Latin diacritics — the loose end of what "accent" can mean,
-/// and the safe end for a caller comparing two spellings of one name.
-///
-/// **An embedded NUL becomes a space.** ID3v2.4 joins the values of a multi-value text frame that
-/// way, so a tag's artist field routinely carries one where a person would have typed a comma —
-/// and so does a row written from such a tag by somebody else's tagger.
+/// NFD, combining marks dropped, lowercased. `is_combining_mark` takes every `Mark`, kana voicing
+/// and Indic spacing marks included, the safe end for comparing two spellings of a name. An
+/// embedded NUL becomes a space, ID3v2.4 joining a multi-value frame's values with one.
 pub fn push_folded(out: &mut String, s: &str) {
     if s.is_ascii() {
         out.reserve(s.len());

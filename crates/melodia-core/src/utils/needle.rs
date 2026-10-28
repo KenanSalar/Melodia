@@ -1,13 +1,6 @@
-//! A filter box's query, folded once.
-//!
-//! **A needle must be folded exactly once, by its owner, and [`Needle`] is what makes that a type
-//! rather than a comment.** The failure is silent in the worst way: the row side is always folded,
-//! so an unfolded needle still matches, just without accent parity, on that one surface. It lives
-//! here rather than beside the filter boxes because the store matches it too, against the folded
-//! column every track carries, and a bare `&str` crossing that boundary could be either spelling.
-//!
-//! Carrying the needle also answers its *shape* once per walk rather than per row (all-ASCII, and
-//! all-ASCII-digits), neither of which can change between rows.
+//! A filter box's query, folded exactly once by its owner. An unfolded needle still matches, just
+//! without accent parity, so [`Needle`] makes the fold a type rather than a comment, and answers
+//! its shape once per walk rather than per row.
 
 use std::cell::RefCell;
 
@@ -16,10 +9,8 @@ use crate::utils::fold::{fold, fold_ascii_byte, push_folded};
 /// Widest `i32` in decimal: ten digits plus a sign.
 const MAX_I32_DIGITS: usize = 11;
 
-/// Write `value` into `buf` back-to-front and hand back the digits. Years are printed once
-/// per row per digit-shaped keystroke, so this stays off the heap for the same reason
-/// `player::playback::dsp::push_fixed` does. Both fallbacks are unreachable, and exist because
-/// the alternatives are a silent `as` truncation and an `unwrap`.
+/// Back-to-front into `buf`, off the heap since years print per row per digit keystroke. Both
+/// fallbacks are unreachable, standing in for an `as` truncation and an `unwrap`.
 fn write_decimal(buf: &mut [u8; MAX_I32_DIGITS], value: i32) -> &str {
     // `unsigned_abs` rather than `abs` — `-i32::MIN` overflows.
     let mut rest = value.unsigned_abs();
@@ -39,25 +30,18 @@ fn write_decimal(buf: &mut [u8; MAX_I32_DIGITS], value: i32) -> &str {
     std::str::from_utf8(&buf[at..]).unwrap_or("")
 }
 
-/// A filter needle, folded once by [`fold_needle`] and carrying the two answers about its
-/// own shape that every predicate below would otherwise re-derive per field, per row.
-/// Construction is the only way in, which makes "folded exactly once by its owner"
-/// enforceable rather than advisory.
+/// Built only by [`fold_needle`], which is what makes the single fold enforceable.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Needle {
     /// Private: handing out a `&str` is how the unfolded spelling gets back in.
     text: String,
-    /// What lets the substring check take the allocation-free byte path. Asked before the
-    /// haystack, so a non-ASCII query short-circuits that scan.
+    /// Gates the allocation-free byte path.
     ascii: bool,
-    /// A non-empty run of ASCII digits — the only shape that can name one of the integer
-    /// fields, and so the gate keeping an ordinary text query off both number predicates.
+    /// A non-empty run of ASCII digits, the only shape that can name an integer field.
     digits: bool,
 }
 
-/// Hand-written rather than derived, so `Needle::default()` and `fold_needle("")` are the
-/// *same* needle. A derived `Default` leaves `ascii` false, a state [`fold_needle`] can
-/// never produce, and the two would compare unequal while behaving identically.
+/// Not derived, so it is the same needle as `fold_needle("")` rather than one with `ascii` false.
 impl Default for Needle {
     fn default() -> Self {
         fold_needle("")
@@ -65,20 +49,17 @@ impl Default for Needle {
 }
 
 impl Needle {
-    /// The folded text, for a haystack folded ahead of time that a plain substring check then
-    /// answers: the `tracks.search_text` column and the cached lists' packed key.
+    /// For a haystack folded ahead of time: `tracks.search_text` and the cached lists' packed key.
     pub fn as_str(&self) -> &str {
         &self.text
     }
 
-    /// Whether the needle can name a year at all, so a query can leave the year column out
-    /// rather than ask [`Self::matches_number`]'s question of every row.
+    /// Whether the needle can name a year, so a query can leave that column out.
     pub fn is_number(&self) -> bool {
         self.digits
     }
 
-    /// Reset to the empty needle — the four detail views' fresh-open, where the incoming
-    /// entity inherits no filter from the one before it.
+    /// A detail's fresh open, which inherits no filter from the one before.
     pub fn clear(&mut self) {
         *self = Self::default();
     }
@@ -87,16 +68,13 @@ impl Needle {
         self.text.is_empty()
     }
 
-    /// Case- and accent-insensitive substring check, skipping the fold entirely on
-    /// all-ASCII text — where the filter walk spends nearly all its time, a large genre
-    /// detail running this over thousands of rows per throttled keystroke. An empty needle
-    /// matches anything, which is what lets a filter walk run unconditionally.
+    /// Skips the fold on all-ASCII text, where a filter walk spends nearly all its time. An empty
+    /// needle matches anything, so a walk can run unconditionally.
     pub fn contains(&self, haystack: &str) -> bool {
         if self.text.is_empty() {
             return true;
         }
-        // An ASCII haystack carries no accent to fold, so the byte walk is the whole
-        // answer rather than an approximation.
+        // An ASCII haystack has no accent to fold, so the byte walk is the whole answer.
         if self.ascii && haystack.is_ascii() {
             let h = haystack.as_bytes();
             let n = self.text.as_bytes();
@@ -110,8 +88,7 @@ impl Needle {
         with_folded(haystack, |folded| folded.contains(&self.text))
     }
 
-    /// Case- and accent-insensitive equality, on the same fold as [`Self::contains`].
-    /// Unlike its sibling, an empty needle matches only an empty `haystack`.
+    /// An empty needle matches only an empty `haystack`.
     pub fn equals(&self, haystack: &str) -> bool {
         // Folding an ASCII string is byte-for-byte, so a length mismatch settles it. It
         // settles nothing in general: NFD decomposition changes length.
@@ -123,8 +100,7 @@ impl Needle {
         with_folded(haystack, |folded| folded == self.text)
     }
 
-    /// Case- and accent-insensitive prefix check, on the same fold as [`Self::contains`].
-    /// An empty needle matches anything, as there.
+    /// An empty needle matches anything.
     pub fn starts_with(&self, haystack: &str) -> bool {
         if self.text.is_empty() {
             return true;
@@ -137,26 +113,19 @@ impl Needle {
         with_folded(haystack, |folded| folded.starts_with(&self.text))
     }
 
-    /// Substring match on an integer field in decimal, without formatting it onto the
-    /// heap. Substring rather than the FTS side's prefix: every other field in these boxes
-    /// matches mid-word (`hap` finds "Rhapsody"), so a prefix year is the odd one out.
-    ///
-    /// `None` is a row that has no such number and matches nothing — which is what lets a
-    /// caller whose sentinel is `0` rather than absence hand over that decision here.
-    ///
-    /// Wrong for a field drawn from a short set of values — see [`Self::equals_number`].
+    /// A substring of the decimal rather than the FTS side's prefix, every other field here
+    /// matching mid-word. `None` matches nothing. Wrong for a field drawn from a short ladder of
+    /// values ([`Self::equals_number`]).
     pub fn matches_number(&self, value: Option<i32>) -> bool {
         self.over_decimal(value, |decimal| decimal.contains(&self.text))
     }
 
-    /// [`Self::matches_number`] on the whole number rather than a run inside it, for a
-    /// field drawn from a short ladder of values that share digits. The substring rule
-    /// that picks a decade out of the years picks most of a bitrate column here.
+    /// The whole number, for a short ladder of values sharing digits, where a substring would
+    /// pick most of a bitrate column.
     pub fn equals_number(&self, value: Option<i32>) -> bool {
         self.over_decimal(value, |decimal| decimal == self.text)
     }
 
-    /// The digit gate and the stack buffer both number predicates run on.
     fn over_decimal(&self, value: Option<i32>, matches: impl FnOnce(&str) -> bool) -> bool {
         if !self.digits {
             return false;
@@ -170,22 +139,12 @@ impl Needle {
 }
 
 thread_local! {
-    /// The buffer the three predicates fold a *haystack* into.
-    ///
-    /// A needle is folded once by its owner, but the row side is folded per candidate, and
-    /// a filter box runs that walk over the whole list on every keystroke: a fresh
-    /// `String` per row where one reused buffer does. Only the accented arm reaches here;
-    /// an all-ASCII pair never leaves the byte walk.
-    ///
-    /// Thread-local rather than a field on [`Needle`], which the detail views keep behind a
-    /// `Mutex` and which a `RefCell` would stop being `Sync`.
+    /// One buffer per thread for the haystacks, folded per row on every keystroke. Not a field on
+    /// [`Needle`], which the detail views hold behind a `Mutex` and a `RefCell` would make `!Sync`.
     static FOLD_SCRATCH: RefCell<String> = const { RefCell::new(String::new()) };
 }
 
-/// Fold `haystack` into the thread's scratch and answer `matches` against it.
-///
-/// `matches` is a `str` comparison at every call site, so it cannot re-enter this and the
-/// borrow is uncontended by construction.
+/// `matches` is a `str` comparison at every call site, so the borrow can't re-enter.
 fn with_folded<R>(haystack: &str, matches: impl FnOnce(&str) -> R) -> R {
     FOLD_SCRATCH.with_borrow_mut(|scratch| {
         scratch.clear();
@@ -194,14 +153,9 @@ fn with_folded<R>(haystack: &str, matches: impl FnOnce(&str) -> R) -> R {
     })
 }
 
-/// The one way to build a [`Needle`]. Trims first — an untrimmed trailing space empties
-/// the list.
-///
-/// The two shape flags are settled on the **folded** text, not interchangeably with the
-/// raw input: folding only ever *adds* ASCII-ness, `Björk` coming out as `bjork`, so a
-/// query the raw check would call non-ASCII is exactly the one the fast path can serve.
-/// Hoisting either onto `raw` stays correct and silently strands every accented needle on
-/// the allocating arm of [`Needle::contains`].
+/// Trims first, a trailing space emptying the list. The shape flags read the folded text: folding
+/// only adds ASCII-ness (`Björk` → `bjork`), so reading the raw input would strand every accented
+/// needle on the allocating arm.
 pub fn fold_needle(raw: &str) -> Needle {
     let text = fold(raw.trim());
     Needle {

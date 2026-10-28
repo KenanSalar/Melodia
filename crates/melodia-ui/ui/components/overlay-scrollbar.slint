@@ -1,47 +1,42 @@
 import { Theme } from "../theme.slint";
 
-// **The only scrollbar in the tree** — std-widgets' bar paints inside padded containers and can't
-// be reskinned. Every colour comes off `Theme`, and the thumb keeps one size at all times, only the
-// colour shifting on hover.
+// **The only scrollbar in the tree**, for either axis: std-widgets' bar paints inside padded
+// containers and can't be reskinned. The thumb keeps one size, only its colour shifting on hover.
+// **The host owns the offset**: it binds `offset` from its scroller and writes the negated value
+// back on every `scroll-to`.
 //
-// Generic across both axes. It reads the viewport and content extents, renders the thumb
-// proportionally, and emits `scroll-to` on interaction. **The host owns the source of truth**: it
-// binds `offset` from its scroller and writes the negated value back on every emit — no two-way
-// `<=>`, which the sign flip would block anyway.
+// Mounting one: the scroller is a `ScrollView` with both scrollbar policies `always-off`, and the
+// bar sits at the view root, a sibling of the padded layout, pinned by absolute coordinates. The
+// round trip is `offset: -sv.content-y` out and `sv.content-y = -o` back, never a `<=>`, which the
+// sign flip blocks. The bar hides itself, so a host mounts one for every axis that can overflow
+// rather than gating it behind an `if`. Where the scroller sits inside an `if`, the bar goes inside
+// that branch, an id declared there being unreadable from outside; where the bar would land over a
+// control, the content reserves a gutter.
 //
-// The drag works in **absolute** coordinates, snapshotted on press, so the thumb tracks the cursor
-// 1:1 even if the host resizes mid-drag — the `ResizeHandle` fix. A click on the bare track jumps
-// the thumb's centre to the cursor and drags on from there.
+// The drag works in **absolute** coordinates snapshotted on press, so the thumb tracks the cursor
+// 1:1 even if the host resizes mid-drag. A click on the bare track jumps the thumb's centre there.
 export component OverlayScrollbar inherits Rectangle {
     in property <bool> horizontal: false;
     in property <length> visible-size;
     in property <length> content-size;
     in property <length> offset;
 
-    // Overridden by tighter contexts — the collapsed sidebar rail, the mini player.
+    // Overridden by tighter contexts, the collapsed rail and the miniplayer.
     in property <length> bar-thickness: 8px;
     in property <length> bar-radius: 4px;
     in property <length> min-thumb: 28px;
 
-    // The neutral treatment every list view takes, and it is tuned for a bar on the
-    // **page**: `surface0` at half alpha is a step up from `base`. Two override
-    // families. Now Playing's Up Next tints all three with the per-artwork accent to
-    // match the visualizer. And every dialog scrollbar passes
-    // `Theme.scrollbar-track-on-card`, because a bar on a `surface0` card composites
-    // this default into the card exactly — see that token for the arithmetic. Passing
-    // the same brush for both thumb states drops its hover shift; the track's own ramp
-    // below still reports hover.
+    // Tuned for a bar on the **page**. Up Next tints all three with the per-artwork accent, and a
+    // bar on a card passes `Theme.scrollbar-track-on-card`, which argues why. The same brush for
+    // both thumb states drops the thumb's hover shift; the track's ramp still reports it.
     in property <brush> track-color: Theme.surface0;
     in property <brush> thumb-color: Theme.surface2;
     in property <brush> thumb-active-color: Theme.accent;
-    // A knob rather than an alpha baked into `track-color`, because it *animates*
-    // between the two. The thumb has no such ramp, so a caller wanting a translucent one
-    // bakes the alpha into its brushes instead.
+    // A knob rather than alpha baked into `track-color`, because it eases between the two. The thumb
+    // has no ramp, so a translucent one bakes its alpha into its brushes.
     in property <float> track-opacity: 0.5;
     in property <float> track-opacity-active: 0.85;
-    // How long the track and thumb take to cross to a new colour or weight. `IconButton`'s knob,
-    // for its reason: every value above is eased here, so a host easing one too restarts that
-    // curve every frame, and one repainting in step with a longer fade hands over this instead.
+    // `IconButton`'s knob, for its reason: every value above is eased here.
     in property <duration> recolor-duration: Theme.dur-fast;
     // `IconButton`'s, for a host handing over a tier Rust writes once.
     in property <bool> on-backdrop: false;
@@ -67,8 +62,6 @@ export component OverlayScrollbar inherits Rectangle {
     private property <length> press-offset;
     private property <length> press-abs;
 
-    // The channel the thumb runs in rather than floating in empty space. Subtle by
-    // design, so it reads against the panel without competing with the content.
     Rectangle {
         x: root.horizontal ? 0px : (root.width - root.bar-thickness) / 2;
         y: root.horizontal ? (root.height - root.bar-thickness) / 2 : 0px;
@@ -77,13 +70,13 @@ export component OverlayScrollbar inherits Rectangle {
         border-radius: root.bar-radius;
         background: root.track-color;
         opacity: root.active ? root.track-opacity-active : root.track-opacity;
-        // The colour eases with the thumb's rather than snapping under it, so a host repainting
-        // the bar sees both halves cross together.
+        // The colour eases with the thumb's, so a host repainting the bar sees both halves cross
+        // together.
         animate background, opacity { duration: root.recolor-duration; easing: ease-in-out; enabled: root.on-backdrop || !Theme.recoloring; }
     }
 
-    // Only the colour transitions. **The position is deliberately un-animated**: derived
-    // from `offset`, it would phase-lag the cursor through a drag.
+    // **The position is deliberately un-animated**: derived from `offset`, it would phase-lag the
+    // cursor through a drag.
     Rectangle {
         x: root.horizontal ? root.thumb-pos : (root.width - root.bar-thickness) / 2;
         y: root.horizontal ? (root.height - root.bar-thickness) / 2 : root.thumb-pos;
@@ -98,9 +91,8 @@ export component OverlayScrollbar inherits Rectangle {
         mouse-cursor: pointer;
         pointer-event(ev) => {
             if (ev.kind == PointerEventKind.down) {
-                // A press inside the thumb snapshots from the current offset, so it
-                // stays put and drags from where it was grabbed; a press on the bare
-                // track jumps its centre to the cursor first and snapshots from there.
+                // Inside the thumb, it drags from where it was grabbed; on the bare track, its
+                // centre jumps to the cursor first.
                 if ((root.horizontal ? self.pressed-x : self.pressed-y) >= root.thumb-pos
                     && (root.horizontal ? self.pressed-x : self.pressed-y) <= root.thumb-pos + root.thumb-len) {
                     root.press-offset = root.offset;

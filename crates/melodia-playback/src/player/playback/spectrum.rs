@@ -1,13 +1,7 @@
-//! Spectrum analysis for the audio visualizer: a window of raw samples off the ring, into the
-//! per-band bar heights the UI draws.
-//!
-//! Pure DSP — nothing here knows about the output layer, Slint or threads, and every step is a
-//! free function over slices, so the maths is unit-tested directly rather than through a running
-//! player. Hann window, two real FFTs (no single window serves both ends), [`NUM_BANDS`] geometric
-//! bands read off the bins, a tilt, a decibel compression, then peak-follow smoothing.
-//!
-//! [`SpectrumAnalyzer`] is the only stateful piece, holding what must not be rebuilt per frame.
-//! Nothing in the analysis path allocates.
+//! The visualizer's spectrum: a window off the ring into the per-band bar heights the UI draws.
+//! Pure DSP over slices, unit-tested directly: a Hann window, two real FFTs (no one window serves
+//! both ends), [`NUM_BANDS`] geometric bands, a tilt, a decibel compression, then peak-follow
+//! smoothing. Nothing in the analysis path allocates.
 
 use std::sync::Arc;
 
@@ -16,28 +10,21 @@ use realfft::{RealFftPlanner, RealToComplex};
 
 use super::dsp::{VISUALIZER_DECAY, db_to_linear, index_to_f32, linear_to_db, push_fixed};
 
-/// Samples per analysis window. At 44.1 kHz this is ~46 ms — long enough to resolve bass, short
-/// enough to keep the bars in step with what you hear. A power of two hits the FFT planner's
-/// fastest path.
+/// ~46 ms at 44.1 kHz: long enough for bass, short enough to stay in step with what you hear.
 pub const FFT_SIZE: usize = 2048;
 
-/// Samples per analysis window for the bands below the crossover. ~186 ms at 44.1 kHz — far too
-/// laggy for treble, but the only way to separate bars a few Hz apart, and bass is slow enough
-/// not to mind.
+/// ~186 ms at 44.1 kHz, too laggy for treble but the only way to separate bass bars a few Hz
+/// apart.
 pub const BASS_FFT_SIZE: usize = 8192;
 
 /// Bars drawn across the display.
 pub const NUM_BANDS: usize = 64;
 
-/// Bottom edge of the lowest band. Below this is inaudible rumble and, at bin 0, any DC offset.
-/// 50 rather than 20 Hz because a 20 Hz bar is near-always silent *and* wider than an octave on
-/// its own at this transform size.
+/// Below is rumble and DC; a 20 Hz bar is near-always silent and wider than an octave here.
 const MIN_HZ: f32 = 50.0;
 
-/// Top edge of the highest band, before the Nyquist clamp. Matches the equalizer's top ISO octave
-/// band ([`BAND_FREQS`]), so the two features describe one range and the top bar answers the top
-/// slider. Every lossy codec lowpasses at or below it, so a band above plots the encoder's
-/// silence.
+/// The equalizer's top ISO band ([`BAND_FREQS`]), so the top bar answers the top slider. Every
+/// lossy codec lowpasses at or below it.
 ///
 /// [`BAND_FREQS`]: super::equalizer::BAND_FREQS
 const MAX_HZ: f32 = 16_000.0;
@@ -45,16 +32,11 @@ const MAX_HZ: f32 = 16_000.0;
 /// Empty-bar level. With [`CEILING_DB`] it sets how much quiet detail shows.
 const FLOOR_DB: f32 = -75.0;
 
-/// Full-bar level. Below full scale on purpose — only a lone bass tone gets near 0 dBFS, so a
-/// ceiling there wastes the top of every bar's travel. No shipping analyzer uses full scale.
+/// Below full scale, which only a lone bass tone nears, or the top of every bar's travel is waste.
 const CEILING_DB: f32 = -15.0;
 
-/// Decibels added per octave above [`TILT_PIVOT_HZ`], subtracted below it. Music is roughly pink,
-/// so an untilted display leans bass.
-///
-/// **The correction on top of the one [`band_magnitude`] already applies**, and so smaller than
-/// the 3–5 dB/octave analyzers usually quote: RSS across a band whose width grows with frequency
-/// is itself ~3 dB/octave, and it is the *total* that has to land in that range.
+/// Music is roughly pink, so an untilted display leans bass. Small because [`band_magnitude`]'s
+/// RSS already tilts ~3 dB/octave, and the sum is what has to land near 5 dB/octave.
 const TILT_DB_PER_OCTAVE: f32 = 2.0;
 
 /// The one frequency the tilt leaves alone.
@@ -64,8 +46,6 @@ const TILT_PIVOT_HZ: f32 = 1000.0;
 /// peak, which is what makes a transient read as a hit.
 const ATTACK: f32 = 0.0;
 
-// --- casts -------------------------------------------------------------------
-
 #[expect(
     clippy::cast_precision_loss,
     reason = "audio sample rates are well below 2^24 Hz and convert to f32 exactly"
@@ -74,19 +54,18 @@ fn rate_to_f32(hz: u32) -> f32 {
     hz as f32
 }
 
-/// The FFT bin a frequency falls in — **fractional**, because a band edge rarely lands on a whole
-/// bin and rounding it is exactly what this module must not do.
+/// Fractional: a band edge rarely lands on a whole bin, and rounding it is what this module must
+/// not do.
 fn hz_to_bin(hz: f32, fft_size: usize, sample_rate: f32) -> f32 {
     hz * index_to_f32(fft_size) / sample_rate
 }
 
-/// The frequency a — possibly fractional — bin sits at: the inverse of [`hz_to_bin`].
 fn bin_to_hz(bin: f32, fft_size: usize, sample_rate: f32) -> f32 {
     bin * sample_rate / index_to_f32(fft_size)
 }
 
-/// A bin position as an index. Callers clamp into `1.0..=max_bin` and every read goes through
-/// `get`, so a bad cast can't reach past the spectrum.
+/// Callers clamp first and every read goes through `get`, so a bad cast can't reach past the
+/// spectrum.
 #[expect(
     clippy::cast_possible_truncation,
     clippy::cast_sign_loss,
@@ -96,10 +75,7 @@ fn bin_to_index(bin: f32) -> usize {
     bin as usize
 }
 
-// --- pure DSP ----------------------------------------------------------------
-
-/// A Hann window of `size` points, cutting the spectral leakage a rectangular window smears
-/// across neighbouring bands. Built once and reused — it depends on nothing but its length.
+/// Cuts the leakage a rectangular window smears across neighbouring bands; built once and reused.
 #[must_use]
 pub fn hann_window(size: usize) -> Box<[f32]> {
     // A one-point window has no span to taper across, and the formula would divide by zero.
@@ -121,19 +97,10 @@ pub fn coherent_gain_scale(window: &[f32]) -> f32 {
     if sum > 0.0 { 2.0 / sum } else { 0.0 }
 }
 
-/// The `bands + 1` band boundaries, as **fractional** bin positions, ascending.
-///
-/// Geometric because pitch perception is, running [`MIN_HZ`] to [`MAX_HZ`] with the top clamped
-/// to Nyquist — a 22 kHz-sampled file has no 16 kHz to show, and edges past its spectrum would
-/// pile the last several bands onto one bin.
-///
-/// Deliberately **not** rounded to whole bins: a bin is wider than any of the bottom bands, so
-/// snapping each to its own would march the low end up the spectrum one bin per bar, giving a
-/// linear ramp whose bars span wildly uneven slices of an octave. Fractional edges let
-/// [`bands_from_spectrum`] interpolate down there instead.
-///
-/// Every edge lands in `1.0..=max_bin`, bin 0 being DC. Degenerate arguments answer with no edges
-/// at all.
+/// The `bands + 1` edges as fractional bins, geometric from [`MIN_HZ`] to [`MAX_HZ`] clamped to
+/// Nyquist, inside `1.0..=max_bin`. Not rounded: a bin is wider than any bottom band, and snapping
+/// would march the low end up one bin per bar, so [`bands_from_spectrum`] interpolates there.
+/// Degenerate arguments answer with no edges.
 #[must_use]
 pub fn band_edges(bands: usize, fft_size: usize, sample_rate: f32) -> Box<[f32]> {
     let nyquist = sample_rate / 2.0;
@@ -153,9 +120,8 @@ pub fn band_edges(bands: usize, fft_size: usize, sample_rate: f32) -> Box<[f32]>
         .collect()
 }
 
-/// Compress a scaled linear magnitude to a 0..1 bar height, [`FLOOR_DB`] to [`CEILING_DB`] across
-/// the bar. Silence short-circuits before the logarithm, which is also the only way `-inf` could
-/// reach the bars.
+/// [`FLOOR_DB`] to [`CEILING_DB`] across the bar. Silence short-circuits before the logarithm,
+/// the only way `-inf` could reach the bars.
 #[must_use]
 pub fn level_from_magnitude(magnitude: f32) -> f32 {
     if magnitude <= 0.0 {
@@ -164,9 +130,7 @@ pub fn level_from_magnitude(magnitude: f32) -> f32 {
     ((linear_to_db(magnitude) - FLOOR_DB) / (CEILING_DB - FLOOR_DB)).clamp(0.0, 1.0)
 }
 
-/// One linear gain per band of `edges`, tilting [`TILT_DB_PER_OCTAVE`] about [`TILT_PIVOT_HZ`] at
-/// each band's **geometric** centre — its true midpoint on the log axis the bands sit on. Depends
-/// only on the band map, so it is built alongside it and reused every frame.
+/// The tilt at each band's geometric centre, its midpoint on the log axis; built with the band map.
 #[must_use]
 pub fn band_tilt_gains(edges: &[f32], fft_size: usize, sample_rate: f32) -> Box<[f32]> {
     edges
@@ -180,13 +144,9 @@ pub fn band_tilt_gains(edges: &[f32], fft_size: usize, sample_rate: f32) -> Box<
         .collect()
 }
 
-/// The magnitude a band spanning `lo..hi` reads: the **root-sum-square** of the whole bins it
-/// contains, or, for a band narrower than one bin, the spectrum interpolated at its centre.
-///
-/// Power-domain summing is load-bearing. A **peak** runs high wherever a band holds many bins,
-/// favouring tonal content over broadband, which pins the bass and kills the treble; a **mean**
-/// overcorrects, dividing a lone tone by its band's width. RSS does neither, growing as `√bins`
-/// for broadband. The narrow case exists at all only because the edges stay fractional.
+/// The root-sum-square of the band's whole bins, or the spectrum interpolated at its centre for a
+/// band under a bin wide. Not a peak, which favours tones and kills the treble, nor a mean, which
+/// divides a lone tone by its band's width.
 fn band_magnitude(spectrum: &[Complex<f32>], lo: f32, hi: f32) -> f32 {
     let first = lo.ceil();
     let last = hi.floor();
@@ -230,9 +190,8 @@ pub fn bands_from_spectrum(
     }
 }
 
-/// Advance the displayed `levels` one frame toward `next`, peak-follow: rise at once (scaled by
-/// `attack`, `0.0` being instant), fall by `decay` per frame but never below the band's actual
-/// level. So the bars read lively, not twitchy.
+/// Peak-follow: rise at once (`attack` `0.0`), fall by `decay` per frame but never below the
+/// band's level, so the bars read lively rather than twitchy.
 pub fn smooth(levels: &mut [f32], next: &[f32], attack: f32, decay: f32) {
     for (level, &target) in levels.iter_mut().zip(next) {
         *level = if target > *level {
@@ -243,16 +202,9 @@ pub fn smooth(levels: &mut [f32], next: &[f32], attack: f32, decay: f32) {
     }
 }
 
-/// The first band the main transform resolves — the first one a whole bin wide. Everything below
-/// it is read from the bass transform instead.
-///
-/// **Width, not "contains a whole bin".** The latter is what [`band_magnitude`] branches on but
-/// isn't monotonic down here: a band far narrower than a bin still contains one whenever it
-/// straddles an integer, so the first match lands several bands below where the display stops
-/// being resolved. Width is monotonic, the bands being geometric.
-///
-/// Derived rather than fixed in Hz, so a 96 kHz file's wider bins move it up. With no band
-/// resolved, every band belongs to the bass transform.
+/// The first band a whole bin wide; everything below reads the bass transform. Width rather than
+/// "contains a bin", which a narrow band straddling an integer passes, so isn't monotonic.
+/// Derived, so a 96 kHz file's wider bins move it up.
 #[must_use]
 pub fn crossover_band(main_edges: &[f32]) -> usize {
     main_edges
@@ -262,13 +214,10 @@ pub fn crossover_band(main_edges: &[f32]) -> usize {
         .unwrap_or_else(|| main_edges.len().saturating_sub(1))
 }
 
-// --- the analyzer ------------------------------------------------------------
-
 /// One windowed real transform, plus the band map for the bins it resolves.
 struct Transform {
     fft: Arc<dyn RealToComplex<f32>>,
-    /// The analysis window. Filled by the caller, then windowed and **consumed** by the
-    /// transform — `realfft` uses it as scratch, so nothing may be read back out of it after.
+    /// Consumed as scratch by the transform, so never read back.
     input: Vec<f32>,
     spectrum: Vec<Complex<f32>>,
     scratch: Vec<Complex<f32>>,
@@ -278,9 +227,7 @@ struct Transform {
 }
 
 impl Transform {
-    /// Takes the planner rather than building one, so both transforms share its caches:
-    /// `realfft`'s plan cache sits over a `rustfft` planner caching the base butterflies a
-    /// radix-4 decomposition pulls from, and both our sizes are powers of two.
+    /// Shares the planner, so both power-of-two sizes share its butterfly caches.
     fn new(planner: &mut RealFftPlanner<f32>, size: usize) -> Self {
         let fft = planner.plan_fft_forward(size);
         let window = hann_window(size);
@@ -299,8 +246,7 @@ impl Transform {
         self.edges = band_edges(bands, self.input.len(), rate);
     }
 
-    /// Window and transform the filled input. `false` only if the plan rejected its own buffers,
-    /// which their construction rules out.
+    /// `false` only if the plan rejected its own buffers.
     fn run(&mut self) -> bool {
         for (sample, weight) in self.input.iter_mut().zip(&self.window) {
             *sample *= weight;
@@ -311,21 +257,10 @@ impl Transform {
     }
 }
 
-/// Everything the per-frame analysis must not rebuild: the two FFT plans and their buffers, the
-/// Hann tables and scales, the bin→band maps with their tilt gains, and the smoothed levels
-/// carried between frames.
-///
-/// Two calls per frame — [`fill_windows`](Self::fill_windows), then [`analyze`](Self::analyze).
-///
-/// **Two transforms, because one can't serve both ends.** A window short enough to keep treble
-/// responsive leaves the lowest bands — a few Hz wide against a bin that isn't — interpolating
-/// the same handful of bins and moving as one block, while a window long enough to separate them
-/// smears every cymbal. So the bass reads [`BASS_FFT_SIZE`] and everything above the crossover
-/// reads [`FFT_SIZE`].
-///
-/// The join needs no correction factor, which is a property of the RSS in [`band_magnitude`]:
-/// per-bin magnitude falls as `1/√N` under [`coherent_gain_scale`] while a band of fixed width
-/// holds `∝ N` bins, so a band reads the same either side.
+/// What the per-frame analysis must not rebuild; [`fill_windows`](Self::fill_windows), then
+/// [`analyze`](Self::analyze). Two transforms, because a window short enough for treble leaves the
+/// bottom bands moving as one block and one long enough to separate them smears every cymbal. The
+/// join needs no correction: per-bin magnitude falls as `1/√N` while a band holds `∝ N` bins.
 pub struct SpectrumAnalyzer {
     bass: Transform,
     main: Transform,
@@ -340,9 +275,8 @@ pub struct SpectrumAnalyzer {
 }
 
 impl SpectrumAnalyzer {
-    /// Allocates everything the analyzer will ever need. `fft_size` must be an even number ≥ 2 —
-    /// `realfft` plans an odd length on a separate half-length path, and the bin maths here reads
-    /// the even layout.
+    /// `fft_size` must be even and ≥ 2: `realfft` plans an odd length on another path, and the bin
+    /// maths here reads the even layout.
     #[must_use]
     pub fn new(fft_size: usize, bands: usize) -> Self {
         let mut planner = RealFftPlanner::<f32>::new();
@@ -357,22 +291,15 @@ impl SpectrumAnalyzer {
         }
     }
 
-    /// The two windows the next [`analyze`](Self::analyze) will transform, bass first. Fill both
-    /// with the most recent samples, newest last — their previous contents are spent scratch, not
-    /// history.
+    /// Bass first, to be filled newest last; their old contents are spent scratch.
     pub fn windows_mut(&mut self) -> (&mut [f32], &mut [f32]) {
         (&mut self.bass.input, &mut self.main.input)
     }
 
-    /// Fill both windows from a single read of the sample source.
-    ///
-    /// `read` runs **once**: the short window is the newest tail of the long one, so copying it
-    /// across is cheaper than a second read *and* more correct — two reads land a few samples
-    /// apart and leave the transforms analysing different instants. The fallback exists only for
-    /// a main window longer than the bass one, which production never builds.
+    /// `read` runs once and the short window copies the long one's tail, so both transforms
+    /// analyse one instant rather than two reads a few samples apart.
     pub fn fill_windows(&mut self, read: impl Fn(&mut [f32])) {
         let (bass, main) = self.windows_mut();
-        // Reborrowed, not handed over — `bass` is read again below.
         read(&mut *bass);
         match bass.len().checked_sub(main.len()) {
             Some(tail) => main.copy_from_slice(&bass[tail..]),
@@ -405,8 +332,7 @@ impl SpectrumAnalyzer {
         &self.levels
     }
 
-    /// Rebuild the band edges, crossover and tilt gains for `sample_rate`. A no-op unless the
-    /// rate changed, which is once per track at most.
+    /// A no-op unless the rate changed, once a track at most.
     fn remap_for_rate(&mut self, sample_rate: u32) {
         if sample_rate == self.mapped_rate {
             return;
@@ -451,48 +377,30 @@ pub enum BarAnchor {
     Centre,
 }
 
-/// Where the strip is drawn and how large, in logical pixels.
-///
-/// The figure normalizes into a unit viewbox, but three of its terms are pixel facts and mean
-/// nothing until they are measured against a real strip: the gap between bars, the floor that keeps
-/// a silent band visible, and where the window's pixel grid falls under the strip.
+/// The strip in logical pixels, against which the bar gap, the silent floor and the pixel grid are
+/// measured.
 #[derive(Clone, Copy, Debug)]
 pub struct StripGeometry {
-    /// Left edge, measured from the window's.
+    /// From the window's left edge.
     pub x: f32,
-    /// Top edge, measured from the window's.
+    /// From the window's top edge.
     pub y: f32,
-    /// Logical pixels across.
     pub width: f32,
-    /// Logical pixels down.
     pub height: f32,
-    /// Device pixels per logical pixel. [`write_bar_path`] lays the figure out in device pixels so
-    /// every edge lands on a whole one, which is the same as a whole logical pixel only at integer
-    /// scaling.
+    /// Device pixels per logical one, [`write_bar_path`] laying edges on whole device pixels.
     pub scale: f32,
 }
 
-/// Gap between neighbouring bars, in logical pixels. Kept tight because at [`NUM_BANDS`] a wider
-/// one starts eating the bars themselves on a narrow window.
+/// Tight, or at [`NUM_BANDS`] a wider gap eats the bars on a narrow window.
 const BAR_GAP_PX: f32 = 2.0;
 
-/// Fractional digits each coordinate is written with, and the most [`push_fixed`]'s `u16` scale
-/// can carry.
-///
-/// The figure's edges are whole device pixels normalized into a unit viewbox, so what this has to
-/// buy is that the round trip lands nearer the pixel it came from than the half-pixel either side
-/// of it — otherwise an edge crosses the rasterizer's coverage threshold and the bar it belongs to
-/// changes width. One part in ten thousand holds that well past any strip this panel can seat.
+/// Enough that a normalized edge round-trips nearer its pixel than the half-pixel either side, or
+/// a bar changes width; the most [`push_fixed`]'s `u16` scale carries.
 const COORD_DECIMALS: u32 = 4;
 
-/// One axis of the strip, measured on the window's device-pixel grid, which is the grid the bars
-/// rasterize against.
-///
-/// The renderer places the strip at its logical origin times the scale factor and rounds neither,
-/// so the strip's own edge is rarely a pixel boundary. With anti-aliasing off a pixel is painted
-/// only when its centre is inside a bar, and an edge a whole number of pixels from a half-pixel
-/// origin sits exactly on those centres, where float noise picks a side edge by edge. Laid out
-/// between grid lines instead, every edge is half a pixel clear of the nearest centre.
+/// One axis on the window's device-pixel grid. The renderer rounds neither origin nor scale, and
+/// with anti-aliasing off an edge on a pixel centre lets float noise pick its side; laid out
+/// between grid lines, every edge is half a pixel clear.
 struct GridAxis {
     /// How far past a grid line the strip starts, in device pixels.
     phase: f32,
@@ -528,17 +436,9 @@ impl GridAxis {
     }
 }
 
-/// Write `levels` into `out` as SVG path commands: one closed rectangle per band, all of them one
-/// figure.
-///
-/// Coordinates are normalized — x across `0..1`, y down `0..1` — so the `Path`'s viewbox is a
-/// constant and the band count never crosses the language boundary. `out` is left empty while the
-/// strip has fewer whole device pixels across than there are bands.
-///
-/// **One figure rather than one element per band is the point.** `FemtoVG` builds and tessellates a
-/// path per drawn element and caches none of it between frames, and the strip rewrites every band
-/// every tick, so a bar that is its own element is a path built, tessellated and filled on its own
-/// every frame. It costs the same to say all of them once.
+/// `levels` as one SVG figure of closed rectangles, normalized to a constant viewbox so the band
+/// count never crosses into Slint, and empty while the strip has fewer device pixels than bands.
+/// One figure because `FemtoVG` tessellates a path per element per frame, caching none.
 pub fn write_bar_path(levels: &[f32], strip: StripGeometry, anchor: BarAnchor, out: &mut String) {
     out.clear();
     if levels.is_empty() {
@@ -546,20 +446,14 @@ pub fn write_bar_path(levels: &[f32], strip: StripGeometry, anchor: BarAnchor, o
     }
     let count = index_to_f32(levels.len());
 
-    // A strip can ask before a layout pass has sized it. With nothing to measure there is no
-    // figure to draw rather than a degenerate one, and the pass that sizes it asks again.
+    // A strip not yet laid out draws nothing; the pass that sizes it asks again.
     let horizontal = GridAxis::new(strip.x, strip.width, strip.scale);
     let vertical = GridAxis::new(strip.y, strip.height, strip.scale);
     if !horizontal.is_drawable() || !vertical.is_drawable() {
         return;
     }
 
-    // **One whole pitch for every band.** Anti-aliasing is off, so there is no drawing a fraction
-    // of a pixel and something has to absorb the remainder of dividing the strip by the band
-    // count. In the widths it makes neighbouring bars different sizes; in the gaps it makes the
-    // rhythm uneven, and it shows there first, the gap being the smaller quantity by several
-    // times. So neither: the pitch is whole, every bar matches every other bar and every gap
-    // every other gap, and the remainder goes to the two ends where it is backdrop either way.
+    // A whole pitch, so every bar and every gap match; the remainder goes to the two ends.
     let Some((pitch, gap)) = band_pitch(horizontal.pixels(), count, BAR_GAP_PX * strip.scale)
     else {
         return;
@@ -567,8 +461,7 @@ pub fn write_bar_path(levels: &[f32], strip: StripGeometry, anchor: BarAnchor, o
     let bar_width = pitch - gap;
     let span = pitch * count - gap;
     let origin = horizontal.first + ((horizontal.pixels() - span) * 0.5).round();
-    // "At least as tall as it is wide", so a silent band rests as a square mark rather than
-    // vanishing. Derived from the column rather than fixed, the column following the strip.
+    // A silent band rests as a square mark rather than vanishing.
     let floor = bar_width.min(vertical.pixels());
     let middle = (vertical.first + vertical.last) * 0.5;
 
@@ -576,8 +469,7 @@ pub fn write_bar_path(levels: &[f32], strip: StripGeometry, anchor: BarAnchor, o
         let height = (level.clamp(0.0, 1.0) * vertical.pixels()).max(floor);
         let (top, bottom) = match anchor {
             BarAnchor::Baseline => (vertical.last - height, vertical.last),
-            // Height is the total in both anchorings, so a centred bar puts half either side of
-            // the axis rather than a full bar each way.
+            // The total in both anchorings, half either side of the axis.
             BarAnchor::Centre => (middle - height * 0.5, middle + height * 0.5),
         };
         let top = top.round();
@@ -588,10 +480,8 @@ pub fn write_bar_path(levels: &[f32], strip: StripGeometry, anchor: BarAnchor, o
 
         let (left, right) = (horizontal.normalize(left), horizontal.normalize(right));
         let (top, bottom) = (vertical.normalize(top), vertical.normalize(bottom));
-        // Lower edge first, then the upper edge back — the winding `waveform::write_path` emits
-        // for the same reason, femtovg reading a subpath's signed area to decide solid from hole.
-        // Every edge is axis-aligned, so `H` and `V` name the one coordinate that moves: the
-        // string is formatted every tick and parsed again on every frame it is drawn.
+        // Lower edge first, `waveform`'s winding, femtovg taking a negative area for a hole. `H`
+        // and `V` keep a string formatted every tick and parsed every frame short.
         push_vertex(out, "M", left, bottom);
         push_coordinate(out, " H", right);
         push_coordinate(out, " V", top);
@@ -600,15 +490,9 @@ pub fn write_bar_path(levels: &[f32], strip: StripGeometry, anchor: BarAnchor, o
     }
 }
 
-/// The whole-pixel pitch and gap `count` bands share across `pixels`, the widest pitch whose last
-/// band still ends inside the strip. `None` with fewer pixels than bands, where none does.
-///
-/// The gap is fixed in logical pixels, so on a narrow strip it stops being a separator and starts
-/// being most of the pitch: at three pixels a band it left one for the bar and took two, and
-/// sixty-four bands degraded into hairlines with more space than mark. Held to half the pitch, so a
-/// bar is never thinner than the gap beside it, and dropped outright below two pixels a band, where
-/// there is nothing to separate. A held gap spends less of the strip than the preferred one the
-/// first pitch was sized against, which is why the pitch is checked again against the gap it got.
+/// The widest whole-pixel pitch whose last band ends inside the strip, `None` with fewer pixels
+/// than bands. The gap is held to half the pitch and dropped below two pixels a band, or a narrow
+/// strip degrades into hairlines; the pitch is re-checked against the gap it got.
 fn band_pitch(pixels: f32, count: f32, preferred_gap: f32) -> Option<(f32, f32)> {
     if pixels < count {
         return None;

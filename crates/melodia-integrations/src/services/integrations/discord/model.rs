@@ -1,12 +1,6 @@
-//! Pure Discord Rich Presence projection: turn the player's published
-//! view-model into a [`Presence`] card, plus the dedupe rule that keeps
-//! a state-change-only `watch` from becoming an IPC write per volume tap.
-//!
-//! No I/O, no locks, no clock reads — `now_ts` (UNIX **seconds**) is an input,
-//! the same shape as [`crate::services::integrations::scrobble::detector`] and
-//! `player::engine::handlers::evaluate_playing_tick`. The impure task in
-//! `tasks::discord_presence` drives it; [`super::payload`] serializes
-//! the [`Presence`] it produces and [`super::ipc`] ships the bytes.
+//! The pure Rich Presence projection: the player's view model into a [`Presence`] card, deduped
+//! so a `watch` republishing on every volume tap doesn't become an IPC write per tap. `now_ts`
+//! (UNIX **seconds**) is an input, as in [`crate::services::integrations::scrobble::detector`].
 
 use melodia_core::entities::integrations::DiscordFlags;
 use melodia_engine::player::engine::now_playing::{SourceId, SourceSummary};
@@ -25,9 +19,7 @@ const MIN_FIELD_CHARS: usize = 2;
 /// volume republish (same anchor) dedupes while a real seek re-anchors.
 const ANCHOR_TOLERANCE_SECS: u64 = 2;
 
-/// A fully-resolved presence card, owned so it can cross the worker channel.
-/// Built by [`PresenceState`] from the view-model; serialized to the Discord
-/// activity object by [`super::payload::set_activity_json`].
+/// Owned, so it can cross the worker channel.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Presence {
     /// Card title (Discord `details`) — the song, or a station's name until it announces one.
@@ -38,9 +30,7 @@ pub struct Presence {
     /// Large-image tooltip — the album, falling back to the app name. A station fills it with its
     /// own name once the lines above are a song and an artist.
     pub large_text: Option<String>,
-    /// External `https://` cover URL for the large image; `None` uses the app
-    /// logo asset. Populated by the detector task on a track change (the pure
-    /// model leaves it `None` — the lookup is I/O).
+    /// An `https://` cover, `None` showing the app logo. The task fills it, the lookup being I/O.
     pub large_image: Option<String>,
     pub paused: bool,
     /// Progress-bar anchor `now - elapsed`, UNIX **seconds**. `None` while paused
@@ -50,20 +40,16 @@ pub struct Presence {
     pub end_ts: Option<u64>,
 }
 
-/// What the detector decided to push. `Clear` removes the card.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Update {
     Set(Presence),
     Clear,
 }
 
-/// What the card is *about*, at the granularity a republish has to notice.
-///
-/// A track is its id. A station is its stream URL **and the lines it is announcing**: the source
-/// never changes for the life of a session, so keyed on the URL alone every song after the first
-/// would dedupe away and the card would name whatever was playing when it tuned in. Owned rather
-/// than borrowed because it is held across evaluations; a station is the only arm that allocates,
-/// and only when the song moves.
+/// What the card is *about*, at the granularity a republish has to notice. A station is its
+/// stream URL **and the lines it announces**: the URL never changes in a session, so keyed on it
+/// alone every song after the first would dedupe away and the card would name whatever was
+/// playing at tune-in.
 #[derive(Debug, Clone, PartialEq, Eq)]
 enum CardSource {
     Track(i64),
@@ -83,21 +69,18 @@ impl From<&SourceSummary<'_>> for CardSource {
     }
 }
 
-/// Dedupe identity for the currently-shown card. `view_model` republishes on
-/// *every* state change (volume included), so the task compares this against the
-/// last emitted one and skips a write when nothing Discord-visible moved.
+/// The dedupe key: what a republish has to move before it costs a write.
 #[derive(Debug, Clone, PartialEq, Eq)]
 enum Identity {
-    /// Nothing on the card (also the initial state — Discord shows nothing).
+    /// Also the initial state, Discord showing nothing.
     Cleared,
-    /// Playing: the source + anchored start (compared with a tolerance).
+    /// `start_ts` matches within [`ANCHOR_TOLERANCE_SECS`], so only a real seek re-anchors.
     Playing { source: CardSource, start_ts: u64 },
-    /// Paused: no timestamps, so a seek-while-paused changes nothing.
+    /// No timestamps, so a seek while paused changes nothing.
     Paused { source: CardSource },
 }
 
 impl Identity {
-    /// Same card? `Playing` allows a small anchor drift; everything else is exact.
     fn matches(&self, other: &Identity) -> bool {
         match (self, other) {
             (Identity::Cleared, Identity::Cleared) => true,
@@ -111,9 +94,7 @@ impl Identity {
     }
 }
 
-/// Tracks the last card the task emitted so republishes that change nothing
-/// visible don't become IPC writes. Pure — the task owns one and feeds it the
-/// view-model.
+/// The last card emitted, held by the task between view models.
 #[derive(Debug)]
 pub struct PresenceState {
     last: Identity,
@@ -130,16 +111,12 @@ impl PresenceState {
         Self::default()
     }
 
-    /// Forget the last emitted card so the next evaluation always paints. Called
-    /// by the task on the disabled→enabled edge (the shown card was cleared while
-    /// off, but our dedupe state still remembers it).
+    /// For the off-to-on edge: the card was cleared while off, but the dedupe still remembers it.
     pub fn reset(&mut self) {
         self.last = Identity::Cleared;
     }
 
-    /// Project the view-model into an [`Update`], or `None` when nothing should
-    /// be sent — either the card is already current (dedupe) or we're in a
-    /// `loading` transition and hold the previous card.
+    /// `None` when nothing is to be sent: the card is current, or a `loading` transition holds it.
     pub fn on_view_model(
         &mut self,
         vm: Option<&PlayerViewModelLight>,
@@ -151,8 +128,6 @@ impl PresenceState {
             return None;
         }
         self.last = identity;
-        // Build the (allocating) card only now that this is a genuine change — a
-        // deduped republish never pays for a presence it would immediately discard.
         let update = match decision {
             Decision::Clear => Update::Clear,
             Decision::Set { source, paused, anchor } => {
@@ -163,18 +138,12 @@ impl PresenceState {
     }
 }
 
-/// A decision before its (allocating) card is built. Holds only cheap ingredients
-/// — a borrow plus copies — so an evaluation can be classified and deduped without
-/// building a [`Presence`] that a republish would discard.
+/// A decision before its card is built, so a deduped republish never pays for a [`Presence`].
 enum Decision<'a> {
-    /// Remove the card.
     Clear,
-    /// Show a card built from these inputs by [`build_presence`].
     Set { source: SourceSummary<'a>, paused: bool, anchor: u64 },
 }
 
-/// The decision, with its dedupe identity. `None` means "hold the current card"
-/// (only the `loading` transition), distinct from a `Clear`.
 fn classify<'a>(
     vm: Option<&'a PlayerViewModelLight>,
     now_ts: i64,
@@ -184,8 +153,8 @@ fn classify<'a>(
         return Some((Identity::Cleared, Decision::Clear));
     };
     match vm.status {
-        // Every track change passes through `loading`; mapping it to a clear
-        // would flash the card off and back on (and spend an update window).
+        // Every track change passes through `loading`, and a clear here would flash the card off
+        // and back on, spending an update window.
         "loading" => None,
         "stopped" => Some((Identity::Cleared, Decision::Clear)),
         _ => {
@@ -214,8 +183,8 @@ fn build_presence(source: &SourceSummary<'_>, paused: bool, anchor: u64) -> Pres
     let state = source.secondary.and_then(clamp_field);
     let large_text =
         Some(source.album.and_then(clamp_field).unwrap_or_else(|| APP_NAME.to_owned()));
-    // A live source reports no duration, so it gets no progress bar — which is what a stream
-    // with no end should show, and needs no arm of its own.
+    // A live source has no duration, so no bar: right for a stream with no end, and no arm of
+    // its own.
     let duration_ms = source.duration_ms.unwrap_or(0);
     let (start_ts, end_ts) = if !paused && duration_ms > 0 {
         (Some(anchor), Some(anchor + duration_ms / 1000))
@@ -225,9 +194,6 @@ fn build_presence(source: &SourceSummary<'_>, paused: bool, anchor: u64) -> Pres
     Presence { details, state, large_text, large_image: None, paused, start_ts, end_ts }
 }
 
-/// Clamp a field to Discord's limits: trim, drop when empty, pad a lone
-/// character to two (Discord rejects a 1-char field), and truncate to 128
-/// characters on a char boundary.
 fn clamp_field(s: &str) -> Option<String> {
     let trimmed = s.trim();
     if trimmed.is_empty() {

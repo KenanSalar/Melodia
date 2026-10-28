@@ -1,26 +1,11 @@
-//! Cross-platform system tray icon.
+//! The system tray: `ksni` on Linux, a `StatusNotifierItem` over D-Bus with no GTK, and
+//! `tray_icon` on Windows and macOS, behind one façade.
 //!
-//! Linux uses `ksni` (a pure-Rust `StatusNotifierItem` implementation over
-//! D-Bus — no GTK). Windows / macOS use `tray_icon`. Neither is linked: each is
-//! a platform-gated dependency, so a link resolves only on the host that has
-//! it. The two backends are
-//! `cfg`-split; this module is the shared façade — action / snapshot types,
-//! the embedded icon, and `init_tray`.
+//! A vanilla GNOME session has no `StatusNotifier` host, so there `init_tray` answers `None`, as on
+//! any session without a working tray, and every tray action still has an in-app control.
 //!
-//! ## GNOME caveat
-//!
-//! GNOME Shell ships no native `StatusNotifier` *host*, so on a vanilla GNOME
-//! session the icon simply will not appear (the user needs the `AppIndicator`
-//! and `KStatusNotifierItem` Support extension). `init_tray` returns `None` in
-//! that case — and on any platform / session without a working tray — and the
-//! app stays fully usable: every tray action duplicates an in-app control.
-//!
-//! ## Menu strings
-//!
-//! The menu labels are English-only. The tray runs in the services layer and
-//! must not depend on Slint, so it cannot reach the `@tr(...)` bundled-
-//! translation pipeline (which only resolves literals inside `.slint`).
-//! Localising the tray menu is a deferred follow-up.
+//! The labels are English-only: `@tr` resolves only literals inside `.slint`, and this layer may
+//! not depend on Slint.
 
 #[cfg(target_os = "linux")]
 mod ksni_backend;
@@ -36,48 +21,35 @@ pub use tray_icon_backend::{
     update as update_tray,
 };
 
-/// Bounded capacity of the `TrayAction` channel. The tray callback thread
-/// (ksni's D-Bus thread / tray-icon's event handler) `try_send`s into it; a
-/// human clicking menu items can never outrun 16 buffered actions.
+/// The tray's callback thread `try_send`s into it, and a human clicking can't outrun this many.
 pub const TRAY_ACTION_CHANNEL_CAP: usize = 16;
 
 /// A menu action emitted by the tray, drained by `ui::shell::tray_bridge`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum TrayAction {
-    /// Toggle play / pause.
     PlayPause,
-    /// Skip to the next track.
     Next,
-    /// Skip to the previous track.
     Previous,
-    /// Toggle the main window between shown and hidden.
     ShowHideWindow,
-    /// Quit the application.
     Quit,
 }
 
-/// Minimal render state the tray needs: tooltip text + the Play/Pause label.
-/// Derived from `PlayerViewModelLight` by `ui::shell::tray_bridge`. `PartialEq`
-/// lets the state subscribers skip the blocking tray round-trip when an
-/// emit (volume step, seek, queue edit) didn't change anything the tray
-/// renders.
+/// What the tray renders. `PartialEq` so an emit that changed none of it, a volume step or a seek,
+/// skips the blocking round trip to the tray.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct TraySnapshot {
-    /// What is playing: a track's title, or the song a station announced. `None` when nothing is
-    /// loaded.
+    /// A track's title, or the song a station announced.
     pub track_title: Option<String>,
-    /// Who by: a track's artist, or the station's name. `None` when unknown or nothing is loaded.
+    /// A track's artist, or the station's name.
     pub track_artist: Option<String>,
-    /// `true` while playback status is "playing".
     pub is_playing: bool,
-    /// Whether the transport can move off the current source. Both are false for a live stream,
-    /// which has nowhere to skip to, and the menu rows follow rather than offering a no-op.
+    /// Both false for a live stream, so the menu rows follow rather than offering a no-op.
     pub has_next: bool,
     pub has_previous: bool,
 }
 
 impl TraySnapshot {
-    /// Single-line tooltip: `"Title — Artist"`, `"Title"`, or `"Melodia"`.
+    /// `"Title — Artist"`, `"Title"`, or `"Melodia"`.
     fn tooltip(&self) -> String {
         match (&self.track_title, &self.track_artist) {
             (Some(title), Some(artist)) if !artist.is_empty() => {
@@ -88,24 +60,21 @@ impl TraySnapshot {
         }
     }
 
-    /// Label for the disabled track-name row at the top of the menu.
+    /// The disabled track-name row at the top of the menu.
     fn menu_track_label(&self) -> String {
         self.track_title.clone().unwrap_or_else(|| "Melodia".to_owned())
     }
 
-    /// Label for the play/pause menu row.
     fn play_pause_label(&self) -> &'static str {
         if self.is_playing { "Pause" } else { "Play" }
     }
 }
 
-/// The tray icon, baked into the binary. Rasterised from
-/// `crates/melodia-ui/ui/assets/icons/logo-without-background.svg` (see `scripts/`).
+/// Rasterised from `crates/melodia-ui/ui/assets/icons/logo-without-background.svg`.
 const TRAY_PNG: &[u8] = include_bytes!("../../../../../../assets/icons/tray.png");
 
-/// Decode the embedded tray PNG into `(width, height, rgba8)`. Returns `None`
-/// if the embedded asset somehow fails to decode — callers then build the
-/// tray without an icon rather than aborting.
+/// `(width, height, rgba8)`, or `None` where the asset won't decode, a tray without an icon
+/// beating no tray.
 fn decode_icon() -> Option<(u32, u32, Vec<u8>)> {
     match image::load_from_memory_with_format(TRAY_PNG, image::ImageFormat::Png) {
         Ok(img) => {

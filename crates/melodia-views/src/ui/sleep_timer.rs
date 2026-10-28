@@ -1,25 +1,13 @@
-//! Session-only sleep timer wired to the Now-Playing overflow menu.
+//! The session-only sleep timer behind the Now Playing overflow menu, in three modes off
+//! `Player.set-sleep-timer(minutes)` (the presets) and `set-sleep-timer-seconds` (the stepper):
+//! - **Duration**, a cancellable countdown that pauses playback when it runs out. It burns down
+//!   only while `Playing`, read off the lock-free status mirror, so a paused player holds it.
+//! - **End of current track** (`minutes < 0`), arming `PlayerState::pause_after_current_track`
+//!   for the playback monitor; `Player.vm.sleep_at_track_end` clears the UI when it fires.
+//! - **Off**, cancelling the countdown and disarming the flag.
 //!
-//! Three modes, picked from `Player.set-sleep-timer(minutes)` for the presets and
-//! `set-sleep-timer-seconds` for the custom stepper:
-//! - **Duration** — a cancellable tokio countdown that pauses playback after the chosen
-//!   time, ticking a remaining string into `Player.sleep-timer-remaining` each second.
-//!   It is **playback-linked**, burning down only while `Playing` (read off the
-//!   lock-free status mirror), so pausing the music holds the timer and it never expires
-//!   on a paused player.
-//! - **End of current track** (`minutes < 0`) — arms
-//!   `PlayerState::pause_after_current_track` and lets the playback monitor pause at the
-//!   next boundary. Its armed state rides on `Player.vm.sleep_at_track_end`, so the UI
-//!   auto-clears when it fires.
-//! - **Off** — cancels any duration timer and disarms the flag.
-//!
-//! The armed duration is mirrored through `Player.sleep-timer-total-seconds`, so the
-//! flyout can highlight a matching preset or none.
-//!
-//! In `ui/` rather than `tasks/` because the countdown writes a Slint property and
-//! `tasks/` may not import `ui::*`. The cancel token sits in an `Rc<RefCell<…>>` the
-//! callback captures — callbacks are UI-thread-only, so only the clone moved into the
-//! spawned task has to be `Send`.
+//! `Player.sleep-timer-total-seconds` mirrors the armed duration for the flyout's preset
+//! highlight. In `ui/` rather than `tasks/` because the countdown writes a Slint property.
 
 use std::cell::RefCell;
 use std::rc::Rc;
@@ -36,20 +24,16 @@ use melodia_core::error::describe;
 use melodia_engine::player::engine::types::PlaybackStatus;
 use melodia_ui::{AppWindow, Player};
 
-/// Bounds on a custom duration, mirroring the stepper's own in
-/// `sleep-timer-flyout.slint` — the ceiling keeps the display and the
-/// hold-to-accelerate tidy.
+/// Bounds on a custom duration, mirroring the stepper's own in `sleep-timer-flyout.slint`.
 const MIN_SLEEP_SECONDS: i32 = 30;
 const MAX_SLEEP_SECONDS: i32 = 2 * 60 * 60;
 
-/// Clamp a stepper-provided value. Defensive: the stepper already clamps in Slint, but
-/// the callback boundary shouldn't trust it.
+/// The stepper clamps in Slint too, but the callback boundary doesn't trust it.
 fn clamp_sleep_seconds(secs: i32) -> i32 {
     secs.clamp(MIN_SLEEP_SECONDS, MAX_SLEEP_SECONDS)
 }
 
-/// Whole seconds as `M:SS`, or `H:MM:SS` once an hour or more, so a long timer reads
-/// naturally.
+/// Whole seconds as `M:SS`, or `H:MM:SS` once an hour or more.
 pub fn format_remaining(secs: u64) -> String {
     let h = secs / 3600;
     let m = (secs % 3600) / 60;
@@ -57,8 +41,7 @@ pub fn format_remaining(secs: u64) -> String {
     if h > 0 { format!("{h}:{m:02}:{s:02}") } else { format!("{m}:{s:02}") }
 }
 
-/// Reset the display properties to "no duration timer" — the Off and End-of-track
-/// paths, and the countdown task on fire.
+/// Reset the display to "no countdown", for Off, End of track and a countdown that fired.
 fn reset_display(weak: &slint::Weak<AppWindow>) {
     if let Some(ui) = weak.upgrade() {
         let p = ui.global::<Player>();
@@ -71,11 +54,9 @@ fn reset_display(weak: &slint::Weak<AppWindow>) {
 /// `install_equalizer` and `install_replaygain`.
 pub fn install_sleep_timer(ui: &AppWindow, state: &AppState) {
     let player = ui.global::<Player>();
-    // Cancel-and-replace store for the active duration timer, shared by both callbacks
-    // — all of it UI-thread-only.
+    // Cancel-and-replace store for the running countdown; UI thread only.
     let store: Rc<RefCell<Option<CancellationToken>>> = Rc::new(RefCell::new(None));
 
-    // Presets: 0 off, > 0 duration in minutes, -1 end of track.
     {
         let state = state.clone();
         let weak = ui.as_weak();
@@ -85,7 +66,6 @@ pub fn install_sleep_timer(ui: &AppWindow, state: &AppState) {
         });
     }
 
-    // Custom duration from the ±stepper's Start pill (seconds). Clamp + arm.
     {
         let state = state.clone();
         let weak = ui.as_weak();
@@ -123,8 +103,7 @@ fn arm_sleep_timer(
     }
 }
 
-/// Arm a duration countdown, shared by the minute presets and the custom stepper:
-/// cancel any running timer, clear end-of-track mode, seed the display, spawn.
+/// Arm a countdown of `total_secs`, for the presets and the stepper alike.
 fn arm_duration_seconds(
     state: &AppState,
     weak: &slint::Weak<AppWindow>,
@@ -146,16 +125,13 @@ fn arm_duration_seconds(
     spawn_countdown(state, weak.clone(), token, total);
 }
 
-/// Cancel and clear any running duration timer — a new selection supersedes the last.
 fn cancel_timer(store: &Rc<RefCell<Option<CancellationToken>>>) {
     if let Some(tok) = store.borrow_mut().take() {
         tok.cancel();
     }
 }
 
-/// Spawn the per-second countdown: the usual `spawn_cancellable` + `select!` shape over
-/// three arms — global shutdown, this timer's own token, and the 1 Hz interval. Reaching
-/// zero pauses cleanly and clears the display.
+/// Spawn the 1 Hz countdown, which pauses playback and clears the display on reaching zero.
 fn spawn_countdown(
     state: &AppState,
     weak: slint::Weak<AppWindow>,
@@ -176,8 +152,7 @@ fn spawn_countdown(
                 () = shutdown.cancelled() => return,
                 () = token.cancelled() => return,
                 _ = ticker.tick() => {
-                    // Playback-linked, so pausing the music holds the countdown. Off
-                    // the lock-free status mirror: no `PlayerState` lock on the tick.
+                    // The lock-free mirror, so the tick takes no `PlayerState` lock.
                     let playing = ctx.player_state.status_atomic.load(Ordering::Relaxed)
                         == PlaybackStatus::Playing as u8;
                     if !playing {
@@ -194,13 +169,10 @@ fn spawn_countdown(
                 }
             }
         }
-        // Fire: clean pause, then clear the display — unless a newer selection
-        // superseded this timer between its final decrement and now. The
-        // re-arm path cancels this token and seeds the new display
-        // synchronously on the UI thread, so re-checking the token inside the
-        // UI closure fully serializes against the re-arm's writes: a stale
-        // clear either runs before the re-arm (and is overwritten by the
-        // seed) or sees the cancelled token and skips.
+        // A newer selection may have superseded this timer since its last decrement. The
+        // re-arm cancels the token and seeds its display synchronously on the UI thread, so
+        // re-checking the token in the UI closure serializes against it: a stale clear either
+        // runs before the seed or sees the cancel and skips.
         if token.is_cancelled() {
             return;
         }

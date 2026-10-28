@@ -15,7 +15,6 @@ use melodia_app::state::AppState;
 use melodia_core::error::{AppResult, describe};
 use melodia_ui::{AppWindow, NavEnterFrom, PlaylistDetail, Playlists};
 
-/// Wire the Playlists section-lifecycle callbacks. See [`super::wire`].
 pub(super) fn wire(ui: &AppWindow, state: &AppState, playlists_ui: &Arc<PlaylistsUi>) {
     grid_tab::wire(ui, state, playlists_ui);
     install_stats_refresher(ui, state, playlists_ui);
@@ -66,18 +65,14 @@ impl GridTab for PlaylistsUi {
     }
 }
 
-/// Play-count / last-played flushes bump `stats_changed` (NOT
-/// `library_changed`, by design, to avoid churning every view on each played
-/// song). Only smart playlists whose rules depend on play stats ("most
-/// played", "recently played", "never played") can change, so only those are
-/// recounted — a static-rule ("Genre is Rock") smart playlist is neither woken
-/// nor recounted here (it can't have moved).
+/// Follows `stats_changed`, which a play-count flush bumps instead of `library_changed`, for the
+/// smart playlists whose rules read play stats.
 fn install_stats_refresher(ui: &AppWindow, state: &AppState, playlists_ui: &Arc<PlaylistsUi>) {
     let s = state.clone();
     let pu = playlists_ui.clone();
     let installed =
         on_signal(&state.stats_changed, ui.as_weak(), "playlists-stats-changed", move |ui| {
-            // Hidden section: the section-enter path reloads on return.
+            // A hidden section reloads on its enter.
             if pu.section_active() {
                 playlists_ui_mod::refresh_play_stats(ui, &s, &pu);
             }

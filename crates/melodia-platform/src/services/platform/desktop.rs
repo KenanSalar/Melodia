@@ -35,14 +35,12 @@ fn desktop_named(value: &str) -> HostDesktop {
         .unwrap_or(HostDesktop::Other)
 }
 
-/// Whether the session is KDE Plasma.
 pub fn is_kde_desktop() -> bool {
     host_desktop() == HostDesktop::Kde
 }
 
-/// The host desktop's window corner radius, in pixels. Values mirror the chip
-/// presets in the Appearance section, so a first launch lights up the chip
-/// matching the environment.
+/// The host's window corner radius in pixels, each value one of the Appearance section's chip
+/// presets so a first launch lights up the matching chip.
 #[must_use]
 pub fn get_os_corner_radius() -> u32 {
     #[cfg(target_os = "macos")]

@@ -66,16 +66,9 @@ fn wire_shown(
     queue_covers: &Arc<CoverThumbs>,
     shown: &Arc<AtomicBool>,
 ) {
-    // Per-handler generation counter — every hide bumps it and stamps
-    // its own pending teardown with the post-increment value. The
-    // teardown only fires when the *latest* hide still owns the stamp,
-    // so a stale teardown timer from an earlier hide can never wipe rows
-    // that a subsequent show→hide has since shown. Combined with the
-    // `shown` re-check inside the UI closure (the only true
-    // serialization point with the show callback), this closes both
-    // races: (1) TOCTOU between the tokio-side `shown` check and the
-    // UI-thread wipe, and (2) an older hide's timer firing during a newer
-    // hide's delay.
+    // Each hide stamps its teardown with a new epoch and only the latest one's fires, so an
+    // earlier hide's timer can't wipe rows a later show seated. The `shown` re-check on the UI
+    // thread closes the gap between the worker's check and the wipe.
     let hide_epoch = Arc::new(AtomicU64::new(0));
     let showing = Showing {
         weak: ui.as_weak(),
@@ -158,11 +151,9 @@ impl Showing {
         runtime.clone().spawn(async move {
             tokio::time::sleep(TEARDOWN_DELAY).await;
             if shown.load(Ordering::Relaxed) || hide_epoch.load(Ordering::Acquire) != my_epoch {
-                return; // shown again, or a newer hide superseded us
+                return;
             }
             let _ = weak.upgrade_in_event_loop(move |ui| {
-                // Final gate — the UI thread is the serialization
-                // point with `on_shown_changed(true)`.
                 if shown.load(Ordering::Relaxed) || hide_epoch.load(Ordering::Acquire) != my_epoch {
                     return;
                 }

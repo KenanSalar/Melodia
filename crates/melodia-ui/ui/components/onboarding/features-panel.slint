@@ -70,7 +70,7 @@ export component OnboardingFeaturesPanel inherits VerticalLayout {
     }
 
     // The one row here that ships *on*, which is the whole reason it earns a place: nothing else
-    // announces the daily check. Hidden where the package manager already suppresses the task.
+    // announces the daily check. Hidden where no in-app path reaches, the task never running there.
     if MelodiaUpdater.updates-supported && !MelodiaUpdater.system-managed: SectionDivider {}
     if MelodiaUpdater.updates-supported && !MelodiaUpdater.system-managed: OnboardingFeatureRow {
         icon: "update";

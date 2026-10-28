@@ -1,27 +1,7 @@
-//! `ReplayGain` (loudness normalization) state and gain math.
-//!
-//! `ReplayGain` tags record how loud a track (or its album) is relative to a
-//! reference level. Applying the stored gain at playback normalizes perceived
-//! loudness across a library so tracks don't jump in volume. Melodia already
-//! parses the tags at scan time (`media::ingest::metadata`) into the `tracks`
-//! table; this module carries them into the audio path.
-//!
-//! Two pieces, mirroring the equalizer:
-//!
-//! - [`TrackReplayGain`]: the four per-track values (track/album gain + peak),
-//!   baked into each [`EqSource`](super::equalizer::EqSource) at construction so
-//!   the gapless-preloaded *next* track carries its own gain, not the playing
-//!   one's. `Default` (all `None`) means "no `ReplayGain` data" → unity gain, so
-//!   untagged tracks play unchanged.
-//! - [`ReplayGainShared`]: lock-free master controls (enabled / mode / preamp /
-//!   prevent-clipping) read on the audio thread. The library/UI layer mutates
-//!   it; the audio thread polls a generation counter and recomputes only on
-//!   change — the same pattern as [`EqShared`](super::equalizer::EqShared).
-//!
-//! The gain itself is applied inside `EqSource` (before the EQ bands), so the
-//! equalizer's existing soft-knee limiter guards any boost for free. `ReplayGain`
-//! is otherwise independent of the EQ toggle — it applies whether or not the EQ
-//! is enabled.
+//! `ReplayGain` state and gain math, mirroring the equalizer. [`TrackReplayGain`] is baked into
+//! each [`EqSource`](super::equalizer::EqSource), so a staged track carries its own gain, and
+//! [`ReplayGainShared`] holds the master controls the audio thread polls by generation. Applied
+//! before the EQ bands, so the limiter guards a boost, whether or not the EQ is on.
 
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicU8, Ordering};
@@ -30,10 +10,7 @@ use melodia_core::entities::track::TrackSummary;
 
 use super::dsp::{AtomicF32, Generation, db_to_linear};
 
-/// Preamp (extra gain applied on top of the tag value) range, in decibels.
-/// Symmetric — unlike the EQ preamp — because the `ReplayGain` preamp is a
-/// listener preference for overall loudness, cutting or boosting equally.
-/// 0 dB is unity.
+/// Symmetric, unlike the EQ's, being a listener's loudness preference.
 pub const RG_MIN_PREAMP_DB: f32 = -15.0;
 pub const RG_MAX_PREAMP_DB: f32 = 15.0;
 
@@ -48,29 +25,23 @@ pub const DEFAULT_MODE: &str = "album";
 /// track with ~0 dB effective `ReplayGain` can still take the bit-identical bypass.
 const RG_UNITY_EPSILON: f32 = 1e-4;
 
-/// Clamp a `ReplayGain` preamp value into the supported range.
 #[must_use]
 pub fn clamp_rg_preamp(db: f32) -> f32 {
     if db.is_nan() { 0.0 } else { db.clamp(RG_MIN_PREAMP_DB, RG_MAX_PREAMP_DB) }
 }
 
-/// Which gain pair `ReplayGain` applies. `enabled` on [`ReplayGainShared`] gates
-/// whether *any* gain applies, so there is deliberately no `Off` variant here
-/// (mirroring the EQ, whose `enabled` flag is the only on/off gate).
+/// No `Off`: [`ReplayGainShared`]'s `enabled` is the one gate, as the EQ's is.
 #[derive(Copy, Clone, Debug, Default, PartialEq, Eq)]
 pub enum RgMode {
-    /// Per-track gain — every track normalized to the reference level
-    /// individually (best for shuffle).
+    /// Every track normalized alone, best for shuffle.
     Track,
-    /// Per-album gain — album-relative levels preserved (best for gapless
-    /// full-album listening). The default.
+    /// Album-relative levels kept, best for listening to whole albums.
     #[default]
     Album,
 }
 
 impl RgMode {
-    /// Stable index used both for the atomic encoding and the UI dropdown order
-    /// (0 = Track, 1 = Album).
+    /// Also the dropdown's order.
     #[must_use]
     pub fn to_u8(self) -> u8 {
         match self {
@@ -107,11 +78,7 @@ impl RgMode {
     }
 }
 
-/// The four `ReplayGain` values for one track, in playback-ready `f32`. `gain`
-/// fields are decibels (as stored in the tag); `peak` fields are linear sample
-/// peaks (1.0 = full scale). Baked into each [`super::equalizer::EqSource`] at
-/// build time. Cheap
-/// to copy (four `Option<f32>`), so it threads through the play actions by value.
+/// Gains in dB as tagged and peaks linear, 1.0 being full scale; all `None` is unity.
 #[derive(Copy, Clone, Debug, Default, PartialEq)]
 pub struct TrackReplayGain {
     pub track_gain: Option<f32>,
@@ -120,9 +87,7 @@ pub struct TrackReplayGain {
     pub album_peak: Option<f32>,
 }
 
-/// On this side of the boundary rather than as a method on `TrackSummary`: a row type has no
-/// business naming the transport newtype, and that one method was `entities`' only edge into
-/// this directory.
+/// Here rather than on `TrackSummary`, a row type having no business naming this one.
 impl From<&TrackSummary> for TrackReplayGain {
     fn from(track: &TrackSummary) -> Self {
         Self {
@@ -134,10 +99,7 @@ impl From<&TrackSummary> for TrackReplayGain {
     }
 }
 
-/// Compute the linear gain factor to apply for one track under the given master
-/// settings. Returns `1.0` (unity) when no gain data is present, so untagged
-/// tracks are unchanged. The pure core of the `ReplayGain` DSP — unit-tested
-/// directly; the caller (`EqSource::rebuild`) only calls it when RG is enabled.
+/// Unity with no gain data, so an untagged track plays unchanged.
 #[must_use]
 pub fn compute_linear_gain(
     baked: TrackReplayGain,
@@ -145,8 +107,7 @@ pub fn compute_linear_gain(
     preamp_db: f32,
     prevent_clipping: bool,
 ) -> f32 {
-    // Pick the (gain, peak) pair for the active mode, falling back to the other
-    // pair when the preferred gain is absent so the peak always matches the gain.
+    // The other pair where the mode's gain is absent, so the peak always matches the gain.
     let pair = match mode {
         RgMode::Album => baked
             .album_gain
@@ -159,14 +120,12 @@ pub fn compute_linear_gain(
     };
 
     let Some((gain_db, peak)) = pair else {
-        return 1.0; // no gain data → unity
+        return 1.0;
     };
 
     let mut lin = db_to_linear(gain_db + preamp_db);
 
-    // Static peak-based clip guard: don't let the boosted signal exceed full
-    // scale. Only applied when a positive peak is known; otherwise the
-    // downstream limiter is the safety net.
+    // Only with a known peak; otherwise the downstream limiter is the safety net.
     if prevent_clipping
         && let Some(p) = peak
         && p > 0.0
@@ -183,11 +142,7 @@ pub fn is_unity_gain(lin: f32) -> bool {
     (lin - 1.0).abs() < RG_UNITY_EPSILON
 }
 
-/// Lock-free `ReplayGain` master state shared between the control layer (writer)
-/// and the audio thread (reader). Every mutation bumps the [`Generation`] so the
-/// [`EqSource`](super::equalizer::EqSource) reading it knows to recompute its
-/// baked gain — the same poll pattern as
-/// [`EqShared`](super::equalizer::EqShared).
+/// The master state, on [`EqShared`](super::equalizer::EqShared)'s generation-poll pattern.
 pub struct ReplayGainShared {
     enabled: AtomicBool,
     mode: AtomicU8,
@@ -197,9 +152,7 @@ pub struct ReplayGainShared {
 }
 
 impl ReplayGainShared {
-    /// Build shared state seeded inert (disabled, Album, 0 dB, prevent-clipping
-    /// on). `AppState::init` applies the persisted values before playback via the
-    /// setters below.
+    /// Inert until `AppState::init` applies the persisted values.
     #[must_use]
     pub fn new() -> Arc<Self> {
         Arc::new(Self {
@@ -211,7 +164,6 @@ impl ReplayGainShared {
         })
     }
 
-    /// Publish a state change — see [`Generation::bump`].
     fn bump(&self) {
         self.generation.bump();
     }

@@ -1,8 +1,4 @@
-//! Wire the `WindowChrome` callback global to OS-level window-control
-//! operations and the restart flow.
-//!
-//! Callback dispatch guarantees the UI thread, so the winit calls are safe directly
-//! without an event-loop hop. The persistence work goes to the tokio runtime.
+//! The `WindowChrome` callbacks: the window controls, through winit, and the restart flow.
 
 use std::sync::Arc;
 
@@ -23,15 +19,11 @@ pub(super) fn wire(app: &AppWindow, state: &AppState) {
         let weak = app.as_weak();
         chrome.on_minimize(move || {
             let Some(ui) = weak.upgrade() else { return };
-            // winit directly rather than `slint::Window::set_minimized`, which is
-            // gated on an `is_minimized` cache Slint keeps in sync off configure
-            // events — and on Wayland `winit::Window::is_minimized` answers `None`,
-            // so after a taskbar restore that cache stays stuck at `true` and the
-            // next call looks like "no change" and never reaches the OS.
+            // Not `slint::Window::set_minimized`, gated on an `is_minimized` cache that Wayland's
+            // `None` leaves stuck at `true` after a taskbar restore, so the call never reaches the OS.
             let _ = ui.window().with_winit_window(|w| w.set_minimized(true));
-            // The tray's Show / Hide reads the visibility shadow, so without this
-            // drop the next click unmaps an already-minimized surface and restoring
-            // takes two. The visualizer's Timer gates on it too.
+            // The tray's Show/Hide and the visualizer's Timer read the shadow; left up, restoring
+            // takes two clicks.
             crate::ui::shell::tray_bridge::set_window_visible(&ui, false);
         });
     }
@@ -40,14 +32,8 @@ pub(super) fn wire(app: &AppWindow, state: &AppState) {
         let weak = app.as_weak();
         chrome.on_toggle_maximize(move || {
             let Some(ui) = weak.upgrade() else { return };
-            // Read **and** write through winit, mirroring the minimize handler:
-            // `slint::Window::set_maximized` only forwards when its cached flag
-            // differs, and that cache refreshes on configure events — so any state
-            // change not yet round-tripped through the compositor (Win+↑,
-            // snap-to-edge, the WM's own gesture) makes the toggle a no-op.
-            //
-            // `is_maximized()` answers `bool` on every platform, so the
-            // `is_minimized` foot-gun doesn't apply to this read.
+            // Read and written through winit: Slint forwards `set_maximized` only when its cached
+            // flag differs, so a Win+↑ or snap not yet round-tripped makes the toggle a no-op.
             let _ = ui.window().with_winit_window(|w| {
                 w.set_maximized(!w.is_maximized());
             });
@@ -65,10 +51,8 @@ pub(super) fn wire(app: &AppWindow, state: &AppState) {
     {
         let weak = app.as_weak();
         chrome.on_close_window(move || {
-            // `should_hide_to_tray` is false with no tray, so this can't strand the
-            // user with a hidden window. The hide is deferred because calling it
-            // inline — inside a winit `WindowEvent` dispatch — trips Slint's
-            // "references to the window still exist" warning.
+            // Posted: inside a winit `WindowEvent` dispatch the hide trips Slint's "references to
+            // the window still exist".
             if crate::ui::shell::tray_bridge::should_hide_to_tray() {
                 let weak = weak.clone();
                 if let Err(e) = slint::invoke_from_event_loop(move || {
@@ -80,9 +64,8 @@ pub(super) fn wire(app: &AppWindow, state: &AppState) {
                 }
                 return;
             }
-            // `Window::hide()` is platform-dependent — on some Wayland compositors
-            // hiding the only visible window doesn't reliably end the loop, leaving
-            // the process alive with no UI. `quit_event_loop()` is explicit.
+            // Not `Window::hide()`: on some Wayland compositors hiding the only window doesn't end
+            // the loop, leaving a process with no UI.
             if let Err(e) = slint::quit_event_loop() {
                 log::warn!("close-window: quit_event_loop: {}", describe(&e));
             }
@@ -98,12 +81,11 @@ pub(super) fn wire(app: &AppWindow, state: &AppState) {
             let new = !chrome.get_always_on_top_active();
             let is_native = matches!(state.always_on_top.method, AlwaysOnTopMethod::Native);
 
-            // Optimistic, so icon and tooltip update on the click's own frame;
-            // reverted below if the backend errors.
+            // Optimistic, so the icon flips on the click's own frame; reverted below on an error.
             chrome.set_always_on_top_active(new);
 
-            // The native path is winit-only and UI-thread-only, so it runs before the
-            // persistence task. The Linux paths route to the KWin / GNOME backend.
+            // winit is UI-thread-only, so the native level is set here; the Linux backends go
+            // through the task.
             if is_native {
                 let level = if new { WindowLevel::AlwaysOnTop } else { WindowLevel::Normal };
                 let _ = ui.window().with_winit_window(|w| w.set_window_level(level));
@@ -118,8 +100,6 @@ pub(super) fn wire(app: &AppWindow, state: &AppState) {
                     log::warn!("set_always_on_top: {}", describe(&e));
                     let _ = weak.upgrade_in_event_loop(move |ui| {
                         ui.global::<melodia_ui::WindowChrome>().set_always_on_top_active(!new);
-                        // Applied through winit above, so roll the OS-level state back
-                        // too and keep it in step with the reverted property.
                         if is_native {
                             let revert =
                                 if new { WindowLevel::Normal } else { WindowLevel::AlwaysOnTop };
@@ -151,18 +131,9 @@ pub(super) fn wire(app: &AppWindow, state: &AppState) {
     ));
 }
 
-/// The handler behind a restart-gated setting: persist the value the dialog carries, then ask for
-/// the respawn.
-///
-/// One body for all three because the only thing that differs is which setting is written.
-/// `setting` names it for the log line, since `persist` is a plain fn pointer with nothing
-/// readable to print.
-///
-/// **`Dialog.target-id` carries the requested value and must be read before the dispatcher wipes
-/// the routing payload.** The respawn is then deferred to `main()`'s exit path: spawning here
-/// while the old loop is still wrapping up leaves two windows on screen, the old one unresponsive
-/// until its `tracker.wait()` finishes. A refusal there leaves the app running with the new value
-/// already on disk.
+/// Persists the value a restart dialog carries, then asks for the respawn. `Dialog.target-id`
+/// holds the value and has to be read before the dispatcher wipes the routing payload. `setting`
+/// names the write for the log, `persist` being a bare fn pointer.
 fn restart_toggle(
     app: &AppWindow,
     state: &AppState,

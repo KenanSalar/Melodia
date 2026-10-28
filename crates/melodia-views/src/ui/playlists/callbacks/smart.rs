@@ -1,23 +1,11 @@
-//! Smart-playlist rule-builder (`DialogKind::SmartPlaylistEditor`, `SmartEditor` global)
-//! wiring.
+//! The smart playlist rule editor (`SmartEditor`). Rust owns the `rules` model, and every edit
+//! rewrites its row with the `field-kind` / `input-kind` codes the body picks its operator list
+//! and value widget by. A field or operator change keeps the value unless the input kind moved,
+//! so the model agrees with the input the change remounts.
 //!
-//! The `rules` model is a Rust-owned `VecModel<SmartRuleRow>` installed here.
-//! Each editor mutation (`add-rule` / `remove-rule` / `set-rule-*`) rewrites the
-//! affected row, recomputing the row's `field-kind` / `input-kind` codes so the
-//! Slint body can pick the right operator array and value widget. On field/op
-//! change the value is only cleared when the *input kind* changes (so the
-//! remounted input reads an empty value) — otherwise it is kept, keeping the
-//! model and the visible input in agreement (see the body's split-by-input-kind
-//! value widgets).
-//!
-//! Entry points populate everything and open the dialog from a fresh event-loop
-//! tick — a synchronous `Dialog.open = true` inside a click callback trips
-//! Slint's property-recursion guard (same reason the create-playlist open is
-//! inline-Slint and the export open hops through Rust).
-//!
-//! `recount` answers the track count the dialog's footer states, from the same
-//! criteria the commit saves, so the number shown is the playlist that Save
-//! would make.
+//! The openers fill the editor and open it on a fresh tick, a synchronous `Dialog.open` inside a
+//! click tripping Slint's property-recursion guard. `recount` counts the criteria the commit
+//! would save, so the footer states the playlist Save makes.
 
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -42,11 +30,7 @@ const NOT_COUNTED: i32 = -1;
 /// again, and the count is a query over the whole library.
 const RECOUNT_SETTLE: Duration = Duration::from_millis(250);
 
-/// Wire the Smart-Playlist editor callbacks + install its rules model. See
-/// [`super::wire`].
 pub(super) fn wire(ui: &AppWindow, state: &AppState, playlists_ui: &Arc<PlaylistsUi>) {
-    // Install the Rust-owned rules model (starts with one blank rule so a fresh
-    // "New Smart Playlist" isn't empty).
     ui.global::<SmartEditor>().set_rules(ModelRc::new(VecModel::from(vec![default_rule_row()])));
 
     wire_add_rule(ui);
@@ -82,8 +66,7 @@ fn wire_remove_rule(ui: &AppWindow) {
     });
 }
 
-/// Reset the operator to this field-kind's first, then recompute the codes
-/// (clearing the value only if the input kind changed).
+/// A field change resets the operator to its value type's first.
 fn wire_set_rule_field(ui: &AppWindow) {
     let weak = ui.as_weak();
     ui.global::<SmartEditor>().on_set_rule_field(move |row, field_idx| {
@@ -95,7 +78,6 @@ fn wire_set_rule_field(ui: &AppWindow) {
     });
 }
 
-/// Recompute the input kind for the new operator.
 fn wire_set_rule_op(ui: &AppWindow) {
     let weak = ui.as_weak();
     ui.global::<SmartEditor>().on_set_rule_op(move |row, op_idx| {
@@ -107,7 +89,7 @@ fn wire_set_rule_op(ui: &AppWindow) {
     });
 }
 
-/// Mirror the input into the model (commit reads it back).
+/// Mirrors the input into the model, which the commit reads back.
 fn wire_set_rule_value(ui: &AppWindow) {
     let weak = ui.as_weak();
     ui.global::<SmartEditor>().on_set_rule_value(move |row, text| {
@@ -116,7 +98,6 @@ fn wire_set_rule_value(ui: &AppWindow) {
     });
 }
 
-/// Populate a fresh (default) editor and open on a fresh tick.
 fn wire_request_new(ui: &AppWindow) {
     let weak = ui.as_weak();
     ui.global::<SmartEditor>().on_request_new(move || {
@@ -128,8 +109,6 @@ fn wire_request_new(ui: &AppWindow) {
     });
 }
 
-/// Load the playlist's criteria, populate, open on a fresh tick (the
-/// `upgrade_in_event_loop` lands on the next UI tick).
 fn wire_request_edit(ui: &AppWindow, state: &AppState) {
     let weak = ui.as_weak();
     let state = state.clone();
@@ -159,9 +138,9 @@ fn wire_request_edit(ui: &AppWindow, state: &AppState) {
     });
 }
 
-/// Count the form off the UI thread once it settles. Each ask carries a generation: one a later
-/// edit has overtaken stands down before it queries, and a query that finishes behind a newer one
-/// doesn't write.
+/// Counts the form off the UI thread once it settles. Each ask carries a generation: one a later
+/// edit overtook stands down before it queries, and one finishing behind a newer ask doesn't
+/// write.
 fn wire_recount(ui: &AppWindow, state: &AppState) {
     let weak = ui.as_weak();
     let state = state.clone();
@@ -194,7 +173,6 @@ fn wire_recount(ui: &AppWindow, state: &AppState) {
     });
 }
 
-/// Reconstruct the criteria and create / update.
 fn wire_commit(ui: &AppWindow, state: &AppState, playlists_ui: &Arc<PlaylistsUi>) {
     let weak = ui.as_weak();
     let state = state.clone();
@@ -237,9 +215,8 @@ async fn create_smart(
     }
 }
 
-/// Name / description are user-owned too — update them along with the
-/// criteria. `update_smart_criteria` bumps `library_changed`, so the grid +
-/// open detail refresh.
+/// Needs no refresh of its own: `update_smart_criteria` bumps `library_changed`, which reloads
+/// the grid and the open detail.
 async fn update_smart(s: &AppState, draft: CriteriaDraft) {
     let CriteriaDraft { name, description, criteria, target_id } = draft;
     if let Err(e) =
@@ -252,13 +229,10 @@ async fn update_smart(s: &AppState, draft: CriteriaDraft) {
     }
 }
 
-/// Run `f` against the installed `VecModel<SmartRuleRow>` if present.
 fn with_rules_model<R>(ui: &AppWindow, f: impl FnOnce(&VecModel<SmartRuleRow>) -> R) -> Option<R> {
     ui.global::<SmartEditor>().get_rules().as_any().downcast_ref::<VecModel<SmartRuleRow>>().map(f)
 }
 
-/// Patch the rule row at editor index `row` through `f`, if it exists. The
-/// keyed-by-index analogue of [`crate::ui::model_patch::patch_track_row_by_id`].
 fn patch_rule_row(ui: &AppWindow, row: i32, f: impl FnOnce(SmartRuleRow) -> SmartRuleRow) {
     with_rules_model(ui, |vm| {
         let Ok(ri) = usize::try_from(row) else { return };
@@ -268,9 +242,7 @@ fn patch_rule_row(ui: &AppWindow, row: i32, f: impl FnOnce(SmartRuleRow) -> Smar
     });
 }
 
-/// Rebuild a rule row after a field or operator change, keeping the old value
-/// text only when the input kind is unchanged (else the remounted input reads
-/// empty). Shared by the `set-rule-field` / `set-rule-op` handlers.
+/// A rule row after a field or operator change, its value kept by [`keep_or_clear`].
 fn rebuilt_row(field: sc::RuleField, op: sc::RuleOp, old: &SmartRuleRow) -> SmartRuleRow {
     let row = rule_row(field, op);
     SmartRuleRow {
@@ -367,8 +339,7 @@ struct CriteriaDraft {
     target_id: i64,
 }
 
-/// Read the `SmartEditor` globals + the rules model into a [`CriteriaDraft`].
-/// Returns `None` when the name is blank (nothing to commit).
+/// The editor as a [`CriteriaDraft`], `None` while the name is blank.
 fn collect_criteria(ui: &AppWindow) -> Option<CriteriaDraft> {
     let se = ui.global::<SmartEditor>();
     let name = se.get_name().trim().to_owned();
@@ -407,9 +378,7 @@ fn read_criteria(ui: &AppWindow) -> sc::SmartCriteria {
     }
 }
 
-/// Populate every `SmartEditor` global + the rules model from a criteria and
-/// target id (`-1` = create), then open the dialog. Shared by `request-new` and
-/// `request-edit`.
+/// Fills the editor from `criteria` for `target_id` (`-1` creates) and opens the dialog.
 fn open_editor(
     ui: &AppWindow,
     name: &str,

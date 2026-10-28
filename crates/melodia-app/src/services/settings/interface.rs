@@ -5,12 +5,8 @@ use serde::{Deserialize, Serialize};
 
 use melodia_platform::services::platform::desktop::{HostDesktop, is_kde_desktop};
 
-/// Style of the custom titlebar's decoration buttons: `Standard` paints
-/// Windows 11's caption glyphs, `Macos` the three traffic-light circles,
-/// `Kde` Breeze's glyphs. Persisted as a token so a future style needs no
-/// schema change, and a build that predates one reads it as `Standard`. That
-/// is also why the chip reading "Windows" is still `Standard` here: the token
-/// is what a shipped `settings.json` holds.
+/// The custom titlebar's caption glyphs. `Standard` is the chip reading "Windows", under the token
+/// shipped files already hold.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum TitlebarButtonStyle {
@@ -20,9 +16,7 @@ pub enum TitlebarButtonStyle {
     Kde,
 }
 
-/// Which window edge the decoration buttons sit on. Independent of
-/// [`TitlebarButtonStyle`]; close stays at the outer corner either way, so
-/// "click corner = close" holds.
+/// Which edge the captions sit on, close staying at the outer corner either way.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum TitlebarButtonSide {
@@ -41,9 +35,8 @@ pub enum WindowBorder {
     Hidden,
 }
 
-/// What the System border colour is mixed from while Material You paints the palette. A token for
-/// [`WindowBorder`]'s reason. Off Material You both read the same, the theme's palette being the
-/// only one painted.
+/// What the System border colour mixes from under Material You; elsewhere both read the theme's.
+/// A token for [`WindowBorder`]'s reason.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum BorderTint {
@@ -58,8 +51,7 @@ pub enum BorderTint {
 /// value is an accent id of the active theme, and one the theme doesn't have reads as this.
 pub const WINDOW_BORDER_SYSTEM_COLOR: &str = "system";
 
-/// Window-chrome toggles. The two `titlebar_button_*` fields only take effect
-/// under `use_native_titlebar == false`; otherwise the OS paints its own.
+/// The two `titlebar_button_*` fields apply only under the custom titlebar.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
 pub struct WindowFlags {
@@ -72,8 +64,7 @@ pub struct WindowFlags {
     /// The miniplayer's captions. Its own field rather than `titlebar_button_style`, the
     /// miniplayer drawing them under the native titlebar too, where that style is inert.
     pub mini_player_button_style: TitlebarButtonStyle,
-    /// Drawn wherever the window is frameless: always under the custom titlebar, and for the
-    /// miniplayer under the native one.
+    /// Drawn wherever the window is frameless, the miniplayer under the native titlebar included.
     pub window_border: WindowBorder,
     pub window_border_color: String,
     pub window_border_tint: BorderTint,
@@ -92,9 +83,7 @@ impl Default for WindowFlags {
         Self {
             is_maximized: false,
             always_on_top: false,
-            // Also what a file without the key reads as, so it stays off here and
-            // `first_launch` answers KDE. On Windows the native frame, painted in the app mantle
-            // through the DWM caption attributes, stays a Settings toggle.
+            // Also what a file without the key reads, so KDE's default lives in `first_launch`.
             use_native_titlebar: false,
             titlebar_button_style: TitlebarButtonStyle::Standard,
             titlebar_button_side: TitlebarButtonSide::Right,
@@ -106,14 +95,8 @@ impl Default for WindowFlags {
     }
 }
 
-/// System-tray toggles. The icon ships on; hiding the window into it is opt-in.
-///
-/// With `tray_enabled` off, `ui::shell::tray_bridge::install` is skipped
-/// entirely — no D-Bus connection, no service thread, no action tasks — so
-/// toggling it needs a restart (the `restart-tray` `Dialog` flow). A session
-/// with no tray host still pays that install and leaves `Settings.tray-active`
-/// false, which is what greys `close_to_tray` out: with no icon the close
-/// handlers quit regardless, so it can never strand the window.
+/// The icon ships on and closing into it is opt-in. Boot reads `tray_enabled` once, so flipping it
+/// restarts, and `close_to_tray` greys out wherever no tray came up.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
 pub struct TrayFlags {
@@ -127,16 +110,14 @@ impl Default for TrayFlags {
     }
 }
 
-/// In-app layout / visual toggles.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
 pub struct LayoutFlags {
     pub sidebar_collapsed: bool,
     pub progress_state_layer: bool,
-    /// KDE-only: under the native titlebar, tint the sidebar and now-playing
-    /// bar toward `Theme.base` while unfocused, mirroring KDE's own
-    /// window-decoration fade. On under KDE both for a fresh install
-    /// ([`LayoutFlags::first_launch`]) and for a file that predates the key (the field default).
+    /// KDE-only: under the native titlebar, tints the sidebar and bar toward `Theme.base` while
+    /// unfocused, as Breeze fades its decoration. On under KDE for a fresh install and a file that
+    /// predates the key alike.
     #[serde(default = "default_match_unfocused_to_system_bg")]
     pub match_unfocused_to_system_bg: bool,
 }
@@ -175,23 +156,16 @@ pub struct QueuePanelLayout {
     pub queue_panel_width: Option<f64>,
 }
 
-/// Which backdrop the artwork-derived surfaces paint.
-///
-/// Its own struct rather than a fourth bool on [`LayoutFlags`], which is already at clippy's
-/// `struct_excessive_bools` budget. Read once at boot into `Theme.aurora-backdrop` — the toggle is
-/// restart-gated, so the artwork tiers can decide whether to build a blur half at all.
+/// Which backdrop the artwork-derived surfaces paint, its own struct for [`QueuePanelLayout`]'s
+/// reason.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
 pub struct BackdropFlags {
-    /// On, and `theme.slint` declares the same value so a failed settings read lands on the
-    /// shipped look.
+    /// Restart-gated, read once at boot into `Theme.aurora-backdrop`. On, matching `theme.slint`'s
+    /// own value so a failed settings read lands on the shipped look.
     pub aurora_backdrop: bool,
-    /// Whether the miniplayer paints that backdrop too, instead of flat chrome.
-    ///
-    /// **A different question from the one above, which is why it is not restart-gated.** That one
-    /// picks which of the two stacks every colour tier is solved for and so what the artwork tiers
-    /// build per decode; this only says whether one more surface mounts the stack already chosen.
-    /// Off, so an install that never presses the button keeps the miniplayer it has.
+    /// Whether the miniplayer paints that backdrop too. Live, since it only mounts one more
+    /// surface over the stack already chosen; off, so an install keeps the miniplayer it has.
     pub mini_backdrop: bool,
 }
 

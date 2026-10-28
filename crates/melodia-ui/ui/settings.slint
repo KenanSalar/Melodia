@@ -1,10 +1,8 @@
-// The Settings page's reactive state. Rust populates the lists and indices at startup and on every
-// chip / dot click; the UI binds chip groups and colour-dot grids to them and forwards
-// `selected(int)` to the change callbacks. The page's own search filter and row-visibility rule
-// live on `SettingsPage`: values the user configures vs. how the page configuring them is navigated.
+// The values the user configures. How the page configuring them is navigated and searched is
+// `SettingsPage`'s.
 
 export global Settings {
-    // Stable across runs — populated once at startup from `themes::registry()`.
+    // Seeded once from `themes::registry()`.
     in property <[string]> theme-names;
     // Seeded beside `theme-names`, so no binding here spells a registry position.
     in property <int> catppuccin-idx: -1;
@@ -13,93 +11,75 @@ export global Settings {
     out property <bool> catppuccin-selected: root.theme-idx == root.catppuccin-idx;
     out property <bool> material3-selected: root.theme-idx == root.material3-idx;
 
-    // The chips themselves are inline `@tr` literals in `appearance-section.slint`, so
-    // bundled translations re-render them on a locale switch; Rust drives only the
-    // index. Same for `color-style-idx` below.
+    // The chips are inline `@tr` literals in `appearance-section.slint`, so a locale switch
+    // re-renders them; Rust drives only the index. Same for `color-style-idx`.
     in-out property <int> variant-idx;
 
-    // Re-populated on every theme *or* variant change — Catppuccin shades each accent
-    // per variant, so one id renders different swatches in Latte and Mocha. 1:1 with
-    // `accent-names`, which the `ColorDotGrid` turns into per-dot tooltips.
+    // Re-seeded on a theme or variant change, Catppuccin shading each accent per variant. 1:1 with
+    // `accent-names`, the dots' tooltips.
     in property <[brush]> accent-colors;
     in property <[string]> accent-names;
     in-out property <int> accent-idx;
 
-    // The accent is Material You's, which follows the artwork rather than naming a swatch, so
-    // `accent-idx` is -1 while it holds. The switch shows under Material 3 with a Color Style set,
-    // playing or not, so the choice doesn't vanish with the artwork.
+    // Material You's accent, a switch above the swatches rather than one of them, `accent-idx`
+    // being -1 while it holds. Shown with a Color Style set, playing or not, so the choice doesn't
+    // vanish with the artwork.
     in-out property <bool> accent-follows-artwork;
 
-    // The palette is coming from Plasma's live colour scheme rather than the static
-    // Light/Dark tables: KDE Breeze, variant "System", and a parsed `kdeglobals`. The
-    // Accent Color row hides its dot grid on it, the OS having already picked one.
+    // KDE Breeze's System variant over a parsed `kdeglobals`, where the OS already picked the
+    // accent and the dot grid hides.
     in property <bool> kde-system-active;
 
-    // 1:1 with `material_you::SchemeStyle::all()`, index 0 being None. Visible only
-    // under the Material 3 theme.
+    // 1:1 with `material_you::SchemeStyle::all()`, 0 being None.
     in-out property <int> color-style-idx;
 
-    // A non-`None` Color Style *and* a seed the coordinator actually extracted from the
-    // artwork. Flips the Color Style row's description so it's clear whether dynamic
-    // colour is live.
+    // A Color Style *and* a seed actually extracted from the artwork, which the row's description
+    // reports.
     in property <bool> material-you-active;
 
-    // Material 3 with a Color Style set. Unlike `material-you-active` it holds with nothing
-    // playing, so the rows it shows don't come and go between tracks.
+    // Unlike `material-you-active`, holds with nothing playing, so the rows it shows don't come and
+    // go between tracks.
     out property <bool> material-you-enabled: root.material3-selected && root.color-style-idx != 0;
 
-    // Fired on chip / dot click. Rust resolves idx → id, persists, applies the new
-    // palette and writes the lists back.
     callback theme-changed(int);
     callback variant-changed(int);
     callback accent-changed(int);
     callback accent-follows-artwork-changed(bool);
     callback color-style-changed(int);
 
-    // Hides the "Match Unfocused Window Background" row entirely off-KDE — the
-    // behaviour mirrors KDE's window-decoration fade and means nothing elsewhere.
+    // Hides the row off KDE, whose decoration fade it mirrors.
     in property <bool> match-unfocused-supported;
 
     in-out property <bool> match-unfocused-bg;
     callback match-unfocused-bg-changed(bool);
 
-    // Whether the tray subsystem runs at all. Never written from Slint: the switch is
-    // `manual: true` and routes through the `restart-tray` Dialog, the change only
-    // applying next launch. Opt-in.
+    // Never written from Slint: the switch is `manual` and routes through the `restart-tray`
+    // dialog, the change applying next launch.
     in property <bool> tray-enabled;
 
-    // A tray icon was actually created. "Close to Tray" greys out rather than hiding when false —
-    // either the tray is off, or the session has no tray host (vanilla GNOME without AppIndicator)
-    // — because the close handlers then fall back to quitting and the toggle would do nothing.
+    // A tray icon exists. Without one "Close to Tray" greys out, the close handlers quitting
+    // regardless.
     in property <bool> tray-active;
 
-    // Applied synchronously to a process-global atomic so `window_chrome`'s close handlers see it
-    // on the next close, then persisted on the blocking pool. Off by default; with no tray icon
-    // active the close handlers quit regardless, so this can never strand the window.
+    // Can't strand the window: with no tray icon the close handlers quit regardless.
     in-out property <bool> close-to-tray: false;
     callback close-to-tray-changed(bool);
 
-    // Applied to `PlayerState.gapless_enabled` synchronously — the next 500 ms monitor
-    // tick picks it up — then persisted on the blocking pool.
     in-out property <bool> gapless-playback: true;
     callback gapless-playback-changed(bool);
 
-    // 0 = None, 1 = Equalizer; read by `PlayButton`. Rust maps idx ↔ token in both
-    // directions, so a malformed disk value can't pin the chip to an invalid index.
+    // 0 = None, 1 = Equalizer, mapped to a token in Rust so a malformed one can't pin an invalid
+    // index.
     in-out property <int> play-button-animation-idx: 0;
     callback play-button-animation-changed(int);
 
-    // Persist-only — no runtime side effect. `main.rs` consults the flag once at the
-    // next launch, after `restore_persisted_playback`.
+    // Persist-only: `boot::tasks::maybe_resume_on_startup` reads it at the next launch.
     in-out property <bool> resume-on-startup: false;
     callback resume-on-startup-changed(bool);
 
-    // Each `*-changed` applies to the live playback engine synchronously before persisting on the
-    // blocking pool — the equalizer / ReplayGain two-phase shape. The duration is in **seconds**
-    // here, the slider's natural unit; Rust converts to the milliseconds the backend and
-    // `settings.json` use, and the bounds are seeded from `player::crossfade::{MIN,MAX}`.
-    // `-changed` fires live during a drag and only applies; `-committed` fires on release and
-    // persists — the `set-volume` / `commit-volume` split.
+    // Seconds here, the slider's unit; Rust converts to the backend's milliseconds and seeds the
+    // bounds from `player::crossfade::{MIN,MAX}`. `-changed` fires live through a drag and only
+    // applies, `-committed` persists on release.
     in-out property <bool> crossfade-enabled: false;
     callback crossfade-enabled-changed(bool);
     in-out property <float> crossfade-duration-secs: 2.0;
@@ -114,94 +94,82 @@ export global Settings {
     in-out property <bool> crossfade-fade-on-pause: false;
     callback crossfade-fade-on-pause-changed(bool);
 
-    // Applied to the engine synchronously, acted on at the next track. A rate change then plays
-    // without a crossfade, since a fade can't cross the reopen it needs. The row is hidden where
-    // following the rate changes nothing, which Rust decides per platform.
+    // Acted on at the next track, which then plays without a crossfade: a fade can't cross the
+    // reopen. Hidden where Rust says following the rate changes nothing.
     in-out property <bool> output-follow-rate: false;
     callback output-follow-rate-changed(bool);
     in property <bool> follow-rate-supported;
 
-    // Linear (0) or band-limited (1), for every conversion: a rate mismatch, either mode, and any
-    // speed other than one. Applied off the UI thread, the engine waiting out a reopen for it.
+    // Linear (0) or band-limited (1), for every conversion, any speed but one included. Applied off
+    // the UI thread, the engine waiting out a reopen.
     in-out property <int> output-resampler-idx: 0;
     out property <bool> resampler-linear: root.output-resampler-idx == 0;
     callback output-resampler-changed(int);
 
-    // Shared (0) or exclusive (1), and which card an exclusive claim takes, and shared output too
-    // where `shared-device-supported`. Rust lists the cards, whose names are data, and applies a
-    // pick off the UI thread, since claiming a card blocks. The rows are hidden where the platform
-    // has no exclusive backend.
+    // Shared (0) or exclusive (1), and the card a claim takes, shared output's too where
+    // `shared-device-supported`. Applied off the UI thread, claiming a card blocking; hidden where
+    // there is no exclusive backend.
     in property <bool> exclusive-supported;
     in property <bool> shared-device-supported;
-    // The picker's first row where it chooses for shared output too, standing for no saved card.
-    // Translated here because the rest of the list is Rust's.
+    // The first row where the picker chooses for shared output too: no saved card. Translated here,
+    // the rest of the list being device names.
     pure callback output-device-system-default() -> string;
     output-device-system-default => {
         return @tr("System Default");
     }
     in-out property <int> output-mode-idx: 0;
     out property <bool> exclusive-chosen: root.exclusive-supported && root.output-mode-idx == 1;
-    // The engine's own answer: exclusive output always follows the file's rate, and the toggle
-    // counts only where it can do anything.
+    // The engine's own answer: exclusive output always follows the file's rate.
     out property <bool> rate-follows: root.exclusive-chosen
         || (root.follow-rate-supported && root.output-follow-rate);
     callback output-mode-changed(int);
-    // The confirmed Make Bit-Perfect from shared output: a pick of exclusive and the reset, in that
-    // order in one task, since the reset keeps the volume only where the claim carries it.
+    // Make Bit-Perfect from shared output: a pick of exclusive, then the reset, in one task, since
+    // the reset keeps the volume only where the claim carries it.
     callback output-switch-to-bit-perfect();
     in property <[string]> output-device-names;
     in-out property <int> output-device-idx: -1;
     callback output-device-changed(int);
-    // Asked as the picker mounts, as it opens and while it is on screen: a card plugged in or
-    // pulled announces nothing, so a list taken earlier can be missing it. Returns the
-    // `output-devices-revision` the answer will be published under, which the picker's popup
-    // waits for.
+    // Asked as the picker mounts, opens and shows, a card plugged in or pulled announcing nothing.
+    // Returns the revision the answer will publish under, which the popup waits for.
     callback list-output-devices() -> int;
     in property <int> output-devices-revision;
-    // What a claim does where the card lacks the file's rate: play shared (0), or resample to one
-    // of the card's rates and keep it (1). Applied like the pickers above, since a change reopens
-    // the claim, and hidden where the backend can't ask a card which other rates it runs.
+    // Where the card lacks the file's rate: play shared (0) or resample to a rate it runs (1).
+    // Reopens the claim; hidden where a card can't be asked its other rates.
     in property <bool> rate-fallback-supported;
     in-out property <int> output-rate-fallback-idx: 0;
     callback output-rate-fallback-changed(int);
     // The saved card is not among those listed.
     in property <bool> output-device-missing;
-    // How an exclusive writer paces the card: a period chip, -1 where the saved period matches
-    // none of them, and polling in place of the card's events where the platform tells the two
-    // apart. Applied like the pickers above, since either reopens the card.
+    // The exclusive writer's period, -1 where the saved one matches no chip, and polling in place
+    // of the card's events where the platform tells the two apart. Either reopens the card.
     in-out property <int> output-period-idx: 2;
     callback output-period-changed(int);
     in property <bool> polling-supported;
     in-out property <bool> output-polling: false;
     callback output-polling-changed(bool);
-    // The card's own control carrying the volume, so the samples reach it untouched. Applied like
-    // the pickers above: a change reopens the claim, since moving the gain between the samples and
-    // the card mid-stream could play a period at the wrong level.
+    // The volume on the card's own control, so the samples reach it untouched. Reopens the claim:
+    // moving the gain mid-stream could play a period at the wrong level.
     in property <bool> hardware-volume-supported;
     in-out property <bool> output-hardware-volume: false;
     callback output-hardware-volume-changed(bool);
-    // Give the card back once a pause has held it long enough. Not one of the pickers: it changes
-    // nothing about the claim, so a toggle applies at once and reopens nothing.
+    // Changes nothing about the claim, so it applies at once and reopens nothing.
     in-out property <bool> output-release-paused: false;
     callback output-release-paused-changed(bool);
-    // The silence a reopen onto a new rate writes first, for the DACs that mute while they relock.
-    // The drag only moves the readout: nothing hears the value until the next rate change, so it
-    // goes to the engine and to disk together on release.
+    // Silence written first on a reopen at a new rate, for DACs that mute while they relock.
+    // Nothing hears it until the next rate change, so the drag moves only the readout.
     in-out property <float> output-resync-ms: 200;
     in property <float> output-resync-max-ms: 1000;
     callback output-resync-committed(int /* milliseconds */);
 
-    // Rust owns every property here — the `ScrobbleService` status-watch subscriber is the single
-    // writer — and the toggles route their events back to persist and refresh the shadow. Connect
-    // is opened inline from the section markup rather than through a callback, dodging Slint's
-    // recursion guard. `configured` says whether this build shipped Last.fm app keys.
+    // Rust's alone, `ScrobbleService`'s status subscriber being the one writer. `configured` says
+    // whether this build shipped Last.fm app keys.
     in property <bool> scrobble-lastfm-configured;
     in property <bool> scrobble-lastfm-connected;
     in property <string> scrobble-lastfm-username;
     in-out property <bool> scrobble-lastfm-enabled;
     callback scrobble-lastfm-enabled-changed(bool);
     callback scrobble-lastfm-disconnect();
-    // Mirror favorites to Last.fm Loved Tracks — independent of the two.
+    // Favorites mirrored to Loved Tracks, independent of scrobbling.
     in-out property <bool> scrobble-lastfm-love;
     callback scrobble-lastfm-love-changed(bool);
     in property <bool> scrobble-listenbrainz-connected;
@@ -209,14 +177,12 @@ export global Settings {
     in-out property <bool> scrobble-listenbrainz-enabled;
     callback scrobble-listenbrainz-enabled-changed(bool);
     callback scrobble-listenbrainz-disconnect();
-    // Mirror favorites to ListenBrainz recording feedback.
+    // Favorites mirrored to recording feedback.
     in-out property <bool> scrobble-listenbrainz-love;
     callback scrobble-listenbrainz-love-changed(bool);
 
-    // Same shape as scrobbling: the `DiscordPresenceService` status-watch subscriber is the single
-    // writer, so a Discord restart flips the status row live, and the toggles persist and refresh
-    // the shadow through `set_flags`, which starts and stops the IPC worker. No credentials — the
-    // application id is a compile-time constant, so everything fits on `Settings`.
+    // Scrobbling's shape: `DiscordPresenceService`'s status subscriber is the one writer, so a
+    // Discord restart flips the row live, and `set_flags` starts and stops the IPC worker.
     in property <bool> discord-rpc-connected;
     in-out property <bool> discord-rpc-enabled;
     callback discord-rpc-enabled-changed(bool);
@@ -225,18 +191,14 @@ export global Settings {
     in-out property <bool> discord-rpc-hide-when-paused;
     callback discord-rpc-hide-when-paused-changed(bool);
 
-    // The Radio section's master switch: the sidebar row and the index-10 router branch both
-    // read it, so flipping it mounts and unmounts the whole feature with no restart. Declared
-    // false so a settings read that fails leaves a local-only install local-only. **The gate
-    // that matters isn't either of these** — `library::radio` refuses on the Rust shadow, which
-    // is what makes "off" mean no traffic rather than a hidden row.
+    // The sidebar row and the nav-10 router branch read it, so the feature mounts with no restart.
+    // False so a failed settings read leaves an install local-only. **The gate that matters is
+    // Rust's**: `library::radio` refuses on its shadow, so off means no traffic.
     in-out property <bool> radio-enabled: false;
     callback radio-enabled-changed(bool);
-    // The sub-toggles declare their live default here. Only the click one differs from the
-    // master's cautious `false`, describing what the feature does rather than whether it runs.
-    // Nothing in Slint reads any of them: the segment filter runs in `library::radio::search`, the
-    // click on the play path and the scrobble in `tasks::scrobble`, all off Rust shadows, so these
-    // are the control surface and not the answer.
+    // Only the click one defaults on, describing what the feature does rather than whether it
+    // runs. Nothing in Slint reads these: `library::radio::directory`, the play path and
+    // `tasks::scrobble` each answer off a Rust shadow.
     in-out property <bool> radio-hide-segmented: false;
     callback radio-hide-segmented-changed(bool);
     in-out property <bool> radio-send-clicks: true;
@@ -244,74 +206,56 @@ export global Settings {
     in-out property <bool> radio-scrobble: false;
     callback radio-scrobble-changed(bool);
 
-    // Whether lyrics run at all, the Now Playing header's switch being its twin. Declared false so a
-    // settings read that fails does not hand the Up Next column to a panel nobody asked for.
+    // The Now Playing switch's twin. False so a failed settings read doesn't hand Up Next's column
+    // to a panel nobody asked for.
     in-out property <bool> lyrics-enabled: false;
     callback lyrics-enabled-changed(bool);
 
-    // Whether a track carrying no words of its own may be looked up online. Declared false so a
-    // settings read that fails leaves a local-only install local-only, which is the radio switch's
-    // reason. **Nothing in Slint gates on it either**: `library::lyrics` refuses on the Rust
-    // shadow, and this is the control surface rather than the answer. The panel reads it once, to
-    // choose between "nothing found" and "the lookup is off".
+    // False for the radio switch's reason, and like it gates nothing in Slint: `library::lyrics`
+    // refuses on the Rust shadow. The panel reads it only to tell "nothing found" from "the lookup
+    // is off".
     in-out property <bool> lyrics-online-enabled: false;
     callback lyrics-online-enabled-changed(bool);
 
-    // Whether the panel draws how a line sounds under the line itself. Declared true, unlike its
-    // neighbour: it reaches nothing and costs nothing, drawing only under a script the reader
-    // cannot sound out, so a settings read that fails leaves it on rather than hiding a feature.
-    // **The Now Playing menu writes the same field**, which is why both surfaces go through one
-    // `SharedFlag` rather than through whichever of them the user touched last.
+    // True: it reaches nothing and draws only under a script the reader can't sound out. **The Now
+    // Playing menu writes it too**, hence one `SharedFlag` for both.
     in-out property <bool> lyrics-romanization-shown: true;
     callback lyrics-romanization-shown-changed(bool);
 
-    // Persists, then flips the `FolderWatcher` on the tokio runtime rather than the
-    // blocking pool — the start needs an async DB query before it can take the
-    // parking_lot lock. **On by default**: consumer players auto-watch with no toggle
-    // at all, and shipping it off stranded new users in a stale-UI failure mode.
+    // **On by default**: off, the library falls behind the disk with nothing saying why. Flips the
+    // `FolderWatcher` on the runtime, not the blocking pool, its start awaiting a query first.
     in-out property <bool> watch-for-file-changes: true;
     callback watch-for-file-changes-changed(bool);
 
-    // Whether a star also lands in the file's own tag. **On by default**: a rating that lives
-    // only in the database is one a library rebuild loses and no other player can see, which is
-    // the reason the write path exists at all. The cost it buys is real though — lofty
-    // re-serializes the whole tag, so a rating rewrites the file — hence the switch.
+    // **On by default**: a rating only in the database is lost to a rebuild and invisible to every
+    // other player. The switch is for the cost, lofty re-serializing the whole tag.
     in-out property <bool> write-ratings-to-tags: true;
     callback write-ratings-to-tags-changed(bool);
 
-    // Logical pixels, mirrored into `Theme.shell-radius` on every change so the mantle shell and
-    // content panel repaint reactively. Rust clamps and snaps to the nearest chip preset on read,
-    // so the chip selection matches what's painted even after a hand-edited `settings.json`.
+    // Mirrored into `Theme.shell-radius`. Rust snaps to the nearest chip on read, so a hand-edited
+    // `settings.json` still selects one.
     in-out property <int> corner-radius: 6;
     callback corner-radius-changed(int);
 
-    // 0 = Windows (its caption glyphs), 1 = macOS (traffic lights with hover-reveal glyphs),
-    // 2 = KDE (Breeze's glyphs and hover disc).
-    // Mirrored into `Theme.titlebar-button-style` so `custom-titlebar.slint` reads it through
-    // `Theme`, the `shell-radius` precedent. Inert under the native titlebar.
+    // Mirrored into `Theme.titlebar-button-style`, which spells the tokens. Inert under the native
+    // titlebar.
     in-out property <int> titlebar-button-style: 0;
     callback titlebar-button-style-changed(int);
 
-    // 0 = Right (Windows / KDE), 1 = Left (macOS). Independent of the style — all four
-    // combinations render with close always at the outer window corner.
+    // Independent of the style: close sits at the outer corner in all four combinations.
     in-out property <int> titlebar-button-side: 0;
     callback titlebar-button-side-changed(int);
 
-    // The miniplayer's captions, in `titlebar-button-style`'s tokens and mirrored into
-    // `MiniPlayer.button-style` the same way. Live under the native titlebar too, the miniplayer
-    // dropping the frame.
+    // `titlebar-button-style`'s tokens, mirrored into `MiniPlayer.button-style`. Live under the
+    // native titlebar too, the miniplayer dropping the frame.
     in-out property <int> mini-player-button-style: 0;
     callback mini-player-button-style-changed(int);
 
-    // The outline a frameless window draws where an OS frame would: under the custom titlebar
-    // always, and for the miniplayer under the native one. The outline reads the switch directly,
-    // so Rust only persists it.
+    // The outline reads the switch directly, so Rust only persists it.
     in-out property <bool> window-border-shown: true;
     callback window-border-shown-changed(bool);
 
-    // System is the OS's own colour rather than a swatch, so `window-border-color-idx` is -1
-    // while it holds. The swatches are the theme's accents, which the grid reads off
-    // `accent-colors` and `accent-names`.
+    // The OS's own colour, `window-border-color-idx` being -1 while it holds.
     in-out property <bool> window-border-system: true;
     callback window-border-system-changed(bool);
     // Under Material You, System mixes from the artwork's palette rather than the theme's own.
@@ -320,10 +264,8 @@ export global Settings {
     in-out property <int> window-border-color-idx: -1;
     callback window-border-color-changed(int);
 
-    // Mirrors `SettingsData.overflow_buttons`, a `Vec<String>` of ids. Discrete bools
-    // rather than a `[string]` model so the callback can name which button toggled
-    // without diffing arrays; Rust applies the add/remove and persists. The
-    // now-playing bar reads them to gate inline-vs-overflow visibility.
+    // `SettingsData.overflow_buttons`' ids as bools, so the callback names the button that toggled
+    // without diffing arrays.
     in-out property <bool> overflow-favorite;
     in-out property <bool> overflow-repeat;
     in-out property <bool> overflow-shuffle;
@@ -332,10 +274,7 @@ export global Settings {
     in-out property <bool> overflow-quality;
     callback overflow-buttons-changed(string /*id*/, bool /*overflow-on*/);
 
-    // `language-names` carries native-name labels, always in the language's own script and never
-    // re-translated; `language-codes` the matching `SUPPORTED_LOCALES` codes. The change callback
-    // resolves idx → code and calls `slint::select_bundled_translation` synchronously, which
-    // re-renders every `@tr` on the next frame, then spawns the disk persist.
+    // Native names, never re-translated, 1:1 with the `SUPPORTED_LOCALES` codes beside them.
     in property <[string]> language-names;
     in property <[string]> language-codes;
     // The native names joined, for the Language card's search term.
@@ -343,31 +282,26 @@ export global Settings {
     in-out property <int>  language-idx;
     callback language-changed(int);
 
-    // Opens `CARGO_PKG_REPOSITORY` in the system browser. No Slint-side handler.
+    // `CARGO_PKG_REPOSITORY`, in the browser.
     callback open-repository();
 
-    // Opens the Ko-fi page, from the About card's button and the one-time support toast's action
-    // alike — hence `crates/melodia-views/src/ui/support.rs` rather than `about.rs`.
+    // Both support buttons are wired in `ui/support.rs` rather than `about.rs`, Ko-fi's being the
+    // support toast's action too.
     callback open-kofi();
-    // The About card's other support button, beside Ko-fi's and wired with it.
     callback open-github-sponsors();
 
-    // The About card's "Welcome Guide" row. Handled in `crates/melodia-views/src/ui/onboarding/`,
-    // which owns the card, rather than in `about.rs` — the Ko-fi row's split, for its reason.
+    // Wired in `ui/onboarding/`, which owns the card.
     callback run-onboarding();
 
-    // The Diagnostics card's three rows, all handled in `crates/melodia-views/src/ui/settings/diagnostics.rs`.
-    // `open-log-folder` is also the "crashed last run" toast's action, via `Notifications.action`.
+    // Wired in `ui/settings/diagnostics.rs`; `open-log-folder` is the crash toast's action too.
     callback open-log-folder();
     callback save-diagnostics-report();
-    // Applied live via `LoggerHandle::set_new_spec` — no relaunch — then persisted. Inert when
-    // `RUST_LOG` is set, which wins outright; see `services::logging`.
+    // Applied live, and inert under `RUST_LOG`, which wins (`platform::logging`).
     in-out property <bool> verbose-logging: false;
     callback verbose-logging-changed(bool);
 
-    // Everything below is a `pure callback` wrapping an `@tr` literal, Slint 1.18 exposing no
-    // Rust-callable `tr(...)`: Rust invokes these at push time so each string resolves in the
-    // locale selected right then, not the one active when the notification was built.
+    // The rest wrap `@tr` literals, Slint exposing no Rust-callable `tr`, so Rust resolves each at
+    // push time in the locale running then.
     pure callback watcher-disabled-title() -> string;
     watcher-disabled-title => {
         return @tr("File watching disabled");
@@ -377,7 +311,7 @@ export global Settings {
         return @tr("Tracks won't reflect disk changes until you re-enable it.");
     }
 
-    // Surfaced on a watcher-overflow rescan (`FileEvent::RescanNeeded`).
+    // On a watcher-overflow rescan (`FileEvent::RescanNeeded`).
     pure callback library-resyncing-title() -> string;
     library-resyncing-title => {
         return @tr("Library re-syncing");
@@ -395,8 +329,6 @@ export global Settings {
         return @tr("Some cover art was missing. Melodia is restoring it from your music files.");
     }
 
-    // The updater's three toasts. "Available" and "installed" carry an action, Install and
-    // Restart; "failed" has none and surfaces the error in its body.
     pure callback update-available-title() -> string;
     update-available-title => {
         return @tr("Update available");
@@ -425,10 +357,7 @@ export global Settings {
     update-failed-title => {
         return @tr("Update failed");
     }
-    // `kind` mirrors `FailureKind::as_kind_str`, which classifies the underlying
-    // `AppError`: "network", "signature", "parse", "io", or anything else. The bank
-    // lives here so each variant goes through `@tr`; the raw error was already logged
-    // at the send site.
+    // `kind` is `FailureKind::as_kind_str`'s. The raw error was logged at the send site.
     pure callback update-failed-reason(string /*kind*/) -> string;
     update-failed-reason(kind) => {
         if (kind == "network") {
@@ -446,7 +375,6 @@ export global Settings {
         return @tr("Update failed. See logs for details.");
     }
 
-    // Saving a diagnostics bundle from the Diagnostics card.
     pure callback diagnostics-saved-title() -> string;
     diagnostics-saved-title => {
         return @tr("Diagnostics report saved");
@@ -464,9 +392,8 @@ export global Settings {
         return @tr("See the log for details.");
     }
 
-    // Pushed once on the launch after a panic, by `crash_report::take_unseen`.
-    // The action label deliberately repeats the Diagnostics card's button, both
-    // because it goes to the same place and so the two share one msgid.
+    // Pushed once after a panic (`crash_report::take_unseen`). The action shares the Diagnostics
+    // card button's msgid, going to the same place.
     pure callback crash-report-title() -> string;
     crash-report-title => {
         return @tr("Melodia crashed last time");
@@ -480,9 +407,8 @@ export global Settings {
         return @tr("Open Folder");
     }
 
-    // Pushed once ever, by `ui::support`, on an early launch that isn't the first.
-    // Sticky for the crash notice's reason: it fires once, so a notice the user was
-    // looking away for is a notice that did nothing.
+    // Pushed once ever by `ui::support`, and sticky: a notice that fires once is wasted on a user
+    // looking away.
     pure callback support-prompt-title() -> string;
     support-prompt-title => {
         return @tr("Enjoying Melodia?");
@@ -496,8 +422,6 @@ export global Settings {
         return @tr("Support");
     }
 
-    // Pushed by `tasks::audio_health` when the output device goes away. No action
-    // button — there is no device picker to send the user to.
     pure callback audio-device-lost-title() -> string;
     audio-device-lost-title => {
         return @tr("Audio device disconnected");
@@ -507,15 +431,13 @@ export global Settings {
         return @tr("Playback won't be audible until you reconnect it and restart Melodia.");
     }
 
-    // The import/export header pills on the Playlists view.
     pure callback playlist-import-title(int /*imported*/) -> string;
     playlist-import-title(imported) => {
         return @tr("{n} playlist imported" | "{n} playlists imported" % imported);
     }
     pure callback playlist-import-message(int /*tracks*/, int /*missing*/) -> string;
     playlist-import-message(tracks, missing) => {
-        // Pluralized on the track count; the no-missing branch shares its msgid with
-        // `add-to-playlist-message`.
+        // The no-missing arm shares its msgid with `add-to-playlist-message`.
         return missing > 0
             ? @tr("{n} track added · {} missing" | "{n} tracks added · {} missing" % tracks, missing)
             : @tr("{n} track added" | "{n} tracks added" % tracks);
@@ -550,16 +472,15 @@ export global Settings {
         return @tr("These playlists are too large for one .zip file. Export fewer at a time.");
     }
 
-    // The station list's own pair. Separate msgids rather than a shared "{n} items imported":
-    // a station is not a playlist, and the skipped line has no playlist equivalent.
+    // Not a shared "{n} items imported": a station isn't a playlist, and the skipped line has no
+    // playlist twin.
     pure callback station-import-title(int /*imported*/) -> string;
     station-import-title(imported) => {
         return @tr("{n} station added" | "{n} stations added" % imported);
     }
     pure callback station-import-message(int /*skipped*/) -> string;
     station-import-message(skipped) => {
-        // Empty where nothing was skipped, which is the ordinary import — the card drops a blank
-        // body, where an unconditional line reports "0 were already in your list."
+        // Empty for the ordinary import, the card dropping a blank body.
         return skipped > 0
             ? @tr("{n} was already in your list." | "{n} were already in your list." % skipped)
             : "";
@@ -590,9 +511,7 @@ export global Settings {
         return @tr("Couldn't write the station list.");
     }
 
-    // Titles for the generic backend-failure toasts coming through the
-    // `services::toast` bridge, resolved by toast kind. The dynamic detail — a path or
-    // an error message — rides on the body and is not translated.
+    // The `utils::toast` bridge's titles, by kind; the detail rides the body untranslated.
     pure callback toast-playback-error-title() -> string;
     toast-playback-error-title => {
         return @tr("Playback error");
@@ -621,8 +540,8 @@ export global Settings {
     toast-radio-vote-title => {
         return @tr("Vote not counted");
     }
-    // The body is translated as well: the detail is only the refusing device's name, empty where
-    // it couldn't be found. The reason is left to the Output settings, where it reads in full.
+    // The body is translated too, the detail being only the device's name, empty where it couldn't
+    // be found. The reason is left to the Output settings, where it reads in full.
     pure callback toast-exclusive-refused-title() -> string;
     toast-exclusive-refused-title => {
         return @tr("Exclusive output unavailable");
@@ -637,8 +556,7 @@ export global Settings {
     toast-exclusive-refused-action-label => {
         return @tr("Details");
     }
-    // The one toast kind whose body is localized too — a restart that couldn't
-    // relaunch carries no path or error worth showing, only an instruction.
+    // A localized body: a relaunch that failed has no path or error to show, only an instruction.
     pure callback toast-restart-required-title() -> string;
     toast-restart-required-title => {
         return @tr("Restart Required");
@@ -648,8 +566,6 @@ export global Settings {
         return @tr("Melodia couldn't relaunch itself. Close and reopen it to apply the change.");
     }
 
-    // The Add-to-Playlist picker's commit toast: title pluralizes on playlists,
-    // message on tracks added.
     pure callback add-to-playlist-title(int /*playlists*/) -> string;
     add-to-playlist-title(playlists) => {
         return @tr("Added to {n} playlist" | "Added to {n} playlists" % playlists);
@@ -659,8 +575,7 @@ export global Settings {
         return @tr("{n} track added" | "{n} tracks added" % tracks);
     }
 
-    // `tag-multiple-values` is the placeholder a disagreeing field shows in a batch
-    // edit; the rest are the Save completion toast.
+    // A disagreeing field's placeholder in a batch edit; the rest are the Save toast.
     pure callback tag-multiple-values() -> string;
     tag-multiple-values => {
         return @tr("‹multiple values›");
@@ -679,18 +594,14 @@ export global Settings {
         }
         return "";
     }
-    // The message above names a count and nothing else, which tells a user their edit half-landed
-    // without telling them what to do about it. This one is reached instead wherever every file in
-    // the batch fell out the same way, which is the usual shape: one album, one format, one field.
+    // Reached instead of the count wherever every file fell out the same way, the usual shape (one
+    // album, one format, one field), so the toast can say what to do about it.
     pure callback tag-unsupported-message(string /*fields*/, string /*format*/) -> string;
     tag-unsupported-message(fields, format) => {
         return @tr("{} can't be saved to {} files", fields, format);
     }
-    // Indexed by `TagField::label_index`: `PLAIN_TAG_FIELDS` in order, then the ten credit roles in
-    // `ROLES` order. An inline literal list because `@tr` resolves at codegen and a `[string]`
-    // seeded from Rust would arrive untranslated, so Rust sends indices and reads the labels back.
-    // A label out of order names the wrong field and nothing else would notice, which is what
-    // `tags_tests.rs::the_slint_label_lists_line_up_with_the_rust_order` pins.
+    // Indexed by `TagField::label_index`: `PLAIN_TAG_FIELDS`, then the ten `ROLES`. Inline so `@tr`
+    // reaches it, Rust sending indices; `tags_tests.rs` pins the order, which nothing else would.
     out property <[string]> tag-field-labels: [
         @tr("Title"), @tr("Artist"), @tr("Album"), @tr("Album Artist"), @tr("Genre"),
         @tr("Year"), @tr("Track"), @tr("Track Total"), @tr("Disc"), @tr("Disc Total"),

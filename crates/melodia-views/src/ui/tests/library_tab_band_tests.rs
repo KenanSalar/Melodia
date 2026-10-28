@@ -440,8 +440,8 @@ fn the_hero_mounts_on_the_detail_or_a_running_morph() {
 }
 
 /// One hero, one clock — and **nothing that carries content fades on a plain
-/// `opacity: root.hero-t`.** `Opacity::need_layer`'s two bails and the line-box crop are
-/// `.claude/rules/slint-pitfalls.md`'s; what it costs here is three separate things.
+/// `opacity: root.hero-t`.** Below 1, `Opacity::need_layer` renders the subtree into a texture
+/// cut to its geometry; what it costs here is three separate things.
 ///
 /// The **text** half's texture is sized to child geometry, and a `Text`'s geometry is its
 /// line box rather than its ink — so an Arabic hero title loses the hamza above its alifs

@@ -1,22 +1,8 @@
-//! Fetches `latest.json` from
-//! `https://github.com/KenanSalar/Melodia/releases/latest/download/latest.json`,
-//! plus its sibling `latest.json.minisig` for manifest verification.
+//! Fetches `latest.json` and its `.minisig`, sending `If-None-Match` when the caller has a tag so
+//! a `304` skips both the fetch and the verify.
 //!
-//! Sends `If-None-Match` when the caller passes a tag, so a check can
-//! short-circuit on `304 Not Modified` without fetching or verifying the
-//! manifest again. Whether a tag is worth sending is the caller's call.
-//!
-//! Verification ordering: minisign signature over the manifest body
-//! is checked **before** `serde_json::from_str`. A missing `.minisig`,
-//! an invalid signature, or a trusted-comment lacking `manifest=true`
-//! all refuse the manifest as a signature failure, and a body that verifies
-//! but won't parse is refused as a parse failure, each naming its
-//! [`FailureKind`] here rather than leaving the caller to guess it. Failing
-//! closed is the only way the signature is a real security boundary; a
-//! fail-open posture would let a network attacker strip the `.minisig` to
-//! bypass verification.
-//!
-//! [`FailureKind`]: super::FailureKind
+//! The signature is checked **before** the body is parsed, and fails closed: a missing `.minisig`
+//! is refused like an invalid one, or a network attacker could strip it.
 
 use reqwest::StatusCode;
 use reqwest::header::{ETAG, HeaderValue, IF_NONE_MATCH};
@@ -27,17 +13,11 @@ use super::event::{UpdateFailure, UpdateResult};
 use super::manifest::LatestManifest;
 use super::minisign;
 
-/// Where the manifest and its signature are published, threaded through the fetch rather than
-/// read from a const so a test can point it at a local server. Parameterised the way
-/// `current_version` already is, and deliberately not an environment override: the fetch is the
-/// updater's trust boundary, and a second configuration surface on it is one more thing that has
-/// to be argued about.
+/// Passed to the fetch rather than read inside it, so a test can point it at a local server.
+/// Deliberately no environment override: the fetch is the updater's trust boundary.
 pub const RELEASES_BASE: &str = "https://github.com/KenanSalar/Melodia/releases/latest/download";
 
-/// Ceiling on the manifest body. Room for many times the release
-/// matrix it describes, and still a bound: the signature is checked
-/// *after* the download, so an unbounded read here would allocate
-/// whatever the CDN in front of the release served.
+/// Many times the release matrix, and still a bound: the signature is checked only after the read.
 const MANIFEST_MAX_BYTES: u64 = 256 * 1024;
 
 /// A minisign blob is two comment lines and a base64 signature.
@@ -82,13 +62,6 @@ pub async fn fetch_latest_manifest(
     let body =
         melodia_net::services::net::read_capped(resp, "latest.json", MANIFEST_MAX_BYTES).await?;
 
-    // Fetch the sibling .minisig. A missing or non-200 response is
-    // treated as a verification failure — we'd rather refuse to install
-    // than let a network attacker strip the signature and serve a
-    // doctored manifest. The same release that started signing the
-    // manifest also ships this verification, so there's no transition
-    // gap where a signed-manifest server would serve a pre-signing
-    // client (or vice versa).
     let sig_resp = http
         .get(&signature_url)
         .send()

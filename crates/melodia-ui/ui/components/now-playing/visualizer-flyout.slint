@@ -3,9 +3,8 @@ import { PopupSurface } from "../popup-surface.slint";
 import { FlyoutOption } from "flyout-option.slint";
 import { VizStylePresets } from "flyout-presets.slint";
 
-// An "Off" row over one row per shared style preset. Like the sleep flyout it
-// lives *inside* the menu's one PopupWindow, left of the column; the host places
-// it and this renders the rows.
+// An "Off" row over one row per shared style preset, filling `VisualizerPicker`'s
+// popup: the host sizes and places it, and this renders the rows.
 //
 // The style rows take their loop index directly, so the leading "Off" row can't
 // shift them out of step with `STYLES` in `crates/melodia-views/src/ui/visualizer/mod.rs`.

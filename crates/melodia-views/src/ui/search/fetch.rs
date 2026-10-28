@@ -1,9 +1,4 @@
-//! Search fetch flow: debounced commit → FTS+LIKE round-trip → stale-token
-//! guard → cover prewarm → apply. Plus the 2-second delayed history-add
-//! scheduler.
-//!
-//! Where the results *go* is [`super::apply`]; what wins the Top Result card
-//! is [`super::top_result`].
+//! The fetch behind a committed query, and the delayed history add.
 
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -21,15 +16,8 @@ use melodia_core::entities::search::SearchResults;
 use melodia_core::error::{AppResult, describe};
 use melodia_ui::{AppWindow, Search};
 
-/// Bump the fetch token, run `search_all`, and (if the token is still
-/// current after the SQL resolves) apply the result to the Slint
-/// models. A newer keystroke that supersedes this one will have moved
-/// the token, and the post-fetch check drops the stale UI write.
-///
-/// Loading state: set ON synchronously *before* the await so the view's
-/// "Searching…" line is visible during the round-trip; turned OFF in
-/// the apply step. Empty query bypasses the fetch and clears
-/// everything synchronously.
+/// Runs `search_all` and applies it unless a newer commit moved the fetch token meanwhile.
+/// `loading` goes up before the await and down with the apply; an empty query clears instead.
 pub async fn kick_search(
     state: &AppState,
     search_ui: &Arc<SearchUi>,
@@ -48,18 +36,12 @@ pub async fn kick_search(
 
     let token_now = search_ui.fetch_token.load(Ordering::Relaxed);
     if token_now != my_token {
-        // Newer keystroke superseded us. Don't paint the stale set —
-        // the in-flight kick_search for the newer query will. Also
-        // don't reset `loading`: that in-flight task is between its
-        // `set_loading_on_ui(true)` and apply step, and toggling here
-        // would race.
+        // Superseded. `loading` stays up, being the newer fetch's to lower.
         return Ok(());
     }
 
     if prewarm_result_covers(search_ui, &results).await {
-        // The decode burst yielded — re-check staleness so a query that
-        // arrived mid-prewarm wins the paint (same no-`loading`-reset
-        // contract as the post-fetch check above).
+        // The prewarm yielded, so a commit landing during it wins.
         if search_ui.fetch_token.load(Ordering::Relaxed) != my_token {
             return Ok(());
         }
@@ -70,23 +52,13 @@ pub async fn kick_search(
     apply_results_to_slint(search_ui, weak, &results, &trimmed);
     set_loading_on_ui(weak, false);
 
-    // Schedule the 2-second delayed history add: a query the user paused
-    // on long enough is worth remembering; a fast typo isn't.
     schedule_history_add(state, search_ui, weak, query);
     Ok(())
 }
 
-/// Warm every result surface's covers off-thread before the apply. Returns
-/// whether it actually yielded, which is what obliges the caller to re-check
-/// its fetch token.
-///
-/// Track rows resolve their thumbnail per mounted row through `RowCovers.request`, and the
-/// Album / Artist strip cards via lazy `request-*-cover` lookups that decode on miss *on the
-/// UI thread* — without this, a cold cache pays one synchronous decode per card at paint time.
-///
-/// Three prewarms rather than one because the three lists land in three
-/// different tiers, so each is capped against its own capacity. Result sets
-/// are LIMIT-bounded, so no cap binds today.
+/// Warms every result surface's covers, each against its own tier, since a miss decodes on the
+/// UI thread at paint time. Returns whether it yielded, which obliges the caller to re-check its
+/// token.
 async fn prewarm_result_covers(search_ui: &Arc<SearchUi>, results: &SearchResults) -> bool {
     let track_covers: Vec<PathBuf> = crate::ui::grid_prewarm::unique_artwork_paths(
         results.tracks.iter().map(|t| t.artwork_path.as_deref()),
@@ -122,10 +94,8 @@ async fn prewarm_result_covers(search_ui: &Arc<SearchUi>, results: &SearchResult
     true
 }
 
-/// Re-derive everything visible from `last_results` — no DB hit, the apply step owning the
-/// slice, sort and label logic. Named for the operation rather than for the
-/// `show-all-tracks` toggle it started as: the sort is the other caller, and it re-derives
-/// the two strips and the Top Result along with the Songs slice.
+/// Re-derives everything visible from `last_results` without a query, for the "Show all" toggle
+/// and a re-sort. A no-op before the first commit.
 pub fn reapply_cached_results(search_ui: &Arc<SearchUi>, weak: &Weak<AppWindow>) {
     let Some(results) = search_ui.state().last_results.lock().clone() else {
         return;
@@ -134,12 +104,8 @@ pub fn reapply_cached_results(search_ui: &Arc<SearchUi>, weak: &Weak<AppWindow>)
     apply_results_to_slint(search_ui, weak, &results, &query);
 }
 
-/// 2-second delayed history add. The history token is bumped on every
-/// keystroke (via the `query-changed` callback in `callbacks::query`); the
-/// delayed task captures the token at spawn time and bails if a newer
-/// keystroke moved it. After persisting, pushes the returned ordered
-/// `Vec<String>` into `Search.recent-rows` so the empty-input state
-/// surfaces the latest add at the top.
+/// Adds `query` to the history after a pause, unless a keystroke moves the history token first:
+/// a query the user paused on is worth remembering, a passing typo isn't.
 pub fn schedule_history_add(
     state: &AppState,
     search_ui: &Arc<SearchUi>,
@@ -153,21 +119,15 @@ pub fn schedule_history_add(
     state.runtime.clone().spawn(async move {
         tokio::time::sleep(Duration::from_secs(2)).await;
         if su.history_token.load(Ordering::Relaxed) != my_token {
-            return; // newer keystroke since we scheduled; bail.
+            return;
         }
         match library::search::add_search_history(&s, query).await {
-            Ok(rows) => {
-                (*su.state().recent.lock()).clone_from(&rows);
-                push_recent_rows_to_slint(&weak, rows);
-            }
+            Ok(rows) => push_recent_rows_to_slint(&weak, rows),
             Err(e) => log::warn!("search::add_history: {}", describe(&e)),
         }
     });
 }
 
-/// Push a freshly-loaded recent-searches list into `Search.recent-rows`.
-/// Called from `callbacks::recent` on initial hydrate, after a successful
-/// history-add, and after `recent-remove` / `recent-clear`.
 pub fn push_recent_rows_to_slint(weak: &Weak<AppWindow>, rows: Vec<String>) {
     let weak = weak.clone();
     let _ = slint::invoke_from_event_loop(move || {

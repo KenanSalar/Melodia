@@ -1,33 +1,20 @@
 //! Whether two sets of tags name the same recording, and what to ask the index for.
 //!
-//! Pure, and the whole of what the client decides for itself. The signature endpoint does its own
-//! normalizing server-side and either answers or does not; the index is a keyword search that will
-//! hand back a different artist's song of the same name, so **everything it returns has to be
-//! checked here before it is believed**.
-//!
-//! **Two questions, deliberately answered differently.** What to *ask* is loose — a `feat.` credit
-//! in a title is noise no uploader agrees on, and a query carrying it finds nothing. What to
-//! *accept* is strict, and strict in one direction: a false accept paints another song's words
-//! over this one, where a false reject falls back to the signature's own answer and costs only the
-//! timings.
+//! Pure, and the whole of what the client decides for itself: the index will hand back another
+//! artist's song of the same name, so **everything it returns is checked here**. What to *ask* is
+//! loose, a `feat.` credit in a title being noise no uploader agrees on. What to *accept* is
+//! strict, because a false accept paints another song's words over this one where a false reject
+//! only costs the timings.
 
 use std::collections::{BTreeMap, BTreeSet};
 
 use melodia_core::entities::artist::ArtistCredit;
 use melodia_core::utils::fold::fold;
 
-/// The words that make a title a *different recording* rather than the same one dressed
-/// differently.
-///
-/// **The distinction is the whole point.** "Remastered 2011", "Explicit", "Bonus Track" and
-/// "NCS Release" are editorial noise on one performance, so they are stripped and ignored; a live
-/// take, a remix or an acoustic version is a different performance, whose sung line falls in a
-/// different place. Duration catches most of those, and not all: a remix can run the same length
-/// as the original.
-///
-/// Kept to the markers that always mean a re-performance. `mix` is deliberately absent — "Original
-/// Mix" is how half an electronic library labels the plain track, and rejecting on it would throw
-/// away exactly the matches this file exists to find.
+/// Words that make a title a *different performance*, where "Remastered 2011" or "Explicit" is
+/// the same one dressed differently. Duration catches most of these, but not a remix as long as
+/// the original. `mix` is absent on purpose: "Original Mix" is how much of an electronic library
+/// labels the plain track.
 const VERSION_MARKERS: [&str; 9] = [
     "live",
     "acoustic",
@@ -40,18 +27,10 @@ const VERSION_MARKERS: [&str; 9] = [
     "reprise",
 ];
 
-/// What separates one credited artist from the next in a string nobody structured: somebody else's
-/// row, or a single-value tag of our own.
-///
-/// Spelled once because the query and the check must agree: a splitter that trims the query to the
-/// first artist while the check compares the whole credit rejects every row the trimming found.
-/// The spaced `x` earns its place on that count — it is how half of one dance library credits a
-/// collaboration, and the spaces are what keep it off `Charli XCX`.
-///
-/// **Not to be extended to cover `entities::artist::JOIN_PHRASES`.** Each entry added trades one
-/// class of miss for another: a `" and "` here would cut `Florence and the Machine` down to
-/// `Florence`. A credit that lists its artists needs no guess at all, which is what
-/// [`Recording::from_credit`] and [`search_artist`] read instead.
+/// Separators between credited artists in an unstructured string, one list so the query and the
+/// check agree. The spaced `x` is a common collaboration spelling, the spaces keeping it off
+/// `Charli XCX`. **Not to be extended to `entities::artist::JOIN_PHRASES`**: a `" and "` would
+/// cut `Florence and the Machine` down to `Florence`.
 const ARTIST_SPLITS: [&str; 9] =
     [" feat ", " feat. ", " ft ", " ft. ", " with ", " & ", " x ", ",", ";"];
 
@@ -59,20 +38,12 @@ const ARTIST_SPLITS: [&str; 9] =
 pub(super) struct Recording {
     /// The title with every bracketed aside removed, folded to letters and digits.
     core_title: String,
-    /// How many times each version marker occurs in the title, whatever brackets it sat in.
-    ///
-    /// **A count rather than a set, because a marker is also an ordinary word.** A title carrying
-    /// one of its own and that title's live take reduce to the same core, so a set holds `live` on
-    /// both and the two read as one recording. Counting separates them without giving up the
-    /// unbracketed suffix, which is how half of these are spelled.
+    /// How often each version marker occurs, in brackets or not. A count rather than a set because
+    /// a marker is also a word: a title containing `live` and its live take share a core.
     markers: BTreeMap<&'static str, usize>,
-    /// Every credited artist, folded and split apart.
     artists: BTreeSet<String>,
-    /// The names our own tags list, where they list them, and empty for every row.
-    ///
-    /// A second reading rather than more of the first: the other side is always one string
-    /// [`credits`] split, so a name that split would have cut belongs to neither set the row can
-    /// be a subset of, and folding it in breaks the comparison it was added for.
+    /// The names our own tags list, empty for every row. Apart from `artists` because the row side
+    /// is always one split string, so a name the split would cut matches nothing there.
     named: BTreeSet<String>,
 }
 
@@ -91,13 +62,9 @@ impl Recording {
         }
     }
 
-    /// Our side of the comparison, built from the credit rather than from its printed line alone.
-    ///
-    /// **The credited names are read beside the split, never merged into it.** The row on the
-    /// other side is still one unstructured string [`credits`] has to guess at, so the guess has
-    /// to stay: a credit of one name that reads as two, `Simon & Garfunkel`, matches the row that
-    /// guessed it apart the same way. What the names buy is the case no splitter reaches, a join
-    /// phrase like `" vs. "` leaving the printed line as a single credit nobody is filed under.
+    /// Our side, from the credit. The listed names sit beside the split rather than in it, so
+    /// `Simon & Garfunkel` still matches a row split the same way, and a `" vs. "` credit nobody
+    /// is filed under reaches its names.
     pub(super) fn from_credit(title: &str, credit: &ArtistCredit) -> Self {
         let mut recording = Self::new(title, credit.line().unwrap_or_default());
         recording.named = credit
@@ -109,22 +76,13 @@ impl Recording {
         recording
     }
 
-    /// Whether this side is comparable at all: the half of [`Self::matches`] that asks about one
-    /// recording rather than about a pair.
-    ///
-    /// A title that is nothing but a bracketed aside leaves no core title, and a credit that is
-    /// nothing but separators leaves no artists unless our own tags name them. Neither can equal
-    /// anything, which is why the caller checks it before spending a request rather than after
-    /// reading the answer.
+    /// Whether this side is comparable at all, asked before spending a request: a title that is
+    /// all bracket, or a credit that is all separators, can equal nothing.
     pub(super) fn can_match(&self) -> bool {
         !self.core_title.is_empty() && (!self.artists.is_empty() || !self.named.is_empty())
     }
 
-    /// Whether `other` is this recording under somebody else's tags.
-    ///
-    /// The title has to be the same words and the same version, and the credits have to agree
-    /// under either reading of ours: a row filed under names one of them claims is this track,
-    /// whichever of the two reached them.
+    /// The same words, the same version, and credits agreeing under either reading of ours.
     pub(super) fn matches(&self, other: &Self) -> bool {
         if !self.can_match() || !other.can_match() {
             return false;
@@ -136,29 +94,18 @@ impl Recording {
     }
 }
 
-/// Whether two credits name one recording: either side a subset of the other, which is what a
-/// shorter credit on one of them means. A row filed under "Dominic Strike, Euphoria" is this track
-/// where the file says only the first of them, and a file crediting a guest the row omits is the
-/// same case mirrored.
-///
-/// **An empty left side is refused rather than trivially accepted.** `named` is empty for every row
-/// and for a credit whose tags list nobody, and the subset test alone would have it match all of
-/// them.
+/// Either side a subset of the other, which is what a shorter credit on one of them means. An
+/// empty left side is refused, `named` being empty for every row and the subset test trivially
+/// true for it.
 fn credits_agree(ours: &BTreeSet<String>, theirs: &BTreeSet<String>) -> bool {
     !ours.is_empty() && (ours.is_subset(theirs) || theirs.is_subset(ours))
 }
 
-/// The title to search the index with: the tag's own, less a `feat.` credit.
-///
-/// **Less that and nothing else.** A version marker stays, so a search for a live take is not
-/// answered by the studio cut — and [`Recording::matches`] would reject that answer anyway, which
-/// is a request spent to learn nothing. Brackets stay too: the index tolerates them, and dropping
-/// them is what would need proving rather than assuming.
+/// The tag's title less a `feat.` credit and nothing else. A version marker stays, or a search for
+/// a live take is answered by the studio cut that [`Recording::matches`] then rejects.
 pub(super) fn query_title(title: &str) -> &str {
-    // **ASCII-folded, so the index it yields is a byte index into `title` as well.** Every marker
-    // below is ASCII, while `to_lowercase` is the full Unicode mapping and expands `İ` from two
-    // bytes to three: past one of those, the cut lands to the right of where it was found, taking
-    // the marker with it and eventually landing inside a character.
+    // ASCII-folded so an index into it is a byte index into `title`: `to_lowercase` grows `İ` by
+    // a byte and would push the cut past the marker.
     let lower = title.to_ascii_lowercase();
     let cut = [" feat ", " feat. ", " ft ", " ft. ", "(feat", "[feat", "(ft", "[ft"]
         .into_iter()
@@ -171,11 +118,8 @@ pub(super) fn query_title(title: &str) -> &str {
     }
 }
 
-/// The artist to search the index with.
-///
-/// A credit naming two or more artists already says who leads, so nothing is guessed. A credit of
-/// one name is a single-value tag that may still be several artists run together, and there
-/// [`query_artist`]'s guess at the string is the only information there is.
+/// A credit listing several artists already says who leads. A single one may still be several
+/// run together, which [`query_artist`] guesses at.
 pub(super) fn search_artist(credit: &ArtistCredit) -> &str {
     if credit.artists().len() > 1 {
         credit.primary_name()
@@ -186,8 +130,7 @@ pub(super) fn search_artist(credit: &ArtistCredit) -> &str {
 
 /// The first credited artist, which is how a row is filed when the file credits several.
 fn query_artist(artist: &str) -> &str {
-    // ASCII-folded for [`query_title`]'s reason, and it bites sooner here: a one-byte marker like
-    // `,` leaves nothing for the drift to land harmlessly inside.
+    // ASCII-folded for `query_title`'s reason.
     let lower = artist.to_ascii_lowercase();
     let cut =
         ARTIST_SPLITS.into_iter().chain(["/", "\0"]).filter_map(|split| lower.find(split)).min();
@@ -198,15 +141,9 @@ fn query_artist(artist: &str) -> &str {
     }
 }
 
-/// Everyone credited on one artist string, folded and squeezed.
-///
-/// **Split before folding, for the NUL.** The fold turns one into a space so it reads as a
-/// separator rather than as a glyph, which is right for a substring filter and wrong here: past it,
-/// `J+1<NUL>DrDisrespect` is one credit with a space in it, and a file crediting only the second of
-/// them stops matching its own row.
-///
-/// A loop rather than an iterator chain because [`split_credits`] borrows from the folded string,
-/// which a `map(fold)` would drop before the split could read it.
+/// Everyone credited on one artist string. Split before folding, for the NUL: the fold makes it a
+/// space, and past that `A<NUL>B` is one credit with a space in it. A loop because the split
+/// borrows from the folded string.
 fn credits(artist: &str) -> BTreeSet<String> {
     let mut names = BTreeSet::new();
     for part in artist.split(['/', '\0']) {
@@ -221,11 +158,7 @@ fn credits(artist: &str) -> BTreeSet<String> {
     names
 }
 
-/// The credits in one folded artist string.
-///
-/// Borrowed rather than owned through the rounds: every separator used to re-own every part it had
-/// not split, so an ordinary single credit cost nine allocations to come back as itself. The caller
-/// squeezes what it keeps, and owns there.
+/// Borrowed through every round; the caller owns what it keeps.
 fn split_credits(text: &str) -> Vec<&str> {
     let mut parts = vec![text];
     let mut next = Vec::new();
@@ -237,8 +170,7 @@ fn split_credits(text: &str) -> Vec<&str> {
     parts
 }
 
-/// How often `haystack` carries `word` as a word rather than inside a longer one, so "cover" does
-/// not fire on "Undercover".
+/// As a whole word, so "cover" doesn't fire on "Undercover".
 fn word_count(haystack: &str, word: &str) -> usize {
     haystack.split(|c: char| !c.is_alphanumeric()).filter(|part| *part == word).count()
 }
@@ -259,12 +191,8 @@ fn strip_brackets(text: &str) -> String {
     out
 }
 
-/// Letters and digits only, single-spaced — so a hyphen or a doubled space cannot make two
-/// spellings of one title unequal.
-///
-/// **An apostrophe is dropped rather than spaced**, and the two are not interchangeable: spacing
-/// it turns `don't` into two words that `dont` can never equal, which is the commonest way one
-/// tagger's title differs from another's. Every other mark separates.
+/// Letters and digits, single-spaced, so punctuation can't make two spellings of a title unequal.
+/// An apostrophe is dropped rather than spaced: spaced, `don't` could never equal `dont`.
 fn squeeze(text: &str) -> String {
     let mut out = String::with_capacity(text.len());
     for ch in text.chars() {

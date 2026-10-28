@@ -1,44 +1,26 @@
-//! Oscilloscope trace for the audio visualizer — the signal itself rather than its spectrum,
-//! so it skips [`spectrum`] entirely: no window, no FFT, no banding.
+//! Oscilloscope trace for the visualizer: the signal itself, so no window, FFT or banding.
 //!
-//! # A column is a range, not a point
-//!
-//! Several samples always share a drawn column, and every way of picking one of them is wrong
-//! in its own way: the loudest alternates between opposite extremes and scribbles, the nearest
-//! aliases, the mean lowpasses anything bright. So a [`Column`] carries the whole `min`..`max`
-//! its samples covered and the strip is the area between the two edges — nothing skipped, so
-//! nothing can alias. Every audio editor's waveform view resolves it the same way.
-//!
-//! Like [`spectrum`] the work is free functions over slices; [`WaveformAnalyzer`] only holds
-//! the buffers that must not be reallocated per frame.
-//!
-//! [`spectrum`]: super::spectrum
+//! A column is a range rather than a point. Several samples share one, and the loudest scribbles,
+//! the nearest aliases and the mean lowpasses, so a [`Column`] carries the whole `min`..`max` and
+//! the strip fills between the edges, aliasing nothing. Free functions over slices;
+//! [`WaveformAnalyzer`] only holds the buffers.
 
 use super::dsp::{VISUALIZER_DECAY, index_to_f32, push_fixed};
 
-/// Milliseconds of audio drawn across the strip.
-///
-/// Time, not samples — a fixed sample count would draw the same music differently depending on
-/// the rate it was mastered at. Under the 50 to 100 ms a scope usually spans, low enough that a
-/// bass note still reads as a wave rather than a blur at the strip's height.
+/// Time rather than samples, so a track draws the same at any rate; short enough that a bass note
+/// still reads as a wave at the strip's height.
 pub const WAVE_SPAN_MS: u32 = 40;
 
 /// Extra milliseconds snapshotted *ahead* of the drawn span, giving [`find_trigger`] somewhere
 /// to look. Also the trace's worst-case latency.
 pub const TRIGGER_SLACK_MS: u32 = 20;
 
-/// Logical pixels per drawn column.
-///
-/// One per pixel is the obvious answer. One per two is indistinguishable under the envelope's own
-/// stroke and halves the path string, its re-parse and the tessellation behind it — which
-/// matters here in a way it doesn't for a scope drawing straight to a canvas.
+/// Indistinguishable from one under the stroke, and halves the path string, its re-parse and its
+/// tessellation.
 const LOGICAL_PX_PER_COLUMN: f32 = 2.0;
 
-/// Column bounds. The floor keeps a narrow strip from degenerating into a handful of very wide
-/// columns; the ceiling bounds the per-frame path string and is what the analyzer's buffer is
-/// sized to — it is the widest strip the view can ask for at [`LOGICAL_PX_PER_COLUMN`], so
-/// nothing past it is reachable. Set below it, the trace redraws the same columns stretched
-/// wider as the window grows.
+/// The floor keeps a narrow strip from a handful of wide columns; the ceiling is the widest strip
+/// the view can ask for, and what the buffer is sized to.
 const MIN_COLUMNS: usize = 64;
 pub const MAX_COLUMNS: usize = 1024;
 
@@ -46,17 +28,11 @@ pub const MAX_COLUMNS: usize = 1024;
 /// trigger latches onto noise around the axis and jitters.
 const TRIGGER_HYSTERESIS: f32 = 0.02;
 
-/// Half-thickness, in viewbox units, that a drawn column never falls below.
-///
-/// A column whose edges land on each other encloses no area, so a silent trace hands the
-/// renderer an outline lying on top of itself — geometry nothing owes you anything sensible
-/// for. Sized against the stroke: close enough that the two edges' strokes still overlap and a
-/// resting trace reads as one line rather than a pair of rails, far enough that they are
-/// nowhere near coincident. Both are in viewbox units, so the pair holds at every height.
+/// In viewbox units. A column whose edges meet encloses nothing, handing the renderer an outline
+/// lying on itself; this keeps the strokes overlapping into one line without ever coinciding.
 const MIN_HALF_THICKNESS: f32 = 0.018;
 
-/// Samples spanning `ms` at `sample_rate`. Saturates rather than wrapping; the caller clamps to
-/// its buffer anyway.
+/// Saturates; the caller clamps to its buffer anyway.
 fn samples_for_ms(sample_rate: u32, ms: u32) -> usize {
     usize::try_from(u64::from(sample_rate) * u64::from(ms) / 1000).unwrap_or(usize::MAX)
 }
@@ -84,13 +60,8 @@ pub fn columns_for_width(width: f32) -> usize {
         as usize
 }
 
-/// Index of the most recent rising zero crossing within `samples[..search_len]`, or `0` if there
-/// is none.
-///
-/// Most recent rather than first keeps the drawn span as close to live as the slack allows;
-/// every candidate is a crossing of the *same* polarity, so the choice changes latency, not
-/// shape. The `0` fallback draws untriggered, which is the right answer for the two signals with
-/// no crossing to find: silence, and a window sitting entirely on one side of the axis.
+/// The most recent rising zero crossing in `samples[..search_len]`, keeping the span as live as
+/// the slack allows. `0` draws untriggered, right for silence and a window on one side of the axis.
 #[must_use]
 pub fn find_trigger(samples: &[f32], search_len: usize) -> usize {
     let mut armed = false;
@@ -132,13 +103,8 @@ pub fn min_max_columns(src: &[f32], out: &mut [Column]) {
     }
 }
 
-/// Write `columns` into `out` as SVG path commands: the lower edge left to right, the upper edge
-/// back, closed into one filled figure.
-///
-/// Coordinates are normalized — x across `0..1`, y over `-1..1` — so the `Path`'s viewbox is a
-/// constant and no column count crosses the language boundary. Builds its [`XPrefixes`] per
-/// call, so it is for the callers that draw a figure once; [`WaveformAnalyzer::trace`] keeps the
-/// table across ticks instead.
+/// One filled figure, normalized to a constant viewbox so no column count crosses into Slint.
+/// Builds its prefixes per call, for a figure drawn once; [`WaveformAnalyzer::trace`] keeps them.
 pub fn write_path_commands(columns: &[Column], out: &mut String) {
     let mut prefixes = XPrefixes::new();
     prefixes.fit(columns.len());
@@ -155,17 +121,11 @@ const Y_DECIMALS: u32 = 3;
 /// digits and the space.
 const X_PREFIX_BYTES: usize = 7;
 
-/// What every vertex but the first opens with. Kept out of the cached entry so the opening `M`
-/// vertex can reuse the same entry rather than slice a lead off it.
+/// Kept out of the cached entry, so the opening `M` vertex reuses it.
 const LINE_TO: &str = " L";
 
-/// The `x` half of every vertex the trace emits, held as text.
-///
-/// `x` depends on the column index and the column count and nothing else, so between resizes it
-/// is byte-identical every frame while the `y` beside it changes. One packed string plus each
-/// entry's end offset, so a resize rebuilds one buffer rather than a string per column. Entries
-/// go through [`push_fixed`], the same writer the per-frame `y` takes, so both halves of a vertex
-/// round by one rule rather than two that have to agree at every tie.
+/// The `x` half of every vertex as text, byte-identical between resizes, packed in one string.
+/// Through [`push_fixed`] like the per-frame `y`, so both halves round by one rule.
 struct XPrefixes {
     /// `"0.1234 "` per column, packed end to end.
     text: String,
@@ -185,8 +145,7 @@ impl XPrefixes {
         }
     }
 
-    /// Rebuild for `columns` columns, unless that is already what is held — which is every frame
-    /// between resizes.
+    /// A no-op between resizes.
     fn fit(&mut self, columns: usize) {
         if self.ends.len() == columns {
             return;
@@ -216,17 +175,14 @@ impl XPrefixes {
     }
 }
 
-/// The one writer, shared by [`write_path_commands`] and [`WaveformAnalyzer::trace`] so neither
-/// holds its own copy of the geometry.
+/// The one writer, so neither caller holds a copy of the geometry.
 fn write_path(columns: &[Column], prefixes: &XPrefixes, out: &mut String) {
     out.clear();
     if columns.is_empty() {
         return;
     }
 
-    // Lower edge left to right, then upper edge back — that order, not the reverse, gives the
-    // closed figure a *positive* signed area, which is what femtovg reads to decide solid from
-    // hole.
+    // Lower edge first gives a positive signed area, which femtovg reads as solid.
     for (i, column) in columns.iter().enumerate() {
         let y = edges(*column).1;
         out.push_str(if i == 0 { "M" } else { LINE_TO });
@@ -242,9 +198,8 @@ fn write_path(columns: &[Column], prefixes: &XPrefixes, out: &mut String) {
     out.push('Z');
 }
 
-/// A column's two screen-space edges, `(upper, lower)`, flipped because screen coordinates grow
-/// downward and a scope draws positive peaks at the top. [`MIN_HALF_THICKNESS`] is applied about
-/// the column's own midpoint, so only a near-silent column is opened up.
+/// `(upper, lower)` on screen, flipped so peaks draw on top. [`MIN_HALF_THICKNESS`] opens a
+/// near-silent column about its own midpoint.
 fn edges(column: Column) -> (f32, f32) {
     let mid = 0.5 * (column.min + column.max);
     let half = (0.5 * (column.max - column.min)).max(MIN_HALF_THICKNESS);
@@ -252,14 +207,9 @@ fn edges(column: Column) -> (f32, f32) {
     (flipped - half, flipped + half)
 }
 
-/// The sample window, the drawn columns and the x half of the path text — each allocated once at
-/// its widest and used a prefix at a time.
-///
-/// Usage mirrors [`SpectrumAnalyzer`]: fill [`window_mut`](Self::window_mut) from the ring, then
-/// call [`trace`](Self::trace). Both derive the window length from the sample rate, so no
-/// order-dependent state sits between them.
-///
-/// [`SpectrumAnalyzer`]: super::spectrum::SpectrumAnalyzer
+/// Buffers allocated once at their widest and used a prefix at a time. Fill
+/// [`window_mut`](Self::window_mut), then [`trace`](Self::trace); both derive the length from the
+/// rate, so no state sits between them.
 pub struct WaveformAnalyzer {
     window: Vec<f32>,
     columns: Vec<Column>,
@@ -267,13 +217,8 @@ pub struct WaveformAnalyzer {
 }
 
 impl WaveformAnalyzer {
-    /// Snapshots up to `window_cap` samples and draws up to `column_cap` columns. In production
-    /// `window_cap` is [`RING_CAP`](super::visualizer::RING_CAP) — a wider window would only be
-    /// padded with silence.
-    ///
-    /// Both are floored because everything downstream clamps *into* these lengths, and a
-    /// zero-length buffer doesn't narrow those clamps, it makes them panic (a `min` above its
-    /// `max`, and a divide by a zero bucket count).
+    /// `window_cap` is [`RING_CAP`](super::visualizer::RING_CAP) in production. Both are floored,
+    /// a zero-length buffer making the clamps downstream panic.
     #[must_use]
     pub fn new(window_cap: usize, column_cap: usize) -> Self {
         Self {
@@ -283,34 +228,27 @@ impl WaveformAnalyzer {
         }
     }
 
-    /// The drawn span plus the trigger's slack, capped at what the buffer — and so the ring —
-    /// can hold. At extreme sample rates the cap bites and the trace simply narrows in time.
+    /// Capped at the ring, so at extreme rates the trace narrows in time.
     fn window_len(&self, sample_rate: u32) -> usize {
         samples_for_ms(sample_rate, WAVE_SPAN_MS + TRIGGER_SLACK_MS).clamp(2, self.window.len())
     }
 
-    /// The buffer the next [`trace`](Self::trace) or [`analyze`](Self::analyze) call reads. Fill
-    /// it with the most recent samples, oldest first.
+    /// Filled with the most recent samples, oldest first.
     pub fn window_mut(&mut self, sample_rate: u32) -> &mut [f32] {
         let len = self.window_len(sample_rate);
         &mut self.window[..len]
     }
 
-    /// This frame's columns without the path they make — the seam the tests reduce against.
-    ///
-    /// `active` is false when there is nothing to draw from: a paused player, a hidden window, a
-    /// track that hasn't started. The ring still holds the last window then, so re-reading it
-    /// would freeze the trace mid-shape; the previous one collapses toward the centre line
-    /// instead, which also lets the caller's idle check eventually stop the driving timer.
+    /// The columns without their path, for the tests. Inactive (paused, hidden, not started), the
+    /// last trace collapses toward the centre line rather than freezing, so the caller's idle check
+    /// can stop its timer.
     pub fn analyze(&mut self, active: bool, sample_rate: u32, columns: usize) -> &[Column] {
         let width = self.fill_columns(active, sample_rate, columns);
         &self.columns[..width]
     }
 
-    /// This frame's columns, written into the path commands Slint renders.
-    ///
-    /// Not [`analyze`](Self::analyze) plus [`write_path_commands`] at the call site, because the
-    /// borrow `analyze` hands back would keep the caller out of the prefix table.
+    /// Not `analyze` plus [`write_path_commands`] at the call site, whose borrow would lock the
+    /// caller out of the prefix table.
     pub fn trace(
         &mut self,
         active: bool,
@@ -324,7 +262,6 @@ impl WaveformAnalyzer {
         &self.columns[..width]
     }
 
-    /// Resolve this frame's columns into the buffer, returning how many are drawn.
     fn fill_columns(&mut self, active: bool, sample_rate: u32, columns: usize) -> usize {
         let width = columns.clamp(1, self.columns.len());
         if active {

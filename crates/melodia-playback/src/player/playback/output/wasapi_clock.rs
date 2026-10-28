@@ -74,10 +74,9 @@ impl StallWatch {
 /// Whether the device sat with nothing to play between `last` and `now`: its clock advanced less
 /// than the time that passed, by more than [`STALL_TOLERANCE`].
 ///
-/// Read off the clock's own progress rather than against what was written: a device can halt its
-/// clock with samples still queued, and come back from a stall with fewer queued than before, so a
-/// count against what was written misses one stall and repeats another. Not asked before the clock
-/// moves at all, since a stream's first period passes before it does.
+/// Read off the clock's own progress rather than what was written: a device can halt its clock
+/// with samples still queued and come back with fewer, so a count against what was written misses
+/// one stall and repeats another. Not asked before the clock first moves, a period into a stream.
 fn stood_still(last: ClockReading, now: ClockReading, clock_hz: u64) -> bool {
     if last.played == 0 {
         return false;

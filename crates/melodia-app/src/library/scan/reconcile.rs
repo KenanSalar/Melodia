@@ -35,10 +35,9 @@ impl Reach {
     }
 }
 
-/// Coalesces concurrent reconcile triggers. A rapid-fire kernel-overflow burst during `rsync`
-/// could otherwise spawn three full library sweeps back to back; each one is idempotent but would
-/// still walk and stat every file. One lock, so a request can't land between a pass deciding it is
-/// done and letting go, which is where a deferred one would be lost.
+/// Coalesces concurrent reconcile triggers, so a watcher-overflow burst during `rsync` doesn't walk
+/// the library several times over. One lock, so a request can't land between a pass deciding it is
+/// done and letting go, where a deferred one would be lost.
 static PASS: Mutex<PassState> = Mutex::new(PassState::Idle);
 
 enum PassState {
@@ -90,29 +89,15 @@ impl Drop for PassClaim<'_> {
     }
 }
 
-/// Fire-and-forget background reconcile of every enabled library folder.
-/// Catches files that landed (or vanished) while the watcher was off: the
-/// watcher itself only reports live events, so what changed while it was
-/// off reaches the library through a pass like this or not at all.
-/// Triggered after the watcher transitions off → on
-/// (`resume_watching::run`, `toggle_folder_watching(true)`), on
-/// watcher-overflow `RescanNeeded` from `file_event_processor`, by
-/// `tag_backfill`, by `artwork_restore`, and by a completed
-/// [`scan_folder`](super::scan_folder) whose repair cleared any covers.
+/// Background reconcile of every enabled library folder: the watcher reports only live events, so
+/// what changed while it was off arrives through a pass like this or not at all.
 ///
-/// Sequential per folder: `SQLite` has a single writer, and the scan
-/// progress is one `watch` slot that parallel scans would clobber. Each
-/// folder's scan bumps `library_changed` when it changed something, so
-/// Browse/Tracks views refresh per folder as scans complete.
+/// Sequential per folder, `SQLite` having one writer and the scan progress one `watch` slot. One
+/// token for the whole pass, so a cancel stops the folders still to come too.
 ///
-/// One token for the whole pass, so a cancel stops the folders still to
-/// come as well as the one being scanned. Tracked on `TaskSpawner` so
-/// shutdown waits for the in-flight folder's last write.
-///
-/// A call while a pass is in flight merges into it. A full pass still reads
-/// the latest audio files, but its artwork repair ran at its start, so a
-/// cover gone since waits for the next scan entry. A narrower pass runs
-/// again over the whole library once it ends.
+/// A call while a pass runs merges into it. A full pass still reads the latest files, but its
+/// artwork repair ran at its start, so a cover gone since waits for the next scan entry; a narrower
+/// pass runs again over the whole library once it ends.
 pub fn reconcile_watched_folders(state: &AppState) {
     start(state, Reach::Library, None);
 }

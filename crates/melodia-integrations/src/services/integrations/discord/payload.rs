@@ -1,32 +1,19 @@
-//! Discord Rich Presence wire payloads: serde DTOs that mirror the Discord
-//! "activity" object, plus the `*_json` frame-body builders [`super::ipc`] ships.
-//!
-//! Pure — no I/O, no clock. Fed the [`super::model::Presence`] that
-//! [`super::model`] projects from the player's view-model. Kept apart from the
-//! projection so the state machine and the serialization evolve independently.
+//! The serde mirror of Discord's activity object, and the frame bodies [`super::ipc`] ships.
+//! Kept apart from [`super::model`] so the projection and the wire format change independently.
 
 use serde::Serialize;
 
 use super::model::Presence;
 
-/// Art-asset key for the app logo (uploaded under this name in the Discord
-/// application's Art Assets). The large image when there's no cover, and the
-/// small corner badge when a cover fills the large slot.
+// Art Asset keys, uploaded under these names to the Discord application.
 const ASSET_LOGO: &str = "melodia";
-/// Art-asset key for the paused badge.
 const ASSET_PAUSED: &str = "paused";
-/// Art-asset key for the playing badge — the small corner overlay shown over an
-/// album cover while playing (in place of the app logo).
 const ASSET_PLAYING: &str = "playing";
-/// Small-image caption while paused.
 const PAUSED_TEXT: &str = "Paused";
-/// Small-image caption while playing.
 const PLAYING_TEXT: &str = "Playing";
 
-/// The single fixed profile button. Deliberately not the resolved album link —
-/// a fixed target has no per-track state and can never point somewhere wrong.
-/// English-only, like the tray labels. (Discord hides a button from the owner
-/// and shows it to everyone else viewing the profile.)
+/// Fixed rather than the album's link, so it has no per-track state and can never point somewhere
+/// wrong. English-only, like the tray labels. Discord hides it from the profile's owner.
 const MELODIA_BUTTON: ButtonDto =
     ButtonDto { label: "Get Melodia", url: "https://github.com/KenanSalar/Melodia" };
 
@@ -36,8 +23,6 @@ const ACTIVITY_LISTENING: u8 = 2;
 /// `status_display_type` 2 = Details, so the member-list line shows the song
 /// title rather than the application name.
 const STATUS_DISPLAY_DETAILS: u8 = 2;
-
-// ── Wire payloads (serialize mirrors, never hand-rolled impls) ──────────────
 
 #[derive(Serialize)]
 struct HandshakeDto<'a> {
@@ -70,8 +55,6 @@ struct ActivityDto<'a> {
     #[serde(skip_serializing_if = "Option::is_none")]
     timestamps: Option<TimestampsDto>,
     assets: AssetsDto<'a>,
-    /// One fixed profile button — always present on a set (never on a clear,
-    /// which sends `activity: null`).
     buttons: [ButtonDto; 1],
 }
 
@@ -130,12 +113,10 @@ fn activity_dto(p: &Presence) -> ActivityDto<'_> {
     }
 }
 
-/// The handshake payload — `{"v":1,"client_id":…}`, opcode 0.
 pub fn handshake_json(client_id: &str) -> Vec<u8> {
     serde_json::to_vec(&HandshakeDto { v: 1, client_id }).unwrap_or_default()
 }
 
-/// A `SET_ACTIVITY` frame body that sets `presence`.
 pub fn set_activity_json(presence: &Presence, pid: u32, nonce: &str) -> Vec<u8> {
     serde_json::to_vec(&SetActivityDto {
         cmd: "SET_ACTIVITY",
@@ -145,7 +126,6 @@ pub fn set_activity_json(presence: &Presence, pid: u32, nonce: &str) -> Vec<u8> 
     .unwrap_or_default()
 }
 
-/// A `SET_ACTIVITY` frame body that clears the presence (`activity: null`).
 pub fn clear_activity_json(pid: u32, nonce: &str) -> Vec<u8> {
     serde_json::to_vec(&SetActivityDto {
         cmd: "SET_ACTIVITY",

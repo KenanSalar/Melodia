@@ -1,11 +1,6 @@
-//! Restores cover art a cache found missing while the app runs.
-//!
-//! With watching on, the boot scan repairs whatever went missing while the app was closed, and
-//! this is the other half: a folder or file deleted mid-session, noticed only when a cover cache
-//! asks for it. With watching off a launch scans only the imports a quit cut short, so this covers
-//! the closed-app case too. Reports arrive one per cover a cache tries, so each wake drains
-//! everything queued and asks once; the reconcile it may start merges a second request into the
-//! one in flight.
+//! Restores cover art a cache found missing: deleted mid-session, or, with watching off and so no
+//! boot scan, while the app was closed. Reports arrive one per cover tried, so each wake drains
+//! them all and asks once, and the reconcile it may start merges into one already in flight.
 
 use crate::library;
 use crate::state::AppState;

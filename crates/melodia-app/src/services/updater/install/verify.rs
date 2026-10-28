@@ -1,6 +1,5 @@
-//! Post-download verification: minisign signature check on the staged
-//! bytes, the post-swap `--version` smoke test, and rollback from the
-//! retained `.old` snapshot when the smoke test fails.
+//! The staged file's signature check, the post-swap `--version` smoke test, and the rollback from
+//! `.old` when that fails.
 
 use std::fs::File;
 use std::io::BufReader;
@@ -10,7 +9,7 @@ use crate::services::updater::event::{UpdateFailure, UpdateResult};
 use crate::services::updater::minisign::{self, MinisignError};
 use melodia_core::error::{AppError, AppResult};
 
-#[cfg(any(target_os = "linux", target_os = "windows"))]
+#[cfg(target_os = "linux")]
 use super::swap::old_path;
 
 pub(super) fn verify_staged(
@@ -34,28 +33,12 @@ fn verification_failure(e: MinisignError) -> UpdateFailure {
     }
 }
 
-/// Spawn `target --version` and assert it (a) exits 0 within 5 s and
-/// (b) prints `Melodia <expected_version>` to stdout. The `--version`
-/// fast path in `main.rs` is the contract this verifier relies on
-/// (literal first branch of `main()`, prints `Melodia <CARGO_PKG_VERSION>`).
+/// Requires `target --version` to exit 0 within 5 s printing `Melodia <expected_version>`, the
+/// contract `main()`'s literal first branch keeps.
 ///
-/// Why 5 s: a healthy `--version` exits in milliseconds; 5 s is enough
-/// slack for cold-cache disk read + ld.so resolution + glibc startup on
-/// a heavily-loaded laptop or a power-constrained aarch64 device (Raspberry
-/// Pi 4/5, Ampere developer board, Snapdragon X laptop on battery saver),
-/// and short enough that an actually-broken new binary doesn't keep the
-/// user waiting on the Install spinner. Earlier 3 s was tight on slower
-/// ARM hardware where the rollback path triggered on slow-but-healthy
-/// boots.
-///
-/// Why assert on the stdout shape: signature verification already
-/// confirmed the bytes are what we signed, so this is primarily an
-/// exec-sanity check (was the swap actually a Melodia binary; can the
-/// kernel run it; does it boot far enough to reach main's first
-/// statement). Asserting `"Melodia "` + the expected version closes
-/// the contrived gap where the swap target somehow ended up pointing
-/// at a different, well-formed CLI tool that happens to exit 0 on
-/// `--version` — that would pass the previous "non-empty stdout" check.
+/// The signature already vouched for the bytes, so this checks only that the kernel runs them as
+/// this release. A healthy binary answers in milliseconds; 5 s covers a cold cache on a loaded,
+/// low-power ARM board without leaving the Install spinner up long for a broken one.
 pub(super) async fn verify_swapped_binary(target: &Path, expected_version: &str) -> AppResult<()> {
     use tokio::time::{Duration, timeout};
 
@@ -105,31 +88,20 @@ pub(super) async fn verify_swapped_binary(target: &Path, expected_version: &str)
     Ok(())
 }
 
-/// Try to restore the previous binary if a smoke test fails. Only the
-/// per-user atomic-swap paths (`linux_swap` happy branch + `windows_swap`)
-/// retain a usable `.old`; the `pkexec mv` branch leaves nothing to
-/// roll back to. Logs the outcome either way — silent failure here is
-/// the wrong kind of quiet.
-///
-/// The package-manager path doesn't call this — see `download_and_install`,
-/// which skips the smoke test entirely when `pkg_format.is_some()`.
+/// Restores `.old` over a binary that failed its smoke test.
 pub(super) fn attempt_post_swap_rollback(target: &Path) {
-    #[cfg(any(target_os = "linux", target_os = "windows"))]
+    #[cfg(target_os = "linux")]
     {
         let old = old_path(target);
         if !old.exists() {
             log::warn!(
                 "updater: smoke test failed but no .old snapshot exists at {}; nothing to \
-                 rollback (likely the pkexec-mv path was taken). User may need to manually \
-                 reinstall the previous version.",
+                 rollback. User may need to manually reinstall the previous version.",
                 old.display()
             );
             return;
         }
-        // Drop the failed new binary, restore the snapshot. Best-effort —
-        // on failure we log and the user sees a missing binary on next
-        // launch. Better than leaving the broken file in place pretending
-        // to be a valid install.
+        // A missing binary beats a broken one posing as a valid install.
         let _ = std::fs::remove_file(target);
         match std::fs::rename(&old, target) {
             Ok(()) => log::info!(
@@ -144,7 +116,7 @@ pub(super) fn attempt_post_swap_rollback(target: &Path) {
             ),
         }
     }
-    #[cfg(not(any(target_os = "linux", target_os = "windows")))]
+    #[cfg(not(target_os = "linux"))]
     {
         let _ = target;
         log::warn!("updater: smoke test failed; rollback not implemented on this platform");
@@ -152,7 +124,7 @@ pub(super) fn attempt_post_swap_rollback(target: &Path) {
 }
 
 // Linux-only: the stand-in for a swapped binary is a shell script, and the rollback half
-// reaches `old_path`, which only exists on the two platforms that retain one.
+// reaches `old_path`, which only the Linux swap keeps.
 #[cfg(all(test, target_os = "linux"))]
 #[path = "../tests/verify_tests.rs"]
 mod tests;

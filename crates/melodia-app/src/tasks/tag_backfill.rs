@@ -1,25 +1,11 @@
-//! Re-reads the tags a library carried in before the ingest learned to look for them, once.
+//! Re-reads the tags a library carried in before the ingest learned to look for them, once:
+//! `scanner::track_is_current` skips an unchanged file, so everything the reader gained since stays
+//! unread however often it is rescanned, the migrations having seeded only what the database knew.
 //!
-//! `scanner::track_is_current` skips a file whose size and mtime haven't moved, so everything the
-//! reader gained — role credits, a second genre, sort names, ISRC, the whole-date fields, the
-//! release tags, and the `"; "`-flattened `ARTISTS` an ID3v2.3 file carries — stays unread on an
-//! existing library however many times it is rescanned. The migration seeds what the database
-//! already knew and no more; the rest is in the files.
-//!
-//! **The pass is one UPDATE**, `queries::track::mark_every_track_stale`. Blanking `date_modified`
-//! is what makes `track_is_current` answer false, and the scan then does the work through the path
-//! that is already batched, chunked and cancellable. A second ingest pipeline beside it would have
-//! to keep its own column list in step with `TRACK_INSERT_COLUMNS` — which is the duplication the
-//! tree's one hand-built UPDATE ban exists to prevent — and would re-hash every file to fill the
-//! columns it isn't there to change.
-//!
-//! Supersedes the artist-credit import, which read one field through a pass of its own. A rescan
-//! reaches that field and every other, and it repairs the one thing the import's own doc recorded
-//! it could not: an album filed under a whole credit line ("X feat. Y") is re-resolved under the
-//! primary name, and `prune_orphans` retires the row it left.
-//!
-//! **Not an `SQLx` migration**, for [`super::rating_import`]'s reason: a migration failure is fatal
-//! at boot, and nothing here may stop the app opening.
+//! **The pass is one UPDATE**, `queries::track::mark_every_track_stale`: a blank `date_modified`
+//! sends every file back through the scan's own batched, cancellable path. A second ingest pipeline
+//! would have to keep its column list in step with `TRACK_INSERT_COLUMNS` and would re-hash every
+//! file. **Not an `SQLx` migration**, for [`super::artwork_renormalize`]'s reason.
 
 use crate::library;
 use crate::state::AppState;
@@ -27,11 +13,8 @@ use crate::tasks::{TaskSpawner, one_shot};
 use melodia_core::error::AppResult;
 use melodia_store::database::queries;
 
-/// Run the backfill unless this install has already had one.
-///
-/// [`one_shot::OnFailure::Retry`]: nothing else marks these rows stale, so a marker recorded over
-/// a failed UPDATE would put every tag this release learned to read out of reach for the life of
-/// the install. The pass is idempotent, so a retry costs one more UPDATE.
+/// [`one_shot::OnFailure::Retry`]: nothing else marks these rows stale, and a retry costs one more
+/// idempotent UPDATE.
 pub fn spawn(spawner: &TaskSpawner, state: &AppState) {
     one_shot::spawn(
         spawner,
@@ -55,10 +38,8 @@ async fn backfill(state: &AppState) -> AppResult<()> {
 
     log::info!("Tag backfill: {marked} track(s) queued for a re-read of their tags");
 
-    // Whichever reconcile gets there first does the work, a pass already in flight taking this
-    // request rather than starting a second. The marks are durable, so a folder that pass has
-    // already read picks them up at its next scan, and the marker records the half that must not
-    // be lost.
+    // A reconcile already in flight takes this request; the marks are durable, so a folder it has
+    // already passed picks them up at its next scan.
     library::scan::reconcile_watched_folders(state);
     Ok(())
 }

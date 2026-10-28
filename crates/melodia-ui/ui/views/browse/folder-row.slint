@@ -1,22 +1,12 @@
 import { Theme } from "../../theme.slint";
 import { MaterialIcon } from "../../components/material-icon.slint";
 
-// One folder row in Browse's list presentation: icon, name, chevron.
-//
-// **The label's `min-width` tracks its own natural width**, so a narrowing window pans
-// the body's horizontal scrollbar rather than compressing and eliding the row — a folder
-// name never truncates.
-//
-// Data-agnostic like every other row component: the host passes the name and takes the
-// click back, so nothing here imports `Browse`. **No `path`** — the row used to navigate
-// itself and needed one; now the host owns the handler and already has `folder.path` in
-// scope there, so a second copy would only be a property nothing reads.
+// The label's `min-width` is its natural width, so a folder name never truncates.
 export component BrowseFolderRowItem inherits Rectangle {
     in property <string> name;
     callback clicked();
 
-    // Chrome plus a gap slot: a `ListView` lays rows back-to-back with no `spacing`, so
-    // the gap is baked into the row itself — and the host's height cap counts on it.
+    // The gap is baked in, a `ListView` having no `spacing`; the host's height cap counts on it.
     height: 50px;
 
     inner := Rectangle {
@@ -46,9 +36,8 @@ export component BrowseFolderRowItem inherits Rectangle {
                 font-size: Theme.font-size-md;
                 font-weight: 500;
                 min-width: self.preferred-width;
-                // For the ink, not the elision — the floor above pins the width, so
-                // this only retires the scissor `clip` would push at the line box.
-                // A filename is the one string here that can carry Arabic marks.
+                // For the ink, not the elision: the floor pins the width, and this drops the
+                // line-box scissor that would cut a filename's Arabic marks.
                 overflow: elide;
             }
 

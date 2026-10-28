@@ -5,12 +5,11 @@
 //! model, and a column change is index arithmetic that keeps every cached card.
 //!
 //! **The same chunk keeps the same model while Slint holds it.** A grid's row repeater compares
-//! models by pointer and rebuilds every card of a row whose model is new (`slint-pitfalls.md`, the
-//! entry on a `for` over a callback's model), so a chunk is built once per generation and handed
-//! back on every read until a new keyset or column count starts the next. That is also what lets a
-//! card that lands repaint its one cell: the store reports the position, and the chunk holding it
-//! repaints that card. A chunk no row instance holds any more is dropped on the next build, which
-//! bounds them by what is on screen.
+//! models by pointer and rebuilds every card of a row whose model is new, so a chunk is built once
+//! per generation and handed back on every read until a new keyset or column count starts the
+//! next. That is also what lets a card that lands repaint its one cell: the store reports the
+//! position, and the chunk holding it repaints that card. A chunk no row instance holds any more
+//! is dropped on the next build, which bounds them by what is on screen.
 
 use std::any::Any;
 use std::cell::{Cell, RefCell};

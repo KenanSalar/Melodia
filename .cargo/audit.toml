@@ -1,6 +1,5 @@
-# cargo-audit config. `.github/actions/cargo-audit` owns the flags and both callers;
-# `.claude/rules/ci-packaging.md` argues the policy and why a stale entry here sits on the
-# critical path of unrelated work.
+# cargo-audit config. `.github/actions/cargo-audit` owns the flags and both callers: every PR
+# into `main` and every release, so an advisory reddens work that never touched `Cargo.lock`.
 #
 # Rules for adding an entry to `ignore`:
 #

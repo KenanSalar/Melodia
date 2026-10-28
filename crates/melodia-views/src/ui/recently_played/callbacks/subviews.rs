@@ -1,6 +1,4 @@
-//! `RecentlyPlayed.*` card actions and sub-view routing: the Most Played
-//! play-track and shuffle actions, the tab switch, and the grid's column-count
-//! push. See [`super::wire`].
+//! The Most Played cards' actions and the tab switch.
 
 use std::sync::Arc;
 
@@ -18,15 +16,12 @@ use melodia_app::state::AppState;
 use melodia_core::error::describe;
 use melodia_ui::{AppWindow, RecentlyPlayed, TrackListRow as UiTrackListRow};
 
-/// Wire the card-action and sub-view-routing callbacks.
 pub(super) fn wire(ui: &AppWindow, state: &AppState, rp_ui: &Arc<RecentlyPlayedUi>) {
     let g = ui.global::<RecentlyPlayed>();
     let weak = ui.as_weak();
 
-    // play-track: clicking a Most Played card loads that grid into the queue and
-    // starts on that card — the grid is the context, not the recency list on the
-    // other tab. The Slint callback carries no row index (these are cards, not
-    // list rows), so the start slot comes from the id.
+    // A card queues its grid rather than the recency list, starting on the card. A card carries
+    // no row index, so the start comes from the id.
     {
         let s = state.clone();
         let weak = weak.clone();
@@ -47,7 +42,6 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, rp_ui: &Arc<RecentlyPlayedU
         });
     }
 
-    // --- Hero pill: Shuffle the Most Played grid -------------------
     {
         let s = state.clone();
         let weak = weak.clone();
@@ -61,62 +55,42 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, rp_ui: &Arc<RecentlyPlayedU
         });
     }
 
-    // --- Tab switch -----------------------------------------------
-    // The bar has already moved `tab-idx` and cleared the Slint-side filter by
-    // the time this runs, so this is the catch-up: drop the Rust filter shadow to
-    // match, fill or reload the entering tab, then off-thread persist the pick
-    // and warm the grid's covers.
+    // Catches the Rust side up once the bar has moved `tab-idx` and cleared the Slint-side filter.
     {
         let s = state.clone();
         let ru = rp_ui.clone();
         let weak = weak.clone();
-        // Ordered: a bounce queues a value per pick and two blocking tasks have
-        // none of their own, so a reversed pair reopens the page on a tab the
-        // user only passed through.
         let persist = Arc::new(IndexPersist::new(g.get_tab_idx()));
         g.on_tab_changed(move |tab| {
             let Some(ui) = weak.upgrade() else { return };
             let g = ui.global::<RecentlyPlayed>();
             let entering = recently_played_ui_mod::tab_from_index(&g, tab);
             persist.publish(tab);
-            // A sub-view pick moves no nav index, so `record_current` never
-            // hears about it. The bar has already written `tab-idx`, so the tag
-            // reads the tab being entered.
+            // A pick moves no nav index, so `record_current` never logs it.
             crate::ui::view_tag::log_current(&ui);
 
-            // Asked before the shadow moves, so it reads the tab being left: the
-            // grid keeps its ids across the pick, and the needle it was loaded
-            // under is about to be cleared. Songs re-walks its cache on entry.
+            // Before the shadow moves: the grid keeps its ids across the pick, under a needle the
+            // pick clears. Songs re-walks its cache on entry.
             if ru.active_tab() == RecentlyPlayedTab::MostPlayed
                 && !recently_played_ui_mod::current_filter(&ru).is_empty()
             {
                 ru.mark_grid_dirty();
             }
 
-            // Shadow first: every later load decides which model to fill and
-            // which covers to warm from it, and both can run off the UI thread
-            // where the global isn't reachable.
+            // Shadow first, every load below choosing its model and covers from it.
             ru.set_active_tab(entering);
             recently_played_ui_mod::set_filter(&ru, "");
             crate::ui::hero_chips::publish_recently_played(&ui, &ru);
 
             if entering == RecentlyPlayedTab::Songs {
-                // Through the `_now` variant: the tab mounts on the next frame,
-                // and a posted write that loses the race paints a `TrackList` of
-                // headers over the model the leave below emptied.
                 recently_played_ui_mod::apply_filtered_tracks_now(&ui, &ru);
             } else {
-                // Leaving empties the model rather than leaving a `TrackListRow`
-                // of `SharedString`s per track pinned behind a tab the user has
-                // left. `apply_filtered_tracks` refuses to refill it while that's
-                // true, so nothing puts them back.
+                // Songs' rows aren't kept behind a tab the user left, and `apply_filtered_tracks`
+                // won't refill them while the grid is up.
                 clear_vec_model::<UiTrackListRow>(
                     &g.get_tracks(),
                     "recently_played: leave songs tab",
                 );
-                // The grid kept its cards, so it paints on this tick; a tick it
-                // missed while Songs was up reloads behind them. See
-                // `lifecycle::kick_full_refresh`.
                 if ru.take_grid_dirty() {
                     recently_played_ui_mod::reload_grid(&ui, &s, &ru);
                 }
@@ -126,22 +100,17 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, rp_ui: &Arc<RecentlyPlayedU
             let s_disk = s.clone();
             let persist_disk = Arc::clone(&persist);
             s.runtime.spawn_blocking(move || {
-                // Scoped to the write alone: a superseded tab drops its own disk
-                // hop, and the cover swap below is this task's regardless.
+                // Only the write is superseded; the prewarm runs regardless.
                 persist_disk.write_if_current(tab, || {
                     if let Err(e) = library::settings::set_recently_played_tab(&s_disk.paths, tab) {
                         log::warn!("recently_played::set_recently_played_tab: {}", describe(&e));
                     }
                 });
-                // Whatever the grid painted last visit is still in the tier as a
-                // proxy; this sharpens it, and anything genuinely absent
-                // schedules itself off the card's own lookup.
                 recently_played_ui_mod::prewarm_covers(&ru_covers);
             });
         });
     }
 
-    // --- Grid column count ----------------------------------------
     // A resize only changes how the ids are chunked, so the cached cards stay.
     {
         let weak = weak.clone();

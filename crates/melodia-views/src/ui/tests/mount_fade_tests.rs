@@ -7,7 +7,6 @@
 //! a race, and neither review nor a single manual run shows it: the miniplayer backdrop snapped on
 //! some presses and faded on others. Each faded layer is read once in `init`, which runs before the
 //! `Timer` can fire, even where the layers sit in an `if` nested below it.
-//! `.claude/rules/slint-pitfalls.md`'s `init` entry has the mechanism.
 //!
 //! The bare reads look like dead statements, which is what makes them worth pinning: deleting one
 //! builds clean and fades correctly on every run that happens to paint first.

@@ -1,9 +1,5 @@
-//! The two playlist shapes HLS uses, and telling both apart from the pointer `.m3u` a station
-//! serves to name a single Icecast mount.
-//!
-//! Pure text in, resolved URLs out. Every URI is joined against the playlist it came from, which
-//! is the half `stream_source::first_stream_url` cannot do and the reason relative segment names
-//! reach nothing today.
+//! The two playlist shapes HLS uses, told apart from the pointer `.m3u` that names one Icecast
+//! mount. Pure text in, URLs resolved against the playlist they came from out.
 
 use std::time::Duration;
 
@@ -31,28 +27,24 @@ const NO_ENCRYPTION: &str = "NONE";
 const MIN_TARGET_SECS: f32 = 1.0;
 const MAX_TARGET_SECS: f32 = 30.0;
 
-/// A rendition named by a master playlist: a rung of the variant ladder, or the playlist an audio
-/// rendition group points at.
+/// A rung of the variant ladder, or the playlist an audio rendition group points at.
 pub struct Variant {
     pub url: Url,
-    /// Peak bits per second the master claims, and `0` where it named none, which a rendition
-    /// group never does: it sits on no ladder to place itself on.
+    /// Peak bits per second, `0` where none was named, which a rendition group never names.
     pub bandwidth: u64,
-    /// Whether this rendition carries a picture, which for a radio station means a simulcast whose
-    /// audio would cost a video stream to reach.
+    /// A simulcast whose audio would cost a video stream to reach.
     pub has_video: bool,
 }
 
-/// A segment playlist, as it stood at the moment it was fetched.
+/// A segment playlist as it stood when fetched.
 pub struct MediaPlaylist {
     /// How long to wait before asking for it again.
     pub target_duration: Duration,
     /// The sequence number of `segments[0]`. Everything after it counts up by one.
     pub media_sequence: u64,
     pub segments: Vec<Url>,
-    /// The header a fragmented-MP4 stream's segments are meaningless without, and `None` for the
-    /// two shapes that carry their own framing. It is not a segment: it is sent once, ahead of the
-    /// first one, and never counts toward [`Self::media_sequence`].
+    /// The header a fragmented-MP4 stream's segments are meaningless without, sent once ahead of
+    /// the first and never counted toward [`Self::media_sequence`].
     pub init_segment: Option<Url>,
     /// A playlist that will not grow again, which for a live station never happens.
     pub ended: bool,
@@ -63,10 +55,8 @@ pub enum Playlist {
     Media(MediaPlaylist),
 }
 
-/// Whether this body is HLS rather than the pointer playlist most stations serve.
-///
 /// Keyed on the two tags the spec makes mandatory, one per playlist type, so a plain `#EXTM3U`
-/// naming one Icecast mount stays on the path that already handles it.
+/// naming one mount stays on the pointer path.
 pub fn is_hls(body: &str) -> bool {
     lines(body)
         .any(|line| line.starts_with(TARGET_DURATION_TAG) || line.starts_with(STREAM_INF_TAG))
@@ -82,25 +72,17 @@ pub fn parse(body: &str, base: &Url) -> Result<Playlist, AppError> {
     }
 }
 
-/// The rendition to play, which is the richest audio-only one a master offers.
-///
-/// An audio rendition group is one of those, and on a television simulcast it is the only one: the
-/// ladder there is video the whole way up and the group is where the single audio track is named.
-/// It states no `BANDWIDTH`, so it loses to any audio-only rung that states one, which is the right
-/// way round.
-///
-/// **Where every rendition carries a picture, the pick inverts to the poorest**, and the asymmetry
-/// is the whole point: that ladder runs from a few hundred kbps to several Mbps for one audio track
-/// that does not change across the rungs, so taking the richest would spend megabits a second on a
-/// picture nothing here draws.
+/// The richest audio-only rendition, an audio group counting as one and being the only one on a
+/// television simulcast. **Where every rendition carries a picture, the pick inverts to the
+/// poorest**: the audio is the same on every rung, so the richest would spend megabits on a picture
+/// nothing here draws.
 pub fn pick_variant(mut variants: Vec<Variant>) -> Option<Variant> {
     if variants.iter().any(|variant| !variant.has_video) {
         variants.retain(|variant| !variant.has_video);
         return variants.into_iter().max_by_key(|variant| variant.bandwidth);
     }
-    // A rung that stated no `BANDWIDTH` reads as zero, and under a poorest-wins pick zero is what
-    // always wins. The attribute is mandatory, so passing over those is a judgement about a
-    // malformed master rather than a policy about ladders.
+    // A rung stating no `BANDWIDTH` reads as zero, which a poorest-wins pick would always take;
+    // the attribute is mandatory, so those are malformed.
     if variants.iter().any(|variant| variant.bandwidth > 0) {
         variants.retain(|variant| variant.bandwidth > 0);
     }
@@ -128,12 +110,8 @@ fn parse_renditions(body: &str, base: &Url) -> Vec<Variant> {
     variants
 }
 
-/// The attributes the variant pick reads: everything else a master carries describes a picture we
-/// are not going to draw.
-///
-/// Three of them answer the same question because `CODECS` is only a *should*, and a master that
-/// omits it while sizing its rungs in pixels is common enough that reading it alone leaves the
-/// simulcast ladder looking like a row of audio streams.
+/// Three attributes answer whether a rung has video, `CODECS` being only a *should*: a master
+/// omitting it while sizing its rungs in pixels would otherwise read as a row of audio streams.
 fn stream_inf(list: &str) -> (u64, bool) {
     let mut bandwidth = 0;
     let mut has_video = false;
@@ -148,8 +126,7 @@ fn stream_inf(list: &str) -> (u64, bool) {
     (bandwidth, has_video)
 }
 
-/// The playlist an audio rendition group names, or `None` for every other kind of group and for
-/// audio the master muxes into its rungs rather than carrying apart from them.
+/// `None` for every other kind of group, and for audio muxed into the rungs.
 fn audio_rendition(list: &str, base: &Url) -> Option<Url> {
     let mut is_audio = false;
     let mut uri = None;
@@ -166,17 +143,11 @@ fn audio_rendition(list: &str, base: &Url) -> Option<Url> {
     joined(base, uri?)
 }
 
-/// A tag's `URI` resolved against the playlist carrying it, refusing a blank one.
+/// Refuses a blank `URI`, which joined would resolve to the playlist's own address, pointing a
+/// rendition back at its master or handing the demuxer the playlist text as an init segment.
 ///
-/// An empty `URI` is not the same as no `URI`: joined, it resolves to that playlist's own address.
-/// A rendition group then points back at the master it came from and beats every video rung in the
-/// pick, and an `EXT-X-MAP` makes the playlist text itself the first thing the demuxer is handed.
-///
-/// **Every URI in a playlist is resolved here**, including the bare lines that name a variant or a
-/// segment. `Url::join` hands an absolute URI back unchanged, so a `file://` or `data:` line comes
-/// out of it looking like any other address, and by the time one reaches the fetch its text form is
-/// gone — [`services::net::is_http`] is the same rule `stream_source` applies to a `.pls` line, asked of
-/// the parsed value.
+/// **Every URI in a playlist is resolved here**, and `Url::join` hands an absolute `file://` or
+/// `data:` back unchanged, so [`services::net::is_http`] is asked of the parsed value.
 ///
 /// [`services::net::is_http`]: melodia_net::services::net::is_http
 fn joined(base: &Url, uri: &str) -> Option<Url> {
@@ -186,8 +157,7 @@ fn joined(base: &Url, uri: &str) -> Option<Url> {
     base.join(uri).ok().filter(melodia_net::services::net::is_http)
 }
 
-/// Split an attribute list on the commas that are not inside a quoted value, which is the one
-/// thing `CODECS="mp4a.40.2,avc1.4d401f"` needs and a plain `split(',')` gets wrong.
+/// Split on the commas outside a quoted value, which `CODECS="mp4a.40.2,avc1.4d401f"` needs.
 fn attributes(list: &str) -> impl Iterator<Item = (&str, &str)> {
     let mut quoted = false;
     list.split(move |c| {
@@ -267,8 +237,7 @@ fn is_encrypted(attrs: &str) -> bool {
         .is_some_and(|(_, method)| !method.eq_ignore_ascii_case(NO_ENCRYPTION))
 }
 
-/// The playlist's meaningful lines: trimmed, blanks dropped, and the byte-order mark some servers
-/// put in front of the `#EXTM3U` taken off the first one.
+/// Trimmed, blanks dropped, and the byte-order mark some servers lead with taken off.
 fn lines(body: &str) -> impl Iterator<Item = &str> {
     body.strip_prefix('\u{FEFF}')
         .unwrap_or(body)

@@ -1,14 +1,14 @@
 //! The values that cross into Slint as **free strings**, and the `.slint` literals that branch
 //! on them.
 //!
-//! Two of them: `RepeatMode` and `PlaybackStatus` reach `PlayerViewModel` through
+//! Two of them: `RepeatMode` and `PlaybackStatus` reach `QueueVm` and `PlayerVm` through
 //! `ui::shell::bridge` as whatever `as_str` returns. Nothing on either side is checked by a
 //! compiler, and neither failure is loud: a renamed `RepeatMode::Off` leaves the repeat button lit
 //! in every state, because the sheet asks `!= "off"`.
 //!
-//! Here rather than beside either tree, and this is the case `CLAUDE.md` draws the line for: the
-//! claim is about two trees at once, so neither the enum's own suite nor a `.slint` pin can hold
-//! it. The enums' Rust halves stay where they are, in `engine/tests/types_tests.rs`.
+//! Here rather than beside either tree because the claim is about two trees at once, so neither
+//! the enum's own suite nor a `.slint` pin can hold it. The enums' Rust halves stay where they
+//! are, in `engine/tests/types_tests.rs`.
 //!
 //! The direction is deliberate. **Every literal the sheet compares against must be one the enum
 //! can produce**, not the reverse: `RepeatMode::All` is legitimately never named in a comparison,

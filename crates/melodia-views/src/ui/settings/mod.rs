@@ -1,17 +1,12 @@
-//! The Settings page: its chrome, and every section card but the four that face the window.
+//! The Settings page: its chrome, and one module per card but the four facing the window, which
+//! are [`crate::ui::appearance`]'s. Appearance and Window Chrome write `Theme` and the chrome
+//! globals rather than a settings row, and Overflow Menu and Mini Player sit beside the window
+//! toggles `window_settings` owns. The Output card is two: [`output_settings`]' rows and
+//! [`signal_path`]'s live readout.
 //!
-//! Those four are [`crate::ui::appearance`]'s. Appearance and Window Chrome write `Theme`
-//! brushes and the window-chrome globals rather than a settings row, and **Overflow Menu** and
-//! **Mini Player** sit there only because `window_settings` already owns the window toggles
-//! beside them. Otherwise it is one module per card, with one card split in two:
-//! [`output_settings`] wires the Output card's rows and [`signal_path`] its live readout.
-//! [`settings_page`] holds the page's own tab index, search predicate and responsive geometry.
-//!
-//! Four modules that look like they belong here stay at the `ui/` root, on what the page
-//! *owns* versus what merely serves it: `equalizer` and `replaygain` wire `Dialog`
-//! overlays reached from the Now Playing overflow, `sleep_timer` is a player feature
-//! outright, `settings_bind` binds rows for those overlays and the visualizer as well, and
-//! `launcher` is a generic open-in-the-OS capability with no caller outside Settings yet.
+//! `equalizer`, `replaygain`, `sleep_timer`, `settings_bind` and `launcher` stay at the `ui/`
+//! root, each serving the page rather than belonging to it: the first two wire dialogs the Now
+//! Playing overflow opens, and the rest are a player feature and two shared helpers.
 
 pub mod about;
 pub mod diagnostics;

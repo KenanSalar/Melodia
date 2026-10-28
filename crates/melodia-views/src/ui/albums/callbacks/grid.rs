@@ -1,5 +1,4 @@
-//! `Albums.*` grid callbacks: lazy cover lookup, re-chunk on column count,
-//! the filter and the sort, and the open-album drill-in.
+//! `Albums.*` grid callbacks.
 
 use std::sync::Arc;
 
@@ -17,7 +16,6 @@ use melodia_app::state::AppState;
 use melodia_core::error::describe;
 use melodia_ui::{AlbumDetail, Albums, AppWindow};
 
-/// Wire the `Albums` grid callbacks. See [`super::wire`].
 pub(super) fn wire(
     ui: &AppWindow,
     state: &AppState,
@@ -27,25 +25,16 @@ pub(super) fn wire(
     let albums = ui.global::<Albums>();
     let weak = ui.as_weak();
 
-    // Seed the grid's sort pill from the persisted `view_sort["albums"]`
-    // so the initial grid build (and the pill) use the remembered order.
+    // Ahead of the first load, so it runs in the remembered order.
     if let Some(sort) = persisted_sort(view_state, view_id::ALBUMS) {
         albums.set_sort_field(SharedString::from(sort.field.as_str()));
         albums.set_sort_dir(SharedString::from(sort.dir.as_str()));
     }
 
-    // request-cover: lazy per-card cover lookup. Only on-screen
-    // `EntityCard`s invoke this, so off-screen albums never decode or
-    // lock a cover. Backed by the shared `CoverThumbs` LRU. The Album
-    // Detail **header** no longer uses a lazy callback — its cover is
-    // decoded paired with the hero blur and pushed into
-    // `AlbumDetail.cover` at `open_album` time (see `albums.rs`).
     // `generation` is read for its effect on the binding, never its value; the notifier that
     // moves it is `boot::ui_setup::views::install_grid_covers`, one for the shared tier.
     albums.on_request_cover(|path, _generation| crate::ui::grid_prewarm::grid_cover(path.as_str()));
 
-    // columns-changed: the view recomputed its integer column count and
-    // already wrote `Albums.columns`. Re-chunk the ids, keeping every cached card.
     {
         let weak = weak.clone();
         albums.on_columns_changed(move |cols| {
@@ -54,8 +43,7 @@ pub(super) fn wire(
         });
     }
 
-    // apply-filter: `Albums.filter` is already updated via the SearchBar's two-way
-    // binding, so the ids reload under it. A hidden grid reloads on its enter instead.
+    // A hidden grid reloads under the filter on its enter instead.
     {
         let s = state.clone();
         let au = albums_ui.clone();
@@ -68,8 +56,6 @@ pub(super) fn wire(
         });
     }
 
-    // request-sort: clicking a sort pill. Same field flips dir; a new field
-    // resets to ascending. The ids reload in the new order.
     {
         let s = state.clone();
         let au = albums_ui.clone();
@@ -88,14 +74,8 @@ pub(super) fn wire(
         });
     }
 
-    // open-album: a card click. Fetches the detail header + track list and
-    // flips `AlbumDetail.album-id >= 0`, swapping the grid for the detail.
-    // Also stamps the Albums entry in `views.json`'s `last_detail_ids` so a
-    // restart on the Albums tab reopens this same detail page. The grid's
-    // cover cache is released off-thread once the fetch is in flight —
-    // the grid view is unmounted by the `AlbumDetail.album-id` flip (see
-    // `app-window.slint`'s `if` gate), so its covers are not visible and
-    // not queried while detail is on screen; re-warmed by `on_close_detail`.
+    // The grid unmounts under the detail, so its covers go back as proxies until the close
+    // re-warms them. The persisted id is what a restart on this tab reopens.
     {
         let s = state.clone();
         let au = albums_ui.clone();
@@ -103,11 +83,8 @@ pub(super) fn wire(
         albums.on_open_album(move |album_id| {
             let id = i64::from(album_id);
 
-            // Same-tab open: defensively zero any stale cross-section origin. A
-            // "Go to Album" from Favorites stamps one and only `close-detail`
-            // clears it, so reaching this grid by any path that left that detail
-            // open would otherwise send the next back press to Favorites. The two
-            // sibling grids carry the same line.
+            // A "Go to Album" from Favorites stamps an origin only `close-detail` clears, so
+            // reaching this grid past that detail would send the next back press to Favorites.
             if let Some(ui) = weak.upgrade() {
                 ui.global::<AlbumDetail>().set_origin_nav_index(-1);
             }

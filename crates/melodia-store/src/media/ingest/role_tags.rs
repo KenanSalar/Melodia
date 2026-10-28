@@ -1,30 +1,16 @@
 //! Role credits on the tag boundary: the one place a [`CreditRole`] becomes a key a file stores,
-//! and back.
+//! and back, so the per-format holes are spelled once.
 //!
-//! Its own module for [`super::rating_tags`]' reason — the reader and the writer both need the
-//! mapping, and the per-format holes in it are the kind of fact that rots when it is spelled twice.
+//! Producer, arranger, engineer, mixer and DJ-mixer reach `ID3v2` through `TIPL`, which lofty
+//! converts into the matching [`ItemKey`]s. **Three holes upstream won't close**: `Arranger` has no
+//! MP4 mapping, and `Performer` neither an MP4 nor an `ID3v2` one, which `WriteOutcome` reports.
+//! lofty parses `TMCL` but leaves it in a companion tag with no public accessor, having removed
+//! `ItemKey::MusicianCredits` on purpose, so reaching it would take a second `Id3v2Tag` parse of
+//! every MP3 on the scan path.
 //!
-//! **Five of the ten roles reach `ID3v2` for free.** Producer, arranger, engineer, mixer and
-//! DJ-mixer live in the `TIPL` frame, and lofty's `Id3v2Tag → Tag` conversion consumes it into the
-//! matching [`ItemKey`]s, so nothing here special-cases MP3 for them.
-//!
-//! **Three holes, none of them ours to close.** `Arranger` has no MP4 mapping and `Performer` has
-//! neither an MP4 nor an `ID3v2` one, so an arranger credit is dropped on M4A and a performer credit
-//! on M4A and MP3 alike — [`super::tag_writer`]'s `WriteOutcome` reports the write half rather
-//! than dropping it silently. The `ID3v2` performer hole is the one worth knowing *why* about, and
-//! it is not one upstream is going to close: `TMCL` carries exactly that credit, lofty parses the
-//! frame, and then `split_tag` consumes only `TIPL` and leaves `TMCL` in a `pub(crate)` companion
-//! tag with no public accessor. `ItemKey::MusicianCredits` existed until lofty 0.24 and was removed
-//! deliberately, as an `ID3v2`-specific field with a format a flat key cannot carry, so waiting for
-//! a newer lofty is waiting for nothing. Closing it here means a second `Id3v2Tag` parse of every
-//! MP3 on the scan path, since writing it without reading it back would blank the credit on the
-//! re-extract a save already does, and [`crate::media::ingest::metadata::read_tags`] is the tree's
-//! only lofty open.
-//!
-//! **`Writer` is read and never written.** lofty maps both `Writer` and `Lyricist` to `ID3v2`'s
-//! `TEXT` frame, so on an MP3 the two are one field: writing a writer credit would consume the
-//! lyricist and a round trip would move names between roles. Reading it onto
-//! [`CreditRole::Composer`] is what other players do with the tag.
+//! **`Writer` is read and never written**: lofty maps it and `Lyricist` both to `ID3v2`'s `TEXT`,
+//! so writing one would consume the other. It reads as [`CreditRole::Composer`], as other players
+//! take it.
 
 use lofty::prelude::ItemKey;
 use lofty::tag::Tag;
@@ -33,8 +19,7 @@ use melodia_core::entities::tags::RoleCreditEdit;
 
 use super::metadata::trimmed_values;
 
-/// The key each role is read from and written to. One entry per [`ROLES`] member; the array is
-/// exhaustive by construction and [`key_for`] would not compile without every arm.
+/// The key each role is read from and written to.
 fn key_for(role: CreditRole) -> ItemKey {
     match role {
         CreditRole::Composer => ItemKey::Composer,
@@ -50,16 +35,11 @@ fn key_for(role: CreditRole) -> ItemKey {
     }
 }
 
-/// Keys folded onto a role on the way in and never written back. See the module doc for why
-/// `Writer` is one.
+/// Keys folded onto a role on the way in and never written back.
 const FOLDED_KEYS: [(CreditRole, ItemKey); 1] = [(CreditRole::Composer, ItemKey::Writer)];
 
-/// Every role credit `tag` carries, in [`ROLES`] order.
-///
-/// A value repeated under one key is one credit each — which is what a tagger writes for multiple
-/// composers, and what [`trimmed_values`] already unpacks per format. Nothing is split on
-/// punctuation: a credit is a name, and the exceptions list that splitting would need is the same
-/// one `metadata::read_credit` declines to start.
+/// Every role credit `tag` carries, in [`ROLES`] order. A repeated value is one credit each, and
+/// nothing is split on punctuation, for `metadata::read_credit`'s reason.
 pub fn read_roles(tag: &Tag) -> RoleCredits {
     let mut credits = Vec::new();
 
@@ -79,12 +59,9 @@ pub fn read_roles(tag: &Tag) -> RoleCredits {
     RoleCredits::new(credits)
 }
 
-/// Write `edit` into `tag`, answering with the roles the format has no key for.
-///
-/// Every role **in scope** is cleared first, including the ones the set says nothing about: a role
-/// the user emptied has to leave the file, and a partial write would leave the old names behind
-/// it. A role outside the scope is neither cleared nor written — see [`RoleCreditEdit`] for what
-/// puts one there, and why clearing it would take a credit nobody was shown.
+/// Writes `edit` into `tag`, answering with the roles the format has no key for. Every role **in
+/// scope** is cleared first, so an emptied role leaves the file; one outside it is left alone, for
+/// the reason [`RoleCreditEdit`] gives.
 pub fn write_roles(tag: &mut Tag, edit: &RoleCreditEdit) -> Vec<CreditRole> {
     let mut unsupported = Vec::new();
     let credits = edit.credits();
@@ -105,21 +82,15 @@ pub fn write_roles(tag: &mut Tag, edit: &RoleCreditEdit) -> Vec<CreditRole> {
     unsupported
 }
 
-/// Remove every role credit the tag carries.
-///
-/// Unscoped, unlike [`write_roles`], because its caller is a `FieldEdit::Clear` and that carries
-/// no payload to take a scope from — so the only honest reading of it is every role.
+/// Removes every role credit, a `FieldEdit::Clear` carrying no scope to narrow it.
 pub fn clear(tag: &mut Tag) {
     for role in ROLES {
         tag.remove_key(key_for(role));
     }
 }
 
-/// Push one item per value under `key`, replacing whatever was there.
-///
-/// `insert_text` would keep only the last, so the first value goes through it — which is also what
-/// reports an unmapped key — and the rest are pushed beside it. lofty renders the repetition per
-/// format: a NUL-separated `ID3v2` frame, a repeated Vorbis field, a repeated MP4 atom value.
+/// Replaces `key`'s values: the first through `insert_text`, which keeps one and reports an
+/// unmapped key, the rest pushed beside it.
 fn push_values(tag: &mut Tag, key: ItemKey, values: Vec<String>) -> bool {
     let mut values = values.into_iter();
     let Some(first) = values.next() else {
@@ -162,11 +133,8 @@ fn join_detail(credit: &RoleCredit) -> String {
     format!("{} ({})", credit.name, credit.detail)
 }
 
-/// Whether this name is already credited in this role.
-///
-/// `Writer` folding is what makes the check necessary: a file naming the same person in both
-/// `COMPOSER` and `WRITER` would otherwise get two composer rows, and `track_credits`' primary key
-/// is `(track_id, role, position)` rather than the name, so nothing downstream would reject it.
+/// Whether this name is already credited in this role. `Writer` folding needs it: a file naming one
+/// person under `COMPOSER` and `WRITER` would get two rows, `track_credits`' key not being the name.
 fn already_credited(credits: &[RoleCredit], role: CreditRole, name: &str) -> bool {
     credits.iter().any(|credit| credit.role == role && credit.name.eq_ignore_ascii_case(name))
 }

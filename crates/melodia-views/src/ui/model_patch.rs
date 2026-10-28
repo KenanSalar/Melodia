@@ -1,11 +1,6 @@
-//! Surgical in-place patches on a Slint row `VecModel`.
-//!
-//! Every `VecModel` list surface (Browse, Recently Played, Search) patches a
-//! favorite/rating change into its visible rows the same way: walk the model, mutate
-//! the row that matters, write back only that one. This module owns that walk; the
-//! per-view `apply_row_*` wrappers keep only their `upgrade_in_event_loop` hop and
-//! the global they read. The two Songs lists, the four details and the queue panel
-//! patch the row their [`PagedRows`](crate::ui::paged_rows::PagedRows) holds instead.
+//! The favourite or rating patch every `VecModel` track list (Browse, Recently Played, Search)
+//! writes into its one changed row; the per-view `apply_row_*` wrappers keep only their hop and
+//! global. A list over [`PagedRows`](crate::ui::paged_rows::PagedRows) patches its cache instead.
 
 use slint::{Model, ModelRc, VecModel};
 
@@ -16,9 +11,8 @@ use melodia_ui::TrackListRow as UiTrackListRow;
 #[path = "tests/model_patch_tests.rs"]
 mod tests;
 
-/// Find the row with `id` and apply `patch` to it. No-ops when the id isn't
-/// present. Only the affected row is written, so scroll position and
-/// neighbouring rows stay put.
+/// Apply `patch` to the row with `id`, where there is one, writing that row alone so the scroll
+/// and its neighbours stay put.
 pub fn patch_track_row_by_id(
     rows: &ModelRc<UiTrackListRow>,
     id: i64,

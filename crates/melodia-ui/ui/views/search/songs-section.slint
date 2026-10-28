@@ -25,8 +25,7 @@ export component SongsSection inherits VerticalLayout {
             vertical-alignment: center;
         }
 
-        // **No Shuffle pill here**: Search has no single "all of these tracks" the way
-        // Favorites does — the user picked a query, so play expectations are per-row.
+        // No Shuffle: a query has no "all of these tracks", so play is per row.
         if Search.tracks.length > 0: ActionPill {
             ColumnTogglePopup {
                 columns <=> Search.track-columns;
@@ -38,16 +37,9 @@ export component SongsSection inherits VerticalLayout {
     TrackList {
         horizontal-stretch: 1;
         vertical-stretch: 0;
-        // Sized to the row count so the outer scroller drives the strips and the list
-        // together.
-        //
-        // **Uncapped, unlike the composite views**, which pin this to the viewport so
-        // their inner list keeps virtualizing. Here the *backend* is the cap — the query
-        // returns at most a screenful or two — so instantiating them all is affordable,
-        // and it buys back native wheel scrolling: a capped list gains inner travel, and
-        // a nested `ListView` swallows the wheel at its scroll edge rather than bubbling,
-        // which is why those views need `CompositeScrollbars` and this one doesn't.
-        // **Raising that SQL limit is what would make the trade wrong.**
+        // Uncapped, unlike the composite views: the query returns a screenful or two, so
+        // instantiating every row is affordable and leaves no inner travel to swallow the wheel.
+        // Raising that SQL limit is what would make the trade wrong.
         height: self.content-height;
         // A column inside the page's own inset, beside the Top Result and under the page's
         // scrollbar rather than one at its own edge.

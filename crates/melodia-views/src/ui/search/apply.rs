@@ -1,9 +1,5 @@
-//! Every write the Search view's models and scalars take, and every clear.
-//!
-//! The split from [`super::fetch`] is worker-versus-UI-thread as much as it
-//! is by job: the row halves that are `Send` are prepared off-thread and only
-//! the `!Send` cover lookups and the translated plurals happen inside the
-//! event-loop closure.
+//! Every write and clear the Search view's models take. Rows are built on the worker, and only
+//! what needs the UI thread, the translated plurals, waits for the event-loop closure.
 
 use std::sync::Arc;
 
@@ -26,11 +22,8 @@ use melodia_ui::{
     AppWindow, EntityStripRow as UiEntityStripRow, Search, TrackListRow as UiTrackListRow,
 };
 
-/// Push the freshly-fetched `results` into all four Slint models,
-/// compute + apply the Top Result, set `tracks-total`, and honour the
-/// `show-all-tracks` toggle (the apply path always re-derives the
-/// visible Songs slice — that way callers don't have to remember to
-/// reset `show-all-tracks` themselves).
+/// Writes `results` into every surface, cutting the Songs slice against the live
+/// `show-all-tracks`.
 pub fn apply_results_to_slint(
     search_ui: &Arc<SearchUi>,
     weak: &Weak<AppWindow>,
@@ -43,10 +36,8 @@ pub fn apply_results_to_slint(
 
     let album_rows: Vec<UiEntityStripRow> =
         results.albums.iter().map(to_slint_album_strip_row).collect();
-    // Artist rows can't be finished here — their subtitle is a translated
-    // plural that only `Search.album-count-label` resolves, and that is a
-    // UI-thread callback. Carry the entities across and build the rows
-    // inside the closure below.
+    // Artist rows wait for the closure, their subtitle being a plural only the UI thread can
+    // translate.
     let artists: Vec<ArtistStats> = results.artists.clone();
 
     let weak = weak.clone();
@@ -59,18 +50,12 @@ pub fn apply_results_to_slint(
     });
 }
 
-/// Sort a result set's tracks into display order and build their rows. Runs on the worker, so
-/// the event-loop closure only pays for the model write.
-///
-/// Result sets are LIMIT-bounded, so building the *full* set — rather than just the compact
-/// slice, which can't be sized off-thread because `show-all-tracks` is UI-thread state — is
-/// cheap.
+/// Sorts the tracks into display order and builds every row on the worker: the compact cut reads
+/// UI-thread state, and a LIMIT-bounded set is cheap to build whole.
 fn sort_track_rows(
     tracks: &[RsTrackListRow],
     sort: &melodia_app::services::settings::ViewSort,
 ) -> (Vec<UiTrackListRow>, i32) {
-    // The FTS5 `ORDER BY rank` lands these rank-ordered, but the user may
-    // have picked a different sort after the fact.
     let mut sorted: Vec<RsTrackListRow> = tracks.to_vec();
     if sort.field == "rank" {
         if matches!(sort.dir, SortDir::Desc) {
@@ -93,8 +78,8 @@ fn sort_track_rows(
     (crate::ui::tracks::to_slint_track_list_rows(&sorted), total)
 }
 
-/// Truncate the Songs rows against the live `show-all-tracks` flag and write
-/// them, with the untruncated total beside them.
+/// Cuts the Songs rows against the live `show-all-tracks` and writes them, the uncut total
+/// beside them.
 fn write_tracks(g: &Search, rows: Vec<UiTrackListRow>, total: i32) {
     // Against the whole result set: the compact view hides the rest rather than dropping it.
     list_selection::keep_selection_within(g, || rows.iter().map(|row| row.id).collect());
@@ -106,8 +91,6 @@ fn write_tracks(g: &Search, rows: Vec<UiTrackListRow>, total: i32) {
     g.set_tracks_total(total);
 }
 
-/// Write both entity strips. The artist rows are built here rather than on
-/// the worker because their subtitle is a translated plural.
 fn write_strips(g: &Search, album_rows: Vec<UiEntityStripRow>, artists: &[ArtistStats]) {
     model_diff::replace_rows(&g.get_album_rows(), album_rows, "Search.album-rows");
     let artist_rows: Vec<UiEntityStripRow> = artists
@@ -117,7 +100,7 @@ fn write_strips(g: &Search, album_rows: Vec<UiEntityStripRow>, artists: &[Artist
     model_diff::replace_rows(&g.get_artist_rows(), artist_rows, "Search.artist-rows");
 }
 
-/// Paint the Top Result card, or clear it when nothing ranked.
+/// Paints the Top Result card, or clears it when nothing ranked.
 fn write_top_result(g: &Search, top: Option<TopResult>) {
     let Some(t) = top else {
         clear_top_result(g);
@@ -136,11 +119,8 @@ fn write_top_result(g: &Search, top: Option<TopResult>) {
         TopSubtitle::TrackCount(n) => g.invoke_track_count_label(*n),
     });
     g.set_top_artwork_path(opt_shared(t.artwork_path.as_deref()));
-    // Derived from the title rather than carried on `TopResult`:
-    // `genre_accent` is a pure function of the name, so deriving here is what
-    // guarantees this card and the genre's grid card tint identically. The
-    // view reads these only under `top-kind == "genre"`, so the other kinds
-    // need no write.
+    // From the name, as the genre's grid card derives it, so the two tint alike. The view reads
+    // these only under `top-kind == "genre"`.
     if t.kind == TopKind::Genre {
         let accent = genre_accent(&t.title);
         g.set_top_tile_color_1(accent.tile_color_1);
@@ -148,9 +128,8 @@ fn write_top_result(g: &Search, top: Option<TopResult>) {
     }
 }
 
-/// Blank the Top Result card. Emptying `top-artwork-path` is what releases the
-/// `Image` slot the card holds through its cover callback — the binding won't
-/// be re-evaluated for an empty path, so no explicit image write is owed.
+/// Emptying `top-artwork-path` releases the image the card holds through its cover callback, so
+/// no image write is owed.
 fn clear_top_result(g: &Search) {
     g.set_top_kind(SharedString::default());
     g.set_top_id(-1);
@@ -159,8 +138,7 @@ fn clear_top_result(g: &Search) {
     g.set_top_artwork_path(SharedString::default());
 }
 
-/// Empty every results surface: the Songs model, both strips, the total, the
-/// Top Result and the loading flag. What a view with no query shows.
+/// Empties every results surface, as a view with no query shows.
 fn clear_result_models(g: &Search) {
     model_diff::clear_vec_model(&g.get_tracks(), "Search.tracks");
     model_diff::clear_vec_model(&g.get_album_rows(), "Search.album-rows");
@@ -170,9 +148,7 @@ fn clear_result_models(g: &Search) {
     g.set_loading(false);
 }
 
-/// Empty-query fast path. Called synchronously from
-/// [`super::fetch::kick_search`] so the recent-searches branch can render the
-/// same tick the user clears the `SearchBar`.
+/// The empty-query path, so the recent searches show as soon as the box empties.
 pub fn clear_results_on_ui(weak: &Weak<AppWindow>) {
     let weak = weak.clone();
     let _ = slint::invoke_from_event_loop(move || {
@@ -181,8 +157,7 @@ pub fn clear_results_on_ui(weak: &Weak<AppWindow>) {
     });
 }
 
-/// Flip `is_favorite` on a single row in the Slint `VecModel`. Only touches
-/// the affected row — scroll position and neighbouring rows stay put.
+/// Patches the one row on screen, so the scroll holds.
 pub fn apply_row_favorite(weak: &Weak<AppWindow>, id: i64, fav: bool) {
     let _ = weak.upgrade_in_event_loop(move |ui| {
         model_patch::patch_track_row_by_id(&ui.global::<Search>().get_tracks(), id, |r| {
@@ -191,8 +166,7 @@ pub fn apply_row_favorite(weak: &Weak<AppWindow>, id: i64, fav: bool) {
     });
 }
 
-/// Set `rating` on a single row in the Slint `VecModel` — the star-rating
-/// analogue of [`apply_row_favorite`].
+/// [`apply_row_favorite`]'s star-rating twin.
 pub fn apply_row_rating(weak: &Weak<AppWindow>, id: i64, rating: i32) {
     let _ = weak.upgrade_in_event_loop(move |ui| {
         model_patch::patch_track_row_by_id(&ui.global::<Search>().get_tracks(), id, |r| {
@@ -201,8 +175,6 @@ pub fn apply_row_rating(weak: &Weak<AppWindow>, id: i64, rating: i32) {
     });
 }
 
-/// Toggle the `loading` flag on the Slint side. Used by `kick_search`
-/// to surface the "Searching…" line through the FTS round-trip.
 pub fn set_loading_on_ui(weak: &Weak<AppWindow>, on: bool) {
     let weak = weak.clone();
     let _ = slint::invoke_from_event_loop(move || {
@@ -211,19 +183,12 @@ pub fn set_loading_on_ui(weak: &Weak<AppWindow>, on: bool) {
     });
 }
 
-/// UI-thread teardown — mirror of `release_section_state`'s Rust-side
-/// cleanup, run synchronously *before* the `spawn_blocking` that drops
-/// the LRUs. Clears every model + scalar + image slot the global owns
-/// so the LRU's `SharedPixelBuffer` Arcs release on the same tick.
-/// Keeps `Search.query` + `Search.recent-rows` so a brief flip away
-/// and back doesn't lose the user's typing.
+/// The leave's UI half, run before the blocking release drops the tiers so no model still holds
+/// their images. Keeps `query` and `recent-rows`, so a flip away and back keeps the user's typing.
 pub fn teardown_models_on_leave(ui: &AppWindow) {
     let g = ui.global::<Search>();
     clear_result_models(&g);
     g.set_show_all_tracks(false);
-    // Drop the selection set too so the next session enter starts
-    // clean. The user just navigated away — they can't be relying on
-    // a sticky selection.
     model_diff::clear_vec_model(&g.get_selected_ids(), "Search.selected-ids");
     g.set_selection_anchor(list_selection::NO_ANCHOR);
 }

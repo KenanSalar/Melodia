@@ -2,31 +2,30 @@ import { Theme } from "../theme.slint";
 import { TextEditMenu } from "text-edit-menu.slint";
 import { ContextClick } from "context-menu.slint";
 
-// The editing half of every single-line field, the host drawing the chrome around it: the
-// `TextInput`, the placeholder Slint doesn't give it, and what std-widgets' `LineEdit` adds to one.
+// The editing half of every single-line field, the host drawing the chrome: the `TextInput`, the
+// placeholder Slint doesn't give it, and what std-widgets' `LineEdit` adds to one.
 //
-// **The text slides to keep the cursor in view.** A bare `TextInput` clips at its own width and
-// never scrolls, so a long value ran out of sight with the cursor behind it. This is upstream's
-// `LineEditBase` arrangement: the input as wide as its text inside a clip, moved on every cursor
-// move.
+// **The text slides to keep the cursor in view**, a bare `TextInput` clipping at its own width and
+// never scrolling. Upstream's `LineEditBase` arrangement: the input as wide as its text inside a
+// clip, moved on every cursor move.
 //
-// **A right-click opens the edit menu.** The input takes only left and middle clicks, so a right
-// one reaches the area around it.
+// The input takes only left and middle clicks, so a right one reaches the area round it, which
+// opens the edit menu.
 export component SingleLineInput inherits Rectangle {
     in-out property <string> text <=> ti.text;
     in property <string> placeholder;
     in property <brush> placeholder-color: Theme.overlay2;
     in property <InputType> input-type: InputType.text;
-    // The edit menu holds the keyboard while it is up and hands it back on close, so the field
-    // reads as focused across it rather than dimming under its own menu.
+    // The edit menu holds the keyboard while it is up, so the field reads as focused across it
+    // rather than dimming under its own menu.
     out property <bool> has-focus: ti.has-focus || menu.is-open;
-    // The placeholder's natural width, for a host sizing itself to its hint.
+    // For a host sizing itself to its hint.
     out property <length> placeholder-width: hint.preferred-width;
 
     callback edited(string);
     callback accepted();
 
-    // Named apart from the built-in `focus` and `clear-focus`, which act on this element.
+    // Apart from the built-in `focus` and `clear-focus`, which act on this element.
     public function focus-input() {
         ti.focus();
     }
@@ -65,8 +64,8 @@ export component SingleLineInput inherits Rectangle {
         }
 
         ti := TextInput {
-            // Where the cursor last pushed the text. The clamp below keeps either end from
-            // leaving a gap once the text shrinks.
+            // Where the cursor last pushed the text; the clamp keeps either end from leaving a gap
+            // once the text shrinks.
             property <length> scroll-x;
 
             x: min(0px, max(parent.width - self.width - self.text-cursor-width, self.scroll-x));

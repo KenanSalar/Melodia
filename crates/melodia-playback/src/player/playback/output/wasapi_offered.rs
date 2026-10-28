@@ -1,15 +1,13 @@
 //! The rates each endpoint offered a claim, remembered for the process's life.
 //!
-//! Asking which rates an endpoint offers means asking every rate in every layout a claim could use,
-//! and a rate it lacks is only known once all of them have been refused. On an output set up for
-//! surround that is several times the stereo sweep, long enough to hear as a stall before every
-//! claim. An endpoint's rates don't move while it stays in the same layout, so the first claim asks
-//! and the rest read the answer.
+//! Proving a rate missing takes an ask in every layout a claim could use, several times the stereo
+//! sweep on an output set up for surround, long enough to hear as a stall before every claim. An
+//! endpoint's rates don't move while its layout stays put, so the first claim asks and the rest
+//! read the answer.
 //!
-//! **Where they do move anyway, the answer stays stale until Melodia restarts.** A driver setting
-//! changed mid-session can do it without touching the layout. A rate the device gained is then
-//! never asked for and plays converted; a rate it lost is asked for and refused before the claim
-//! moves on to another.
+//! **Where they move anyway, the answer stays stale until Melodia restarts**, as a driver setting
+//! changed mid-session can do: a rate gained is never asked for and plays converted, and a rate
+//! lost is asked for and refused before the claim moves on.
 
 use std::time::Instant;
 
@@ -49,13 +47,10 @@ impl Answers {
         Self(Mutex::new(Vec::new()))
     }
 
-    /// `key`'s answer, running `probe` for it where none is kept.
-    ///
-    /// A sweep that fails is not kept: one cut short by the device being taken or unplugged would
-    /// otherwise stand for the rest of the session, short of rates the device has.
-    ///
-    /// The lock isn't held across `probe`: claims come one at a time, through the output's own
-    /// lock, and a sweep can take the better part of a second.
+    /// `key`'s answer, running `probe` where none is kept. A failed sweep isn't kept, as one cut
+    /// short by the device being taken would stand for the session short of rates it has. The lock
+    /// isn't held across `probe`: claims come one at a time through the output's own lock, and a
+    /// sweep can take the better part of a second.
     fn answer<E>(
         &self,
         key: ProbeKey,

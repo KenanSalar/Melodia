@@ -1,6 +1,4 @@
-//! `Genres.*` grid callbacks: re-chunk on column count, the filter and the
-//! sort, and the open-genre drill-in. Genres have no covers, so (unlike
-//! `albums/grid.rs`) there's no `request-cover` handler or cover prewarm.
+//! `Genres.*` grid callbacks, wired as `albums/callbacks/grid.rs` argues less the covers.
 
 use std::sync::Arc;
 
@@ -18,7 +16,6 @@ use melodia_app::state::AppState;
 use melodia_core::error::describe;
 use melodia_ui::{AppWindow, GenreDetail, Genres};
 
-/// Wire the `Genres` grid callbacks. See [`super::wire`].
 pub(super) fn wire(
     ui: &AppWindow,
     state: &AppState,
@@ -28,14 +25,11 @@ pub(super) fn wire(
     let genres = ui.global::<Genres>();
     let weak = ui.as_weak();
 
-    // Seed the grid's sort pill from the persisted `view_sort["genres"]`.
     if let Some(sort) = persisted_sort(view_state, view_id::GENRES) {
         genres.set_sort_field(SharedString::from(sort.field.as_str()));
         genres.set_sort_dir(SharedString::from(sort.dir.as_str()));
     }
 
-    // columns-changed: the view recomputed its integer column count and
-    // already wrote `Genres.columns`. Re-chunk the ids, keeping every cached card.
     {
         let weak = weak.clone();
         genres.on_columns_changed(move |cols| {
@@ -44,9 +38,6 @@ pub(super) fn wire(
         });
     }
 
-    // apply-filter: `Genres.filter` is already updated via the SearchBar's
-    // two-way binding, so the ids reload under it. A hidden grid reloads on
-    // its enter instead.
     {
         let s = state.clone();
         let gu = genres_ui.clone();
@@ -59,8 +50,6 @@ pub(super) fn wire(
         });
     }
 
-    // request-sort: clicking a sort pill. Same field flips dir; a new
-    // field resets to ascending. The ids reload in the new order.
     {
         let s = state.clone();
         let gu = genres_ui.clone();
@@ -79,11 +68,6 @@ pub(super) fn wire(
         });
     }
 
-    // open-genre: a card click. Fetches the detail header + track
-    // list and flips `GenreDetail.genre-id >= 0`, swapping the grid
-    // for the detail. Also stamps the Genres entry in
-    // `views.json`'s `last_detail_ids` so a restart on the Genres tab
-    // reopens this same detail page.
     {
         let s = state.clone();
         let gu = genres_ui.clone();
@@ -91,8 +75,6 @@ pub(super) fn wire(
         genres.on_open_genre(move |genre_id| {
             let id = i64::from(genre_id);
 
-            // Same-tab open: defensively zero any stale cross-section origin —
-            // see `albums::grid`'s copy for the path it guards against.
             if let Some(ui) = weak.upgrade() {
                 ui.global::<GenreDetail>().set_origin_nav_index(-1);
             }
