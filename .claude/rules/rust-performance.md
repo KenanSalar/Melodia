@@ -16,7 +16,6 @@ paths:
 
 ## String Handling
 
-- Prefer `&str` in function parameters over `String` or `&String`
 - Use `Cow<'_, str>` for functions that usually return input unchanged but sometimes modify
 - Avoid `format!()` for simple conversions — use `.to_owned()` for a `&str`, `.to_string()`
   otherwise, `.into()`, or string concatenation
@@ -27,7 +26,6 @@ paths:
 ## Collections
 
 - Use Entry API for HashMap insert-or-update: `map.entry(key).or_insert_with(|| value)`
-- Accept `&[T]` over `&Vec<T>` in function signatures — more flexible, same performance
 - Consider `SmallVec<[T; N]>` for collections that are usually small but occasionally grow
 - Avoid `Box<dyn Trait>` in hot paths — use enums or generics for static dispatch
 - `Vec::extract_if` (1.87) / `HashMap::extract_if` (1.88) drain matching elements with a predicate

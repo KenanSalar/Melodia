@@ -13,7 +13,7 @@ paths:
 
 - **CPU-bound work** → Rayon (`par_iter`, `par_sort`, parallel map/reduce)
 - **I/O-bound work** → Tokio (async, non-blocking)
-- **Mixed** → Bridge with `rayon::spawn` + `tokio::sync::oneshot` channel
+- **Mixed** → `spawn_blocking`, with the parallel part under `pool.install`
 
 ## Parallel Iteration
 
@@ -44,13 +44,10 @@ paths:
 ## Bridging with Tokio
 
 ```rust
-// Run CPU-bound work from async context
-let (tx, rx) = tokio::sync::oneshot::channel();
-rayon::spawn(move || {
-    let result = expensive_computation();
-    let _ = tx.send(result);
-});
-let result = rx.await.unwrap();
+// CPU-bound work from async: a blocking task, the parallel part under a pool
+let index = tokio::task::spawn_blocking(move || pool.install(|| build_index(files)))
+    .await
+    .map_err(|e| AppError::scanner("Scan walk task failed", e))?;
 ```
 
 ## Reduction Patterns
@@ -74,15 +71,11 @@ let result = rx.await.unwrap();
   locking)
 - `par_iter().flat_map_iter(|item| sequential_iter)` — flatten with a sequential inner iterator
   per item
-- `par_iter().panic_fuse()` — stops all threads as soon as a panic occurs (default propagates but
-  doesn't halt immediately)
 - `par_iter().while_some()` — halts as soon as any element produces `None`
 - Collect directly into `HashMap`: `par_iter().map(|x| (k, v)).collect::<HashMap<_,_>>()`
 
 ## Panic Handling
 
-- Panics inside `par_iter` closures are propagated to the calling thread at
-  `.collect()`/`.for_each()` completion
-- Without `panic_fuse()`, other threads continue executing after a panic — add it when early abort
-  is critical
-- `std::panic::catch_unwind` inside a `par_iter` closure to handle per-item panics gracefully
+- **Release builds are `panic = "abort"`**: a panic in a pool thread ends the process, so
+  `catch_unwind` never returns `Err` there, and propagation and `panic_fuse()` change only what
+  a debug build or a test sees. A per-item failure is a `Result` the closure returns.

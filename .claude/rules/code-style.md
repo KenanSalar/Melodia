@@ -67,6 +67,13 @@ tests, holds no duplication, says what it means, and has no more parts than that
   taken owned (`String`, `Vec<T>`, `PathBuf`): a caller done with its value moves it in, one
   that isn't clones at the call site. A `&str` the body `.to_owned()`s copies on every call.
   Clippy's `needless_pass_by_value` catches an owned parameter that is only read, not this.
+- **Borrow the data, not its holder** - a parameter that is only read takes `&T`, `&[T]`, `&str`,
+  `&Path` or `Option<&T>`, not `&Arc<T>`, `&Rc<T>`, `&Box<T>`, `&Vec<T>`, `&String`, `&PathBuf`
+  or `&Option<T>`. Naming the holder ties every caller to one way of storing the value. A
+  `&Arc<T>` or `&Rc<T>` is right only where the body keeps a pointer of its own: it clones or
+  downgrades it, or hands it to a callee that does. Clippy holds `&Box<T>`, `&Vec<T>`, `&String`
+  and `&PathBuf` everywhere (`borrowed_box`, `ptr_arg`) and `&Option<T>` on private items only
+  (`ref_option`); nothing holds `&Arc<T>` or `&Rc<T>`.
 - **Command or query, never both** - a function either changes state or answers a question.
   One that does both leaves every call site working out whether calling it twice is safe.
 - **Don't reach through** - `a.b().c().d()` couples the caller to the shape of everything in
