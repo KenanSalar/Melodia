@@ -1,6 +1,6 @@
 # Plan: Compress the subsystem rules, and take their citations out of the code
 
-Status: **in progress**, Phase 6 next · Owner: Kenan · Created: 2026-10-27 · branch `docs/trim-comments`
+Status: **in progress**, Phase 7 next · Owner: Kenan · Created: 2026-10-27 · branch `docs/trim-comments`
 
 > **Measured 2026-10-27** against `a3963bb3` plus Phase 1's changes. Every figure below comes from
 > a command run that day. Each phase measures its rule again before it starts (Every rule, step 1),
@@ -34,7 +34,8 @@ Working doc. Delete when every phase has landed (Phase 10).
 | `ci-packaging.md` | `52c215ed` | 323 / 24,758 | 122 / 7,996 (32%) |
 | `radio.md` | `3cb8af76` | 181 / 13,308 | 107 / 6,492 (49%) |
 | `visualizer.md` | `ac2b1b69` | 159 / 11,280 | 51 / 2,745 (24%) |
-| `updater.md` | Phase 5.3 | 160 / 11,471 | 71 / 4,287 (37%) |
+| `updater.md` | `62386f54` | 160 / 11,471 | 71 / 4,287 (37%) |
+| `symphonia.md` | Phase 6 | 112 / 7,296 | 52 / 2,899 (40%) |
 
 Read the first two commits before Phase 2: `git show <sha> --stat`, then the rule as it landed, then
 a few of the comment diffs.
@@ -152,7 +153,7 @@ a few of the comment diffs.
 | 5.1 | `radio.md` | 181 / 13,308, 6 over 100 | 7 in 5 files | 107 / 6,492 (49%), 0 over 100, 0 citations |
 | 5.2 | `visualizer.md` | 159 / 11,280, 1 over 100 | 7 in 6 files | 51 / 2,745 (24%), 0 over 100, 0 citations |
 | 5.3 | `updater.md` | 160 / 11,471, 5 over 100 | 1 | 71 / 4,287 (37%), 0 over 100, 0 citations |
-| 6 | `symphonia.md` | 112 / 7,296, 5 over 100 | 0 | |
+| 6 | `symphonia.md` | 112 / 7,296, 5 over 100 | 0 | 52 / 2,899 (40%), 0 over 100, 0 citations |
 | 7 | `diagnostics.md` (deleted) | 52 / 3,006 | 0 | |
 | 8 | `testing.md`, `unsafe-rust.md`, `sqlx.md`, `slint.md` (citations only) | | 2, 1, 1, 0 | |
 | 9 | `slint.md`'s font bullet | | | |
@@ -449,9 +450,47 @@ Status: done.
     - `docs/adr/0019-updater-trust-boundary-is-the-repo.md:45`, an accepted ADR.
 
 ### Phase 6: `symphonia.md`
-Status: not started.
+Status: done.
 
-- [ ] **6. The rule**, one commit. It has no code citations.
+- [x] **6. The rule**, one commit. It has no code citations.
+  - **Result:** three sections, Opening and decoding, Seeking, and Gapless, each entry a pointer
+    at the `source/` module holding it plus what Symphonia 0.6.1 does underneath. The gapless
+    section is now one line per container (`aac_trim`, `mkv_trim`, `opus`) and the
+    `Track::delay` comparison, which no one module holds. Cut as history: the 0.5 probe and
+    `enable_gapless`, the two-majors story, symphonia#274's misreading. Cut as not this tree's:
+    "reuse buffers" (`fill` already does) and metadata-only reads (tags are lofty's).
+  - **Stale, fixed or cut:**
+    - The decode-loop sketch was 0.5's: 0.6.1's `next_packet` returns `Ok(None)` at the end, and
+      `ResetRequired` ends the source here rather than re-reading. Now a pointer at `decode::fill`.
+    - "Sample Format Conversion" named `SampleBuffer` and `copy_interleaved_ref`, neither in
+      0.6.1. A packet is a `GenericAudioBufferRef`, flattened with `copy_to_vec_interleaved`.
+    - "default track may be video": 0.6's `default_track` takes a `TrackType`. The real trap is
+      a null-codec track winning, which `decode::audio_track` argues.
+    - `player::decode`, `player::aac_trim` and `player::mkv_trim` live under `player::source::`.
+    - The intro put "the two decks" in `output/`; those are `playback::decks`, `output` holding
+      the voices. The intro now names `audio-stack.md` alone.
+    - "a count against a window" resolved to nothing in either trim module or `audio-stack.md`.
+      Dropped.
+  - **Comment whose reason went false (Decision 3):** `decode::open`'s doc said the hint is one
+    "0.6 scores rather than trusts". 0.6.1's `Probe::next` takes it as `_hint` and never reads
+    it. Rewritten to "which 0.6 ignores, scoring instead"; `stream_decode.rs:61` already said so.
+  - **Code diff:** 1 comment line out, 1 in, 1 byte fewer. Clippy clean.
+  - **Verified against source (symphonia 0.6.1):**
+    - `Probe::probe` and `next` never read the hint; `find_reader` scores each tier's readers
+      whose marker matches.
+    - `AudioDecoderOptions::gapless` defaults to `true`; only `symphonia-bundle-mp3` and
+      `symphonia-codec-vorbis` read it.
+    - `FormatReader::seek` asks every consuming decoder to be reset. PCM, ADPCM, ALAC and FLAC
+      `reset` do nothing; MP3 rebuilds `State`; AAC zeroes each ICS `delay` buffer; Vorbis
+      clears its overlap buffer.
+    - MP3 starts `next_packet_ts` at `-delay` and CAF `start_pts` at `-priming_frames`.
+    - Ogg's Opus mapper overrides no `absgp_to_ts` (the trait's identity) and its packet parser
+      reports zero discard, so no packet trim and a start at the granule less the packet
+      durations, zero for a stream whose granule counts the pre-skip. This settles the claim
+      Phase 1 left open.
+    - Matroska subtracts `CodecDelay` from block timestamps (`lacing.rs:97`) and parses
+      `DiscardPadding` into a field nothing reads.
+  - **Not verified:** nothing left open.
   - **What it is:** a per-crate practice rule, named in `CLAUDE.md`'s table only in the "rest" row.
     Nothing cites it by file name.
   - **It cites `audio-stack.md` three times** (`:12`, `:92`, `:96`), and all three still land after

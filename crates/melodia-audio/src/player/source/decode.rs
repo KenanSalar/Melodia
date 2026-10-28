@@ -152,7 +152,7 @@ pub(super) enum OpenError {
     Empty,
 }
 
-/// `hint` is a file's extension or a mount's content type, which 0.6 scores rather than trusts.
+/// `hint` is a file's extension or a mount's content type, which 0.6 ignores, scoring instead.
 pub(super) fn open(source: Box<dyn MediaSource>, hint: &Hint) -> Result<Opened, OpenError> {
     let mss = MediaSourceStream::new(source, MediaSourceStreamOptions::default());
     let mut format = symphonia::default::get_probe()
