@@ -193,7 +193,7 @@ export struct SmartRuleRow {
 
 // The station on the deck; `has_track` and `has_station` are never both true.
 // **`stream_url` crosses here**, where `RadioStationRow` withholds it, because Now Playing
-// states it as the station page does (`radio.md`). The facts below `buffering` ride the view model
+// states it as the station page does. The facts below `buffering` ride the view model
 // so the bar and the Now Playing panel can't disagree about the deck, and `monogram` and the stops
 // are `ui::radio::identity::station_tile`'s, as the card's and the hero's are.
 export struct RadioVm {
@@ -375,12 +375,13 @@ export struct NotificationRow {
 
 // **`id` is `0` for a station only in the directory**, results never being persisted until the
 // user keeps or plays one. No `stream_url`: Rust resolves a row back to its own cache by `uuid` or
-// `id` (`radio.md`). `tags` and `codec` arrive display-ready, the directory's tag field being a
+// `id`. `tags` and `codec` arrive display-ready, the directory's tag field being a
 // free-form list of a dozen; `codec` reads `HLS` for a segmented stream the directory couldn't
 // name, and nothing badges one, because those play.
 export struct RadioStationRow {
     id: int,
-    // What the card selects and copies by (`radio.md`). A browsed row built outside Browse holds 0.
+    // What the card selects and copies by: the row id, or on Browse the station's 1-based place in
+    // the answer, which a fresh search renumbers. A browsed row built outside Browse holds 0.
     select_key: int,
     uuid: string,
     name: string,

@@ -43,7 +43,7 @@ fn facade_source() -> String {
 
 /// **"Off" means no traffic, and this file is the only place that can be true.**
 ///
-/// D15's switch is enforced at the facade rather than at the sidebar row, because a row that
+/// The switch is enforced at the facade rather than at the sidebar row, because a row that
 /// disappears stops nothing a stale callback or an in-flight fetch has already started. What makes
 /// one guard enough is that every outbound call reaches its client through
 /// [`super::directory_client`], which is [`super::ensure_enabled`] plus the handle — so the check

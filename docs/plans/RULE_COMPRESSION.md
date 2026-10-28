@@ -1,6 +1,6 @@
 # Plan: Compress the subsystem rules, and take their citations out of the code
 
-Status: **in progress**, Phase 5 next · Owner: Kenan · Created: 2026-10-27 · branch `docs/trim-comments`
+Status: **in progress**, Phase 5.2 next · Owner: Kenan · Created: 2026-10-27 · branch `docs/trim-comments`
 
 > **Measured 2026-10-27** against `a3963bb3` plus Phase 1's changes. Every figure below comes from
 > a command run that day. Each phase measures its rule again before it starts (Every rule, step 1),
@@ -31,7 +31,8 @@ Working doc. Delete when every phase has landed (Phase 10).
 | `audio-stack.md` | `fbee5d01` | 122 / 37,701 | 165 / 11,746 (31%) |
 | `desktop-shell.md` | `df93eb10` | 299 / 22,352 | 128 / 8,345 (37%) |
 | `library-data.md` | `312554ea` | 314 / 24,572 | 124 / 8,403 (34%) |
-| `ci-packaging.md` | Phase 4 | 323 / 24,758 | 122 / 7,996 (32%) |
+| `ci-packaging.md` | `52c215ed` | 323 / 24,758 | 122 / 7,996 (32%) |
+| `radio.md` | Phase 5.1 | 181 / 13,308 | 107 / 6,492 (49%) |
 
 Read the first two commits before Phase 2: `git show <sha> --stat`, then the rule as it landed, then
 a few of the comment diffs.
@@ -146,7 +147,7 @@ a few of the comment diffs.
 | 2 | `desktop-shell.md` | 299 / 22,352, 4 over 100 | 8 in 6 files | 128 / 8,345 (37%), 0 over 100, 0 citations |
 | 3 | `library-data.md` | 314 / 24,572, 9 over 100 | 6 in 6 files | 124 / 8,403 (34%), 0 over 100, 0 citations |
 | 4 | `ci-packaging.md` | 323 / 24,758, 9 over 100 | 1 named, plus 3 the grep missed | 122 / 7,996 (32%), 0 over 100, 0 citations |
-| 5.1 | `radio.md` | 181 / 13,308, 6 over 100 | 7 in 5 files | |
+| 5.1 | `radio.md` | 181 / 13,308, 6 over 100 | 7 in 5 files | 107 / 6,492 (49%), 0 over 100, 0 citations |
 | 5.2 | `visualizer.md` | 159 / 11,280, 1 over 100 | 7 in 6 files | |
 | 5.3 | `updater.md` | 160 / 11,471, 5 over 100 | 1 | |
 | 6 | `symphonia.md` | 112 / 7,296, 5 over 100 | 0 | |
@@ -319,9 +320,33 @@ Status: done.
     workflow files and the pinned SHAs, and say which couldn't be checked locally.
 
 ### Phase 5: `radio.md`, `visualizer.md`, `updater.md`
-Status: not started.
+Status: in progress, 5.1 done.
 
-- [ ] **5.1 `radio.md`**, one commit.
+- [x] **5.1 `radio.md`**, one commit.
+  - **Result:** the five sections kept. Cut as carried at their anchors: the facade walks' own
+    arguments (`radio_facade.rs`), `fold_disabled_nav_index`'s placement, the `local_*` and
+    logo-answer arguments (the two migration headers), id reuse (`detail_tests.rs`), the feed
+    thread's inline name (its spawn), the `stream-download` pin (root `Cargo.toml`), a paused
+    station dropping its socket (`audio-stack.md`), the batch star and remove, and the leave's
+    card-selection clear (`card_selection.rs`, `ui-patterns.md`).
+  - **Stale, fixed or cut:**
+    - "D3", "D6", "D8" and "D9" were decision numbers from `docs/plans/INTERNET_RADIO.md`,
+      deleted in `4124c530`. D8 became ADR 14 and D15 ADR 15; the rest never became ADRs.
+    - The radio migration's header was said to argue "no `AUTOINCREMENT`, no secondary indexes".
+      It never mentions `AUTOINCREMENT` and argues the one index it creates,
+      `idx_radio_stations_stream_url`.
+    - "Four" walks holding the switch: `radio_facade.rs` has five, counting
+      `the_facade_builds_no_client_of_its_own`.
+    - `id == 0` was said to be spelled by hand once below `melodia-views`. The engine's
+      `PlayerState::to_persisted` spells it too.
+  - **Dangling plan labels in code, fixed (comment-only):** `detail_tests.rs:101`'s "(D6)",
+    `radio_facade.rs:46`'s "D15's switch", and `state_tests.rs:1491`'s "D11:", the last outside
+    this rule's trees but from the same deleted plan.
+  - **No comment's stated reason was false.**
+  - **Code diff:** 12 comment lines out, 13 in, 44 bytes more.
+  - **Verified against source:** stream-download 0.24.4's defaults pull `reqwest/default-tls`, and
+    `new_http` reaches `Client::create`, a `LazyLock` over a bare `reqwest::Client::new`.
+  - **Not verified:** nothing left open.
   - **Covers** the directory facade and its off switch, the two station tables, the stream path's
     ring and feed thread, and the numbers both trees spell.
   - **Code citations (7 in 5 files):**
@@ -335,9 +360,6 @@ Status: not started.
     - `CLAUDE.md:17`'s table row;
     - `CLAUDE.md:82`, at `radio/` as the one door;
     - `CLAUDE.md:83`, at what crosses out of `player/`.
-  - **Known stale:** line 114 opens "**D8**, the reconnect's home...", and nothing in the tree
-    resolves D8 (the ADRs are numbered 0001 to 0040). The reconnect and the ring now sit in
-    `audio-stack.md`'s live-source and DSP chain sections.
 - [ ] **5.2 `visualizer.md`**, one commit.
   - **Covers** the visualizer's UI half: arming, the tick's gates, the strip and its pickers.
   - **Code citations (7 in 6 files):**
@@ -437,6 +459,8 @@ Status: not started.
   - From Phase 2: root `CLAUDE.md`'s UI Structure bullet still says Slint's `resize-border-width`
     handler "compares a logical band with a physical cursor", stale since Slint 1.18. Drop that
     clause; the square corners alone carry the argument `app-window.slint:140` points to.
+  - From Phase 5.1: root `CLAUDE.md:17`'s `radio.md` row still lists "the stream path's ring and
+    feed thread", which the rule now hands to `audio-stack.md`'s live source. Drop that clause.
 - [ ] Delete this file.
 
 ## Cross-cutting

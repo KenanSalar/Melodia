@@ -33,149 +33,75 @@ paths:
 
 # Internet radio
 
-The couplings no single file can hold: an off switch enforced one place and observable from four,
-two tables the artwork sweep has to know about, a stream whose prohibitions and dependency pins
-reach out of `melodia-audio`, and a handful of numbers spelled in both trees.
-
-The page's own shape belongs to `.claude/rules/ui-patterns.md` — the Browse box and its scope
-pills, `StationCard` as an `EntityCard` host, and why three tabs share one `SectionActiveGate`.
-The sweep is `library-data.md`'s. The stream's own design, the ring included, is
-`.claude/rules/audio-stack.md`'s. None of those is restated here, and a paragraph here that starts to
-is the copy to delete.
+What no single file holds: an off switch enforced in one place and reachable from many, two tables
+the artwork sweep has to know, a stream whose prohibitions reach out of `melodia-audio`, and the
+numbers spelled in both trees. The page's shape is `ui-patterns.md`'s, the sweep and its ledger
+`library-data.md`'s, and the ring and the feed thread's reconnect `audio-stack.md`'s live source.
 
 ## The off switch
 
-- **The switch itself is argued on `library::radio`'s own items** — why it sits at the facade,
-  what the getters are exempt from, and why the logo download is not. What spans is the walks
-  holding it: four now, and no one of them covers another's half. Two are per direction —
-  `crates/melodia/tests/radio_facade.rs`'s `every_outbound_call_takes_its_client_from_behind_the_switch` counts the
-  reaches inside the facade, `crates/melodia/tests/radio_facade.rs`'s `only_the_radio_facade_reaches_the_directory_client`
-  counts them outside it. So **`http_client()` may be named exactly once across all of
-  `library/radio/`** and `radio_browser` may be named nowhere else in the tree. Both walks read the
-  facade off its **directory** rather than off a file list, so a sixth submodule is covered the day
-  it is added — the facade was one file once, and re-anchoring them onto `mod.rs` alone would have
-  left four fifths of it unmeasured while still passing.
-- **The other two hold the guard rather than the reach, which no count of clients can see.**
-  `the_switch_is_read_in_one_place` makes **`radio_enabled` a name spelled exactly once**, inside
-  `ensure_enabled`; an equality there fails on a deleted guard as readily as on a second hand-rolled
-  one, which `station_to_restore` carried for a while.
-  `a_station_reaches_the_deck_only_from_behind_the_switch` covers the door the pair above
-  structurally cannot: a station opens through `PlaybackContext.http`, so `play_station` reaches
-  the network naming no client at all.
-- **Turning it off has four consequences beyond the row, and three are findable only from here.**
-  `ui::radio::disable` stops a playing station, sweeps section 10 out of the nav history, closes and
-  forgets every seated detail, and folds a live `Nav.selected-index` off 10. The history sweep is
-  the easy one to miss: the row and the router branch both go, but a Mouse-4 walk would still
-  land on nav 10, and the `PlaceholderView` fall-through keeps a plain `!= 10` term — so the panel
-  behind it paints *nothing at all*, not a placeholder.
-- **`fold_disabled_nav_index` sits beside `my_library::fold_retired_nav_index`, never inside it**,
-  its doc saying why. `boot::ui_setup` composes the two, and the live move goes through the same
-  function as the boot fold, so the two cannot disagree about where 10 goes.
-- **The `SectionActiveGate` mount at index 10 carries no `if`.** It holds a `changed` tracker and a
-  dropped tracker-bearing branch panics; with the sidebar row gone the index is simply unreachable,
-  so the gate never fires true. Gate the row and the router branch, not the mount.
+- **`library::radio` is the one door, and the door is the directory, not `mod.rs`** (its `//!`,
+  ADR 15). `crates/melodia/tests/radio_facade.rs` holds both sides, reading the facade off its
+  directory so a new submodule is covered unedited:
+  - `http_client()` and `radio_enabled` are each named once in the facade, inside
+    `directory_client` and `ensure_enabled`, and the facade builds no client of its own;
+  - `play_station` asks `ensure_enabled` itself, its stream coming off `PlaybackContext.http`;
+  - nothing outside the facade names `radio_browser`, and nothing but the facade and
+    `library::radio_files` names `queries::radio`, where a station write elsewhere in
+    `melodia-app` reads as ordinary transport code.
+- **`ui::radio::disable` is everything off undoes past the row and the router branch**, the nav
+  history included: a live index left on 10 paints an empty panel, the placeholder fall-through
+  excluding 10. A new way onto nav 10 owes it a line; `fold_disabled_nav_index` is the one fold,
+  at boot and live.
+- **The `SectionActiveGate` at index 10 carries no `if`.** Its `changed` tracker reads `Nav`,
+  which outlives any branch, so a dropped one panics on the next nav change (`slint-pitfalls.md`).
+  With the row gone the index is unreachable: gate the row and the router branch, never the mount.
 
 ## Stations on disk
 
-- **`queries::radio::` is `library::radio`'s to name, and `library::radio_files`'s by the written
-  exemption at that module's own `//!`.** The facade's doc argues the door against the *UI*, which
-  leaves the sibling nobody expects: a station-row write from elsewhere in `melodia-app` reads as
-  ordinary transport code and is one. `record_probed_codec` was exactly that and now sits beside
-  `mark_played`, whose one-line-`UPDATE`-per-play shape it copies. **`radio_facade.rs`'s
-  `only_the_radio_facade_writes_to_the_station_table` is what holds it**, and its own doc comment
-  argues why none of the six checks beside it could.
-- **Two tables, and only one holds rows the user owns.** `radio_stations` is favorites, hand-typed
-  URLs and play history at three points in one row's life. `radio_logo_answers` is a record of our
-  own network outcomes keyed on the URL — which is what lets it exist beside the rule that browsed
-  stations are never persisted (D3): it describes what a fetch returned, not what the directory
-  said.
-- **Both carry an `artwork_path` and both are in the sweep's ledger.** Six columns now, in both
-  halves of `queries::artwork`'s pair. Miss either and station logos are deleted on the next sweep,
-  with no way to re-derive them.
-- **The prune-then-sweep order, and why its trigger is a Radio leave rather than a scan, are
-  `tasks::radio_logo_cache`'s own `//!`.** The ledger both halves turn on is `library-data.md`'s.
-- **Every column has exactly one writer, which is what the four `local_*` columns buy.** The
-  directory rewrites `homepage`, `tags`, `country` and `favicon_url` wholesale on the next
-  re-import, so a user edit folded into them would be silently reverted; kept apart, a reader takes
-  the local one first and both writers stay correct. `RadioStation::can_override` is why a field is
-  offered only where the directory said nothing.
-- **The migration shipped in v0.12.0, so a schema change here is a second migration, never an edit
-  to it.** Its header argues the schema — no `AUTOINCREMENT`, no secondary indexes, why `hls` and
-  `country` are stored rather than re-derived — and none of that is restated here. There is a
-  second one now, `probed_codec`, and it argues its own column the same way: why the answer only
-  exists once a stream has opened, and why it sits beside the directory's `codec` rather than
-  correcting it. Read whichever one owns the column you are asking about.
-- **A deleted station's id can be reused**, there being no `AUTOINCREMENT`. So a persisted
-  `last_detail_ids` entry can land on a different station across a restart, exactly as it can for a
-  playlist. That is the accepted cost of not upserting every station the user merely glanced at.
+- **Two tables, and only `radio_stations` holds what the user owns**: favorites, hand-typed URLs
+  and play history, as one row. `radio_logo_answers` records our own fetch outcomes by URL, which
+  is why it may exist when browsed stations are never persisted. Both `artwork_path`s are in
+  `queries::artwork::ARTWORK_COLUMNS` (`library-data.md`) and neither file can be re-derived.
+  `tasks::radio_logo_cache`'s `//!` argues why its prune runs before the sweep.
+- **Each of the two migrations argues its own columns in its header**, the four `local_*` columns
+  that give each field one writer among them. Both have shipped, so a schema change is a third.
 
 ## The stream
 
-- **D8, the reconnect's home and what the ring is still for are `.claude/rules/audio-stack.md`'s**,
-  over `prebuffer.rs`'s and `stream_decode.rs`'s `//!`. That file loads on the whole directory,
-  including `handlers.rs` — the monitor the reconnect argument is *about*, and the one file in it
-  no glob here reaches.
-- **The feed thread's name is spelled inline and may not become a const.**
-  `crates/melodia/tests/packaging.rs`'s `no_thread_name_outgrows_what_the_kernel_keeps` matches a literal after
-  `.name(`, so lifting `"radio-buffer"` out would leave it silently unmeasured — the one refactor
-  here that looks like an improvement and disables a check.
-- **Nothing may call `StreamDownload::new_http`** — it constructs its own unconfigured client behind
-  your back, losing both the shared pool and the `Icy-MetaData` header. Go through `HttpStream::new`
-  with the shared-client newtype; held by a corpus walk, since the temptation is a one-line
-  constructor.
-- **The two dependencies are feature-pinned and the pin is load-bearing.** `stream-download`'s
-  defaults pull `reqwest/default-tls`, which is OpenSSL on Linux and changes what `cargo-deb`'s
-  `$auto` resolves to. `default-features = false` plus the single `reqwest-rustls` entry is what
-  keeps `cargo tree -i native-tls` and `-i openssl-sys` empty and `reqwest` on one version.
-- **A station is not a queue entry** (D9) and pausing one drops its connection. The queue is
-  track-id-based end to end and a station has no track id, so starting one stops queue playback and
-  leaves the queue seated underneath — which is what hands the library back on stop. `queue.json`
-  holds the station's row id *beside* the queue for the same reason.
-- **Nothing logs a stream URL.** It can carry a session token, so `PlayerAction::PlayStream` renders
-  its generation rather than its URL and `player::stream_source` names the station in every message
-  and the URL in none. `RadioStationRow` deliberately has no `stream_url` field at all; it crosses
-  on `RadioVm` and `Radio.detail-stream-url`, the two places something actually needs it.
+- **Nothing logs a stream URL**, which can carry a session token. `PlayerAction`'s `Display` prints
+  the generation and `stream_source` names the station; `RadioStationRow` has no `stream_url`, the
+  URL crossing only on `RadioVm` and `Radio.detail-stream-url`.
+- **Nothing calls `StreamDownload`'s convenience constructors**, which build an unconfigured
+  client of their own: open through `HttpStream::new` with the shared one
+  (`crates/melodia/tests/stream_client.rs`). `stream-download`'s `default-features = false` is
+  load-bearing, argued at the root `Cargo.toml`.
+- **A station is not a queue entry**: starting one stops the queue and leaves it seated underneath,
+  which is what hands the library back on stop, and `queue.json` holds the station's row id beside
+  it.
 
 ## Cards and history
 
-- **A station card selects by `RadioStationRow.select_key`, never by `id`**, one scope per tab
-  (`radio-browse`, `radio-favorites`, `radio-recent`). On the kept tabs the key is the row id; on
-  Browse, whose rows all hold `id == 0`, it is the station's 1-based place in the answer, which a
-  page appended keeps and a fresh search renumbers. So `browse::paint` drops a `radio-browse` set
-  as a fresh answer lands, and `browse::resolve_keys` is how every batch action and copy finds the
-  browsed stations. The leave's clear sits in the `on_section_active_changed` closure, where
-  `card_selection.rs`' walk reads it, rather than in `leave()`.
-- **A batch star or remove loops the facade's per-id calls from the slice**, so every write still
-  goes through `library::radio` and the facade walks see nothing new. A removal clears the card
-  selection, the removed ids being otherwise still counted by the menu.
-- **A history row is split by the engine's `Announcement::parse`**, the call behind the player
-  bar, MPRIS, Discord and scrobbling, so the menu's Copy Title and Copy Artist name what the bar
-  showed while the line played. `ui::radio::history` splits on publish into `StationHistoryRow`;
-  the line itself is always offered whole, the split being a convention rather than a format.
+- **A station card selects by `RadioStationRow.select_key`, never `id`**, one `CardSelection` scope
+  per tab: the row id on the kept tabs, the place in the answer on Browse, whose rows all hold
+  `id == 0`. A fresh answer renumbers, so `browse::paint` drops a Browse set, and every batch
+  action resolves through its tab's `resolve_keys`.
+- **A history row splits through the engine's `Announcement::parse`**, the call behind the bar and
+  the integrations, so Copy Title and Copy Artist name what the bar showed.
 
 ## Numbers both trees spell
 
-Each of these is written once in Rust and again in `.slint`, so each needs a pin or an argument.
+Each is written once in Rust and again in `.slint`, so each has a pin or an argument.
 
-- **`media::image::logo_tile::MIN_LOGO_DIM` is restated in `components/now-playing/source-artwork.slint`**,
-  which argues from it that no source reaching that tile can be small enough for `ArtworkImage`'s
-  inset arm to fire — so it binds no `native-size`. Lower the floor and the argument stops being
-  true with nothing to say so. Pinned by
-  `media::image::logo_tile::tests::the_slint_tile_that_skips_native_size_still_agrees_with_the_floor`.
-- **`Radio.tab-count` is the sole definition of how many tabs there are.** `seed_tab` clamps the
-  persisted index against the global's own count rather than a Rust const, `RadioTab` carries one
-  variant per tab, and `tab_from_index` ends in a default arm so a fourth tab resolves to Browse
-  rather than to nothing. All four halves are pinned in `ui::radio::tests`.
-- **`NAV_RADIO` is 10 and `MAX_NAV_INDEX` is the same 10**, the latter bounding the persisted nav
-  index at *both* ends of its round trip. They were literals once, and disagreeing literals are
-  what made Radio persist as Settings and boot onto My Library — silent at both ends.
-- **`id == 0` means "no database row"**, given its one meaning in `rows::station_has_row` and asked
-  from four directions: which cache a page resolves from, whether a removal has a target, whether
-  `views.json` may name the page (D6), and whether a history walk may reopen it. A fifth asks it
-  in `melodia-app`, where `record_probed_codec` refuses to write a row that does not exist, and
-  that one spells the comparison by hand: `station_has_row` lives in `melodia-views`, which nothing
-  below it can name. So the sentinel now has two homes rather than one, and the raw spelling is the
-  one to grep for when its meaning moves.
-- **The `-1` sentinels are declared twice by hand** — `NO_SEAT`, `VOTES_UNKNOWN`, `chip_index`'s
-  miss, and `tab_bar::UNFETCHED_COUNT`. The facet chip *indices* are the one group that is safe:
-  `facets::chip_indices` reads them off the global rather than restating them.
+- **`logo_tile::MIN_LOGO_DIM` is restated in `now-playing/source-artwork.slint`**, which binds no
+  `native-size` on the strength of it; `logo_tile_tests.rs` pins the two together.
+- **`Radio.tab-count` is the sole tab count**: `seed_tab` clamps against it and `tab_from_index`
+  falls to Browse, both pinned in `radio_tests.rs`.
+- **`NAV_RADIO` and `services::view_state::MAX_NAV_INDEX` are both 10**, the second bounding the
+  persisted nav index at both ends of its round trip.
+- **`id == 0` means "no database row"**, given that meaning once in `rows::station_has_row` and
+  spelled by hand where `melodia-views` can't be named: `record_probed_codec` and
+  `PlayerState::to_persisted`. Grep the raw spelling when its meaning moves.
+- **The `-1` sentinels are declared twice by hand**: `NO_SEAT`, `VOTES_UNKNOWN` and
+  `tab_bar::UNFETCHED_COUNT`, against their `globals/radio.slint` defaults. The facet chip indices
+  are safe, `facets::chip_indices` reading them off the global.

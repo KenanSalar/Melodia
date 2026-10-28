@@ -70,8 +70,8 @@ export global Radio {
     // picked by the dialog *kind*, so the confirm acts on what the click saw.
     callback remove-from-favorites([int] /*ids*/);
     callback remove-from-recent([int] /*ids*/);
-    // `keys` are `select_key`s resolved against `tab`'s list (`radio.md`); a hand-typed station is
-    // skipped, its card offering no star.
+    // `keys` are `select_key`s resolved against `tab`'s list, every browsed row's id being 0; a
+    // hand-typed station is skipped, its card offering no star.
     callback set-favorites(int /*tab*/, [int] /*keys*/, bool /*favorite*/);
     // `field` is "name" | "stream-url" | "website". Here rather than on `CopyActions` because the
     // caches the keys resolve from are this slice's.

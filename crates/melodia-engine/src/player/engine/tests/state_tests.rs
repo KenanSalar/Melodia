@@ -1488,7 +1488,7 @@ fn connecting_to_a_station_clears_the_decks_and_leaves_the_queue_alone() {
     assert_eq!(state.queue.to_persistable(), queue_before, "the queue must survive verbatim");
 }
 
-/// D11: speed is a ratio on the deck's converter, so anything but 1.0 starves or overruns a
+/// Speed is a ratio on the deck's converter, so anything but 1.0 starves or overruns a
 /// real-time source. Resetting the state alongside the deck is what keeps the transport honest.
 #[test]
 fn connecting_to_a_station_resets_playback_speed() {

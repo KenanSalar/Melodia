@@ -193,7 +193,7 @@ export global Settings {
 
     // The sidebar row and the nav-10 router branch read it, so the feature mounts with no restart.
     // False so a failed settings read leaves an install local-only. **The gate that matters is
-    // Rust's**: `library::radio` refuses on its shadow, so off means no traffic (`radio.md`).
+    // Rust's**: `library::radio` refuses on its shadow, so off means no traffic.
     in-out property <bool> radio-enabled: false;
     callback radio-enabled-changed(bool);
     // Only the click one defaults on, describing what the feature does rather than whether it

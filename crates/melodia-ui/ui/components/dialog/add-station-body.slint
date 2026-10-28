@@ -6,7 +6,7 @@ import { DialogScrollPane } from "./dialog-scroll-pane.slint";
 // Add or edit a station by URL, one body for both kinds.
 //
 // A directory-owned row drops its name and stream URL, which the next play rewrites, so an edit
-// would silently revert. It keeps whatever the directory left blank (`radio.md`'s `local_*`).
+// would silently revert. It keeps whatever the directory left blank, into a `local_*` column.
 //
 // No auto-focus on init: `focus()` during the open trips Slint's recursion guard.
 export component AddStationBody inherits VerticalLayout {

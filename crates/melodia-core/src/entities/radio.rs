@@ -14,8 +14,8 @@ pub struct RadioStation {
     pub stream_url: String,
     /// The directory's, and rewritten in full on every re-import.
     pub homepage: Option<String>,
-    /// The user's own, for a directory entry with none, in its own column so each has one writer
-    /// (`.claude/rules/radio.md`). Read through [`Self::website`].
+    /// The user's own, for a directory entry with none, in its own column so a re-import can't
+    /// revert it. Read through [`Self::website`].
     pub local_homepage: Option<String>,
     /// Kept so a re-download can be retried after the stored file is swept.
     pub favicon_url: Option<String>,
