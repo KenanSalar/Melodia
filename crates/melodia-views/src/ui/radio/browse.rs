@@ -366,7 +366,7 @@ fn paint_landed(weak: &Weak<AppWindow>, radio_ui: &Arc<RadioUi>) {
 /// enough to be the station the user typed.
 async fn discover_page(
     state: &AppState,
-    radio_ui: &Arc<RadioUi>,
+    radio_ui: &RadioUi,
     is_current: &impl Fn() -> bool,
     on_landed: &impl Fn(),
 ) -> bool {

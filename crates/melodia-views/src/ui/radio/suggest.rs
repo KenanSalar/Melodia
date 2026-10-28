@@ -160,7 +160,7 @@ fn bitrate(text: &str) -> Option<u32> {
 
 /// Recomputes the pill row from what Browse is asking for. Cheap, and reading the query rather
 /// than taking a needle, so anything that moves what the box means can call it.
-pub(super) fn refresh(ui: &AppWindow, radio_ui: &Arc<RadioUi>) {
+pub(super) fn refresh(ui: &AppWindow, radio_ui: &RadioUi) {
     let g = ui.global::<Radio>();
     let rows = if offers_scopes(&g) {
         let search = browse::query(radio_ui);

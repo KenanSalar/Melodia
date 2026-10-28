@@ -80,7 +80,7 @@ pub fn install_sleep_timer(ui: &AppWindow, state: &AppState) {
 fn arm_sleep_timer(
     state: &AppState,
     weak: &slint::Weak<AppWindow>,
-    store: &Rc<RefCell<Option<CancellationToken>>>,
+    store: &RefCell<Option<CancellationToken>>,
     minutes: i32,
 ) {
     let ctx = state.playback_ctx();
@@ -107,7 +107,7 @@ fn arm_sleep_timer(
 fn arm_duration_seconds(
     state: &AppState,
     weak: &slint::Weak<AppWindow>,
-    store: &Rc<RefCell<Option<CancellationToken>>>,
+    store: &RefCell<Option<CancellationToken>>,
     total_secs: i32,
 ) {
     cancel_timer(store);
@@ -125,7 +125,7 @@ fn arm_duration_seconds(
     spawn_countdown(state, weak.clone(), token, total);
 }
 
-fn cancel_timer(store: &Rc<RefCell<Option<CancellationToken>>>) {
+fn cancel_timer(store: &RefCell<Option<CancellationToken>>) {
     if let Some(tok) = store.borrow_mut().take() {
         tok.cancel();
     }

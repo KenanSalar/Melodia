@@ -232,7 +232,7 @@ macro_rules! release {
 }
 
 /// Fill the `TagEditor` global from the fetched rows and record the snapshot.
-fn populate(ui: &AppWindow, session: &Rc<RefCell<TagSession>>, fetched: Fetched) {
+fn populate(ui: &AppWindow, session: &RefCell<TagSession>, fetched: Fetched) {
     let Fetched { rows, credits, roles, genre_lists, release, lyrics, resident, cover } = fetched;
     let te = ui.global::<TagEditor>();
     let mut form = Form {
@@ -453,7 +453,7 @@ struct Baseline {
 /// Finish a `populate`: scalar flags, cover, Summary, and the session snapshot.
 fn finalize_populate(
     te: &TagEditor,
-    session: &Rc<RefCell<TagSession>>,
+    session: &RefCell<TagSession>,
     rows: &[TagEditRow],
     baseline: Baseline,
     resident: Option<String>,

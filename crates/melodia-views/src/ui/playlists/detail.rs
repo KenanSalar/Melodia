@@ -196,7 +196,7 @@ pub async fn refresh_detail(
 /// the same: a move hands an automatic cover to whichever track now leads.
 pub async fn refresh_header(
     state: &AppState,
-    playlists_ui: &Arc<PlaylistsUi>,
+    playlists_ui: &PlaylistsUi,
     weak: Weak<AppWindow>,
     playlist_id: i64,
 ) -> AppResult<()> {

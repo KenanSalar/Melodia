@@ -50,7 +50,7 @@ async fn reconcile_once(
     db: &DbPool,
     player_state: &PlayerStateHandle,
     sinks: &PlayerSinks,
-    engine: &Arc<PlaybackEngine>,
+    engine: &PlaybackEngine,
 ) -> AppResult<()> {
     // A bare lock rather than an emit: nothing changes, so observers shouldn't see a re-emit.
     let queued_ids = lock_state(player_state).queue.play_ids();
@@ -74,7 +74,7 @@ async fn reconcile_once(
         None => Vec::new(),
     };
 
-    emit_and_execute(&**engine, player_state, sinks, |s| {
+    emit_and_execute(engine, player_state, sinks, |s| {
         let outcome = s.queue.prune_missing(&to_remove);
         s.window.seat(&s.queue.window_ids(), successor.into_iter().map(Arc::new));
         // A station plays over the queue rather than from it, so a row missing from it is no

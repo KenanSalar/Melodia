@@ -13,7 +13,7 @@ use melodia_ui::AppWindow;
 /// Calls `bump` on the UI thread whenever `tier` finishes a batch a miss handed it. A closure
 /// rather than a trait, `bump` being all that differs between tiers.
 pub fn notify_on_decode(
-    tier: &Arc<CoverThumbs>,
+    tier: &CoverThumbs,
     app: &AppWindow,
     bump: impl Fn(&AppWindow) + Send + Sync + 'static,
 ) {

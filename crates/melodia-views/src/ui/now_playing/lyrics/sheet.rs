@@ -187,7 +187,7 @@ pub(crate) fn wire_reseed(ui: &AppWindow, state: &AppState, np_state: &Rc<NowPla
 /// `online_enabled` decides only which sentence an empty panel shows.
 fn apply(
     ui: &AppWindow,
-    ly: &Rc<LyricsUi>,
+    ly: &LyricsUi,
     track_path: &str,
     outcome: &LyricsOutcome,
     online_enabled: bool,
@@ -230,7 +230,7 @@ fn apply(
 
 /// **Claims the track before the `.await`**: the lookup can reach a file and then a socket, and a
 /// reseed landing in that window would start a second one for the same song.
-fn mark_loading(ui: &AppWindow, ly: &Rc<LyricsUi>, track_path: &str) {
+fn mark_loading(ui: &AppWindow, ly: &LyricsUi, track_path: &str) {
     clear(ui, ly);
     *ly.holding.borrow_mut() = Some(track_path.to_owned());
     ui.global::<Lyrics>().set_state(LyricsState::Loading);
@@ -238,13 +238,13 @@ fn mark_loading(ui: &AppWindow, ly: &Rc<LyricsUi>, track_path: &str) {
 
 /// Hands back the rows and the table with the claim, so the next open looks the sheet up again
 /// rather than believing it is still on screen.
-pub(crate) fn release(ui: &AppWindow, ly: &Rc<LyricsUi>) {
+pub(crate) fn release(ui: &AppWindow, ly: &LyricsUi) {
     ly.holding.borrow_mut().take();
     clear(ui, ly);
     ui.global::<Lyrics>().set_state(LyricsState::Idle);
 }
 
-fn clear(ui: &AppWindow, ly: &Rc<LyricsUi>) {
+fn clear(ui: &AppWindow, ly: &LyricsUi) {
     ly.rows.borrow_mut().clear();
     ly.offsets.borrow_mut().clear();
     ly.pinned.set(None);
@@ -259,6 +259,6 @@ fn clear(ui: &AppWindow, ly: &Rc<LyricsUi>) {
 }
 
 /// Keep the sheet's text and stamps. Heights are not kept, following the width instead.
-fn take_sheet(ly: &Rc<LyricsUi>, sheet: &Sheet) {
+fn take_sheet(ly: &LyricsUi, sheet: &Sheet) {
     *ly.rows.borrow_mut() = rows_for(sheet);
 }

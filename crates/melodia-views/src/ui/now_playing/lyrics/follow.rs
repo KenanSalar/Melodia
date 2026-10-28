@@ -10,7 +10,6 @@
 //! twice as tall. A plain `for` holds because a sheet is small and bounded by
 //! [`super::rows::MAX_ROWS`].
 
-use std::rc::Rc;
 use std::time::Instant;
 
 use slint::{ComponentHandle, Model};
@@ -29,7 +28,7 @@ const PIN_HOLDS_FOR_MS: f64 = 2_000.0;
 /// buckets to one, two or three, so almost every width lays the sheet out as the last did. Past the
 /// guard rows are written through, `set_vec` rebuilding every row's item tree. Ends by restating
 /// the sung line, an offset into the table just moved and unanswered on a fresh paused sheet.
-pub(super) fn republish(ui: &AppWindow, ly: &Rc<LyricsUi>) {
+pub(super) fn republish(ui: &AppWindow, ly: &LyricsUi) {
     let width = ly.width.get();
     let metrics = ly.metrics;
     // Read here, not filtered at the source, so a suppressed romanization is shorter by exactly
@@ -114,7 +113,7 @@ pub(super) fn published_row(row: &Row, romanization_shown: bool) -> LyricRow {
 }
 
 /// Move the sung line on, interpolating between the position channel's roughly one-second ticks.
-pub(super) fn follow(ui: &AppWindow, ly: &Rc<LyricsUi>) {
+pub(super) fn follow(ui: &AppWindow, ly: &LyricsUi) {
     let player = ui.global::<Player>();
     let reported = player.get_position_ms();
     // The two projections rather than `get_vm()`, which clones the whole view model — sixteen
@@ -150,7 +149,7 @@ pub(super) fn follow(ui: &AppWindow, ly: &Rc<LyricsUi>) {
 
 /// Takes a coordinate rather than a stamp, so the pin names the clicked row: a chorus repeats its
 /// stamp, and pinning the first would glide back up the sheet from a seek into the second.
-pub(super) fn seek_at(ui: &AppWindow, ly: &Rc<LyricsUi>, y: f32) {
+pub(super) fn seek_at(ui: &AppWindow, ly: &LyricsUi, y: f32) {
     let rows = ly.rows.borrow();
     let Some(index) = row_at(&ly.offsets.borrow(), &rows, ly.metrics, y) else {
         return;
@@ -197,7 +196,7 @@ pub(super) fn sung_at(rows: &[Row], position_ms: f64) -> Option<usize> {
 }
 
 /// Publish which row is sung and where it sits, so the panel can centre it.
-fn write_active(ui: &AppWindow, ly: &Rc<LyricsUi>, index: Option<usize>, position_ms: f64) {
+fn write_active(ui: &AppWindow, ly: &LyricsUi, index: Option<usize>, position_ms: f64) {
     let global = ui.global::<Lyrics>();
     let Some(index) = index else {
         global.set_active_index(-1);

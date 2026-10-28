@@ -67,7 +67,7 @@ impl StationHistory {
 pub fn install(
     weak: slint::Weak<AppWindow>,
     radio_ui: &Arc<RadioUi>,
-    sinks: &Arc<PlayerSinks>,
+    sinks: &PlayerSinks,
 ) -> Result<(), slint::EventLoopError> {
     let mut rx = sinks.view_model.subscribe();
     let radio_ui = radio_ui.clone();

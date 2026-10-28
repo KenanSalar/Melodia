@@ -27,7 +27,7 @@ pub fn dispatch(ui: &AppWindow, state: &AppState, radio_ui: &Arc<RadioUi>, text:
 
 /// Puts the box back to whatever the tab under it is filtered by: a reseat, not a clear, a blanked
 /// box leaving a query standing in Rust with nothing on screen naming it.
-pub fn sync_box(ui: &AppWindow, radio_ui: &Arc<RadioUi>) {
+pub fn sync_box(ui: &AppWindow, radio_ui: &RadioUi) {
     let g = ui.global::<Radio>();
     let mounted = match mounted_tab(&g) {
         RadioTab::Browse => browse::query_name(radio_ui),

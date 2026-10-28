@@ -1,8 +1,6 @@
 //! Every write and clear the Search view's models take. Rows are built on the worker, and only
 //! what needs the UI thread, the translated plurals, waits for the event-loop closure.
 
-use std::sync::Arc;
-
 use slint::{ComponentHandle, SharedString, Weak};
 
 use super::state::COMPACT_TRACK_LIMIT;
@@ -25,7 +23,7 @@ use melodia_ui::{
 /// Writes `results` into every surface, cutting the Songs slice against the live
 /// `show-all-tracks`.
 pub fn apply_results_to_slint(
-    search_ui: &Arc<SearchUi>,
+    search_ui: &SearchUi,
     weak: &Weak<AppWindow>,
     results: &SearchResults,
     query: &str,

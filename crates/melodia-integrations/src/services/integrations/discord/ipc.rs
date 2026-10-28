@@ -6,7 +6,6 @@
 //! Wire frame: `[u32 LE opcode][u32 LE len][JSON body]`.
 
 use std::io::{self, Read, Write};
-use std::sync::Arc;
 use std::sync::mpsc;
 use std::time::Duration;
 
@@ -68,7 +67,7 @@ enum ServeOutcome {
 /// A failure to connect stays in the log, never a toast. `connect` is [`connect`] in the app.
 pub(crate) fn run_worker(
     rx: &mpsc::Receiver<Command>,
-    status: &Arc<StatusCell>,
+    status: &StatusCell,
     connect: &dyn Fn() -> Option<Connection>,
 ) {
     let pid = std::process::id();
@@ -188,7 +187,7 @@ fn idle_wait(
 
 fn wait_and_backoff(
     rx: &mpsc::Receiver<Command>,
-    status: &Arc<StatusCell>,
+    status: &StatusCell,
     backoff: &mut Duration,
     desired: &mut Option<Presence>,
     enabled: &mut bool,
