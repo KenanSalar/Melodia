@@ -1,4 +1,4 @@
-# Melodia
+# <img src="assets/icons/logo-with-background.svg" width="48" align="center" alt=""> Melodia
 
 **A fast, lightweight cross-platform desktop music player built with [Slint](https://slint.dev/) and pure Rust.**
 
@@ -7,13 +7,46 @@
 [![Platforms](https://img.shields.io/badge/platforms-Linux%20%C2%B7%20Windows-success.svg)](#installation)
 [![Built with Rust](https://img.shields.io/badge/built%20with-Rust%20%2B%20Slint-orange.svg)](https://www.rust-lang.org/)
 
-There is no embedded browser engine underneath the UI, which keeps the memory footprint small; [Footprint](#footprint) has the measured numbers and the setup behind them.
+<p align="center"><img src="assets/screenshots/playlist-detail.png" alt="A playlist opened inside My Library"></p>
 
 ---
 
+## Highlights
+
+- **Bit-perfect exclusive output** on Linux and Windows, with a Signal Path panel that grades every stage from the file to the device
+- **Gapless playback and crossfade**, a 10-band equalizer, ReplayGain, and playback speed from 0.25× to 2.0×
+- **Timed lyrics** from `.lrc` files, tags, or an opt-in online lookup, romanized for around a hundred scripts
+- **Internet radio** from a worldwide directory or your own stream URLs, off until you switch it on
+- **Six theme families** in light and dark, and Material You colors drawn from the playing artwork
+- **A library that keeps up**: parallel scanning, live folder watching, full-text search, smart playlists, and tag editing written back to the files
+- **A responsive mini-player** the window collapses into as you shrink it
+- **Last.fm and ListenBrainz scrobbling**, Discord Rich Presence, and the OS media controls
+- **No embedded browser engine** under the UI, which keeps the memory footprint small ([Footprint](#footprint))
+- **Sixteen languages**, switchable without a restart
+
+## Installation
+
+Linux (X11 and Wayland) and Windows, on both `x86_64` and `aarch64`. Take the latest build from the
+[Releases page](https://github.com/KenanSalar/Melodia/releases).
+
+| Format | Install |
+|--------|---------|
+| `.rpm` (Fedora/RHEL) | `sudo dnf install ./melodia-*.rpm` |
+| `.deb` (Debian/Ubuntu) | `sudo apt install ./melodia-*.deb` |
+| AppImage | `chmod +x melodia-*.AppImage && ./melodia-*.AppImage` |
+| Tarball | Extract, then `./install-linux.sh`, which installs into `~/.local/share/Melodia` with no `sudo`, so the in-app updater can replace it |
+| Windows | Run the installer |
+
+Melodia updates itself in place, minisign-signed. Release artifacts also carry
+build-provenance attestations, verifiable with:
+
+```bash
+gh attestation verify <file> --repo KenanSalar/Melodia
+```
+
 ## Screenshots
 
-Six theme families, light and dark variants, configurable accents, and Material You dynamic color; the shots below are a handful of them, all on the default aurora backdrop. See [Themes](#themes) below for the full list.
+The shots below are a handful of the themes, all on the default aurora backdrop; Themes under [Features](#features) lists the rest.
 
 ### Library
 
@@ -48,7 +81,7 @@ Six theme families, light and dark variants, configurable accents, and Material 
 
 ### Mini-player
 
-Shrink the window past a threshold and the full UI collapses into a compact mini-player. It grows with the window rather than switching between layouts: a one-line strip, then a card with the controls sliding under the title beside larger artwork and the window buttons opening above, then a column with Up Next or lyrics below. Close Melodia from it and it opens as the mini-player next time, with its restore button still returning to the full-size window you had.
+Shrink the window and the full UI collapses into a mini-player that grows with it: a one-line strip, then a card, then a column with Up Next or lyrics below.
 
 <table>
   <tr>
@@ -61,80 +94,113 @@ Shrink the window past a threshold and the full UI collapses into a compact mini
   </tr>
 </table>
 
----
-
 ## Features
 
-### Library
-- A first-run card that opens on your library, adding your Music folder in one click or any other folder you pick, then sets language, theme and accent, and names every feature that reaches the network so you can switch it on or leave it off. Three panels, closeable in a click, and reachable again from Settings ▸ About
+<details>
+<summary><b>Library</b>: scanning, search, playlists, and tag editing</summary>
+
+- A three-panel first-run card: add your Music folder or any other, pick the language, theme and accent, and see every feature that reaches the network before you switch it on. Settings ▸ About reopens it
 - Parallel folder scanning, live folder watching, and incremental re-scans
 - Content hashing (BLAKE3), so a moved or renamed file keeps its play counts, favorites, and place in the queue
-- Full-text search (SQLite FTS5) over tracks, albums, artists, and genres, and over the people credited on a track, so a composer or a producer reaches their work: accent-insensitive, relevance-ranked, with a top-result card and recent history. The filter box on every list searches the same fields
+- Full-text search (SQLite FTS5) over tracks, albums, artists, genres, and the people credited on a track: accent-insensitive, relevance-ranked, with a top-result card and recent history. Every list's filter box searches the same fields
 - **My Library** gathers everything into one page with five tabs (Songs, Albums, Artists, Genres, Playlists); opening an entity grows the tab band into its banner rather than navigating away
 - Favorites and Recently Played, each a hero banner over sortable lists and browsable card grids
 - Browse by folder, as a detailed list or a grid of cards
 - Star ratings, play and skip counts, natural sort, resizable and toggleable columns
-- Multi-selection on every library list and card grid: tick one to start, then a click anywhere on a row or card adds the next and shift-click takes a range. Right-click acts on the whole set, from queueing it to rating it or editing its tags; `Esc` clears it
-- Copy from any right-click menu: a song's title, artist, album, "Artist - Title" or file path, an album's name and artist, or a station's name, stream URL or website. A selection copies one line per item, in the order it was picked, and the queue's in queue order
-- Tag editing for one track or many at once, cover art included, written straight back to the files. A track's artists, its genres and the ten studio credits (composer, lyricist, conductor, performer, producer and the rest) are each an editable list rather than one text box, beside the rest of what a file can carry: work and movement, key, mood, ISRC, and the release's own label, catalog number, barcode and medium
-- Manual and smart playlists, the latter rule-based and resolved live; `.m3u8` import and export, several at once as a single `.zip` that imports back without extracting, drag-and-drop import, and reordering that moves a whole selection at once
+- Multi-selection on every list and card grid: tick one to start, click to add, shift-click for a range, and right-click to queue, rate or tag the whole set. `Esc` clears it
+- Copy from any right-click menu: a song's title, artist, album, "Artist - Title" or file path, an album's name, or a station's name, stream URL or website, one line per selected item
+- Tag editing for one track or many, cover art included, written straight back to the files. Artists, genres and the ten studio credits are each an editable list, beside work and movement, key, mood, ISRC, label, catalog number, barcode and medium
+- Manual and smart playlists, the latter rule-based and resolved live; `.m3u8` import and export, several at once as one `.zip` that imports back without extracting, drag-and-drop import, and reordering that moves a whole selection
 - A database backup before every schema migration, three kept
 
-### Playback
+</details>
+
+<details>
+<summary><b>Playback</b>: gapless, crossfade, EQ, the queue, and the mini-player</summary>
+
 - Gapless, including the AAC encoder delay and padding read back from `iTunSMPB` or the MP4 edit list, and the trailing padding a Matroska file states
 - Crossfade (1–12 s) across two decks with a clip-safe ramp, optionally skipped between same-album tracks, and under exclusive output too wherever the next track needs no change of device format
-- 10-band equalizer (31 Hz – 16 kHz) with preamp, presets, and a soft-knee limiter, adjusted from the player bar's overflow menu without leaving the page you're on, or under Settings ▸ Effects
+- 10-band equalizer (31 Hz – 16 kHz) with preamp, presets, and a soft-knee limiter, from the player bar's overflow menu or Settings ▸ Effects
 - ReplayGain in track or album mode, with preamp and peak-based clip prevention, reached the same two ways
-- Queue with shuffle and repeat, in a resizable panel beside whatever page is open that reopens as you left it and makes room on a narrow window, opening over the page once there's no room left to dock it; playing from any list queues that list behind your pick. Drag tracks, albums, artists, genres or playlists in from any list or grid to place them where you let go, or onto the player bar's queue button to add them at the end; files dragged in from your file manager go to the queue or the open playlist, whichever you let go over. Drag a track to reorder it, in the panel or in Up Next, in Now Playing or the mini-player, and Now Playing's Up Next takes the same right-click menu; in the panel a selection moves together, gathered where you let go
-- Hold Previous or Next to scan through a track in short audible jumps that grow the longer you hold, and hold Play/Pause to stop, which takes the track back to its start
+- A queue with shuffle and repeat in a resizable side panel, which floats over the page once the window is too narrow to dock it. Playing from any list queues that list behind your pick
+- Drag tracks, albums, artists, genres, playlists, or files from your file manager into the queue or a playlist where you let go; a selection reorders together in the queue, Up Next, and the mini-player
+- Hold Previous or Next to scan through a track in audible jumps that grow the longer you hold, and hold Play/Pause to stop
 - Full-screen Now Playing with an up-next list and a spectrum, mirrored, or waveform visualizer tinted to the album's own colors
-- Right-click the playing song in the player bar for the menu its row has in a list: copy its details, add it to a playlist or your favorites, edit its tags, open its folder, or go to its album, artist or genre
+- Right-click the playing song in the player bar for the menu its row has in a list
 - Playback speed 0.25×–2.0×, a playback-linked sleep timer, resume on startup, media keys
-- Sample-rate conversion wherever a file's rate isn't the output's or the speed isn't 1×: band-limited to keep the full treble, or linear, light on the CPU at any device rate and the default on Windows, under Settings ▸ Output. Either way it is carried across gapless track changes and skipped entirely where the rates already match
-- Responsive mini-player: shrink the window and the UI collapses to a strip, a card or a column with Up Next or lyrics, one layout that rearranges as you resize instead of jumping between them
+- Sample-rate conversion wherever a file's rate isn't the output's or the speed isn't 1×, band-limited or a CPU-light linear (the Windows default) under Settings ▸ Output. It carries across gapless track changes and is skipped where the rates already match
+- A responsive mini-player that rearranges as you resize, from a one-line strip to a column with Up Next or lyrics, and reopens as the mini-player if you closed Melodia from it
 
-### Bit-perfect output
-- **Exclusive output** on Linux and Windows, off until you choose it under Settings ▸ Output. Melodia takes the audio device for itself and hands it the decoder's samples at each file's own sample rate and bit depth, with no system mixer in between: an ALSA `hw:` device on Linux, asked of the sound server so it is handed back cleanly, and WASAPI exclusive mode on Windows
-- A **Signal Path** panel follows the playing track from the file to the device, grades every stage that can change it (the decoded format, EQ and ReplayGain, speed, volume, a crossfade, the sample rate, the channel layout and the output itself), and sums it up as Bit-perfect, Enhanced (only effects you chose), Converted, Lossy (a compressed file, whatever else the path does), or Fallback (a refused claim, which outranks the rest). **Make Bit-Perfect** switches off whatever you chose that changes the sound, and from shared output asks to switch to exclusive
-- A quality chip in the player bar carries that verdict and the device's rate, and opens the panel in one click. It shows only under exclusive output, and moves into the overflow menu if you'd rather
-- **Output Device** (**Exclusive Device** on Linux) picks the sound card exclusive output claims. On Windows it routes shared output too, and its System Default entry follows whichever device Windows makes the default. A chosen device you unplug hands playback to the default and is taken back as soon as it returns. On Linux the sound server routes shared output, and remembers where you moved it in its own mixer
-- A device that refuses the claim never costs you the music: playback carries on shared (on Windows, through that same device), a notification names the device, and the panel says why
-- **Unsupported Sample Rates** can keep the claim for a file at a rate the device lacks, resampling it to one the device has rather than handing it to the system mixer, and an album mixing such rates stays gapless wherever the device's own rate doesn't change
-- Dither wherever samples Melodia changed are narrowed to 16 or 24 bits, so a quiet fade ends in a soft hiss rather than distortion, while untouched samples still pass bit-exact
-- **Hardware Volume** turns the device's own volume control instead of scaling the samples, so the slider keeps the sound bit-perfect, and the system's own volume keys move Melodia's slider with it
-- **Give the Device Back When Paused** hands the device to other apps after five minutes paused; pressing play takes it again and carries on where it stopped
-- A buffer period to choose, a short silence for the DACs that mute while they switch sample rates, and on Windows a polling mode for USB devices that stutter under exclusive output
+</details>
+
+<details>
+<summary><b>Bit-perfect output</b>: exclusive ALSA and WASAPI output, graded stage by stage</summary>
+
+- **Exclusive output** on Linux and Windows, off until you choose it under Settings ▸ Output. Each file's own sample rate and bit depth go straight to the device with no system mixer in between: an ALSA `hw:` device on Linux, asked of the sound server so it is handed back cleanly, and WASAPI exclusive mode on Windows
+- A **Signal Path** panel grades every stage from the file to the device and sums it up as Bit-perfect, Enhanced (only effects you chose), Converted, Lossy, or Fallback (a refused claim). **Make Bit-Perfect** switches off whatever you chose that changes the sound
+- A quality chip in the player bar carries that verdict and the device's rate under exclusive output, and opens the panel in one click
+- **Output Device** (**Exclusive Device** on Linux) picks the sound card to claim, and on Windows routes shared output too. An unplugged device hands playback to the default and is taken back as soon as it returns
+- A device that refuses the claim never costs you the music: playback carries on shared, and a notification and the panel say why
+- **Unsupported Sample Rates** can resample a file to a rate the device has rather than give up the claim, staying gapless wherever the device's rate doesn't change
+- Dither wherever samples Melodia changed are narrowed to 16 or 24 bits, while untouched samples still pass bit-exact
+- **Hardware Volume** turns the device's own volume control instead of scaling the samples, so the slider keeps the sound bit-perfect and the system's volume keys move it too
+- **Give the Device Back When Paused** hands the device to other apps after five minutes paused; pressing play takes it again
+- A choosable buffer period, a short silence for DACs that mute while switching sample rates, and on Windows a polling mode for USB devices that stutter
 - In shared mode on Linux, **Match the File's Sample Rate** reopens the device at each track's own rate wherever the sound server allows it
 - Unplugging the device or restarting the sound server picks playback up on the new output at the same position
 
-### Lyrics
-- A panel in the Now Playing column in place of Up Next, turned on from the switch in that view's header or under Settings ▸ Lyrics. A timed sheet follows the song line by line, and clicking a line seeks to it
-- **Off by default, and off means off**: while lyrics are switched off, Now Playing shows Up Next and nothing looks a sheet up or keeps one in memory
-- Read from a `.lrc` beside the track or from the file's own lyrics tag, so a library that already carries them needs no online lookup
-- **Online lookup is off until you switch it on**, from the lyrics menu or under Settings ▸ Lyrics. Nothing contacts **lrclib.net** until you do, and what it answers is cached under your data folder rather than written into your files
-- Romanization printed under a line written in a script you don't read. Korean and Japanese each get an engine matched to them; around a hundred scripts are covered in all, Chinese, Cyrillic and Arabic among them. On by default, and it draws nothing for a sheet already in Latin letters
-- A bilingual sheet's translation is drawn under the words it glosses
-- **Look up again** when a sheet matched the wrong recording, **Save to file** to write the one on screen into the track's own tag, and **Edit lyrics…** when it is nearly right and a stamp needs typing. The Edit Tags dialog offers the same sheet above its Lyrics field
+</details>
 
-### Internet Radio
+<details>
+<summary><b>Lyrics</b>: timed sheets, an opt-in online lookup, and romanization</summary>
+
+- A timed sheet in Now Playing, in place of Up Next, that follows the song line by line; click a line to seek to it. Switch it on from that view's header or Settings ▸ Lyrics
+- **Off by default, and off means off**: while lyrics are switched off, nothing looks a sheet up or keeps one in memory
+- Read from a `.lrc` beside the track or from the file's own lyrics tag, so a library that already carries them needs no online lookup
+- **Online lookup is off until you switch it on**: nothing contacts **lrclib.net** until you do, and its answers are cached under your data folder rather than written into your files
+- Romanization under a line in a script you don't read, around a hundred scripts in all, with engines matched to Korean and Japanese. On by default, and silent for a sheet already in Latin letters
+- A bilingual sheet's translation is drawn under the words it glosses
+- **Look up again** for a wrong match, **Save to file** to write the sheet into the track's tag, and **Edit lyrics…** to fix a stamp by hand
+
+</details>
+
+<details>
+<summary><b>Internet Radio</b>: a worldwide directory and your own streams, off by default</summary>
+
 - **Off until you switch it on**, under Settings ▸ Radio. Nothing contacts the directory until you do
 - A worldwide directory (**radio-browser.info**, no account and no API key) narrowed by country, language, genre, codec, or bitrate
 - Your own stream URLs, checked at the dialog rather than at the first click; `.pls`, `.m3u`, and `.asx` resolve to the audio behind them
 - Live titles reach the player bar, Now Playing, your desktop's media controls, and Discord, with buffering and reconnection handled underneath
 - Favorites, Recently Played, station pages, cached logos, and playlist-file import and export
-- Station cards select like any other card on all three tabs, with a right-click menu to play one, star or copy one or many, and to edit or remove the stations you keep
-- The titles a station has announced this session, listed under it and copyable from a right-click, artist and title apart where the line splits
+- Station cards select like any other card, with a right-click menu to play, star, copy, edit, or remove them
+- The titles a station announced this session, listed under it and copyable
 - Segmented (HLS) stations play like any other
 
-### Themes
-Six families, each with light and dark variants and configurable accents: **Catppuccin** (Latte, Frappé, Macchiato, Mocha), **Material 3**, **GNOME Adwaita**, **KDE Breeze**, **Windows Fluent**, and **macOS**. System dark/light is followed automatically, KDE color schemes are read from `kdeglobals`, and Material You derives a palette from the current artwork in seven color styles, fading the whole window into each new cover's colors. The accent and the window outline can follow the artwork too, each behind its own switch. Material 3 and Material You both follow Google's 2025 Material color spec wherever it defines the style. Headers paint an aurora of the album's own colors by default, or a blurred cover instead. The titlebar is custom and transparent, with native decorations available, and KDE opens on its native one. A first launch picks the desktop's own theme too: Windows Fluent, KDE Breeze and GNOME Adwaita follow the system's light or dark mode, and any other desktop starts on Catppuccin Mocha.
+</details>
 
-### Formats and languages
+<details>
+<summary><b>Themes</b>: six families in light and dark, and Material You</summary>
+
+- Six families, each with light and dark variants and configurable accents: **Catppuccin** (Latte, Frappé, Macchiato, Mocha), **Material 3**, **GNOME Adwaita**, **KDE Breeze**, **Windows Fluent**, and **macOS**
+- System dark/light is followed automatically and KDE color schemes are read from `kdeglobals`. A first launch starts on the desktop's own theme (Windows Fluent, KDE Breeze, or GNOME Adwaita, in the system's light or dark mode), and on Catppuccin Mocha anywhere else
+- Material You derives a palette from the current artwork in seven color styles, fading the window into each new cover's colors, and the accent and window outline can follow the artwork too. Material 3 and Material You follow Google's 2025 Material color spec wherever it defines the style
+- Headers paint an aurora of the album's own colors by default, or a blurred cover instead
+- A custom transparent titlebar, or native decorations, which KDE opens on
+
+</details>
+
+<details>
+<summary><b>Formats and languages</b>: MP3, FLAC, AAC, ALAC, Opus, and more, in sixteen locales</summary>
+
 MP3, FLAC, M4A/M4B (AAC and ALAC), raw AAC (`.aac`), Ogg Vorbis (`.ogg`, `.oga`), Opus (`.opus`, up to 7.1), WAV (PCM and ADPCM), AIFF/AIFF-C, Matroska (`.mka`), and CAF. Matroska and CAF carry no tags Melodia can read, so those tracks list under their filename, as does anything whose tags are too damaged to parse.
 
 Sixteen locales (English, German, French, Spanish, Turkish, Greek, Italian, Brazilian Portuguese, European Portuguese, Dutch, Polish, Indonesian, Russian, Ukrainian, Hungarian, Vietnamese), switchable at runtime with no restart under Settings ▸ Language.
 
-### System integration
+</details>
+
+<details>
+<summary><b>System integration</b>: scrobbling, Discord, media controls, the tray, and updates</summary>
+
 - Scrobbling to **Last.fm** and **ListenBrainz**, each independently, with loved-track sync that catches your existing favorites up on connect, and a durable offline queue. A ListenBrainz love needs the track's MusicBrainz recording ID in its tags
 - **Discord Rich Presence** (off by default): title, artist, album, and optionally a cover looked up on Deezer, sent to your running Discord client. Nothing leaves the machine while it is off
 - OS media controls (MPRIS2 on Linux, SMTC on Windows) and media keys
@@ -145,11 +211,22 @@ Sixteen locales (English, German, French, Spanish, Turkish, Greek, Italian, Braz
 - On Linux, a self-deploying desktop entry and AppStream metadata for KDE Discover and GNOME Software
 - Window, queue, and navigation state persisted across sessions
 
+</details>
+
 ## Footprint
 
-Release builds on one dual-boot PC, a Ryzen 7 9800X3D (8 cores, 16 threads) with an RTX 3080 and the window on a 144 Hz display, against the same 512-track library on both platforms, and again with a second library of 50,500 tracks added beside it, 51,012 tracks in all. On both platforms Melodia opened on the same playlist, its detail view showing the hero banner, and the visualizer ran in the Mirrored style. Each scenario is sampled every second for 60 s: memory is the median sample, CPU and GPU the total over that minute. Each platform's table uses what its own kernel accounts for, so the columns differ between the two.
+Release builds on one dual-boot PC, a Ryzen 7 9800X3D (8 cores, 16 threads) with an RTX 3080 and the window on a 144 Hz display. Melodia opened on a playlist's detail view, the visualizer in the Mirrored style, and each scenario is sampled every second for 60 s: memory is the median sample, CPU and GPU the total over that minute. With a 512-track library, the native titlebar, and each platform's default sample-rate conversion:
 
-### Linux (Fedora)
+| Scenario | Linux, Anonymous | Linux, CPU (1 core) | Windows, Commit | Windows, CPU (1 core) |
+| --- | --- | --- | --- | --- |
+| Idle | 29.44 MiB | 0.08% | 109.62 MiB | 0.16% |
+| Playing, list view | 30.05 MiB | 0.60% | 112.26 MiB | 0.78% |
+| Playing, visualizer live | 31.50 MiB | 2.42% | 118.77 MiB | 7.19% |
+
+Each platform's figure is what its own kernel accounts for, so the two memory columns don't compare with each other. The full tables add startup, the Songs tab, the whole library queued, the custom titlebar, and a second library of 50,500 tracks beside the first, 51,012 in all.
+
+<details>
+<summary><b>Linux (Fedora)</b>: every scenario, both titlebars, both libraries</summary>
 
 Measured with [`scripts/measure-footprint.py`](scripts/measure-footprint.py) on KDE Plasma under Wayland, with the default Band-Limited sample-rate conversion. Startup is sampled from the moment Melodia launches, and every other scenario starts 150 s after the launch or the switch into it, once the database connections either opened have closed. The Songs tab is My Library ▸ Songs, opened with the playlist still playing; double-clicking its first track queues the whole library, and the queue sheet opens over that queue.
 
@@ -177,8 +254,6 @@ With both libraries, 51,012 tracks. The higher PSS and RSS at startup are the li
 | Playing, whole library queued | 42.22 MiB | 101.55 MiB | 97.38 MiB | 172.34 MiB | 25.00 MiB | 0.50% | 0.03% | 0.00% |
 | Playing, queue sheet open | 43.05 MiB | 102.45 MiB | 98.27 MiB | 173.24 MiB | 27.00 MiB | 0.58% | 0.04% | 0.02% |
 
----
-
 #### Custom titlebar
 
 | Scenario | Anonymous | PSS | USS | RSS | GPU memory | CPU (1 core) | CPU (all cores) | GPU |
@@ -205,7 +280,10 @@ With both libraries, 51,012 tracks:
 
 Linux keeps no commit charge per process, so **Anonymous** is the figure to compare: the memory Melodia allocated itself, in RAM or in swap, which nothing another process does can move. **PSS** is KDE System Monitor's Memory column. It adds a share of the file-backed pages, mostly the binary and the shared graphics stack rather than anything Melodia allocated, and that share shrinks whenever another program maps the same libraries. **USS** is the part no other process maps, what closing Melodia gives back, and System Monitor's Private column. **RSS** counts every shared page in full. **GPU memory** is the video memory the NVIDIA driver charges to Melodia, where FemtoVG keeps its textures and framebuffers, counted apart from the rest. **CPU (1 core)** counts one full core as 100%, and **CPU (all cores)** spreads that across all 16 threads, as System Monitor's CPU column does. **GPU** is the utilization the NVIDIA driver reports for Melodia, in whole percents each second.
 
-### Windows
+</details>
+
+<details>
+<summary><b>Windows</b>: every scenario, both titlebars, both libraries</summary>
 
 Measured with [`scripts/measure-footprint.py`](scripts/measure-footprint.py), on an output device Windows mixes at 192 kHz, so every track passes through the sample-rate conversion. Startup is sampled from the moment Melodia launches, and every other scenario starts 150 s after the launch or the switch into it, once the database connections either opened have closed. The Songs tab is My Library ▸ Songs, opened with the playlist still playing; double-clicking its first track queues the whole library, and the queue sheet opens over that queue.
 
@@ -235,8 +313,6 @@ With both libraries, 51,012 tracks. The higher commit and working set at startup
 
 Both tables use the default Linear sample-rate conversion. Band-Limited costs more CPU while playing: with the 512-track library, about 1.9% of one core in the list view and about 7.9% with the visualizer live.
 
----
-
 #### Custom titlebar
 
 | Scenario | Commit | Private WS | Working set | GPU dedicated | GPU shared | CPU (1 core) | CPU (all cores) | GPU |
@@ -265,7 +341,14 @@ Both tables use the default Linear sample-rate conversion. Band-Limited costs mo
 
 Windows keeps no PSS, so **Commit** is the figure to compare: the private memory Windows has set aside for Melodia, in RAM or paged out, which doesn't fall when Windows trims the process. **Private WS** is Task Manager's Memory column, the private memory in RAM at that moment. **Working set** adds the pages Melodia shares with other processes, mostly system DLLs. **GPU dedicated** and **GPU shared** are the video memory Task Manager lists per process, where FemtoVG keeps its textures and framebuffers, counted apart from commit. **CPU (1 core)** counts one full core as 100%, and **CPU (all cores)** spreads that across all 16 threads, as Task Manager's Details tab does. **GPU** is the busiest GPU engine, Task Manager's per-process figure.
 
+</details>
+
 ## Keyboard Shortcuts
+
+`Space`, the arrow keys and single letters cover playback, the queue and navigation, and the OS media keys (play/pause, next, previous, stop) are handled too. Stop takes the track back to its start, as holding the Play/Pause button does.
+
+<details>
+<summary>All shortcuts</summary>
 
 | Action | Shortcut |
 |--------|----------|
@@ -291,27 +374,7 @@ Windows keeps no PSS, so **Commit** is the figure to compare: the private memory
 | Close dialog / close Now Playing or the queue overlay / clear selection | `Esc` |
 | Navigate back / forward through history | `Mouse-4` / `Mouse-5` |
 
-OS media keys (play/pause, next, previous, stop) are also handled. Stop takes the track back to its start, as holding the Play/Pause button does.
-
-## Installation
-
-Linux (X11 and Wayland) and Windows, on both `x86_64` and `aarch64`. Take the latest build from the
-[Releases page](https://github.com/KenanSalar/Melodia/releases).
-
-| Format | Install |
-|--------|---------|
-| `.rpm` (Fedora/RHEL) | `sudo dnf install ./melodia-*.rpm` |
-| `.deb` (Debian/Ubuntu) | `sudo apt install ./melodia-*.deb` |
-| AppImage | `chmod +x melodia-*.AppImage && ./melodia-*.AppImage` |
-| Tarball | Extract, then `./install-linux.sh`, which installs into `~/.local/share/Melodia` with no `sudo`, so the in-app updater can replace it |
-| Windows | Run the installer |
-
-Melodia updates itself in place, minisign-signed. Release artifacts also carry
-build-provenance attestations, verifiable with:
-
-```bash
-gh attestation verify <file> --repo KenanSalar/Melodia
-```
+</details>
 
 ## Building from Source
 
@@ -339,6 +402,9 @@ cargo clippy --all-targets --workspace -- -D warnings    # lint
 cargo test --workspace                                   # tests
 ```
 
+<details>
+<summary>Build notes: the dev data folder, the vendored winit, and API keys</summary>
+
 A source build keeps its own library under `Melodia-dev`, beside an installed copy's folder rather
 than inside it, so a schema migration still on a branch can't leave an installed Melodia unable to
 open its database, and the two can run at once. `MELODIA_DATA_DIR` points either build at a
@@ -357,6 +423,8 @@ functional, ListenBrainz included, and the Last.fm Connect button reports "not c
 build". A fork wanting its own Discord presence sets `MELODIA_DISCORD_APP_ID`.
 
 [winit#1881]: https://github.com/rust-windowing/winit/issues/1881
+
+</details>
 
 ## Architecture
 
@@ -378,7 +446,10 @@ chosen over the alternatives.
 ## Data and Logs
 
 Everything lives under the OS application-data directory, `~/.local/share/Melodia` on Linux and
-`%APPDATA%\Melodia` on Windows:
+`%APPDATA%\Melodia` on Windows, and `MELODIA_DATA_DIR` moves the whole folder somewhere else.
+
+<details>
+<summary>What the folder holds</summary>
 
 | File / folder | Purpose |
 |---------------|---------|
@@ -390,7 +461,7 @@ Everything lives under the OS application-data directory, `~/.local/share/Melodi
 | `backups/` | Database copies taken before each schema migration |
 | `logs/` | Rolling logs and crash reports |
 
-`MELODIA_DATA_DIR` moves the whole folder somewhere else.
+</details>
 
 Melodia writes a log on every run, with no environment variable and no terminal needed, and leaves a
 crash report beside it if it ever panics. The current log is `melodia_rCURRENT.log`; it rotates at
