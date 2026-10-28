@@ -85,8 +85,9 @@ a few of the comment diffs.
 6. **Citations into a rule stay, and constrain it.** Rule-to-rule, `CLAUDE.md` and ADR citations
    are grepped before writing, and every entry they name keeps a recognisable lead. An accepted ADR
    is never rewritten (`docs/adr/README.md`), so an ADR citing a rule pins that rule's entry.
-7. **The gate is `cargo fmt --all --check`.** No clippy or tests, the edits being comments and
-   markdown (but see Open questions). A comment edited under
+7. **The gate is `cargo fmt --all --check`, plus clippy whenever a `.rs` file changed**, comment
+   lines included (Open questions 1). No tests, the edits being comments and markdown. A comment
+   edited under
    `crates/melodia-playback/src/player/playback/output/` also gets bare
    `rustfmt --edition 2024 --check`: cargo fmt skips the modules declared inside `output/mod.rs`'s
    `cfg_select!` (`alsa`, `alsa_volume`, `hardware_volume`, `realtime`, `reserve`,
@@ -133,7 +134,7 @@ a few of the comment diffs.
    - no changed line over 100 columns, and no em dashes added;
    - the identifier check clean;
    - every entry the other rules, `CLAUDE.md` and the ADRs cite still present;
-   - `cargo fmt --all --check` clean, plus `rustfmt` where Decision 7 asks.
+   - `cargo fmt --all --check` clean, plus `rustfmt` and clippy where Decision 7 asks.
 
    Then report what was cut as stale, which dependency claims were verified against source and
    which couldn't be, and anything that couldn't be placed. Stop there.
@@ -608,12 +609,16 @@ Status: not started.
 
 ## Open questions
 
-1. **Clippy on doc-comment edits.** The comment trim ran clippy on every slice, because
-   `doc_markdown`, `doc_lazy_continuation` and their siblings fire on `///` and `//!` prose, and
-   CI's clippy job runs with `-D warnings`. This plan follows the instruction it was written from:
-   no clippy. Lean: run clippy for a phase whose diff changes a `///` or `//!` line, since CI will
-   run it on the PR regardless. Kenan's call. Phase 5.3 is the case for it: `doc_markdown` failed
-   a rewritten `swap.rs` doc that `cargo fmt --check` passed.
+1. **Resolved: any `.rs` edit runs clippy, comments included; markdown-only edits don't**
+   (Kenan, 2026-10-28). A scratch crate on the workspace lint table showed 10 lints failing a
+   comment-only edit under `-D warnings`: eight on `///`/`//!` prose (`doc_markdown`,
+   `doc_lazy_continuation`, `doc_overindented_list_items`, `doc_link_with_quotes`,
+   `tabs_in_doc_comments`, `empty_docs`, `empty_line_after_doc_comments`,
+   `suspicious_doc_comments`) and two on plain-comment edits (`four_forward_slashes`, rustc's
+   `unused_doc_comments`). Phase 5.3's `swap.rs` doc was a live case. A warm run costs 3 to 6 s.
+   Outside clippy's reach: a `.slint` `// Translators:` line, which `translations.rs` reads, and
+   broken intra-doc links, which only `cargo doc` checks and CI never runs. Decision 7's "no
+   clippy" is superseded.
 2. **Resolved: the PR template no longer sends contributors to `.claude/rules/`** (Kenan,
    2026-10-28). Its docs checklist names `CLAUDE.md` and `README.md`; `CONTRIBUTING.md` and
    `README.md` never named the rules.
@@ -673,6 +678,8 @@ All of these run in zsh from the repo root, with `r` set to the rule's name and 
   ```
 - **Formatting:** `cargo fmt --all --check`, plus `rustfmt --edition 2024 --check <file>` for each
   file Decision 7 names.
+- **Lints**, whenever a `.rs` file changed:
+  `cargo clippy --all-targets --locked --workspace -- -D warnings`.
 
 ## Tools
 
