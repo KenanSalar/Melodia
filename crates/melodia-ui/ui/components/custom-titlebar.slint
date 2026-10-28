@@ -5,10 +5,10 @@ import { CaptionStyle, MinimizeCaption, MaximizeCaption, CloseCaption } from "ca
 
 // The brand on one side, a drag region in the middle, the decoration cluster opposite.
 //
-// **Slint tracks only the drag region's hover**; Rust takes the press at the winit layer, where a
-// double press toggles maximize too (`desktop-shell.md`). **The buttons are the outer layout's own
-// children, not a wrapper's**: a Rectangle-rooted wrapper of conditional layout children reports
-// 0 × 0.
+// **Slint tracks only the drag region's hover**: a move started from Slint leaks the grab, so Rust
+// takes the press at the winit layer, where a double press toggles maximize too. **The buttons are
+// the outer layout's own children, not a wrapper's**: a Rectangle-rooted wrapper of conditional
+// layout children reports 0 × 0.
 export component CustomTitleBar inherits Rectangle {
     // A fixed slot: a plain `height` on a layout child claims the window's whole height.
     min-height: 32px;

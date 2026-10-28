@@ -1,7 +1,7 @@
 //! What a file drop's targets owe the hit test the winit filter runs for them.
 //!
 //! Slint has no pointer during an OS drag, so each target publishes where it is drawn and Rust
-//! decides where letting go lands (`desktop-shell.md`). Both halves fail away from the code that
+//! decides where letting go lands. Both halves fail away from the code that
 //! breaks them: a report in the wrong branch panics on a frame nothing obvious caused, and a second
 //! writer of the answer raises a banner over a target the files won't reach.
 

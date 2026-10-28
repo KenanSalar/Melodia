@@ -9,14 +9,14 @@ export enum ResizeZone { none, north, south, west, east, north-west, north-east,
 export enum DragRegion { none, titlebar, miniplayer }
 
 // The custom titlebar's state, Slint only rendering it (`ui/window_chrome/`); dragging and resizing
-// are the winit layer's (`desktop-shell.md`). Each `restart-*` persists and respawns, so a gate read
-// once at startup is read again.
+// are the winit layer's, a grab started from Slint leaking. Each `restart-*` persists and respawns,
+// so a gate read once at startup is read again.
 export global WindowChrome {
     // Off a winit `Resized` subscription, so the icon stays right under tiling shortcuts.
     in property <bool> is-maximized;
 
-    // What the OS frame adds to the client on each axis, held across the frameless span;
-    // `geometry::frame_allowance` argues the measurement and `desktop-shell.md` the coupling.
+    // What the OS frame adds to the client on each axis, held across the frameless span for the
+    // miniplayer's exit edge and the window's floor; `geometry::frame_allowance` argues the step.
     in property <length> frame-allowance-w;
     in property <length> frame-allowance-h;
 

@@ -106,7 +106,7 @@ export struct WindowRect {
 }
 
 // A file dragged in from the file manager. No OS drag reaches a `DropArea`, so the winit filter
-// hit-tests it against these rects (`desktop-shell.md`).
+// hit-tests it against these rects.
 export global FileDrag {
     // Each written by a `WindowRectReport` as it moves. The filter reads one only while its target
     // can take a drop, so neither is cleared when its target goes.

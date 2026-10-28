@@ -1,6 +1,6 @@
 # Plan: Compress the subsystem rules, and take their citations out of the code
 
-Status: **in progress**, Phase 2 next · Owner: Kenan · Created: 2026-10-27 · branch `docs/trim-comments`
+Status: **in progress**, Phase 3 next · Owner: Kenan · Created: 2026-10-27 · branch `docs/trim-comments`
 
 > **Measured 2026-10-27** against `a3963bb3` plus Phase 1's changes. Every figure below comes from
 > a command run that day. Each phase measures its rule again before it starts (Every rule, step 1),
@@ -18,7 +18,7 @@ Working doc. Delete when every phase has landed (Phase 10).
   `.claude/rules/` file"): 34 citations across `crates/` and `.github/`, listed under each phase.
 - **Some entries are stale**: they name code that no longer exists, or a mechanism a dependency
   has moved since. ui-patterns' pass found 3 and slint-pitfalls' 7. audio-stack's found 4, one of
-  them a claim about another subsystem of ours.
+  them a claim about another subsystem of ours, and desktop-shell's 1.
 - **`diagnostics.md` holds nothing its anchors don't**, except one declined decision.
 - **`slint.md`'s font advice is wrong for this tree.**
 
@@ -28,7 +28,8 @@ Working doc. Delete when every phase has landed (Phase 10).
 |---|---|---|---|
 | `ui-patterns.md` | `5f6559f0` | 1,715 lines / 136,354 bytes | 371 / 27,459 (20%) |
 | `slint-pitfalls.md` | `a3963bb3` | 946 / 77,705 | 419 / 28,498 (37%) |
-| `audio-stack.md` | Phase 1 | 122 / 37,701 | 165 / 11,746 (31%) |
+| `audio-stack.md` | `fbee5d01` | 122 / 37,701 | 165 / 11,746 (31%) |
+| `desktop-shell.md` | Phase 2 | 299 / 22,352 | 128 / 8,345 (37%) |
 
 Read the first two commits before Phase 2: `git show <sha> --stat`, then the rule as it landed, then
 a few of the comment diffs.
@@ -138,7 +139,7 @@ a few of the comment diffs.
 | Phase | Rule | Before | Code citations | After |
 |---|---|---|---|---|
 | 1 | `audio-stack.md` | 122 lines / 37,701 bytes, 54 over 100 | 8 in 7 files (plus 1 to `slint-pitfalls.md`) | 165 / 11,746 (31%), 0 over 100, 0 citations |
-| 2 | `desktop-shell.md` | 299 / 22,352, 4 over 100 | 8 in 6 files | |
+| 2 | `desktop-shell.md` | 299 / 22,352, 4 over 100 | 8 in 6 files | 128 / 8,345 (37%), 0 over 100, 0 citations |
 | 3 | `library-data.md` | 314 / 24,572, 9 over 100 | 6 in 6 files | |
 | 4 | `ci-packaging.md` | 323 / 24,758, 9 over 100 | 1 | |
 | 5.1 | `radio.md` | 181 / 13,308, 6 over 100 | 7 in 5 files | |
@@ -183,9 +184,31 @@ Status: done.
     (Phase 6), `deploy-coverage.yml:32`'s citation (Phase 4), the PR template (Open questions).
 
 ### Phase 2: `desktop-shell.md`
-Status: not started.
+Status: done.
 
-- [ ] **2. The rule and its citations**, one commit.
+- [x] **2. The rule and its citations**, one commit.
+  - **Result:** sections now Window chrome, the native miniplayer's frame, the shell and its edge,
+    File drops, Tray and media keys, and Shutdown (kept for audio-stack's citation). Cut as carried
+    at their anchors: the file-manager open path, single-instance, the tray façade, the
+    always-on-top methods, the restore caption's floor, first-launch KDE defaults.
+  - **Stale, fixed:** `resize-border-width`'s handler no longer "compares the logical band with a
+    physical cursor". Slint 1.18.1's `handle_cursor_move_for_resize` scales the band by
+    `scale_factor()`, where 1.16.1 compared it raw. Only the square corner survives.
+  - **Comment whose reason went false (Decision 3):** `frameless_tests.rs:214`'s doc on
+    `the_shell_leaves_every_resize_press_to_the_ring`, which said the same and promised "a thinner
+    edge on a scaled display". Rewritten to the corner alone.
+  - **Code diff:** 18 comment lines out, 18 in, 32 characters fewer.
+  - **Verified against source:**
+    - i-slint-backend-winit 1.18.1: windows built from the active event loop
+      (`create_inactive_windows`), so `with_winit_window` is `None` before; `no-frame` re-applied
+      live through `set_decorations`; minimize and maximize forwarded only when the cached flag
+      differs; transparent except on macOS (`wants_transparent`) and Windows with a menubar.
+    - i-slint-core 1.18.1: `set_minimized`/`set_maximized` only set the item's flag.
+    - The winit fork: `focus_window` and `is_visible` unsupported on Wayland, macOS
+      `drag_resize_window` returns `NotSupported`; `winit/README.md` matches the four commits.
+    - souvlaki 0.8.3: the Windows backend `expect`s an `HWND`.
+  - **Not verified:** the Win32 claims (frame steps, invisible borders, the parked loop, the
+    tray ghosting), which need the Windows machine; all are argued at their anchors.
   - **Covers** window chrome and winit, the tray, media keys, always-on-top, and the force-exit
     shutdown.
   - **Code citations (8 in 6 files):**
@@ -359,6 +382,9 @@ Status: not started.
 - [ ] Confirm Progress is complete and every phase landed.
 - [ ] Check that no decision recorded only here goes unrecorded once this file is deleted.
 - [ ] Offer the `CLAUDE.md` and `README.md` edits the phases leave, if any.
+  - From Phase 2: root `CLAUDE.md`'s UI Structure bullet still says Slint's `resize-border-width`
+    handler "compares a logical band with a physical cursor", stale since Slint 1.18. Drop that
+    clause; the square corners alone carry the argument `app-window.slint:140` points to.
 - [ ] Delete this file.
 
 ## Cross-cutting

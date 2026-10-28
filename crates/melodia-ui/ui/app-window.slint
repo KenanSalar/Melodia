@@ -435,8 +435,8 @@ export component AppWindow inherits Window {
         active-changed(active) => { Radio.section-active-changed(active); }
     }
 
-    // The window outline, whose clip is the only antialiased pass the corner gets
-    // (`desktop-shell.md`): no `background` here, and whatever reaches the edge mounts inside.
+    // The window outline. Its clip is the corner's only antialiased pass, since a second stacks
+    // into a harder arc: no `background` here, and whatever reaches the edge mounts inside.
     Rectangle {
         x: root.margin-left;
         y: 0px;
@@ -488,7 +488,7 @@ export component AppWindow inherits Window {
                 }
 
                 // Rounded by `RoundedFrame`, not a rounded clip, which would hold the view as a
-                // texture (`desktop-shell.md`). This clip only keeps a sliding view off its
+                // texture redrawn on every scroll. This clip only keeps a sliding view off its
                 // neighbours.
                 Rectangle {
                     horizontal-stretch: 1;

@@ -95,8 +95,8 @@ impl Default for WindowFlags {
     }
 }
 
-/// The icon ships on and closing into it is opt-in; `desktop-shell.md` has the restart and the
-/// greying both switches go through.
+/// The icon ships on and closing into it is opt-in. Boot reads `tray_enabled` once, so flipping it
+/// restarts, and `close_to_tray` greys out wherever no tray came up.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
 pub struct TrayFlags {

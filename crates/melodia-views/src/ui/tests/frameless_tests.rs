@@ -211,9 +211,9 @@ fn the_resize_ring_reads_no_band_but_the_one_it_is_handed() {
     assert_eq!(own, 1, "a ring edge reads the theme's band past the `band` default");
 }
 
-/// Slint's handler for this binding hit-tests square corners a band wide and compares a logical
-/// width with a physical cursor. Beside the ring it takes presses the ring's cursor says mean
-/// something else: no diagonal anywhere on a rounded corner, and a thinner edge on a scaled display.
+/// Slint's handler for this binding hit-tests square corners a band wide, so beside the ring it
+/// takes presses the ring's cursor says mean something else: no diagonal anywhere on a rounded
+/// corner.
 #[test]
 fn the_shell_leaves_every_resize_press_to_the_ring() {
     let shell = code_tokens(APP_WINDOW);
