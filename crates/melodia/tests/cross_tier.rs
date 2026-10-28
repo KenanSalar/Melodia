@@ -6,8 +6,8 @@
 //! settings test may not name the nav map, and a database test may not name the lists' sort.
 //! Held from outside all of them instead, which is also the only place that can see both.
 //!
-//! `.claude/rules/testing.md` gives every corpus walk one home; these are the walks'
-//! compile-time cousins and land in the same place for the same reason.
+//! Corpus walks live here too, so a per-crate `cargo test` stays a question about that crate;
+//! these are their compile-time cousins and land beside them for the same reason.
 
 use melodia_core::entities::smart_criteria::Draw;
 use melodia_core::entities::track::TrackListRow;

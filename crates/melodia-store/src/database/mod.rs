@@ -313,8 +313,8 @@ pub async fn init_database(paths: &Paths) -> Result<DbPool, AppError> {
     let db_existed = db_path.exists();
 
     // `busy_timeout` lets the one writer wait out the WAL checkpointer rather than fail with
-    // `SQLITE_BUSY`. DEFERRED rather than `sqlx.md`'s `BEGIN IMMEDIATE`: with one write connection
-    // and no second process there is no contention to fail fast on.
+    // `SQLITE_BUSY`. DEFERRED rather than the `BEGIN IMMEDIATE` a contended writer takes to fail
+    // fast: with one write connection and no second process there is no contention.
     let write_opts = collation::register(SqliteConnectOptions::from_str(&db_url)?)
         .journal_mode(SqliteJournalMode::Wal)
         .create_if_missing(true)

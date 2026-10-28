@@ -4,11 +4,10 @@ use std::cell::Cell;
 use std::sync::{Mutex, MutexGuard, PoisonError};
 
 /// Serialises every test in this binary that mutates the process environment, and every test
-/// opting into reading it through [`reading_env`]. `.claude/rules/unsafe-rust.md` owns the
-/// argument; what binds at the definition is that it is one lock for the whole *binary* —
-/// two tests holding different locks are still racing — that the read side is opt-in, so a
-/// reader that hasn't wrapped itself is still racing, and that it stays private, an
-/// exported lock inviting the hand-rolled snapshot/restore whose restore goes missing.
+/// opting into reading it through [`reading_env`]. One lock for the whole *binary*, since two
+/// tests holding different locks still race; the read side opt-in, so a reader that hasn't
+/// wrapped itself still races; and private, an exported lock inviting the hand-rolled
+/// snapshot/restore whose restore goes missing.
 static ENV_LOCK: Mutex<()> = Mutex::new(());
 
 thread_local! {

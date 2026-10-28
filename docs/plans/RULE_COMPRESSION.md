@@ -1,6 +1,6 @@
 # Plan: Compress the subsystem rules, and take their citations out of the code
 
-Status: **in progress**, Phase 8 next · Owner: Kenan · Created: 2026-10-27 · branch `docs/trim-comments`
+Status: **in progress**, Phase 9 next · Owner: Kenan · Created: 2026-10-27 · branch `docs/trim-comments`
 
 > **Measured 2026-10-27** against `a3963bb3` plus Phase 1's changes. Every figure below comes from
 > a command run that day. Each phase measures its rule again before it starts (Every rule, step 1),
@@ -36,7 +36,7 @@ Working doc. Delete when every phase has landed (Phase 10).
 | `visualizer.md` | `ac2b1b69` | 159 / 11,280 | 51 / 2,745 (24%) |
 | `updater.md` | `62386f54` | 160 / 11,471 | 71 / 4,287 (37%) |
 | `symphonia.md` | `09da3fd3` | 112 / 7,296 | 52 / 2,899 (40%) |
-| `diagnostics.md` | Phase 7 | 52 / 3,006 | deleted |
+| `diagnostics.md` | `6beaeaa0` | 52 / 3,006 | deleted |
 
 Read the first two commits before Phase 2: `git show <sha> --stat`, then the rule as it landed, then
 a few of the comment diffs.
@@ -156,7 +156,7 @@ a few of the comment diffs.
 | 5.3 | `updater.md` | 160 / 11,471, 5 over 100 | 1 | 71 / 4,287 (37%), 0 over 100, 0 citations |
 | 6 | `symphonia.md` | 112 / 7,296, 5 over 100 | 0 | 52 / 2,899 (40%), 0 over 100, 0 citations |
 | 7 | `diagnostics.md` (deleted) | 52 / 3,006 | 0 | deleted; `rules_globs.rs` sees 176 paths |
-| 8 | `testing.md`, `unsafe-rust.md`, `sqlx.md`, `slint.md` (citations only) | | 2, 1, 1, 0 | |
+| 8 | `testing.md`, `unsafe-rust.md`, `sqlx.md`, `slint.md` (citations only) | | 2, 1, 1, 0 | 0 citations in all four trees |
 | 9 | `slint.md`'s font bullet | | | |
 
 ## Phases
@@ -538,10 +538,19 @@ Status: done.
     again first.
 
 ### Phase 8: Sweep the citation-only rules
-Status: not started.
+Status: done.
 
-- [ ] **8. Their citations**, one commit. Steps 1, 3 and 5 of Every rule only. The rules themselves
+- [x] **8. Their citations**, one commit. Steps 1, 3 and 5 of Every rule only. The rules themselves
   aren't compressed.
+  - **Result:** the fresh grep found the same four and nothing unnamed. The two `Cargo.toml`
+    comments naming `.claude/rules` describe what `rules_globs.rs` reads, not a reason, and stay.
+    Each site now states its reason: `http.rs` that a mock framework is a workspace-wide choice
+    and the workspace runs none; `cross_tier.rs` that the corpus walks live in this crate so a
+    per-crate `cargo test` stays about that crate; `ENV_LOCK` drops the pointer, the `SAFETY`
+    comment in `with_env_set` already arguing why mutation needs the lock; and `init_database`
+    names `BEGIN IMMEDIATE` as what a contended writer takes to fail fast.
+  - **Code diff:** 13 comment lines out, 12 in (`ENV_LOCK`'s doc one shorter, its two em dashes
+    gone with the sentence), 150 bytes fewer. Clippy clean.
   - **`testing.md` (2):** `crates/melodia-testkit/src/http.rs:13` and
     `crates/melodia/tests/cross_tier.rs:9`, a test module doc.
   - **`unsafe-rust.md` (1):** `crates/melodia-testkit/src/env.rs:7`.
