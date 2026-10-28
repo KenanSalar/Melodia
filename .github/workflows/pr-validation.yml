@@ -39,7 +39,8 @@ jobs:
       # `predicate-quantifier: every` is what makes the `!` lines do anything,
       # the default `some` plus `**` matching every file and never skipping.
       # `assets/` and `.github/` are excluded per file, both holding real inputs
-      # (`melodia.ico`, three `include_*!`d payloads); the rule file says which.
+      # (`melodia.ico`, the `include_*!`d payloads, the composites the jobs run):
+      # a file leaves only once nothing builds, reads or runs it before a merge.
       - uses: dorny/paths-filter@7b450fff21473bca461d4b92ce414b9d0420d706 # v4.0.2
         id: paths
         if: github.event_name == 'pull_request'
@@ -114,7 +115,7 @@ jobs:
   # instrumented build on demand. The `CARGO_BUILD_JOBS: 4` memory cap overrides
   # .cargo/config.toml's jobs=8: past the ceiling nothing fails, it swaps, and
   # the job looks like a hang. `line-tables-only` is a build-time cap rather
-  # than a memory one: `cargo test` links 42 test binaries and full debuginfo
+  # than a memory one: `cargo test` links each test target and full debuginfo
   # is most of that tail, while file:line survives for the backtraces this job
   # exists to print — hence not the `0` deploy-coverage.yml sets. Both profiles,
   # since `cargo test` builds dependencies under `dev` and test targets under
@@ -162,9 +163,9 @@ jobs:
   # it runs no test.
   # Same two caps as `test`, the runner being the same 4-core / 16 GB box. The
   # debuginfo one is worth more here than there, MSVC PDBs being the heaviest
-  # form of it: it took over 40% off this job's build against Linux's 30%. Why
-  # neither Windows job takes system deps or a pinned image label is in the rule
-  # file.
+  # form of it: it took over 40% off this job's build against Linux's 30%.
+  # Neither Windows job takes system deps, which Slint and cpal don't need here,
+  # or a pinned image label, so a runner rollover reddens a PR before a tag.
   test-windows:
     name: test-windows
     runs-on: windows-latest

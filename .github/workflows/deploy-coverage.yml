@@ -29,8 +29,8 @@ jobs:
     # Debug info to zero rather than `line-tables-only`: LLVM coverage carries
     # its own region table in `__llvm_covmap` and reads no DWARF, so the report
     # renders identically without it and nothing reads a backtrace here.
-    # `CARGO_BUILD_JOBS` is the memory cap `.claude/rules/ci-packaging.md`
-    # measures; this is the build that has OOM-killed the runner (143) outright.
+    # `CARGO_BUILD_JOBS` caps memory, not CPU: `melodia-ui`'s codegen threads
+    # draw jobserver tokens, and this build has OOM-killed the runner (143).
     env:
       CARGO_BUILD_JOBS: 4
       CARGO_PROFILE_DEV_DEBUG: "0"

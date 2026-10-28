@@ -1,6 +1,6 @@
 # Plan: Compress the subsystem rules, and take their citations out of the code
 
-Status: **in progress**, Phase 4 next · Owner: Kenan · Created: 2026-10-27 · branch `docs/trim-comments`
+Status: **in progress**, Phase 5 next · Owner: Kenan · Created: 2026-10-27 · branch `docs/trim-comments`
 
 > **Measured 2026-10-27** against `a3963bb3` plus Phase 1's changes. Every figure below comes from
 > a command run that day. Each phase measures its rule again before it starts (Every rule, step 1),
@@ -30,7 +30,8 @@ Working doc. Delete when every phase has landed (Phase 10).
 | `slint-pitfalls.md` | `a3963bb3` | 946 / 77,705 | 419 / 28,498 (37%) |
 | `audio-stack.md` | `fbee5d01` | 122 / 37,701 | 165 / 11,746 (31%) |
 | `desktop-shell.md` | `df93eb10` | 299 / 22,352 | 128 / 8,345 (37%) |
-| `library-data.md` | Phase 3 | 314 / 24,572 | 124 / 8,403 (34%) |
+| `library-data.md` | `312554ea` | 314 / 24,572 | 124 / 8,403 (34%) |
+| `ci-packaging.md` | Phase 4 | 323 / 24,758 | 122 / 7,996 (32%) |
 
 Read the first two commits before Phase 2: `git show <sha> --stat`, then the rule as it landed, then
 a few of the comment diffs.
@@ -107,6 +108,8 @@ a few of the comment diffs.
    - Measure it (Verification) and compare with Progress. Rescope if it moved.
    - Grep every reference to the rule in `crates/`, `scripts/`, `.github/` and `packaging/`, plus
      `CLAUDE.md`, `README.md`, `CONTRIBUTING.md`, `docs/` and the other rules. List them by file.
+   - Grep `.cargo/` and the root `*.toml` too, and read the files the rule anchors for an unnamed
+     pointer ("the rule file"). Phase 4 found three citations the name grep missed.
 2. **Staleness check**, two halves.
    - (a) Extract every backticked identifier the rule names that is our code, and grep the tree for
      each (Tools). A word hit doesn't prove `X::y` lives on `X`, so check qualified names against
@@ -142,7 +145,7 @@ a few of the comment diffs.
 | 1 | `audio-stack.md` | 122 lines / 37,701 bytes, 54 over 100 | 8 in 7 files (plus 1 to `slint-pitfalls.md`) | 165 / 11,746 (31%), 0 over 100, 0 citations |
 | 2 | `desktop-shell.md` | 299 / 22,352, 4 over 100 | 8 in 6 files | 128 / 8,345 (37%), 0 over 100, 0 citations |
 | 3 | `library-data.md` | 314 / 24,572, 9 over 100 | 6 in 6 files | 124 / 8,403 (34%), 0 over 100, 0 citations |
-| 4 | `ci-packaging.md` | 323 / 24,758, 9 over 100 | 1 | |
+| 4 | `ci-packaging.md` | 323 / 24,758, 9 over 100 | 1 named, plus 3 the grep missed | 122 / 7,996 (32%), 0 over 100, 0 citations |
 | 5.1 | `radio.md` | 181 / 13,308, 6 over 100 | 7 in 5 files | |
 | 5.2 | `visualizer.md` | 159 / 11,280, 1 over 100 | 7 in 6 files | |
 | 5.3 | `updater.md` | 160 / 11,471, 5 over 100 | 1 | |
@@ -263,11 +266,43 @@ Status: done.
     - `CLAUDE.md:12`'s table row.
 
 ### Phase 4: `ci-packaging.md`
-Status: not started.
+Status: done.
 
-- [ ] **4. The rule and its citation**, one commit.
-  - **Covers** the PR gate, the skip matrix, coverage, action pinning, and the five package formats
-    with their licence pins.
+- [x] **4. The rule and its citations**, one commit.
+  - **Result:** the four sections kept. Cut as carried at their anchors: the job-DAG argument,
+    the aggregate's and the skip matrix's mechanics, the audit flags, rust-cache's key suffix,
+    what the headless shim leans on (root `CLAUDE.md`), the frame-budget lesson
+    (`CONTROL_OP_BUDGET`), `components`, `%F` over `%U`, the DEP-5 and Policy 12.5 arguments,
+    `licenses/` against `Files: *`, the font pin and the toolchain bump (both root `CLAUDE.md`),
+    and the cargo-wix and upload-glob stories (`release-build.yml`). Cut as history: the two-phase
+    build and every memory and build-time figure.
+  - **Stale, fixed or cut:**
+    - "48 test binaries": `cargo metadata` counts 60 harnesses (47 integration, 12 lib, 1 bin).
+    - "C13" resolves to nothing, like radio.md's "D8".
+    - `CODEOWNERS` protects `.github/actions/` too, not only the workflows.
+    - "the Ko-fi stanza's argument over five more files": four texts sit under the glob.
+    - "only `windows-2025` is documented to keep" naming that image: the runner-images README
+      lists all three labels on one image and says nothing about which lasts. Dropped.
+  - **Comments with a stale fact (Decision 3), rewritten count-free:** `pr-validation.yml`'s
+    "42 test binaries" and "three `include_*!`d payloads" (four today).
+  - **Code citations swept (4):** the named one, plus three the grep couldn't see:
+    `.cargo/audit.toml:2` (outside the four trees) and two unnamed "the rule file" pointers in
+    `pr-validation.yml` (the denylist note and the `test-windows` note).
+  - **Code diff:** 10 comment lines out, 10 in, 121 characters more.
+  - **Verified against source:**
+    - Swatinem/rust-cache 2.9.1: OS and arch appended after `shared-key`, `CARGO_INCREMENTAL=0`
+      exported, `CARGO*` env hashed into the key.
+    - dorny/paths-filter 4.0.2: `predicate-quantifier` defaults to `some`.
+    - fkirc/skip-duplicate-actions 5.3.2: `paths_filter` is an input.
+    - Every pinned action is `node24` or a composite (`attest-build-provenance` over
+      `actions/attest`, `upload-pages-artifact` over `upload-artifact`, taiki-e's two over bash
+      and `actions/cache`). No `uses:` floats.
+    - runner-images: Defender real-time monitoring off and `C:\` and `D:\` excluded.
+    - cargo-deb 3.7.0: `has_copyright_metadata` reads the first ten lines for any DEP-5 key.
+    - `ring`, `aws-lc-sys`, `libsqlite3-sys` and `blake3` are all in `Cargo.lock`.
+  - **Not verified:** the Policy 12.5 footnote and lintian's tag coverage (no lintian here), and
+    `cargo wix`'s single-member auto-select at the git pin (argued at its step, not reread).
+  - **Conflict, unresolved:** see Open questions 4.
   - **Code citation (1):** `.github/workflows/deploy-coverage.yml:32`, a YAML `#` comment.
   - **Cited by, keep findable:** the most-cited rule.
     - `testing.md:15`, at the gate and the coverage flags;
@@ -279,7 +314,7 @@ Status: not started.
     - `docs/adr/0006-agpl-and-what-artifacts-owe.md:55` and
       `docs/adr/0031-five-package-formats.md:34`. Both are accepted ADRs, which are never
       rewritten (Decision 6).
-  - **Its line 21 points at `updater.md`**, which Phase 5.3 must keep landing.
+  - **Its line 22 points at `updater.md`**, which Phase 5.3 must keep landing.
   - **Dependencies to read:** GitHub Actions aren't in the registry. Check claims against the
     workflow files and the pinned SHAs, and say which couldn't be checked locally.
 
@@ -319,7 +354,7 @@ Status: not started.
   - **Covers** install methods, manifest signing, and the release matrix.
   - **Code citation (1):** `crates/melodia-core/src/utils/exe.rs:8`.
   - **Cited by, keep findable:**
-    - `ci-packaging.md:21`, at the release matrix (recheck after Phase 4);
+    - `ci-packaging.md:22`, at the release matrix, so keep the `## Release matrix` heading;
     - `CLAUDE.md:15`'s table row;
     - `docs/adr/0019-updater-trust-boundary-is-the-repo.md:45`, an accepted ADR.
 
@@ -426,6 +461,15 @@ Status: not started.
 3. **`slint.md` (54 lines over 100), `sqlx.md` (20) and `unsafe-rust.md` (11) stay unwrapped.**
    Phases 8 and 9 only sweep their citations and fix the font bullet. Compressing them would be a
    phase of its own.
+4. **Does coverage still need its `--ignore-filename-regex`?** `deploy-coverage.yml:52` says
+   cargo-llvm-cov's built-in excludes miss `melodia-ui`'s `OUT_DIR`. By source they don't:
+   cargo-llvm-cov 0.8.7, what install-action v2.85.2 installs, puts `^<target>/llvm-cov-target/`
+   in every report's default ignore (`report.rs`, `push_abs_path(&cx.ws.target_dir)`), the
+   `OUT_DIR` sits under it, and 0.5.0 already did the same. Against that, `22006716`'s message
+   records `app-window.rs` in the denominator, and the only run before it has an expired log
+   (HTTP 410). Phase 4 dropped the claim from the rule and left the comment. One instrumented run
+   without the flag settles it; if the source is right, the regex and its comment go, which is a
+   code change outside this plan.
 
 ## Verification
 
