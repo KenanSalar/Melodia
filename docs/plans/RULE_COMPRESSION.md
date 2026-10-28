@@ -1,6 +1,6 @@
 # Plan: Compress the subsystem rules, and take their citations out of the code
 
-Status: **in progress**, Phase 3 next · Owner: Kenan · Created: 2026-10-27 · branch `docs/trim-comments`
+Status: **in progress**, Phase 4 next · Owner: Kenan · Created: 2026-10-27 · branch `docs/trim-comments`
 
 > **Measured 2026-10-27** against `a3963bb3` plus Phase 1's changes. Every figure below comes from
 > a command run that day. Each phase measures its rule again before it starts (Every rule, step 1),
@@ -18,7 +18,7 @@ Working doc. Delete when every phase has landed (Phase 10).
   `.claude/rules/` file"): 34 citations across `crates/` and `.github/`, listed under each phase.
 - **Some entries are stale**: they name code that no longer exists, or a mechanism a dependency
   has moved since. ui-patterns' pass found 3 and slint-pitfalls' 7. audio-stack's found 4, one of
-  them a claim about another subsystem of ours, and desktop-shell's 1.
+  them a claim about another subsystem of ours, desktop-shell's 1 and library-data's none.
 - **`diagnostics.md` holds nothing its anchors don't**, except one declined decision.
 - **`slint.md`'s font advice is wrong for this tree.**
 
@@ -29,7 +29,8 @@ Working doc. Delete when every phase has landed (Phase 10).
 | `ui-patterns.md` | `5f6559f0` | 1,715 lines / 136,354 bytes | 371 / 27,459 (20%) |
 | `slint-pitfalls.md` | `a3963bb3` | 946 / 77,705 | 419 / 28,498 (37%) |
 | `audio-stack.md` | `fbee5d01` | 122 / 37,701 | 165 / 11,746 (31%) |
-| `desktop-shell.md` | Phase 2 | 299 / 22,352 | 128 / 8,345 (37%) |
+| `desktop-shell.md` | `df93eb10` | 299 / 22,352 | 128 / 8,345 (37%) |
+| `library-data.md` | Phase 3 | 314 / 24,572 | 124 / 8,403 (34%) |
 
 Read the first two commits before Phase 2: `git show <sha> --stat`, then the rule as it landed, then
 a few of the comment diffs.
@@ -140,7 +141,7 @@ a few of the comment diffs.
 |---|---|---|---|---|
 | 1 | `audio-stack.md` | 122 lines / 37,701 bytes, 54 over 100 | 8 in 7 files (plus 1 to `slint-pitfalls.md`) | 165 / 11,746 (31%), 0 over 100, 0 citations |
 | 2 | `desktop-shell.md` | 299 / 22,352, 4 over 100 | 8 in 6 files | 128 / 8,345 (37%), 0 over 100, 0 citations |
-| 3 | `library-data.md` | 314 / 24,572, 9 over 100 | 6 in 6 files | |
+| 3 | `library-data.md` | 314 / 24,572, 9 over 100 | 6 in 6 files | 124 / 8,403 (34%), 0 over 100, 0 citations |
 | 4 | `ci-packaging.md` | 323 / 24,758, 9 over 100 | 1 | |
 | 5.1 | `radio.md` | 181 / 13,308, 6 over 100 | 7 in 5 files | |
 | 5.2 | `visualizer.md` | 159 / 11,280, 1 over 100 | 7 in 6 files | |
@@ -227,9 +228,25 @@ Status: done.
     four commits), not the registry.
 
 ### Phase 3: `library-data.md`
-Status: not started.
+Status: done.
 
-- [ ] **3. The rule and its citations**, one commit.
+- [x] **3. The rule and its citations**, one commit.
+  - **Result:** the six sections kept, each entry cut to the contract and its anchor. The sweep
+    now points at `queries::artwork::ARTWORK_COLUMNS`, which already argued the six columns and
+    the three that bite. Cut as carried at their anchors: the chunk and bulk-trigger mechanics,
+    the grace window and `retire_released`, the first-launch folder and nested-folder absorb, the
+    projection column counts, `TagEditRow`'s missing multi-valued fields, `DurationMs` in seconds,
+    the full rating index, lyrics living in the file. The mid-session `missing_artwork` reconcile
+    went as root `CLAUDE.md`'s.
+  - **Stale:** none. Every qualified name resolves to its definition; `20260910000000` is still
+    the newest `tracks_fts` rebuild and the index still has eight columns; only
+    `bind_track_columns` writes the five searchable columns.
+  - **No comment's stated reason was false.**
+  - **Code diff:** 10 comment lines out, 10 in, 111 characters more.
+  - **Verified against source:** SQLite in libsqlite3-sys 0.30.1 refuses `ALTER` on a virtual
+    table ("virtual tables may not be altered").
+  - **Still landing:** `radio.md:42` and `:96` (the sweep, the ledger) and `ui-patterns.md:216`
+    (`search_name`).
   - **Covers** scan ingest, the two change channels, track projections, ratings, tag
     write-through, M3U8, and smart playlists.
   - **Code citations (6 in 6 files):**

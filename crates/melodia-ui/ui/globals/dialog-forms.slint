@@ -34,9 +34,9 @@ export global SmartEditor {
     callback commit();
 }
 
-// Owned by `ui::callbacks::tags`, whose commit diffs the form against the populate-time snapshot
-// (`library-data.md`). A field the selection disagrees on starts empty behind a ‹multiple values›
-// placeholder.
+// Owned by `ui::callbacks::tags`, whose commit diffs the form against the populate-time snapshot,
+// so a batch edit writes only the fields touched. A field the selection disagrees on starts empty
+// behind a ‹multiple values› placeholder.
 export global TagEditor {
     in-out property <string> title;
     in-out property <string> album;

@@ -148,8 +148,8 @@ pub struct TrackMeta {
 }
 
 /// The Edit Track Information dialog, native columns only. The multi-valued fields are rows it
-/// reads apart, an editor fed from a rendered line splitting `Chanson, Francaise` in two
-/// (`.claude/rules/library-data.md`).
+/// reads apart, an editor fed from a rendered line splitting `Chanson, Francaise` in two and the
+/// save making it permanent.
 #[derive(Clone, Debug, PartialEq, FromRow)]
 pub struct TagEditRow {
     pub id: i64,

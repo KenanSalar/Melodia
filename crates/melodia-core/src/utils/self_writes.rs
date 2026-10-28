@@ -5,7 +5,7 @@
 //! Mark per file immediately before its write, since the TTL has to line up with the event, and
 //! with the DB `file_path`: the set keys on exact [`PathBuf`] equality, so a picker path silently
 //! suppresses nothing. Suppression leaves the tag orchestrator the row's only writer, so it
-//! re-extracts after the write (`.claude/rules/library-data.md`).
+//! re-extracts after the write rather than trusting the form, keeping hash and mtime in step.
 //!
 //! Accepted trades: an external edit inside the TTL is swallowed until the next boot reconcile,
 //! and so is one shadowed by a mark a same-batch `Removed` or `Renamed` stranded. Taking an entry

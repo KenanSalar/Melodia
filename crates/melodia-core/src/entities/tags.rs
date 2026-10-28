@@ -140,7 +140,7 @@ impl TagEdit {
     }
 
     /// The release-level fields this edit emptied, which the commit nulls after its upserts, since
-    /// `upsert_album` can raise one and never lower it (`.claude/rules/library-data.md`).
+    /// `upsert_album` coalesces a cleared NULL away, so it can raise one but never lower it.
     pub fn cleared_release_tags(&self) -> ClearedReleaseTags {
         ClearedReleaseTags {
             label: self.label == FieldEdit::Clear,

@@ -98,8 +98,8 @@ component SmartRuleRowView inherits Rectangle {
 }
 
 // The rule-builder dialog over `SmartEditor`. Every dropdown array mirrors
-// `entities::smart_criteria` by index (`library-data.md`), so a field or operator changes on both
-// sides together.
+// `entities::smart_criteria` by index, `@tr` taking literals only, so a field or operator changes
+// on both sides together; `smart_criteria_tests` reads this file to hold them.
 export component SmartPlaylistEditorBody inherits VerticalLayout {
     spacing: Theme.pad-md;
 

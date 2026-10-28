@@ -253,7 +253,7 @@ fn queued(pairs: &[(i64, i64)]) -> Vec<i64> {
     pairs.iter().map(|&(_, track_id)| track_id).collect()
 }
 
-/// **What `library-data.md` said nothing could check.** The card beside a detail page queues
+/// **What neither crate can check on its own.** The card beside a detail page queues
 /// through `entity_ids`, a second SQL spelling of the page's default order, and the two have
 /// already shipped disagreeing: the same set played in one order from the page and another from
 /// the card. Both are held to the comparator, Rust against SQL in crates that cannot name each
