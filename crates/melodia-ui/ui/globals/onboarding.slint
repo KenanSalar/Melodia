@@ -1,6 +1,7 @@
 // **`mounted` gates the card's `if` branch and `open` drives its fade**, so a close lowers `open`
-// and Rust lowers `mounted` a beat later. Rust owns both timers, for the root `CLAUDE.md`'s reason:
-// nothing under `components/onboarding/` may carry a `changed` handler.
+// and Rust lowers `mounted` a beat later. Rust owns both timers because nothing under
+// `components/onboarding/` may carry a `changed` handler, one outliving the dropped branch
+// panicking on the next open.
 export global Onboarding {
     in-out property <bool> mounted;
     // Raised a frame after `mounted`, so `animate` has an edge to run on.

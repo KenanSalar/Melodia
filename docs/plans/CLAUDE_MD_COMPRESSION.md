@@ -1,6 +1,6 @@
 # Plan: Compress the root CLAUDE.md, and take its citations out of the code
 
-Status: **Phases 1 and 2 done**, Phase 3 next · Owner: Kenan · Created: 2026-10-28 · branch
+Status: **Phases 1 to 3 done**, Phase 4 next · Owner: Kenan · Created: 2026-10-28 · branch
 `docs/trim-comments`
 
 > **Measured 2026-10-28** against `c05b7574`. Every figure below comes from a command run that
@@ -104,7 +104,7 @@ Working doc. Delete when every phase has landed (Phase 5).
 |---|---|---|---|
 | 1 | Fix the contradictions outside `CLAUDE.md` | 4 files wrong | done, plus 2 stale lines found on the way |
 | 2 | Move what has no other home | 7 moves | done, and 3 of Phase 3's pointers dropped in the same edits |
-| 3 | Sweep the 21 citations | 21 lines in 17 files | |
+| 3 | Sweep the 21 citations | 21 lines in 17 files | 0 left (3 went in Phase 2) |
 | 4 | Rewrite `CLAUDE.md` | 921 lines / 76,197 bytes, 160 bold | |
 | 5 | Retire the plan | | |
 
@@ -182,8 +182,10 @@ Each move lands where the fact is enforced. The audit found these arguments carr
   deletion being the last check. Not an ADR edit: the README is the collection's guide.
 
 ### Phase 3: Sweep the 21 citations
-Status: not started. One commit, one Edit per site. Comment lines only, except the two test
-messages in `scrollbars.rs`, the one sanctioned non-comment change.
+Status: done 2026-10-28. One commit, one Edit per site. Comment lines only, except the two test
+messages in `scrollbars.rs`, the one sanctioned non-comment change. Also fixed on the way:
+`view_model_strings.rs` named `PlayerViewModel` as what the two strings reach; they reach
+`QueueVm` and `PlayerVm`.
 
 Each states its own reason in about the length of the pointer it replaces (Decision 2). Re-grep
 first: `git grep -n 'CLAUDE\.md' -- . ':!docs' ':!.claude' ':!CLAUDE.md' ':!README.md'

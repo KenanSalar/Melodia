@@ -41,9 +41,9 @@ const _: () = assert!(
     "LOCALE_NATIVE_NAMES must stay 1:1 with SUPPORTED_LOCALES"
 );
 
-/// The synchronous shadow of `settings.locale` the root `CLAUDE.md`'s sibling-callback rule asks
-/// for, [`crate::ui::appearance::PersistedAccent`]'s shape. No sibling reads it yet; it stops the
-/// next one racing a read against an in-flight write.
+/// The synchronous shadow of `settings.locale`, [`crate::ui::appearance::PersistedAccent`]'s shape:
+/// a sibling callback reading the field off disk can land before an in-flight write and read the
+/// old locale. No sibling reads it yet; it stops the next one racing that write.
 type PersistedLocale = Arc<parking_lot::Mutex<String>>;
 
 /// Hydrate the language lists, seed `language-idx` from the persisted locale, and wire

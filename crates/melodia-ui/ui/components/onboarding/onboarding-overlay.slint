@@ -9,8 +9,9 @@ import { OnboardingFeaturesPanel } from "features-panel.slint";
 // The first-run card, on `DialogOverlay`'s backdrop and card treatment, with a step index and a
 // footer that doesn't close on Next.
 //
-// No `changed` handler watching anything outside the branch (the root `CLAUDE.md`), which rules
-// out `TabBar`, `SearchBar`, `GridColumnsSync`, `FilterThrottle` and `FocusLossWatcher` here.
+// No `changed` handler watching anything outside the branch: the branch drops on close, so such a
+// tracker survives the first open and panics on the second. That rules out `TabBar`, `SearchBar`,
+// `GridColumnsSync`, `FilterThrottle` and `FocusLossWatcher` here.
 // `IconButton`'s `Tooltip` tracks only its own hover, so it may stay.
 export component OnboardingOverlay inherits Rectangle {
     width: 100%;

@@ -2,9 +2,10 @@
 //! `sleep_timer`. It takes `(&AppWindow, &AppState)` rather than a `ViewCtx`, needing neither the
 //! cover tier nor `views.json`.
 //!
-//! **Rust owns the mount and unmount timing**, for the `changed` prohibition the root `CLAUDE.md`
-//! states on `components/onboarding/`: one frame after `mounted` raises `open`, giving `animate`
-//! an edge, and one fade later drops the branch.
+//! **Rust owns the mount and unmount timing**, since nothing under `components/onboarding/` may
+//! carry a `changed` handler: the branch drops on close, so a tracker on anything outside it
+//! survives the first open and panics on the second. One frame after `mounted` raises `open`,
+//! giving `animate` an edge, and one fade later drops the branch.
 
 use std::cell::RefCell;
 use std::rc::Rc;

@@ -78,7 +78,7 @@ flamegraph.svg
 perf.data
 perf.data.old
 
-# heaptrack (we use this for memory regression checks per CLAUDE.md)
+# heaptrack output from the memory regression checks
 heaptrack.*.gz
 heaptrack.*.zst
 *.heaptrack

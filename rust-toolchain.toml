@@ -6,7 +6,9 @@
 # coverage jobs would silently lose their tooling. CI installs from it with a
 # bare `rustup toolchain install`.
 #
-# A bump moves four things together — see CLAUDE.md's Important Conventions.
+# A bump moves four things together: this file, `Cargo.toml`'s `rust-version`,
+# `clippy.toml`'s `msrv` (which overrides the Cargo one) and `README.md`'s
+# prerequisites.
 [toolchain]
 channel = "1.97.0"
 components = ["clippy", "rustfmt", "llvm-tools-preview"]

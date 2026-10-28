@@ -5,7 +5,9 @@
 pub const DEFAULT_LOCALE: &str = "en";
 
 /// In the Language list's order, by each language's own name, 1:1 with `ui::settings::locale`'s
-/// labels. The root `CLAUDE.md` has what a new locale owes.
+/// labels. A new locale owes a row here and in `LOCALE_NATIVE_NAMES`, a catalog started from the
+/// template with `msginit`, and a `LANGUAGE_LETTERS` row in `scripts/patch_vazirmatn.py` wherever
+/// the bundled faces lack its alphabet.
 pub const SUPPORTED_LOCALES: &[&str] = &[
     "id", "de", "en", "es", "fr", "it", "hu", "nl", "pl", "pt_BR", "pt", "vi", "tr", "el", "ru",
     "uk",

@@ -3,8 +3,8 @@
 //!
 //! **The settings block is an allowlist, never a whole-struct dump**, so a new `SettingsData`
 //! field can't start shipping, and `scrobble_credentials.json` is never read here. The log tail is
-//! safe only while no `log::` call writes a credential (root `CLAUDE.md`), and every path goes
-//! through [`redact_home`], a home directory usually holding a real name.
+//! safe only while no `log::` call anywhere writes a credential, which no walk can check, and every
+//! path goes through [`redact_home`], a home directory usually holding a real name.
 
 use std::io::{Read, Seek, SeekFrom};
 use std::path::{Path, PathBuf};

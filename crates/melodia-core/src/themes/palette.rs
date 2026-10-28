@@ -25,7 +25,8 @@ pub struct Palette {
     // because most palettes keep `surface1` all but level with the card.
     pub card_control: u32,
     pub card_control_hover: u32,
-    // 3 semantic, named by every palette with no struct-update fallback (root `CLAUDE.md`).
+    // 3 semantic, named by every palette with no struct-update fallback, so one that forgets a
+    // slot fails to compile rather than greying the traffic lights, toasts and stars.
     pub red: u32,
     pub green: u32,
     pub yellow: u32,
@@ -158,7 +159,7 @@ impl ThemeDef {
 
 /// sRGB luma on the gamma-encoded channels, not the linearized luminance `ui::backdrop` solves
 /// against. Named because `theme.slint`'s `ink-on` spells the same numbers, pinned by
-/// `themes::tests`; `dwm_titlebar::is_dark_from_rgb` is the third copy (root `CLAUDE.md`).
+/// `themes::tests`; `dwm_titlebar::is_dark_from_rgb` is the third copy, pinned by its own tests.
 pub const LUMA_R: f64 = 0.2126;
 pub const LUMA_G: f64 = 0.7152;
 pub const LUMA_B: f64 = 0.0722;

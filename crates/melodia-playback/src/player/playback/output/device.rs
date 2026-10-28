@@ -1,7 +1,9 @@
 //! Opening the output device through a ladder, so a config the host dislikes never boots into
 //! silence: the default first, then every config the device reports in cpal's order, taking the
 //! first that opens and reporting the original failure if none do. A requested rate's configs go
-//! ahead of the default. CI's null device depends on it (root `CLAUDE.md`).
+//! ahead of the default. CI depends on it: the runners have no card, ALSA's default PCM pointing
+//! at the userspace `null` device, and a stricter open fails `crates/melodia/tests/headless.rs`
+//! looking like a scan bug.
 //!
 //! The walk runs twice, [`TARGET_BUFFER`] first and the host's own block size behind it, `Fixed`
 //! being the least portable request here (on ALSA a period, checked against a range for the whole

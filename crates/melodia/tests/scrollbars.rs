@@ -4,9 +4,9 @@
 //! Also for what a scroller does with a *drag*, which lands here rather than beside itself
 //! because it is answered on the same two elements by the same block walk.
 //!
-//! `CLAUDE.md` states the rule — both policies `always-off` on every scroller, with a
-//! sibling `OverlayScrollbar` pinned by absolute coordinates — because std-widgets' bar
-//! paints inside padded containers and can't be reskinned. A drifted scroller reads as a
+//! The rule is both policies `always-off` on every scroller, with a sibling
+//! `OverlayScrollbar` pinned by absolute coordinates, because std-widgets' bar paints
+//! inside padded containers and can't be reskinned. A drifted scroller reads as a
 //! different app the moment its content overflows, and looks fine in the file it lives in.
 //!
 //! Two checks, because the two failures are different shapes. A wrong *value* is the one
@@ -152,7 +152,7 @@ fn every_scroller_opts_out_of_the_stock_scrollbar() {
     assert!(
         offenders.is_empty(),
         "every ScrollView/ListView must turn both stock scrollbars off and mount an \
-         OverlayScrollbar instead (CLAUDE.md, Slint Conventions):\n{}",
+         OverlayScrollbar instead, std-widgets' bar painting inside padded containers:\n{}",
         offenders.join("\n")
     );
 }
@@ -301,7 +301,7 @@ fn no_scrollbar_policy_asks_for_the_stock_bar() {
     assert!(
         offenders.is_empty(),
         "the only scrollbar in the tree is OverlayScrollbar, so every policy reads \
-         `{OPT_OUT}` (CLAUDE.md, Slint Conventions):\n{}",
+         `{OPT_OUT}`:\n{}",
         offenders.join("\n")
     );
 }

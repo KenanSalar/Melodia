@@ -1,4 +1,4 @@
-// Built rather than upstream's, by `scripts/patch_vazirmatn.py` (the root `CLAUDE.md`'s Fonts).
+// Built rather than upstream's, by `scripts/patch_vazirmatn.py`, which argues the merge.
 import "assets/fonts/vazirmatn/Vazirmatn-Regular.ttf";
 import "assets/fonts/vazirmatn/Vazirmatn-Medium.ttf";
 import "assets/fonts/vazirmatn/Vazirmatn-SemiBold.ttf";
@@ -139,7 +139,7 @@ export component AppWindow inherits Window {
     }
 
     // `ResizeRing`'s band, as wide as the margins it covers so they resize as the frame's borders
-    // did. No `resize-border-width`, for the root `CLAUDE.md`'s reason.
+    // did. No `resize-border-width`: Slint's handler for it hit-tests square corners.
     property <length> resize-band: max(Theme.resize-border, root.margin-left, root.margin-right,
         root.margin-bottom);
     no-frame: root.frameless;

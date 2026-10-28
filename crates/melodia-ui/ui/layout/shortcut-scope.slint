@@ -82,7 +82,8 @@ export component ShortcutScope inherits FocusScope {
                 Dialog.open = false;
                 return accept;
             }
-            // Below the dialog, matching the paint order (the root `CLAUDE.md`).
+            // Below the dialog, matching the paint order: the card mounts under
+            // `DialogOverlay`, so a dialog its folder picker raises takes Escape first.
             if (Onboarding.open) {
                 Onboarding.dismiss();
                 return accept;
