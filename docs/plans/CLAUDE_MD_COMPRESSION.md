@@ -1,6 +1,6 @@
 # Plan: Compress the root CLAUDE.md, and take its citations out of the code
 
-Status: **Phases 1 to 4 done**, Phase 5 next · Owner: Kenan · Created: 2026-10-28 · branch
+Status: **Phases 1 to 4 done**, Phase 5 waits on Open questions 1 to 3 · Owner: Kenan · Created: 2026-10-28 · branch
 `docs/trim-comments`
 
 > **Measured 2026-10-28** against `c05b7574`. Every figure below comes from a command run that
@@ -106,7 +106,7 @@ Working doc. Delete when every phase has landed (Phase 5).
 | 2 | Move what has no other home | 7 moves | done, and 3 of Phase 3's pointers dropped in the same edits |
 | 3 | Sweep the 21 citations | 21 lines in 17 files | 0 left (3 went in Phase 2) |
 | 4 | Rewrite `CLAUDE.md` | 921 lines / 76,197 bytes, 160 bold | 195 lines / 13,466 bytes, 62 bold |
-| 5 | Retire the plan | | |
+| 5 | Retire the plan | | waits on Open questions 1 to 3 |
 
 ## Phases
 
@@ -371,18 +371,30 @@ also runs from about eight view teardowns; the winit retirement names `file_drop
 - `README.md:374` (Phase 1).
 
 ### Phase 5: Retire the plan
-Status: not started.
+Status: blocked on Kenan's answers, 2026-10-28. Everything but the deletion is done.
 
-- [ ] Confirm Progress is complete and every phase landed.
-- [ ] Check that no decision recorded only here goes unrecorded.
-- [ ] Offer any `README.md` or `CONTRIBUTING.md` edits the phases leave.
-- [ ] Delete this file. It owes no ADR (Decision 4).
+- [x] Confirm Progress is complete and every phase landed: `eee477e1`, `359f566f`, `e7e21367`,
+  `ccee0feb`.
+- [x] Check that no decision recorded only here goes unrecorded. Decisions 2, 4 and 5 now live in
+  `CLAUDE.md` and ADR 1, and 7 and 8 in Claude's memory. Decision 6 (bold marks a bullet's lead
+  and nothing else) lives only here: Open question 2.
+- [x] Offer any `README.md` or `CONTRIBUTING.md` edits the phases leave: none. `README.md:374`
+  landed in Phase 1, and `CONTRIBUTING.md` names only `docs/adr/`.
+- [ ] Delete this file. It owes no ADR (Decision 4). Waits on Open questions 1 to 3.
 
 ## Open questions
 
 1. **A walk holding Decision 2.** Nothing enforces "no comment cites a rule or `CLAUDE.md`"; a
    corpus walk in `crates/melodia/tests/` could, with the docs and the PR template exempt. A new
    test needs Kenan's go, so it is not a phase.
+2. **Where Decision 6 goes.** Bold marking a bullet's lead and nothing else is recorded only here.
+   Either a line in `CLAUDE.md`'s "Where things go", or let it go with this file, the rewrite
+   already following it.
+3. **The arena cap's two loose ends** (found in Phase 4). `allocator::pin_arenas_and_thresholds`
+   says it "must precede the first malloc on any thread", but `prepare_process` removes the
+   updater's stale binary first, on the main thread. Only other threads create arenas, so the
+   order is harmless; either the doc says "before a second thread exists" or the call moves above
+   the removal. And `CLAUDE.md`'s "Don't lower it to 1" has no stated reason anywhere in the tree.
 
 ## Verification
 
