@@ -48,21 +48,16 @@ jobs:
       - uses: ./.github/actions/headless-audio
 
       # One instrumented run feeds both outputs; the report phases re-run nothing.
-      # The regex drops `melodia-ui`'s generated `app-window.rs`, big enough to
-      # swamp the denominator alone and missed by cargo-llvm-cov's built-in
-      # excludes, which reach the sysroot and registry but not a member's
-      # OUT_DIR. Scoped to that crate, so a build script that one day generates
-      # exercised code doesn't vanish. Without `pipefail`, `tee` swallows a
-      # failing `report` and publishes an empty summary.
+      # No `--ignore-filename-regex`: cargo-llvm-cov's defaults already drop its
+      # whole target dir, `melodia-ui`'s generated `app-window.rs` included.
+      # Without `pipefail`, `tee` swallows a failing `report` and publishes an
+      # empty summary.
       - name: Run tests with coverage
-        env:
-          IGNORE_GENERATED: '.*/build/melodia-ui-[^/]*/out/.*'
         run: |
           set -o pipefail
           cargo llvm-cov --locked --workspace --no-report
-          cargo llvm-cov report --html --ignore-filename-regex "$IGNORE_GENERATED"
-          cargo llvm-cov report --summary-only --ignore-filename-regex "$IGNORE_GENERATED" \
-            | tee coverage-summary.txt
+          cargo llvm-cov report --html
+          cargo llvm-cov report --summary-only | tee coverage-summary.txt
 
       - name: Coverage summary to job log
         if: ${{ !cancelled() }}

@@ -302,7 +302,7 @@ Status: done.
     - `ring`, `aws-lc-sys`, `libsqlite3-sys` and `blake3` are all in `Cargo.lock`.
   - **Not verified:** the Policy 12.5 footnote and lintian's tag coverage (no lintian here), and
     `cargo wix`'s single-member auto-select at the git pin (argued at its step, not reread).
-  - **Conflict, unresolved:** see Open questions 4.
+  - **Coverage regex:** redundant, removed after the phase; see Open questions 4.
   - **Code citation (1):** `.github/workflows/deploy-coverage.yml:32`, a YAML `#` comment.
   - **Cited by, keep findable:** the most-cited rule.
     - `testing.md:15`, at the gate and the coverage flags;
@@ -461,15 +461,12 @@ Status: not started.
 3. **`slint.md` (54 lines over 100), `sqlx.md` (20) and `unsafe-rust.md` (11) stay unwrapped.**
    Phases 8 and 9 only sweep their citations and fix the font bullet. Compressing them would be a
    phase of its own.
-4. **Does coverage still need its `--ignore-filename-regex`?** `deploy-coverage.yml:52` says
-   cargo-llvm-cov's built-in excludes miss `melodia-ui`'s `OUT_DIR`. By source they don't:
-   cargo-llvm-cov 0.8.7, what install-action v2.85.2 installs, puts `^<target>/llvm-cov-target/`
-   in every report's default ignore (`report.rs`, `push_abs_path(&cx.ws.target_dir)`), the
-   `OUT_DIR` sits under it, and 0.5.0 already did the same. Against that, `22006716`'s message
-   records `app-window.rs` in the denominator, and the only run before it has an expired log
-   (HTTP 410). Phase 4 dropped the claim from the rule and left the comment. One instrumented run
-   without the flag settles it; if the source is right, the regex and its comment go, which is a
-   code change outside this plan.
+4. **Resolved: coverage's `--ignore-filename-regex` was redundant, and is gone.** cargo-llvm-cov
+   drops its whole target dir by default, `melodia-ui`'s `OUT_DIR` included (0.8.7 in CI, 0.9.1
+   locally, and as far back as 0.5.0). Checked on 2026-10-28 with an instrumented `melodia-views`
+   run: the defaults alone and CI's regex gave byte-identical summaries, and switching the
+   defaults off brought `app-window.rs` back, so the file was in the map. `22006716`'s message
+   claiming otherwise was wrong.
 
 ## Verification
 
