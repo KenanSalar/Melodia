@@ -18,10 +18,10 @@ Decision: a choice that spans the whole project and has no file to sit beside ge
 constant is argued in the doc comment on the constant, where it cannot drift out of sight of the
 code it describes. A contract spanning trees that no single file reaches is a `.claude/rules/`
 entry. A prohibition violable from anywhere is a bullet in `CLAUDE.md`. A feature's implementation
-shape is a working doc under `docs/plans/`, still as temporary as it is today, except that one
-reaching the point of deletion now leaves an ADR behind first. That last clause is the whole
-mechanism, and it is attached to something that already happens rather than to a habit somebody has
-to remember.
+shape is a working doc under `docs/plans/`, still as temporary as it is today. Before one is
+deleted, what it built is argued at its anchors, and an ADR is written only where it carried a
+significant decision, so the deletion is the last check that none went unrecorded. That check is
+attached to something that already happens rather than to a habit somebody has to remember.
 
 Alternatives: keeping the working docs instead of deleting them; a single `DECISIONS.md`; MADR;
 leaving the arguments in commit messages, which is the status quo.

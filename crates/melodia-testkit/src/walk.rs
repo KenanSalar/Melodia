@@ -14,8 +14,8 @@ use crate::{FONTS_DIR, REPO_ROOT, UI_SRC_DIR};
 pub const MIN_SLINT_SOURCES: usize = 100;
 
 /// Vacuity floor for a walk over the Rust tree, loose for [`MIN_SLINT_SOURCES`]' reason.
-/// Shared rather than declared per pin: ten files stand on that corpus, and a copy apiece is a
-/// copy that can disagree about how much of it has to be there.
+/// Shared rather than declared per pin: every walk over the Rust tree stands on it, and a copy
+/// apiece is a copy that can disagree about how much of it has to be there.
 pub const MIN_SOURCES: usize = 200;
 
 /// Every module that owns callback wiring: the cross-cutting root plus the twelve view
@@ -265,8 +265,8 @@ pub fn raw_rust_sources() -> Vec<(String, String)> {
 /// which is held to its exact count rather than forgiven wholesale, since a second call written
 /// into a sanctioned file is itself the regression.
 ///
-/// Shared rather than per-pin because the three walks standing on it now live in three
-/// different modules, and a copy apiece is a copy that can drift on the exemption semantics —
+/// Shared rather than per-pin because the walks standing on it live in different modules, and a
+/// copy apiece is a copy that can drift on the exemption semantics —
 /// which is the half a reviewer cannot check by reading one of them.
 ///
 /// Two seams it does not cover, both shared with the tree's other corpus pins:

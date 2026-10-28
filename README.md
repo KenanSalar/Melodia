@@ -371,8 +371,9 @@ names no database or socket, the decoders name no mixer, the tag writer names no
 Slint 1.18 on FemtoVG, Tokio, Symphonia and cpal (with ALSA and WASAPI directly for exclusive output),
 SQLite via SQLx with WAL and FTS5, Lofty for tags, Rayon, BLAKE3, and minisign for the updater.
 
-[`CLAUDE.md`](CLAUDE.md) is the architecture reference; [`docs/adr/`](docs/adr/) records why each
-piece was chosen over the alternatives.
+The doc comments are the architecture reference, [`CLAUDE.md`](CLAUDE.md) holds the repo-wide
+rules and commands for a coding agent, and [`docs/adr/`](docs/adr/) records why each piece was
+chosen over the alternatives.
 
 ## Data and Logs
 

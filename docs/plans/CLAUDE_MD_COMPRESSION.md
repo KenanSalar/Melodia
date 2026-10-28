@@ -1,6 +1,6 @@
 # Plan: Compress the root CLAUDE.md, and take its citations out of the code
 
-Status: **not started**, Phase 1 next · Owner: Kenan · Created: 2026-10-28 · branch
+Status: **Phase 1 done**, Phase 2 next · Owner: Kenan · Created: 2026-10-28 · branch
 `docs/trim-comments`
 
 > **Measured 2026-10-28** against `c05b7574`. Every figure below comes from a command run that
@@ -102,7 +102,7 @@ Working doc. Delete when every phase has landed (Phase 5).
 
 | Phase | What | Before | After |
 |---|---|---|---|
-| 1 | Fix the contradictions outside `CLAUDE.md` | 4 files wrong | |
+| 1 | Fix the contradictions outside `CLAUDE.md` | 4 files wrong | done, plus 2 stale lines found on the way |
 | 2 | Move what has no other home | 7 moves | |
 | 3 | Sweep the 21 citations | 21 lines in 17 files | |
 | 4 | Rewrite `CLAUDE.md` | 921 lines / 76,197 bytes, 160 bold | |
@@ -111,9 +111,11 @@ Working doc. Delete when every phase has landed (Phase 5).
 ## Phases
 
 ### Phase 1: Fix the contradictions outside `CLAUDE.md`
-Status: not started. One commit. Markdown and one comment.
+Status: done 2026-10-28. One commit. Markdown and two comments. Also fixed on the way:
+`tokio.md`'s first bullet (a sync guard across `.await` is a compile error under `tokio::spawn`,
+not a panic) and `walk.rs`'s `spellings_outside` doc ("three walks", five today).
 
-- [ ] **ADR 1, corrected in place** (Decision 4). `docs/adr/0001-record-architecture-decisions.md`
+- [x] **ADR 1, corrected in place** (Decision 4). `docs/adr/0001-record-architecture-decisions.md`
   lines 21 to 24: replace "except that one reaching the point of deletion now leaves an ADR behind
   first. That last clause is the whole mechanism, and it is attached to something that already
   happens rather than to a habit somebody has to remember." with the correct rule: before a plan
@@ -121,17 +123,17 @@ Status: not started. One commit. Markdown and one comment.
   carried a significant decision, the deletion being the last check that none went unrecorded.
   No `**Amendment:**` paragraph, no status change. Re-read the whole ADR afterwards: its Trade
   paragraph mentions deleted working docs and must still agree. An ADR names no plan file.
-- [ ] **`tokio.md`'s mutex bullet** says "Prefer `std::sync::Mutex` over `tokio::sync::Mutex`",
+- [x] **`tokio.md`'s mutex bullet** says "Prefer `std::sync::Mutex` over `tokio::sync::Mutex`",
   where `CLAUDE.md` says `parking_lot::Mutex` and the tree has 70 `parking_lot` uses against 21
   `std`. Before rewording, read the `std` sites: `melodia-store` and `melodia-testkit` carry no
   `parking_lot`, and `PlayerState` and `exec_lock` in `melodia-engine` use `std` on purpose. State
   the rule the tree follows (a synchronous mutex unless the lock crosses `.await`,
   `parking_lot::Mutex` where the crate carries it), so both files say one thing.
-- [ ] **`slint.md`'s Animations bullet** names `Theme.duration-fast` and `Theme.duration-medium`.
+- [x] **`slint.md`'s Animations bullet** names `Theme.duration-fast` and `Theme.duration-medium`.
   The tokens are `Theme.dur-fast` and `Theme.dur-med` (`theme.slint:185-186`).
-- [ ] **`crates/melodia-testkit/src/walk.rs:17`** says "ten files stand on that corpus". Count the
+- [x] **`crates/melodia-testkit/src/walk.rs:17`** says "ten files stand on that corpus". Count the
   files naming `MIN_SOURCES` and state it without a number if it would rot.
-- [ ] **`README.md:374`**: "`CLAUDE.md` is the architecture reference" becomes what it is after
+- [x] **`README.md:374`**: "`CLAUDE.md` is the architecture reference" becomes what it is after
   Phase 4: the repo-wide rules and commands for a coding agent, the code's doc comments being
   the architecture reference.
 

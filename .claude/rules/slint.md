@@ -128,8 +128,8 @@ paths:
 
 - `animate <property> { duration: 200ms; easing: ease-in-out; }` placed inside a component
   animates whenever that property changes.
-- Match the design tokens defined in `Theme` (e.g. `Theme.duration-fast: 200ms`,
-  `Theme.duration-medium: 250ms`).
+- Match the design tokens defined in `Theme` (e.g. `Theme.dur-fast: 200ms`,
+  `Theme.dur-med: 250ms`).
 - Use `states` and `transitions` for multi-property state machines (e.g. hover/pressed/selected)
   instead of stitching individual `animate` blocks.
 
