@@ -129,7 +129,8 @@ each earn its place, and re-read every comment before moving on.
 
 ```bash
 # production Rust
-cloc --include-lang=Rust --exclude-dir=tests,target,melodia-testkit,benches --not-match-f='_tests\.rs$' crates
+cloc --include-lang=Rust --exclude-dir=tests,target,melodia-testkit,benches \
+  --not-match-f='_tests\.rs$' crates
 # the Slint tree: cloc has no Slint, and C++ comments the same way
 cloc --force-lang=C++,slint --include-ext=slint crates/melodia-ui/ui
 ```

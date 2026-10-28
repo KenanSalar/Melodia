@@ -585,7 +585,9 @@ Status: not started.
 
 - [ ] Confirm Progress is complete and every phase landed.
 - [ ] Check that no decision recorded only here goes unrecorded once this file is deleted.
-- [ ] Offer the `CLAUDE.md` and `README.md` edits the phases leave, if any.
+- [x] Offer the `CLAUDE.md` and `README.md` edits the phases leave, if any. All three made on
+  2026-10-28; the radio row names "the stream's prohibitions" in place of the ring and feed
+  thread, that being what its stream section now holds. No `README.md` edit was owed.
   - From Phase 2: root `CLAUDE.md`'s UI Structure bullet still says Slint's `resize-border-width`
     handler "compares a logical band with a physical cursor", stale since Slint 1.18. Drop that
     clause; the square corners alone carry the argument `app-window.slint:140` points to.
@@ -612,12 +614,18 @@ Status: not started.
    no clippy. Lean: run clippy for a phase whose diff changes a `///` or `//!` line, since CI will
    run it on the PR regardless. Kenan's call. Phase 5.3 is the case for it: `doc_markdown` failed
    a rewritten `swap.rs` doc that `cargo fmt --check` passed.
-2. **`.github/pull_request_template.md:24` sends contributors to `.claude/rules/*.md`.** That
-   cuts against `CLAUDE.md`'s "the rules are Claude's tooling, not documentation a contributor
-   reads". It isn't a code comment, so no phase touches it as written.
-3. **`slint.md` (54 lines over 100), `sqlx.md` (20) and `unsafe-rust.md` (11) stay unwrapped.**
-   Phases 8 and 9 only sweep their citations and fix the font bullet. Compressing them would be a
-   phase of its own.
+2. **Resolved: the PR template no longer sends contributors to `.claude/rules/`** (Kenan,
+   2026-10-28). Its docs checklist names `CLAUDE.md` and `README.md`; `CONTRIBUTING.md` and
+   `README.md` never named the rules.
+3. **Resolved: every rule is wrapped at 100 columns** (Kenan, 2026-10-28: the long lines hurt
+   readability). Not only the three named here: ten rules held 175 lines over 100, now none
+   outside 12 table rows (`code-style.md` 2, `unsafe-rust.md` 10), which markdown can't wrap.
+   Line breaks only: every frontmatter byte-identical, every file's text identical with whitespace
+   collapsed, save one `#` continuing a TOML comment in `rust-performance.md`'s release-profile
+   block, and a `\` continuing `code-style.md`'s `cloc` command. Root `CLAUDE.md` took the same
+   treatment (109 lines over 100, the longest 2,905): what remains is its 9 table rows and two
+   code spans too long for any line, the `app-window.slint` layout sketch and the `msginit`
+   command, each now on a line of its own.
 4. **Resolved: coverage's `--ignore-filename-regex` was redundant, and is gone.** cargo-llvm-cov
    drops its whole target dir by default, `melodia-ui`'s `OUT_DIR` included (0.8.7 in CI, 0.9.1
    locally, and as far back as 0.5.0). Checked on 2026-10-28 with an instrumented `melodia-views`

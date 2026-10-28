@@ -1,10 +1,13 @@
 # CLAUDE.md
 
-Guidance for Claude Code in this repo. Cross-platform desktop music player: **Slint 1.18** UI + pure-Rust backend, direct calls + tokio channels (no WebView, and the only IPC is between two *Melodias* — the single-instance socket below).
+Guidance for Claude Code in this repo. Cross-platform desktop music player: **Slint 1.18** UI +
+pure-Rust backend, direct calls + tokio channels (no WebView, and the only IPC is between two
+*Melodias* — the single-instance socket below).
 
 ## Where the docs live
 
-This file holds what applies repo-wide. Subsystem contracts load on demand — **put new subsystem detail in the rule, not here.**
+This file holds what applies repo-wide. Subsystem contracts load on demand — **put new subsystem
+detail in the rule, not here.**
 
 | file | covers |
 |------|--------|
@@ -14,22 +17,54 @@ This file holds what applies repo-wide. Subsystem contracts load on demand — *
 | `.claude/rules/desktop-shell.md` | window chrome + winit, tray, media keys, always-on-top, force-exit shutdown |
 | `.claude/rules/updater.md` | install methods, manifest signing, the release matrix |
 | `.claude/rules/visualizer.md` | the visualizer's UI half — arming, the tick's gates, the strip and its pickers |
-| `.claude/rules/radio.md` | the directory facade and its off switch, the two station tables, the stream path's ring and feed thread, the numbers both trees spell |
+| `.claude/rules/radio.md` | the directory facade and its off switch, the two station tables, the stream's prohibitions, the numbers both trees spell |
 | `.claude/rules/ci-packaging.md` | the PR gate, the skip matrix, coverage, action pinning, the five package formats and their licence pins |
 | `.claude/rules/testing.md` | testing practice, not this tree's inventory: the ISTQB principles, how to pick cases, the Rust attribute and determinism rules, assertion discipline |
 | `.claude/rules/*.md` (rest) | per-crate best practices (tokio, sqlx, slint, symphonia, lofty, rayon, serde, blake3, rust-performance) plus `slint-pitfalls`, `unsafe-rust` and `code-style` |
 
-Rules are **path-scoped** by a `paths:` glob and load when Claude *reads* a matching file, so a grep hit or a clippy failure won't pull one in. **A rule earns its place only when its subject has no single anchor file**: a coupling between trees (Rust ↔ `.slint`, Rust ↔ CI, Rust ↔ a shipped migration nobody may edit), or a comparison across peers that no one of them owns. Everything else is argued *at its anchor*, in the doc comment on the constant, function or migration it constrains, where it cannot drift out of sight of the code it describes. A **prohibition** violable from outside that anchor's directory stays in this file. Hence "no `unwrap`", the zbus footgun and the `--version` contract sitting here.
+Rules are **path-scoped** by a `paths:` glob and load when Claude *reads* a matching file, so a
+grep hit or a clippy failure won't pull one in. **A rule earns its place only when its subject has
+no single anchor file**: a coupling between trees (Rust ↔ `.slint`, Rust ↔ CI, Rust ↔ a shipped
+migration nobody may edit), or a comparison across peers that no one of them owns. Everything else
+is argued *at its anchor*, in the doc comment on the constant, function or migration it
+constrains, where it cannot drift out of sight of the code it describes. A **prohibition**
+violable from outside that anchor's directory stays in this file. Hence "no `unwrap`", the zbus
+footgun and the `--version` contract sitting here.
 
-Two copies of one argument is the failure mode that test exists to prevent, and it is not hypothetical: a task's module doc and the rule describing it once came to disagree about whether a set was persisted, each correct on the day it was written. Prose in a rule that restates a doc comment is the copy to delete.
+Two copies of one argument is the failure mode that test exists to prevent, and it is not
+hypothetical: a task's module doc and the rule describing it once came to disagree about whether a
+set was persisted, each correct on the day it was written. Prose in a rule that restates a doc
+comment is the copy to delete.
 
-A subsystem gets a `CLAUDE.md` when it **is** a directory and its contract needs more than the module `//!` docs carry; a `.claude/rules/` entry when the subject spans trees no single file can reach. UI features always span (`.slint` under `crates/melodia-ui/ui/`, Rust under `crates/melodia-views/src/ui/`), so a per-directory file would reach one tree and silently miss the other.
+A subsystem gets a `CLAUDE.md` when it **is** a directory and its contract needs more than the
+module `//!` docs carry; a `.claude/rules/` entry when the subject spans trees no single file can
+reach. UI features always span (`.slint` under `crates/melodia-ui/ui/`, Rust under
+`crates/melodia-views/src/ui/`), so a per-directory file would reach one tree and silently miss the
+other.
 
-Only this file is re-injected after `/compact`; nested ones come back on the next read in their directory, so a long session can lose one without saying so. Module `//!` docs are the third tier and usually the most current, and tuning constants are justified at their definitions — link, don't restate.
+Only this file is re-injected after `/compact`; nested ones come back on the next read in their
+directory, so a long session can lose one without saying so. Module `//!` docs are the third tier
+and usually the most current, and tuning constants are justified at their definitions — link,
+don't restate.
 
-**`docs/adr/` answers the question none of the above can: why this, and not the obvious alternative.** A choice between two libraries has no anchor file, because the code is the consequence of the decision rather than the decision, so it lands nowhere or lands in a working doc the convention then deletes. It carries no `paths:` glob and does not load on its own; start at `docs/adr/README.md`, which holds the index, the shape and when not to write one. **A prohibition here that used to argue itself is argued there now — don't restore the paragraph, and don't put a second copy of one in an ADR either.**
+**`docs/adr/` answers the question none of the above can: why this, and not the obvious
+alternative.** A choice between two libraries has no anchor file, because the code is the
+consequence of the decision rather than the decision, so it lands nowhere or lands in a working doc
+the convention then deletes. It carries no `paths:` glob and does not load on its own; start at
+`docs/adr/README.md`, which holds the index, the shape and when not to write one. **A prohibition
+here that used to argue itself is argued there now — don't restore the paragraph, and don't put a
+second copy of one in an ADR either.**
 
-**An ADR records an architecturally significant decision, never a feature.** Significant means it shapes the structure, a quality the whole app must hold (memory, latency, trust), an external dependency, an interface other code builds on or how the code is built; that it is costly to reverse; and that a real alternative was on the table. A feature is not a decision, whatever its size, and neither is a tuning constant, a UI treatment or anything one module can undo alone. The record is best written when the decision is made, while the alternatives and constraints are still in view. **A shipped plan doc owes no ADR by itself**: before it is deleted, what it built is argued at its anchors (doc comments, the rules, `README.md`), and the deletion is the last check that no significant decision inside it went unrecorded. One decision per ADR, titled with the call; an accepted one is amended or superseded, never rewritten. The rest of the shape is the README's.
+**An ADR records an architecturally significant decision, never a feature.** Significant means it
+shapes the structure, a quality the whole app must hold (memory, latency, trust), an external
+dependency, an interface other code builds on or how the code is built; that it is costly to
+reverse; and that a real alternative was on the table. A feature is not a decision, whatever its
+size, and neither is a tuning constant, a UI treatment or anything one module can undo alone. The
+record is best written when the decision is made, while the alternatives and constraints are still
+in view. **A shipped plan doc owes no ADR by itself**: before it is deleted, what it built is
+argued at its anchors (doc comments, the rules, `README.md`), and the deletion is the last check
+that no significant decision inside it went unrecorded. One decision per ADR, titled with the call;
+an accepted one is amended or superseded, never rewritten. The rest of the shape is the README's.
 
 ## Build & Dev Commands
 
@@ -46,128 +81,725 @@ cargo llvm-cov --workspace --html          # coverage → target/llvm-cov/html/
 ## Prerequisites
 
 - **Rust** edition 2024, pinned to 1.97.0 by `rust-toolchain.toml`.
-- **Linux**: GTK / X11 / Wayland dev pkgs for Slint femtovg (`libfontconfig1-dev`, `libfreetype6-dev`, Vulkan/OpenGL; `libwayland-dev` on Wayland). No WebKitGTK.
+- **Linux**: GTK / X11 / Wayland dev pkgs for Slint femtovg (`libfontconfig1-dev`,
+  `libfreetype6-dev`, Vulkan/OpenGL; `libwayland-dev` on Wayland). No WebKitGTK.
 - **Windows**: no extra deps.
 
 ## Architecture
 
 ### State & Playback Flow
 
-- **Library API** (`crates/melodia-app/src/library/`): pure Rust `pub async fn`s returning `Result<T, AppError>`. **The UI reaches the database through here and nowhere else** — cargo's property now, not a convention to remember: `melodia-views` names neither `melodia-store` nor `melodia-net`.
-- **PlayerState** (`crates/melodia-engine/src/player/engine/state/mod.rs`): state machine behind `std::sync::Mutex`. `with_state_emit()` mutates → builds the VM → drops the lock → publishes on a `watch` → returns `Vec<PlayerAction>` for `execute_actions()`. **Pair the two only through `emit_and_execute()`** (`player/engine/actions.rs`), whose per-handle `exec_lock` spans both halves so mutation order == side-effect order; a bare `with_state_emit` + `execute_actions` pair is a bug.
-- **ViewModel propagation** — three `tokio::sync::watch`: `view_model_tx` (state minus queue), `queue_tx`, `position_tx` (500 ms). Prod uses `to_view_model_light` + `to_queue_view_model`; the full `to_view_model()` is `#[cfg(test)]`-only (no per-tick queue clone).
-- **Bridge** (`crates/melodia-views/src/ui/shell/bridge.rs`): `slint::spawn_local(async_compat::Compat::new(...))` futures subscribe and write Slint properties on the UI thread.
-- **`PlayerAction`** is the side-effect list run after the lock drops. Persistence is deliberately not on it — the periodic queue/position save in `handlers.rs` writes through `queries::track` directly.
-- **The audio device opens through `output::device::open`, which tries the device's own config and then every config it reports** — taking the first that works and reporting the *original* failure if none do. Opening the default config alone turns any config the host dislikes into a boot with no audio at all, and it is also what CI depends on: the runners have no card and `.github/actions/headless-audio` points ALSA's default PCM at the userspace `null` device, so a stricter open fails `crates/melodia/tests/headless.rs` looking like a scan bug. **`PlaybackEngine` owns the `AudioOutput`**, so a lost device is reopened, on the current default wherever no chosen device is back yet, rather than reported and left silent; the recovery, and the stall watch that catches the loss no host reports, are `tasks::audio_health`'s, and what a reopen may touch is `.claude/rules/audio-stack.md`'s.
+- **Library API** (`crates/melodia-app/src/library/`): pure Rust `pub async fn`s returning
+  `Result<T, AppError>`. **The UI reaches the database through here and nowhere else** — cargo's
+  property now, not a convention to remember: `melodia-views` names neither `melodia-store` nor
+  `melodia-net`.
+- **PlayerState** (`crates/melodia-engine/src/player/engine/state/mod.rs`): state machine behind
+  `std::sync::Mutex`. `with_state_emit()` mutates → builds the VM → drops the lock → publishes on a
+  `watch` → returns `Vec<PlayerAction>` for `execute_actions()`. **Pair the two only through
+  `emit_and_execute()`** (`player/engine/actions.rs`), whose per-handle `exec_lock` spans both
+  halves so mutation order == side-effect order; a bare `with_state_emit` + `execute_actions` pair
+  is a bug.
+- **ViewModel propagation** — three `tokio::sync::watch`: `view_model_tx` (state minus queue),
+  `queue_tx`, `position_tx` (500 ms). Prod uses `to_view_model_light` + `to_queue_view_model`; the
+  full `to_view_model()` is `#[cfg(test)]`-only (no per-tick queue clone).
+- **Bridge** (`crates/melodia-views/src/ui/shell/bridge.rs`):
+  `slint::spawn_local(async_compat::Compat::new(...))` futures subscribe and write Slint properties
+  on the UI thread.
+- **`PlayerAction`** is the side-effect list run after the lock drops. Persistence is deliberately
+  not on it — the periodic queue/position save in `handlers.rs` writes through `queries::track`
+  directly.
+- **The audio device opens through `output::device::open`, which tries the device's own config and
+  then every config it reports** — taking the first that works and reporting the *original*
+  failure if none do. Opening the default config alone turns any config the host dislikes into a
+  boot with no audio at all, and it is also what CI depends on: the runners have no card and
+  `.github/actions/headless-audio` points ALSA's default PCM at the userspace `null` device, so a
+  stricter open fails `crates/melodia/tests/headless.rs` looking like a scan bug.
+  **`PlaybackEngine` owns the `AudioOutput`**, so a lost device is reopened, on the current
+  default wherever no chosen device is back yet, rather than reported and left silent; the
+  recovery, and the stall watch that catches the loss no host reports, are `tasks::audio_health`'s,
+  and what a reopen may touch is `.claude/rules/audio-stack.md`'s.
 
 ### Threading Rules
 
 - Slint event loop runs on the **main thread** only. Never block it.
 - One **tokio multi-thread runtime** in `main.rs`, shared as `Arc<Runtime>`.
 - **UI → backend**: callbacks `runtime.spawn(...)`, push results back over channels.
-- **Backend → UI** (never `ui.set_*` from background): (1) `slint::spawn_local(async_compat::Compat::new(...))` UI-thread task that `.await`s tokio futures — **preferred** for reactive loops; (2) `slint::invoke_from_event_loop(...)` fire-and-forget; (3) `weak_handle.upgrade_in_event_loop(|ui| …)` auto-handles a dropped UI.
-- **Models from background**: `upgrade_in_event_loop` + `as_any().downcast_ref::<VecModel<T>>()`, except what can grow with the library. Both Songs tabs, the four details and the queue panel are a `ui::paged_rows::PagedRows`, or built over one, reached through `installed` (`track_rows::TrackRows`, loaded through `track_rows`' `PagedTrackList` path except for a detail's fresh open, and `queue_rows::QueueRows` over one for the panel), and the seven library card grids a `paged_rows::grid::PagedGrid`, loaded only through `ui::card_grid`.
-- **A thread name fits in 15 bytes or Linux silently truncates it.** `pthread_setname_np` caps at `TASK_COMM_LEN`, and std truncates rather than erroring, so a longer name costs nothing at the spawn and shows up docked in `htop`, `perf` and `/proc`, the three places the name is for. Rust keeps the full string, so `crash_report`'s `thread.name()` is unaffected either way. Applies to the rayon pools too, each naming its threads by closure, where the budget is the prefix *plus* the widest index (`cover-decode-{i}`, `scan-{i}`, `tag-write-{i}`, `rayon-{i}`). Held by `crates/melodia/tests/packaging.rs`'s `no_thread_name_outgrows_what_the_kernel_keeps`, which walks every crate rather than listing the spawns.
+- **Backend → UI** (never `ui.set_*` from background): (1)
+  `slint::spawn_local(async_compat::Compat::new(...))` UI-thread task that `.await`s tokio futures
+  — **preferred** for reactive loops; (2) `slint::invoke_from_event_loop(...)` fire-and-forget;
+  (3) `weak_handle.upgrade_in_event_loop(|ui| …)` auto-handles a dropped UI.
+- **Models from background**: `upgrade_in_event_loop` + `as_any().downcast_ref::<VecModel<T>>()`,
+  except what can grow with the library. Both Songs tabs, the four details and the queue panel are
+  a `ui::paged_rows::PagedRows`, or built over one, reached through `installed`
+  (`track_rows::TrackRows`, loaded through `track_rows`' `PagedTrackList` path except for a
+  detail's fresh open, and `queue_rows::QueueRows` over one for the panel), and the seven library
+  card grids a `paged_rows::grid::PagedGrid`, loaded only through `ui::card_grid`.
+- **A thread name fits in 15 bytes or Linux silently truncates it.** `pthread_setname_np` caps at
+  `TASK_COMM_LEN`, and std truncates rather than erroring, so a longer name costs nothing at the
+  spawn and shows up docked in `htop`, `perf` and `/proc`, the three places the name is for. Rust
+  keeps the full string, so `crash_report`'s `thread.name()` is unaffected either way. Applies to
+  the rayon pools too, each naming its threads by closure, where the budget is the prefix *plus*
+  the widest index (`cover-decode-{i}`, `scan-{i}`, `tag-write-{i}`, `rayon-{i}`). Held by
+  `crates/melodia/tests/packaging.rs`'s `no_thread_name_outgrows_what_the_kernel_keeps`, which
+  walks every crate rather than listing the spawns.
 
 ### Module Map
 
-Prohibitions and non-obvious wiring only — read the code for file roles. **Each bullet leads with the crate that owns it**, and the path after it is `src/`-relative inside that crate — every member kept the subtree it left with, so `library/` is `crates/melodia-app/src/library/` and a bare `ui/` is `crates/melodia-views/src/ui/` (the Rust layer), never the Slint tree (`crates/melodia-ui/ui/`).
+Prohibitions and non-obvious wiring only — read the code for file roles. **Each bullet leads with
+the crate that owns it**, and the path after it is `src/`-relative inside that crate — every member
+kept the subtree it left with, so `library/` is `crates/melodia-app/src/library/` and a bare `ui/`
+is `crates/melodia-views/src/ui/` (the Rust layer), never the Slint tree (`crates/melodia-ui/ui/`).
 
-- **melodia** · `main.rs` — arena cap → runtime → `AppState::init` → `boot::*` → `app.show()` + `slint::run_event_loop_until_quit()` (stays alive while close-to-tray hides the window) → `shutdown::*` → `process::exit(0)`.
-- **melodia-ui** · the whole UI, sources included (the `.slint` tree, the `.po` catalogs and the `.pot` template they're merged from, the Slint compilation in its own manifest-relative `build.rs`). Split off so the generated unit builds **once** rather than once per compilation of its dependents, which is the whole of what it buys: **nothing re-exports it**, so every call site spells `melodia_ui::AppWindow`, `melodia_ui::TrackRow`, … and the import says where the type is generated. Its Rust half is `mod generated_ui` and a re-export, so the *only* thing that must stay in the **binary's** `build.rs` is the Windows `winresource` embed (icon and version info); `load_dotenv()` went to `melodia-integrations` and the blocklist bake to `melodia-net`, each with the `cargo:rustc-env` and `OUT_DIR` reach it needed. **The `slint` version + feature list (and matching `slint-build`) live once in `[workspace.dependencies]`** — a drift resolves *two* `slint` crates and the build dies in a wall of `expected slint::Weak, found slint::Weak`. **Before adding a member, grep the `release*.yml` and the packaging scripts for `melodia`** — the first split broke that workflow twice, each time on a name that was unambiguous with one member (`.claude/rules/ci-packaging.md`).
-- **melodia-app** · `state/` — `AppState`; `PlaybackContext` via `state.playback_ctx()`. **The two cells `AppState` hands out by the handful are `signal.rs`'s, and neither may be hand-rolled beside it.** `Signal` is a "go and look" `watch` tick: **`bump()` is the only way to move one**, so no site spells `send_modify(|n| *n = n.wrapping_add(1))`, and its subscribers take `ui::signal::on_signal` rather than a hand-written `spawn_local` loop. `SharedFlag` is a settings toggle mirrored where a worker can read it without a file read, and the rule it carries is the write order — **the mirror is set synchronously *before* the persist is spawned**, so a task firing in the gap sees the new value rather than the one still on disk.
-- **melodia-store** · `database/` — SQLx + SQLite (WAL, two-pool R/W, `sqlx::migrate!`, FTS5). **A boundary DTO belongs in `entities/`, not here.** **A write transaction opens only in here**: each unit of work that needs one is a store function taking plain data, and every query that takes a transaction is `pub(crate)`, so `melodia-app` cannot compose one and carries `sqlx` for its tests alone. **`melodia-views` cannot name this crate at all** — it is absent from views' manifest and nothing below re-exports it, so `melodia_store::database` does not resolve there rather than resolving to something private, which is the harder of the two errors. A library API returning a type views cannot name means the missing entity is the bug, never a re-export in `melodia-app`.
-- **melodia-artwork / melodia-store / melodia-net** · `media/` — **three tiers, and the direction between them is the point**: `image/` (decode, resize, the artwork store, `cover_thumbs`, `material_you`) names nothing but `melodia-core`, `ingest/` (scanner, metadata, watcher, tag writer, cover embed, ratings) reads it, `fetch/` (the four things that open a socket) names neither tier and hands what it downloads up to `melodia-app` to store, and nothing points back up. Keeping `fetch/` off `image/` is what keeps Slint out of `melodia-net` and every audio crate above it. **`image_decode` holds the primitives every image path shares**, argued in its module doc: `decode_capped` is the one bounded decode, `resize_rgb8` the one resampler, `encode_jpeg` the one in-memory JPEG encode and `large_decode_guard` the one gate on oversized decodes, so a second copy of any of them is the regression. The first two have exactly one exception each, held by equality walks rather than by review (`crates/melodia/tests/resampler.rs`, `bounded_decode.rs`): `image/material_you.rs` keeps the `image` crate's resampler, a filter change there moving every generated theme colour, and `cover_embed` builds its own reader around `capped_limits`. `image/logo_tile.rs` is the ingest for a station's own logo and carries the one source-size floor the store enforces; `fetch/station_logo.rs` only downloads it. **The artwork store is content-addressed, atomically written, bounded on ingest at the largest tier's decode size, and swept against six columns** — `media/image/artwork/` owns all of that, and `playlists.thumbnail_path` is the column to remember, carrying composites no other row names. **Three directories now share those six**: `artwork/`, `artists/` and `radio-logos/`, the last split off because a station logo came off a third-party host and cannot be rebuilt by re-scanning, where everything else in the store can. One reference set spans all three, so a file is held by whichever column names it wherever it sits. `image/cover_thumbs.rs` is the shared path-keyed RGB8 LRU, and **its tiers are sized against the display, not fixed** — `image::cover_thumbs::row_cover_size` steps the row tier between a 1× and a `HiDPI` value, and `ui::grid_prewarm::cover_size` derives the grid tier from the widest card `GridGeometry` will draw into the content panel, whose width the panel reports into `WindowChrome.content-panel-width`, both retuned in place by `set_thumb_size` beside the existing cap tune. Detail stays flat at 384 px, matching its max draw. A tier that spells its own size is the duplication those two replaced, and **no tier may exceed `STORE_MAX_DIM`** — past it every tier upscales from a source the store already discarded.
-- **melodia-app** · `library/` — `playback::*` takes `&PlaybackContext`, a function reading only `paths` or only `db` takes that field (`&Paths`, `&DbPool`), and the rest take the state (`library/mod.rs`). Anything a callback needs from the database gets a function here rather than a reach past it. **`radio/` is the one door onto internet radio** — the local table and the remote directory both, so a callback never learns which side answered, and so the off switch is one early return (`.claude/rules/radio.md`). The door is the *module*: `mod.rs` holds the switch, the client behind it and the getters exempt from both, and re-exports `authoring`, `playback`, `logos` and `directory` so no caller learns which file answered. **`lyrics/` is the second door of that shape**: sidecar, tag, store and directory behind one `for_track`, with two switches in front: the feature's before all four, read only by `is_enabled` (the Now Playing reseed and close included), and the lookup's before the directory, read only by `online_lookup_enabled`. Where it stops resembling radio's is the order, which is not first-hit-wins. A timed sheet beats an untimed one wherever the sidecar has not spoken, so `read_local` hands back all three local answers rather than the first, and a directory calling a recording instrumental loses to a tag with words in it.
-- **melodia-audio / melodia-playback / melodia-engine** · `player/` — **contracts live in `.claude/rules/audio-stack.md`**, including the three tiers (`source/`, `playback/`, `engine/`) and why the direction never reverses. `playback/stream_health.rs` may touch atomics and nothing else (cpal calls it on the output worker thread, so every arm is a storm vector and none logs). `playback/dsp.rs` holds the shared `Generation` poll counter, the `AtomicF32`/`AtomicF64` cells the four lock-free state structs publish through, and the numeric primitives more than one DSP module needs — put a cast or constant there, not a second copy in a sibling. **Everything decodes through `source::decode`, against one Symphonia** — `decode::open` is the probe, track pick, decoder build and first packet, and `file_decode` and `stream_decode` differ only in the `MediaSource` and `Hint` they hand it. The live-source trio (`stream_source`, `prebuffer`, `stream_decode`) is the network's end of the chain, the ring below it keeping a blocking socket read off the audio callback thread; `.claude/rules/radio.md` argues what crosses out of this directory. **`playback/output/` is everything under the DSP chain** — the cpal stream and the exclusive backends beside it, the two voices, the rate and channel conversion and the clock — and `AudioOutput` is the whole of it the rest of the tree names: `open` it at boot and hand it to `PlaybackEngine::with_output`, which takes its `mixer()` for the decks and is the one caller of `reopen()`. **`Deck` is `playback::decks`'s word and `Voice` is `output`'s**, one layer apart, which is what a `use … Deck as Voice` in both consumers used to paper over. **`source/audio.rs` is the vocabulary the chain is written against** (`Sample`, `ChannelCount`, `SampleRate`, `Shape`, `SeekError`, `AudioSource`); a DSP module importing those from anywhere else is importing from a dependency again.
-- **melodia-app** · `tasks/` — **imports no `ui::*` and no Slint**, and cargo holds both halves: the manifest names neither `melodia-views` nor `melodia-ui` nor `slint`, so a `.slint` edit leaves the command layer alone. A task that needs the UI takes it from its caller. `rss_sampler` hands its loop back for `boot::ui_setup` to spawn on the UI thread, with `ui::view_tag::format_view` as its tag, and `updater_daily` reports each panel write to the painter `ui::callbacks::check_painter` builds. `spawner.rs` bundles the `TaskTracker` + `CancellationToken` every `spawn` takes. **A once-per-install sweep is `one_shot::spawn` and not a fourth copy of its shape** — the marker read, the pass, the `mutate_settings` write-back — the axis two such passes genuinely differ on being `OnFailure`, whether a pass that failed part way still records its marker. Its `Sweep` carries **both** a prose `label` for the two log lines and the flag name as `marker`; collapsing them onto one field turns "Rating import failed" into the flag name and is invisible until someone reads a bug report.
-- **melodia-net / melodia-platform / melodia-integrations / melodia-app** · `services/` — **four groups, one crate each**: `net/` (the shared HTTP primitives, the radio and lyrics directory clients, radio's blocklist, and the `pacer` that holds the lyrics one to the interval that service asks for), `platform/` (everything answering to the OS: tray, allocator, logging, crash reports, single-instance, system theme, the desktop probe, desktop integration, always-on-top, the DWM caption, the accent Windows borders its windows in, and `install_kind`), `integrations/` (scrobbling, Discord presence, OS media controls — the three that share a crate because `cargo:rustc-env` reaches only one and two of them read API keys through `option_env!`), and flat at the top the app-level rest: settings, the two JSON state files, `artist_images`, `diagnostics` and the updater. **`melodia-platform`'s manifest names `melodia-core` and nothing else**, which is what `always_on_top::apply` taking a method and a directory rather than an `&AppState` bought: the state and the engine are unreachable rather than merely unused. **`install_kind` is in `platform/` on evidence, not category** — `crash_report` stamps its target key into a report and `desktop_integration` bakes its path into an `Exec=` line, and a second consumer is the only thing that separates a platform primitive from a feature's internals; everything the updater does *with* those answers stayed in `updater/`. **Nothing outside `library::radio` may name `radio_browser`** — the prohibition sits here rather than in that rule because it is violable from any file, and `crates/melodia/tests/radio_facade.rs` walks every crate for it. **Nothing outside `library::lyrics` may name `lyrics_directory`** is its sibling, held the same way by `crates/melodia/tests/lyrics_switch.rs`. The needle is the module's own name rather than any provider's, which is also why the module is not simply called `lyrics`: every file on both sides of that seam already contains the word. **`net/`'s `http_url` and `read_capped` are the two primitives every fetch shares**, argued in `services::net`'s module doc, with `get_capped` the GET around the second: a URL from outside the app is parsed rather than prefix-tested, and every response body is read through `read_capped`, never `bytes()` or `.json::<T>()`, the updater's download to a file being the one sanctioned second reader. `crates/melodia/tests/net_primitives.rs` walks for a prefix test and for a second copy of the capped loop; the `bytes()` half is not walkable, `str::bytes()` being everywhere.
-- **melodia-core** · `utils/` — what every layer may name and nothing may name upward from. `error::describe`, `atomic_file`'s whole-file read/write pair and `fold` are the primitives; the three `event_bridge` producers are the prohibition. **`fold` is here because two crates ask its question**, whether a typed needle appears in a row and whether a directory's row names the recording playing, and each argues its own reason where it asks. A second copy is how the two would come to disagree about what an ID3v2.4 NUL means. `needle` beside it is the filter boxes' `Needle`, down here because the store's SQL filter takes one too and a bare string crossing that boundary could be either spelling. **`toast` and `play_counts` are here so `player/` can raise a toast and count a play without naming `services` or `tasks`** — an engine reaching either is the edge the layering exists to forbid, and both were exactly that until the producer halves moved. `missing_artwork` is the third, for a cover cache in `melodia-artwork` or `melodia-views` to say a stored file is gone without naming the library that restores it. Each bridge's *consumer* stays where its I/O is: the toast drain in `boot::ui_setup`, the batching in `tasks::play_count_flusher` (the statement itself is `queries::track::add_{play,skip}_counts`), the reconcile in `tasks::artwork_restore`. **`exe` and `redact` are here for the same reason one layer down**: `config::Paths::data_root` asks `is_dev_build` before anything else in the tree exists, so parking that answer in `services/` had the bottom of the tree naming a directory eleven crates will sit above.
-- **melodia-core** · `themes/` — pluggable registry, and **nothing under it names a Slint type**: the half that writes the 21 brushes is `ui::appearance`, `theme_apply` resolving the palette and `theme_paint` writing it, kept there so a crate wanting a palette need not carry `melodia-ui`. `"system"` resolves via `system_{dark,light}_variant`, Material You wins when `system.material_you = Some(...)`. **`Palette` names all three semantic slots (`red`/`green`/`yellow`) with no struct-update fallback**, so a palette that forgets one fails to compile — the fallback that used to exist silently greyed the two *generated* palettes (Material You, KDE-from-`kdeglobals`), which is invisible in review and obvious on screen: traffic lights, success/warning toasts and the star rating all painted grey. Material You takes its three from `themes::material3` consts, deliberately **not** album-derived — a per-track hue on a rating control reads as a glitch. **Material 3's two variants are generated, not hand-kept**: they are melodia-artwork's `material_you::generate_palette` over the baseline seed `#6750a4` at the spec that module pins, so a change to that mapping or a spec bump means regenerating `material3.rs`, which sits in a crate that cannot call it.
-- **melodia-views** · `ui/` — **the shared component library, and that is all it is**: detail-view / grid / track-list helpers, artwork and backdrop tiers, the two Dialog overlays, `sleep_timer`, and `view_ctx.rs`'s `ViewCtx` that every slice's `install` takes. **`.claude/rules/ui-patterns.md` is the catalogue — reach for something there before building a second one.** What outlives any single view:
-  - **Nothing in the tree spells `open::that`, only `open::that_detached`** — `that` `waitpid`s the launcher, which where `xdg-open` falls through to `$BROWSER` is the browser's whole lifetime; macOS/Windows return immediately either way, so the regression is invisible on two of three platforms and on the third it is a blocking-pool slot held until the user closes someone else's window. **Two launch sites in two crates**, `launcher.rs` here and `library::tracks::reveal_in_file_manager`, so unlike `rfd` there is no one helper to funnel through and the spelling *is* the rule; `crates/melodia/tests/launcher.rs` walks every crate for both it and the `use open::that;` that would hide it.
-  - **`file_dialog.rs::parented` is the only place `rfd` may be named.** Parenting stops the picker opening *behind* Melodia on Windows/macOS and is unobservable on Linux, so an inline site is correct on the platform it's reviewed on and wrong on the two it isn't. `crates/melodia/tests/file_dialog.rs` walks every crate for the crate name rather than listing call sites.
-  - **`artwork_cache.rs` is reached through two newtypes** (`now_playing_artwork`, `detail_artwork`), so one tier can't be handed where the other is meant. **A tier's blur half is an `Option<BlurSpec>`, answered once at boot** — under the aurora setting nothing paints a blur and none is built, which is the cost the setting exists to avoid; each tier module binds its own numbers to the live answer in a `blur_spec(ui)`, over `backdrop::blur_spec`. **A `None` spec skips the blur's whole preamble, not just the blur**: the seeds survive — the aurora is what wants them — but they come off the cover tile rather than off a second downscale that existed to make `fast_blur` cheap, and `BackdropSample::quantize` takes no brightness, only the blur arm's `measure` sizing a scrim against one.
-  - **Every view slice owns its own wiring** (`ui/<view>/callbacks.rs` or `callbacks/`); `ui/callbacks/` keeps only what answers to no single view. `melodia_testkit::callback_sources()` asserts the set of homes **equals** `CALLBACK_HOMES` — an equality, not a floor, since a floor is precisely what cannot see a subtree stop existing.
-  - **`spawn_logged_sync!` and `spawn_blocking_logged!` are not interchangeable — the pool is the difference**: transport calls onto the runtime, a `views.json` write onto the blocking pool. `settings.json` goes through `AppState::persist_blocking` instead.
+- **melodia** · `main.rs` — arena cap → runtime → `AppState::init` → `boot::*` → `app.show()` +
+  `slint::run_event_loop_until_quit()` (stays alive while close-to-tray hides the window) →
+  `shutdown::*` → `process::exit(0)`.
+- **melodia-ui** · the whole UI, sources included (the `.slint` tree, the `.po` catalogs and the
+  `.pot` template they're merged from, the Slint compilation in its own manifest-relative
+  `build.rs`). Split off so the generated unit builds **once** rather than once per compilation of
+  its dependents, which is the whole of what it buys: **nothing re-exports it**, so every call site
+  spells `melodia_ui::AppWindow`, `melodia_ui::TrackRow`, … and the import says where the type is
+  generated. Its Rust half is `mod generated_ui` and a re-export, so the *only* thing that must
+  stay in the **binary's** `build.rs` is the Windows `winresource` embed (icon and version info);
+  `load_dotenv()` went to `melodia-integrations` and the blocklist bake to `melodia-net`, each with
+  the `cargo:rustc-env` and `OUT_DIR` reach it needed. **The `slint` version + feature list (and
+  matching `slint-build`) live once in `[workspace.dependencies]`** — a drift resolves *two*
+  `slint` crates and the build dies in a wall of `expected slint::Weak, found slint::Weak`.
+  **Before adding a member, grep the `release*.yml` and the packaging scripts for `melodia`** — the
+  first split broke that workflow twice, each time on a name that was unambiguous with one member
+  (`.claude/rules/ci-packaging.md`).
+- **melodia-app** · `state/` — `AppState`; `PlaybackContext` via `state.playback_ctx()`. **The two
+  cells `AppState` hands out by the handful are `signal.rs`'s, and neither may be hand-rolled
+  beside it.** `Signal` is a "go and look" `watch` tick: **`bump()` is the only way to move one**,
+  so no site spells `send_modify(|n| *n = n.wrapping_add(1))`, and its subscribers take
+  `ui::signal::on_signal` rather than a hand-written `spawn_local` loop. `SharedFlag` is a settings
+  toggle mirrored where a worker can read it without a file read, and the rule it carries is the
+  write order — **the mirror is set synchronously *before* the persist is spawned**, so a task
+  firing in the gap sees the new value rather than the one still on disk.
+- **melodia-store** · `database/` — SQLx + SQLite (WAL, two-pool R/W, `sqlx::migrate!`, FTS5). **A
+  boundary DTO belongs in `entities/`, not here.** **A write transaction opens only in here**: each
+  unit of work that needs one is a store function taking plain data, and every query that takes a
+  transaction is `pub(crate)`, so `melodia-app` cannot compose one and carries `sqlx` for its tests
+  alone. **`melodia-views` cannot name this crate at all** — it is absent from views' manifest and
+  nothing below re-exports it, so `melodia_store::database` does not resolve there rather than
+  resolving to something private, which is the harder of the two errors. A library API returning a
+  type views cannot name means the missing entity is the bug, never a re-export in `melodia-app`.
+- **melodia-artwork / melodia-store / melodia-net** · `media/` — **three tiers, and the direction
+  between them is the point**: `image/` (decode, resize, the artwork store, `cover_thumbs`,
+  `material_you`) names nothing but `melodia-core`, `ingest/` (scanner, metadata, watcher, tag
+  writer, cover embed, ratings) reads it, `fetch/` (the four things that open a socket) names
+  neither tier and hands what it downloads up to `melodia-app` to store, and nothing points back
+  up. Keeping `fetch/` off `image/` is what keeps Slint out of `melodia-net` and every audio crate
+  above it. **`image_decode` holds the primitives every image path shares**, argued in its module
+  doc: `decode_capped` is the one bounded decode, `resize_rgb8` the one resampler, `encode_jpeg`
+  the one in-memory JPEG encode and `large_decode_guard` the one gate on oversized decodes, so a
+  second copy of any of them is the regression. The first two have exactly one exception each,
+  held by equality walks rather than by review (`crates/melodia/tests/resampler.rs`,
+  `bounded_decode.rs`): `image/material_you.rs` keeps the `image` crate's resampler, a filter
+  change there moving every generated theme colour, and `cover_embed` builds its own reader around
+  `capped_limits`. `image/logo_tile.rs` is the ingest for a station's own logo and carries the one
+  source-size floor the store enforces; `fetch/station_logo.rs` only downloads it. **The artwork
+  store is content-addressed, atomically written, bounded on ingest at the largest tier's decode
+  size, and swept against six columns** — `media/image/artwork/` owns all of that, and
+  `playlists.thumbnail_path` is the column to remember, carrying composites no other row names.
+  **Three directories now share those six**: `artwork/`, `artists/` and `radio-logos/`, the last
+  split off because a station logo came off a third-party host and cannot be rebuilt by
+  re-scanning, where everything else in the store can. One reference set spans all three, so a
+  file is held by whichever column names it wherever it sits. `image/cover_thumbs.rs` is the shared
+  path-keyed RGB8 LRU, and **its tiers are sized against the display, not fixed** —
+  `image::cover_thumbs::row_cover_size` steps the row tier between a 1× and a `HiDPI` value, and
+  `ui::grid_prewarm::cover_size` derives the grid tier from the widest card `GridGeometry` will
+  draw into the content panel, whose width the panel reports into
+  `WindowChrome.content-panel-width`, both retuned in place by `set_thumb_size` beside the existing
+  cap tune. Detail stays flat at 384 px, matching its max draw. A tier that spells its own size is
+  the duplication those two replaced, and **no tier may exceed `STORE_MAX_DIM`** — past it every
+  tier upscales from a source the store already discarded.
+- **melodia-app** · `library/` — `playback::*` takes `&PlaybackContext`, a function reading only
+  `paths` or only `db` takes that field (`&Paths`, `&DbPool`), and the rest take the state
+  (`library/mod.rs`). Anything a callback needs from the database gets a function here rather than
+  a reach past it. **`radio/` is the one door onto internet radio** — the local table and the
+  remote directory both, so a callback never learns which side answered, and so the off switch is
+  one early return (`.claude/rules/radio.md`). The door is the *module*: `mod.rs` holds the switch,
+  the client behind it and the getters exempt from both, and re-exports `authoring`, `playback`,
+  `logos` and `directory` so no caller learns which file answered. **`lyrics/` is the second door
+  of that shape**: sidecar, tag, store and directory behind one `for_track`, with two switches in
+  front: the feature's before all four, read only by `is_enabled` (the Now Playing reseed and close
+  included), and the lookup's before the directory, read only by `online_lookup_enabled`. Where it
+  stops resembling radio's is the order, which is not first-hit-wins. A timed sheet beats an
+  untimed one wherever the sidecar has not spoken, so `read_local` hands back all three local
+  answers rather than the first, and a directory calling a recording instrumental loses to a tag
+  with words in it.
+- **melodia-audio / melodia-playback / melodia-engine** · `player/` — **contracts live in
+  `.claude/rules/audio-stack.md`**, including the three tiers (`source/`, `playback/`, `engine/`)
+  and why the direction never reverses. `playback/stream_health.rs` may touch atomics and nothing
+  else (cpal calls it on the output worker thread, so every arm is a storm vector and none logs).
+  `playback/dsp.rs` holds the shared `Generation` poll counter, the `AtomicF32`/`AtomicF64` cells
+  the four lock-free state structs publish through, and the numeric primitives more than one DSP
+  module needs — put a cast or constant there, not a second copy in a sibling. **Everything decodes
+  through `source::decode`, against one Symphonia** — `decode::open` is the probe, track pick,
+  decoder build and first packet, and `file_decode` and `stream_decode` differ only in the
+  `MediaSource` and `Hint` they hand it. The live-source trio (`stream_source`, `prebuffer`,
+  `stream_decode`) is the network's end of the chain, the ring below it keeping a blocking socket
+  read off the audio callback thread; `.claude/rules/radio.md` argues what crosses out of this
+  directory. **`playback/output/` is everything under the DSP chain** — the cpal stream and the
+  exclusive backends beside it, the two voices, the rate and channel conversion and the clock — and
+  `AudioOutput` is the whole of it the rest of the tree names: `open` it at boot and hand it to
+  `PlaybackEngine::with_output`, which takes its `mixer()` for the decks and is the one caller of
+  `reopen()`. **`Deck` is `playback::decks`'s word and `Voice` is `output`'s**, one layer apart,
+  which is what a `use … Deck as Voice` in both consumers used to paper over. **`source/audio.rs`
+  is the vocabulary the chain is written against** (`Sample`, `ChannelCount`, `SampleRate`,
+  `Shape`, `SeekError`, `AudioSource`); a DSP module importing those from anywhere else is
+  importing from a dependency again.
+- **melodia-app** · `tasks/` — **imports no `ui::*` and no Slint**, and cargo holds both halves:
+  the manifest names neither `melodia-views` nor `melodia-ui` nor `slint`, so a `.slint` edit
+  leaves the command layer alone. A task that needs the UI takes it from its caller. `rss_sampler`
+  hands its loop back for `boot::ui_setup` to spawn on the UI thread, with
+  `ui::view_tag::format_view` as its tag, and `updater_daily` reports each panel write to the
+  painter `ui::callbacks::check_painter` builds. `spawner.rs` bundles the `TaskTracker` +
+  `CancellationToken` every `spawn` takes. **A once-per-install sweep is `one_shot::spawn` and not
+  a fourth copy of its shape** — the marker read, the pass, the `mutate_settings` write-back — the
+  axis two such passes genuinely differ on being `OnFailure`, whether a pass that failed part way
+  still records its marker. Its `Sweep` carries **both** a prose `label` for the two log lines and
+  the flag name as `marker`; collapsing them onto one field turns "Rating import failed" into the
+  flag name and is invisible until someone reads a bug report.
+- **melodia-net / melodia-platform / melodia-integrations / melodia-app** · `services/` — **four
+  groups, one crate each**: `net/` (the shared HTTP primitives, the radio and lyrics directory
+  clients, radio's blocklist, and the `pacer` that holds the lyrics one to the interval that
+  service asks for), `platform/` (everything answering to the OS: tray, allocator, logging, crash
+  reports, single-instance, system theme, the desktop probe, desktop integration, always-on-top,
+  the DWM caption, the accent Windows borders its windows in, and `install_kind`),
+  `integrations/` (scrobbling, Discord presence, OS media controls — the three that share a crate
+  because `cargo:rustc-env` reaches only one and two of them read API keys through `option_env!`),
+  and flat at the top the app-level rest: settings, the two JSON state files, `artist_images`,
+  `diagnostics` and the updater. **`melodia-platform`'s manifest names `melodia-core` and nothing
+  else**, which is what `always_on_top::apply` taking a method and a directory rather than an
+  `&AppState` bought: the state and the engine are unreachable rather than merely unused.
+  **`install_kind` is in `platform/` on evidence, not category** — `crash_report` stamps its target
+  key into a report and `desktop_integration` bakes its path into an `Exec=` line, and a second
+  consumer is the only thing that separates a platform primitive from a feature's internals;
+  everything the updater does *with* those answers stayed in `updater/`. **Nothing outside
+  `library::radio` may name `radio_browser`** — the prohibition sits here rather than in that rule
+  because it is violable from any file, and `crates/melodia/tests/radio_facade.rs` walks every
+  crate for it. **Nothing outside `library::lyrics` may name `lyrics_directory`** is its sibling,
+  held the same way by `crates/melodia/tests/lyrics_switch.rs`. The needle is the module's own
+  name rather than any provider's, which is also why the module is not simply called `lyrics`:
+  every file on both sides of that seam already contains the word. **`net/`'s `http_url` and
+  `read_capped` are the two primitives every fetch shares**, argued in `services::net`'s module
+  doc, with `get_capped` the GET around the second: a URL from outside the app is parsed rather
+  than prefix-tested, and every response body is read through `read_capped`, never `bytes()` or
+  `.json::<T>()`, the updater's download to a file being the one sanctioned second reader.
+  `crates/melodia/tests/net_primitives.rs` walks for a prefix test and for a second copy of the
+  capped loop; the `bytes()` half is not walkable, `str::bytes()` being everywhere.
+- **melodia-core** · `utils/` — what every layer may name and nothing may name upward from.
+  `error::describe`, `atomic_file`'s whole-file read/write pair and `fold` are the primitives; the
+  three `event_bridge` producers are the prohibition. **`fold` is here because two crates ask its
+  question**, whether a typed needle appears in a row and whether a directory's row names the
+  recording playing, and each argues its own reason where it asks. A second copy is how the two
+  would come to disagree about what an ID3v2.4 NUL means. `needle` beside it is the filter boxes'
+  `Needle`, down here because the store's SQL filter takes one too and a bare string crossing that
+  boundary could be either spelling. **`toast` and `play_counts` are here so `player/` can raise a
+  toast and count a play without naming `services` or `tasks`** — an engine reaching either is the
+  edge the layering exists to forbid, and both were exactly that until the producer halves moved.
+  `missing_artwork` is the third, for a cover cache in `melodia-artwork` or `melodia-views` to say
+  a stored file is gone without naming the library that restores it. Each bridge's *consumer* stays
+  where its I/O is: the toast drain in `boot::ui_setup`, the batching in
+  `tasks::play_count_flusher` (the statement itself is `queries::track::add_{play,skip}_counts`),
+  the reconcile in `tasks::artwork_restore`. **`exe` and `redact` are here for the same reason one
+  layer down**: `config::Paths::data_root` asks `is_dev_build` before anything else in the tree
+  exists, so parking that answer in `services/` had the bottom of the tree naming a directory
+  eleven crates will sit above.
+- **melodia-core** · `themes/` — pluggable registry, and **nothing under it names a Slint type**:
+  the half that writes the 21 brushes is `ui::appearance`, `theme_apply` resolving the palette and
+  `theme_paint` writing it, kept there so a crate wanting a palette need not carry `melodia-ui`.
+  `"system"` resolves via `system_{dark,light}_variant`, Material You wins when
+  `system.material_you = Some(...)`. **`Palette` names all three semantic slots
+  (`red`/`green`/`yellow`) with no struct-update fallback**, so a palette that forgets one fails to
+  compile — the fallback that used to exist silently greyed the two *generated* palettes (Material
+  You, KDE-from-`kdeglobals`), which is invisible in review and obvious on screen: traffic lights,
+  success/warning toasts and the star rating all painted grey. Material You takes its three from
+  `themes::material3` consts, deliberately **not** album-derived — a per-track hue on a rating
+  control reads as a glitch. **Material 3's two variants are generated, not hand-kept**: they are
+  melodia-artwork's `material_you::generate_palette` over the baseline seed `#6750a4` at the spec
+  that module pins, so a change to that mapping or a spec bump means regenerating `material3.rs`,
+  which sits in a crate that cannot call it.
+- **melodia-views** · `ui/` — **the shared component library, and that is all it is**:
+  detail-view / grid / track-list helpers, artwork and backdrop tiers, the two Dialog overlays,
+  `sleep_timer`, and `view_ctx.rs`'s `ViewCtx` that every slice's `install` takes.
+  **`.claude/rules/ui-patterns.md` is the catalogue — reach for something there before building a
+  second one.** What outlives any single view:
+  - **Nothing in the tree spells `open::that`, only `open::that_detached`** — `that` `waitpid`s the
+    launcher, which where `xdg-open` falls through to `$BROWSER` is the browser's whole lifetime;
+    macOS/Windows return immediately either way, so the regression is invisible on two of three
+    platforms and on the third it is a blocking-pool slot held until the user closes someone
+    else's window. **Two launch sites in two crates**, `launcher.rs` here and
+    `library::tracks::reveal_in_file_manager`, so unlike `rfd` there is no one helper to funnel
+    through and the spelling *is* the rule; `crates/melodia/tests/launcher.rs` walks every crate
+    for both it and the `use open::that;` that would hide it.
+  - **`file_dialog.rs::parented` is the only place `rfd` may be named.** Parenting stops the picker
+    opening *behind* Melodia on Windows/macOS and is unobservable on Linux, so an inline site is
+    correct on the platform it's reviewed on and wrong on the two it isn't.
+    `crates/melodia/tests/file_dialog.rs` walks every crate for the crate name rather than listing
+    call sites.
+  - **`artwork_cache.rs` is reached through two newtypes** (`now_playing_artwork`,
+    `detail_artwork`), so one tier can't be handed where the other is meant. **A tier's blur half
+    is an `Option<BlurSpec>`, answered once at boot** — under the aurora setting nothing paints a
+    blur and none is built, which is the cost the setting exists to avoid; each tier module binds
+    its own numbers to the live answer in a `blur_spec(ui)`, over `backdrop::blur_spec`. **A
+    `None` spec skips the blur's whole preamble, not just the blur**: the seeds survive — the
+    aurora is what wants them — but they come off the cover tile rather than off a second
+    downscale that existed to make `fast_blur` cheap, and `BackdropSample::quantize` takes no
+    brightness, only the blur arm's `measure` sizing a scrim against one.
+  - **Every view slice owns its own wiring** (`ui/<view>/callbacks.rs` or `callbacks/`);
+    `ui/callbacks/` keeps only what answers to no single view. `melodia_testkit::callback_sources()`
+    asserts the set of homes **equals** `CALLBACK_HOMES` — an equality, not a floor, since a floor
+    is precisely what cannot see a subtree stop existing.
+  - **`spawn_logged_sync!` and `spawn_blocking_logged!` are not interchangeable — the pool is the
+    difference**: transport calls onto the runtime, a `views.json` write onto the blocking pool.
+    `settings.json` goes through `AppState::persist_blocking` instead.
 - Requires `unstable-winit-030` on `slint`.
 
 ### UI Structure (Slint)
 
 Paths here are rooted at **`crates/melodia-ui/ui/`** — the Slint tree, not the Rust one.
 
-- `app-window.slint` — root `Window`, and a mount sheet: rounded mantle wrapping `ShortcutScope { VerticalLayout { CustomTitleBar?; HorizontalLayout { Sidebar; ContentArea; QueuePanel; } NowPlayingBar; } }`, `no-frame: frameless` (the custom titlebar, or the native one while the miniplayer is up), and a full-screen `NowPlayingView` replacing the content panel when `Nav.now-playing-open`, the queue panel easing aside under it. `layout/shortcut-scope.slint` owns every key binding (reach it via `shortcut-scope.grab-focus()`). `components/section-active-gate.slint` mounts 10× in **nav-index** order — not one per sidebar section; five share `index: 3` and differ only by `tab-index`, and Radio's one covers all three of its tabs. The one lifecycle hook deliberately *not* a gate is `MyLibrary.page-active-changed`, which matters to anything tempted to add an eleventh mount. `layout/resize-ring.slint` is the frameless window's only resize geometry, miniplayer included. It is mounted for good and switched by `active: rounded-shell` (frameless and not maximized), so its zone can fall back to `none`, and above the overlays so a dialog can't take resizing away. Its hover names the `ResizeZone` the winit filter starts the OS resize from, so **there is no `resize-border-width`**: Slint's handler for it hit-tests square corners and compares a logical band with a physical cursor. The corners follow `Theme.window-radius` and are measured off the root's `resize-band`, floored at `Theme.resize-border` and widened to the invisible Win32 frame margins the native miniplayer keeps transparent; the ring reads no band but that one. **The first-run card mounts `if Onboarding.mounted` *below* `DialogOverlay`** — the first step's folder picker can raise a real `Dialog`, which has to paint over the card and take Escape first, so the mount order and the Escape chain's arms are one fact spelled twice. **Nothing written under `components/onboarding/` may carry a `changed` handler**: the branch is dropped on close, so a tracker watching anything that outlives it — a global, or a property owned above the mount — stays registered against a property the Settings ▸ About row then moves by re-opening the card, so it survives the first open and panics on the second. A tracker on a property *local* to the branch is fine, and `IconButton`'s `Tooltip` is one. That is why Rust owns both the mount and unmount timers and why the step dots aren't a `TabBar`; `crates/melodia/tests/onboarding.rs` walks the directory's own files, not what they mount.
-- `theme.slint` — the `Theme` global: 21 brushes (`in-out` for repaint), layout/typography/motion `out`. Two of them are `card-control`/`card-control-hover`, the fill every control resting on a card takes instead of `surface1` (`ui-patterns.md`). Semantic tokens `danger`/`danger-text`, and **there is no `danger-hover`** (the destructive `SectionButton` brightens its own fill; `PillButton`'s `danger` is a different treatment, don't read the two as one pattern). **`Theme.is-light(brush)` is the luminance threshold and `ink-on(brush)` the ink picker over it — reach for `ink-on` whenever the surface underneath isn't the accent**, and `danger-text` only when it *is* `danger`: bound straight to `accent-text` it answers a question about the *accent*, so a light variant with a light accent painted a near-black label on dark red. **`is-light` is also the only polarity signal that reaches Slint, and the only form correct for all six themes** — `Palette` carries no light/dark flag and the two *generated* palettes (Material You, KDE-from-`kdeglobals`) have no variant id to match on, so measuring the brush is what covers them; `brand-mark` takes it against `mantle`, the surface the titlebar paints. Its Rust twin `themes::on_accent_hex` is pinned against both halves; `services::platform::dwm_titlebar::is_dark_from_rgb` is a deliberate third copy, pinned against `on_accent_hex` by `services::platform::dwm_titlebar::tests` — which runs only under `test-windows`, the reason that copy sat on `lum < 0.5` against its siblings' `lum > 0.5` unnoticed.
-- `settings.slint` — the `Settings` global (theme/variant/accent lists + indices, dynamic-mode flags, per-row toggles), owned by Rust. The Settings *page*'s chrome is `globals/settings-page.slint`, where `SettingsPage.category-count` is the sole definition of how many categories its panel lists.
-- `models.slint` — boundary structs (`TrackRow`, `AlbumRow`, `ArtistRow`, `GenreRow`, `PlaylistRow`, `PositionTick`, `PlayerViewModel`). **Mirror exactly in Rust.**
-- `globals/` — the 48 globals in 32 feature-scoped files, **no barrel**: every consumer imports the file it needs. Slint exposes a global to Rust only if the **main** file exports or re-exports it, so `app-window.slint`'s flat `export { }` block is the only place the full name list appears and several of its import lines exist purely to feed it — not dead. Cross-global edges stay a shallow DAG (`settings.slint` imports nothing, and the only two that import siblings are the dispatchers — `globals/dialog.slint` over its `kind` arms, `globals/selection.slint` over the ten surfaces that can hold a multi-selection — both leaves, so no branch can cycle); a same-file forward reference is illegal.
-- `layout/`, `views/`, `components/` (incl. `dialog`, driven by the `Dialog` global with `kind` + `target-id` routing), `assets/fonts/`, `assets/icons/`. The **packaging** artwork is not here — `assets/icons/{logo-with-background.svg,tray.png}` at the repo root has no Slint consumer and is embedded by `melodia-platform`'s `desktop_integration` and `tray`.
-- **The three tabbed pages — Favorites (nav 2), Recently Played (nav 8), My Library (nav 3) — share one contract, and it lives in `.claude/rules/ui-patterns.md`.** Read it before touching any of them. **Radio (nav 10) is tabbed too and deliberately sits outside that contract**: its leave keeps every list and hands back the logo tier plus whatever heroes are seated, so it rewinds no count and its dirty flag describes the hero alone — argued in `ui/radio/mod.rs`. It is also the one page whose detail is per-tab *in Rust* rather than per-global: all three tabs may hold a station page, one is painted, and `ui::radio::detail::reseat` is what points `Radio.detail-*` at the mounted one. The nav map, since this is the only place it is written down: 0 Search, 1 Browse, 2 Favorites, **3 My Library** (five tabs; 4–7 are retired and fold onto 3 on read via `ui::my_library::fold_retired_nav_index`), 8 Recently Played, 9 Settings, **10 Radio** (three tabs). `globals/nav.slint` is authoritative.
+- `app-window.slint` — root `Window`, and a mount sheet: rounded mantle wrapping
+  `ShortcutScope { VerticalLayout { CustomTitleBar?; HorizontalLayout { Sidebar; ContentArea; QueuePanel; } NowPlayingBar; } }`,
+  `no-frame: frameless` (the custom titlebar, or the native one while the miniplayer is up), and a
+  full-screen `NowPlayingView` replacing the content panel when
+  `Nav.now-playing-open`, the queue panel easing aside under it. `layout/shortcut-scope.slint` owns
+  every key binding (reach it via `shortcut-scope.grab-focus()`).
+  `components/section-active-gate.slint` mounts 10× in **nav-index** order — not one per sidebar
+  section; five share `index: 3` and differ only by `tab-index`, and Radio's one covers all three
+  of its tabs. The one lifecycle hook deliberately *not* a gate is
+  `MyLibrary.page-active-changed`, which matters to anything tempted to add an eleventh mount.
+  `layout/resize-ring.slint` is the frameless window's only resize geometry, miniplayer included.
+  It is mounted for good and switched by `active: rounded-shell` (frameless and not maximized), so
+  its zone can fall back to `none`, and above the overlays so a dialog can't take resizing away.
+  Its hover names the `ResizeZone` the winit filter starts the OS resize from, so **there is no
+  `resize-border-width`**: Slint's handler for it hit-tests square corners. The corners follow
+  `Theme.window-radius` and are measured off the root's `resize-band`, floored at
+  `Theme.resize-border` and widened to the invisible Win32 frame margins the native miniplayer
+  keeps transparent; the ring reads no band but that one. **The first-run card mounts
+  `if Onboarding.mounted` *below* `DialogOverlay`** — the first step's folder picker can raise a
+  real `Dialog`, which has to paint over the card and take Escape first, so the mount order and the
+  Escape chain's arms are one fact spelled twice. **Nothing written under `components/onboarding/`
+  may carry a `changed` handler**: the branch is dropped on close, so a tracker watching anything
+  that outlives it — a global, or a property owned above the mount — stays registered against a
+  property the Settings ▸ About row then moves by re-opening the card, so it survives the first
+  open and panics on the second. A tracker on a property *local* to the branch is fine, and
+  `IconButton`'s `Tooltip` is one. That is why Rust owns both the mount and unmount timers and why
+  the step dots aren't a `TabBar`; `crates/melodia/tests/onboarding.rs` walks the directory's own
+  files, not what they mount.
+- `theme.slint` — the `Theme` global: 21 brushes (`in-out` for repaint), layout/typography/motion
+  `out`. Two of them are `card-control`/`card-control-hover`, the fill every control resting on a
+  card takes instead of `surface1` (`ui-patterns.md`). Semantic tokens `danger`/`danger-text`, and
+  **there is no `danger-hover`** (the destructive `SectionButton` brightens its own fill;
+  `PillButton`'s `danger` is a different treatment, don't read the two as one pattern).
+  **`Theme.is-light(brush)` is the luminance threshold and `ink-on(brush)` the ink picker over it —
+  reach for `ink-on` whenever the surface underneath isn't the accent**, and `danger-text` only
+  when it *is* `danger`: bound straight to `accent-text` it answers a question about the *accent*,
+  so a light variant with a light accent painted a near-black label on dark red. **`is-light` is
+  also the only polarity signal that reaches Slint, and the only form correct for all six themes**
+  — `Palette` carries no light/dark flag and the two *generated* palettes (Material You,
+  KDE-from-`kdeglobals`) have no variant id to match on, so measuring the brush is what covers
+  them; `brand-mark` takes it against `mantle`, the surface the titlebar paints. Its Rust twin
+  `themes::on_accent_hex` is pinned against both halves;
+  `services::platform::dwm_titlebar::is_dark_from_rgb` is a deliberate third copy, pinned against
+  `on_accent_hex` by `services::platform::dwm_titlebar::tests` — which runs only under
+  `test-windows`, the reason that copy sat on `lum < 0.5` against its siblings' `lum > 0.5`
+  unnoticed.
+- `settings.slint` — the `Settings` global (theme/variant/accent lists + indices, dynamic-mode
+  flags, per-row toggles), owned by Rust. The Settings *page*'s chrome is
+  `globals/settings-page.slint`, where `SettingsPage.category-count` is the sole definition of how
+  many categories its panel lists.
+- `models.slint` — boundary structs (`TrackRow`, `AlbumRow`, `ArtistRow`, `GenreRow`,
+  `PlaylistRow`, `PositionTick`, `PlayerViewModel`). **Mirror exactly in Rust.**
+- `globals/` — the 48 globals in 32 feature-scoped files, **no barrel**: every consumer imports the
+  file it needs. Slint exposes a global to Rust only if the **main** file exports or re-exports it,
+  so `app-window.slint`'s flat `export { }` block is the only place the full name list appears and
+  several of its import lines exist purely to feed it — not dead. Cross-global edges stay a shallow
+  DAG (`settings.slint` imports nothing, and the only two that import siblings are the dispatchers
+  — `globals/dialog.slint` over its `kind` arms, `globals/selection.slint` over the ten surfaces
+  that can hold a multi-selection — both leaves, so no branch can cycle); a same-file forward
+  reference is illegal.
+- `layout/`, `views/`, `components/` (incl. `dialog`, driven by the `Dialog` global with `kind` +
+  `target-id` routing), `assets/fonts/`, `assets/icons/`. The **packaging** artwork is not here —
+  `assets/icons/{logo-with-background.svg,tray.png}` at the repo root has no Slint consumer and is
+  embedded by `melodia-platform`'s `desktop_integration` and `tray`.
+- **The three tabbed pages — Favorites (nav 2), Recently Played (nav 8), My Library (nav 3) —
+  share one contract, and it lives in `.claude/rules/ui-patterns.md`.** Read it before touching
+  any of them. **Radio (nav 10) is tabbed too and deliberately sits outside that contract**: its
+  leave keeps every list and hands back the logo tier plus whatever heroes are seated, so it
+  rewinds no count and its dirty flag describes the hero alone — argued in `ui/radio/mod.rs`. It is
+  also the one page whose detail is per-tab *in Rust* rather than per-global: all three tabs may
+  hold a station page, one is painted, and `ui::radio::detail::reseat` is what points
+  `Radio.detail-*` at the mounted one. The nav map, since this is the only place it is written
+  down: 0 Search, 1 Browse, 2 Favorites, **3 My Library** (five tabs; 4–7 are retired and fold onto
+  3 on read via `ui::my_library::fold_retired_nav_index`), 8 Recently Played, 9 Settings, **10
+  Radio** (three tabs). `globals/nav.slint` is authoritative.
 
 ## Important Conventions
 
-- **`.claude/rules/code-style.md` binds every edit in this tree, and it is the rule most likely to be missing when you need it.** It arrives when you *read* a matching file, but the prose you write lands later in the turn, and after a `/compact` only this file comes back. **Re-read it before writing comments**, not just before writing code. The half that keeps getting violated is the comment budget: **explain why, never what; be terse; never restate the code, narrate the mechanism step by step, or read as a changelog of the bug it fixed.** The tell is register rather than length. Same bar for a doc comment and a `.slint` note.
-- **A code comment never cites a `.claude/rules/` file.** The rules are Claude's tooling, not documentation a contributor reads, so every comment, doc comment and `.slint` note states its own reason, and the pointing runs the other way: a rule names the code. The citations still in the tree predate this and go as each rule is compressed; don't copy one.
+- **`.claude/rules/code-style.md` binds every edit in this tree, and it is the rule most likely to
+  be missing when you need it.** It arrives when you *read* a matching file, but the prose you
+  write lands later in the turn, and after a `/compact` only this file comes back. **Re-read it
+  before writing comments**, not just before writing code. The half that keeps getting violated is
+  the comment budget: **explain why, never what; be terse; never restate the code, narrate the
+  mechanism step by step, or read as a changelog of the bug it fixed.** The tell is register rather
+  than length. Same bar for a doc comment and a `.slint` note.
+- **A code comment never cites a `.claude/rules/` file.** The rules are Claude's tooling, not
+  documentation a contributor reads, so every comment, doc comment and `.slint` note states its own
+  reason, and the pointing runs the other way: a rule names the code. The citations still in the
+  tree predate this and go as each rule is compressed; don't copy one.
 - **Rust Edition 2024** — `gen` is reserved.
-- **No crate re-exports another member's items. There are zero, keep it that way.** Every `melodia_*` path is a plain import, and the generated Slint types are no exception — `melodia_ui::AppWindow`, never `crate::AppWindow`. The ADRs carry why, including the `pub(crate)` trap and the clippy lint that permits the wrong spelling of it. Violable from any `lib.rs` or `mod.rs`, so `crates/melodia/tests/workspace_shape.rs` walks every crate for it rather than listing the roots — beside the two other properties no compile can answer: every member carries `[lints] workspace = true`, which is all that enforces `unwrap_used` and `dead_code`, and every member sits directly under `crates/`, which is the only place the corpus walks look.
-- **Lock discipline** — release the `PlayerState` lock before side effects; `with_state_emit()` enforces it, and `emit_and_execute`'s `exec_lock` (`std::sync::Mutex<()>`, never held across `.await`) serializes the follow-on across tasks. Ordering is `exec_lock → PlayerState → decks → output`, never reversed.
-- **`PlaybackContext` for `library::playback::*`** (not `&AppState`) — `state.playback_ctx()` is six `Arc::clone`s, and the owned `Arc`s dodge lifetime issues in `async move`. Wire via `wire_pb!`/`wire_sync_pb!`; don't propagate it elsewhere in `library/*`.
-- **`TaskSpawner` for `tasks/*::spawn`** — `TaskSpawner::from_state(&state)`, then pass `&spawner`. `spawn(fut)` is fire-and-forget; `spawn_cancellable(|shutdown| …)` is for loops that must observe shutdown (loop + `select!` on `shutdown.cancelled()`).
-- **The audio pipeline documents itself in `.claude/rules/audio-stack.md`** and its UI half in `.claude/rules/visualizer.md`. Don't re-home their contents here.
-- **Persistence** — **the root of all of it is `config::Paths::data_root`**: `MELODIA_DATA_DIR` wins and is made absolute *and* component-collected, the single-instance socket name being a hash of the result **as spelled**; otherwise `Melodia` or `Melodia-dev` by `utils::exe::is_dev_build()`. **A dev build may not share the installed root.** `is_dev_build` is `debug_assertions` *or* a `target/` grandparent, so `cargo build --release` is covered too, and it is pinned to `true` in a test binary — hence `data_root_for(is_dev)`, the seam `crates/melodia-core/src/tests/config_tests.rs` drives to reach the installed branch at all. Under that root: `settings.json` = app/user prefs (theme, locale, backdrop style, playback, window geom as closed and the full player a miniplayer close leaves behind, the sidebar and the queue panel as closed, updater, verbose logging, the support prompt's counters, the welcome card's revision). Per-view UI state (column widths/visibility and the track rows' marks, sort, browse path and list-vs-cards mode, nav index, detail ids, the four page tab indices and the Settings category, section-collapse) → `views.json` (`crates/melodia-app/src/services/view_state.rs`). Window state on close; queue **plus the station tuned over it** → `queue.json` (one file because a station leaves the queue seated underneath, so a restart owes both); search history → `search_history.json` (cap 10); pre-migration DB copies → `backups/`; cached cover, artist and station images → `artwork/`, `artists/` and `radio-logos/`; sheets the lyrics directory answered with, plus a marker per track it had none for, keyed by a hash of the track's *path* rather than of its contents → `lyrics/`; rolling logs, crash reports and the `last-seen-crash.json` marker → `logs/`. **A map in any of these JSON files is a `BTreeMap`, never a `HashMap`**, argued at `services::view_state::ViewStateData`.
-- **SQLx migrations** run on startup from `./migrations/`, and the DB is backed up first, **fatal if that fails**. Three things `crates/melodia-store/src/database/backup.rs` owns and nothing outside it may undo: the copy is **`VACUUM INTO` through the open connection, never a file copy** (WAL mode all run means `melodia.db` alone isn't the database); it is staged under `.tmp` and **renamed**, so the final name existing means it is complete; and **retention only deletes names it can parse back into the scheme the module writes**, a hand-made backup there not being ours to retire. Restoring one means deleting `melodia.db-wal`/`-shm` beside the rename — a boot that died in a migration never reached `DbPool::close`, and a stale WAL replays onto pages the vacuum already moved.
-- **Never log a credential, token or session key.** The rolling log's tail ships inside a file users attach to public issues, and what makes that safe is a property of *every* file rather than of the logger. Log that a request was signed, never what signed it.
-- **A `log::` call handed an error goes through `error::describe`, never a bare `{e}`, whatever the error's type.** The struct `AppError` variants keep context message and typed cause apart, so their `Display` names the operation and drops the reason, reporting a permissions failure and a full disk identically; any other error loses the chain below it. One spelling, `{}` plus `describe(&e)`, means a reviewer never has to know what `e` is. `describe` walks `.source()` once, skipping a cause the `Display` already printed. Text the user reads about a failure (a toast's detail, the updater panel's reason) takes `describe` too, a struct variant's `Display` never carrying the cause, though only the `log::` half is walked. Violable from any file and silent when broken, so `crates/melodia/tests/logged_errors.rs` walks every crate for a bare one, inline or positional.
-- **`utils::redact::redact_home` resolves through `dirs::home_dir()`, never `$HOME`** — that variable is unset on Windows, the one platform whose users have no console to have read the paths from, while `README.md` and `bug_report.yml` both promise `~`.
-- **The crash-report sweep deletes only names that parse back into its own scheme**, because `logs/` is shared: `crash_report::prune` collects through `timestamp_of` (`crash-<stamp>.txt` and nothing else) and `flexi_logger`'s own cleanup is gated the other way, on its basename and suffix. Two independent gates — don't add a third file to that folder without checking it falls outside both.
-- **Every package format ships `licenses/`** — five formats, five toolchains, and the obligation is held by tests rather than by review. **Read `.claude/rules/ci-packaging.md` before touching packaging.**
-- **File hashing & moved-file detection** — BLAKE3 + partial index `idx_tracks_file_hash`, backfilled by `tasks/retroactive_hash.rs`. **A delete is a hard `DELETE`**, so what carries a move across one is `queries::scan::apply_watch_batch`, which resolves the candidate hashes before the write transaction opens **and** applies a batch's deletes last so the matching `Created` still has a row to re-point. Losing either half turns a cross-device move (which arrives as a delete plus a create, never a rename) into a re-import that drops the user's rating, play count and favourite. **Don't reach for the id to prove that didn't happen** — `tracks.id` is a bare `INTEGER PRIMARY KEY`, so an insert takes `max(rowid) + 1` and re-uses the freed id whenever the deleted row held the largest, and the loss reads as a survival. Argued at `apply_watch_batch`; see `.claude/rules/blake3.md`.
+- **No crate re-exports another member's items. There are zero, keep it that way.** Every
+  `melodia_*` path is a plain import, and the generated Slint types are no exception —
+  `melodia_ui::AppWindow`, never `crate::AppWindow`. The ADRs carry why, including the `pub(crate)`
+  trap and the clippy lint that permits the wrong spelling of it. Violable from any `lib.rs` or
+  `mod.rs`, so `crates/melodia/tests/workspace_shape.rs` walks every crate for it rather than
+  listing the roots — beside the two other properties no compile can answer: every member carries
+  `[lints] workspace = true`, which is all that enforces `unwrap_used` and `dead_code`, and every
+  member sits directly under `crates/`, which is the only place the corpus walks look.
+- **Lock discipline** — release the `PlayerState` lock before side effects; `with_state_emit()`
+  enforces it, and `emit_and_execute`'s `exec_lock` (`std::sync::Mutex<()>`, never held across
+  `.await`) serializes the follow-on across tasks. Ordering is
+  `exec_lock → PlayerState → decks → output`, never reversed.
+- **`PlaybackContext` for `library::playback::*`** (not `&AppState`) — `state.playback_ctx()` is
+  six `Arc::clone`s, and the owned `Arc`s dodge lifetime issues in `async move`. Wire via
+  `wire_pb!`/`wire_sync_pb!`; don't propagate it elsewhere in `library/*`.
+- **`TaskSpawner` for `tasks/*::spawn`** — `TaskSpawner::from_state(&state)`, then pass
+  `&spawner`. `spawn(fut)` is fire-and-forget; `spawn_cancellable(|shutdown| …)` is for loops that
+  must observe shutdown (loop + `select!` on `shutdown.cancelled()`).
+- **The audio pipeline documents itself in `.claude/rules/audio-stack.md`** and its UI half in
+  `.claude/rules/visualizer.md`. Don't re-home their contents here.
+- **Persistence** — **the root of all of it is `config::Paths::data_root`**: `MELODIA_DATA_DIR`
+  wins and is made absolute *and* component-collected, the single-instance socket name being a
+  hash of the result **as spelled**; otherwise `Melodia` or `Melodia-dev` by
+  `utils::exe::is_dev_build()`. **A dev build may not share the installed root.** `is_dev_build`
+  is `debug_assertions` *or* a `target/` grandparent, so `cargo build --release` is covered too,
+  and it is pinned to `true` in a test binary — hence `data_root_for(is_dev)`, the seam
+  `crates/melodia-core/src/tests/config_tests.rs` drives to reach the installed branch at all.
+  Under that root: `settings.json` = app/user prefs (theme, locale, backdrop style, playback,
+  window geom as closed and the full player a miniplayer close leaves behind, the sidebar and the
+  queue panel as closed, updater, verbose logging, the support prompt's counters, the welcome
+  card's revision). Per-view UI state (column widths/visibility and the track rows' marks, sort,
+  browse path and list-vs-cards mode, nav index, detail ids, the four page tab indices and the
+  Settings category, section-collapse) → `views.json`
+  (`crates/melodia-app/src/services/view_state.rs`). Window state on close; queue **plus the
+  station tuned over it** → `queue.json` (one file because a station leaves the queue seated
+  underneath, so a restart owes both); search history → `search_history.json` (cap 10);
+  pre-migration DB copies → `backups/`; cached cover, artist and station images → `artwork/`,
+  `artists/` and `radio-logos/`; sheets the lyrics directory answered with, plus a marker per track
+  it had none for, keyed by a hash of the track's *path* rather than of its contents → `lyrics/`;
+  rolling logs, crash reports and the `last-seen-crash.json` marker → `logs/`. **A map in any of
+  these JSON files is a `BTreeMap`, never a `HashMap`**, argued at
+  `services::view_state::ViewStateData`.
+- **SQLx migrations** run on startup from `./migrations/`, and the DB is backed up first, **fatal
+  if that fails**. Three things `crates/melodia-store/src/database/backup.rs` owns and nothing
+  outside it may undo: the copy is **`VACUUM INTO` through the open connection, never a file copy**
+  (WAL mode all run means `melodia.db` alone isn't the database); it is staged under `.tmp` and
+  **renamed**, so the final name existing means it is complete; and **retention only deletes names
+  it can parse back into the scheme the module writes**, a hand-made backup there not being ours
+  to retire. Restoring one means deleting `melodia.db-wal`/`-shm` beside the rename — a boot that
+  died in a migration never reached `DbPool::close`, and a stale WAL replays onto pages the vacuum
+  already moved.
+- **Never log a credential, token or session key.** The rolling log's tail ships inside a file
+  users attach to public issues, and what makes that safe is a property of *every* file rather
+  than of the logger. Log that a request was signed, never what signed it.
+- **A `log::` call handed an error goes through `error::describe`, never a bare `{e}`, whatever the
+  error's type.** The struct `AppError` variants keep context message and typed cause apart, so
+  their `Display` names the operation and drops the reason, reporting a permissions failure and a
+  full disk identically; any other error loses the chain below it. One spelling, `{}` plus
+  `describe(&e)`, means a reviewer never has to know what `e` is. `describe` walks `.source()`
+  once, skipping a cause the `Display` already printed. Text the user reads about a failure (a
+  toast's detail, the updater panel's reason) takes `describe` too, a struct variant's `Display`
+  never carrying the cause, though only the `log::` half is walked. Violable from any file and
+  silent when broken, so `crates/melodia/tests/logged_errors.rs` walks every crate for a bare one,
+  inline or positional.
+- **`utils::redact::redact_home` resolves through `dirs::home_dir()`, never `$HOME`** — that
+  variable is unset on Windows, the one platform whose users have no console to have read the paths
+  from, while `README.md` and `bug_report.yml` both promise `~`.
+- **The crash-report sweep deletes only names that parse back into its own scheme**, because
+  `logs/` is shared: `crash_report::prune` collects through `timestamp_of` (`crash-<stamp>.txt`
+  and nothing else) and `flexi_logger`'s own cleanup is gated the other way, on its basename and
+  suffix. Two independent gates — don't add a third file to that folder without checking it falls
+  outside both.
+- **Every package format ships `licenses/`** — five formats, five toolchains, and the obligation is
+  held by tests rather than by review. **Read `.claude/rules/ci-packaging.md` before touching
+  packaging.**
+- **File hashing & moved-file detection** — BLAKE3 + partial index `idx_tracks_file_hash`,
+  backfilled by `tasks/retroactive_hash.rs`. **A delete is a hard `DELETE`**, so what carries a
+  move across one is `queries::scan::apply_watch_batch`, which resolves the candidate hashes before
+  the write transaction opens **and** applies a batch's deletes last so the matching `Created`
+  still has a row to re-point. Losing either half turns a cross-device move (which arrives as a
+  delete plus a create, never a rename) into a re-import that drops the user's rating, play count
+  and favourite. **Don't reach for the id to prove that didn't happen** — `tracks.id` is a bare
+  `INTEGER PRIMARY KEY`, so an insert takes `max(rowid) + 1` and re-uses the freed id whenever the
+  deleted row held the largest, and the loss reads as a survival. Argued at `apply_watch_batch`;
+  see `.claude/rules/blake3.md`.
 - **Natural sort** — `natord` + the `sort_key` column on tracks.
-- **No `#[allow(dead_code)]` in hand-written code — there are zero, keep it that way.** The only ones in the build are what the **Slint compiler** stamps on generated accessors. The two shapes that would otherwise need one have a better spelling: a compile-time trait assertion is an anonymous **`const _: fn() = || { fn check<T: Send + Sync>() {} check::<FooUi>(); };`**, and a never-read field is usually a **redundant** keepalive (every `wire_*` closure clones its own strong `Arc`; there is no `Weak<…Ui>` in the tree). If a suppression is genuinely unavoidable use **`#[expect(lint, reason = "…")]`**, never `allow` — `expect` fires `unfulfilled_lint_expectations` once it stops being needed.
-- **Strict clippy + rustc lints** — `[workspace.lints.*]` + `clippy.toml`, inherited by every package so none can sit outside the gate. **`cargo clippy --all-targets --locked --workspace -- -D warnings` is the whole gate.** `--workspace` is redundant today and spelled anyway: a virtual root with no `default-members` already selects every member, so the flag is what keeps the gate whole if either of those two facts stops being true. Slint-generated `app-window.rs` rides `mod generated_ui` under `#[allow(warnings, unsafe_code, clippy::all, clippy::unwrap_used)]` — `warnings` absorbs every warn-level workspace lint, the other three are the deny-level entries it can't reach, and only a new **deny** in `[workspace.lints]` needs a line there. **Don't enable 1.97's `dead_code_pub_in_binary`**: a test harness is itself an executable, so under `--all-targets` the lint decides `pub` exports nothing and flags the whole public API and wiring layer.
-- **`cargo fmt --all --check` is a CI job, so a reflow is never yours to argue about.** `rustfmt.toml` puts every width heuristic on `max_width` and leaves `max_width` alone — reasoning at the setting. `#[rustfmt::skip]` where the output genuinely reads worse; there are none today, keep it near that.
-- **The toolchain is pinned, and the pin is what makes the strict gate survivable** — with `pedantic`/`style`/`complexity` at `warn` and CI running `-D warnings`, a floating stable would fail an unrelated PR on every new lint. A bump moves **four** things in lockstep: `rust-toolchain.toml`, `Cargo.toml`'s `[workspace.package] rust-version`, `clippy.toml`'s `msrv` (an explicit clippy msrv *overrides* the Cargo one), and the two docs (`README.md` prerequisites + Prerequisites above).
-- **No `unsafe` outside platform FFI.** `unsafe_code = "deny"` is workspace-level; the only `#[allow]` sites are calls into an OS the type system can't reach, plus test env-var mutation. **Never for performance.** `.claude/rules/unsafe-rust.md` has the sanctioned-site list, the `// SAFETY:` contract and the what-to-reach-for-instead table.
-- **No `unwrap()` anywhere, tests included. There are zero in the tree, keep it that way.** `unwrap_used = deny` + `expect_used = warn` apply crate-wide with no test exemption and `-D warnings` promotes the warning, so reach for `?` and `AppError`, or `assert_eq!`, `matches!`, `.ok().map(...)` and `let …/else` in tests. `expect()` only with the invariant in the message, and a test helper tempted by either returns `Result` rather than carrying a suppression into the production build.
-- **`AppError` (`crates/melodia-core/src/error.rs`)** — `Database`/`Migration`/`Io` take their cause through `#[from]`, and every other variant but `NotFound` is a struct variant `{ msg, #[source] source }` keeping the context message *and* the typed cause. Each has an `AppError::x(msg, source)` / `x_msg(msg)` pair; `NotFound` is `{ msg }` alone, with `not_found(entity, id)` beside `not_found_msg`, a lookup miss having no cause. **A site holding a cause takes `x(msg, source)`, never `x_msg(format!("…{e}"))`.** A struct variant's `Display` prints its category and `msg` and never its cause, so text built from `e.to_string()` says nothing of why; Browse's error state reads `describe` for that reason. A cause no category fits goes on `Io`: `io(msg, source)` names the operation beside it, `io_source(e)` wraps it alone, and `io_other(msg)` is message-only. No category is a catch-all for another subsystem. **Nothing reads a category back out of an error's text**: a caller that has to tell failures apart branches on the variant, as the radio form's `form_error` and the add-folder dialog do, or takes a kind decided where the error was made, as every updater path does through `updater::UpdateFailure`. **An error is never *carried* as a `String` either.** A `Result<_, String>` keeps the message and drops the cause, which is exactly what `error::describe` exists to walk, and it flattens at the throw rather than at the read. Where `AppError` genuinely cannot be named the answer is a local type implementing `std::error::Error`, never a `String`: `radio_blocklist::source` is `include!`d into `build.rs`, so it may name no `crate::` path and defines its own `ParseError`. Both rules are violable from any file and free at compile time, so `crates/melodia/tests/error_as_string.rs` walks every crate for each rather than listing sites: `no_result_carries_its_error_as_a_string` for a `String` in an error position, and `no_cause_is_flattened_into_an_error_message` for an error interpolated into a message-only constructor.
-- **Kick-after-persist for `mutate_settings` consumers** — the kick fires **inside** the same `spawn_blocking` after the write commits, only on `Ok(())`. Multi-write callbacks track `all_persists_ok` and kick only if every write committed.
-- **Sibling-callback writes need a synchronous shadow.** Two callbacks reading and writing the same field race through disk: mirror it in `Arc<parking_lot::Mutex<T>>`, update that synchronously *before* spawning the disk write, and read the cell from siblings.
-  **A `views.json` index goes through `ui::callbacks::index_persist::IndexPersist`, never a bare `spawn_blocking`.** The nav index, the four page tab indices and the Settings category each queue a value per tick off a control the user can bounce, and the nav one fires twice in a *single* tick (`nav_history::replay` closes the departing detail before landing the target, and a close restores a cross-section origin; My Library's tab has a second writer beside the pick for the same paths). Two blocking tasks have no ordering between them whichever tick queued them, so the value the user only passed through can land last. The primitive owns that argument; `crates/melodia/tests/index_persist.rs` walks the wiring tree for a write outside it rather than listing the six sites.
-- **Never `std::env::current_exe()` for a path you will execute, install to, or write down — use `utils::exe::current_exe`.** On Linux it is a bare `readlink("/proc/self/exe")`, and the kernel appends a literal `" (deleted)"` once the dentry is unlinked, which an RPM/DEB upgrade does to `/usr/bin/Melodia` mid-session and cargo does to `target/debug/Melodia` on every re-uplift. The helper **resolves** rather than trims. Inside the updater use `updater::install_target`; for the respawn, `ui::window_chrome::respawn_target`. Violable from any file, so `utils::exe`'s own tests walk the corpus rather than listing callers.
-- **Renderer is FemtoVG**, set directly on the `slint` dep — no Cargo feature, so there is no build that loses rounded clipping.
-- **`--version` is a literal-first branch in `main()`**, printing `Melodia <CARGO_PKG_VERSION>`. **Forward-compat contract**: the updater's smoke test spawns the *new* binary with it, asserts exit 0 in 5 s plus the `Melodia ` prefix, and rolls back otherwise — removing the branch or the prefix breaks in-place updates for older clients. **`--logs` is the sibling branch**, printing `paths.logs_dir` and touching neither the database nor Slint, because it answers what the rest of the diagnostics feature can't: a Melodia that won't open. Both stay ahead of everything that can fail. `--logs` reaches only Linux/macOS (`windows_subsystem = "windows"` leaves a release build with no console, and debug builds are console-subsystem so the gap is invisible locally) — hence `README.md` and `bug_report.yml` pointing Windows at `%APPDATA%\Melodia\logs\`.
-- **Every other argument is an audio file to open, read by `services::platform::single_instance`.** Ordering is load-bearing throughout: the two literal branches → `Paths::resolve()` → **`claim()`** → `logging::install`. **Binding the socket is the claim**, keyed on `paths.data_dir`, and it has **two spellings** (`services::platform::single_instance::name_is_taken`). **Ahead of the logger** so a forwarding launch never opens the shared file. **Claim early, accept late**: `boot::tasks::serve_file_opens` accepts only once the window exists, the backlog holding what arrives before. A claim that fails for any reason *other* than a live primary **boots anyway**. **`shutdown::respawn_if_requested` sets `MELODIA_RESPAWN=1` on the `spawn_detached` arm only**, so that child waits for the name instead of forwarding: the fallback leaves parent and child briefly alive together, where a child that forwarded and exited would go down with the parent behind it. Deliberately **not** on the `exec` arm — CLOEXEC frees the name at the image replace, so there is nothing to wait for, and a variable set there would outlive its purpose in the restarted process and be inherited by everything it spawns (a file manager opened from it, handing it to the next launch). The handoff's Linux half is `%F` on four `.desktop` sources plus a fifth `sed` that must not eat it (`.claude/rules/ci-packaging.md`); the Windows half is `crates/melodia/wix/main.wxs`'s `FileAssociations` component.
+- **No `#[allow(dead_code)]` in hand-written code — there are zero, keep it that way.** The only
+  ones in the build are what the **Slint compiler** stamps on generated accessors. The two shapes
+  that would otherwise need one have a better spelling: a compile-time trait assertion is an
+  anonymous **`const _: fn() = || { fn check<T: Send + Sync>() {} check::<FooUi>(); };`**, and a
+  never-read field is usually a **redundant** keepalive (every `wire_*` closure clones its own
+  strong `Arc`; there is no `Weak<…Ui>` in the tree). If a suppression is genuinely unavoidable use
+  **`#[expect(lint, reason = "…")]`**, never `allow` — `expect` fires
+  `unfulfilled_lint_expectations` once it stops being needed.
+- **Strict clippy + rustc lints** — `[workspace.lints.*]` + `clippy.toml`, inherited by every
+  package so none can sit outside the gate.
+  **`cargo clippy --all-targets --locked --workspace -- -D warnings` is the whole gate.**
+  `--workspace` is redundant today and spelled anyway: a virtual
+  root with no `default-members` already selects every member, so the flag is what keeps the gate
+  whole if either of those two facts stops being true. Slint-generated `app-window.rs` rides
+  `mod generated_ui` under `#[allow(warnings, unsafe_code, clippy::all, clippy::unwrap_used)]` —
+  `warnings` absorbs every warn-level workspace lint, the other three are the deny-level entries it
+  can't reach, and only a new **deny** in `[workspace.lints]` needs a line there. **Don't enable
+  1.97's `dead_code_pub_in_binary`**: a test harness is itself an executable, so under
+  `--all-targets` the lint decides `pub` exports nothing and flags the whole public API and wiring
+  layer.
+- **`cargo fmt --all --check` is a CI job, so a reflow is never yours to argue about.**
+  `rustfmt.toml` puts every width heuristic on `max_width` and leaves `max_width` alone — reasoning
+  at the setting. `#[rustfmt::skip]` where the output genuinely reads worse; there are none today,
+  keep it near that.
+- **The toolchain is pinned, and the pin is what makes the strict gate survivable** — with
+  `pedantic`/`style`/`complexity` at `warn` and CI running `-D warnings`, a floating stable would
+  fail an unrelated PR on every new lint. A bump moves **four** things in lockstep:
+  `rust-toolchain.toml`, `Cargo.toml`'s `[workspace.package] rust-version`, `clippy.toml`'s `msrv`
+  (an explicit clippy msrv *overrides* the Cargo one), and the two docs (`README.md`
+  prerequisites + Prerequisites above).
+- **No `unsafe` outside platform FFI.** `unsafe_code = "deny"` is workspace-level; the only
+  `#[allow]` sites are calls into an OS the type system can't reach, plus test env-var mutation.
+  **Never for performance.** `.claude/rules/unsafe-rust.md` has the sanctioned-site list, the
+  `// SAFETY:` contract and the what-to-reach-for-instead table.
+- **No `unwrap()` anywhere, tests included. There are zero in the tree, keep it that way.**
+  `unwrap_used = deny` + `expect_used = warn` apply crate-wide with no test exemption and
+  `-D warnings` promotes the warning, so reach for `?` and `AppError`, or `assert_eq!`, `matches!`,
+  `.ok().map(...)` and `let …/else` in tests. `expect()` only with the invariant in the message, and
+  a test helper tempted by either returns `Result` rather than carrying a suppression into the
+  production build.
+- **`AppError` (`crates/melodia-core/src/error.rs`)** — `Database`/`Migration`/`Io` take their
+  cause through `#[from]`, and every other variant but `NotFound` is a struct variant
+  `{ msg, #[source] source }` keeping the context message *and* the typed cause. Each has an
+  `AppError::x(msg, source)` / `x_msg(msg)` pair; `NotFound` is `{ msg }` alone, with
+  `not_found(entity, id)` beside `not_found_msg`, a lookup miss having no cause. **A site holding a
+  cause takes `x(msg, source)`, never `x_msg(format!("…{e}"))`.** A struct variant's `Display`
+  prints its category and `msg` and never its cause, so text built from `e.to_string()` says
+  nothing of why; Browse's error state reads `describe` for that reason. A cause no category fits
+  goes on `Io`: `io(msg, source)` names the operation beside it, `io_source(e)` wraps it alone, and
+  `io_other(msg)` is message-only. No category is a catch-all for another subsystem. **Nothing
+  reads a category back out of an error's text**: a caller that has to tell failures apart
+  branches on the variant, as the radio form's `form_error` and the add-folder dialog do, or takes
+  a kind decided where the error was made, as every updater path does through
+  `updater::UpdateFailure`. **An error is never *carried* as a `String` either.** A
+  `Result<_, String>` keeps the message and drops the cause, which is exactly what
+  `error::describe` exists to walk, and it flattens at the throw rather than at the read. Where
+  `AppError` genuinely cannot be named the answer is a local type implementing `std::error::Error`,
+  never a `String`: `radio_blocklist::source` is `include!`d into `build.rs`, so it may name no
+  `crate::` path and defines its own `ParseError`. Both rules are violable from any file and free
+  at compile time, so `crates/melodia/tests/error_as_string.rs` walks every crate for each rather
+  than listing sites: `no_result_carries_its_error_as_a_string` for a `String` in an error
+  position, and `no_cause_is_flattened_into_an_error_message` for an error interpolated into a
+  message-only constructor.
+- **Kick-after-persist for `mutate_settings` consumers** — the kick fires **inside** the same
+  `spawn_blocking` after the write commits, only on `Ok(())`. Multi-write callbacks track
+  `all_persists_ok` and kick only if every write committed.
+- **Sibling-callback writes need a synchronous shadow.** Two callbacks reading and writing the same
+  field race through disk: mirror it in `Arc<parking_lot::Mutex<T>>`, update that synchronously
+  *before* spawning the disk write, and read the cell from siblings.
+  **A `views.json` index goes through `ui::callbacks::index_persist::IndexPersist`, never a bare
+  `spawn_blocking`.** The nav index, the four page tab indices and the Settings category each queue
+  a value per tick off a control the user can bounce, and the nav one fires twice in a *single*
+  tick (`nav_history::replay` closes the departing detail before landing the target, and a close
+  restores a cross-section origin; My Library's tab has a second writer beside the pick for the
+  same paths). Two blocking tasks have no ordering between them whichever tick queued them, so the
+  value the user only passed through can land last. The primitive owns that argument;
+  `crates/melodia/tests/index_persist.rs` walks the wiring tree for a write outside it rather than
+  listing the six sites.
+- **Never `std::env::current_exe()` for a path you will execute, install to, or write down — use
+  `utils::exe::current_exe`.** On Linux it is a bare `readlink("/proc/self/exe")`, and the kernel
+  appends a literal `" (deleted)"` once the dentry is unlinked, which an RPM/DEB upgrade does to
+  `/usr/bin/Melodia` mid-session and cargo does to `target/debug/Melodia` on every re-uplift. The
+  helper **resolves** rather than trims. Inside the updater use `install_kind::install_target`; for
+  the respawn, `ui::window_chrome::respawn_target`. Violable from any file, so `utils::exe`'s own
+  tests walk the corpus rather than listing callers.
+- **Renderer is FemtoVG**, set directly on the `slint` dep — no Cargo feature, so there is no build
+  that loses rounded clipping.
+- **`--version` is a literal-first branch in `main()`**, printing `Melodia <CARGO_PKG_VERSION>`.
+  **Forward-compat contract**: the updater's smoke test spawns the *new* binary with it, asserts
+  exit 0 in 5 s plus the `Melodia ` prefix, and rolls back otherwise — removing the branch or the
+  prefix breaks in-place updates for older clients. **`--logs` is the sibling branch**, printing
+  `paths.logs_dir` and touching neither the database nor Slint, because it answers what the rest of
+  the diagnostics feature can't: a Melodia that won't open. Both stay ahead of everything that can
+  fail. `--logs` reaches only Linux/macOS (`windows_subsystem = "windows"` leaves a release build
+  with no console, and debug builds are console-subsystem so the gap is invisible locally) — hence
+  `README.md` and `bug_report.yml` pointing Windows at `%APPDATA%\Melodia\logs\`.
+- **Every other argument is an audio file to open, read by `services::platform::single_instance`.**
+  Ordering is load-bearing throughout: the two literal branches → `Paths::resolve()` →
+  **`claim()`** → `logging::install`. **Binding the socket is the claim**, keyed on
+  `paths.data_dir`, and it has **two spellings**
+  (`services::platform::single_instance::name_is_taken`). **Ahead of the logger** so a forwarding
+  launch never opens the shared file. **Claim early, accept late**:
+  `boot::tasks::serve_file_opens` accepts only once the window exists, the backlog holding what
+  arrives before. A claim that fails for any reason *other* than a live primary **boots anyway**.
+  **`shutdown::respawn_if_requested` sets `MELODIA_RESPAWN=1` on the `spawn_detached` arm only**,
+  so that child waits for the name instead of forwarding: the fallback leaves parent and child
+  briefly alive together, where a child that forwarded and exited would go down with the parent
+  behind it. Deliberately **not** on the `exec` arm — CLOEXEC frees the name at the image replace,
+  so there is nothing to wait for, and a variable set there would outlive its purpose in the
+  restarted process and be inherited by everything it spawns (a file manager opened from it,
+  handing it to the next launch). The handoff's Linux half is `%F` on four `.desktop` sources plus
+  a fifth `sed` that must not eat it (`.claude/rules/ci-packaging.md`); the Windows half is
+  `crates/melodia/wix/main.wxs`'s `FileAssociations` component.
 
 ## Slint Conventions
 
-Three rules share the UI globs: `.claude/rules/slint.md` is general patterns, **`slint-pitfalls.md` is the things that build, look right, and are wrong**, and `ui-patterns.md` is the component to reach for before building a second one. Widen a glob rather than restating a rule here. Project-specific:
+Three rules share the UI globs: `.claude/rules/slint.md` is general patterns, **`slint-pitfalls.md`
+is the things that build, look right, and are wrong**, and `ui-patterns.md` is the component to
+reach for before building a second one. Widen a glob rather than restating a rule here.
+Project-specific:
 
 - **No `slint::slint!`** — `.slint` files via `crates/melodia-ui/build.rs`.
 - **Animation tokens**: 200 ms fast, 250 ms medium, 400 ms spatial.
-- **Scrollbars — always `crates/melodia-ui/ui/components/overlay-scrollbar.slint`.** std-widgets' bar paints inside padded containers and can't be reskinned. (1) `ScrollView` primitive, both scrollbar policies `always-off`; (2) `OverlayScrollbar` at the view root, sibling of the padded layout, pinned via absolute coords; (3) round-trip via `offset: -sv.content-y` + `scroll-to(o) => { sv.content-y = -o; }` (no `<=>` — the sign flip blocks it); (4) the bar hides itself on `content-size > visible-size`, so a host mounts one for every axis that can overflow rather than gating it behind an `if`; (5) a bar on a card passes `track-color: Theme.scrollbar-track-on-card`, since the default track composites to exactly `surface0` over a dialog and leaves the thumb nothing to gauge extent against; (6) a plain `TrackList` page mounts its bar as `components/track-list-scrollbars.slint`'s `TrackListScrollbars`, never a hand-rolled one; (7) a popup's rows scroll in `components/popup-column.slint`'s `PopupColumn`, the popup placing itself through `PopupFit` (`ui-patterns.md`). The element slot is `Theme.scrollbar-slot`, distinct from the 8 px `OverlayScrollbar` paints inside it, and it is also where a list's right inset stops, so a row's pill never runs under the track. **A track list has no horizontal bar**: `ui::track_columns` fits the columns to the list's width, shrinking every one below its floor rather than overflowing. `CompositeScrollbars` is still the one to reach for where a list nests *under* another scroller; its mount contract is last child of the view root at `x: 0; y: 0; width: 100%; height: 100%`.
-  Where the scroller sits inside an `if`, the bar goes **inside that branch** (Slint can't read an id declared inside an `if` from outside); where it would land over a control, the content reserves a gutter rather than the bar overlaying it. `crates/melodia/tests/scrollbars.rs` walks the tree for all of this, brace-matching each scroller so an *omitted* policy can't borrow the opt-out of a scroller nested inside it.
+- **Scrollbars — always `crates/melodia-ui/ui/components/overlay-scrollbar.slint`.** std-widgets'
+  bar paints inside padded containers and can't be reskinned. (1) `ScrollView` primitive, both
+  scrollbar policies `always-off`; (2) `OverlayScrollbar` at the view root, sibling of the padded
+  layout, pinned via absolute coords; (3) round-trip via `offset: -sv.content-y` +
+  `scroll-to(o) => { sv.content-y = -o; }` (no `<=>` — the sign flip blocks it); (4) the bar hides
+  itself on `content-size > visible-size`, so a host mounts one for every axis that can overflow
+  rather than gating it behind an `if`; (5) a bar on a card passes
+  `track-color: Theme.scrollbar-track-on-card`, since the default track composites to exactly
+  `surface0` over a dialog and leaves the thumb nothing to gauge extent against; (6) a plain
+  `TrackList` page mounts its bar as `components/track-list-scrollbars.slint`'s
+  `TrackListScrollbars`, never a hand-rolled one; (7) a popup's rows scroll in
+  `components/popup-column.slint`'s `PopupColumn`, the popup placing itself through `PopupFit`
+  (`ui-patterns.md`). The element slot is `Theme.scrollbar-slot`, distinct from the 8 px
+  `OverlayScrollbar` paints inside it, and it is also where a list's right inset stops, so a row's
+  pill never runs under the track. **A track list has no horizontal bar**: `ui::track_columns` fits
+  the columns to the list's width, shrinking every one below its floor rather than overflowing.
+  `CompositeScrollbars` is still the one to reach for where a list nests *under* another scroller;
+  its mount contract is last child of the view root at `x: 0; y: 0; width: 100%; height: 100%`.
+  Where the scroller sits inside an `if`, the bar goes **inside that branch** (Slint can't read an
+  id declared inside an `if` from outside); where it would land over a control, the content
+  reserves a gutter rather than the bar overlaying it. `crates/melodia/tests/scrollbars.rs` walks
+  the tree for all of this, brace-matching each scroller so an *omitted* policy can't borrow the
+  opt-out of a scroller nested inside it.
 
 ## Styling
 
-- **Pluggable themes** in `melodia-core`'s `themes/`, applied by writing brushes into `Theme`. **`ui::appearance::theme_paint` is the only writer of those brushes**, and it eases one Material You palette into the next by writing a blend every frame, so **any `animate` whose binding can read a palette brush carries `enabled: !Theme.recoloring`** (`slint-pitfalls.md` has the exceptions). Violable from any `.slint` file and silent outside a fade, so `crates/melodia/tests/palette_fade.rs` walks the tree for every colour `animate` outside a `states` transition, the files exempt held to exact counts. The first-launch default follows the host: Windows Fluent, KDE Breeze and GNOME Adwaita each on the System variant under their own desktop, Catppuccin Mocha mauve anywhere else (`services::settings`'s `first_launch_theme`, fed by `host_desktop`). **System dark/light** resolves through `platform::system_theme` on Linux (the XDG portal; KDE Breeze and `"system"` re-source `~/.config/kdeglobals`, and `spawn_color_watcher` re-applies on portal `SettingChanged`) and through `platform::color_mode` on Windows (the default app mode, re-read on winit `ThemeChanged` and on every focus gain via `WindowChrome.recheck-system-theme`). Both land in `ui/appearance/system_watcher.rs`, and both are read before the first frame, so a System variant never paints the wrong brightness first.
-- **Icons** — Material Symbols Rounded variable font, addressed through OpenType ligatures (`text: "play_arrow"`); `MaterialSymbolsRoundedFilled.ttf` is the FILL=1 face and both carry the full used-set. `scripts/subset-icon-fonts.py` trims them **by glyph id with `--no-layout-closure`** — do not regress to `--text=<names>`, which feeds a–z into ligature closure and ships the whole catalogue. `scripts/icons.txt` is load-bearing: a name used in code but absent renders as tofu, and `scripts/check-icons.py` re-derives the used set and fails on drift — run it (and re-subset) after adding an icon. Pristine sources live in gitignored `scripts/fonts-src/`; requires `fonttools`.
-- **Fonts** — Vazirmatn (OFL; Latin and Arabic, plus the Greek, Russian, Ukrainian and Vietnamese alphabets) under `crates/melodia-ui/ui/assets/fonts/`, embedded via static `import`. UI base 14 px. **The TTFs are built, not upstream's:** `scripts/patch_vazirmatn.py` merges in the letters those four languages need from Roboto 3.004, the release Vazirmatn's own Latin came from, then rewrites OS/2 typo + hhea ascent/descent to `1650/-500` so glyph mass lands at line-box centre on FemtoVG. Slint takes one family, so a character these faces lack falls back to an OS face that breaks that centring; coverage goes into the merge, never into a second `import`. **What gets merged is a language's CLDR alphabet, not a Unicode block** (`LANGUAGE_LETTERS`), so no symbols or historic letters ride along. Neither pristine source is checked in (drop both in gitignored `originals/` and re-run). **A face added under that root owes an entry in `licenses/ATTRIBUTION.txt`** — `crates/melodia/tests/packaging.rs`'s `every_bundled_font_is_named_in_the_attribution` walks the directory rather than listing the faces, a sixth face being precisely the regression.
+- **Pluggable themes** in `melodia-core`'s `themes/`, applied by writing brushes into `Theme`.
+  **`ui::appearance::theme_paint` is the only writer of those brushes**, and it eases one Material
+  You palette into the next by writing a blend every frame, so **any `animate` whose binding can
+  read a palette brush carries `enabled: !Theme.recoloring`** (`slint-pitfalls.md` has the
+  exceptions). Violable from any `.slint` file and silent outside a fade, so
+  `crates/melodia/tests/palette_fade.rs` walks the tree for every colour `animate` outside a
+  `states` transition, the files exempt held to exact counts. The first-launch default follows the
+  host: Windows Fluent, KDE Breeze and GNOME Adwaita each on the System variant under their own
+  desktop, Catppuccin Mocha mauve anywhere else (`services::settings`'s `first_launch_theme`, fed
+  by `host_desktop`). **System dark/light** resolves through `platform::system_theme` on Linux
+  (the XDG portal; KDE Breeze and `"system"` re-source `~/.config/kdeglobals`, and
+  `spawn_color_watcher` re-applies on portal `SettingChanged`) and through `platform::color_mode`
+  on Windows (the default app mode, re-read on winit `ThemeChanged` and on every focus gain via
+  `WindowChrome.recheck-system-theme`). Both land in `ui/appearance/system_watcher.rs`, and both
+  are read before the first frame, so a System variant never paints the wrong brightness first.
+- **Icons** — Material Symbols Rounded variable font, addressed through OpenType ligatures
+  (`text: "play_arrow"`); `MaterialSymbolsRoundedFilled.ttf` is the FILL=1 face and both carry the
+  full used-set. `scripts/subset-icon-fonts.py` trims them **by glyph id with
+  `--no-layout-closure`** — do not regress to `--text=<names>`, which feeds a–z into ligature
+  closure and ships the whole catalogue. `scripts/icons.txt` is load-bearing: a name used in code
+  but absent renders as tofu, and `scripts/check-icons.py` re-derives the used set and fails on
+  drift — run it (and re-subset) after adding an icon. Pristine sources live in gitignored
+  `scripts/fonts-src/`; requires `fonttools`.
+- **Fonts** — Vazirmatn (OFL; Latin and Arabic, plus the Greek, Russian, Ukrainian and Vietnamese
+  alphabets) under `crates/melodia-ui/ui/assets/fonts/`, embedded via static `import`. UI base
+  14 px. **The TTFs are built, not upstream's:** `scripts/patch_vazirmatn.py` merges in the letters
+  those four languages need from Roboto 3.004, the release Vazirmatn's own Latin came from, then
+  rewrites OS/2 typo + hhea ascent/descent to `1650/-500` so glyph mass lands at line-box centre on
+  FemtoVG. Slint takes one family, so a character these faces lack falls back to an OS face that
+  breaks that centring; coverage goes into the merge, never into a second `import`. **What gets
+  merged is a language's CLDR alphabet, not a Unicode block** (`LANGUAGE_LETTERS`), so no symbols
+  or historic letters ride along. Neither pristine source is checked in (drop both in gitignored
+  `originals/` and re-run). **A face added under that root owes an entry in
+  `licenses/ATTRIBUTION.txt`** — `crates/melodia/tests/packaging.rs`'s
+  `every_bundled_font_is_named_in_the_attribution` walks the directory rather than listing the
+  faces, a sixth face being precisely the regression.
 
 ## Internationalization (i18n)
 
-- **`@tr("English msgid")`**, registered at codegen and re-rendered on locale switch. Plurals `@tr("{n} track" | "{n} tracks" % count)`, interpolation `@tr("{} of {}", a, b)`.
-- **Bundled translations** live at `crates/melodia-ui/translations/<lang>/LC_MESSAGES/melodia-ui.po`; English is the source baseline, so there is no `en.po`. **The basename tracks the package name and isn't a free choice** — slint-build derives the gettext domain from `CARGO_PKG_NAME` with no override, so renaming the crate means renaming every catalog or the build fails with "No translations found". Both `build.rs` paths resolve against `$CARGO_MANIFEST_DIR`, not the CWD. **`translations/melodia-ui.pot` beside them is generated** by `scripts/update-translations.py`, and Slint never reads it: it loads only an `LC_MESSAGES/melodia-ui.po`.
-- **Runtime switch** is `slint::select_bundled_translation(&code)` — in `boot::ui_setup::chrome::install_locale` before `app.show()` from persisted `settings.locale`, and again per pick in `Settings.language-changed`. No restart. **It also moves the decimal separator every number-to-string in a `.slint` file writes**, which a path built with `+` doesn't survive (`slint-pitfalls.md`). A new locale is `SUPPORTED_LOCALES` + `LOCALE_NATIVE_NAMES` (1:1 and inserted at the native name's alphabetical place, the length held at compile time and the order by a test, names always native) plus a `.po` beside its siblings, plus a `LANGUAGE_LETTERS` row in `scripts/patch_vazirmatn.py` and a re-run if the bundled faces lack its alphabet. `<code>` is the directory name, the `SUPPORTED_LOCALES` entry and the persisted setting at once, Slint matching the directory exactly, so a regional locale is `pt_BR` in all three. Start the catalog from `crates/melodia-ui` with `msginit --no-translator -l <code> -i translations/melodia-ui.pot -o translations/<code>/LC_MESSAGES/melodia-ui.po`, since the script merges only into catalogs that already exist. Then fill its header as the siblings' are filled. msginit leaves `Project-Id-Version`, `PO-Revision-Date` and `Last-Translator` unset (the script's `msgfmt -c` warns about the first two on every run), and it copies in the template's "Never edit by hand" line, which msgmerge keeps.
-- **Don't translate** Material Symbols ligatures, asset paths, theme tokens, debug logs, brand/proper-noun chip labels (`"Melodia"`, `"KDE"`, `"GNOME"`, `"macOS"`, `"Windows 11"`, Catppuccin names) or the fallback `Dialog.confirm-label: "OK"`.
-- **`@tr()` only translates literal strings at codegen** — a `[string]` populated from Rust renders whatever Rust pushed. The workaround is an inline literal list at the use site (`[@tr("A"), @tr("B"), …]`, order matching the Rust source), dropping the global property and its seeding.
-- **A new, changed or removed `@tr` string means running `scripts/update-translations.py`**, then finishing what it leaves in every catalog: an empty `msgstr`, or a `#, fuzzy` guess where gettext found a near match. The script argues its own tooling and the two extractor bugs it works around. **A translator note is one `// Translators:` line directly above the line holding the `@tr`, with no second `@tr` on that line**, since the extractor hands the comment above to every call on the line below it; any other comment there stays out of the catalogs. `crates/melodia/tests/translations.rs` holds the template equal to the tree, the catalogs on disk equal to `SUPPORTED_LOCALES` less English, every catalog equal to the template, no entry fuzzy or empty (Slint shows either in English, a plural with any one form empty included, and nothing says so), every plural carrying exactly the forms its catalog's header declares, every translation substituting the arguments its msgid does (Slint silently drops one a translation leaves out, and `{0}`/`{1}` reorder them), every note in the tree equal to its entry's in the template, every character a catalog or the template sets present in each bundled text face (one missing is drawn from an OS fallback, off-centre, and invisible on a Latin machine), and every letter `LANGUAGE_LETTERS` merges, in both cases and decomposed, present there too, a catalog setting only the part of its alphabet its strings use where titles and file names use the rest. A plural is `msgid_plural` + one `msgstr[i]` per form the header's `nplurals` declares, and Slint shows `msgstr[0]` for a form an entry lacks. Every catalog but Polish, Russian, Ukrainian, Indonesian and Vietnamese has two: Turkish and Hungarian keep that layout but don't pluralize after numerals, Greek pluralizes regularly, and Brazilian Portuguese takes the singular for 0 as well as 1 (`plural=(n > 1)`), so its `msgstr[0]` has to read right after a zero. European Portuguese (`pt`) takes the plural for 0 (`plural=(n != 1)`), so the two Portuguese catalogs can't share a header. Polish has three: 1, then 2–4 outside 12–14, then everything else, 0 included, so its `msgstr[2]` is the form most counts read. Russian has three by another rule: the first serves every count ending in 1 except those ending in 11, so its `msgstr[0]` is read after 21 and has to keep `{n}`. Ukrainian takes Russian's rule, so the same holds for its `msgstr[0]`. A Polish header in a Russian catalog passes this test and `msgfmt -c` alike, so the rule is msginit's to write. Indonesian has one (`nplurals=1; plural=0`): a noun doesn't change after a numeral, as in Turkish, but here the header says so, so each plural is a lone `msgstr[0]` and a second form carried over from a sibling is a surplus the test refuses. Vietnamese takes the same header, its nouns never inflecting for number, so `{n}` alone carries the count.
-- **RTL is deferred** (Slint 1.18 has no `direction: rtl` and no bidi-aware `HorizontalLayout`), and **`slint::translate_from_bundle` is `i_slint_core`-internal** — there is no publicly Rust-callable `tr("…")`.
+- **`@tr("English msgid")`**, registered at codegen and re-rendered on locale switch. Plurals
+  `@tr("{n} track" | "{n} tracks" % count)`, interpolation `@tr("{} of {}", a, b)`.
+- **Bundled translations** live at
+  `crates/melodia-ui/translations/<lang>/LC_MESSAGES/melodia-ui.po`; English is the source
+  baseline, so there is no `en.po`. **The basename tracks the package name and isn't a free
+  choice** — slint-build derives the gettext domain from `CARGO_PKG_NAME` with no override, so
+  renaming the crate means renaming every catalog or the build fails with "No translations found".
+  Both `build.rs` paths resolve against `$CARGO_MANIFEST_DIR`, not the CWD.
+  **`translations/melodia-ui.pot` beside them is generated** by `scripts/update-translations.py`,
+  and Slint never reads it: it loads only an `LC_MESSAGES/melodia-ui.po`.
+- **Runtime switch** is `slint::select_bundled_translation(&code)` — in
+  `boot::ui_setup::chrome::install_locale` before `app.show()` from persisted `settings.locale`,
+  and again per pick in `Settings.language-changed`. No restart. **It also moves the decimal
+  separator every number-to-string in a `.slint` file writes**, which a path built with `+` doesn't
+  survive (`slint-pitfalls.md`). A new locale is `SUPPORTED_LOCALES` + `LOCALE_NATIVE_NAMES` (1:1
+  and inserted at the native name's alphabetical place, the length held at compile time and the
+  order by a test, names always native) plus a `.po` beside its siblings, plus a `LANGUAGE_LETTERS`
+  row in `scripts/patch_vazirmatn.py` and a re-run if the bundled faces lack its alphabet. `<code>`
+  is the directory name, the `SUPPORTED_LOCALES` entry and the persisted setting at once, Slint
+  matching the directory exactly, so a regional locale is `pt_BR` in all three. Start the catalog
+  from `crates/melodia-ui` with
+  `msginit --no-translator -l <code> -i translations/melodia-ui.pot -o translations/<code>/LC_MESSAGES/melodia-ui.po`,
+  since the script merges only into catalogs that already exist. Then fill its header as the
+  siblings' are filled. msginit leaves `Project-Id-Version`, `PO-Revision-Date` and
+  `Last-Translator` unset (the script's `msgfmt -c` warns about the first two on every run), and it
+  copies in the template's "Never edit by hand" line, which msgmerge keeps.
+- **Don't translate** Material Symbols ligatures, asset paths, theme tokens, debug logs,
+  brand/proper-noun chip labels (`"Melodia"`, `"KDE"`, `"GNOME"`, `"macOS"`, `"Windows 11"`,
+  Catppuccin names) or the fallback `Dialog.confirm-label: "OK"`.
+- **`@tr()` only translates literal strings at codegen** — a `[string]` populated from Rust renders
+  whatever Rust pushed. The workaround is an inline literal list at the use site
+  (`[@tr("A"), @tr("B"), …]`, order matching the Rust source), dropping the global property and its
+  seeding.
+- **A new, changed or removed `@tr` string means running `scripts/update-translations.py`**, then
+  finishing what it leaves in every catalog: an empty `msgstr`, or a `#, fuzzy` guess where gettext
+  found a near match. The script argues its own tooling and the two extractor bugs it works around.
+  **A translator note is one `// Translators:` line directly above the line holding the `@tr`, with
+  no second `@tr` on that line**, since the extractor hands the comment above to every call on the
+  line below it; any other comment there stays out of the catalogs.
+  `crates/melodia/tests/translations.rs` holds the template equal to the tree, the catalogs on disk
+  equal to `SUPPORTED_LOCALES` less English, every catalog equal to the template, no entry fuzzy or
+  empty (Slint shows either in English, a plural with any one form empty included, and nothing
+  says so), every plural carrying exactly the forms its catalog's header declares, every
+  translation substituting the arguments its msgid does (Slint silently drops one a translation
+  leaves out, and `{0}`/`{1}` reorder them), every note in the tree equal to its entry's in the
+  template, every character a catalog or the template sets present in each bundled text face (one
+  missing is drawn from an OS fallback, off-centre, and invisible on a Latin machine), and every
+  letter `LANGUAGE_LETTERS` merges, in both cases and decomposed, present there too, a catalog
+  setting only the part of its alphabet its strings use where titles and file names use the rest.
+  A plural is `msgid_plural` + one `msgstr[i]` per form the header's `nplurals` declares, and Slint
+  shows `msgstr[0]` for a form an entry lacks. Every catalog but Polish, Russian, Ukrainian,
+  Indonesian and Vietnamese has two: Turkish and Hungarian keep that layout but don't pluralize
+  after numerals, Greek pluralizes regularly, and Brazilian Portuguese takes the singular for 0 as
+  well as 1 (`plural=(n > 1)`), so its `msgstr[0]` has to read right after a zero. European
+  Portuguese (`pt`) takes the plural for 0 (`plural=(n != 1)`), so the two Portuguese catalogs
+  can't share a header. Polish has three: 1, then 2–4 outside 12–14, then everything else, 0
+  included, so its `msgstr[2]` is the form most counts read. Russian has three by another rule: the
+  first serves every count ending in 1 except those ending in 11, so its `msgstr[0]` is read after
+  21 and has to keep `{n}`. Ukrainian takes Russian's rule, so the same holds for its `msgstr[0]`.
+  A Polish header in a Russian catalog passes this test and `msgfmt -c` alike, so the rule is
+  msginit's to write. Indonesian has one (`nplurals=1; plural=0`): a noun doesn't change after a
+  numeral, as in Turkish, but here the header says so, so each plural is a lone `msgstr[0]` and a
+  second form carried over from a sibling is a surplus the test refuses. Vietnamese takes the same
+  header, its nouns never inflecting for number, so `{n}` alone carries the count.
+- **RTL is deferred** (Slint 1.18 has no `direction: rtl` and no bidi-aware `HorizontalLayout`),
+  and **`slint::translate_from_bundle` is `i_slint_core`-internal** — there is no publicly
+  Rust-callable `tr("…")`.
 
 ## Async / Tokio
 
 See `.claude/rules/tokio.md`. Project-specific:
 
-- One multi-thread runtime in `main.rs`. Inside the Slint event loop, `.await` tokio futures via `slint::spawn_local(async_compat::Compat::new(...))`; pure background work uses `runtime.spawn(...)`.
+- One multi-thread runtime in `main.rs`. Inside the Slint event loop, `.await` tokio futures via
+  `slint::spawn_local(async_compat::Compat::new(...))`; pure background work uses
+  `runtime.spawn(...)`.
 - **`tokio::sync::Mutex` only when the lock crosses `.await`.** Otherwise `parking_lot::Mutex`.
 - **`watch` when only the latest matters; `mpsc` for events you must not coalesce.**
 
@@ -179,32 +811,110 @@ determinism rules, and what an assertion may contain under a lint set that denie
 It is a practice rule and deliberately holds no inventory of our fixtures, walks or counts,
 which rot silently because nothing compiles them. This tree's own arrangement stays here.
 
-- **Unit tests** — per-module `tests/` subdirs, referenced via `#[cfg(test)] #[path = "tests/<name>_tests.rs"] mod tests;`. Never inline `#[cfg(test)] mod tests { ... }`.
-- **A check that enumerates a corpus lives in `crates/melodia/tests/`, a pin on one named file lives beside that file.** The rule is what keeps `cargo test -p <crate>` a question about that crate: a walk left inside one makes that crate's suite compile the whole tree to answer a question about neither, which is what `melodia-net`'s did.
-- **A corpus walk owes five things, none of which a passing run can show.** A **vacuity floor**, because a walk that finds nothing passes and takes every pin standing on it along — `melodia_testkit`'s `MIN_SOURCES`, `MIN_UI_SOURCES` and `MIN_SLINT_SOURCES` are shared so ten pins can't disagree about how much of a corpus has to be there, and a walk over a narrower tree declares its own; keep them loose, since one tight enough to be interesting trips on an ordinary file deletion. An **equality wherever a vanishing subtree is the failure**, a floor being exactly what cannot see one slice stop existing — `CALLBACK_HOMES` is the worked example and argues it where it is defined. **Unreadable paths collected and asserted empty, never skipped**, a path that won't read being indistinguishable from one holding nothing. **Comments stripped before the needle, and brace-matched scope wherever a substring would lie** — `crates/melodia/tests/scrollbars.rs` lifts each scroller's body before reading its policy, so a nested scroller's opt-out can't be borrowed by the one around it. And **an exemption held to an exact count**, every entry asserted to still match something: a second call written into a sanctioned site is itself the regression, and an entry that has stopped matching is a hole that reads as coverage.
-- **The suite assumes an LF checkout, and `.gitattributes` is what guarantees one.** Without it a clone under `core.autocrlf=true` rewrites line endings on the way out and thirteen tests fail on Windows alone: every source walk that splits on `"\n}\n"` or parses a rule's `---` frontmatter, the packaging text compared against `LICENSE`, and all seven updater-signature tests — git having quietly rewritten the *signed* fixtures, which is why they are pinned `-text` there rather than left to its text heuristic.
-- **A path in a fixture is joined, never spelled.** `format!("{dir}/x.mp3")` is a path only the CI runner has; the code under test looks the row up by what `Path::join` gave it, so a hand-spelled `/` seeds a row Windows can never match and the test fails for a reason that has nothing to do with what it is checking. Where the *separator itself* is the subject, build it from `MAIN_SEPARATOR_STR` so the assertion means something on both platforms — a literal `\` only ever fails on Linux, which is how `find_folder_for_path` shipped broken for every Windows install.
+- **Unit tests** — per-module `tests/` subdirs, referenced via
+  `#[cfg(test)] #[path = "tests/<name>_tests.rs"] mod tests;`. Never inline
+  `#[cfg(test)] mod tests { ... }`.
+- **A check that enumerates a corpus lives in `crates/melodia/tests/`, a pin on one named file lives
+  beside that file.** The rule is what keeps `cargo test -p <crate>` a question about that crate: a
+  walk left inside one makes that crate's suite compile the whole tree to answer a question about
+  neither, which is what `melodia-net`'s did.
+- **A corpus walk owes five things, none of which a passing run can show.** A **vacuity floor**,
+  because a walk that finds nothing passes and takes every pin standing on it along —
+  `melodia_testkit`'s `MIN_SOURCES`, `MIN_UI_SOURCES` and `MIN_SLINT_SOURCES` are shared so ten
+  pins can't disagree about how much of a corpus has to be there, and a walk over a narrower tree
+  declares its own; keep them loose, since one tight enough to be interesting trips on an ordinary
+  file deletion. An **equality wherever a vanishing subtree is the failure**, a floor being exactly
+  what cannot see one slice stop existing — `CALLBACK_HOMES` is the worked example and argues it
+  where it is defined. **Unreadable paths collected and asserted empty, never skipped**, a path
+  that won't read being indistinguishable from one holding nothing. **Comments stripped before the
+  needle, and brace-matched scope wherever a substring would lie** —
+  `crates/melodia/tests/scrollbars.rs` lifts each scroller's body before reading its policy, so a
+  nested scroller's opt-out can't be borrowed by the one around it. And **an exemption held to an
+  exact count**, every entry asserted to still match something: a second call written into a
+  sanctioned site is itself the regression, and an entry that has stopped matching is a hole that
+  reads as coverage.
+- **The suite assumes an LF checkout, and `.gitattributes` is what guarantees one.** Without it a
+  clone under `core.autocrlf=true` rewrites line endings on the way out and thirteen tests fail on
+  Windows alone: every source walk that splits on `"\n}\n"` or parses a rule's `---` frontmatter,
+  the packaging text compared against `LICENSE`, and all seven updater-signature tests — git having
+  quietly rewritten the *signed* fixtures, which is why they are pinned `-text` there rather than
+  left to its text heuristic.
+- **A path in a fixture is joined, never spelled.** `format!("{dir}/x.mp3")` is a path only the CI
+  runner has; the code under test looks the row up by what `Path::join` gave it, so a hand-spelled
+  `/` seeds a row Windows can never match and the test fails for a reason that has nothing to do
+  with what it is checking. Where the *separator itself* is the subject, build it from
+  `MAIN_SEPARATOR_STR` so the assertion means something on both platforms — a literal `\` only ever
+  fails on Linux, which is how `find_folder_for_path` shipped broken for every Windows install.
 
 ## Continuous Integration
 
-`.github/workflows/pr-validation.yml` gates PRs into `main` (`changes` → `audit` ∥ `fmt` ∥ `clippy` ∥ `test` ∥ `clippy-windows` ∥ `test-windows`), and the aggregate `pr-validation` job is the required status check. Coverage is off the PR path. **What bites — a job the aggregate never waits on, the skip matrix being a denylist, the memory cap on the compiling jobs, the headless-audio shim and the one job that can't have it, SHA pinning, the licence pins — is in `.claude/rules/ci-packaging.md`. Read it before editing anything under `.github/` or `packaging/`.** Two prohibitions violable from outside `.github/`:
+`.github/workflows/pr-validation.yml` gates PRs into `main` (`changes` → `audit` ∥ `fmt` ∥
+`clippy` ∥ `test` ∥ `clippy-windows` ∥ `test-windows`), and the aggregate `pr-validation` job is
+the required status check. Coverage is off the PR path. **What bites — a job the aggregate never
+waits on, the skip matrix being a denylist, the memory cap on the compiling jobs, the
+headless-audio shim and the one job that can't have it, SHA pinning, the licence pins — is in
+`.claude/rules/ci-packaging.md`. Read it before editing anything under `.github/` or
+`packaging/`.** Two prohibitions violable from outside `.github/`:
 
-- **A release is a pushed `v*.*.*` tag, never a merge.** `main` is the integration branch, so landing a PR ships nothing on its own; `release.yml` fires on the tag and `prepare` fails the run in seconds unless it equals `v<[workspace.package] version>`, which is one line in the root `Cargo.toml` and the fourteen `Cargo.lock` entries a build refreshes from it, every member carrying `version.workspace = true`. The `v*.*.*` ruleset blocks `deletion` and `non_fast_forward`, because a published tag is what every download URL and `latest.json` name, and a moved one breaks links for everybody already on that version. The cycle is: land the bump like any other PR, tag the merge commit, then QA the draft `release.yml` leaves and publish it by hand.
-- **Never write a closing keyword — the *link* is the input.** An issue linked to its branch from the Development sidebar carries into the PR opened from that branch, and GitHub closes it natively when that PR merges into `main`; the board's built-in "Item closed" workflow then moves it to Done. A `Fixes #N` in the body or in a commit message is a second mechanism for the same close: it works, and it stops working the moment someone rewords the text, which the sidebar link doesn't.
+- **A release is a pushed `v*.*.*` tag, never a merge.** `main` is the integration branch, so
+  landing a PR ships nothing on its own; `release.yml` fires on the tag and `prepare` fails the run
+  in seconds unless it equals `v<[workspace.package] version>`, which is one line in the root
+  `Cargo.toml` and the fourteen `Cargo.lock` entries a build refreshes from it, every member
+  carrying `version.workspace = true`. The `v*.*.*` ruleset blocks `deletion` and
+  `non_fast_forward`, because a published tag is what every download URL and `latest.json` name,
+  and a moved one breaks links for everybody already on that version. The cycle is: land the bump
+  like any other PR, tag the merge commit, then QA the draft `release.yml` leaves and publish it by
+  hand.
+- **Never write a closing keyword — the *link* is the input.** An issue linked to its branch from
+  the Development sidebar carries into the PR opened from that branch, and GitHub closes it
+  natively when that PR merges into `main`; the board's built-in "Item closed" workflow then moves
+  it to Done. A `Fixes #N` in the body or in a commit message is a second mechanism for the same
+  close: it works, and it stops working the moment someone rewords the text, which the sidebar link
+  doesn't.
 
 ## Memory Discipline
 
 Memory is a product requirement, and `docs/adr/` says why.
 
-- Run `/usr/bin/time -v target/release/Melodia` after notable changes; track peak RSS. A feature adding > 20 MB idle RSS gets profiled with `heaptrack` before merging.
-- Size-bound caches (LRU); construct heavy clients lazily; `Vec::with_capacity` whenever capacity is known.
-- **`RUST_LOG=info MELODIA_RSS_SAMPLE=1`** turns on `crates/melodia-app/src/tasks/rss_sampler.rs` (UI thread), logging `VmRSS`/`RssAnon`/`RssFile` every 500 ms tagged with the current view, `boot::ui_setup` supplying the tag. `RssFile` growth is the Mesa GPU pool, not the Rust heap.
-- **glibc arena cap via `mallopt(M_ARENA_MAX, 2)`, ahead of the first malloc on any thread** — `services::platform::allocator::pin_arenas_and_thresholds()` in `main.rs`'s `prepare_process()`, the first call in `main()` after the literal branches, before `services::platform::logging::install` and tokio, both of which allocate. **Don't lower it to 1.** Linux-glibc only; pairs with the two startup `allocator::trim()`s `tasks::heap_trim` schedules (one once the boot settles, one after the pool closes the boot's connections), and the one a reconcile pass makes as it ends. **`services::platform::allocator` is the only module that may name `libc`** — the cap and the trim are one concern, and splitting them is what let the trim threshold ratchet out from under the trim.
+- Run `/usr/bin/time -v target/release/Melodia` after notable changes; track peak RSS. A feature
+  adding > 20 MB idle RSS gets profiled with `heaptrack` before merging.
+- Size-bound caches (LRU); construct heavy clients lazily; `Vec::with_capacity` whenever capacity
+  is known.
+- **`RUST_LOG=info MELODIA_RSS_SAMPLE=1`** turns on `crates/melodia-app/src/tasks/rss_sampler.rs`
+  (UI thread), logging `VmRSS`/`RssAnon`/`RssFile` every 500 ms tagged with the current view,
+  `boot::ui_setup` supplying the tag. `RssFile` growth is the Mesa GPU pool, not the Rust heap.
+- **glibc arena cap via `mallopt(M_ARENA_MAX, 2)`, ahead of the first malloc on any thread** —
+  `services::platform::allocator::pin_arenas_and_thresholds()` in `main.rs`'s `prepare_process()`,
+  the first call in `main()` after the literal branches, before
+  `services::platform::logging::install` and tokio, both of which allocate. **Don't lower it
+  to 1.** Linux-glibc only; pairs with the two startup `allocator::trim()`s `tasks::heap_trim`
+  schedules (one once the boot settles, one after the pool closes the boot's connections), and the
+  one a reconcile pass makes as it ends.
+  **`services::platform::allocator` is the only module that may name `libc`** — the cap and the
+  trim are one concern, and splitting them is what let the trim threshold ratchet out from under
+  the trim.
 
 ## Known Gaps
 
-- **zbus footgun**: never enable `features = ["tokio"]` on zbus. Under it `zbus::block_on`, which every `zbus::blocking` call goes through, blocks on a tokio runtime zbus starts for itself, and `AppState::init` opens two connections (MPRIS and the always-on-top probe) inside `runtime.block_on`, where tokio refuses to start a second runtime and panics at startup. Nothing needs the async API: AOT uses `zbus::blocking::Connection` inside `tokio::task::spawn_blocking(...)`, and MPRIS sends its signals from a thread of its own. `ksni` (Linux tray) is pinned `default-features = false, features = ["blocking", "async-io"]` for the same reason: its default `tokio` feature pulls `zbus/tokio`, and `async-io` (matching accesskit) is mandatory since ksni's `compat` module `compile_error!`s without an executor feature.
-- **Vendored winit fork**: `winit/` is winit 0.30.13 + 4 commits, three for Wayland file drag-and-drop and one for the positioned drag events the file-drop route reads on Wayland, X11 and Windows, wired by `[patch.crates-io]`; fresh clones and CI build with no setup. **`dpi` is NOT vendored** — a path-vendored `dpi` is a second un-unifiable instance clashing with `muda`'s registry copy on Windows. Retires (delete `winit/` + the patch block) once winit 0.31 ships the merged #4571 DnD API *and* a Slint release surfaces external drops as file paths on `DropArea`; that bump also renames `unstable-winit-030` → `-031` and `slint::winit_030` → `winit_031`. **The fork's drag events are the `0.31.0` betas' shape, not #4571's**, which fetches paths by id, so the retirement also moves `window_chrome::file_drop`'s routing onto whatever that Slint release offers rather than deleting a directory alone.
+- **zbus footgun**: never enable `features = ["tokio"]` on zbus. Under it `zbus::block_on`, which
+  every `zbus::blocking` call goes through, blocks on a tokio runtime zbus starts for itself, and
+  `AppState::init` opens two connections (MPRIS and the always-on-top probe) inside
+  `runtime.block_on`, where tokio refuses to start a second runtime and panics at startup. Nothing
+  needs the async API: AOT uses `zbus::blocking::Connection` inside
+  `tokio::task::spawn_blocking(...)`, and MPRIS sends its signals from a thread of its own. `ksni`
+  (Linux tray) is pinned `default-features = false, features = ["blocking", "async-io"]` for the
+  same reason: its default `tokio` feature pulls `zbus/tokio`, and `async-io` (matching accesskit)
+  is mandatory since ksni's `compat` module `compile_error!`s without an executor feature.
+- **Vendored winit fork**: `winit/` is winit 0.30.13 + 4 commits, three for Wayland file
+  drag-and-drop and one for the positioned drag events the file-drop route reads on Wayland, X11
+  and Windows, wired by `[patch.crates-io]`; fresh clones and CI build with no setup. **`dpi` is
+  NOT vendored** — a path-vendored `dpi` is a second un-unifiable instance clashing with `muda`'s
+  registry copy on Windows. Retires (delete `winit/` + the patch block) once winit 0.31 ships the
+  merged #4571 DnD API *and* a Slint release surfaces external drops as file paths on `DropArea`;
+  that bump also renames `unstable-winit-030` → `-031` and `slint::winit_030` → `winit_031`. **The
+  fork's drag events are the `0.31.0` betas' shape, not #4571's**, which fetches paths by id, so
+  the retirement also moves `window_chrome::file_drop`'s routing onto whatever that Slint release
+  offers rather than deleting a directory alone.
 
 ## User Conventions
 
