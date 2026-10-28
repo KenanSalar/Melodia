@@ -303,8 +303,8 @@ Linux (X11 and Wayland) and Windows, on both `x86_64` and `aarch64`. Take the la
 | `.rpm` (Fedora/RHEL) | `sudo dnf install ./melodia-*.rpm` |
 | `.deb` (Debian/Ubuntu) | `sudo apt install ./melodia-*.deb` |
 | AppImage | `chmod +x melodia-*.AppImage && ./melodia-*.AppImage` |
-| Tarball | Extract, then `./install-linux.sh`, which installs into `~/.local/share/Melodia` with no `sudo`, so the in-app updater needs no polkit prompt |
-| Windows | Run the installer, or use the portable binary |
+| Tarball | Extract, then `./install-linux.sh`, which installs into `~/.local/share/Melodia` with no `sudo`, so the in-app updater can replace it |
+| Windows | Run the installer |
 
 Melodia updates itself in place, minisign-signed. Release artifacts also carry
 build-provenance attestations, verifiable with:

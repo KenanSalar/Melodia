@@ -3,9 +3,9 @@
 //!
 //! Three shapes have one: a per-user install whose directory we can `rename(2)` in, a
 //! package-owned RPM/DEB that `pkexec dnf/apt install` keeps consistent, and a per-machine MSI that
-//! `msiexec /i` replaces. Two don't: a tarball hand-dropped under a root-owned directory, and a
-//! **portable extract on Windows**, whose target key is `cfg!`-derived and still reads
-//! `windows-*-msi`, so the updater would install a fresh MSI and orphan the portable copy.
+//! `msiexec /i` replaces. Two don't: a tarball or `AppImage` hand-dropped under a root-owned
+//! directory, and a **portable extract on Windows**, whose target key is `cfg!`-derived and still
+//! reads `windows-*-msi`, so the updater would install a fresh MSI and orphan the portable copy.
 //!
 //! Keyed on `install_target()`, not `current_exe()`: under an `AppImage` the latter is a read-only
 //! mount in `/tmp`, which would mark every user install system-managed.

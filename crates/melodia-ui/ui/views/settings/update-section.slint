@@ -33,7 +33,8 @@ export component UpdateSection inherits Rectangle {
     property <string> restart-label: @tr("Update Installed");
     property <string> restart-desc: @tr("Restart Melodia to apply the update");
     property <string> available-label: @tr("Version {} Available", MelodiaUpdater.available-version);
-    property <string> managed-label: @tr("Updates managed by your package manager");
+    property <string> managed-label: @tr("Updates are installed outside Melodia");
+    property <string> managed-desc: @tr("Install the new version the same way you installed this one.");
     property <string> auto-check-label: @tr("Check for updates automatically");
     property <string> auto-check-desc: @tr("Once a day, Melodia asks GitHub whether a newer version is out.");
 
@@ -52,23 +53,15 @@ export component UpdateSection inherits Rectangle {
         && row-visible(available-label, MelodiaUpdater.notes-short);
     property <bool> show-error: MelodiaUpdater.error-message != ""
         && row-visible("", MelodiaUpdater.error-message);
-    // A ternary, so each branch's literal stays inside `@tr()` and re-resolves
-    // on a locale switch. The order matches `updater_settings.rs`'s values.
-    property <string> pkg-manager-hint:
-        MelodiaUpdater.platform-kind == "windows"
-            ? @tr("Re-run the latest .msi installer from the Releases page.")
-        : MelodiaUpdater.platform-kind == "macos"
-            ? @tr("Use brew upgrade melodia.")
-        : @tr("Use sudo dnf update melodia (or your distro equivalent).");
-    property <bool> show-package-managed: MelodiaUpdater.system-managed
-        && row-visible(managed-label, pkg-manager-hint);
+    property <bool> show-system-managed: MelodiaUpdater.system-managed
+        && row-visible(managed-label, managed-desc);
 
     // Gated as a whole rather than per row: an unsupported build has no state worth a card, and
     // routing it through `has-matches` is also what keeps a search for "update" from landing on
     // an empty one.
     out property <bool> has-matches: MelodiaUpdater.updates-supported
         && (show-software || show-auto-check || show-up-to-date || show-restart
-            || show-update-available || show-error || show-package-managed);
+            || show-update-available || show-error || show-system-managed);
 
     VerticalLayout {
     if has-matches: SectionCard {
@@ -102,11 +95,11 @@ export component UpdateSection inherits Rectangle {
 
         // Directly under the software row, so it's clear at once why the action
         // buttons below are missing.
-        if root.show-software && root.show-package-managed: SectionDivider {}
-        if root.show-package-managed: SettingRow {
+        if root.show-software && root.show-system-managed: SectionDivider {}
+        if root.show-system-managed: SettingRow {
             icon: "package_2";
             label: root.managed-label;
-            description: pkg-manager-hint;
+            description: root.managed-desc;
         }
 
         if root.show-software && root.show-up-to-date: SectionDivider {}

@@ -18,14 +18,13 @@ use melodia_platform::services::platform::install_kind::install_target;
 
 use download::download_to_file;
 use staging::{
-    InstallMethod, resolve_install_method, resolve_staged_path, sidecar_meta_path, staged_msi_path,
-    staged_package_path,
+    InstallMethod, resolve_install_method, sidecar_meta_path, staged_msi_path, staged_package_path,
+    staged_path,
 };
-use swap::{install_via_msiexec, install_via_package_manager};
+use swap::{install_via_msiexec, install_via_package_manager, swap_in_place};
 use verify::{attempt_post_swap_rollback, verify_staged, verify_swapped_binary};
 
 pub use staging::prune_stale_staging;
-pub use swap::swap_in_place;
 
 // For `super::install_target_old`; Windows installs through msiexec and keeps no `.old`.
 #[cfg(target_os = "linux")]
@@ -108,7 +107,7 @@ async fn download_and_install_to(
     let staged = match method {
         InstallMethod::LinuxPackage(format) => staged_package_path(&asset.url, format)?,
         InstallMethod::WindowsMsi => staged_msi_path(&asset.url)?,
-        InstallMethod::AtomicSwap => resolve_staged_path(&target)?,
+        InstallMethod::AtomicSwap => staged_path(&target),
     };
 
     download_to_file(http, &asset.url, expected_version, asset.size, &staged, &on_progress).await?;
@@ -134,7 +133,10 @@ async fn download_and_install_to(
         }
         InstallMethod::AtomicSwap => {
             let (target, staged) = (target.clone(), staged.clone());
-            install_blocking(move || swap_in_place(&target, &staged)).await?
+            install_blocking(move || {
+                swap_in_place(&target, &staged).map(|()| InstallOutcome::Installed)
+            })
+            .await?
         }
         // On the runtime: the wait normally ends with this process closed under it.
         InstallMethod::WindowsMsi => install_via_msiexec(&staged).await?,

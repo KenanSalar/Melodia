@@ -33,11 +33,13 @@ the platform keys and the schema default. `manifest=true` is argued at `verify_m
   `target/` cargo owns: no daily task, and `MelodiaUpdater.updates-supported` takes the card out of
   the settings search through `UpdateSection.has-matches`. `is_system_install()` is true where no
   in-app path reaches (`system_install`'s module doc): the daily task stays down, the manual check
-  survives, and Download and Skip give way to a package-manager hint. Widening the second to cover
-  a dev build would offer that hint to `cargo run`.
+  survives, and Download and Skip give way to a hint. Both ways into `MelodiaUpdater.install()`
+  read the flag, the panel's button in `update-section.slint` and the Available toast in
+  `updater_settings::dispatch`. Widening the second to cover a dev build would offer that hint to
+  `cargo run`.
 - **Only the atomic swap (AppImage, tarball) keeps a `.old`**, which `install/mod.rs` smoke-tests
-  and rolls back from and `main()` reaps on the next Linux boot. The `pkexec mv` fallback, the
-  RPM/DEB install and the MSI leave the replace to the format and skip the smoke test.
+  and rolls back from and `main()` reaps on the next Linux boot. The RPM/DEB install and the MSI
+  leave the replace to the format and skip the smoke test.
 - **Windows is a per-machine MSI the updater re-runs.** `swap::install_via_msiexec` and `main.wxs`
   argue the Restart Manager close, the relaunch and the property both spell.
 - **The polkit helper is spelled in four places**: `swap.rs`'s `HELPER` and its `rpm`/`deb` argv,

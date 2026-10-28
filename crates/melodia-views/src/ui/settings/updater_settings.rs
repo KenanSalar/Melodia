@@ -22,22 +22,9 @@ pub fn install(ui: &AppWindow, state: &AppState) {
     updater.set_current_version(env!("CARGO_PKG_VERSION").into());
     updater.set_updates_supported(is_available());
     updater.set_system_managed(is_system_install());
-    updater.set_platform_kind(platform_kind().into());
 
     if let Ok(s) = settings::read_settings(&state.paths) {
         updater.set_auto_check_enabled(s.updates.auto_check_enabled);
-    }
-}
-
-/// The system-managed install's package-manager hint, as the key `update-section.slint`'s ternary
-/// picks its `@tr` literal by. Keep the two in step.
-fn platform_kind() -> &'static str {
-    if cfg!(target_os = "windows") {
-        "windows"
-    } else if cfg!(target_os = "macos") {
-        "macos"
-    } else {
-        "linux"
     }
 }
 
@@ -64,6 +51,9 @@ pub fn install_event_subscriber(
 
 fn dispatch(ui: &AppWindow, notifications: &NotificationsUi, event: UpdaterEvent) {
     match event {
+        // The toast's one action is the install the panel withholds here, and the panel the check
+        // ran from already names the version.
+        UpdaterEvent::Available { .. } if ui.global::<MelodiaUpdater>().get_system_managed() => {}
         UpdaterEvent::Available { version, .. } => {
             // One card, for the newest version, however many daily checks report one.
             notifications.dismiss_by_kind(NotificationKind::InstallUpdate);

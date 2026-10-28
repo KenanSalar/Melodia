@@ -1,8 +1,8 @@
 //! The final install step: an atomic in-place swap for a per-user install, or an elevated
 //! package-manager or MSI install.
 //!
-//! A rename across filesystems fails with `EXDEV`, so a writable parent stages beside the target
-//! rather than under `$TEMP` (`swap_tests::same_dir_swap_succeeds`).
+//! A rename across filesystems fails with `EXDEV`, so the swap stages beside its target rather
+//! than under `$TEMP` (`swap_tests::same_dir_swap_succeeds`).
 
 use std::path::Path;
 #[cfg(any(target_os = "linux", target_os = "windows"))]
@@ -170,44 +170,14 @@ pub(super) fn install_via_msiexec(_staged: &Path) -> std::future::Ready<AppResul
     std::future::ready(Err(AppError::updater_msg("msiexec install is only supported on Windows")))
 }
 
-/// Swaps the verified `staged` file in over the live binary at `target`.
-///
-/// Linux renames over the running file, whose open fd stays valid, falling back to `pkexec mv` at
-/// a root-owned target. Windows can't rename over a loaded executable, so the running one moves to
-/// `.old` first and is scheduled for delete on reboot, `main()`'s startup reaper being Linux-only.
-pub fn swap_in_place(target: &Path, staged: &Path) -> AppResult<InstallOutcome> {
-    #[cfg(target_os = "windows")]
-    {
-        windows_swap(target, staged)?;
-        Ok(InstallOutcome::Installed)
-    }
-    #[cfg(target_os = "linux")]
-    {
-        linux_swap(target, staged)
-    }
-    #[cfg(not(any(target_os = "windows", target_os = "linux")))]
-    {
-        std::fs::rename(staged, target)?;
-        Ok(InstallOutcome::Installed)
-    }
-}
-
+/// Swaps the verified `staged` file in over the live binary at `target`, renaming over the running
+/// file, whose open fd stays valid.
 #[cfg(target_os = "linux")]
-fn linux_swap(target: &Path, staged: &Path) -> AppResult<InstallOutcome> {
+pub(super) fn swap_in_place(target: &Path, staged: &Path) -> AppResult<()> {
     // Two renames, so a `.old` survives for `verify_swapped_binary`'s rollback.
     let old = old_path(target);
     let _ = std::fs::remove_file(&old);
-
-    // A root-owned dir or another filesystem leaves no room for a `.old`; pkexec has no rollback.
-    if let Err(e) = std::fs::rename(target, &old) {
-        if matches!(
-            e.kind(),
-            std::io::ErrorKind::PermissionDenied | std::io::ErrorKind::CrossesDevices
-        ) {
-            return elevate_swap_via_pkexec(target, staged);
-        }
-        return Err(AppError::from(e));
-    }
+    std::fs::rename(target, &old)?;
 
     // Put `.old` back so the path isn't left empty, reporting the original error either way.
     if let Err(e) = std::fs::rename(staged, target) {
@@ -226,37 +196,14 @@ fn linux_swap(target: &Path, staged: &Path) -> AppResult<InstallOutcome> {
     }
 
     // `.old` stays for the smoke test's rollback; the new binary's first boot reaps it.
-    Ok(InstallOutcome::Installed)
+    Ok(())
 }
 
-/// Not atomic across filesystems, `mv` copying then unlinking, which is accepted over a second
-/// polkit prompt. Only a root-owned `AppImage` or tarball reaches here, RPM and deb installs
-/// going through [`install_via_package_manager`].
-#[cfg(target_os = "linux")]
-fn elevate_swap_via_pkexec(target: &Path, staged: &Path) -> AppResult<InstallOutcome> {
-    log::info!("updater: elevating swap via pkexec ({} → {})", staged.display(), target.display());
-    let output =
-        std::process::Command::new("pkexec").arg("mv").arg("--").arg(staged).arg(target).output();
-
-    let output = match output {
-        Ok(o) => o,
-        Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
-            // No retry here: the way forward is a writable location.
-            let _ = std::fs::remove_file(staged);
-            return Err(AppError::updater_msg(
-                "polkit (pkexec) is not installed; install it or move Melodia to \
-                 a user-writable location like ~/.local/share/Melodia/",
-            ));
-        }
-        Err(e) => return Err(AppError::updater("failed to spawn pkexec", e)),
-    };
-
-    if !output.status.success() {
-        // Keep `staged` so a retry reuses the verified bytes.
-        return pkexec_failure("pkexec mv", output.status.code().unwrap_or(-1), &output.stderr);
-    }
-
-    Ok(InstallOutcome::Installed)
+#[cfg(not(target_os = "linux"))]
+pub(super) fn swap_in_place(_target: &Path, _staged: &Path) -> AppResult<()> {
+    // Unreachable: every key off Linux is an MSI's, and an unpackaged host stops at
+    // `NoAssetForTarget`.
+    Err(AppError::updater_msg("an in-place swap is only supported on Linux"))
 }
 
 /// pkexec's exit when the user dismissed the authentication dialog, per pkexec(1). Only an agent
@@ -290,53 +237,15 @@ fn pkexec_failure(command: &str, code: i32, stderr: &[u8]) -> AppResult<InstallO
     Err(AppError::updater_msg(format!("update install requires admin privileges and {reason}")))
 }
 
-#[cfg(target_os = "windows")]
-#[allow(
-    unsafe_code,
-    reason = "FFI call to MoveFileExW scheduling delete-on-reboot for the .old rollback copy; null lpNewFileName + MOVEFILE_DELAY_UNTIL_REBOOT is the documented contract"
-)]
-fn windows_swap(target: &Path, staged: &Path) -> AppResult<()> {
-    use windows_sys::Win32::Storage::FileSystem::{MOVEFILE_DELAY_UNTIL_REBOOT, MoveFileExW};
-
-    let old = old_path(target);
-    // Best-effort: a stale `.old` still loaded goes at the reboot-delete scheduled below.
-    let _ = std::fs::remove_file(&old);
-
-    std::fs::rename(target, &old)?;
-    if let Err(e) = std::fs::rename(staged, target) {
-        // The usual cause, a transient AV lock, lets this undo succeed.
-        let _ = std::fs::rename(&old, target);
-        return Err(AppError::from(e));
-    }
-
-    let wide: Vec<u16> = wide_with_nul(&old);
-    // SAFETY: `wide` is NUL-terminated by `wide_with_nul` and outlives the call. A null
-    // `lpNewFileName` is what `MOVEFILE_DELAY_UNTIL_REBOOT` documents as delete-on-reboot.
-    let ok = unsafe { MoveFileExW(wide.as_ptr(), std::ptr::null(), MOVEFILE_DELAY_UNTIL_REBOOT) };
-    if ok == 0 {
-        log::warn!(
-            "updater: failed to schedule {} for delete-on-reboot; cleanup will retry on next launch",
-            old.display()
-        );
-    }
-    Ok(())
-}
-
-/// `<target>.old`, the rollback copy both swaps keep. `pub(crate)` so the startup reaper
+/// `<target>.old`, the rollback copy the swap keeps. `pub(crate)` so the startup reaper
 /// (`updater::install_target_old`) derives the same name.
-#[cfg(any(target_os = "linux", target_os = "windows"))]
+#[cfg(target_os = "linux")]
 pub(crate) fn old_path(target: &Path) -> PathBuf {
     let mut name = target.file_name().map(std::ffi::OsStr::to_os_string).unwrap_or_default();
     name.push(".old");
     target.with_file_name(name)
 }
 
-#[cfg(target_os = "windows")]
-fn wide_with_nul(path: &Path) -> Vec<u16> {
-    use std::os::windows::ffi::OsStrExt;
-    path.as_os_str().encode_wide().chain(std::iter::once(0)).collect()
-}
-
-#[cfg(test)]
+#[cfg(all(test, target_os = "linux"))]
 #[path = "../tests/swap_tests.rs"]
 mod tests;

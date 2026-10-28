@@ -110,14 +110,13 @@ fn the_card_sits_under_the_dialog_in_paint_and_in_escape_order() {
     );
 }
 
-/// Both places the daily update check is named hide it where a package manager owns updates.
+/// Both places the daily update check is named hide it on a system install.
 ///
-/// `updater_daily` is already gated on the install kind, so the switch on an RPM, DEB or `AppImage`
-/// build would describe a task that never runs — a control the user can toggle to no effect, which
-/// is worse than not offering it. The card and the Settings row grew the row independently and
-/// nothing ties them together but this.
+/// `updater_daily` doesn't run where no in-app path reaches, so the switch there would toggle
+/// nothing, which is worse than not offering it. The card and the Settings row grew the row
+/// independently and nothing ties them together but this.
 #[test]
-fn neither_update_row_offers_a_switch_a_package_manager_already_owns() {
+fn neither_update_row_offers_the_auto_check_switch_on_a_system_install() {
     let hosts = [
         ("update-section.slint", strip_line_comments(UPDATE_SECTION)),
         ("features-panel.slint", strip_line_comments(FEATURES_PANEL)),

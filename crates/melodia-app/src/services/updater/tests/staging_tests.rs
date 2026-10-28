@@ -68,10 +68,10 @@ fn staged_path_lives_next_to_target() {
 }
 
 #[test]
-fn staged_path_preserves_extension_for_windows_exe() {
-    let target = std::path::PathBuf::from("C:/Program Files/Melodia/Melodia.exe");
-    let staged = staged_path(&target);
-    assert_eq!(staged, std::path::PathBuf::from("C:/Program Files/Melodia/Melodia.exe.new"));
+fn staged_path_preserves_extension_for_an_appimage() {
+    let dir = Path::new("Applications");
+    let staged = staged_path(&dir.join("Melodia-x86_64.AppImage"));
+    assert_eq!(staged, dir.join("Melodia-x86_64.AppImage.new"));
 }
 
 /// `staged_msi_path` returns a `.msi`-suffixed path under the per-user

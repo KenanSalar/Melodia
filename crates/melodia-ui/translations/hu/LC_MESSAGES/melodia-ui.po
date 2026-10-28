@@ -3327,20 +3327,12 @@ msgid "Version {} Available"
 msgstr "Új verzió érhető el: {}"
 
 #: ui/views/settings/update-section.slint
-msgid "Updates managed by your package manager"
-msgstr "A frissítéseket a csomagkezelőd kezeli"
+msgid "Updates are installed outside Melodia"
+msgstr "A frissítések a Melodián kívül települnek"
 
 #: ui/views/settings/update-section.slint
-msgid "Re-run the latest .msi installer from the Releases page."
-msgstr "Futtasd újra a legújabb .msi telepítőt a Releases oldalról."
-
-#: ui/views/settings/update-section.slint
-msgid "Use brew upgrade melodia."
-msgstr "Használd a brew upgrade melodia parancsot."
-
-#: ui/views/settings/update-section.slint
-msgid "Use sudo dnf update melodia (or your distro equivalent)."
-msgstr "Használd a sudo dnf update melodia parancsot (vagy a disztribúciód megfelelőjét)."
+msgid "Install the new version the same way you installed this one."
+msgstr "Az új verziót ugyanúgy telepítsd, ahogyan ezt telepítetted."
 
 #: ui/views/settings/update-section.slint
 msgid "Check for Updates"

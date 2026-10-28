@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Stage the per-user Linux bundle and tar it. Extract anywhere, run
-# `./install-linux.sh`, land under ~/.local/share/Melodia/ — user-writable, so
-# the updater needs no polkit.
+# `./install-linux.sh`, land under ~/.local/share/Melodia/. That path is
+# user-writable, which is what lets the in-app updater replace the binary.
 #
 # Usage:
 #   ./scripts/build-tarball.sh                          # melodia-v<ver>-<uname -m>-linux.tar.gz

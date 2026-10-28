@@ -9,7 +9,7 @@ use crate::services::updater::event::{UpdateFailure, UpdateResult};
 use crate::services::updater::minisign::{self, MinisignError};
 use melodia_core::error::{AppError, AppResult};
 
-#[cfg(any(target_os = "linux", target_os = "windows"))]
+#[cfg(target_os = "linux")]
 use super::swap::old_path;
 
 pub(super) fn verify_staged(
@@ -88,17 +88,15 @@ pub(super) async fn verify_swapped_binary(target: &Path, expected_version: &str)
     Ok(())
 }
 
-/// Restores `.old` over a binary that failed its smoke test. The `pkexec mv` path keeps no `.old`,
-/// leaving nothing to restore.
+/// Restores `.old` over a binary that failed its smoke test.
 pub(super) fn attempt_post_swap_rollback(target: &Path) {
-    #[cfg(any(target_os = "linux", target_os = "windows"))]
+    #[cfg(target_os = "linux")]
     {
         let old = old_path(target);
         if !old.exists() {
             log::warn!(
                 "updater: smoke test failed but no .old snapshot exists at {}; nothing to \
-                 rollback (likely the pkexec-mv path was taken). User may need to manually \
-                 reinstall the previous version.",
+                 rollback. User may need to manually reinstall the previous version.",
                 old.display()
             );
             return;
@@ -118,7 +116,7 @@ pub(super) fn attempt_post_swap_rollback(target: &Path) {
             ),
         }
     }
-    #[cfg(not(any(target_os = "linux", target_os = "windows")))]
+    #[cfg(not(target_os = "linux"))]
     {
         let _ = target;
         log::warn!("updater: smoke test failed; rollback not implemented on this platform");
@@ -126,7 +124,7 @@ pub(super) fn attempt_post_swap_rollback(target: &Path) {
 }
 
 // Linux-only: the stand-in for a swapped binary is a shell script, and the rollback half
-// reaches `old_path`, which only exists on the two platforms that retain one.
+// reaches `old_path`, which only the Linux swap keeps.
 #[cfg(all(test, target_os = "linux"))]
 #[path = "../tests/verify_tests.rs"]
 mod tests;

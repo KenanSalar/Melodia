@@ -20,14 +20,11 @@ export global MelodiaUpdater {
     // Hides "Skip this version", so a critical release can't be deferred for good; the toast still
     // dismisses for the session and returns at the next daily check.
     in-out property <bool> is-critical;
-    // An install no in-app path reaches (`is_system_install`): Download and Skip give way to a hint
-    // pointing at the package manager.
+    // An install no in-app path reaches (`is_system_install`): Download and Skip give way to a
+    // hint, and no toast offers the install.
     in property <bool> system-managed;
     // False on a source build, where the section neither draws nor matches the settings search.
     in property <bool> updates-supported: true;
-    // "linux" | "windows" | "macos", picking the hint. A string so the hint resolves inline and
-    // re-translates on a locale switch, with no conditional compilation on the Slint side.
-    in property <string> platform-kind;
 
     callback check();
     callback install();

@@ -136,8 +136,8 @@ fn a_rollback_restores_the_retained_snapshot() -> TestResult {
     Ok(())
 }
 
-/// The `pkexec mv` path retains no snapshot, so a rollback there has nothing to restore. It must
-/// leave what is on disk alone rather than removing the binary and replacing it with nothing.
+/// With no snapshot to restore, a rollback must leave what is on disk alone rather than removing
+/// the binary and replacing it with nothing.
 #[test]
 fn a_rollback_with_no_snapshot_leaves_the_target_where_it_is() -> TestResult {
     let dir = tempdir()?;

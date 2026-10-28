@@ -1,9 +1,8 @@
 //! Where a download is staged, and the sidecar that fingerprints a partial one so a `Range:`
 //! resume can't glue two releases' bytes together.
 //!
-//! A swap stages beside its target where that directory is writable, keeping the final rename on
-//! one filesystem, and in the user cache dir otherwise. The package methods always stage in the
-//! cache dir under the asset's own name, which dnf, apt and msiexec dispatch on.
+//! A swap stages beside its target, keeping the final rename on one filesystem. The package methods
+//! stage in the user cache dir under the asset's own name, which dnf, apt and msiexec dispatch on.
 
 use std::ffi::OsString;
 use std::path::{Path, PathBuf};
@@ -12,7 +11,6 @@ use serde::{Deserialize, Serialize};
 
 use melodia_core::error::{AppError, AppResult};
 use melodia_platform::services::platform::install_kind::linux_pkg::LinuxPackageFormat;
-use melodia_platform::services::platform::install_kind::probe::dir_is_writable;
 use melodia_platform::services::platform::install_kind::target::current_target_key;
 
 /// How this install is updated, deciding both where the artifact lands and how it goes in, so an
@@ -132,24 +130,11 @@ fn asset_basename(url: &str) -> Option<String> {
     Some(last.to_string())
 }
 
-/// `<target>.new`, appended so `Melodia.exe` keeps its extension.
+/// `<target>.new`, appended so an `.AppImage` keeps its extension.
 pub(crate) fn staged_path(target: &Path) -> PathBuf {
     let mut name = target.file_name().map(std::ffi::OsStr::to_os_string).unwrap_or_default();
     name.push(".new");
     target.with_file_name(name)
-}
-
-/// Beside the target when its parent is writable, else in the cache dir for a `pkexec mv`, so the
-/// polkit prompt comes at swap time and a failed download doesn't waste it.
-pub(super) fn resolve_staged_path(target: &Path) -> AppResult<PathBuf> {
-    let primary = staged_path(target);
-    if primary.parent().is_some_and(dir_is_writable) {
-        return Ok(primary);
-    }
-    let dir = staging_dir()?;
-    let mut name = target.file_name().map(std::ffi::OsStr::to_os_string).unwrap_or_default();
-    name.push(".new");
-    Ok(dir.join(name))
 }
 
 fn staging_root() -> Option<PathBuf> {

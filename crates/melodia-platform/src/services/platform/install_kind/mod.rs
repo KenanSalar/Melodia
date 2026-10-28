@@ -7,7 +7,7 @@ use std::path::PathBuf;
 use melodia_core::error::AppResult;
 
 pub mod linux_pkg;
-pub mod probe;
+mod probe;
 pub mod system_install;
 pub mod target;
 

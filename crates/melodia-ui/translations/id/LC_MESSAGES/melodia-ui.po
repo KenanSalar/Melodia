@@ -3294,20 +3294,12 @@ msgid "Version {} Available"
 msgstr "Versi {} Tersedia"
 
 #: ui/views/settings/update-section.slint
-msgid "Updates managed by your package manager"
-msgstr "Pembaruan dikelola oleh manajer paket Anda"
+msgid "Updates are installed outside Melodia"
+msgstr "Pembaruan diinstal di luar Melodia"
 
 #: ui/views/settings/update-section.slint
-msgid "Re-run the latest .msi installer from the Releases page."
-msgstr "Jalankan ulang penginstal .msi terbaru dari halaman Releases."
-
-#: ui/views/settings/update-section.slint
-msgid "Use brew upgrade melodia."
-msgstr "Gunakan brew upgrade melodia."
-
-#: ui/views/settings/update-section.slint
-msgid "Use sudo dnf update melodia (or your distro equivalent)."
-msgstr "Gunakan sudo dnf update melodia (atau padanannya di distro Anda)."
+msgid "Install the new version the same way you installed this one."
+msgstr "Instal versi baru dengan cara yang sama seperti Anda menginstal versi ini."
 
 #: ui/views/settings/update-section.slint
 msgid "Check for Updates"

@@ -1,4 +1,4 @@
-//! Directory writability, for `install`'s staging choice and `system_install`'s UI gate.
+//! Directory writability, for `system_install`'s UI gate.
 //!
 //! By `create_new` rather than `access(W_OK)`, which checks permission bits and is wrong under
 //! `nosuid`, ACLs, immutable flags, a full disk or a read-only mount.
