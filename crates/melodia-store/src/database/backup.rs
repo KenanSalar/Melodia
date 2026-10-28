@@ -1,5 +1,12 @@
-//! Pre-migration database backups, and the retention that bounds them. The three invariants are
-//! the root `CLAUDE.md`'s; what is written down only here:
+//! Pre-migration database backups, and the retention that bounds them. Three invariants nothing
+//! outside this module may undo:
+//!
+//! - **The copy is `VACUUM INTO` through the open connection, never a file copy.** The database
+//!   runs in WAL mode, so `melodia.db` alone is not the database.
+//! - **It is staged under `.tmp` and renamed**, so the final name existing means the copy is
+//!   complete.
+//! - **Retention deletes only names it parses back into this module's scheme**, a hand-made backup
+//!   in the directory not being ours to retire.
 //!
 //! **Restoring** means deleting `melodia.db-wal` and `melodia.db-shm` beside the rename, with the
 //! app closed. A boot that died in a migration never reached `DbPool::close` and leaves them, and a

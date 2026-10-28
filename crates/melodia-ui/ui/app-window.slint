@@ -71,7 +71,9 @@ import { SectionActiveGate } from "components/section-active-gate.slint";
 import { Tooltip, TooltipSide } from "components/tooltip.slint";
 import { ViewTransition } from "components/view-transition.slint";
 
-// Re-export so Rust can mention these from `slint::include_modules!`.
+// Re-export so Rust can mention these from `slint::include_modules!`, a global reaching Rust only
+// through the main file. The only place the full list appears: `globals/` has no barrel, every
+// consumer importing the file it needs, so an import above that only feeds this block is not dead.
 export {
     Theme, Settings, SettingsPage, Player, HeroBackdrop, HeroChips, Equalizer, ReplayGain, Visualizer, SignalPathUi, ScrobbleUi, SmartEditor, TagEditor, Nav, CompositeScroll, MiniPlayer, MyLibrary, Tracks, Browse, LibrarySettings, Dialog, WindowChrome, Queue, Notifications, NowPlaying, Favorites, RecentlyPlayed, Albums, AlbumDetail, Artists, ArtistDetail, Genres, GenreDetail, Playlists, PlaylistDetail, Search, MelodiaUpdater, RowCovers, Radio, RadioForm, Onboarding, Lyrics, TrackColumnSizing, CardSelection, CardActions, CopyActions, Selection, Drag, DragOrigin, FileDrag, FileDropTarget, WindowRect,
     TrackSummaryRow, TrackListRow, PlayerVm, QueueVm, QueueRow, FolderListRow, LyricRow, LiftedRun,

@@ -1,6 +1,6 @@
 # Plan: Compress the root CLAUDE.md, and take its citations out of the code
 
-Status: **Phase 1 done**, Phase 2 next · Owner: Kenan · Created: 2026-10-28 · branch
+Status: **Phases 1 and 2 done**, Phase 3 next · Owner: Kenan · Created: 2026-10-28 · branch
 `docs/trim-comments`
 
 > **Measured 2026-10-28** against `c05b7574`. Every figure below comes from a command run that
@@ -103,7 +103,7 @@ Working doc. Delete when every phase has landed (Phase 5).
 | Phase | What | Before | After |
 |---|---|---|---|
 | 1 | Fix the contradictions outside `CLAUDE.md` | 4 files wrong | done, plus 2 stale lines found on the way |
-| 2 | Move what has no other home | 7 moves | |
+| 2 | Move what has no other home | 7 moves | done, and 3 of Phase 3's pointers dropped in the same edits |
 | 3 | Sweep the 21 citations | 21 lines in 17 files | |
 | 4 | Rewrite `CLAUDE.md` | 921 lines / 76,197 bytes, 160 bold | |
 | 5 | Retire the plan | | |
@@ -138,40 +138,44 @@ not a panic) and `walk.rs`'s `spellings_outside` doc ("three walks", five today)
   the architecture reference.
 
 ### Phase 2: Move what has no other home
-Status: not started. One commit. Comment lines and markdown only.
+Status: done 2026-10-28. One commit. Comment lines and markdown only. The pointers at
+`backup.rs:2`, `redact.rs:6` and `overlay-scrollbar.slint:3` sat in the very lines being rewritten,
+so they went here rather than in Phase 3. Rechecked first: the scrollbar slot, the card track,
+`TrackListScrollbars`, `CompositeScrollbars` and the track list's missing horizontal bar are all
+argued at their own files already, so only the mount steps moved.
 
 Each move lands where the fact is enforced. The audit found these arguments carried nowhere but
 `CLAUDE.md`; check each again before moving.
 
-- [ ] **`crates/melodia-store/src/database/backup.rs`'s `//!`** gets the three invariants it
+- [x] **`crates/melodia-store/src/database/backup.rs`'s `//!`** gets the three invariants it
   points at `CLAUDE.md` for (line 2): the copy is `VACUUM INTO` through the open connection,
   never a file copy, WAL mode meaning `melodia.db` alone isn't the database; it is staged under
   `.tmp` and renamed, so the final name existing means it is complete; retention deletes only
   names it parses back into its own scheme. Its restore note (lines 4 to 6) already says to
   delete `-wal`/`-shm`; keep one copy.
-- [ ] **`crates/melodia-core/src/utils/redact.rs:6`** states why `dirs::home_dir()` and never
+- [x] **`crates/melodia-core/src/utils/redact.rs:6`** states why `dirs::home_dir()` and never
   `$HOME`: the variable is unset on Windows, whose users have no console to read the paths from,
   while `README.md` and `bug_report.yml` both promise `~`.
-- [ ] **`crates/melodia-ui/ui/components/overlay-scrollbar.slint`'s header** gets the mount steps
+- [x] **`crates/melodia-ui/ui/components/overlay-scrollbar.slint`'s header** gets the mount steps
   no file holds: `ScrollView` with both policies `always-off`; the bar at the view root, a
   sibling of the padded layout, pinned by absolute coordinates; the round trip through
   `offset: -sv.content-y` and `scroll-to(o)` (no `<=>`, the sign flip blocks it); one bar per
   axis that can overflow, never gated behind an `if`; inside the `if` branch where the scroller
   is; a gutter rather than a bar over a control. `scrollbars.rs` holds only the policies, the
   dialog track and the hand-rolled `TrackListScrollbars`, so the header must not claim more.
-- [ ] **`crates/melodia-ui/ui/theme.slint`** at `is-light`: it is the only polarity signal that
+- [x] **`crates/melodia-ui/ui/theme.slint`** at `is-light`: it is the only polarity signal that
   reaches Slint, `Palette` carrying no light/dark flag and the generated palettes no variant id,
   so polarity is measured, never matched.
-- [ ] **`crates/melodia-ui/ui/app-window.slint:74`**, the re-export block: no barrel, every
+- [x] **`crates/melodia-ui/ui/app-window.slint:74`**, the re-export block: no barrel, every
   consumer imports the file it needs, and an import here that only feeds the block is not dead.
-- [ ] **`.claude/rules/testing.md`** gets the five things a corpus walk owes, as practice and
+- [x] **`.claude/rules/testing.md`** gets the five things a corpus walk owes, as practice and
   without the tree's names: a vacuity floor, kept loose; an equality wherever a vanishing subtree
   is the failure; unreadable paths collected and asserted empty, never skipped; comments stripped
   before the needle and brace-matched scope where a substring would lie; an exemption held to an
   exact count, each entry asserted to still match. ADR 36 already says `testing.md` holds these,
   and its globs cover `crates/melodia/tests/` and the testkit. The tree's names (`MIN_SOURCES`,
   `CALLBACK_HOMES`, `scrollbars.rs`) stay at `walk.rs` and the walks. Frontmatter untouched.
-- [ ] **`docs/adr/README.md`'s "When not to write one"** gets the parts of `CLAUDE.md`'s ADR
+- [x] **`docs/adr/README.md`'s "When not to write one"** gets the parts of `CLAUDE.md`'s ADR
   paragraph it lacks: significant means it shapes the structure, a quality the whole app must
   hold, an external dependency, an interface other code builds on or how the code is built;
   write it when the decision is made; a plan doc reaching deletion owes none by itself, the
@@ -193,13 +197,13 @@ first: `git grep -n 'CLAUDE\.md' -- . ':!docs' ':!.claude' ':!CLAUDE.md' ':!READ
 | `crates/melodia-core/src/entities/locale.rs:8` | what a new locale owes: a row here and in `LOCALE_NATIVE_NAMES`, a catalog started with `msginit`, a `LANGUAGE_LETTERS` row in `scripts/patch_vazirmatn.py` where the faces lack its alphabet |
 | `crates/melodia-core/src/themes/palette.rs:28` | no struct-update fallback, so a palette that forgets a semantic slot fails to compile instead of greying the generated palettes |
 | `crates/melodia-core/src/themes/palette.rs:161` | the third copy is pinned by `dwm_titlebar`'s own tests |
-| `crates/melodia-core/src/utils/redact.rs:6` | the reason moved in Phase 2; drop the pointer |
+| `crates/melodia-core/src/utils/redact.rs:6` | done in Phase 2 |
 | `crates/melodia-playback/src/player/playback/output/device.rs:4` | CI's null device depends on it (`crates/melodia/tests/headless.rs`). `rustfmt --edition 2024 --check` this file: it sits in `output/` |
-| `crates/melodia-store/src/database/backup.rs:2` | the invariants moved in Phase 2; drop the pointer |
+| `crates/melodia-store/src/database/backup.rs:2` | done in Phase 2 |
 | `crates/melodia-ui/ui/app-window.slint:1` | `scripts/patch_vazirmatn.py` argues the build |
 | `crates/melodia-ui/ui/app-window.slint:140` | Slint's handler for `resize-border-width` hit-tests square corners (`frameless_tests.rs`) |
 | `crates/melodia-ui/ui/components/onboarding/onboarding-overlay.slint:12` | the branch drops on close, so a tracker on anything outside it survives the first open and panics on the second (`crates/melodia/tests/onboarding.rs`) |
-| `crates/melodia-ui/ui/components/overlay-scrollbar.slint:3` | std-widgets' bar paints inside padded containers and can't be reskinned; the mount steps are below (Phase 2) |
+| `crates/melodia-ui/ui/components/overlay-scrollbar.slint:3` | done in Phase 2 |
 | `crates/melodia-ui/ui/globals/onboarding.slint:2` | the same reason as `onboarding-overlay.slint:12`, in a clause |
 | `crates/melodia-ui/ui/layout/shortcut-scope.slint:85` | the first-run card mounts below `DialogOverlay`, so a dialog paints over it and takes Escape first |
 | `crates/melodia-views/src/ui/onboarding/mod.rs:5` | the same reason as `onboarding-overlay.slint:12` |

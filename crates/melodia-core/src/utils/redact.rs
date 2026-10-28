@@ -3,8 +3,10 @@
 
 use std::borrow::Cow;
 
-/// Through [`dirs::home_dir`], never `$HOME` (the root `CLAUDE.md` argues why). Resolved per call
-/// rather than cached, so the tests driving it through `$HOME` can still reach the answer.
+/// Through [`dirs::home_dir`], never `$HOME`, which Windows leaves unset: its users have no console
+/// to have read the paths from, and `README.md` and `bug_report.yml` both promise them `~`.
+/// Resolved per call rather than cached, so the tests driving it through `$HOME` can still reach
+/// the answer.
 pub fn redact_home(text: &str) -> Cow<'_, str> {
     let Some(home) = home_dir_string() else {
         return Cow::Borrowed(text);

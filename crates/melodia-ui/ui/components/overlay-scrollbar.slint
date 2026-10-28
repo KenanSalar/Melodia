@@ -1,8 +1,17 @@
 import { Theme } from "../theme.slint";
 
-// **The only scrollbar in the tree**, for either axis; the root `CLAUDE.md` has why and the mount
-// rules. The thumb keeps one size, only its colour shifting on hover. **The host owns the offset**:
-// it binds `offset` from its scroller and writes the negated value back on every `scroll-to`.
+// **The only scrollbar in the tree**, for either axis: std-widgets' bar paints inside padded
+// containers and can't be reskinned. The thumb keeps one size, only its colour shifting on hover.
+// **The host owns the offset**: it binds `offset` from its scroller and writes the negated value
+// back on every `scroll-to`.
+//
+// Mounting one: the scroller is a `ScrollView` with both scrollbar policies `always-off`, and the
+// bar sits at the view root, a sibling of the padded layout, pinned by absolute coordinates. The
+// round trip is `offset: -sv.content-y` out and `sv.content-y = -o` back, never a `<=>`, which the
+// sign flip blocks. The bar hides itself, so a host mounts one for every axis that can overflow
+// rather than gating it behind an `if`. Where the scroller sits inside an `if`, the bar goes inside
+// that branch, an id declared there being unreadable from outside; where the bar would land over a
+// control, the content reserves a gutter.
 //
 // The drag works in **absolute** coordinates snapshotted on press, so the thumb tracks the cursor
 // 1:1 even if the host resizes mid-drag. A click on the bare track jumps the thumb's centre there.

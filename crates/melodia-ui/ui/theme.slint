@@ -50,7 +50,9 @@ export global Theme {
     in-out property <brush> accent-text: #1e1e2e;
 
     // sRGB luma over gamma-encoded channels, not the relative luminance `ui/backdrop.rs` solves
-    // scrims against. A hand-copy of `themes::on_accent_hex`, pinned by `themes::tests`.
+    // scrims against. A hand-copy of `themes::on_accent_hex`, pinned by `themes::tests`. The only
+    // polarity signal Slint gets: `Palette` carries no light/dark flag and the generated palettes
+    // no variant id, so polarity is measured, never matched.
     public pure function is-light(fill: brush) -> bool {
         return (0.2126 * fill.red + 0.7152 * fill.green + 0.0722 * fill.blue) / 255 > 0.5;
     }
