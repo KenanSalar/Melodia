@@ -216,7 +216,7 @@ pub fn request(ui: &AppWindow, state: &AppState, radio_ui: &Arc<RadioUi>, idx: i
 }
 
 /// Narrows the open picker's list to `needle`.
-pub fn filter(ui: &AppWindow, radio_ui: &Arc<RadioUi>, needle: &str) {
+pub fn filter(ui: &AppWindow, radio_ui: &RadioUi, needle: &str) {
     let Some(facets) = radio_ui.facet_list.lock().clone() else {
         return;
     };

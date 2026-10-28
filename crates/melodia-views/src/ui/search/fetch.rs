@@ -59,7 +59,7 @@ pub async fn kick_search(
 /// Warms every result surface's covers, each against its own tier, since a miss decodes on the
 /// UI thread at paint time. Returns whether it yielded, which obliges the caller to re-check its
 /// token.
-async fn prewarm_result_covers(search_ui: &Arc<SearchUi>, results: &SearchResults) -> bool {
+async fn prewarm_result_covers(search_ui: &SearchUi, results: &SearchResults) -> bool {
     let track_covers: Vec<PathBuf> = crate::ui::grid_prewarm::unique_artwork_paths(
         results.tracks.iter().map(|t| t.artwork_path.as_deref()),
         search_ui.cover_thumbs.capacity(),
@@ -96,7 +96,7 @@ async fn prewarm_result_covers(search_ui: &Arc<SearchUi>, results: &SearchResult
 
 /// Re-derives everything visible from `last_results` without a query, for the "Show all" toggle
 /// and a re-sort. A no-op before the first commit.
-pub fn reapply_cached_results(search_ui: &Arc<SearchUi>, weak: &Weak<AppWindow>) {
+pub fn reapply_cached_results(search_ui: &SearchUi, weak: &Weak<AppWindow>) {
     let Some(results) = search_ui.state().last_results.lock().clone() else {
         return;
     };

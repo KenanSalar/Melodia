@@ -122,7 +122,7 @@ fn remove(
 
 /// Fills the form from a card's station and opens the dialog, from a fresh event-loop tick: a
 /// synchronous `Dialog` write in a click handler trips Slint's recursion guard.
-fn open_editor(radio_ui: &Arc<RadioUi>, weak: &Weak<AppWindow>, id: i64) {
+fn open_editor(radio_ui: &RadioUi, weak: &Weak<AppWindow>, id: i64) {
     // Either tab can hold the row — the same station is in both once it has been played.
     let Some(station) = kept::resolve(radio_ui, RadioTab::Favorites, id)
         .or_else(|| kept::resolve(radio_ui, RadioTab::Recent, id))

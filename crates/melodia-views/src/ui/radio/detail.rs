@@ -314,7 +314,7 @@ pub fn reseat(ui: &AppWindow, radio_ui: &RadioUi, tab: RadioTab) {
 /// (a session-found logo, a browsed answer); the database answers the boot restore.
 async fn resolve(
     state: &AppState,
-    radio_ui: &Arc<RadioUi>,
+    radio_ui: &RadioUi,
     station: &StationRef,
 ) -> AppResult<StationSource> {
     if station.is_kept() {

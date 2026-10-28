@@ -1,7 +1,5 @@
 //! What the user is told after a Save.
 
-use std::rc::Rc;
-
 use slint::{ComponentHandle, Model, SharedString};
 
 use crate::ui::shell::notifications::{Completion, NotificationsUi, RowText};
@@ -14,7 +12,7 @@ use melodia_ui::{AppWindow, Settings};
 /// unsupported field must be visible, not swallowed.
 pub(super) fn show_report_toast(
     ui: &AppWindow,
-    notifications: &Rc<NotificationsUi>,
+    notifications: &NotificationsUi,
     result: Result<TagEditReport, AppError>,
 ) {
     let settings = ui.global::<Settings>();

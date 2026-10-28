@@ -122,7 +122,7 @@ fn patch_credit_row(
 
 /// Re-render the credit line under the rows after every edit, so the user sees what will be
 /// written rather than having to picture the join phrases in place.
-fn refresh_preview(ui: &AppWindow, session: &Rc<RefCell<TagSession>>, field: usize) {
+fn refresh_preview(ui: &AppWindow, session: &RefCell<TagSession>, field: usize) {
     let credit = credit_from_model(ui, field, &session.borrow().join_phrases);
     let line = opt_shared(credit.line());
     let te = ui.global::<TagEditor>();

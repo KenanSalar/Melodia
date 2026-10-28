@@ -3,8 +3,8 @@
 
 #[cfg(target_os = "linux")]
 use std::sync::LazyLock;
+use std::sync::Mutex;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, Mutex};
 
 use slint::ComponentHandle;
 
@@ -248,7 +248,7 @@ fn spawn_action_receiver(
     ui_weak: slint::Weak<AppWindow>,
     mut rx: tokio::sync::mpsc::Receiver<TrayAction>,
 ) {
-    let sink: Arc<dyn EventSink> = Arc::new(SlintEventSink { state: state.clone() });
+    let sink = SlintEventSink { state: state.clone() };
     spawner.spawn_cancellable(move |shutdown| async move {
         loop {
             tokio::select! {
@@ -265,11 +265,7 @@ fn spawn_action_receiver(
 }
 
 /// Playback actions reuse the OS media controls' sink; the window ones need the UI thread.
-fn dispatch_action(
-    action: TrayAction,
-    sink: &Arc<dyn EventSink>,
-    ui_weak: &slint::Weak<AppWindow>,
-) {
+fn dispatch_action(action: TrayAction, sink: &dyn EventSink, ui_weak: &slint::Weak<AppWindow>) {
     match action {
         TrayAction::PlayPause => sink.handle(PlayerEvent::PlayPause),
         TrayAction::Next => sink.handle(PlayerEvent::Next),
@@ -357,9 +353,7 @@ fn spawn_state_subscriber_linux(
 
 /// On the UI thread, the `tray-icon` handle being `!Send`; `install` spawns it from there.
 #[cfg(any(target_os = "windows", target_os = "macos"))]
-fn spawn_state_subscriber_local(
-    sinks: &Arc<melodia_engine::player::engine::event_sink::PlayerSinks>,
-) {
+fn spawn_state_subscriber_local(sinks: &melodia_engine::player::engine::event_sink::PlayerSinks) {
     let mut rx = sinks.view_model.subscribe();
     let res = slint::spawn_local(async_compat::Compat::new(async move {
         let mut last = snapshot_from_vm(rx.borrow_and_update().as_ref());

@@ -237,7 +237,7 @@ async fn react(
     publish_repaint(repaint_tx, os_state);
 }
 
-fn write_palette(os_state: &Arc<RwLock<SystemColorState>>, palette: Palette, accent_hex: u32) {
+fn write_palette(os_state: &RwLock<SystemColorState>, palette: Palette, accent_hex: u32) {
     let mut guard = os_state.write();
     guard.material_you = Some((palette, accent_hex));
 }
@@ -245,7 +245,7 @@ fn write_palette(os_state: &Arc<RwLock<SystemColorState>>, palette: Palette, acc
 /// A `watch`, so a burst of generations during quick skips collapses to one repaint.
 fn publish_repaint(
     repaint_tx: &watch::Sender<SystemColorState>,
-    os_state: &Arc<RwLock<SystemColorState>>,
+    os_state: &RwLock<SystemColorState>,
 ) {
     let snapshot = os_state.read().clone();
     if let Err(e) = repaint_tx.send(snapshot) {

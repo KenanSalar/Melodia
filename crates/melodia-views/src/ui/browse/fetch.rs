@@ -237,7 +237,7 @@ fn to_ui_folder_rows(folders: &[BrowseFolder]) -> Vec<UiBrowseFolderRow> {
 /// Re-sorts the cached files and rebuilds `Browse.rows`, keeping the selection, ids being stable
 /// across a re-sort. The cards need no write: a sort comes from a header that exists only while
 /// the list is mounted, and the toggle rebuilds them from these same files.
-pub fn resort_and_apply(ui: &AppWindow, browse_ui: &Arc<BrowseUi>) {
+pub fn resort_and_apply(ui: &AppWindow, browse_ui: &BrowseUi) {
     let sort_field = browse_ui.sort_field();
     let sort_dir = browse_ui.sort_dir();
     let ui_rows: Vec<UiTrackListRow> = {

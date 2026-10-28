@@ -162,7 +162,7 @@ pub async fn player_play_station(
 /// under its predicate's emit.
 async fn open_and_start_station(
     ctx: &PlaybackContext,
-    station: &Arc<RadioNowPlaying>,
+    station: &RadioNowPlaying,
     generation: u64,
 ) -> Result<(), AppError> {
     let client = ctx.http.get_or_init(melodia_net::services::net::build_http_client).clone();

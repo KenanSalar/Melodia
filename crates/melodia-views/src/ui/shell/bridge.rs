@@ -55,7 +55,7 @@ pub fn show_position(player: &Player<'_>, position_ms: u64, duration_ms: u64) {
 
 pub fn spawn_view_model_subscriber(
     ui: Weak<AppWindow>,
-    sinks: &Arc<PlayerSinks>,
+    sinks: &PlayerSinks,
     cover_thumbs: Arc<CoverThumbs>,
     runtime: Handle,
     shown: ShownPosition,
@@ -118,7 +118,7 @@ pub fn spawn_view_model_subscriber(
 
 pub fn spawn_queue_subscriber(
     ui: Weak<AppWindow>,
-    sinks: &Arc<PlayerSinks>,
+    sinks: &PlayerSinks,
 ) -> Result<(), slint::EventLoopError> {
     let mut rx = sinks.queue.subscribe();
     slint::spawn_local(Compat::new(async move {
