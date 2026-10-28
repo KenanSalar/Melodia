@@ -1,6 +1,6 @@
 # Plan: Compress the subsystem rules, and take their citations out of the code
 
-Status: **in progress**, Phase 9 next · Owner: Kenan · Created: 2026-10-27 · branch `docs/trim-comments`
+Status: **in progress**, Phase 10 next · Owner: Kenan · Created: 2026-10-27 · branch `docs/trim-comments`
 
 > **Measured 2026-10-27** against `a3963bb3` plus Phase 1's changes. Every figure below comes from
 > a command run that day. Each phase measures its rule again before it starts (Every rule, step 1),
@@ -157,7 +157,7 @@ a few of the comment diffs.
 | 6 | `symphonia.md` | 112 / 7,296, 5 over 100 | 0 | 52 / 2,899 (40%), 0 over 100, 0 citations |
 | 7 | `diagnostics.md` (deleted) | 52 / 3,006 | 0 | deleted; `rules_globs.rs` sees 176 paths |
 | 8 | `testing.md`, `unsafe-rust.md`, `sqlx.md`, `slint.md` (citations only) | | 2, 1, 1, 0 | 0 citations in all four trees |
-| 9 | `slint.md`'s font bullet | | | |
+| 9 | `slint.md`'s font bullet | 141 / 10,214 | | 145 / 10,438, the bullet wrapped at 100 |
 
 ## Phases
 
@@ -560,9 +560,17 @@ Status: done.
     is ADR 0033's filename (`0033-artwork-depends-on-slint.md`), and it stays.
 
 ### Phase 9: Fix `slint.md`'s font advice
-Status: not started.
+Status: done.
 
-- [ ] **9. The Images & Fonts bullet**, one commit. Markdown only.
+- [x] **9. The Images & Fonts bullet**, one commit. Markdown only.
+  - **Result:** the bullet now says fonts are imported, never registered from Rust: a `.slint`
+    `import` of the face embeds it, `app-window.slint` importing the three text faces and naming
+    them in `default-font-family`, `material-icon.slint` the two icon faces. It points at root
+    `CLAUDE.md`'s Fonts and Icons bullets for the faces and the patching.
+  - **Worse than the plan said:** Slint 1.18.1 has no `slint::FontFile` at all. The only
+    registration is `RendererSealed::register_font_from_{memory,path}`, internal, which the
+    generated code calls once per imported face: five `register_font_from_memory` calls in
+    `app-window.rs`, which is also what confirms the faces are embedded.
   - **What it says** (line 119): register fonts at startup with `slint::FontFile::load_from_path`
     so `default-font-family: "Inter"` resolves.
   - **What the tree does:** `app-window.slint` imports the TTFs statically

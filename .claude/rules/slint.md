@@ -116,7 +116,11 @@ paths:
 - **Images at compile time**: `Image { source: @image-url("assets/icons/play.svg"); }` — bakes the asset into the binary, no I/O at runtime.
 - **Images at runtime**: `slint::Image::load_from_path(path)` (e.g. for album artwork on disk) and assign to an `Image`'s `source` property.
 - Use SVGs for icons — they scale, take less RAM than rasterized variants, and tree-shake naturally per file.
-- **Fonts**: bundle UI font(s) under `crates/melodia-ui/ui/assets/fonts/`. Register at app startup with `slint::FontFile::load_from_path("…")` (or `load_from_data` for embedded fonts) so `default-font-family: "Inter";` resolves.
+- **Fonts are imported, never registered from Rust**: a `.slint` file imports each face
+  (`import "assets/fonts/vazirmatn/Vazirmatn-Regular.ttf";`), which embeds it at build time.
+  `app-window.slint` imports the text faces and names them in `default-font-family`,
+  `material-icon.slint` the two icon faces. Slint 1.18 has no public registration API to reach
+  for instead. Root `CLAUDE.md`'s Fonts and Icons bullets argue the faces and their patching.
 
 ## Animations & Performance
 
