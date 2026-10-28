@@ -38,8 +38,8 @@ export component UpdateSection inherits Rectangle {
     property <string> auto-check-desc: @tr("Once a day, Melodia asks GitHub whether a newer version is out.");
 
     property <bool> show-software: row-visible(software-label, software-desc);
-    // The daily task is already suppressed on a package-managed install, so the switch there would
-    // describe nothing.
+    // The daily task never runs where no in-app path reaches, so the switch there would describe
+    // nothing.
     property <bool> show-auto-check: !MelodiaUpdater.system-managed
         && row-visible(auto-check-label, auto-check-desc);
     property <bool> show-up-to-date:
@@ -129,8 +129,8 @@ export component UpdateSection inherits Rectangle {
             }
         }
 
-        // Install and Skip go when the install path is package-managed: the
-        // available version is still worth showing, but the action isn't ours.
+        // Install and Skip go where no in-app path reaches: the available
+        // version is still worth showing, but the action isn't ours.
         if root.show-software && root.show-update-available: SectionDivider {}
         if root.show-update-available: SettingRow {
             icon: "new_releases";

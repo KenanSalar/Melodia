@@ -20,8 +20,8 @@ export global MelodiaUpdater {
     // Hides "Skip this version", so a critical release can't be deferred for good; the toast still
     // dismisses for the session and returns at the next daily check.
     in-out property <bool> is-critical;
-    // A read-only install (RPM, MSI, Homebrew): Download and Skip give way to a hint pointing at
-    // the package manager.
+    // An install no in-app path reaches (`is_system_install`): Download and Skip give way to a hint
+    // pointing at the package manager.
     in property <bool> system-managed;
     // False on a source build, where the section neither draws nor matches the settings search.
     in property <bool> updates-supported: true;

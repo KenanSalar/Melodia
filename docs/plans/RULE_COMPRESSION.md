@@ -1,6 +1,6 @@
 # Plan: Compress the subsystem rules, and take their citations out of the code
 
-Status: **in progress**, Phase 5.3 next · Owner: Kenan · Created: 2026-10-27 · branch `docs/trim-comments`
+Status: **in progress**, Phase 6 next · Owner: Kenan · Created: 2026-10-27 · branch `docs/trim-comments`
 
 > **Measured 2026-10-27** against `a3963bb3` plus Phase 1's changes. Every figure below comes from
 > a command run that day. Each phase measures its rule again before it starts (Every rule, step 1),
@@ -33,7 +33,8 @@ Working doc. Delete when every phase has landed (Phase 10).
 | `library-data.md` | `312554ea` | 314 / 24,572 | 124 / 8,403 (34%) |
 | `ci-packaging.md` | `52c215ed` | 323 / 24,758 | 122 / 7,996 (32%) |
 | `radio.md` | `3cb8af76` | 181 / 13,308 | 107 / 6,492 (49%) |
-| `visualizer.md` | Phase 5.2 | 159 / 11,280 | 51 / 2,745 (24%) |
+| `visualizer.md` | `ac2b1b69` | 159 / 11,280 | 51 / 2,745 (24%) |
+| `updater.md` | Phase 5.3 | 160 / 11,471 | 71 / 4,287 (37%) |
 
 Read the first two commits before Phase 2: `git show <sha> --stat`, then the rule as it landed, then
 a few of the comment diffs.
@@ -150,7 +151,7 @@ a few of the comment diffs.
 | 4 | `ci-packaging.md` | 323 / 24,758, 9 over 100 | 1 named, plus 3 the grep missed | 122 / 7,996 (32%), 0 over 100, 0 citations |
 | 5.1 | `radio.md` | 181 / 13,308, 6 over 100 | 7 in 5 files | 107 / 6,492 (49%), 0 over 100, 0 citations |
 | 5.2 | `visualizer.md` | 159 / 11,280, 1 over 100 | 7 in 6 files | 51 / 2,745 (24%), 0 over 100, 0 citations |
-| 5.3 | `updater.md` | 160 / 11,471, 5 over 100 | 1 | |
+| 5.3 | `updater.md` | 160 / 11,471, 5 over 100 | 1 | 71 / 4,287 (37%), 0 over 100, 0 citations |
 | 6 | `symphonia.md` | 112 / 7,296, 5 over 100 | 0 | |
 | 7 | `diagnostics.md` (deleted) | 52 / 3,006 | 0 | |
 | 8 | `testing.md`, `unsafe-rust.md`, `sqlx.md`, `slint.md` (citations only) | | 2, 1, 1, 0 | |
@@ -321,7 +322,7 @@ Status: done.
     workflow files and the pinned SHAs, and say which couldn't be checked locally.
 
 ### Phase 5: `radio.md`, `visualizer.md`, `updater.md`
-Status: in progress, 5.1 and 5.2 done.
+Status: done.
 
 - [x] **5.1 `radio.md`**, one commit.
   - **Result:** the five sections kept. Cut as carried at their anchors: the facade walks' own
@@ -395,7 +396,51 @@ Status: in progress, 5.1 and 5.2 done.
   - **Cited by, keep findable:** `audio-stack.md`'s visualizer section ("the UI half"),
     `CLAUDE.md:16`'s table row and `CLAUDE.md:117`.
   - **Its line 22 cites `audio-stack.md` for the DSP**, which still lands.
-- [ ] **5.3 `updater.md`**, one commit.
+- [x] **5.3 `updater.md`**, one commit.
+  - **Result:** the three sections kept, plus an opening pointer at
+    `crates/melodia/tests/updater_contract.rs`, which already holds four of the rule's couplings
+    (the trusted-comment fields, the prehashed signing step, the platform keys, the schema
+    default). Cut as carried at their anchors: `manifest=true`'s domain separation
+    (`verify_manifest_bytes`), the fail-closed order (`github.rs`), the schema bump and
+    `critical` (`manifest.rs`, the test), the MSI's mechanics, exit codes and shortcut `Icon`
+    (`main.wxs`, `swap::msiexec_outcome`), the portable-extract short-circuit
+    (`system_install`), `desktop_integration`'s whole entry (its module doc; the `include_*!`
+    paths fail the build), the attestation step and verify command (`release.yml`, `README.md`),
+    and the per-arch linuxdeploy SHAs (`build-appimage.sh`). Cut as history: v0.8.0's missing deb
+    entry and v0.9.0's broken refresh (both still told at their anchors), and the "fold into
+    `actions/attest`" to-do, which is a suggestion rather than a contract.
+  - **Stale, fixed:**
+    - "`is_system_install()` ... the update is real, only the mechanism is the package manager's,
+      so the check survives": `probe` returns `false` for RPM, DEB and MSI, so a system install is
+      one no in-app path reaches (a root-owned install rpm and dpkg don't own, a portable Windows
+      copy). Boot skips the daily task there; only the manual check survives.
+    - "bumping it means bumping ... `--manifest-schema-version` and the CI invocation": no
+      workflow passes one. The script's default is the whole of it, which the contract test pins.
+  - **Comments whose reason went false (Decision 3), rewritten:** `updater.slint`'s
+    `system-managed` note named "(RPM, MSI, Homebrew)", two of them installs that keep Download;
+    `update-section.slint`'s two notes and `features-panel.slint`'s said "package-managed" and
+    "the package manager suppresses the task", where an RPM install keeps both; `swap.rs`'s
+    `elevate_swap_via_pkexec` doc credited `is_system_install()` with keeping RPM and deb off the
+    path, which `install_method_for_key` does, and said "only a tarball" where a root-owned
+    AppImage arrives too.
+  - **Code diff:** 11 comment lines out, 11 in, 10 bytes more. Clippy caught a bare `AppImage`
+    (`doc_markdown`) in the rewritten `swap.rs` doc, fixed by hand; see Open questions 1.
+  - **Verified against source:**
+    - dirs 7.0.0: `cache_dir()` is `data_local_dir()`, `FOLDERID_LocalAppData` on Windows.
+    - windows-sys 0.61.2: `ERROR_SUCCESS_REBOOT_REQUIRED` 3010, `ERROR_SUCCESS_REBOOT_INITIATED`
+      1641, `ERROR_INSTALL_USEREXIT` 1602.
+  - **Not verified:** Restart Manager's event 10010 and the elevated SID (Win32 docs, argued at
+    `main.wxs`).
+  - **Found, not this plan's (no code changes):**
+    - The Available toast's Install action (`notifications.rs`, `InstallUpdate`) calls
+      `MelodiaUpdater.install()` with no `system-managed` gate, so a manual check on a system
+      install offers the install the panel hides. A root-owned tarball then reaches `pkexec mv`.
+    - The panel's hint reads "Use sudo dnf update melodia" on any system-managed Linux install,
+      including a hand-dropped `/opt/` tarball no package manager owns.
+    - `swap::windows_swap` is unreachable in production: a Windows key is always `windows-*-msi`,
+      which resolves to `WindowsMsi`.
+    - `PLATFORM_PATTERNS` carries two `windows-*-zip` keys no slot builds and no client asks for,
+      which `updater_contract.rs`'s `MANIFEST_KEYS` (12) pins.
   - **Covers** install methods, manifest signing, and the release matrix.
   - **Code citation (1):** `crates/melodia-core/src/utils/exe.rs:8`.
   - **Cited by, keep findable:**
@@ -484,6 +529,8 @@ Status: not started.
     clause; the square corners alone carry the argument `app-window.slint:140` points to.
   - From Phase 5.1: root `CLAUDE.md:17`'s `radio.md` row still lists "the stream path's ring and
     feed thread", which the rule now hands to `audio-stack.md`'s live source. Drop that clause.
+  - From Phase 5.3: root `CLAUDE.md:137` says "Inside the updater use `updater::install_target`",
+    which resolves nowhere: it is `install_kind::install_target`, in `melodia-platform`.
 - [ ] Delete this file.
 
 ## Cross-cutting
@@ -501,7 +548,8 @@ Status: not started.
    `doc_markdown`, `doc_lazy_continuation` and their siblings fire on `///` and `//!` prose, and
    CI's clippy job runs with `-D warnings`. This plan follows the instruction it was written from:
    no clippy. Lean: run clippy for a phase whose diff changes a `///` or `//!` line, since CI will
-   run it on the PR regardless. Kenan's call.
+   run it on the PR regardless. Kenan's call. Phase 5.3 is the case for it: `doc_markdown` failed
+   a rewritten `swap.rs` doc that `cargo fmt --check` passed.
 2. **`.github/pull_request_template.md:24` sends contributors to `.claude/rules/*.md`.** That
    cuts against `CLAUDE.md`'s "the rules are Claude's tooling, not documentation a contributor
    reads". It isn't a code comment, so no phase touches it as written.

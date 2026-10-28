@@ -230,8 +230,8 @@ fn linux_swap(target: &Path, staged: &Path) -> AppResult<InstallOutcome> {
 }
 
 /// Not atomic across filesystems, `mv` copying then unlinking, which is accepted over a second
-/// polkit prompt. Only a tarball under a root-owned `/opt/` reaches here, `is_system_install()`
-/// keeping RPM and deb installs off this path.
+/// polkit prompt. Only a root-owned `AppImage` or tarball reaches here, RPM and deb installs
+/// going through [`install_via_package_manager`].
 #[cfg(target_os = "linux")]
 fn elevate_swap_via_pkexec(target: &Path, staged: &Path) -> AppResult<InstallOutcome> {
     log::info!("updater: elevating swap via pkexec ({} → {})", staged.display(), target.display());

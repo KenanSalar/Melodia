@@ -19,142 +19,53 @@ paths:
 
 # In-app updater, packaging and release
 
-The trust boundary is the GitHub repo — a manifest the publisher signed is trusted content, so the
-threat model stops at transport and integrity, not at a hostile manifest.
-`docs/adr/` argues it, including what the line costs and why the mitigations against a hostile
-manifest are not worth building.
+The trust boundary is the GitHub repo: a manifest the publisher signed is trusted content, so the
+threat model stops at transport and integrity. `docs/adr/` argues it and what the line costs.
+`main()`'s `--version` branch is root `CLAUDE.md`'s, being breakable from `main.rs` alone.
 
-`main()`'s `--version` literal-first branch is the one piece of this that lives in the root
-`CLAUDE.md`, because it is a forward-compat contract older clients depend on and you can break it
-from `main.rs` without ever opening this file.
+Four couplings between the client, the workflows and the script are held by
+`crates/melodia/tests/updater_contract.rs`: the trusted-comment fields, the prehashed signing step,
+the platform keys and the schema default. `manifest=true` is argued at `verify_manifest_bytes`.
 
 ## Install methods
 
-- **Two gates decide whether the updater exists, and they are not the same question.**
-  `updater::is_available()` is the outer one: false on a source build, because `target/` belongs to
-  cargo and a swapped-in release would be older than the tree above it and gone at the next build.
-  It stops `updater_daily::spawn` in `boot::ui_setup::install` and clears
-  `MelodiaUpdater.updates-supported`, which gates `UpdateSection.has-matches` and so takes the card *and* its settings-search hits.
-  `is_system_install()` is the inner one and softer: the update is real, only the mechanism is the
-  package manager's, so the check survives and Download/Skip become a hint. Reach for the right one
-  — widening `is_system_install` to cover a dev build would offer a `sudo dnf update` hint to
-  someone running `cargo run`.
-
-- **Atomic-swap retains `.old` for rollback (Linux AppImage/tarball only).** Two-step rename:
-  `target → target.old`, `staged → target`, smoke-test, rollback on failure; `.old` reaped on first
-  successful boot, single source `install::old_path()`. The `pkexec mv` cross-fs fallback,
-  `install_via_package_manager` (Linux RPM/DEB) and `install_via_msiexec` (Windows MSI) retain
-  **no** `.old` — the package format owns the replace — and skip the smoke-test via the
-  `InstallMethod` match in `download_and_install`. `main.rs`'s `.old` reaper (`prepare_process`) is
-  `cfg(target_os = "linux")`, and macOS isn't a CI target, so `swap_in_place` falls through to
-  `std::fs::rename`.
-
-- **Windows installs are per-machine MSIs at `C:\Program Files\Melodia\bin\`.** `crates/melodia/wix/main.wxs`
-  `Scope="perMachine"` + `ProgramFiles6432Folder`; UAC at install. The Start Menu shortcut
-  Component under `ProgramMenuFolder` is what lets Windows Search find the app. Console suppressed
-  via `#![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]` — release runs as GUI,
-  `cargo run` keeps the console for `RUST_LOG`. The in-app updater downloads the signed `.msi` to
-  `%LocalAppData%\Melodia\update-staging\` and **awaits** `msiexec /i <staged> /qb!
-  MELODIA_RELAUNCH=1` on the runtime. UAC re-prompts, `MajorUpgrade` + `util:RestartResource` have
-  Restart Manager close Melodia, and `main.wxs`'s `RelaunchMelodia` action reopens the new build
-  after `InstallFinalize`, since Restart Manager never can (event 10010: the elevated installer's
-  SID isn't the user's). So the wait normally ends with this process gone, and only an exit with
-  the app still up reports, through `swap::msiexec_outcome`: 0 is the "installed" toast and so
-  are 3010 and 1641, the two reboot codes Windows Installer counts as success, 1602 (a dismissed
-  UAC prompt) is `InstallOutcome::Cancelled`, anything else a failure.
-  `updater::installer_running()` stands close-to-tray down for the wait. **The Start Menu
-  shortcut takes no `Icon`**, argued at the shortcut in `main.wxs`; putting one back blanks every
-  taskbar pin on the next upgrade. Smoke test skipped.
-  `system_install::probe` short-circuits `windows-*-msi` keys to `false` so the updater UI stays
-  visible — symmetric with `linux_pkg::detect`.
-
-- **Polkit helper for in-app updater RPM/DEB installs.** `/usr/libexec/melodia-update-helper`
-  argv-dispatches to dnf5/dnf/apt/apt-get; policy `com.github.kenansalar.melodia.update`.
-  `install_via_package_manager` runtime-detects and falls back to a direct `pkexec dnf install`.
-  **`LinuxPackageFormat` variants double as helper argv-dispatch keys.**
-
-- **Replacing the binary under a running process breaks its own path two different ways, and only
-  one of them is recoverable after the fact.** An RPM/DEB upgrade *unlinks* `/usr/bin/Melodia` and
-  the kernel marks `/proc/self/exe` `" (deleted)"`; `utils::exe::current_exe` resolves that centrally
-  (root `CLAUDE.md` argues the rule) and `install_target()` is the single updater consumer. **The
-  marker can only appear mid-session** — you cannot exec an unlinked path — so the callers that
-  meet one are the late ones: the post-exit respawn, and `spawn_install`'s pre-swap
-  `install_target()` capture. `desktop_integration`'s `Exec=` line and `linux_pkg::detect`'s
-  package-DB lookup both run at boot, so today they are defended without it — **and the second of
-  those defences is one edit away.** `detect` runs at boot *and* caches: its `OnceLock` is primed
-  by `is_system_install()` on a root-owned install and by `desktop_integration` on a writable one,
-  and every later caller reads it — `run_check` on the daily task and the user's Check
-  button, the panic hook through `current_target_key()`, and `install/staging.rs`. Drop the cache
-  and those three ask a fresh `rpm -qf` mid-session, squarely inside the window. Keep the routing
-  regardless, because the failure **compounds**: a marked path makes `rpm -qf` miss, so `detect`
-  returns `None`, so the updater offers a tarball asset to an RPM install (and would swap it into
-  root-owned `/usr/bin` rather than going through `pkexec dnf install`), the crash report's
-  `install=` field names the wrong format, and `desktop_integration` stops skipping and
-  BLAKE3-writes `Exec=/usr/bin/Melodia (deleted)` into the user's launcher. The atomic swap
-  *renames* instead, and a rename leaves `/proc/self/exe` reporting the stale path with a straight
-  face — nothing can undo that after the fact, which is why
-  **`ui::window_chrome::set_respawn_exe`** still has to capture the target *before* the swap and
-  stays load-bearing. Don't read the central fix as retiring it.
-
-- **`services::platform::desktop_integration` self-deploys `.desktop` + icon on boot for tarball installs.**
-  Compiled-in payloads `assets/desktop/Melodia.desktop.tmpl` (`@EXEC@`) +
-  `logo-with-background.svg`; BLAKE3-gated idempotent writes to
-  `~/.local/share/applications/…desktop` + `~/.local/share/icons/…/melodia.svg`. Skipped on
-  AppImage (`$APPIMAGE` set) and RPM/DEB. Don't move the source paths without updating the
-  `include_*!` call sites.
+- **Two gates, two questions.** `updater::is_available()` is false on a source build, whose
+  `target/` cargo owns: no daily task, and `MelodiaUpdater.updates-supported` takes the card out of
+  the settings search through `UpdateSection.has-matches`. `is_system_install()` is true where no
+  in-app path reaches (`system_install`'s module doc): the daily task stays down, the manual check
+  survives, and Download and Skip give way to a package-manager hint. Widening the second to cover
+  a dev build would offer that hint to `cargo run`.
+- **Only the atomic swap (AppImage, tarball) keeps a `.old`**, which `install/mod.rs` smoke-tests
+  and rolls back from and `main()` reaps on the next Linux boot. The `pkexec mv` fallback, the
+  RPM/DEB install and the MSI leave the replace to the format and skip the smoke test.
+- **Windows is a per-machine MSI the updater re-runs.** `swap::install_via_msiexec` and `main.wxs`
+  argue the Restart Manager close, the relaunch and the property both spell.
+- **The polkit helper is spelled in four places**: `swap.rs`'s `HELPER` and its `rpm`/`deb` argv,
+  `packaging/melodia-update-helper`'s `case`, the policy's `exec.path`, and both packages' install
+  lines (`build-rpm.sh`, `crates/melodia/Cargo.toml`'s deb assets). Without it the updater runs
+  `pkexec <dnf5|dnf|apt|apt-get> install` directly.
+- **An upgrade breaks the running binary's path two ways.** An RPM/DEB upgrade unlinks it, and
+  `utils::exe::current_exe` resolves the `" (deleted)"` marker. Only a late caller can meet one, so
+  `desktop_integration`'s `Exec=` and `linux_pkg::detect` are safe today by running at boot and
+  caching. Keep them on `install_target()` regardless: a marked path makes `rpm -qf` miss, and the
+  miss compounds into a tarball offered to an RPM install, a wrong `install=` in crash reports and
+  `Exec=… (deleted)` written into the launcher. The atomic swap renames instead, which no lookup
+  sees through, so `window_chrome::set_respawn_exe`'s capture before the swap stays load-bearing.
 
 ## Manifest
 
-- **`latest.json` is minisign-signed and the client verifies before parse.** Same key as the
-  per-artifact sigs (`assets/updater-pubkey.b64`): `fetch_latest_manifest` fetches
-  `latest.json.minisig` and calls `minisign::verify_manifest_bytes`, where the `manifest=true`
-  trusted comment is a **domain-separation tag**. Fail-closed: a missing or invalid sig refuses
-  the manifest, and `github.rs` names each refusal's `FailureKind` where it makes the error. CI:
-  `minisign -SHm latest.json -t "version=$VERSION manifest=true"`.
-
-- **The manifest is built twice, and the second build is the one users read.** `release-publish.yml`
-  builds `latest.json` while the release is still a draft, so its `notes_short` is GitHub's
-  `--generate-notes` text; `refresh-manifest.yml` fires on draft→published, re-reads the now-final
-  (author-edited) body, and rebuilds + re-signs + re-uploads the manifest and `SHA256SUMS.txt`.
-  `version` / `manifest_schema_version` / `critical` / `pub_date` are carried over from the
-  published manifest verbatim, so a refresh changes the notes and nothing else — `pub_date` in
-  particular must not bump. **`workflow_dispatch` with a `tag` input refreshes retroactively**,
-  which is the recovery path when the job fails: the release keeps the draft-time manifest,
-  complete and correctly signed, merely stale in its notes. **Both callers reach the script through
-  `.github/actions/build-manifest`, which argues why**, and both hand it an `--artifacts`
-  directory **holding installable artifacts and their `.minisig` siblings and nothing else** — the
-  script `SystemExit`s on anything it can't classify, which is why a rebuild's non-artifact inputs
-  are staged in `$RUNNER_TEMP`. Staging the published
-  `latest.json` in `artifacts/` alongside them is what broke v0.9.0's refresh on the first publish
-  after that guard landed.
-
-- **Manifest schema gate + critical-release flag** (`crates/melodia-app/src/services/updater/manifest.rs`).
-  `manifest_schema_version: u32` (default 1) — `check.rs` returns `Verdict::UnsupportedSchema`
-  when `> SUPPORTED_MANIFEST_SCHEMA`, treated like `NoAssetForTarget`; bumping it means bumping
-  `build-latest-json.py`'s `--manifest-schema-version` and the CI invocation. `critical: bool`
-  (default false) hides "Skip this version" and bypasses the `skipped_release` filter, set via
-  `--critical`.
+**It is built twice and users read the second**: `release-publish.yml` at draft time,
+`refresh-manifest.yml` on publish with the final notes, both through
+`.github/actions/build-manifest`. A refresh carries `version`, `manifest_schema_version`, `critical`
+and `pub_date` over and changes only the notes. The workflow argues it, the `--artifacts` contract
+and the `workflow_dispatch` recovery included.
 
 ## Release matrix
 
-- **Build provenance attestation.** `release-build.yml` runs `actions/attest-build-provenance` (v4,
-  SHA-pinned) in every slot, needing `id-token: write` + `attestations: write`. Verify with
-  `gh attestation verify <file> --repo KenanSalar/Melodia`. Upstream now calls v4 a thin wrapper
-  over `actions/attest` and points new work at that directly — worth folding in next time this line
-  is touched.
-
-- **aarch64 builds alongside x86_64** (Linux + Windows): the 10 matrix slots `release.yml`
-  declares, 5 × x86_64 + 5 × aarch64 (`ubuntu-24.04-arm`/`windows-11-arm`).
-  **`build-latest-json.py`'s `PLATFORM_PATTERNS` is downstream of `release-build.yml`'s
-  packaging steps and the `scripts/build-*.sh` they call, and must move with them.**
-  Every pattern pins an explicit arch token, so the two arch groups are disjoint and the
-  aarch64-first ordering is readability rather than disambiguation — that ordering existed for
-  cargo-deb's native `_arm64.deb`, which carries no leading-arch token, and `release-build.yml`
-  renames the deb to the `melodia-<tag>-<arch>.deb` scheme every other slot produces so its
-  `melodia-*.deb` globs match. The table was left on the old name and **v0.8.0 shipped with no deb
-  entry at all** while both signed `.deb` files sat on the release, leaving deb clients on
-  `NoAssetForTarget` indefinitely; it survived because `classify()` returning `None` was a bare
-  `continue`, which is the guard now spelled above. Client `target::current_target_key()` is
-  `cfg!`-branched per `(target_os, target_arch)` and its key strings are that same table's values,
-  so a renamed key breaks both ends. All three `build-{tarball,appimage,rpm}.sh` read `ARCH`
-  (default `uname -m`), and the AppImage's per-arch `linuxdeploy` SHA256s bump in lockstep.
+- **Ten slots, each of the five formats on x86_64 and aarch64** (`release.yml`'s matrix), each one
+  attested and signed in `release-build.yml`.
+- **A platform key is spelled in three tables.** The contract test reads `target::format_key`
+  against `build-latest-json.py`'s `PLATFORM_PATTERNS`; `staging::install_method_for_key` is the
+  third, outside it, and argues what a typo there costs. The patterns follow the artifact names
+  `release-build.yml` and `scripts/build-*.sh` produce, and the script aborts on a file none
+  matches.

@@ -5,8 +5,8 @@ use std::path::{Path, PathBuf};
 
 /// The running binary's path with the `" (deleted)"` marker Linux appends to an unlinked dentry
 /// resolved rather than trimmed, so a respawn relaunches the binary now at that path. The marker
-/// only appears mid-session, which is what sorts the callers (`.claude/rules/updater.md`); inside
-/// the updater go through `install_target`.
+/// only appears mid-session, an unlinked path being impossible to exec, so only a late caller meets
+/// it; inside the updater go through `install_target`.
 pub fn current_exe() -> std::io::Result<PathBuf> {
     Ok(undeleted_exe(std::env::current_exe()?, Path::exists))
 }
