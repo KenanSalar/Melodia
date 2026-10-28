@@ -155,7 +155,7 @@ export component NowPlayingView inherits Rectangle {
                         spacing: clamp(root.height * 0.03, 6px, Theme.pad-md);
 
                         // A plain Rectangle with each tile at an explicit `x`/`y`, which keeps this
-                        // slot the column's only slack (`visualizer.md`). A centring layout would
+                        // slot the column's only slack. A centring layout would
                         // fold the tile's minimum in and take that slack away.
                         cover-slot := Rectangle {
                             min-height: root.cover-min;

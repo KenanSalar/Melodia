@@ -3,12 +3,12 @@ import { Player } from "../../globals/player.slint";
 
 // One bar per band, bass left. Every band is one figure rather than one element: FemtoVG builds
 // and tessellates a path per element every frame, caching none of it. `spectrum::write_bar_path`
-// writes it and owns the anchor (`visualizer.md`).
+// writes it and owns the anchor, so Mirrored mounts this same `Path`.
 //
 // No `animate`: Rust has already smoothed the heights, and easing a smoothed value phase-lags.
 export component SpectrumBars inherits Rectangle {
     Path {
-        // Asked for over the live geometry rather than pushed (`visualizer.md`).
+        // Asked for over the live geometry, so a strip moved at rest still lands on whole pixels.
         commands: Visualizer.bars-figure(
             Visualizer.bars-generation,
             Visualizer.style-idx,

@@ -40,7 +40,7 @@ export global ReplayGain {
     callback commit-preamp(float /*dB*/);
 }
 
-// The contract across the strip, the pickers and Rust is `.claude/rules/visualizer.md`.
+// `enabled` decides only whether the strip mounts; `set-active`, off the mount, arms the tap.
 //
 // `style` and `style-idx` are one choice in two shapes: the strip mounts on the key, so reordering
 // the picker can't repoint an install, and the Settings chips need the index.

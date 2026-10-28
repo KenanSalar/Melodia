@@ -24,9 +24,9 @@ export component VisualizerStrip inherits Rectangle {
         Visualizer.tick(Player.vm.is_playing, root.width / 1px);
     }
 
-    // 30 Hz for every style (`visualizer.md`); `dormant` only notices frames coming back. Not just
-    // `is_playing`: a pause leaves the last window in the ring, so the tick runs on, feeding the
-    // analyzers silence, until Rust reports everything settled.
+    // 30 Hz for every style, each figure rebuilt from scratch per tick; `dormant` only notices
+    // frames coming back. Not just `is_playing`: a pause leaves the last window in the ring, so
+    // the tick runs on, feeding the analyzers silence, until Rust reports everything settled.
     Timer {
         interval: Visualizer.dormant ? 500ms : 33ms;
         running: (Player.vm.is_playing && Visualizer.window-shown) || !Visualizer.idle;

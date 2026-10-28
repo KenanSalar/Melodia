@@ -1,6 +1,6 @@
 # Plan: Compress the subsystem rules, and take their citations out of the code
 
-Status: **in progress**, Phase 5.2 next · Owner: Kenan · Created: 2026-10-27 · branch `docs/trim-comments`
+Status: **in progress**, Phase 5.3 next · Owner: Kenan · Created: 2026-10-27 · branch `docs/trim-comments`
 
 > **Measured 2026-10-27** against `a3963bb3` plus Phase 1's changes. Every figure below comes from
 > a command run that day. Each phase measures its rule again before it starts (Every rule, step 1),
@@ -32,7 +32,8 @@ Working doc. Delete when every phase has landed (Phase 10).
 | `desktop-shell.md` | `df93eb10` | 299 / 22,352 | 128 / 8,345 (37%) |
 | `library-data.md` | `312554ea` | 314 / 24,572 | 124 / 8,403 (34%) |
 | `ci-packaging.md` | `52c215ed` | 323 / 24,758 | 122 / 7,996 (32%) |
-| `radio.md` | Phase 5.1 | 181 / 13,308 | 107 / 6,492 (49%) |
+| `radio.md` | `3cb8af76` | 181 / 13,308 | 107 / 6,492 (49%) |
+| `visualizer.md` | Phase 5.2 | 159 / 11,280 | 51 / 2,745 (24%) |
 
 Read the first two commits before Phase 2: `git show <sha> --stat`, then the rule as it landed, then
 a few of the comment diffs.
@@ -148,7 +149,7 @@ a few of the comment diffs.
 | 3 | `library-data.md` | 314 / 24,572, 9 over 100 | 6 in 6 files | 124 / 8,403 (34%), 0 over 100, 0 citations |
 | 4 | `ci-packaging.md` | 323 / 24,758, 9 over 100 | 1 named, plus 3 the grep missed | 122 / 7,996 (32%), 0 over 100, 0 citations |
 | 5.1 | `radio.md` | 181 / 13,308, 6 over 100 | 7 in 5 files | 107 / 6,492 (49%), 0 over 100, 0 citations |
-| 5.2 | `visualizer.md` | 159 / 11,280, 1 over 100 | 7 in 6 files | |
+| 5.2 | `visualizer.md` | 159 / 11,280, 1 over 100 | 7 in 6 files | 51 / 2,745 (24%), 0 over 100, 0 citations |
 | 5.3 | `updater.md` | 160 / 11,471, 5 over 100 | 1 | |
 | 6 | `symphonia.md` | 112 / 7,296, 5 over 100 | 0 | |
 | 7 | `diagnostics.md` (deleted) | 52 / 3,006 | 0 | |
@@ -320,7 +321,7 @@ Status: done.
     workflow files and the pinned SHAs, and say which couldn't be checked locally.
 
 ### Phase 5: `radio.md`, `visualizer.md`, `updater.md`
-Status: in progress, 5.1 done.
+Status: in progress, 5.1 and 5.2 done.
 
 - [x] **5.1 `radio.md`**, one commit.
   - **Result:** the five sections kept. Cut as carried at their anchors: the facade walks' own
@@ -360,7 +361,29 @@ Status: in progress, 5.1 done.
     - `CLAUDE.md:17`'s table row;
     - `CLAUDE.md:82`, at `radio/` as the one door;
     - `CLAUDE.md:83`, at what crosses out of `player/`.
-- [ ] **5.2 `visualizer.md`**, one commit.
+- [x] **5.2 `visualizer.md`**, one commit.
+  - **Result:** the four sections kept, one or two entries each: the arm split and its sole
+    writer, the `analyzing` guard and the gate pins, the bars' ask, the picker list by position
+    and the hosts' `dismiss()`. Cut as carried at their anchors: the ring re-arm and first
+    allocation (`VisualizerShared::set_enabled`), the session's buffers (`Session`,
+    `wire_set_active`), the `pulse` deferral, the strip's dimensions and the cover slot's slack
+    (`now-playing-view.slint`), the Mirrored anchor and its half-height (`write_bar_path`), the
+    33 ms interval (`visualizer-strip.slint`, `VISUALIZER_DECAY`), the trace's cost
+    (`waveform.rs`), the picker's popup, "Off" and trigger state (`visualizer-picker.slint`) and
+    the rows' container (`menu-surface.slint`). Cut as trivia: the 56 px fallback, "mirror" as an
+    overloaded word.
+  - **Stale:** none in the rule. Every name resolves, and the two Slint internals it named
+    (`solve_box_layout`, `layout_items`) are in i-slint-core 1.18.1's `layout.rs`.
+  - **Comment whose reason went false (Decision 3):** `visualizer-flyout.slint`'s header said the
+    flyout lives inside a menu's `PopupWindow` beside its column, like the sleep flyout.
+    `VisualizerPicker` is its only mount, and it fills that popup. Rewritten.
+  - **Code diff:** 13 comment lines out, 11 in, 99 bytes fewer. Clippy clean.
+  - **Verified against source:**
+    - i-slint-core 1.18.1: `solve_box_layout` falls through to `layout_items` once the preferred
+      sizes stop fitting, and `layout_items` shrinks from `pref` and positions from the start.
+    - i-slint-renderer-femtovg 1.18.1: with a rendering notifier set, every frame flushes right
+      after the clear (`lib.rs:246`).
+  - **Not verified:** nothing left open.
   - **Covers** the visualizer's UI half: arming, the tick's gates, the strip and its pickers.
   - **Code citations (7 in 6 files):**
     - `crates/melodia-app/src/library/playback.rs:512`;

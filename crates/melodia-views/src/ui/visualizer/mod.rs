@@ -1,6 +1,5 @@
 //! The Now-Playing visualizer's Rust half: the `Visualizer` global's seed and callbacks, the
-//! per-frame analysis being [`frame`]'s. The contract across this, the `.slint` strip and both
-//! pickers is `.claude/rules/visualizer.md`.
+//! per-frame analysis being [`frame`]'s.
 //!
 //! The bars frame's two real FFTs are cheap enough for the UI thread, which spares a third thread
 //! and a second shared cell.

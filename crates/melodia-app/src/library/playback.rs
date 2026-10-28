@@ -509,7 +509,7 @@ pub fn player_make_bit_perfect(ctx: &PlaybackContext) -> u32 {
     volume
 }
 
-// No visualizer setter: the Now Playing view arms the tap itself (`.claude/rules/visualizer.md`).
+// No visualizer setter: the Now Playing view arms the tap, the setting only mounting the strip.
 
 #[cfg(test)]
 #[path = "tests/playback_tests.rs"]
