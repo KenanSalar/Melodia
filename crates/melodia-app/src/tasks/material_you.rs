@@ -130,7 +130,7 @@ async fn run(
 }
 
 async fn react(
-    os_state: &Arc<RwLock<SystemColorState>>,
+    os_state: &RwLock<SystemColorState>,
     seed_cache: &mut SeedCache,
     last: &mut LastApplied,
     appearance: Option<&AppearanceSnapshot>,
