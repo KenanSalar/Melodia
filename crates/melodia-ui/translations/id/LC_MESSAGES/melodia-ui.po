@@ -1785,6 +1785,10 @@ msgstr "Urungkan"
 msgid "Equalizer reset"
 msgstr "Equalizer diatur ulang"
 
+#: ui/globals/undo-text.slint
+msgid "Recent searches cleared"
+msgstr "Pencarian terbaru dihapus"
+
 #. Translators: the action a click takes, expanding the sidebar
 #: ui/layout/sidebar.slint
 msgid "Expand"

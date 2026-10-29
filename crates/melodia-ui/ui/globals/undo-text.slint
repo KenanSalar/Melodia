@@ -10,4 +10,9 @@ export global UndoText {
     equalizer-reset() => {
         return @tr("Equalizer reset");
     }
+
+    pure callback recent-searches-cleared() -> string;
+    recent-searches-cleared() => {
+        return @tr("Recent searches cleared");
+    }
 }

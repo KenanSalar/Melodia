@@ -33,6 +33,7 @@ use melodia_ui::{
 use state::{ALBUM_STRIP_THUMB_SIZE, ARTIST_STRIP_THUMB_SIZE, STRIP_THUMB_CAP, SearchUiState};
 
 pub(super) use apply::{apply_row_favorite, apply_row_rating};
+pub(crate) use callbacks::RecentClearUndo;
 
 /// Wires every `Search.*` callback. The two peers are the open-album and open-artist hand-offs,
 /// parameters so the install order is a compile error. There is no initial fetch, the page
@@ -46,7 +47,7 @@ pub fn install(
 ) -> Arc<SearchUi> {
     install_models(cx.app);
     let search_ui = Arc::new(SearchUi::new(cx.cover_thumbs.clone()));
-    callbacks::wire(cx.app, cx.state, cx.view_state, &search_ui, albums_ui, artists_ui);
+    callbacks::wire(cx, &search_ui, albums_ui, artists_ui);
     search_ui
 }
 

@@ -1798,6 +1798,10 @@ msgstr "Αναίρεση"
 msgid "Equalizer reset"
 msgstr "Ο ισοσταθμιστής επαναφέρθηκε"
 
+#: ui/globals/undo-text.slint
+msgid "Recent searches cleared"
+msgstr "Οι πρόσφατες αναζητήσεις καθαρίστηκαν"
+
 #. Translators: the action a click takes, expanding the sidebar
 #: ui/layout/sidebar.slint
 msgid "Expand"

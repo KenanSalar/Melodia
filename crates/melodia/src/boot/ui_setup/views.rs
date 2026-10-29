@@ -71,6 +71,7 @@ fn install_grid_covers(app: &AppWindow) {
 pub fn install_views(
     app: &AppWindow,
     state: &AppState,
+    undo: &Rc<UndoWindow>,
     startup_view_state: Option<&services::view_state::ViewStateData>,
 ) -> UiHandles {
     // Before any `wire_*`: every section seeds its `section_active` shadow off these, and its gate
@@ -103,6 +104,7 @@ pub fn install_views(
         app,
         state,
         cover_thumbs: &cover_thumbs,
+        undo,
         view_state: startup_view_state,
     };
 

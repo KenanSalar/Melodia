@@ -1805,6 +1805,10 @@ msgstr "Geri al"
 msgid "Equalizer reset"
 msgstr "Ekolayzer sıfırlandı"
 
+#: ui/globals/undo-text.slint
+msgid "Recent searches cleared"
+msgstr "Son aramalar temizlendi"
+
 #. Translators: the action a click takes, expanding the sidebar
 #: ui/layout/sidebar.slint
 msgid "Expand"

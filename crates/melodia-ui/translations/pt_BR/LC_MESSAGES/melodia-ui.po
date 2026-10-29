@@ -1796,6 +1796,10 @@ msgstr "Desfazer"
 msgid "Equalizer reset"
 msgstr "Equalizador redefinido"
 
+#: ui/globals/undo-text.slint
+msgid "Recent searches cleared"
+msgstr "Buscas recentes limpas"
+
 #. Translators: the action a click takes, expanding the sidebar
 #: ui/layout/sidebar.slint
 msgid "Expand"

@@ -68,7 +68,7 @@ fn install_shell(
     }
     // Ahead of every installer whose removals offer an undo, which takes the slot.
     let (notifications, undo) = install_notice_stack(app, state);
-    let views = install_views(app, state, view_state);
+    let views = install_views(app, state, &undo, view_state);
     install_library_settings_and_friends(app, state, &notifications, &undo)?;
 
     // These three wire here rather than inside their slices because their
@@ -110,7 +110,7 @@ fn install_notice_stack(
             log::warn!("notifications locale refresher: {}", describe(&e));
         }
     }
-    let undo = ui::undo::install(app, &notifications);
+    let undo = ui::undo::install(app, state, &notifications);
     (notifications, undo)
 }
 

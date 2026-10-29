@@ -15,24 +15,26 @@ use crate::ui::artists::ArtistsUi;
 use crate::ui::callbacks::persisted_sort;
 use crate::ui::search::{SearchUi, fetch::push_recent_rows_to_slint};
 use crate::ui::track_list_view::view_id;
+use crate::ui::view_ctx::ViewCtx;
 use melodia_app::library;
 use melodia_app::services::view_state::ViewStateData;
 use melodia_app::state::AppState;
 use melodia_core::error::describe;
 use melodia_ui::{AppWindow, Search};
 
+pub(crate) use recent::RecentClearUndo;
+
 /// This page's `Nav.selected-index`, and the single definition of it.
 pub(super) const NAV_SEARCH: i32 = 0;
 
 /// Runs after `wire_all`, from [`super::install`], which installs the models first.
 pub(super) fn wire(
-    ui: &AppWindow,
-    state: &AppState,
-    view_state: Option<&ViewStateData>,
+    cx: ViewCtx<'_>,
     search_ui: &Arc<SearchUi>,
     albums_ui: &Arc<AlbumsUi>,
     artists_ui: &Arc<ArtistsUi>,
 ) {
+    let ViewCtx { app: ui, state, undo, view_state, .. } = cx;
     let weak = ui.as_weak();
 
     hydrate_sort_from_settings(view_state, search_ui, &ui.global::<Search>());
@@ -40,7 +42,7 @@ pub(super) fn wire(
 
     covers::wire(ui, search_ui);
     query::wire(ui, state, search_ui);
-    recent::wire(ui, state);
+    recent::wire(ui, state, undo);
     results::wire(ui, state, search_ui, albums_ui, artists_ui);
     lifecycle::wire(ui, state, search_ui);
 }

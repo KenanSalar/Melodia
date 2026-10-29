@@ -1,6 +1,6 @@
 # Plan: Undo for removals (a notice that puts back what went)
 
-Status: **Phase 1 done** (hand-tested 2026-10-29), Phase 2 next · Owner: Kenan · Created: 2026-10-28 · Issue #109, branch `feat/undo-removals`
+Status: **Phases 1 and 2 done** (hand-tested 2026-10-29), Phase 3 next · Owner: Kenan · Created: 2026-10-28 · Issue #109, branch `feat/undo-removals`
 
 > **Validated 2026-10-28** against `5fa3d5ed` (`feat/undo-removals`): three read-only traces (the
 > toast stack, shortcuts and confirmations; the library removals; the queue, the equalizer and the
@@ -251,7 +251,7 @@ A kept confirmation is raised from Rust once the size is known, across an await,
 
 | File | Owns |
 |---|---|
-| `crates/melodia-views/src/ui/undo/mod.rs` (new) | `UndoWindow`: the one slot, `offer` (merge, or replace and dismiss the old row), the Undo/Ctrl+Z handler acting only on the slot's own row id, the slot's release when its row goes, and `UNDO_NOTICE_MS` |
+| `crates/melodia-views/src/ui/undo/mod.rs` (new) | `UndoWindow`: the one slot, `offer` (merge, or replace and dismiss the old row), the Undo/Ctrl+Z handler acting only on the slot's own row id, the slot's release when its row goes, `UNDO_NOTICE_MS`, and the app state and window it hands each restore, so a hold carries only what it took |
 | `crates/melodia-views/src/ui/undo/removal.rs` (new) | `Removal`, one variant per surface wrapping that surface's token: `absorb` (merge or hand back), `count`, its wording recipe, and `restore`, which dispatches each arm to the surface module that raised it. No surface names another's. |
 | `crates/melodia-views/src/ui/shell/notifications.rs` | `recipes` keeps its shape. Adds a timed localized push, an in-place `relabel`, `restart` (a bump of the row's `restarts`), one row-removed listener, and the `Undo` arm in `run_action`, which now takes the row id. `show_auto_dismiss` writes the row's `timeout-ms` instead of arming a Rust timer. `remove_at` stays the one removal path. |
 | `crates/melodia-ui/ui/globals/undo-text.slint` (new) | `UndoText`: every undo wording as `pure callback`s with plural `@tr`, spelled as `Settings.playlist-import-title` spells them (`settings.slint:434-437`), keeping `settings.slint` (625 lines) from growing. Exported from `app-window.slint`, Rust calling it. |
@@ -287,9 +287,10 @@ A kept confirmation is raised from Rust once the size is known, across an await,
 **Threading.** `NotificationsUi` and `UndoWindow` are installed ahead of `install_views`
 (`install.rs:68`). `notifications::install` needs only the window (`notifications.rs:237`), while
 today the playlists, favorites, recently-played, radio and search installs (`views.rs:113-117`) and
-`install_equalizer` (`:189`) all run before it. Each removing installer then takes
-`&Rc<UndoWindow>`, the way `notifications` travels today; `queue_panel::install` and `recent::wire`
-gain the parameter.
+`install_equalizer` (`:189`) all run before it. The view slices reach the slot through
+`ViewCtx.undo`, a shared service like the row tier rather than a peer, so their `install`
+signatures don't change. `install_equalizer` and `queue_panel::install`, outside `install_views`,
+take `&Rc<UndoWindow>`.
 
 ## Phases
 
@@ -360,19 +361,34 @@ The shell and its simplest user land together, the shell having nothing to show 
 - A language switch with the notice up re-renders it.
 - A Copy toast pauses under the pointer too, and a notice outlasts a switch to another window.
 
-### Phase 2: recent searches' Clear all
+### Phase 2: recent searches' Clear all (done 2026-10-29)
 
-- `SearchHistoryState::clear` hands back the old list (`std::mem::take`); today it answers
-  `Ok(vec![])` (`search_history.rs:58-66`).
-- `restore` puts the list back, with any query added since kept in front, deduped and truncated to
-  `MAX_ENTRIES`, which is private, so `restore` lives beside it.
-- The facade lives in `library::search`. `search/callbacks/recent.rs:44-53` offers, and the
-  restore ends in `push_recent_rows_to_slint` (`search/fetch.rs:131-138`) as the clear does.
+- `SearchHistoryState::clear` hands back the old list (`std::mem::take`). `add`, `remove` and
+  `restore` share one `change`, which edits under the lock and flushes the snapshot.
+- `restore` puts the list back behind any query added since, deduped and truncated to
+  `MAX_ENTRIES` (`restore_queries`, beside `add_query`, since `MAX_ENTRIES` is private).
+- The facade is `library::search::{clear,restore}_search_history`. `on_recent_clear` runs on the
+  UI thread through `spawn_local`, because the slot is an `Rc`. It offers `Removal::RecentSearches`
+  only when something was cleared, and the restore ends in `push_recent_rows_to_slint`. Phase 3's
+  offers take the same shape.
+- A run of Clear alls merges with the newer list in front, since a second clear could only take
+  what was searched after the first. Keeping the older hold, as the equalizer does, would lose
+  those queries.
 - The field keeps focus after Clear all, so Ctrl+Z edits the field here and the button is the way
   back (decision 8).
 - **Not in scope:** a single chip's ✕, which the issue doesn't list. Searching again recreates a
   chip.
 - **String:** "Recent searches cleared".
+
+**By hand.**
+- Clear all raises the notice, and Undo brings the chips back in their order.
+- Clear all, search something new and let it join (about 2 s), then Undo: the new query comes
+  first, then the old ones, ten at most.
+- Clear all, search, empty the box, Clear all again inside the window: one card with its clock
+  restarted, and Undo brings back both sets.
+- With the field focused, Ctrl+Z edits the field. With focus elsewhere, it restores.
+- An undone clear is still there after a restart.
+- A language switch with the notice up re-renders it.
 
 ### Phase 3: tracks removed from a playlist
 
@@ -405,7 +421,9 @@ The shell and its simplest user land together, the shell having nothing to show 
      already handles an off-screen page.
 4. **Measure.** One heaptrack of a held cap-sized cut confirms `UNDO_HOLD_CAP`, and one of a moved
    full-library queue confirms the queue's exemption (decision 5). Both results are recorded here.
-5. **The first fallible restore.** A failed restore raises `show_failure` with "Couldn't undo".
+5. **The first restore that reports its failure.** A failed restore raises `show_failure` with
+   "Couldn't undo". Phase 2's search restore, which can fail only when the history file's write
+   fails, logs that failure the way its clear does.
 6. **Strings:** "{n} track removed from {}" (plural), the over-cap line "Too many to undo", and
    "Couldn't undo".
 
@@ -604,7 +622,8 @@ This lands before Phase 7, whose queue token restores the flag with the cursor.
     `total_duration_ms` matching its items, plus the id-taken fallback.
 - `radio_tests`: every `StationCut` arm, a history restore after a play in the window keeping the
   play, and both skips (the uuid, and a hand-typed `stream_url`).
-- `search_history` tests: restore with queries added since.
+- `search_history` tests: restore with queries added since, and a merged run of two clears
+  restoring the newer list in front.
 - `notifications_tests`: `relabel` keeping the id, `restart` bumping `restarts`, a timed row
   carrying its `timeout-ms`, a replace dismissing the old Undo row, an Undo naming another row
   doing nothing, and the row-removed listener firing once on every removal path, the eviction

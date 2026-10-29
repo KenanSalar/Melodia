@@ -13,6 +13,7 @@ use std::rc::Rc;
 use slint::ComponentHandle;
 
 use crate::ui::shell::notifications::{LocalizedPush, NotificationsUi};
+use melodia_app::state::AppState;
 use melodia_ui::{AppWindow, NotificationKind, NotificationVariant, Notifications};
 
 pub use removal::Removal;
@@ -21,8 +22,10 @@ pub use removal::Removal;
 /// other timed toast, the exclusive-output refusal's button included.
 pub const UNDO_NOTICE_MS: u32 = 10_000;
 
+/// The state and the window are handed to each restore, so a hold carries only what it took.
 pub struct UndoWindow {
     notifications: Rc<NotificationsUi>,
+    state: AppState,
     ui: slint::Weak<AppWindow>,
     slot: RefCell<Option<Slot>>,
 }
@@ -80,7 +83,7 @@ impl UndoWindow {
         }
         let Some(slot) = self.release() else { return };
         self.notifications.dismiss(slot.row);
-        slot.removal.restore();
+        slot.removal.restore(&self.state, &self.ui);
     }
 
     fn row_removed(&self, row: i32) {
@@ -105,9 +108,14 @@ impl UndoWindow {
 
 /// Wires the slot to the notice stack and to `Notifications.undo`. Both hold it weakly, the
 /// listener living inside the `NotificationsUi` the slot holds.
-pub fn install(ui: &AppWindow, notifications: &Rc<NotificationsUi>) -> Rc<UndoWindow> {
+pub fn install(
+    ui: &AppWindow,
+    state: &AppState,
+    notifications: &Rc<NotificationsUi>,
+) -> Rc<UndoWindow> {
     let window = Rc::new(UndoWindow {
         notifications: notifications.clone(),
+        state: state.clone(),
         ui: ui.as_weak(),
         slot: RefCell::new(None),
     });

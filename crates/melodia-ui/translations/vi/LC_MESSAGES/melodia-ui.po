@@ -1785,6 +1785,10 @@ msgstr "Hoàn tác"
 msgid "Equalizer reset"
 msgstr "Đã đặt lại bộ chỉnh âm"
 
+#: ui/globals/undo-text.slint
+msgid "Recent searches cleared"
+msgstr "Đã xóa các tìm kiếm gần đây"
+
 #. Translators: the action a click takes, expanding the sidebar
 #: ui/layout/sidebar.slint
 msgid "Expand"

@@ -25,6 +25,14 @@ pub async fn remove_search_history(
     state.search_history.remove(&query).await
 }
 
+/// Answers the cleared list, for [`restore_search_history`] to put back.
 pub async fn clear_search_history(state: &AppState) -> Result<Vec<String>, AppError> {
     state.search_history.clear().await
+}
+
+pub async fn restore_search_history(
+    state: &AppState,
+    cleared: Vec<String>,
+) -> Result<Vec<String>, AppError> {
+    state.search_history.restore(cleared).await
 }

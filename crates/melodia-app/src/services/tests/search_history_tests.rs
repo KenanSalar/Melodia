@@ -100,7 +100,7 @@ async fn clearing_writes_an_empty_history_rather_than_removing_the_file() -> Res
 
     let history = store(&tmp).await;
     history.add("boards of canada").await?;
-    assert_eq!(history.clear().await?, Vec::<String>::new());
+    assert_eq!(history.clear().await?, vec!["boards of canada"]);
 
     assert!(path.exists(), "the file is the record that the history is empty");
     assert!(store(&tmp).await.get().is_empty());
