@@ -1607,8 +1607,8 @@ msgid "Delete playlist?"
 msgstr "Xóa danh sách phát?"
 
 #: ui/globals/dialog.slint
-msgid "The playlist and its track order will be removed, and this can't be undone. The tracks themselves stay in your library."
-msgstr "Danh sách phát và thứ tự bản nhạc của nó sẽ bị xóa, và không thể hoàn tác. Bản thân các bản nhạc vẫn ở trong thư viện của bạn."
+msgid "This playlist has too many tracks to undo, so deleting it can't be undone. The tracks themselves stay in your library."
+msgstr "Danh sách phát này có quá nhiều bản nhạc nên không thể hoàn tác việc xóa. Bản thân các bản nhạc vẫn ở trong thư viện của bạn."
 
 #: ui/globals/dialog.slint
 msgid "Delete"
@@ -1620,8 +1620,8 @@ msgid_plural "Delete {n} playlists?"
 msgstr[0] "Xóa {n} danh sách phát?"
 
 #: ui/globals/dialog.slint
-msgid "The playlists and their track order will be removed, and this can't be undone. The tracks themselves stay in your library."
-msgstr "Các danh sách phát và thứ tự bản nhạc của chúng sẽ bị xóa, và không thể hoàn tác. Bản thân các bản nhạc vẫn ở trong thư viện của bạn."
+msgid "These playlists have too many tracks to undo, so deleting them can't be undone. The tracks themselves stay in your library."
+msgstr "Các danh sách phát này có quá nhiều bản nhạc nên không thể hoàn tác việc xóa. Bản thân các bản nhạc vẫn ở trong thư viện của bạn."
 
 #: ui/globals/dialog.slint
 msgid "Remove from Recently Played?"

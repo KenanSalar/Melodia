@@ -1,6 +1,6 @@
 # Plan: Undo for removals (a notice that puts back what went)
 
-Status: **Phases 1 to 3 done** (hand-tested 2026-10-29; Phase 3's measure waits for Kenan's go), **Phase 4 implemented**, awaiting its hand test · Owner: Kenan · Created: 2026-10-28 · Issue #109, branch `feat/undo-removals`
+Status: **Phases 1 to 4 done** (hand-tested 2026-10-29 and 2026-10-30; Phase 3's measure waits for Kenan's go), **Phase 5 next** · Owner: Kenan · Created: 2026-10-28 · Issue #109, branch `feat/undo-removals`
 
 > **Validated 2026-10-28** against `5fa3d5ed` (`feat/undo-removals`): three read-only traces (the
 > toast stack, shortcuts and confirmations; the library removals; the queue, the equalizer and the
@@ -259,8 +259,8 @@ The issue's Notes ask for this list before any confirmation goes. "Over the cap"
 
 | Confirmation | Raised at | Fate |
 |---|---|---|
-| Delete playlist | `Dialog.open-delete-playlist`, raised from Rust (`crud.rs`' `confirm_first`) | Gone under the cap (Phase 4). Kept over it, reworded to say it can't be undone; with undo off from Phase 10. |
-| Delete N playlists | `Dialog.open-delete-playlists`, raised from Rust (`crud.rs`' `confirm_first`) | Gone under the cap (Phase 4). Kept over it, reworded, and a true plural; with undo off from Phase 10. |
+| Delete playlist | `Dialog.open-delete-playlist`, raised from Rust (`crud.rs`' `confirm_first`) | Gone under the cap (Phase 4). Kept over it, saying it can't be undone because the playlist has too many tracks; with undo off from Phase 10, in its own wording. |
+| Delete N playlists | `Dialog.open-delete-playlists`, raised from Rust (`crud.rs`' `confirm_first`) | Gone under the cap (Phase 4). Kept over it, naming the same reason, and a true plural; with undo off from Phase 10, in its own wording. |
 | Clear queue | inline, `queue-panel.slint:240-249` | Hidden while queue undo is on. The queue's holds are uncapped (decision 5), so only Settings brings it back (decision 13). "Playback will stop" was never true and is reworded. |
 | Remove station (Favorites / Recently Played) | `Dialog.open-remove-station` (`dialog.slint:291-307`), from `station-context-menu.slint:186` and `kept-stations-tab.slint:62` | Goes. Kept over the cap and with undo off, reworded. |
 | Remove N stations | `Dialog.open-remove-stations` (`dialog.slint:311-325`), from `station-context-menu.slint:184` | Goes. Kept over the cap and with undo off, reworded. |
@@ -490,7 +490,7 @@ The shell and its simplest user land together, the shell having nothing to show 
 - More than 10,000 rows: a notice with no button saying it's too many to undo.
 - A language switch with the notice up re-renders it.
 
-### Phase 4: deleting playlists (implemented 2026-10-29, awaiting the hand test)
+### Phase 4: deleting playlists (done 2026-10-30)
 
 1. **Core.** `PlaylistSnapshot { playlist: Playlist, items: Vec<CutItem> }`, `row` being each
    item's index. `search_name` isn't held: the restore packs it from the name, as create does, a
@@ -534,7 +534,9 @@ The shell and its simplest user land together, the shell having nothing to show 
      so 6 s is enough. Phase 10's slider lengthens it, and turning a kind's undo off brings its
      confirmation back.
 5. **Strings:** "{} deleted", "{n} playlist deleted" (plural), "Delete {n} playlist?" (plural,
-   replacing "Delete {} playlists?"), and both messages saying the delete can't be undone.
+   replacing "Delete {} playlists?"), and both messages saying why the delete can't be undone:
+   too many tracks (Kenan, 2026-10-30, so the user learns it before deciding rather than from the
+   notice after). No number, the cap being Rust's and free to move.
 
 **By hand.**
 - Delete from the card trash, the card menu and the detail pill. Each deletes at once with "Road
@@ -753,6 +755,10 @@ removing stations and Clear queue ask first again (decision 13).
      over-cap branch already being the plain write.
    - Deleting playlists and removing stations: uncovered takes the over-cap path, its confirmation
      raised from Rust with a `DialogClaim` (Phases 4 and 5 build it).
+   - **The playlist delete confirmations need a second wording for undo off.** Phase 4's messages
+     give the over-cap reason, "too many tracks to undo", which is wrong when the user turned undo
+     off. The undo-off form says only that the delete can't be undone, so the openers take which
+     reason applies. Phase 5's station confirmations owe the same if they name the cap.
    - Clear queue: Rust writes `Queue.clear-confirms` from the shadow, which shows Phase 7's kept
      inline confirmation.
 4. **The category** (`ui-patterns.md`'s "A new category" list):
@@ -782,7 +788,8 @@ removing stations and Clear queue ask first again (decision 13).
    - "Offer undo after a removal" and "Also for a single item", each with a description;
    - the six kind names;
    - "Keep the notice up";
-   - the reworded confirmations, if Phases 4, 5 and 7 haven't already settled them.
+   - the reworded confirmations, if Phases 4, 5 and 7 haven't already settled them;
+   - the undo-off wording of the two playlist delete confirmations, one message each.
 
 **By hand.**
 - Undo off: no notice anywhere and Ctrl+Z does nothing. Deleting a playlist, removing a station and

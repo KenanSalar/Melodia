@@ -1614,7 +1614,7 @@ msgid "Delete playlist?"
 msgstr ""
 
 #: ui/globals/dialog.slint
-msgid "The playlist and its track order will be removed, and this can't be undone. The tracks themselves stay in your library."
+msgid "This playlist has too many tracks to undo, so deleting it can't be undone. The tracks themselves stay in your library."
 msgstr ""
 
 #: ui/globals/dialog.slint
@@ -1628,7 +1628,7 @@ msgstr[0] ""
 msgstr[1] ""
 
 #: ui/globals/dialog.slint
-msgid "The playlists and their track order will be removed, and this can't be undone. The tracks themselves stay in your library."
+msgid "These playlists have too many tracks to undo, so deleting them can't be undone. The tracks themselves stay in your library."
 msgstr ""
 
 #: ui/globals/dialog.slint

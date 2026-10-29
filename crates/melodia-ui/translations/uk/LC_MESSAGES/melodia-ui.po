@@ -1621,8 +1621,8 @@ msgid "Delete playlist?"
 msgstr "Видалити плейлист?"
 
 #: ui/globals/dialog.slint
-msgid "The playlist and its track order will be removed, and this can't be undone. The tracks themselves stay in your library."
-msgstr "Плейлист і порядок треків у ньому буде видалено, і це не можна скасувати. Самі треки залишаться в медіатеці."
+msgid "This playlist has too many tracks to undo, so deleting it can't be undone. The tracks themselves stay in your library."
+msgstr "У цьому плейлисті забагато треків, щоб видалення можна було скасувати. Самі треки залишаться в медіатеці."
 
 #: ui/globals/dialog.slint
 msgid "Delete"
@@ -1636,8 +1636,8 @@ msgstr[1] "Видалити {n} плейлисти?"
 msgstr[2] "Видалити {n} плейлистів?"
 
 #: ui/globals/dialog.slint
-msgid "The playlists and their track order will be removed, and this can't be undone. The tracks themselves stay in your library."
-msgstr "Плейлисти й порядок треків у них буде видалено, і це не можна скасувати. Самі треки залишаться в медіатеці."
+msgid "These playlists have too many tracks to undo, so deleting them can't be undone. The tracks themselves stay in your library."
+msgstr "У цих плейлистах забагато треків, щоб видалення можна було скасувати. Самі треки залишаться в медіатеці."
 
 #: ui/globals/dialog.slint
 msgid "Remove from Recently Played?"

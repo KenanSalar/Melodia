@@ -1616,8 +1616,8 @@ msgid "Delete playlist?"
 msgstr "Törlöd a lejátszási listát?"
 
 #: ui/globals/dialog.slint
-msgid "The playlist and its track order will be removed, and this can't be undone. The tracks themselves stay in your library."
-msgstr "A lejátszási lista és a számok sorrendje törlődik, és ez nem vonható vissza. Maguk a számok a könyvtáradban maradnak."
+msgid "This playlist has too many tracks to undo, so deleting it can't be undone. The tracks themselves stay in your library."
+msgstr "Ez a lejátszási lista túl sok számot tartalmaz ahhoz, hogy a törlése visszavonható legyen. Maguk a számok a könyvtáradban maradnak."
 
 #: ui/globals/dialog.slint
 msgid "Delete"
@@ -1630,8 +1630,8 @@ msgstr[0] "Törölsz {n} lejátszási listát?"
 msgstr[1] "Törölsz {n} lejátszási listát?"
 
 #: ui/globals/dialog.slint
-msgid "The playlists and their track order will be removed, and this can't be undone. The tracks themselves stay in your library."
-msgstr "A lejátszási listák és a számok sorrendje törlődik, és ez nem vonható vissza. Maguk a számok a könyvtáradban maradnak."
+msgid "These playlists have too many tracks to undo, so deleting them can't be undone. The tracks themselves stay in your library."
+msgstr "Ezek a lejátszási listák túl sok számot tartalmaznak ahhoz, hogy a törlésük visszavonható legyen. Maguk a számok a könyvtáradban maradnak."
 
 #: ui/globals/dialog.slint
 msgid "Remove from Recently Played?"

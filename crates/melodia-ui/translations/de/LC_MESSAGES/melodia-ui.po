@@ -1615,8 +1615,8 @@ msgid "Delete playlist?"
 msgstr "Playlist löschen?"
 
 #: ui/globals/dialog.slint
-msgid "The playlist and its track order will be removed, and this can't be undone. The tracks themselves stay in your library."
-msgstr "Die Playlist und ihre Titelreihenfolge werden entfernt, und das lässt sich nicht rückgängig machen. Die Titel selbst bleiben in deiner Bibliothek."
+msgid "This playlist has too many tracks to undo, so deleting it can't be undone. The tracks themselves stay in your library."
+msgstr "Diese Playlist enthält zu viele Titel, um das Löschen rückgängig machen zu können. Die Titel selbst bleiben in deiner Bibliothek."
 
 #: ui/globals/dialog.slint
 msgid "Delete"
@@ -1629,8 +1629,8 @@ msgstr[0] "{n} Playlist löschen?"
 msgstr[1] "{n} Playlists löschen?"
 
 #: ui/globals/dialog.slint
-msgid "The playlists and their track order will be removed, and this can't be undone. The tracks themselves stay in your library."
-msgstr "Die Playlists und ihre Titelreihenfolge werden entfernt, und das lässt sich nicht rückgängig machen. Die Titel selbst bleiben in deiner Bibliothek."
+msgid "These playlists have too many tracks to undo, so deleting them can't be undone. The tracks themselves stay in your library."
+msgstr "Diese Playlists enthalten zu viele Titel, um das Löschen rückgängig machen zu können. Die Titel selbst bleiben in deiner Bibliothek."
 
 #: ui/globals/dialog.slint
 msgid "Remove from Recently Played?"
