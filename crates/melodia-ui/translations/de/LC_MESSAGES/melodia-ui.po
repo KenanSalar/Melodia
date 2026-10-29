@@ -1789,6 +1789,14 @@ msgstr "Verlustbehaftet"
 msgid "Converted"
 msgstr "Umgewandelt"
 
+#: ui/globals/undo-text.slint
+msgid "Undo"
+msgstr "Rückgängig"
+
+#: ui/globals/undo-text.slint
+msgid "Equalizer reset"
+msgstr "Equalizer zurückgesetzt"
+
 #. Translators: the action a click takes, expanding the sidebar
 #: ui/layout/sidebar.slint
 msgid "Expand"

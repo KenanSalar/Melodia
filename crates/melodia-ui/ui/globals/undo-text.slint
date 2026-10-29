@@ -1,0 +1,13 @@
+// The undo notice's wording, asked by Rust so a run of one removal can re-render its card, and a
+// language switch the card it left up.
+export global UndoText {
+    pure callback undo-label() -> string;
+    undo-label() => {
+        return @tr("Undo");
+    }
+
+    pure callback equalizer-reset() -> string;
+    equalizer-reset() => {
+        return @tr("Equalizer reset");
+    }
+}

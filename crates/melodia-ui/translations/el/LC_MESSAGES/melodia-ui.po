@@ -1790,6 +1790,14 @@ msgstr "Απωλεστικό"
 msgid "Converted"
 msgstr "Μετατρεπόμενο"
 
+#: ui/globals/undo-text.slint
+msgid "Undo"
+msgstr "Αναίρεση"
+
+#: ui/globals/undo-text.slint
+msgid "Equalizer reset"
+msgstr "Ο ισοσταθμιστής επαναφέρθηκε"
+
 #. Translators: the action a click takes, expanding the sidebar
 #: ui/layout/sidebar.slint
 msgid "Expand"

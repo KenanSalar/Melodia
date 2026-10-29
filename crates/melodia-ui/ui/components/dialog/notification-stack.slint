@@ -7,13 +7,33 @@ import { SectionButton } from "../settings/section-button.slint";
 import { TuckedFill } from "../tucked-fill.slint";
 
 // One card in the notification stack. No exit animation: a dismiss drops the row from the model.
-// No root TouchArea either, so the gaps between cards don't block the layers underneath.
+// The pointer is caught by the card alone, never the stack, so the gaps between cards don't block
+// the layers underneath.
 component NotificationCard inherits Rectangle {
     // Not `row`, which Slint reserves as the `for` variable.
     in property <NotificationRow> data;
     private property <bool> shown: false;
 
     init => { root.shown = true; }
+
+    // Here rather than in Rust so it can stand still while the card is read or the window is in
+    // the background; a resume runs the whole interval again.
+    clock := Timer {
+        interval: root.data.timeout-ms * 1ms;
+        running: root.data.timeout-ms > 0 && !sentinel.has-hover && Theme.window-focused;
+        triggered => {
+            Notifications.dismiss(root.data.id);
+        }
+    }
+
+    // Only a running clock: `restart()` re-arms a stopped timer, and `running` is re-read only
+    // when it changes, so a bump under the pointer would dismiss the card being read.
+    private property <int> watched-restarts: root.data.restarts;
+    changed watched-restarts => {
+        if (clock.running) {
+            clock.restart();
+        }
+    }
 
     private property <{accent: brush, icon: string}> look:
         root.data.variant == NotificationVariant.success ? { accent: Theme.green, icon: "check_circle" }
@@ -73,56 +93,67 @@ component NotificationCard inherits Rectangle {
             + " Z";
     }
 
-    layout := HorizontalLayout {
-        padding-left: root.bar-end + Theme.pad-md;
-        padding-right: Theme.pad-sm;
-        padding-top: Theme.pad-sm;
-        padding-bottom: Theme.pad-sm;
-        spacing: Theme.pad-sm;
-        // The glyph box outgrows the title's line box, so a top-aligned cell sits off centre.
-        cross-axis-alignment: center;
+    // Read only for `has-hover`. An ancestor of the buttons, so the hover holds over Undo and ✕
+    // while their own areas take the press.
+    sentinel := TouchArea {
+        width: 100%;
+        height: 100%;
+        // A wheel tick nothing took would drop the hover until the pointer moved.
+        scroll-event(ev) => { return accept; }
 
-        MaterialIcon {
-            name: root.look.icon;
-            icon-size: 20px;
-            icon-color: root.look.accent;
-        }
+        layout := HorizontalLayout {
+            padding-left: root.bar-end + Theme.pad-md;
+            padding-right: Theme.pad-sm;
+            padding-top: Theme.pad-sm;
+            padding-bottom: Theme.pad-sm;
+            spacing: Theme.pad-sm;
+            // The glyph box outgrows the title's line box, so a top-aligned cell sits off centre.
+            cross-axis-alignment: center;
 
-        VerticalLayout {
-            horizontal-stretch: 1;
-            spacing: 2px;
-            Text {
-                text: root.data.title;
-                color: Theme.text;
-                font-size: Theme.font-size-md;
-                font-weight: 600;
-                wrap: word-wrap;
+            MaterialIcon {
+                name: root.look.icon;
+                icon-size: 20px;
+                icon-color: root.look.accent;
             }
-            if root.data.message != "": Text {
-                text: root.data.message;
-                color: Theme.subtext0;
-                font-size: Theme.font-size-sm;
-                wrap: word-wrap;
-            }
-        }
 
-        if root.data.action-label != "": SectionButton {
-            label: root.data.action-label;
-            icon: "";
-            primary: true;
-            clicked => {
-                Notifications.action(root.data.id, root.data.kind);
+            VerticalLayout {
+                horizontal-stretch: 1;
+                spacing: 2px;
+                Text {
+                    text: root.data.title;
+                    color: Theme.text;
+                    font-size: Theme.font-size-md;
+                    font-weight: 600;
+                    wrap: word-wrap;
+                    // A screen reader user has to hear a notice to know it can be undone.
+                    accessible-live-region: polite;
+                }
+                if root.data.message != "": Text {
+                    text: root.data.message;
+                    color: Theme.subtext0;
+                    font-size: Theme.font-size-sm;
+                    wrap: word-wrap;
+                }
             }
-        }
 
-        IconButton {
-            icon: "close";
-            icon-size: 16px;
-            diameter: 24px;
-            // A step up from the card's fill, so the hover reads.
-            hover-bg: Theme.surface1;
-            clicked => {
-                Notifications.dismiss(root.data.id);
+            if root.data.action-label != "": SectionButton {
+                label: root.data.action-label;
+                icon: "";
+                primary: true;
+                clicked => {
+                    Notifications.action(root.data.id, root.data.kind);
+                }
+            }
+
+            IconButton {
+                icon: "close";
+                icon-size: 16px;
+                diameter: 24px;
+                // A step up from the card's fill, so the hover reads.
+                hover-bg: Theme.surface1;
+                clicked => {
+                    Notifications.dismiss(root.data.id);
+                }
             }
         }
     }

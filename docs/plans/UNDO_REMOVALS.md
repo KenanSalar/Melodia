@@ -1,6 +1,6 @@
 # Plan: Undo for removals (a notice that puts back what went)
 
-Status: **planned** (no phase started) · Owner: Kenan · Created: 2026-10-28 · Issue #109, branch `feat/undo-removals`
+Status: **Phase 1 done** (hand-tested 2026-10-29), Phase 2 next · Owner: Kenan · Created: 2026-10-28 · Issue #109, branch `feat/undo-removals`
 
 > **Validated 2026-10-28** against `5fa3d5ed` (`feat/undo-removals`): three read-only traces (the
 > toast stack, shortcuts and confirmations; the library removals; the queue, the equalizer and the
@@ -75,7 +75,9 @@ play replaces the queue silently unless the queue it replaces was built by hand 
    queue, one station tab) **merges** while its notice is up: counts add, the clock restarts, and
    the restore walks the merged steps newest first. Anything else **replaces** the slot, and the
    earlier removal stands. This is libadwaita's batched-undo example. It avoids Nautilus losing the
-   first item of a run and Loupe stacking a toast per item (GNOME HIG #155).
+   first item of a run and Loupe stacking a toast per item (GNOME HIG #155). A whole-state hold
+   (the equalizer's curve) merges by keeping the older hold: walking snapshots newest first ends
+   there anyway.
 3. **Restore by position, not by whole-list snapshot,** wherever rows survive the removal
    (playlist rows, queue rows). Removed rows go back in ascending index order, so an earlier insert
    never shifts a later target. That is Strawberry's algorithm, and it keeps edits made during the
@@ -112,6 +114,10 @@ play replaces the queue silently unless the queue it replaces was built by hand 
    - **The clock lives in the card**: a Slint `Timer` whose `running` reads the card's hover and
      `Theme.window-focused`, which the winit `Focused` arm already writes
      (`winit_filter.rs:298-305`). Rust holds no timer, no epoch and no hover callback.
+   - **A `restarts` bump restarts only a running clock.** Slint 1.18.1's `Timer::restart()`
+     re-arms a stopped timer (`i-slint-core/timers.rs:171`), and the generated `update_timers`
+     runs only when `running` or `interval` changes (`passes/lower_timers.rs:110-111`), so an
+     unguarded bump under the pointer would dismiss the card being read.
    - **The card is a polite live region** (`accessible-live-region`, which Slint 1.18.1 declares).
      WCAG 2.2.1 excuses a message that vanishes only when the same function can be reached
      another way. Ctrl+Z is that way, and a screen reader user has to hear the notice to know it
@@ -291,7 +297,7 @@ Each phase stops at the static gates (`cargo fmt --all`, `cargo clippy --all-tar
 --workspace -- -D warnings`, `cargo test --locked --workspace`) and Kenan's hand test. New tests
 wait for Phase 10.
 
-### Phase 1: the notice, with the equalizer's Reset as its first user
+### Phase 1: the notice, with the equalizer's Reset as its first user (done 2026-10-29)
 
 The shell and its simplest user land together, the shell having nothing to show by hand on its own.
 
@@ -303,7 +309,8 @@ The shell and its simplest user land together, the shell having nothing to show 
    - **The card's clock**: a `Timer` with
      `running: data.timeout-ms > 0 && !hovered && Theme.window-focused`, whose `triggered` calls
      the existing `Notifications.dismiss(data.id)`, and a `changed` mirror on `data.restarts`
-     calling `restart()` (as `filter-throttle.slint:20` does). A resume restarts the full interval.
+     calling `restart()` only while the clock runs (decision 7). A resume restarts the full
+     interval.
      A one-frame hover blink (`slint-pitfalls.md`) only restarts a clock that a leave restarts
      anyway, so the hover needs no latch.
    - **The hover sentinel** is a `TouchArea` wrapping the card's layout as its ancestor, which
@@ -331,8 +338,8 @@ The shell and its simplest user land together, the shell having nothing to show 
    - The install order moves first (see Threading).
    - The slot writes its row id to `undo-row`. A replace dismisses the old row, so one slot shows
      one notice, and an Undo naming any other row does nothing.
-   - Undo takes the slot, dismisses the row and spawns the restore. A failed restore raises
-     `show_failure` with "Couldn't undo".
+   - Undo takes the slot, dismisses the row and runs the restore. The equalizer's can't fail, so
+     the failure branch lands with Phase 3's.
 4. **The equalizer.**
    - `apply_curve` is the one write of gains, preamp and preset, both the engine's and persisted.
      Reset makes two settings writes today, gains with the preset name and the preamp on its own
@@ -342,11 +349,13 @@ The shell and its simplest user land together, the shell having nothing to show 
      already flat at 0 dB.
    - Restore maps the preset name back to an index the way `seed` does, falling to the Custom slot
      (`equalizer.rs:33-45`).
-5. **Strings:** "Undo", "Equalizer reset", "Couldn't undo".
+5. **Strings:** "Undo", "Equalizer reset".
 
 **By hand.**
 - Reset raises the notice, and hovering holds it, over Undo and ✕ too.
 - Undo and Ctrl+Z restore both the card and the dialog, with the dialog still open.
+- Reset, nudge a band, Reset again: one card, its clock restarted, and Undo returns the curve from
+  before the first Reset. Reset on a flat curve raises nothing.
 - Ctrl+Z after the notice expires, or inside a text field, does nothing to the curve.
 - A language switch with the notice up re-renders it.
 - A Copy toast pauses under the pointer too, and a notice outlasts a switch to another window.
@@ -396,7 +405,9 @@ The shell and its simplest user land together, the shell having nothing to show 
      already handles an off-screen page.
 4. **Measure.** One heaptrack of a held cap-sized cut confirms `UNDO_HOLD_CAP`, and one of a moved
    full-library queue confirms the queue's exemption (decision 5). Both results are recorded here.
-5. **Strings:** "{n} track removed from {}" (plural), and the over-cap line "Too many to undo".
+5. **The first fallible restore.** A failed restore raises `show_failure` with "Couldn't undo".
+6. **Strings:** "{n} track removed from {}" (plural), the over-cap line "Too many to undo", and
+   "Couldn't undo".
 
 ### Phase 4: deleting playlists
 

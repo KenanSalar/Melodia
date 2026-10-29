@@ -35,7 +35,9 @@ pub use diagnostics::set_verbose_logging;
 pub use discord::{
     set_discord_rpc_artwork, set_discord_rpc_enabled, set_discord_rpc_hide_when_paused,
 };
-pub use equalizer::{set_eq_band_gains_and_preset, set_eq_enabled, set_eq_preamp};
+pub use equalizer::{
+    EqCurve, set_eq_band_gains_and_preset, set_eq_curve, set_eq_enabled, set_eq_preamp,
+};
 pub use folders::{
     add_folder, get_folders, remove_folder, set_folder_watching_enabled, suggested_music_folder,
     toggle_folder_watching,

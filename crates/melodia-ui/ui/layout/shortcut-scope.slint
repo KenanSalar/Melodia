@@ -5,11 +5,12 @@ import { Player } from "../globals/player.slint";
 import { Queue } from "../globals/queue.slint";
 import { Selection } from "../globals/selection.slint";
 import { MiniPlayer, WindowChrome } from "../globals/shell.slint";
+import { Notifications } from "../globals/notifications.slint";
 
 // The app's shortcuts, round the whole main layout. **The only `FocusScope` in the tree**: a
 // scope takes focus on a press, never on mount, so a nested one leaves keys dead on a sheet
 // opened from the keyboard. Escape runs under `Dialog.open` too, routing to
-// `Dialog.cancelled()`; **every other shortcut early-outs there**.
+// `Dialog.cancelled()`, and so does Ctrl+Z; **every other shortcut early-outs there**.
 export component ShortcutScope inherits FocusScope {
     // Slint doesn't hand focus back to an ancestor scope when the focused item dies, so the host
     // calls this on every content-view switch.
@@ -110,6 +111,14 @@ export component ShortcutScope inherits FocusScope {
                 return accept;
             }
             return reject;
+        }
+
+        // Above the modal gate, as the notice's own button works over a dialog, the stack painting
+        // above it. A focused field takes Ctrl+Z before it bubbles here, so it keeps its own.
+        if (ev.modifiers.control && !ev.modifiers.shift && ev.text == "z"
+            && Notifications.undo-row >= 0) {
+            Notifications.undo(Notifications.undo-row);
+            return accept;
         }
 
         // A confirm-only dialog has no input to consume Space, and the welcome card none at all.

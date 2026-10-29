@@ -1,20 +1,25 @@
 //! The graphic equalizer's wiring: the Equalizer card on Settings ▸ Effects and the overflow
 //! menu's dialog both drive the one `Equalizer` global. Each callback applies to the engine
 //! synchronously and persists on the blocking pool; a band drag updates the model in place and
-//! persists only on release (`commit-band`), the `set-volume` / `commit-volume` split.
+//! persists only on release (`commit-band`), the `set-volume` / `commit-volume` split. Reset raises
+//! the undo notice, which puts the curve back through the same writer a preset pick uses.
 
 use std::rc::Rc;
 
 use slint::{ComponentHandle, Model, ModelRc, VecModel};
 
 use crate::ui::settings_bind::{read_or_default, toggle_binding};
+use crate::ui::undo::{Removal, UndoWindow};
 use melodia_app::library;
+use melodia_app::library::settings::EqCurve;
 use melodia_app::state::AppState;
 use melodia_playback::player::playback::equalizer;
 use melodia_ui::{AppWindow, Equalizer};
 
-pub fn install_equalizer(ui: &AppWindow, state: &AppState) {
+pub fn install_equalizer(ui: &AppWindow, state: &AppState, undo: &Rc<UndoWindow>) {
     let model = seed(ui, state);
+    let curves =
+        Rc::new(CurveWriter { state: state.clone(), model: model.clone(), ui: ui.as_weak() });
 
     ui.global::<Equalizer>().on_set_enabled(toggle_binding(
         state,
@@ -24,10 +29,66 @@ pub fn install_equalizer(ui: &AppWindow, state: &AppState) {
     ));
     wire_set_band(ui, state, &model);
     wire_commit_band(ui, state, &model);
-    wire_select_preset(ui, state, &model);
-    wire_reset(ui, state, &model);
+    wire_select_preset(ui, &curves);
+    wire_reset(ui, &curves, undo);
     wire_set_preamp(ui, state);
     wire_commit_preamp(ui, state);
+}
+
+/// What Reset took, and the writer that puts it back.
+pub struct ResetUndo {
+    before: EqCurve,
+    curves: Rc<CurveWriter>,
+}
+
+impl ResetUndo {
+    pub fn restore(self) {
+        self.curves.apply(self.before);
+    }
+}
+
+/// Every write of a whole curve: the band model, the engine, the global and `settings.json`
+/// together, so the card, the dialog and what plays never disagree.
+struct CurveWriter {
+    state: AppState,
+    model: Rc<VecModel<f32>>,
+    ui: slint::Weak<AppWindow>,
+}
+
+impl CurveWriter {
+    fn apply(&self, curve: EqCurve) {
+        self.model.set_vec(curve.gains.to_vec());
+        let ctx = self.state.playback_ctx();
+        library::playback::player_set_eq_gains(&ctx, &curve.gains);
+        library::playback::player_set_eq_preamp(&ctx, curve.preamp_db);
+        if let Some(ui) = self.ui.upgrade() {
+            let eq = ui.global::<Equalizer>();
+            eq.set_preset_idx(preset_slot(curve.preset));
+            eq.set_preamp(curve.preamp_db);
+        }
+        self.state.persist_blocking("persist eq curve", move |paths| {
+            library::settings::set_eq_curve(paths, &curve)
+        });
+    }
+
+    /// A built-in preset's gains, with the preamp as it stands.
+    fn apply_preset(&self, preset: &equalizer::EqPreset) {
+        let Some(ui) = self.ui.upgrade() else { return };
+        let preamp_db = ui.global::<Equalizer>().get_preamp();
+        self.apply(EqCurve { gains: preset.gains, preset: preset.name, preamp_db });
+    }
+
+    /// `None` once the window is gone.
+    fn current(&self) -> Option<EqCurve> {
+        let ui = self.ui.upgrade()?;
+        let eq = ui.global::<Equalizer>();
+        let gains: Vec<f32> = self.model.iter().collect();
+        Some(EqCurve {
+            gains: equalizer::normalize_gains(&gains),
+            preset: preset_name(eq.get_preset_idx()),
+            preamp_db: eq.get_preamp(),
+        })
+    }
 }
 
 /// The synthetic "Custom" entry's dropdown index, one past the last built-in preset.
@@ -35,21 +96,33 @@ fn custom_preset_index() -> i32 {
     i32::try_from(equalizer::PRESET_COUNT).unwrap_or(0)
 }
 
+/// The dropdown index a persisted name selects, "Custom" for one that isn't built in.
+fn preset_slot(name: &str) -> i32 {
+    equalizer::preset_index(name)
+        .and_then(|i| i32::try_from(i).ok())
+        .unwrap_or_else(custom_preset_index)
+}
+
+/// The name a dropdown index persists as.
+fn preset_name(slot: i32) -> &'static str {
+    usize::try_from(slot)
+        .ok()
+        .and_then(|i| equalizer::PRESETS.get(i))
+        .map_or(equalizer::CUSTOM_PRESET, |preset| preset.name)
+}
+
 /// Write the persisted state onto the global, handing back the `band-gains` model the callbacks
 /// share with the card and the dialog.
 fn seed(ui: &AppWindow, state: &AppState) -> Rc<VecModel<f32>> {
     let flags = read_or_default(state, "equalizer").equalizer;
     let gains = equalizer::normalize_gains(&flags.eq_band_gains);
-    let preset_idx = equalizer::preset_index(&flags.eq_selected_preset)
-        .and_then(|i| i32::try_from(i).ok())
-        .unwrap_or_else(custom_preset_index);
 
     let model: Rc<VecModel<f32>> = Rc::new(VecModel::from(gains.to_vec()));
 
     let eq = ui.global::<Equalizer>();
     eq.set_enabled(flags.eq_enabled);
     eq.set_band_gains(ModelRc::from(model.clone()));
-    eq.set_preset_idx(preset_idx);
+    eq.set_preset_idx(preset_slot(&flags.eq_selected_preset));
     eq.set_preamp(equalizer::clamp_preamp(flags.eq_preamp));
 
     // The sliders' ranges are the DSP's constants, seeded before either surface can mount.
@@ -91,40 +164,28 @@ fn wire_commit_band(ui: &AppWindow, state: &AppState, model: &Rc<VecModel<f32>>)
 
 /// Apply a built-in preset's gains. The "Custom" entry (and
 /// any out-of-range index) is a no-op: the gains stay as the user left them.
-fn wire_select_preset(ui: &AppWindow, state: &AppState, model: &Rc<VecModel<f32>>) {
-    let state = state.clone();
-    let model = model.clone();
+fn wire_select_preset(ui: &AppWindow, curves: &Rc<CurveWriter>) {
+    let curves = curves.clone();
     ui.global::<Equalizer>().on_select_preset(move |idx| {
         let Ok(i) = usize::try_from(idx) else { return };
         let Some(preset) = equalizer::PRESETS.get(i) else {
             return;
         };
-        model.set_vec(preset.gains.to_vec());
-        library::playback::player_set_eq_gains(&state.playback_ctx(), &preset.gains);
-        persist_curve(&state, preset.gains.to_vec(), preset.name);
+        curves.apply_preset(preset);
     });
 }
 
-/// Full return to neutral: flat curve, "Flat" preset, 0 dB preamp.
-fn wire_reset(ui: &AppWindow, state: &AppState, model: &Rc<VecModel<f32>>) {
-    let state = state.clone();
-    let model = model.clone();
-    let weak = ui.as_weak();
+/// Full return to neutral: flat curve, "Flat" preset, 0 dB preamp. A curve that was already flat
+/// had nothing to take, so it raises no notice.
+fn wire_reset(ui: &AppWindow, curves: &Rc<CurveWriter>, undo: &Rc<UndoWindow>) {
+    let curves = curves.clone();
+    let undo = undo.clone();
     ui.global::<Equalizer>().on_reset(move || {
-        let flat = [0.0_f32; equalizer::NUM_BANDS];
-        model.set_vec(flat.to_vec());
-        let ctx = state.playback_ctx();
-        library::playback::player_set_eq_gains(&ctx, &flat);
-        library::playback::player_set_eq_preamp(&ctx, 0.0);
-        if let Some(ui) = weak.upgrade() {
-            let eq = ui.global::<Equalizer>();
-            eq.set_preset_idx(0);
-            eq.set_preamp(0.0);
+        let Some(before) = curves.current() else { return };
+        curves.apply(EqCurve::flat());
+        if !before.is_flat() {
+            undo.offer(Removal::Equalizer(ResetUndo { before, curves: curves.clone() }));
         }
-        persist_curve(&state, flat.to_vec(), equalizer::DEFAULT_PRESET);
-        state.persist_blocking("persist eq_preamp", |paths| {
-            library::settings::set_eq_preamp(paths, 0.0)
-        });
     });
 }
 
@@ -152,7 +213,7 @@ fn wire_commit_preamp(ui: &AppWindow, state: &AppState) {
     });
 }
 
-/// Persist a curve with the preset it now answers to.
+/// Persist a dragged curve with the preset it now answers to.
 fn persist_curve(state: &AppState, gains: Vec<f32>, preset: &str) {
     let preset = preset.to_owned();
     state.persist_blocking("persist eq band gains + preset", move |paths| {

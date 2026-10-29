@@ -1790,6 +1790,14 @@ msgstr "Veszteséges"
 msgid "Converted"
 msgstr "Átalakított"
 
+#: ui/globals/undo-text.slint
+msgid "Undo"
+msgstr "Visszavonás"
+
+#: ui/globals/undo-text.slint
+msgid "Equalizer reset"
+msgstr "Hangszínszabályzó visszaállítva"
+
 #. Translators: the action a click takes, expanding the sidebar
 #: ui/layout/sidebar.slint
 msgid "Expand"

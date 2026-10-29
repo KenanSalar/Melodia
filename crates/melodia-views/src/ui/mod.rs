@@ -57,6 +57,7 @@ pub mod track_links;
 pub mod track_list_view;
 pub mod track_sort;
 pub mod tracks;
+pub mod undo;
 pub mod util;
 pub mod view_ctx;
 pub mod view_tag;

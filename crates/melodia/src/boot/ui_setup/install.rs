@@ -12,6 +12,7 @@ use melodia_platform::services::platform;
 use melodia_ui::AppWindow;
 use melodia_views::ui;
 use melodia_views::ui::shell::notifications::NotificationsUi;
+use melodia_views::ui::undo::UndoWindow;
 use slint::ComponentHandle;
 use tokio::sync::watch;
 
@@ -65,8 +66,10 @@ fn install_shell(
     if apply_backdrop_style(app, settings) {
         install_backdrop_dither(app);
     }
+    // Ahead of every installer whose removals offer an undo, which takes the slot.
+    let (notifications, undo) = install_notice_stack(app, state);
     let views = install_views(app, state, view_state);
-    let notifications = install_library_settings_and_friends(app, state)?;
+    install_library_settings_and_friends(app, state, &notifications, &undo)?;
 
     // These three wire here rather than inside their slices because their
     // completion toasts need the `Rc<NotificationsUi>`.
@@ -89,6 +92,26 @@ fn install_shell(
 
     hydrate_ui_from_settings(app, state, settings, view_state);
     Ok((views, notifications))
+}
+
+/// The toast stack and the undo slot that raises its notices through it.
+fn install_notice_stack(
+    app: &AppWindow,
+    state: &AppState,
+) -> (Rc<NotificationsUi>, Rc<UndoWindow>) {
+    let notifications = ui::shell::notifications::install(app);
+    // Toast rows carry strings Rust resolved once and outlive every navigation, so a language
+    // switch reaches them only through this. Not in the locale callback, which wires first.
+    {
+        let notifications = notifications.clone();
+        if let Err(e) = ui::locale_refresh::on_locale_changed(state, app.as_weak(), move |ui| {
+            notifications.refresh_for_locale(ui);
+        }) {
+            log::warn!("notifications locale refresher: {}", describe(&e));
+        }
+    }
+    let undo = ui::undo::install(app, &notifications);
+    (notifications, undo)
 }
 
 /// The player's subscribers and the surfaces that render it: the queue panel, Now Playing and the

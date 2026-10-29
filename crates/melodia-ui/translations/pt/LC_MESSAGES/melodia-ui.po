@@ -1788,6 +1788,14 @@ msgstr "Com perdas"
 msgid "Converted"
 msgstr "Convertido"
 
+#: ui/globals/undo-text.slint
+msgid "Undo"
+msgstr "Anular"
+
+#: ui/globals/undo-text.slint
+msgid "Equalizer reset"
+msgstr "Equalizador reposto"
+
 #. Translators: the action a click takes, expanding the sidebar
 #: ui/layout/sidebar.slint
 msgid "Expand"

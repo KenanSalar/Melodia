@@ -1788,6 +1788,14 @@ msgstr ""
 msgid "Converted"
 msgstr ""
 
+#: ui/globals/undo-text.slint
+msgid "Undo"
+msgstr ""
+
+#: ui/globals/undo-text.slint
+msgid "Equalizer reset"
+msgstr ""
+
 #. Translators: the action a click takes, expanding the sidebar
 #: ui/layout/sidebar.slint
 msgid "Expand"
