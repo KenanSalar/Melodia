@@ -350,14 +350,14 @@ pub async fn remove_tracks_from_playlist_batch(
 
     if track_ids.len() > UNDO_HOLD_CAP {
         let removed = delete_items_tx(&mut tx, playlist_id, track_ids).await?;
+        if removed == 0 {
+            return Ok(UndoCapture::Nothing);
+        }
         renumber_playlist_positions_tx(&mut tx, playlist_id).await?;
         let now = melodia_core::utils::now_rfc3339();
         update_playlist_thumbnail_and_timestamp_tx(&mut tx, playlist_id, &now).await?;
         tx.commit().await?;
-        return Ok(match removed {
-            0 => UndoCapture::Nothing,
-            rows => UndoCapture::OverCap { rows },
-        });
+        return Ok(UndoCapture::OverCap { rows: removed });
     }
 
     let rows = cut_rows_tx(&mut tx, playlist_id, track_ids).await?;

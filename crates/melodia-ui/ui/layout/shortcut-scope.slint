@@ -9,8 +9,8 @@ import { Notifications } from "../globals/notifications.slint";
 
 // The app's shortcuts, round the whole main layout. **The only `FocusScope` in the tree**: a
 // scope takes focus on a press, never on mount, so a nested one leaves keys dead on a sheet
-// opened from the keyboard. Escape runs under `Dialog.open` too, routing to
-// `Dialog.cancelled()`, and so does Ctrl+Z; **every other shortcut early-outs there**.
+// opened from the keyboard. Escape and Ctrl+Z run under `Dialog.open` too, Escape routing to
+// `Dialog.cancelled()`; **every other shortcut early-outs there**.
 export component ShortcutScope inherits FocusScope {
     // Slint doesn't hand focus back to an ancestor scope when the focused item dies, so the host
     // calls this on every content-view switch.
