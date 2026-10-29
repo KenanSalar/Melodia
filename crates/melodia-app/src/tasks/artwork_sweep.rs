@@ -6,11 +6,13 @@
 //! [`melodia_artwork::media::image::artwork::sweep`] argues. It runs per scan because the store
 //! churns: every change to a playlist's top four writes a new composite and orphans the last.
 
-use std::collections::HashSet;
-use std::path::PathBuf;
+use std::collections::{BTreeMap, HashSet};
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
+
+use parking_lot::Mutex;
 
 use crate::state::AppState;
 use crate::tasks::TaskSpawner;
@@ -124,12 +126,53 @@ pub(crate) async fn run_radio_logos(db: &DbPool, paths: &Paths) -> AppResult<()>
         .map(drop)
 }
 
+/// The basenames every live [`ArtworkHold`] names, counted per hold: the store is
+/// content-addressed, so two held rows can name one file.
+static HELD: Mutex<BTreeMap<String, usize>> = Mutex::new(BTreeMap::new());
+
+/// Keeps the files a deleted row named out of every sweep, for as long as an undo could write the
+/// row back. **Take it before the delete commits**: a sweep reads the columns and then the holds,
+/// so one of the two always names the file.
+pub(crate) struct ArtworkHold(Vec<String>);
+
+impl ArtworkHold {
+    pub(crate) fn new(paths: impl IntoIterator<Item = String>) -> Self {
+        let basenames: Vec<String> = paths
+            .into_iter()
+            .filter_map(|path| Path::new(&path).file_name()?.to_str().map(str::to_owned))
+            .collect();
+        let mut held = HELD.lock();
+        for basename in &basenames {
+            *held.entry(basename.clone()).or_default() += 1;
+        }
+        Self(basenames)
+    }
+
+    /// Takes over `newer`'s files, for a run of deletes merged into one undo.
+    pub(crate) fn absorb(&mut self, mut newer: Self) {
+        self.0.append(&mut newer.0);
+    }
+}
+
+impl Drop for ArtworkHold {
+    fn drop(&mut self) {
+        let mut held = HELD.lock();
+        for basename in &self.0 {
+            let Some(holders) = held.get_mut(basename) else { continue };
+            *holders -= 1;
+            if *holders == 0 {
+                held.remove(basename);
+            }
+        }
+    }
+}
+
 /// One pass over each of `stores`, answering how many orphans the grace window spared.
 ///
 /// Listed first and the reference set read second, the order that fails safe against a scan
 /// writing meanwhile: a row committed in between is visible to the query, where the reverse would
 /// unlink a live cover. **One reference set for every directory**, the union of all six columns as
-/// basenames, so a file is held by whichever column names it wherever it sits.
+/// basenames and every [`ArtworkHold`], so a file is held by whichever names it wherever it sits.
 async fn sweep_stores(
     db: &DbPool,
     stores: Vec<(&'static str, PathBuf)>,
@@ -146,7 +189,8 @@ async fn sweep_stores(
     .await
     .map_err(AppError::io_source)?;
 
-    let referenced = queries::artwork::referenced_filenames(db).await?;
+    let mut referenced = queries::artwork::referenced_filenames(db).await?;
+    referenced.extend(HELD.lock().keys().cloned());
 
     let reports = tokio::task::spawn_blocking(move || {
         listed

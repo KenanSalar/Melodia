@@ -102,7 +102,7 @@ export component StationGrid inherits Rectangle {
                         // On the row rather than the uuid: a directory entry already naming a site
                         // has nothing to set and everything to lose.
                         editable: root.manageable && station.editable;
-                        removable: root.manageable;
+                        removable: root.manageable && !cell.multi-selection;
                         homepage-known: station.homepage != "";
                         play-count: root.show-play-count ? station.play_count : 0;
                         clicked => { root.station-clicked(station); }

@@ -1621,20 +1621,23 @@ msgid "Delete playlist?"
 msgstr "Usunąć playlistę?"
 
 #: ui/globals/dialog.slint
-msgid "The playlist and its track order will be removed. The tracks themselves stay in your library."
-msgstr "Playlista i kolejność jej utworów zostaną usunięte. Same utwory pozostaną w bibliotece."
+msgid "The playlist and its track order will be removed, and this can't be undone. The tracks themselves stay in your library."
+msgstr "Playlista i kolejność jej utworów zostaną usunięte i nie da się tego cofnąć. Same utwory pozostaną w bibliotece."
 
 #: ui/globals/dialog.slint
 msgid "Delete"
 msgstr "Usuń"
 
 #: ui/globals/dialog.slint
-msgid "Delete {} playlists?"
-msgstr "Usunąć playlisty ({})?"
+msgid "Delete {n} playlist?"
+msgid_plural "Delete {n} playlists?"
+msgstr[0] "Usunąć {n} playlistę?"
+msgstr[1] "Usunąć {n} playlisty?"
+msgstr[2] "Usunąć {n} playlist?"
 
 #: ui/globals/dialog.slint
-msgid "The playlists and their track order will be removed. The tracks themselves stay in your library."
-msgstr "Playlisty i kolejność ich utworów zostaną usunięte. Same utwory pozostaną w bibliotece."
+msgid "The playlists and their track order will be removed, and this can't be undone. The tracks themselves stay in your library."
+msgstr "Playlisty i kolejność ich utworów zostaną usunięte i nie da się tego cofnąć. Same utwory pozostaną w bibliotece."
 
 #: ui/globals/dialog.slint
 msgid "Remove from Recently Played?"
@@ -1818,6 +1821,18 @@ msgid_plural "{n} tracks removed from {}"
 msgstr[0] "Usunięto {n} utwór z playlisty „{}”"
 msgstr[1] "Usunięto {n} utwory z playlisty „{}”"
 msgstr[2] "Usunięto {n} utworów z playlisty „{}”"
+
+#. Translators: {} is the playlist's name.
+#: ui/globals/undo-text.slint
+msgid "{} deleted"
+msgstr "Usunięto playlistę „{}”"
+
+#: ui/globals/undo-text.slint
+msgid "{n} playlist deleted"
+msgid_plural "{n} playlists deleted"
+msgstr[0] "Usunięto {n} playlistę"
+msgstr[1] "Usunięto {n} playlisty"
+msgstr[2] "Usunięto {n} playlist"
 
 #: ui/globals/undo-text.slint
 msgid "Too many to undo"

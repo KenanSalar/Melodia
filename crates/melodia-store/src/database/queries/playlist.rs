@@ -198,24 +198,6 @@ pub async fn update_playlist(
     }
 }
 
-/// Deletes playlists, their items cascading. Chunked rather than a statement per id, since the
-/// card menu hands it a whole selection.
-pub async fn delete_playlists(db: &DbPool, ids: &[i64]) -> Result<(), AppError> {
-    if ids.is_empty() {
-        return Ok(());
-    }
-    for chunk in ids.chunks(crate::database::MAX_BINDS_PER_STATEMENT) {
-        let placeholders = crate::database::placeholders(chunk.len());
-        let sql = format!("DELETE FROM playlists WHERE id IN ({placeholders})");
-        let mut query = sqlx::query(AssertSqlSafe(sql)).persistent(false);
-        for id in chunk {
-            query = query.bind(*id);
-        }
-        query.execute(db.write()).await?;
-    }
-    Ok(())
-}
-
 #[cfg(test)]
 pub async fn get_playlist_tracks(
     db: &DbPool,

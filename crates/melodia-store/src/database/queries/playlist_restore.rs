@@ -1,4 +1,4 @@
-//! Putting back what removals from a playlist took.
+//! Putting back what removals from a playlist, and deletes of whole ones, took.
 
 use std::collections::HashSet;
 
@@ -8,8 +8,9 @@ use super::playlist::{
     NewItem, batch_update_positions_pairs, insert_items_tx,
     update_playlist_thumbnail_and_timestamp_tx,
 };
+use super::search_name;
 use crate::database::DbPool;
-use melodia_core::entities::playlist::{CutItem, PlaylistItemsCut};
+use melodia_core::entities::playlist::{CutItem, Playlist, PlaylistItemsCut, PlaylistSnapshot};
 use melodia_core::error::AppError;
 use melodia_core::utils::reinsert::reinsert;
 
@@ -97,6 +98,78 @@ fn restored_stamp(live: &str, cuts: &[PlaylistItemsCut]) -> String {
         stamp = Some(&cut.updated_before);
     }
     stamp.map_or_else(melodia_core::utils::now_rfc3339, str::to_owned)
+}
+
+/// Writes deleted playlists back, each with the items whose track the library still holds, in
+/// their order and with their own dates added. The held `updated_at` goes in last, through the
+/// cover refresh that also re-derives an automatic cover, so each card returns to its grid slot.
+pub async fn restore_playlists(
+    db: &DbPool,
+    snapshots: &[PlaylistSnapshot],
+) -> Result<(), AppError> {
+    if snapshots.is_empty() {
+        return Ok(());
+    }
+    let mut tx = db.write().begin().await?;
+
+    let held_ids: Vec<i64> =
+        snapshots.iter().flat_map(|snapshot| &snapshot.items).map(|item| item.track_id).collect();
+    let in_library = tracks_still_there(&mut tx, &held_ids).await?;
+
+    for snapshot in snapshots {
+        let id = insert_playlist_tx(&mut tx, &snapshot.playlist).await?;
+        let items: Vec<NewItem<'_>> = snapshot
+            .items
+            .iter()
+            .filter(|item| in_library.contains(&item.track_id))
+            .enumerate()
+            .map(|(index, item)| NewItem {
+                track_id: item.track_id,
+                position: i32::try_from(index).unwrap_or(i32::MAX),
+                added_at: &item.added_at,
+            })
+            .collect();
+        insert_items_tx(&mut tx, id, &items).await?;
+        update_playlist_thumbnail_and_timestamp_tx(&mut tx, id, &snapshot.playlist.updated_at)
+            .await?;
+    }
+
+    tx.commit().await?;
+    Ok(())
+}
+
+/// Inserts `playlist` under its own id, or a fresh one where a playlist created since took it, and
+/// answers which. The stats go in at 0, the item triggers adding each item back.
+async fn insert_playlist_tx(
+    tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
+    playlist: &Playlist,
+) -> Result<i64, AppError> {
+    let taken: bool = sqlx::query_scalar("SELECT EXISTS (SELECT 1 FROM playlists WHERE id = ?)")
+        .bind(playlist.id)
+        .fetch_one(&mut **tx)
+        .await?;
+    // A NULL `INTEGER PRIMARY KEY` takes the next free id.
+    let id = (!taken).then_some(playlist.id);
+
+    let id = sqlx::query_scalar(
+        "INSERT INTO playlists (id, name, description, thumbnail_path, is_smart, smart_criteria,
+                                created_at, updated_at, custom_thumbnail, search_name)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+         RETURNING id",
+    )
+    .bind(id)
+    .bind(&playlist.name)
+    .bind(&playlist.description)
+    .bind(&playlist.thumbnail_path)
+    .bind(playlist.is_smart)
+    .bind(&playlist.smart_criteria)
+    .bind(&playlist.created_at)
+    .bind(&playlist.updated_at)
+    .bind(playlist.custom_thumbnail)
+    .bind(search_name::pack(&[&playlist.name]))
+    .fetch_one(&mut **tx)
+    .await?;
+    Ok(id)
 }
 
 /// Which of `track_ids` the library still holds. A scan hard-deletes a track whose file went, and

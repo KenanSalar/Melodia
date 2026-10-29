@@ -1614,20 +1614,22 @@ msgid "Delete playlist?"
 msgstr "Afspeellijst verwijderen?"
 
 #: ui/globals/dialog.slint
-msgid "The playlist and its track order will be removed. The tracks themselves stay in your library."
-msgstr "De afspeellijst en de volgorde van de nummers worden verwijderd. De nummers zelf blijven in je bibliotheek."
+msgid "The playlist and its track order will be removed, and this can't be undone. The tracks themselves stay in your library."
+msgstr "De afspeellijst en de volgorde van de nummers worden verwijderd, en dit kan niet ongedaan worden gemaakt. De nummers zelf blijven in je bibliotheek."
 
 #: ui/globals/dialog.slint
 msgid "Delete"
 msgstr "Verwijderen"
 
 #: ui/globals/dialog.slint
-msgid "Delete {} playlists?"
-msgstr "{} afspeellijsten verwijderen?"
+msgid "Delete {n} playlist?"
+msgid_plural "Delete {n} playlists?"
+msgstr[0] "{n} afspeellijst verwijderen?"
+msgstr[1] "{n} afspeellijsten verwijderen?"
 
 #: ui/globals/dialog.slint
-msgid "The playlists and their track order will be removed. The tracks themselves stay in your library."
-msgstr "De afspeellijsten en de volgorde van hun nummers worden verwijderd. De nummers zelf blijven in je bibliotheek."
+msgid "The playlists and their track order will be removed, and this can't be undone. The tracks themselves stay in your library."
+msgstr "De afspeellijsten en de volgorde van hun nummers worden verwijderd, en dit kan niet ongedaan worden gemaakt. De nummers zelf blijven in je bibliotheek."
 
 #: ui/globals/dialog.slint
 msgid "Remove from Recently Played?"
@@ -1806,6 +1808,17 @@ msgid "{n} track removed from {}"
 msgid_plural "{n} tracks removed from {}"
 msgstr[0] "{n} nummer verwijderd uit {}"
 msgstr[1] "{n} nummers verwijderd uit {}"
+
+#. Translators: {} is the playlist's name.
+#: ui/globals/undo-text.slint
+msgid "{} deleted"
+msgstr "{} verwijderd"
+
+#: ui/globals/undo-text.slint
+msgid "{n} playlist deleted"
+msgid_plural "{n} playlists deleted"
+msgstr[0] "{n} afspeellijst verwijderd"
+msgstr[1] "{n} afspeellijsten verwijderd"
 
 #: ui/globals/undo-text.slint
 msgid "Too many to undo"

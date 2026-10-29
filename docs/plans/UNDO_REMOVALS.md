@@ -1,6 +1,6 @@
 # Plan: Undo for removals (a notice that puts back what went)
 
-Status: **Phases 1 and 2 done** (hand-tested 2026-10-29), **Phase 3 implemented**, awaiting its hand test · Owner: Kenan · Created: 2026-10-28 · Issue #109, branch `feat/undo-removals`
+Status: **Phases 1 to 3 done** (hand-tested 2026-10-29; Phase 3's measure waits for Kenan's go), **Phase 4 implemented**, awaiting its hand test · Owner: Kenan · Created: 2026-10-28 · Issue #109, branch `feat/undo-removals`
 
 > **Validated 2026-10-28** against `5fa3d5ed` (`feat/undo-removals`): three read-only traces (the
 > toast stack, shortcuts and confirmations; the library removals; the queue, the equalizer and the
@@ -259,8 +259,8 @@ The issue's Notes ask for this list before any confirmation goes. "Over the cap"
 
 | Confirmation | Raised at | Fate |
 |---|---|---|
-| Delete playlist | `Dialog.open-delete-playlist` (`dialog.slint:261-271`), from `tab-pills.slint:155` and `playlists-tab.slint:28` | Goes. Kept over the cap and with undo off, reworded to say it can't be undone. |
-| Delete N playlists | `Dialog.open-delete-playlists` (`dialog.slint:275-285`), from `playlists-tab.slint:37` | Goes. Kept over the cap and with undo off, reworded, and made a true plural. |
+| Delete playlist | `Dialog.open-delete-playlist`, raised from Rust (`crud.rs`' `confirm_first`) | Gone under the cap (Phase 4). Kept over it, reworded to say it can't be undone; with undo off from Phase 10. |
+| Delete N playlists | `Dialog.open-delete-playlists`, raised from Rust (`crud.rs`' `confirm_first`) | Gone under the cap (Phase 4). Kept over it, reworded, and a true plural; with undo off from Phase 10. |
 | Clear queue | inline, `queue-panel.slint:240-249` | Hidden while queue undo is on. The queue's holds are uncapped (decision 5), so only Settings brings it back (decision 13). "Playback will stop" was never true and is reworded. |
 | Remove station (Favorites / Recently Played) | `Dialog.open-remove-station` (`dialog.slint:291-307`), from `station-context-menu.slint:186` and `kept-stations-tab.slint:62` | Goes. Kept over the cap and with undo off, reworded. |
 | Remove N stations | `Dialog.open-remove-stations` (`dialog.slint:311-325`), from `station-context-menu.slint:184` | Goes. Kept over the cap and with undo off, reworded. |
@@ -285,13 +285,14 @@ A kept confirmation is raised from Rust once the size is known, across an await,
 | `crates/melodia-ui/ui/components/track-list/track-context-menu.slint` | The remove-from-Favorites entry calls one shared callback rather than the list's `toggle-row-favorite` (decision 11) |
 | `crates/melodia/src/boot/ui_setup/` | `notifications::install` and `UndoWindow` move ahead of `install_views` (`install.rs:68`) |
 | `crates/melodia-core/src/entities/undo.rs` (new) | `UndoCapture<T>` (`Nothing`, `Held(T)` or `OverCap { rows }`) and `UNDO_HOLD_CAP`, named by store, app and views |
-| `crates/melodia-core/src/entities/{playlist,radio}.rs` | The plain tokens beside their entity: `PlaylistItemsCut`, `PlaylistSnapshot`, `StationCut` |
+| `crates/melodia-core/src/entities/{playlist,radio}.rs` | The plain tokens beside their entity: `PlaylistItemsCut`, `PlaylistSnapshot` (a `Playlist` and its `CutItem`s), `StationCut` |
 | `crates/melodia-core/src/utils/reinsert.rs` (new) | `reinsert`: held items back at their indices in one linear walk, the playlist restore's and the queue's `restore_cut`'s |
 | `crates/melodia-store/src/database/queries/playlist.rs` | Capture inside the removal transactions. `insert_items_tx` takes explicit `(track_id, position, added_at)` rows, its two callers building contiguous ones. `update_playlist_thumbnail_and_timestamp_tx` takes its stamp from the caller, which minted it inside (`:515`). |
 | `crates/melodia-store/src/database/queries/playlist_restore.rs` (new) | `restore_playlist_items`, `restore_playlists`, keeping `playlist.rs` (550 lines) under the 800-line cap |
+| `crates/melodia-store/src/database/queries/playlist_delete.rs` (new) | Both deletes, each one transaction: `delete_playlists` (for good, answering the names) and `delete_playlists_held` (answering `PlaylistSnapshot`s), plus `item_count` and `custom_covers` |
 | `crates/melodia-store/src/database/queries/radio.rs` | `remove_stations`: the per-id loop now in `radio/callbacks/kept.rs:106-114`, as one transaction. Also `restore_stations`. |
 | `crates/melodia-store/src/database/queries/track/write.rs` | `unfavorite`, returning the ids it flipped |
-| `crates/melodia-app/src/services/artwork_holds.rs` (new) | `ArtworkHold` (released on drop) and `held_basenames()`, unioned in `tasks::artwork_sweep::sweep_stores` |
+| `crates/melodia-app/src/tasks/artwork_sweep.rs` | `ArtworkHold` (refcounted per basename, released on drop) beside its one reader, unioned into `sweep_stores`' reference set |
 | `crates/melodia-app/src/library/{playlists,radio/mod,queue,search,favorites}.rs` | Each removal returns its capture, and each surface gets one restore fn |
 | `crates/melodia-app/src/services/search_history.rs` | `clear` hands back the list; `restore` puts it back |
 | `crates/melodia-engine/src/player/engine/queue.rs` (534 lines) | `cut`/`restore_cut` replacing `remove_at` and `remove_batch` (`prune_missing` built on `cut`), `take_cleared`/`restore_cleared`, the `playing_left` and `hand_edited` flags, and one `seat` method. Split into `queue/` if it passes 800. |
@@ -418,7 +419,7 @@ The shell and its simplest user land together, the shell having nothing to show 
 - An undone clear is still there after a restart.
 - A language switch with the notice up re-renders it.
 
-### Phase 3: tracks removed from a playlist (implemented 2026-10-29, awaiting the hand test)
+### Phase 3: tracks removed from a playlist (done 2026-10-29, its measure pending)
 
 1. **Core.**
    - `UndoCapture<T>` and `UNDO_HOLD_CAP`. A third arm, `Nothing`, puts decision 6 in the type: a
@@ -483,33 +484,75 @@ The shell and its simplest user land together, the shell having nothing to show 
 - Remove the track whose cover is the playlist's automatic cover, then Undo: the cover returns.
 - Remove, leave the page, Undo from elsewhere: reopening shows the rows.
 - With the filter box focused, Ctrl+Z edits the field.
-- Remove, delete that playlist (still confirmed until Phase 4), press Undo: "Couldn't undo".
+- Remove, then delete that playlist: the delete's notice replaces the removal's. "Couldn't undo"
+  is left to Phase 11's store test of a restore into a deleted playlist, no hand path reaching it
+  once a delete holds the slot.
 - More than 10,000 rows: a notice with no button saying it's too many to undo.
 - A language switch with the notice up re-renders it.
 
-### Phase 4: deleting playlists
+### Phase 4: deleting playlists (implemented 2026-10-29, awaiting the hand test)
 
-1. **Core.** `PlaylistSnapshot`: every `playlists` column (`initial_schema.sql:178-192` plus
-   `search_name`) and its items as in Phase 3.
-2. **Store.**
-   - `delete_playlists` (`playlist.rs:200`) is chunked with no transaction today. It becomes one
-     transaction, in two forms: a held delete that reads the snapshots first, and the plain one for
-     over the cap.
-   - Add a count of the items a delete would take, which is what the cap is checked on.
-   - `restore_playlists` inserts each row under its own id (decision 9), then its items through the
-     generalized `insert_items_tx`. The row goes in with `track_count` and `total_duration_ms` at
-     0, since the stats triggers add per item rather than recount (`initial_schema.sql:548-593`),
-     and with its `search_name`, whose backfill runs only at launch. The triggers leave
-     `updated_at` alone; the cover refresh stamps it, so the held stamp is written last.
-3. **App.** `services::artwork_holds` lands here and is unioned in `sweep_stores`. The facade holds
-   a custom cover's basename for as long as the snapshot lives.
+1. **Core.** `PlaylistSnapshot { playlist: Playlist, items: Vec<CutItem> }`, `row` being each
+   item's index. `search_name` isn't held: the restore packs it from the name, as create does, a
+   card's name and its `search_name` being written together.
+2. **Store** (`queries/playlist_delete.rs`, keeping `playlist.rs` well under the cap).
+   - `delete_playlists` is one transaction now, where it was chunked with none, and answers the
+     names it deleted (`RETURNING name`), so the confirmed path knows what went.
+   - `delete_playlists_held` reads the snapshots, then deletes, in one transaction, and returns
+     before any write when no id matched.
+   - `item_count` is what the cap is checked on, read at the click.
+   - `restore_playlists` (`playlist_restore.rs`), one transaction: each row under its own id, or a
+     fresh one where a playlist created since took it (decision 9). The stats go in at 0, the
+     per-item triggers adding back only the items whose track is still there. The cover refresh
+     writes the held `updated_at` last, so the card returns to its grid slot.
+3. **App.**
+   - `ArtworkHold` lives in `tasks::artwork_sweep`, its one reader, refcounted per basename since
+     two playlists can share a content-addressed composite.
+   - `library::playlists::delete_playlists_held` takes it off `custom_covers` **before** the delete
+     commits: a sweep reads the columns and then the holds, so one of the two always names the
+     file.
+   - `DeletedPlaylists` carries the snapshots and the hold, and its restore drops the hold only
+     once the rows are back.
 4. **Slint and views.**
-   - The card trash, card menu and detail pill call `Playlists.delete-playlist(s)` directly.
-   - `crud.rs` asks for the item count, then either does the held delete and offers, or raises the
-     reworded opener with a `DialogClaim` and does the plain delete on accept.
-   - Recheck `dialog_openers.rs`' `FOLDED_KINDS`.
-5. **Strings:** "Deleted {}", "{n} playlists deleted" (plural), and the two confirmations reworded,
-   the many-playlists title as a true plural.
+   - The trash, the card menu and the detail pill all call `Playlists.delete-playlists([int])`,
+     and the single-id callback is gone.
+   - In `crud.rs`, a `Deleter` takes a `DialogClaim` at the click and counts the items:
+     - past the cap, `confirm_first` raises the reworded opener by count, and its accept,
+       `delete-playlists-confirmed`, deletes for good and raises the button-less notice;
+     - otherwise it closes the detail, does the held delete, and offers.
+   - The count can't come after the write: the confirmation must precede it, and the detail closes
+     before it only once the delete is decided.
+   - **Deletes merge**, the target being the playlist collection, so deleting B doesn't make A's
+     delete permanent. `Removal::absorb` sums the run's items against the cap.
+   - Both kinds stay in `dialog_openers.rs`' `FOLDED_KINDS`, now as deferred raises. The batch kind
+     gains the delete icon the single one had.
+   - **The card's hover trash hides while two or more cards are picked** (`CardCell.multi-selection`),
+     as does a station card's remove. Beside a selection a one-card delete reads as the set's, and
+     with no confirmation one stray click took the wrong scope. The right-click menu deletes the
+     set and names its count first. Rename and Edit artwork stay, meaning one card either way.
+   - **No confirmation under the cap** (Kenan, 2026-10-29). The notice comes up as the user acts,
+     so 6 s is enough. Phase 10's slider lengthens it, and turning a kind's undo off brings its
+     confirmation back.
+5. **Strings:** "{} deleted", "{n} playlist deleted" (plural), "Delete {n} playlist?" (plural,
+   replacing "Delete {} playlists?"), and both messages saying the delete can't be undone.
+
+**By hand.**
+- Delete from the card trash, the card menu and the detail pill. Each deletes at once with "Road
+  Trip deleted". Undo and Ctrl+Z bring it back in its grid slot with its tracks in order, dates
+  added, description and cover, and the detail stays closed.
+- Select three and delete them: "3 playlists deleted", and Undo restores all three.
+- With two or more cards picked, no card shows its trash, and a Radio card on a kept tab shows no
+  remove. With one picked, both are back.
+- Delete A, then B inside the window: one card, "2 playlists deleted", its clock restarted, and
+  Undo brings back both.
+- Delete a smart playlist, then Undo: its rules come back.
+- Delete the newest playlist, create one inside the window, then Undo: both exist.
+- Delete a playlist with a custom cover more than an hour old, rescan a folder while hovering the
+  notice, then Undo: the cover is still there.
+- Remove tracks from a playlist, then delete it: the delete's notice replaces the removal's.
+- Over 10,000 tracks: the reworded confirmation. Cancel keeps everything, the detail included;
+  Delete gives a notice with no button.
+- A language switch with the notice up re-renders it.
 
 ### Phase 5: radio stations
 
@@ -783,8 +826,9 @@ removing stations and Clear queue ask first again (decision 13).
   carrying its `timeout-ms`, a replace dismissing the old Undo row, an Undo naming another row
   doing nothing, and the row-removed listener firing once on every removal path, the eviction
   inside `show` included (the `:117-154` pattern).
-- **Slint pins:** the card's `Timer` gates on its hover and `Theme.window-focused`, and the row
-  menu's remove entry calls the shared callback rather than `toggle-row-favorite`.
+- **Slint pins:** the card's `Timer` gates on its hover and `Theme.window-focused`, the row menu's
+  remove entry calls the shared callback rather than `toggle-row-favorite`, and the playlist
+  card's trash and the station card's remove hide on `CardCell.multi-selection`.
 - **Sweep:** a held basename survives `sweep_stores`.
 - **Settings:**
   - `UndoFlags` defaulting from an older `settings.json`, the duration clamped at both ends, and an
@@ -799,6 +843,8 @@ removing stations and Clear queue ask first again (decision 13).
 **Docs:**
 - `ui-patterns.md`'s "Dialogs, toasts": the slot contract (decisions 2, 5, 6, 8 and 12), and the
   card owning its clock.
+- `ui-patterns.md`'s "Selection": a card's hover control that deletes it hides under a
+  multi-selection (`CardCell.multi-selection`).
 - `library-data.md`: restores as units of work, and the artwork hold.
 - `audio-stack.md`: `playing_left`.
 - `ui-patterns.md`'s "The Settings page": the category persisted by key, and Accessibility as #36's

@@ -1621,20 +1621,22 @@ msgid "Delete playlist?"
 msgstr "Çalma listesi silinsin mi?"
 
 #: ui/globals/dialog.slint
-msgid "The playlist and its track order will be removed. The tracks themselves stay in your library."
-msgstr "Çalma listesi ve parça sırası kaldırılacak. Parçaların kendisi kitaplığınızda kalır."
+msgid "The playlist and its track order will be removed, and this can't be undone. The tracks themselves stay in your library."
+msgstr "Çalma listesi ve parça sırası kaldırılacak ve bu geri alınamaz. Parçaların kendisi kitaplığınızda kalır."
 
 #: ui/globals/dialog.slint
 msgid "Delete"
 msgstr "Sil"
 
 #: ui/globals/dialog.slint
-msgid "Delete {} playlists?"
-msgstr "{} çalma listesi silinsin mi?"
+msgid "Delete {n} playlist?"
+msgid_plural "Delete {n} playlists?"
+msgstr[0] "{n} çalma listesi silinsin mi?"
+msgstr[1] "{n} çalma listesi silinsin mi?"
 
 #: ui/globals/dialog.slint
-msgid "The playlists and their track order will be removed. The tracks themselves stay in your library."
-msgstr "Çalma listeleri ve parça sırası kaldırılacak. Parçaların kendisi kitaplığınızda kalır."
+msgid "The playlists and their track order will be removed, and this can't be undone. The tracks themselves stay in your library."
+msgstr "Çalma listeleri ve parça sırası kaldırılacak ve bu geri alınamaz. Parçaların kendisi kitaplığınızda kalır."
 
 #: ui/globals/dialog.slint
 msgid "Remove from Recently Played?"
@@ -1815,6 +1817,17 @@ msgid "{n} track removed from {}"
 msgid_plural "{n} tracks removed from {}"
 msgstr[0] "{n} parça {} çalma listesinden çıkarıldı"
 msgstr[1] "{n} parça {} çalma listesinden çıkarıldı"
+
+#. Translators: {} is the playlist's name.
+#: ui/globals/undo-text.slint
+msgid "{} deleted"
+msgstr "{} silindi"
+
+#: ui/globals/undo-text.slint
+msgid "{n} playlist deleted"
+msgid_plural "{n} playlists deleted"
+msgstr[0] "{n} çalma listesi silindi"
+msgstr[1] "{n} çalma listesi silindi"
 
 #: ui/globals/undo-text.slint
 msgid "Too many to undo"

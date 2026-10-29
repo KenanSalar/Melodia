@@ -22,6 +22,7 @@ use melodia_app::state::AppState;
 use melodia_core::error::describe;
 use melodia_ui::AppWindow;
 
+pub(crate) use crud::PlaylistDeleteUndo;
 pub(crate) use detail::PlaylistCutUndo;
 
 /// Wires every `Playlists.*` / `PlaylistDetail.*` callback but [`wire_files`]', on
@@ -31,7 +32,7 @@ pub(super) fn wire(cx: ViewCtx<'_>, playlists_ui: &Arc<PlaylistsUi>) {
     grid::wire(ui, state, playlists_ui);
     detail::wire(cx, playlists_ui);
     row_cover::wire(ui, playlists_ui);
-    crud::wire(ui, state, playlists_ui);
+    crud::wire(cx, playlists_ui);
     artwork::wire(ui, state, playlists_ui);
     smart::wire(ui, state, playlists_ui);
     lifecycle::wire(ui, state, playlists_ui);

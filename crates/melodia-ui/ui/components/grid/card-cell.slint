@@ -33,6 +33,9 @@ export component CardCell inherits Rectangle {
         CardSelection.selected(root.scope, root.card-id, CardSelection.generation);
     out property <bool> selection-live: CardSelection.any-in(root.scope);
     out property <bool> menu-open: ctx-menu.is-open || station-menu.is-open;
+    // A hover control that deletes its own card hides while this holds: beside a selection it
+    // reads as acting on the set, and the menu, which names the count, is the set's.
+    out property <bool> multi-selection: root.scope-count > 1;
 
     // Nothing when another scope holds the live set.
     private property <[int]> scope-selection:

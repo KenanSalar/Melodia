@@ -40,6 +40,14 @@ pub struct PlaylistItemsCut {
     pub stamped_at: String,
 }
 
+/// A deleted playlist as a restore writes it back: the row under its own id, and every item.
+#[derive(Debug, PartialEq)]
+pub struct PlaylistSnapshot {
+    pub playlist: Playlist,
+    /// Ascending, each `row` its index in the playlist.
+    pub items: Vec<CutItem>,
+}
+
 #[derive(Debug, PartialEq)]
 pub struct CutItem {
     pub track_id: i64,

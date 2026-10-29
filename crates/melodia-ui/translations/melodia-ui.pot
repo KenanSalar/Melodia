@@ -1614,7 +1614,7 @@ msgid "Delete playlist?"
 msgstr ""
 
 #: ui/globals/dialog.slint
-msgid "The playlist and its track order will be removed. The tracks themselves stay in your library."
+msgid "The playlist and its track order will be removed, and this can't be undone. The tracks themselves stay in your library."
 msgstr ""
 
 #: ui/globals/dialog.slint
@@ -1622,11 +1622,13 @@ msgid "Delete"
 msgstr ""
 
 #: ui/globals/dialog.slint
-msgid "Delete {} playlists?"
-msgstr ""
+msgid "Delete {n} playlist?"
+msgid_plural "Delete {n} playlists?"
+msgstr[0] ""
+msgstr[1] ""
 
 #: ui/globals/dialog.slint
-msgid "The playlists and their track order will be removed. The tracks themselves stay in your library."
+msgid "The playlists and their track order will be removed, and this can't be undone. The tracks themselves stay in your library."
 msgstr ""
 
 #: ui/globals/dialog.slint
@@ -1804,6 +1806,17 @@ msgstr ""
 #: ui/globals/undo-text.slint
 msgid "{n} track removed from {}"
 msgid_plural "{n} tracks removed from {}"
+msgstr[0] ""
+msgstr[1] ""
+
+#. Translators: {} is the playlist's name.
+#: ui/globals/undo-text.slint
+msgid "{} deleted"
+msgstr ""
+
+#: ui/globals/undo-text.slint
+msgid "{n} playlist deleted"
+msgid_plural "{n} playlists deleted"
 msgstr[0] ""
 msgstr[1] ""
 

@@ -25,10 +25,10 @@ use melodia_testkit::{MIN_SLINT_SOURCES, UI_DIR, stripped_sources};
 /// dialog, two headings, and two msgids translated separately in every catalogue,
 /// with nothing failing.
 ///
-/// **Nor is a second caller the only trigger.** `delete-playlists` has one, the card menu's batch
-/// arm, and is folded because the singular copy names one playlist's track order and the plural
-/// cannot: two openers rather than a count-ternary inside one, so each heading and message is
-/// stated where it is written.
+/// **Nor is a second caller the only trigger.** Both delete confirmations are raised from Rust,
+/// once it has counted the tracks a delete would take and found too many to undo. Two openers
+/// rather than a count-ternary inside one, because the singular copy names one playlist's track
+/// order and the plural cannot, so each heading and message is stated where it is written.
 ///
 /// **The other trigger is a deferred raise.** Export and New Smart Playlist have one caller
 /// each and are folded anyway: both leave `open` false while Rust fetches or hops a tick, and

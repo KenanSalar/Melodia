@@ -66,7 +66,7 @@ async fn update_playlist() -> Result<(), AppError> {
 async fn delete_playlist() -> Result<(), AppError> {
     let db = setup_seeded_db().await?;
     let pl = queries::playlist::create_playlist(&db, "ToDelete", None).await?;
-    queries::playlist::delete_playlists(&db, &[pl.id]).await?;
+    queries::playlist_delete::delete_playlists(&db, &[pl.id]).await?;
     let result = queries::playlist::get_playlist_by_id(&db, pl.id).await;
     assert!(result.is_err());
     Ok(())
@@ -698,7 +698,7 @@ async fn several_playlists_delete_in_one_pass() -> Result<(), AppError> {
     let also = queries::playlist::create_playlist(&db, "Also Doomed", None).await?;
     let kept = queries::playlist::create_playlist(&db, "Kept", None).await?;
 
-    queries::playlist::delete_playlists(&db, &[doomed, also.id]).await?;
+    queries::playlist_delete::delete_playlists(&db, &[doomed, also.id]).await?;
 
     let left: Vec<i64> =
         queries::playlist::get_all_playlists(&db).await?.iter().map(|p| p.id).collect();
@@ -717,7 +717,7 @@ async fn deleting_nothing_is_not_an_error() -> Result<(), AppError> {
     let db = setup_seeded_db().await?;
     queries::playlist::create_playlist(&db, "Kept", None).await?;
 
-    queries::playlist::delete_playlists(&db, &[]).await?;
+    queries::playlist_delete::delete_playlists(&db, &[]).await?;
 
     assert_eq!(queries::playlist::get_all_playlists(&db).await?.len(), 1);
     Ok(())
@@ -734,7 +734,7 @@ async fn more_playlists_than_one_statement_holds_all_delete() -> Result<(), AppE
         ids.push(queries::playlist::create_playlist(&db, &format!("P{index:04}"), None).await?.id);
     }
 
-    queries::playlist::delete_playlists(&db, &ids).await?;
+    queries::playlist_delete::delete_playlists(&db, &ids).await?;
 
     assert!(queries::playlist::get_all_playlists(&db).await?.is_empty());
     Ok(())
@@ -764,7 +764,7 @@ async fn an_id_deleted_under_the_grid_is_simply_absent() -> Result<(), AppError>
     let db = setup_seeded_db().await?;
     let kept = queries::playlist::create_playlist(&db, "Kept", None).await?;
     let gone = queries::playlist::create_playlist(&db, "Gone", None).await?;
-    queries::playlist::delete_playlists(&db, &[gone.id]).await?;
+    queries::playlist_delete::delete_playlists(&db, &[gone.id]).await?;
 
     let verdicts =
         queries::playlist::smart_criteria_for_playlists(&db, &[kept.id, gone.id]).await?;

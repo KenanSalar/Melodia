@@ -1614,20 +1614,22 @@ msgid "Delete playlist?"
 msgstr "Supprimer la liste ?"
 
 #: ui/globals/dialog.slint
-msgid "The playlist and its track order will be removed. The tracks themselves stay in your library."
-msgstr "La liste et l'ordre de ses pistes seront supprimés. Les pistes elles-mêmes restent dans votre bibliothèque."
+msgid "The playlist and its track order will be removed, and this can't be undone. The tracks themselves stay in your library."
+msgstr "La liste et l'ordre de ses pistes seront supprimés, et cette action est irréversible. Les pistes elles-mêmes restent dans votre bibliothèque."
 
 #: ui/globals/dialog.slint
 msgid "Delete"
 msgstr "Supprimer"
 
 #: ui/globals/dialog.slint
-msgid "Delete {} playlists?"
-msgstr "Supprimer {} listes ?"
+msgid "Delete {n} playlist?"
+msgid_plural "Delete {n} playlists?"
+msgstr[0] "Supprimer {n} liste ?"
+msgstr[1] "Supprimer {n} listes ?"
 
 #: ui/globals/dialog.slint
-msgid "The playlists and their track order will be removed. The tracks themselves stay in your library."
-msgstr "Les listes et l'ordre de leurs pistes seront supprimés. Les pistes elles-mêmes restent dans votre bibliothèque."
+msgid "The playlists and their track order will be removed, and this can't be undone. The tracks themselves stay in your library."
+msgstr "Les listes et l'ordre de leurs pistes seront supprimés, et cette action est irréversible. Les pistes elles-mêmes restent dans votre bibliothèque."
 
 #: ui/globals/dialog.slint
 msgid "Remove from Recently Played?"
@@ -1806,6 +1808,17 @@ msgid "{n} track removed from {}"
 msgid_plural "{n} tracks removed from {}"
 msgstr[0] "{n} piste retirée de {}"
 msgstr[1] "{n} pistes retirées de {}"
+
+#. Translators: {} is the playlist's name.
+#: ui/globals/undo-text.slint
+msgid "{} deleted"
+msgstr "{} supprimée"
+
+#: ui/globals/undo-text.slint
+msgid "{n} playlist deleted"
+msgid_plural "{n} playlists deleted"
+msgstr[0] "{n} liste supprimée"
+msgstr[1] "{n} listes supprimées"
 
 #: ui/globals/undo-text.slint
 msgid "Too many to undo"

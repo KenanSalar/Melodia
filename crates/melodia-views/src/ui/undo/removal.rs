@@ -4,7 +4,7 @@
 use slint::{ComponentHandle, SharedString};
 
 use crate::ui::equalizer::ResetUndo;
-use crate::ui::playlists::PlaylistCutUndo;
+use crate::ui::playlists::{PlaylistCutUndo, PlaylistDeleteUndo};
 use crate::ui::search::RecentClearUndo;
 use crate::ui::shell::notifications::RowText;
 use crate::ui::util::len_as_i32;
@@ -23,6 +23,7 @@ pub enum Removal {
     Equalizer(ResetUndo),
     RecentSearches(RecentClearUndo),
     PlaylistTracks(PlaylistCutUndo),
+    Playlists(PlaylistDeleteUndo),
 }
 
 /// How a later removal lands on the one held.
@@ -55,6 +56,14 @@ impl Removal {
                 held.absorb(next);
                 Absorbed::Merged
             }
+            (Removal::Playlists(held), Removal::Playlists(next)) => {
+                if held.items() + next.items() > UNDO_HOLD_CAP {
+                    let count = held.count() + next.count();
+                    return Absorbed::OverCap(Box::new(playlists_deleted(count, next.name())));
+                }
+                held.absorb(next);
+                Absorbed::Merged
+            }
             (_, next) => Absorbed::Distinct(next),
         }
     }
@@ -66,6 +75,9 @@ impl Removal {
                 titled(|ui| ui.global::<UndoText>().invoke_recent_searches_cleared())
             }
             Removal::PlaylistTracks(cut) => titled(tracks_removed_from(cut.count(), cut.name())),
+            Removal::Playlists(deleted) => {
+                titled(playlists_deleted(deleted.count(), deleted.name()))
+            }
         }
     }
 
@@ -83,6 +95,7 @@ impl Removal {
             }
             Removal::RecentSearches(cleared) => cleared.restore(state, ui).await,
             Removal::PlaylistTracks(cut) => cut.restore(state, ui).await,
+            Removal::Playlists(deleted) => deleted.restore(state, ui).await,
         }
     }
 }
@@ -94,6 +107,15 @@ pub fn tracks_removed_from(
 ) -> impl Fn(&AppWindow) -> SharedString + 'static {
     let count = len_as_i32(count);
     move |ui| ui.global::<UndoText>().invoke_tracks_removed_from_playlist(count, playlist.clone())
+}
+
+/// "Road Trip deleted", or "3 playlists deleted", whether the notice can undo it or not.
+pub fn playlists_deleted(
+    count: usize,
+    name: SharedString,
+) -> impl Fn(&AppWindow) -> SharedString + 'static {
+    let count = len_as_i32(count);
+    move |ui| ui.global::<UndoText>().invoke_playlists_deleted(count, name.clone())
 }
 
 /// A notice whose title says it all.

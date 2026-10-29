@@ -1616,20 +1616,22 @@ msgid "Delete playlist?"
 msgstr "Διαγραφή λίστας;"
 
 #: ui/globals/dialog.slint
-msgid "The playlist and its track order will be removed. The tracks themselves stay in your library."
-msgstr "Η λίστα και η σειρά των κομματιών της θα καταργηθούν. Τα ίδια τα κομμάτια παραμένουν στη βιβλιοθήκη σας."
+msgid "The playlist and its track order will be removed, and this can't be undone. The tracks themselves stay in your library."
+msgstr "Η λίστα και η σειρά των κομματιών της θα καταργηθούν, και αυτό δεν αναιρείται. Τα ίδια τα κομμάτια παραμένουν στη βιβλιοθήκη σας."
 
 #: ui/globals/dialog.slint
 msgid "Delete"
 msgstr "Διαγραφή"
 
 #: ui/globals/dialog.slint
-msgid "Delete {} playlists?"
-msgstr "Διαγραφή {} λιστών;"
+msgid "Delete {n} playlist?"
+msgid_plural "Delete {n} playlists?"
+msgstr[0] "Διαγραφή {n} λίστας;"
+msgstr[1] "Διαγραφή {n} λιστών;"
 
 #: ui/globals/dialog.slint
-msgid "The playlists and their track order will be removed. The tracks themselves stay in your library."
-msgstr "Οι λίστες και η σειρά των κομματιών τους θα καταργηθούν. Τα ίδια τα κομμάτια παραμένουν στη βιβλιοθήκη σας."
+msgid "The playlists and their track order will be removed, and this can't be undone. The tracks themselves stay in your library."
+msgstr "Οι λίστες και η σειρά των κομματιών τους θα καταργηθούν, και αυτό δεν αναιρείται. Τα ίδια τα κομμάτια παραμένουν στη βιβλιοθήκη σας."
 
 #: ui/globals/dialog.slint
 msgid "Remove from Recently Played?"
@@ -1808,6 +1810,17 @@ msgid "{n} track removed from {}"
 msgid_plural "{n} tracks removed from {}"
 msgstr[0] "{n} κομμάτι αφαιρέθηκε από τη λίστα «{}»"
 msgstr[1] "{n} κομμάτια αφαιρέθηκαν από τη λίστα «{}»"
+
+#. Translators: {} is the playlist's name.
+#: ui/globals/undo-text.slint
+msgid "{} deleted"
+msgstr "Η λίστα «{}» διαγράφηκε"
+
+#: ui/globals/undo-text.slint
+msgid "{n} playlist deleted"
+msgid_plural "{n} playlists deleted"
+msgstr[0] "{n} λίστα διαγράφηκε"
+msgstr[1] "{n} λίστες διαγράφηκαν"
 
 #: ui/globals/undo-text.slint
 msgid "Too many to undo"

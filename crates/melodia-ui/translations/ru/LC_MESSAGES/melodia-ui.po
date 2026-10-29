@@ -1621,20 +1621,23 @@ msgid "Delete playlist?"
 msgstr "Удалить плейлист?"
 
 #: ui/globals/dialog.slint
-msgid "The playlist and its track order will be removed. The tracks themselves stay in your library."
-msgstr "Плейлист и порядок треков в нём будут удалены. Сами треки останутся в медиатеке."
+msgid "The playlist and its track order will be removed, and this can't be undone. The tracks themselves stay in your library."
+msgstr "Плейлист и порядок треков в нём будут удалены, и это нельзя отменить. Сами треки останутся в медиатеке."
 
 #: ui/globals/dialog.slint
 msgid "Delete"
 msgstr "Удалить"
 
 #: ui/globals/dialog.slint
-msgid "Delete {} playlists?"
-msgstr "Удалить плейлисты ({})?"
+msgid "Delete {n} playlist?"
+msgid_plural "Delete {n} playlists?"
+msgstr[0] "Удалить {n} плейлист?"
+msgstr[1] "Удалить {n} плейлиста?"
+msgstr[2] "Удалить {n} плейлистов?"
 
 #: ui/globals/dialog.slint
-msgid "The playlists and their track order will be removed. The tracks themselves stay in your library."
-msgstr "Плейлисты и порядок треков в них будут удалены. Сами треки останутся в медиатеке."
+msgid "The playlists and their track order will be removed, and this can't be undone. The tracks themselves stay in your library."
+msgstr "Плейлисты и порядок треков в них будут удалены, и это нельзя отменить. Сами треки останутся в медиатеке."
 
 #: ui/globals/dialog.slint
 msgid "Remove from Recently Played?"
@@ -1818,6 +1821,18 @@ msgid_plural "{n} tracks removed from {}"
 msgstr[0] "Удалён {n} трек из плейлиста «{}»"
 msgstr[1] "Удалено {n} трека из плейлиста «{}»"
 msgstr[2] "Удалено {n} треков из плейлиста «{}»"
+
+#. Translators: {} is the playlist's name.
+#: ui/globals/undo-text.slint
+msgid "{} deleted"
+msgstr "Плейлист «{}» удалён"
+
+#: ui/globals/undo-text.slint
+msgid "{n} playlist deleted"
+msgid_plural "{n} playlists deleted"
+msgstr[0] "Удалён {n} плейлист"
+msgstr[1] "Удалено {n} плейлиста"
+msgstr[2] "Удалено {n} плейлистов"
 
 #: ui/globals/undo-text.slint
 msgid "Too many to undo"

@@ -1607,20 +1607,21 @@ msgid "Delete playlist?"
 msgstr "Xóa danh sách phát?"
 
 #: ui/globals/dialog.slint
-msgid "The playlist and its track order will be removed. The tracks themselves stay in your library."
-msgstr "Danh sách phát và thứ tự bản nhạc của nó sẽ bị xóa. Bản thân các bản nhạc vẫn ở trong thư viện của bạn."
+msgid "The playlist and its track order will be removed, and this can't be undone. The tracks themselves stay in your library."
+msgstr "Danh sách phát và thứ tự bản nhạc của nó sẽ bị xóa, và không thể hoàn tác. Bản thân các bản nhạc vẫn ở trong thư viện của bạn."
 
 #: ui/globals/dialog.slint
 msgid "Delete"
 msgstr "Xóa"
 
 #: ui/globals/dialog.slint
-msgid "Delete {} playlists?"
-msgstr "Xóa {} danh sách phát?"
+msgid "Delete {n} playlist?"
+msgid_plural "Delete {n} playlists?"
+msgstr[0] "Xóa {n} danh sách phát?"
 
 #: ui/globals/dialog.slint
-msgid "The playlists and their track order will be removed. The tracks themselves stay in your library."
-msgstr "Các danh sách phát và thứ tự bản nhạc của chúng sẽ bị xóa. Bản thân các bản nhạc vẫn ở trong thư viện của bạn."
+msgid "The playlists and their track order will be removed, and this can't be undone. The tracks themselves stay in your library."
+msgstr "Các danh sách phát và thứ tự bản nhạc của chúng sẽ bị xóa, và không thể hoàn tác. Bản thân các bản nhạc vẫn ở trong thư viện của bạn."
 
 #: ui/globals/dialog.slint
 msgid "Remove from Recently Played?"
@@ -1794,6 +1795,16 @@ msgstr "Đã xóa các tìm kiếm gần đây"
 msgid "{n} track removed from {}"
 msgid_plural "{n} tracks removed from {}"
 msgstr[0] "Đã xóa {n} bản nhạc khỏi {}"
+
+#. Translators: {} is the playlist's name.
+#: ui/globals/undo-text.slint
+msgid "{} deleted"
+msgstr "Đã xóa {}"
+
+#: ui/globals/undo-text.slint
+msgid "{n} playlist deleted"
+msgid_plural "{n} playlists deleted"
+msgstr[0] "Đã xóa {n} danh sách phát"
 
 #: ui/globals/undo-text.slint
 msgid "Too many to undo"

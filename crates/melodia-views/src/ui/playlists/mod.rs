@@ -45,7 +45,7 @@ pub(super) use detail::{
 };
 pub(super) use grid::{refresh_after_write, refresh_play_stats, shown_card};
 
-pub(crate) use callbacks::PlaylistCutUndo;
+pub(crate) use callbacks::{PlaylistCutUndo, PlaylistDeleteUndo};
 
 /// The M3U8 import and export and the Add-to-Playlist wiring, outside [`install`] for the
 /// `Rc<NotificationsUi>` their toasts need, which exists only after the views.

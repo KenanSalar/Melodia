@@ -20,6 +20,10 @@ export global Playlists {
     pure callback request-row-cover(string /*artwork_path*/) -> image;
     callback section-active-changed(bool);
 
+    // Deletes at once, offering an undo; a lone card passes one id. Where the playlists hold too
+    // many tracks to undo, Rust asks first and the confirmation fires `delete-playlists-confirmed`.
+    callback delete-playlists([int] /*ids*/);
+
     // Fired by `Dialog.accepted` on confirm.
     callback create-playlist(
         string /*name*/,
@@ -31,10 +35,7 @@ export global Playlists {
         string /*new_name*/,
         string /*description (empty ⇒ clear)*/,
     );
-    callback delete-playlist(int /*id*/);
-    // One refetch and one selection clear for the batch, where looping `delete-playlist` would do
-    // both per playlist.
-    callback delete-playlists([int] /*ids*/);
+    callback delete-playlists-confirmed([int] /*ids*/);
 
     // 1–4 of the playlist's own covers, composed and persisted by Rust.
     callback apply-mosaic(int /*id*/, [string] /*paths*/);

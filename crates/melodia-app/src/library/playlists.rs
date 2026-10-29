@@ -3,8 +3,9 @@ use std::path::{Path, PathBuf};
 
 use super::import::import_and_summarize;
 use crate::state::AppState;
+use crate::tasks::artwork_sweep::ArtworkHold;
 use melodia_artwork::media::image::artwork::CoverCache;
-use melodia_core::entities::playlist::{self, PlaylistItemsCut};
+use melodia_core::entities::playlist::{self, PlaylistItemsCut, PlaylistSnapshot};
 use melodia_core::entities::track_list::TrackListScope;
 use melodia_core::entities::undo::UndoCapture;
 use melodia_core::error::AppError;
@@ -49,10 +50,61 @@ pub async fn update_playlist(
     .await
 }
 
-/// Drop one or more playlists. The single-card arm passes a one-element slice rather than
-/// keeping a second spelling of the same statement.
-pub async fn delete_playlists(db: &DbPool, ids: &[i64]) -> Result<(), AppError> {
-    queries::playlist::delete_playlists(db, ids).await
+/// What a delete took, and the custom covers kept from the sweep until the undo goes.
+pub struct DeletedPlaylists {
+    snapshots: Vec<PlaylistSnapshot>,
+    covers: ArtworkHold,
+}
+
+impl DeletedPlaylists {
+    /// A later delete, for a run merged into one undo.
+    pub fn absorb(&mut self, newer: Self) {
+        self.snapshots.extend(newer.snapshots);
+        self.covers.absorb(newer.covers);
+    }
+
+    pub fn playlist_count(&self) -> usize {
+        self.snapshots.len()
+    }
+
+    /// What the undo cap is checked on.
+    pub fn item_count(&self) -> usize {
+        self.snapshots.iter().map(|snapshot| snapshot.items.len()).sum()
+    }
+
+    pub fn newest_name(&self) -> &str {
+        self.snapshots.last().map_or("", |snapshot| &snapshot.playlist.name)
+    }
+}
+
+/// How many tracks deleting `ids` would take out of playlists, which decides whether the delete
+/// can be undone.
+pub async fn playlist_item_count(db: &DbPool, ids: Vec<i64>) -> Result<usize, AppError> {
+    queries::playlist_delete::item_count(db, &ids).await
+}
+
+/// Deletes playlists, holding what puts them back, or answers `None` where none was there. Its
+/// caller checks [`playlist_item_count`] against `UNDO_HOLD_CAP` first.
+pub async fn delete_playlists_held(
+    db: &DbPool,
+    ids: Vec<i64>,
+) -> Result<Option<DeletedPlaylists>, AppError> {
+    let covers = ArtworkHold::new(queries::playlist_delete::custom_covers(db, &ids).await?);
+    let snapshots = queries::playlist_delete::delete_playlists_held(db, &ids).await?;
+    Ok((!snapshots.is_empty()).then_some(DeletedPlaylists { snapshots, covers }))
+}
+
+/// Deletes playlists for good, answering the names of those that went.
+pub async fn delete_playlists(db: &DbPool, ids: Vec<i64>) -> Result<Vec<String>, AppError> {
+    queries::playlist_delete::delete_playlists(db, &ids).await
+}
+
+/// Undoes a delete. The covers stay held until the rows naming them are back.
+pub async fn restore_playlists(db: &DbPool, deleted: DeletedPlaylists) -> Result<(), AppError> {
+    let DeletedPlaylists { snapshots, covers } = deleted;
+    queries::playlist_restore::restore_playlists(db, &snapshots).await?;
+    drop(covers);
+    Ok(())
 }
 
 pub async fn add_to_playlist(

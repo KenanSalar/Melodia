@@ -1,26 +1,67 @@
-//! The create / rename / delete commits the `Dialog.accepted` dispatcher in
-//! `globals/dialog.slint` routes to. Their opens are inline Slint: crossing into
-//! Rust to write `Dialog` properties *synchronously* from a click handler trips
-//! Slint's "Recursion detected" property guard (`i_slint_core::properties`).
+//! Creating, renaming and deleting playlists. Create and rename commit from the `Dialog.accepted`
+//! dispatcher in `globals/dialog.slint`, their opens being inline Slint: crossing into Rust to
+//! write `Dialog` properties *synchronously* from a click handler trips Slint's "Recursion
+//! detected" property guard (`i_slint_core::properties`). A delete runs at once and offers its
+//! undo, raising a confirmation from past an `await` only where it can't be undone.
 
+use std::rc::Rc;
 use std::sync::Arc;
 
-use slint::{ComponentHandle, Model, Weak};
+use async_compat::Compat;
+use slint::{ComponentHandle, Model, ModelRc, SharedString, Weak};
 
 use super::{optional_text, refresh_after_edit};
+use crate::ui::callbacks::DialogClaim;
 use crate::ui::detail_view::release_detail_hero_images;
 use crate::ui::playlists::{self as playlists_ui_mod, PlaylistsUi};
 use crate::ui::track_detail::TrackDetail;
 use crate::ui::track_list_view::view_id;
+use crate::ui::undo::{Removal, UndoWindow, playlists_deleted};
+use crate::ui::view_ctx::ViewCtx;
 use melodia_app::library;
+use melodia_app::library::playlists::DeletedPlaylists;
 use melodia_app::state::AppState;
-use melodia_core::error::describe;
-use melodia_ui::{AppWindow, CardSelection, PlaylistDetail, Playlists};
+use melodia_core::entities::undo::UNDO_HOLD_CAP;
+use melodia_core::error::{AppError, describe};
+use melodia_ui::{AppWindow, CardSelection, Dialog, PlaylistDetail, Playlists};
 
-pub(super) fn wire(ui: &AppWindow, state: &AppState, playlists_ui: &Arc<PlaylistsUi>) {
+pub(super) fn wire(cx: ViewCtx<'_>, playlists_ui: &Arc<PlaylistsUi>) {
+    let ViewCtx { app: ui, state, .. } = cx;
     wire_create(ui, state, playlists_ui);
     wire_rename(ui, state, playlists_ui);
-    wire_delete(ui, state, playlists_ui);
+    wire_delete(cx, playlists_ui);
+}
+
+/// What a run of deletes took, put back together.
+pub struct PlaylistDeleteUndo {
+    deleted: DeletedPlaylists,
+    playlists_ui: Arc<PlaylistsUi>,
+}
+
+impl PlaylistDeleteUndo {
+    pub fn absorb(&mut self, newer: Self) {
+        self.deleted.absorb(newer.deleted);
+    }
+
+    pub fn count(&self) -> usize {
+        self.deleted.playlist_count()
+    }
+
+    pub fn items(&self) -> usize {
+        self.deleted.item_count()
+    }
+
+    pub fn name(&self) -> SharedString {
+        SharedString::from(self.deleted.newest_name())
+    }
+
+    /// Writes the playlists back and reloads the grid. The detail a delete closed stays closed,
+    /// navigation not being part of what went.
+    pub async fn restore(self, state: &AppState, weak: &Weak<AppWindow>) -> Result<(), AppError> {
+        library::playlists::restore_playlists(&state.db, self.deleted).await?;
+        playlists_ui_mod::refresh_after_write(state, &self.playlists_ui, weak);
+        Ok(())
+    }
 }
 
 /// The playlist and its pending tracks land together or not at all.
@@ -96,73 +137,140 @@ fn wire_rename(ui: &AppWindow, state: &AppState, playlists_ui: &Arc<PlaylistsUi>
     });
 }
 
-/// `delete-playlist` is the dispatcher's single id, `delete-playlists` the card menu's batch.
-fn wire_delete(ui: &AppWindow, state: &AppState, playlists_ui: &Arc<PlaylistsUi>) {
-    let playlists = ui.global::<Playlists>();
+/// The trash, the card menu and the detail's pill all arrive at `delete-playlists`, and the
+/// confirmation a delete past the cap raises at `delete-playlists-confirmed`.
+fn wire_delete(cx: ViewCtx<'_>, playlists_ui: &Arc<PlaylistsUi>) {
+    let deleter = Deleter {
+        state: cx.state.clone(),
+        playlists_ui: playlists_ui.clone(),
+        undo: cx.undo.clone(),
+        weak: cx.app.as_weak(),
+    };
+    let playlists = cx.app.global::<Playlists>();
     {
-        let s = state.clone();
-        let pu = playlists_ui.clone();
-        let weak = ui.as_weak();
-        playlists.on_delete_playlist(move |id| {
-            spawn_delete(&s, &pu, &weak, vec![i64::from(id)], "playlists::delete");
-        });
+        let deleter = deleter.clone();
+        playlists.on_delete_playlists(move |ids| deleter.request(ids));
     }
-    {
-        let s = state.clone();
-        let pu = playlists_ui.clone();
-        let weak = ui.as_weak();
-        playlists.on_delete_playlists(move |ids| {
-            let ids: Vec<i64> = ids.iter().map(i64::from).collect();
-            spawn_delete(&s, &pu, &weak, ids, "playlists::delete_many");
-        });
-    }
-}
-
-/// Deletes `ids`, closing the open detail first where it is among them, so no frame shows a
-/// deleted playlist. A failed write is logged and the rest still runs: the detail is closed by
-/// then, and the refetch keeps the grid honest about what survived.
-fn spawn_delete(
-    state: &AppState,
-    playlists_ui: &Arc<PlaylistsUi>,
-    weak: &Weak<AppWindow>,
-    ids: Vec<i64>,
-    label: &'static str,
-) {
-    if ids.is_empty() {
-        return;
-    }
-    let open_was_deleted = close_detail_if_among(weak, playlists_ui, &ids);
-    let s = state.clone();
-    let pu = playlists_ui.clone();
-    let weak = weak.clone();
-    state.runtime.spawn(async move {
-        match library::playlists::delete_playlists(&s.db, &ids).await {
-            Ok(()) => log::info!("{label}({ids:?})"),
-            Err(e) => log::warn!("{label}({ids:?}): {}", describe(&e)),
-        }
-        if open_was_deleted {
-            // So a restart doesn't reopen it.
-            let s_disk = s.clone();
-            s.runtime.spawn_blocking(move || {
-                if let Err(e) = library::settings::set_last_detail_id(
-                    &s_disk.paths,
-                    view_id::PLAYLIST_DETAIL,
-                    None,
-                ) {
-                    log::warn!("{label} clear last_detail_id: {}", describe(&e));
-                }
-            });
-        }
-        // A deleted id can still be sitting in the card selection, where it would keep
-        // being counted by the card menu and asked for by the next batch action.
-        let _ = weak.upgrade_in_event_loop(|ui| {
-            ui.global::<CardSelection>().invoke_clear();
-        });
-        playlists_ui_mod::refresh_after_write(&s, &pu, &weak);
+    playlists.on_delete_playlists_confirmed(move |ids| {
+        deleter.for_good(ids.iter().map(i64::from).collect());
     });
 }
 
-/// Close the open detail when its playlist is among `ids`, reporting whether it was.
+/// What a delete reaches. Both of its paths run on the UI thread, where the undo slot lives.
+#[derive(Clone)]
+struct Deleter {
+    state: AppState,
+    playlists_ui: Arc<PlaylistsUi>,
+    undo: Rc<UndoWindow>,
+    weak: Weak<AppWindow>,
+}
+
+impl Deleter {
+    /// Deletes at once and offers the undo, or asks first where the playlists hold more tracks
+    /// than an undo may.
+    fn request(&self, ids: ModelRc<i32>) {
+        let id_vec: Vec<i64> = ids.iter().map(i64::from).collect();
+        if id_vec.is_empty() {
+            return;
+        }
+        let Some(claim) = DialogClaim::take_from(&self.weak) else { return };
+        let this = self.clone();
+        let spawned = slint::spawn_local(Compat::new(async move {
+            let counted =
+                library::playlists::playlist_item_count(&this.state.db, id_vec.clone()).await;
+            match counted {
+                Ok(items) if items > UNDO_HOLD_CAP => this.confirm_first(claim, ids),
+                Ok(_) => this.delete_held(id_vec).await,
+                Err(e) => log::warn!("playlists::delete count: {}", describe(&e)),
+            }
+        }));
+        if let Err(e) = spawned {
+            log::warn!("playlists::delete spawn_local: {}", describe(&e));
+        }
+    }
+
+    async fn delete_held(&self, ids: Vec<i64>) {
+        let open_was_deleted = close_detail_if_among(&self.weak, &self.playlists_ui, &ids);
+        let deleted = library::playlists::delete_playlists_held(&self.state.db, ids).await;
+        self.finish(open_was_deleted);
+        match deleted {
+            Ok(Some(deleted)) => {
+                log::info!("playlists::delete: {} playlist(s)", deleted.playlist_count());
+                let playlists_ui = self.playlists_ui.clone();
+                self.undo.offer(Removal::Playlists(PlaylistDeleteUndo { deleted, playlists_ui }));
+            }
+            Ok(None) => {}
+            Err(e) => log::warn!("playlists::delete: {}", describe(&e)),
+        }
+    }
+
+    /// Raises the confirmation, unless another dialog claimed the global during the count. Its
+    /// accept arrives at [`Self::for_good`].
+    fn confirm_first(&self, claim: DialogClaim, ids: ModelRc<i32>) {
+        let Some(ui) = self.weak.upgrade() else { return };
+        if !claim.holds(&ui) {
+            return;
+        }
+        let dialog = ui.global::<Dialog>();
+        match (ids.row_count(), ids.row_data(0)) {
+            (1, Some(id)) => dialog.invoke_open_delete_playlist(id),
+            _ => dialog.invoke_open_delete_playlists(ids),
+        }
+    }
+
+    /// Deletes for good, then raises a notice with no button. It still replaces a held one, so
+    /// Ctrl+Z never reaches past it.
+    fn for_good(&self, ids: Vec<i64>) {
+        if ids.is_empty() {
+            return;
+        }
+        let open_was_deleted = close_detail_if_among(&self.weak, &self.playlists_ui, &ids);
+        let this = self.clone();
+        let spawned = slint::spawn_local(Compat::new(async move {
+            let deleted = library::playlists::delete_playlists(&this.state.db, ids).await;
+            this.finish(open_was_deleted);
+            let names = match deleted {
+                Ok(names) => names,
+                Err(e) => {
+                    log::warn!("playlists::delete_for_good: {}", describe(&e));
+                    return;
+                }
+            };
+            let Some(name) = names.first() else { return };
+            log::info!("playlists::delete_for_good: {} playlist(s)", names.len());
+            let name = SharedString::from(name.as_str());
+            this.undo.notify_over_cap(playlists_deleted(names.len(), name));
+        }));
+        if let Err(e) = spawned {
+            log::warn!("playlists::delete_for_good spawn_local: {}", describe(&e));
+        }
+    }
+
+    /// Runs after every delete, a failed one included: the detail is closed by then, and the
+    /// refetch keeps the grid honest about what survived.
+    fn finish(&self, open_was_deleted: bool) {
+        if open_was_deleted {
+            // So a restart doesn't reopen it.
+            let s = self.state.clone();
+            self.state.runtime.spawn_blocking(move || {
+                if let Err(e) =
+                    library::settings::set_last_detail_id(&s.paths, view_id::PLAYLIST_DETAIL, None)
+                {
+                    log::warn!("playlists::delete clear last_detail_id: {}", describe(&e));
+                }
+            });
+        }
+        // A deleted id can still be sitting in the card selection, where it would keep being
+        // counted by the card menu and asked for by the next batch action.
+        if let Some(ui) = self.weak.upgrade() {
+            ui.global::<CardSelection>().invoke_clear();
+        }
+        playlists_ui_mod::refresh_after_write(&self.state, &self.playlists_ui, &self.weak);
+    }
+}
+
+/// Closes the open detail when its playlist is among `ids`, before the write, so no frame shows a
+/// deleted playlist. Reports whether it was.
 fn close_detail_if_among(weak: &Weak<AppWindow>, playlists_ui: &PlaylistsUi, ids: &[i64]) -> bool {
     if !ids.contains(&playlists_ui.detail_playlist_id()) {
         return false;

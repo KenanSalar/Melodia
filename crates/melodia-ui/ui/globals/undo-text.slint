@@ -22,6 +22,15 @@ export global UndoText {
         return @tr("{n} track removed from {}" | "{n} tracks removed from {}" % count, playlist);
     }
 
+    pure callback playlists-deleted(int /*count*/, string /*playlist*/) -> string;
+    playlists-deleted(count, playlist) => {
+        if (count == 1) {
+            // Translators: {} is the playlist's name.
+            return @tr("{} deleted", playlist);
+        }
+        return @tr("{n} playlist deleted" | "{n} playlists deleted" % count);
+    }
+
     pure callback too-many-to-undo() -> string;
     too-many-to-undo() => {
         return @tr("Too many to undo");

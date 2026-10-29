@@ -133,9 +133,9 @@ export global Dialog {
                 root.input-text-2,
             );
         } else if (root.kind == DialogKind.delete-playlist) {
-            Playlists.delete-playlist(root.target-id);
+            Playlists.delete-playlists-confirmed([root.target-id]);
         } else if (root.kind == DialogKind.delete-playlists) {
-            Playlists.delete-playlists(root.pending-card-ids);
+            Playlists.delete-playlists-confirmed(root.pending-card-ids);
         } else if (root.kind == DialogKind.edit-playlist-artwork) {
             if (root.mosaic-selection.length == 0) {
                 if (root.mosaic-touched) {
@@ -258,10 +258,12 @@ export global Dialog {
         root.open = true;
     }
 
+    // Rust raises both delete confirmations, and only where the playlists hold too many tracks to
+    // undo: a delete under that is undone instead of confirmed.
     public function open-delete-playlist(id: int) {
         root.claim-request();
         root.title = @tr("Delete playlist?");
-        root.message = @tr("The playlist and its track order will be removed. The tracks themselves stay in your library.");
+        root.message = @tr("The playlist and its track order will be removed, and this can't be undone. The tracks themselves stay in your library.");
         root.confirm-label = @tr("Delete");
         root.cancel-label = @tr("Cancel");
         root.destructive = true;
@@ -274,8 +276,8 @@ export global Dialog {
     // playlist's track order.
     public function open-delete-playlists(ids: [int]) {
         root.claim-request();
-        root.title = @tr("Delete {} playlists?", ids.length);
-        root.message = @tr("The playlists and their track order will be removed. The tracks themselves stay in your library.");
+        root.title = @tr("Delete {n} playlist?" | "Delete {n} playlists?" % ids.length);
+        root.message = @tr("The playlists and their track order will be removed, and this can't be undone. The tracks themselves stay in your library.");
         root.confirm-label = @tr("Delete");
         root.cancel-label = @tr("Cancel");
         root.destructive = true;

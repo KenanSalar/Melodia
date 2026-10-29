@@ -1621,20 +1621,23 @@ msgid "Delete playlist?"
 msgstr "Видалити плейлист?"
 
 #: ui/globals/dialog.slint
-msgid "The playlist and its track order will be removed. The tracks themselves stay in your library."
-msgstr "Плейлист і порядок треків у ньому буде видалено. Самі треки залишаться в медіатеці."
+msgid "The playlist and its track order will be removed, and this can't be undone. The tracks themselves stay in your library."
+msgstr "Плейлист і порядок треків у ньому буде видалено, і це не можна скасувати. Самі треки залишаться в медіатеці."
 
 #: ui/globals/dialog.slint
 msgid "Delete"
 msgstr "Видалити"
 
 #: ui/globals/dialog.slint
-msgid "Delete {} playlists?"
-msgstr "Видалити плейлисти ({})?"
+msgid "Delete {n} playlist?"
+msgid_plural "Delete {n} playlists?"
+msgstr[0] "Видалити {n} плейлист?"
+msgstr[1] "Видалити {n} плейлисти?"
+msgstr[2] "Видалити {n} плейлистів?"
 
 #: ui/globals/dialog.slint
-msgid "The playlists and their track order will be removed. The tracks themselves stay in your library."
-msgstr "Плейлисти й порядок треків у них буде видалено. Самі треки залишаться в медіатеці."
+msgid "The playlists and their track order will be removed, and this can't be undone. The tracks themselves stay in your library."
+msgstr "Плейлисти й порядок треків у них буде видалено, і це не можна скасувати. Самі треки залишаться в медіатеці."
 
 #: ui/globals/dialog.slint
 msgid "Remove from Recently Played?"
@@ -1818,6 +1821,18 @@ msgid_plural "{n} tracks removed from {}"
 msgstr[0] "Вилучено {n} трек з плейлиста «{}»"
 msgstr[1] "Вилучено {n} треки з плейлиста «{}»"
 msgstr[2] "Вилучено {n} треків з плейлиста «{}»"
+
+#. Translators: {} is the playlist's name.
+#: ui/globals/undo-text.slint
+msgid "{} deleted"
+msgstr "Плейлист «{}» видалено"
+
+#: ui/globals/undo-text.slint
+msgid "{n} playlist deleted"
+msgid_plural "{n} playlists deleted"
+msgstr[0] "Видалено {n} плейлист"
+msgstr[1] "Видалено {n} плейлисти"
+msgstr[2] "Видалено {n} плейлистів"
 
 #: ui/globals/undo-text.slint
 msgid "Too many to undo"
