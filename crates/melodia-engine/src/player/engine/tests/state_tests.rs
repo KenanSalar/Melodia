@@ -2434,3 +2434,48 @@ fn a_retag_of_a_track_that_has_played_a_while_reaches_now_playing() {
         Some("Retagged".to_owned())
     );
 }
+
+// --- The Speed flyout's copy of the band ---
+
+use melodia_testkit::{array_body, binding_value, block_after, strip_line_comments};
+
+const FLYOUT_PRESETS: &str =
+    include_str!("../../../../../melodia-ui/ui/components/now-playing/flyout-presets.slint");
+
+/// `SpeedPresets`' body, comments stripped so a note naming a bound can't answer for it.
+fn speed_presets() -> String {
+    block_after(&strip_line_comments(FLYOUT_PRESETS), "export global SpeedPresets").to_owned()
+}
+
+/// `MIN_SPEED` and `MAX_SPEED` in the whole percents the flyout spells them in.
+fn engine_band() -> (String, String) {
+    let whole_percent = |speed: f64| format!("{:.0}", speed * 100.0);
+    (whole_percent(MIN_SPEED), whole_percent(MAX_SPEED))
+}
+
+/// The stepper clamps and dims at its own copy of the band. Moved here alone, it shows a speed the
+/// engine clamped away, or stops short of one it plays.
+#[test]
+fn the_speed_stepper_stops_where_the_engine_clamps() {
+    let presets = speed_presets();
+
+    let stepper = (
+        binding_value(&presets, "out property <int> min-percent:").trim().to_owned(),
+        binding_value(&presets, "out property <int> max-percent:").trim().to_owned(),
+    );
+
+    assert_eq!(stepper, engine_band());
+}
+
+/// A preset past the band plays the clamped speed under a row that never lights.
+#[test]
+fn the_speed_presets_run_from_the_engines_floor_to_its_ceiling() {
+    let presets = speed_presets();
+    let (floor, ceiling) = engine_band();
+
+    let list = array_body(&presets, "out property <[int]> list: [").unwrap_or_default();
+    let mut entries = list.split(',').map(|entry| entry.trim().to_owned());
+    let ends = (entries.next(), entries.next_back());
+
+    assert_eq!(ends, (Some(floor), Some(ceiling)));
+}
