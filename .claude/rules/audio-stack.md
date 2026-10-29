@@ -74,6 +74,9 @@ a station → StreamDecoder → ring → PrebufferSource ─┴→ EqSource:
   window's record into `preload_gapless`, never `PlayerAction::PreloadGapless`, which only clears.
 - **`equalizer::PRESETS` order is load-bearing**: `EqPresetPicker` mirrors it in inline `@tr`
   names plus a trailing "Custom", and the persisted `CUSTOM_PRESET` is absent from `PRESETS`.
+- **`MIN_SPEED` and `MAX_SPEED` are spelled again in whole percents** by `SpeedPresets`
+  (`flyout-presets.slint`), whose stepper clamps and dims at them and whose preset list ends on
+  them.
 - **Nothing in the chain ends, starves or re-polls mid-frame**, half a frame flipping that deck's
   channel parity for everything after it: `EqSource::next` and `PrebufferSource` both decide at
   `frame_phase == 0`.

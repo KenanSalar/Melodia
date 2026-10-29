@@ -191,7 +191,7 @@ impl VisualizerShared {
     /// `PlaybackEngine::set_speed` is the single writer; don't add calls beside it.
     #[expect(
         clippy::cast_possible_truncation,
-        reason = "speed is bounded to 0.25..=2.0, where f32 has far more precision than the UI's 8 presets can express"
+        reason = "speed is bounded to 0.25..=2.0, where f32 keeps far more precision than the analysis rate needs"
     )]
     pub fn set_speed(&self, speed: f64) {
         self.speed.store((speed as f32).to_bits(), Ordering::Relaxed);
@@ -210,7 +210,7 @@ impl VisualizerShared {
         clippy::cast_possible_truncation,
         clippy::cast_sign_loss,
         clippy::cast_precision_loss,
-        reason = "audio rates are well below 2^24 Hz and speed is bounded to 0.25..=2.0, so the product is exact in f32 and far inside u32"
+        reason = "audio rates are well below 2^24 Hz, so the rate converts to f32 exactly, and speed is bounded to 0.25..=2.0, so the rounded product is positive and far inside u32"
     )]
     #[must_use]
     pub fn analysis_rate(&self) -> u32 {

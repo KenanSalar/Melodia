@@ -33,10 +33,10 @@ component StepperButton inherits Rectangle {
     touch := TouchArea {
         mouse-cursor: pointer;
         pointer-event(ev) => {
-            if (ev.kind == PointerEventKind.down) {
+            if (ev.kind == PointerEventKind.down && ev.button == PointerEventButton.left) {
                 root.pressed-changed(true);
             }
-            if (ev.kind == PointerEventKind.up
+            if ((ev.kind == PointerEventKind.up && ev.button == PointerEventButton.left)
                 || ev.kind == PointerEventKind.cancel) {
                 root.pressed-changed(false);
             }
@@ -56,10 +56,10 @@ export component FlyoutStepper inherits Rectangle {
     callback released();
 
     property <int> repeat-dir: 0;   // -1 / 0 / +1
-    property <int> hold-ticks: 0;
+    property <int> held-ticks: 0;
 
     function press(dir: int) {
-        root.hold-ticks = 0;
+        root.held-ticks = 0;
         root.stepped(dir, 0);
         root.repeat-dir = dir;   // starts the repeat timer
     }
@@ -74,11 +74,11 @@ export component FlyoutStepper inherits Rectangle {
         interval: 90ms;
         running: root.repeat-dir != 0;
         triggered => {
-            root.hold-ticks += 1;
+            root.held-ticks += 1;
             // The press already applied one step, so the repeat waits: a tap must not read as a
             // hold.
-            if (root.hold-ticks >= 5) {
-                root.stepped(root.repeat-dir, root.hold-ticks);
+            if (root.held-ticks >= 5) {
+                root.stepped(root.repeat-dir, root.held-ticks);
             }
         }
     }

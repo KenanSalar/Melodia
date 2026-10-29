@@ -10,11 +10,10 @@ export struct SleepPreset {
 // Speeds in whole percents of normal.
 export global SpeedPresets {
     out property <[int]> list: [25, 50, 75, 100, 125, 150, 175, 200];
-    // Mirror `MIN_SPEED` and `MAX_SPEED` in the engine's `state/mod.rs`. Capped at 2×: the deck
-    // resamples naively, so pitch shifts with it.
+    out property <int> step-percent: 5;
+    // Mirror `MIN_SPEED` and `MAX_SPEED` in the engine's `state/mod.rs`.
     out property <int> min-percent: 25;
     out property <int> max-percent: 200;
-    out property <int> step-percent: 5;
 
     public pure function percent-of(speed: float) -> int {
         round(speed * 100)
