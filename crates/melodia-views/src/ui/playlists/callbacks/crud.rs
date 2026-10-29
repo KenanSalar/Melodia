@@ -8,7 +8,7 @@ use std::rc::Rc;
 use std::sync::Arc;
 
 use async_compat::Compat;
-use slint::{ComponentHandle, Model, ModelRc, SharedString, Weak};
+use slint::{ComponentHandle, Model, ModelRc, SharedString, VecModel, Weak};
 
 use super::{optional_text, refresh_after_edit};
 use crate::ui::callbacks::DialogClaim;
@@ -149,7 +149,7 @@ fn wire_delete(cx: ViewCtx<'_>, playlists_ui: &Arc<PlaylistsUi>) {
     let playlists = cx.app.global::<Playlists>();
     {
         let deleter = deleter.clone();
-        playlists.on_delete_playlists(move |ids| deleter.request(ids));
+        playlists.on_delete_playlists(move |ids| deleter.request(ids.iter().collect()));
     }
     playlists.on_delete_playlists_confirmed(move |ids| {
         deleter.for_good(ids.iter().map(i64::from).collect());
@@ -168,11 +168,11 @@ struct Deleter {
 impl Deleter {
     /// Deletes at once and offers the undo, or asks first where the playlists hold more tracks
     /// than an undo may.
-    fn request(&self, ids: ModelRc<i32>) {
-        let id_vec: Vec<i64> = ids.iter().map(i64::from).collect();
-        if id_vec.is_empty() {
+    fn request(&self, ids: Vec<i32>) {
+        if ids.is_empty() {
             return;
         }
+        let id_vec: Vec<i64> = ids.iter().copied().map(i64::from).collect();
         let Some(claim) = DialogClaim::take_from(&self.weak) else { return };
         let this = self.clone();
         let spawned = slint::spawn_local(Compat::new(async move {
@@ -205,16 +205,18 @@ impl Deleter {
     }
 
     /// Raises the confirmation, unless another dialog claimed the global during the count. Its
-    /// accept arrives at [`Self::for_good`].
-    fn confirm_first(&self, claim: DialogClaim, ids: ModelRc<i32>) {
+    /// accept arrives at [`Self::for_good`]. The dialog gets a model of its own: the menu's ids can
+    /// be the card selection's model, which every pick and clear rewrites in place
+    /// (`card_selection::publish`).
+    fn confirm_first(&self, claim: DialogClaim, ids: Vec<i32>) {
         let Some(ui) = self.weak.upgrade() else { return };
         if !claim.holds(&ui) {
             return;
         }
         let dialog = ui.global::<Dialog>();
-        match (ids.row_count(), ids.row_data(0)) {
-            (1, Some(id)) => dialog.invoke_open_delete_playlist(id),
-            _ => dialog.invoke_open_delete_playlists(ids),
+        match ids.as_slice() {
+            &[id] => dialog.invoke_open_delete_playlist(id),
+            _ => dialog.invoke_open_delete_playlists(ModelRc::new(VecModel::from(ids))),
         }
     }
 

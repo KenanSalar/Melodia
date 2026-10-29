@@ -85,7 +85,7 @@ async fn snapshots_tx(
         }
         playlists.extend(query.fetch_all(&mut **tx).await?);
 
-        // A playlist's ids all sit in one chunk, so its items arrive in order.
+        // Chunked by playlist, so each one's items come from this one ordered query.
         let sql = format!(
             "SELECT playlist_id, track_id, added_at FROM playlist_items
              WHERE playlist_id IN ({placeholders}) ORDER BY playlist_id, position, id"

@@ -836,7 +836,8 @@ removing stations and Clear queue ask first again (decision 13).
 - **Slint pins:** the card's `Timer` gates on its hover and `Theme.window-focused`, the row menu's
   remove entry calls the shared callback rather than `toggle-row-favorite`, and the playlist
   card's trash and the station card's remove hide on `CardCell.multi-selection`.
-- **Sweep:** a held basename survives `sweep_stores`.
+- **Sweep:** a held basename survives `sweep_stores`, and so does one whose hold drops while the
+  column read is in flight.
 - **Settings:**
   - `UndoFlags` defaulting from an older `settings.json`, the duration clamped at both ends, and an
     unknown kind key ignored;

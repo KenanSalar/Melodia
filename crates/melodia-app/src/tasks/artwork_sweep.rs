@@ -130,9 +130,14 @@ pub(crate) async fn run_radio_logos(db: &DbPool, paths: &Paths) -> AppResult<()>
 /// content-addressed, so two held rows can name one file.
 static HELD: Mutex<BTreeMap<String, usize>> = Mutex::new(BTreeMap::new());
 
+fn held_basenames() -> Vec<String> {
+    HELD.lock().keys().cloned().collect()
+}
+
 /// Keeps the files a deleted row named out of every sweep, for as long as an undo could write the
-/// row back. **Take it before the delete commits**: a sweep reads the columns and then the holds,
-/// so one of the two always names the file.
+/// row back. **Take it before the delete commits, and drop it only after the restore does**: a
+/// sweep reads the holds on both sides of the columns, so a file is named by the columns or by a
+/// hold whichever way the two race.
 pub(crate) struct ArtworkHold(Vec<String>);
 
 impl ArtworkHold {
@@ -173,6 +178,8 @@ impl Drop for ArtworkHold {
 /// writing meanwhile: a row committed in between is visible to the query, where the reverse would
 /// unlink a live cover. **One reference set for every directory**, the union of all six columns as
 /// basenames and every [`ArtworkHold`], so a file is held by whichever names it wherever it sits.
+/// The holds are read before the columns as well as after: an undo can commit its rows after the
+/// query's snapshot and drop its hold before the second read.
 async fn sweep_stores(
     db: &DbPool,
     stores: Vec<(&'static str, PathBuf)>,
@@ -189,8 +196,10 @@ async fn sweep_stores(
     .await
     .map_err(AppError::io_source)?;
 
+    let held_before = held_basenames();
     let mut referenced = queries::artwork::referenced_filenames(db).await?;
-    referenced.extend(HELD.lock().keys().cloned());
+    referenced.extend(held_before);
+    referenced.extend(held_basenames());
 
     let reports = tokio::task::spawn_blocking(move || {
         listed
