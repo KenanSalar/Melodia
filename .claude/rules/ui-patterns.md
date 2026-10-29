@@ -262,8 +262,9 @@ Paths are under `crates/melodia-ui/ui/components/` unless stated.
 - **`ShortcutScope` is the only `FocusScope`**; put new keys there. **A `changed` mirror on each
   view-mounting branch selector regrabs focus**, Slint not handing it back when the focused item is
   destroyed; one unmounting a composite view also owes `CompositeScroll.reset()`. The queue's
-  mirror grabs on its rising edge only. Non-Esc keys gate on `!Dialog.open`, Q on
-  `!MiniPlayer.active`, Ctrl+B on `!Nav.sidebar-yields`.
+  mirror grabs on its rising edge only. Keys other than Esc and Ctrl+Z gate on `!Dialog.open`, Q
+  on `!MiniPlayer.active`, Ctrl+B on `!Nav.sidebar-yields`. Ctrl+Z sits above that gate and acts
+  only while `Notifications.undo-row >= 0`, as the notice's Undo button works over a dialog.
 - **Whether the docked queue holds the keys is decided per press in the winit filter**
   (`claim_queue_keys`, off a hover sentinel's `Queue.pointer-in`). The sentinel takes the wheel its
   children leave, a row's menu hands the keys back as it closes, and the overlay always holds them.
