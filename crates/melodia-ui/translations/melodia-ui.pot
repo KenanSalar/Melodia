@@ -1800,6 +1800,25 @@ msgstr ""
 msgid "Recent searches cleared"
 msgstr ""
 
+#. Translators: {} is the playlist's name.
+#: ui/globals/undo-text.slint
+msgid "{n} track removed from {}"
+msgid_plural "{n} tracks removed from {}"
+msgstr[0] ""
+msgstr[1] ""
+
+#: ui/globals/undo-text.slint
+msgid "Too many to undo"
+msgstr ""
+
+#: ui/globals/undo-text.slint
+msgid "Couldn't undo"
+msgstr ""
+
+#: ui/globals/undo-text.slint ui/settings.slint
+msgid "See the log for details."
+msgstr ""
+
 #. Translators: the action a click takes, expanding the sidebar
 #: ui/layout/sidebar.slint
 msgid "Expand"
@@ -1896,10 +1915,6 @@ msgstr ""
 
 #: ui/settings.slint
 msgid "Couldn't save the diagnostics report"
-msgstr ""
-
-#: ui/settings.slint
-msgid "See the log for details."
 msgstr ""
 
 #: ui/settings.slint

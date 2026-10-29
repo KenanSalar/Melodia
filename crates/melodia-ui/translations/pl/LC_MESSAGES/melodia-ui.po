@@ -1811,6 +1811,26 @@ msgstr "Zresetowano korektor"
 msgid "Recent searches cleared"
 msgstr "Wyczyszczono ostatnie wyszukiwania"
 
+#. Translators: {} is the playlist's name.
+#: ui/globals/undo-text.slint
+msgid "{n} track removed from {}"
+msgid_plural "{n} tracks removed from {}"
+msgstr[0] "Usunięto {n} utwór z playlisty „{}”"
+msgstr[1] "Usunięto {n} utwory z playlisty „{}”"
+msgstr[2] "Usunięto {n} utworów z playlisty „{}”"
+
+#: ui/globals/undo-text.slint
+msgid "Too many to undo"
+msgstr "Zbyt wiele, by cofnąć"
+
+#: ui/globals/undo-text.slint
+msgid "Couldn't undo"
+msgstr "Nie udało się cofnąć"
+
+#: ui/globals/undo-text.slint ui/settings.slint
+msgid "See the log for details."
+msgstr "Szczegóły znajdziesz w dzienniku."
+
 #. Translators: the action a click takes, expanding the sidebar
 #: ui/layout/sidebar.slint
 msgid "Expand"
@@ -1908,10 +1928,6 @@ msgstr "Zapisano w {}"
 #: ui/settings.slint
 msgid "Couldn't save the diagnostics report"
 msgstr "Nie udało się zapisać raportu diagnostycznego"
-
-#: ui/settings.slint
-msgid "See the log for details."
-msgstr "Szczegóły znajdziesz w dzienniku."
 
 #: ui/settings.slint
 msgid "Melodia crashed last time"

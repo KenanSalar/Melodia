@@ -4,8 +4,9 @@ use std::path::{Path, PathBuf};
 use super::import::import_and_summarize;
 use crate::state::AppState;
 use melodia_artwork::media::image::artwork::CoverCache;
-use melodia_core::entities::playlist;
+use melodia_core::entities::playlist::{self, PlaylistItemsCut};
 use melodia_core::entities::track_list::TrackListScope;
+use melodia_core::entities::undo::UndoCapture;
 use melodia_core::error::AppError;
 use melodia_store::database::{DbPool, queries};
 
@@ -75,8 +76,16 @@ pub async fn remove_tracks_from_playlist_batch(
     db: &DbPool,
     playlist_id: i64,
     track_ids: Vec<i64>,
-) -> Result<(), AppError> {
+) -> Result<UndoCapture<PlaylistItemsCut>, AppError> {
     queries::playlist::remove_tracks_from_playlist_batch(db, playlist_id, &track_ids).await
+}
+
+/// Undoes a run of removals from one playlist, `cuts` in the order they were made.
+pub async fn restore_playlist_items(
+    db: &DbPool,
+    cuts: Vec<PlaylistItemsCut>,
+) -> Result<(), AppError> {
+    queries::playlist_restore::restore_playlist_items(db, &cuts).await
 }
 
 pub async fn move_playlist_tracks(

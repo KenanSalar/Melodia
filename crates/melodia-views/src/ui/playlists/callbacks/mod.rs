@@ -17,15 +17,19 @@ use slint::Weak;
 
 use crate::ui::playlists::{self as playlists_ui_mod, PlaylistsUi};
 use crate::ui::shell::notifications::NotificationsUi;
+use crate::ui::view_ctx::ViewCtx;
 use melodia_app::state::AppState;
 use melodia_core::error::describe;
 use melodia_ui::AppWindow;
 
+pub(crate) use detail::PlaylistCutUndo;
+
 /// Wires every `Playlists.*` / `PlaylistDetail.*` callback but [`wire_files`]', on
 /// `albums::callbacks::wire`'s terms.
-pub(super) fn wire(ui: &AppWindow, state: &AppState, playlists_ui: &Arc<PlaylistsUi>) {
+pub(super) fn wire(cx: ViewCtx<'_>, playlists_ui: &Arc<PlaylistsUi>) {
+    let ViewCtx { app: ui, state, .. } = cx;
     grid::wire(ui, state, playlists_ui);
-    detail::wire(ui, state, playlists_ui);
+    detail::wire(cx, playlists_ui);
     row_cover::wire(ui, playlists_ui);
     crud::wire(ui, state, playlists_ui);
     artwork::wire(ui, state, playlists_ui);

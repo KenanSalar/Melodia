@@ -1789,6 +1789,24 @@ msgstr "Equalizer diatur ulang"
 msgid "Recent searches cleared"
 msgstr "Pencarian terbaru dihapus"
 
+#. Translators: {} is the playlist's name.
+#: ui/globals/undo-text.slint
+msgid "{n} track removed from {}"
+msgid_plural "{n} tracks removed from {}"
+msgstr[0] "{n} lagu dihapus dari {}"
+
+#: ui/globals/undo-text.slint
+msgid "Too many to undo"
+msgstr "Terlalu banyak untuk diurungkan"
+
+#: ui/globals/undo-text.slint
+msgid "Couldn't undo"
+msgstr "Tidak dapat mengurungkan"
+
+#: ui/globals/undo-text.slint ui/settings.slint
+msgid "See the log for details."
+msgstr "Lihat log untuk detailnya."
+
 #. Translators: the action a click takes, expanding the sidebar
 #: ui/layout/sidebar.slint
 msgid "Expand"
@@ -1886,10 +1904,6 @@ msgstr "Disimpan ke {}"
 #: ui/settings.slint
 msgid "Couldn't save the diagnostics report"
 msgstr "Tidak dapat menyimpan laporan diagnostik"
-
-#: ui/settings.slint
-msgid "See the log for details."
-msgstr "Lihat log untuk detailnya."
 
 #: ui/settings.slint
 msgid "Melodia crashed last time"

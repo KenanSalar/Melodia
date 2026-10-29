@@ -3,7 +3,8 @@
 
 use std::sync::Arc;
 
-use slint::ComponentHandle;
+use async_compat::Compat;
+use slint::{ComponentHandle, SharedString, Weak};
 
 use super::artwork::open_edit_artwork;
 use crate::ui::callbacks::{DialogClaim, collect_track_ids};
@@ -11,18 +12,65 @@ use crate::ui::callbacks::{grid_tab, track_detail};
 use crate::ui::drag;
 use crate::ui::paged_rows::track_rows;
 use crate::ui::playlists::{self as playlists_ui_mod, PlaylistsUi};
+use crate::ui::undo::{Removal, tracks_removed_from};
+use crate::ui::view_ctx::ViewCtx;
 use melodia_app::library;
 use melodia_app::state::AppState;
-use melodia_core::error::describe;
+use melodia_core::entities::playlist::PlaylistItemsCut;
+use melodia_core::entities::undo::UndoCapture;
+use melodia_core::error::{AppError, describe};
 use melodia_core::utils::block_move;
 use melodia_ui::{AppWindow, PlaylistDetail};
 
-pub(super) fn wire(ui: &AppWindow, state: &AppState, playlists_ui: &Arc<PlaylistsUi>) {
+pub(super) fn wire(cx: ViewCtx<'_>, playlists_ui: &Arc<PlaylistsUi>) {
+    let ViewCtx { app: ui, state, .. } = cx;
     track_detail::wire(state, playlists_ui);
     wire_close(ui, state, playlists_ui);
     wire_reorder(ui, state, playlists_ui);
     wire_edit_artwork(ui, state, playlists_ui);
-    wire_remove_track(ui, state, playlists_ui);
+    wire_remove_track(cx, playlists_ui);
+}
+
+/// What a run of removals from one playlist took, put back newest first.
+pub struct PlaylistCutUndo {
+    playlist_id: i64,
+    cuts: Vec<PlaylistItemsCut>,
+    /// As the detail header showed it at the latest removal.
+    name: SharedString,
+    playlists_ui: Arc<PlaylistsUi>,
+}
+
+impl PlaylistCutUndo {
+    pub fn same_playlist(&self, other: &Self) -> bool {
+        self.playlist_id == other.playlist_id
+    }
+
+    /// A later removal from the same playlist, whose rows are indexed as this one left it.
+    pub fn absorb(&mut self, newer: Self) {
+        self.cuts.extend(newer.cuts);
+        self.name = newer.name;
+    }
+
+    pub fn count(&self) -> usize {
+        self.cuts.iter().map(|cut| cut.rows.len()).sum()
+    }
+
+    pub fn name(&self) -> SharedString {
+        self.name.clone()
+    }
+
+    /// Writes the rows back, then refreshes as an edit does: the grid, and the detail only while
+    /// it still shows this playlist.
+    pub async fn restore(self, state: &AppState, weak: &Weak<AppWindow>) -> Result<(), AppError> {
+        let Self { playlist_id, cuts, playlists_ui, .. } = self;
+        library::playlists::restore_playlist_items(&state.db, cuts).await?;
+        let (s, weak) = (state.clone(), weak.clone());
+        state.runtime.spawn(async move {
+            super::refresh_after_edit(&s, &playlists_ui, weak, &[playlist_id], "playlists::undo")
+                .await;
+        });
+        Ok(())
+    }
 }
 
 /// The header's back button. No `mark_drill_back` where its siblings have one: this detail
@@ -135,39 +183,69 @@ fn wire_edit_artwork(ui: &AppWindow, state: &AppState, playlists_ui: &Arc<Playli
     });
 }
 
-/// The row menu's removal, one row or a selection, as one batched write. Once it lands the rows
-/// and their picks leave on that tick, filtered or not, and `refresh_detail` reloads the rest.
-fn wire_remove_track(ui: &AppWindow, state: &AppState, playlists_ui: &Arc<PlaylistsUi>) {
-    let s = state.clone();
+/// The row menu's removal, one row or a selection, as one batched write that offers its undo. Once
+/// it lands the rows and their picks leave on that tick, filtered or not, and `refresh_detail`
+/// reloads the rest. On the UI thread, where the undo slot lives.
+fn wire_remove_track(cx: ViewCtx<'_>, playlists_ui: &Arc<PlaylistsUi>) {
+    let s = cx.state.clone();
     let pu = playlists_ui.clone();
-    let weak = ui.as_weak();
-    ui.global::<PlaylistDetail>().on_remove_track(move |track_ids| {
+    let undo = cx.undo.clone();
+    let weak = cx.app.as_weak();
+    cx.app.global::<PlaylistDetail>().on_remove_track(move |track_ids| {
         let id_vec = collect_track_ids(&track_ids);
         let playlist_id = pu.detail_playlist_id();
         if playlist_id < 0 || id_vec.is_empty() {
             return;
         }
-        let s = s.clone();
-        let pu = pu.clone();
-        let weak = weak.clone();
-        s.runtime.clone().spawn(async move {
-            if let Err(e) = library::playlists::remove_tracks_from_playlist_batch(
+        let Some(ui) = weak.upgrade() else { return };
+        let name = ui.global::<PlaylistDetail>().get_playlist().name;
+        let (s, pu, undo, weak) = (s.clone(), pu.clone(), undo.clone(), weak.clone());
+        let spawned = slint::spawn_local(Compat::new(async move {
+            let removed = match library::playlists::remove_tracks_from_playlist_batch(
                 &s.db,
                 playlist_id,
                 id_vec.clone(),
             )
             .await
             {
-                log::warn!("playlists::remove_track: {}", describe(&e));
-                return;
-            }
+                Ok(removed) => removed,
+                Err(e) => {
+                    log::warn!("playlists::remove_track: {}", describe(&e));
+                    return;
+                }
+            };
             track_rows::remove_rows(&*pu, id_vec);
-            if let Err(e) =
-                playlists_ui_mod::refresh_detail(&s, &pu, weak.clone(), playlist_id).await
-            {
-                log::warn!("playlists::remove_track refresh: {}", describe(&e));
+            refresh_after_removal(&s, &pu, &weak, playlist_id);
+            match removed {
+                UndoCapture::Nothing => {}
+                UndoCapture::Held(cut) => {
+                    let cuts = vec![cut];
+                    let hold = PlaylistCutUndo { playlist_id, cuts, name, playlists_ui: pu };
+                    undo.offer(Removal::PlaylistTracks(hold));
+                }
+                UndoCapture::OverCap { rows } => {
+                    undo.notify_over_cap(tracks_removed_from(rows, name));
+                }
             }
-            playlists_ui_mod::refresh_after_write(&s, &pu, &weak);
-        });
+        }));
+        if let Err(e) = spawned {
+            log::warn!("playlists::remove_track spawn_local: {}", describe(&e));
+        }
+    });
+}
+
+/// On the runtime, where every other refresh of the detail runs.
+fn refresh_after_removal(
+    state: &AppState,
+    playlists_ui: &Arc<PlaylistsUi>,
+    weak: &Weak<AppWindow>,
+    playlist_id: i64,
+) {
+    let (s, pu, weak) = (state.clone(), playlists_ui.clone(), weak.clone());
+    state.runtime.spawn(async move {
+        if let Err(e) = playlists_ui_mod::refresh_detail(&s, &pu, weak.clone(), playlist_id).await {
+            log::warn!("playlists::remove_track refresh: {}", describe(&e));
+        }
+        playlists_ui_mod::refresh_after_write(&s, &pu, &weak);
     });
 }

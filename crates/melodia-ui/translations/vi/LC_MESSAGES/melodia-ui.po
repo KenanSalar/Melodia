@@ -1789,6 +1789,24 @@ msgstr "Đã đặt lại bộ chỉnh âm"
 msgid "Recent searches cleared"
 msgstr "Đã xóa các tìm kiếm gần đây"
 
+#. Translators: {} is the playlist's name.
+#: ui/globals/undo-text.slint
+msgid "{n} track removed from {}"
+msgid_plural "{n} tracks removed from {}"
+msgstr[0] "Đã xóa {n} bản nhạc khỏi {}"
+
+#: ui/globals/undo-text.slint
+msgid "Too many to undo"
+msgstr "Quá nhiều để hoàn tác"
+
+#: ui/globals/undo-text.slint
+msgid "Couldn't undo"
+msgstr "Không thể hoàn tác"
+
+#: ui/globals/undo-text.slint ui/settings.slint
+msgid "See the log for details."
+msgstr "Xem nhật ký để biết chi tiết."
+
 #. Translators: the action a click takes, expanding the sidebar
 #: ui/layout/sidebar.slint
 msgid "Expand"
@@ -1886,10 +1904,6 @@ msgstr "Đã lưu vào {}"
 #: ui/settings.slint
 msgid "Couldn't save the diagnostics report"
 msgstr "Không thể lưu báo cáo chẩn đoán"
-
-#: ui/settings.slint
-msgid "See the log for details."
-msgstr "Xem nhật ký để biết chi tiết."
 
 #: ui/settings.slint
 msgid "Melodia crashed last time"

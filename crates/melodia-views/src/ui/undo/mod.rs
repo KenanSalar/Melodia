@@ -10,17 +10,19 @@ mod removal;
 use std::cell::RefCell;
 use std::rc::Rc;
 
-use slint::ComponentHandle;
+use async_compat::Compat;
+use slint::{ComponentHandle, SharedString};
 
-use crate::ui::shell::notifications::{LocalizedPush, NotificationsUi};
+use crate::ui::shell::notifications::{LocalizedPush, NotificationsUi, RowText};
 use melodia_app::state::AppState;
-use melodia_ui::{AppWindow, NotificationKind, NotificationVariant, Notifications};
+use melodia_core::error::describe;
+use melodia_ui::{AppWindow, NotificationKind, NotificationVariant, Notifications, UndoText};
 
-pub use removal::Removal;
+pub use removal::{Removal, tracks_removed_from};
 
-/// Material's long duration, its value for a snackbar carrying an action. It has to outlast every
-/// other timed toast, the exclusive-output refusal's button included.
-pub const UNDO_NOTICE_MS: u32 = 10_000;
+/// How long the notice waits for a press. It runs only while nobody is reading it: hover and a
+/// window in the background both hold the clock.
+pub const UNDO_NOTICE_MS: u32 = 6_000;
 
 /// The state and the window are handed to each restore, so a hold carries only what it took.
 pub struct UndoWindow {
@@ -60,9 +62,7 @@ impl UndoWindow {
                 self.notifications.restart(row);
             }
             Landing::Fresh(removal) => {
-                if let Some(old) = self.release() {
-                    self.notifications.dismiss(old.row);
-                }
+                self.replace_held();
                 let push = LocalizedPush {
                     variant: NotificationVariant::Info,
                     kind: NotificationKind::Undo,
@@ -75,15 +75,54 @@ impl UndoWindow {
         }
     }
 
+    /// Raises the notice for a removal too large to hold: what went, that it can't be undone, and
+    /// no button. It still replaces the held one, so the card up is always the latest removal and
+    /// Ctrl+Z never reaches past it to an older one.
+    pub fn notify_over_cap(&self, title: impl Fn(&AppWindow) -> SharedString + 'static) {
+        let Some(ui) = self.ui.upgrade() else { return };
+        self.replace_held();
+        let push = LocalizedPush {
+            variant: NotificationVariant::Info,
+            kind: NotificationKind::None,
+            timeout_ms: UNDO_NOTICE_MS,
+        };
+        self.notifications.show_localized_timed(&ui, push, move |ui| {
+            RowText::plain(title(ui), ui.global::<UndoText>().invoke_too_many_to_undo())
+        });
+    }
+
     /// The card's button and Ctrl+Z both arrive here. Only the slot's own row acts, so a press
-    /// racing a replace does nothing.
+    /// racing a replace does nothing. The restore runs on this thread, where a failure can raise
+    /// its notice.
     fn undo(&self, row: i32) {
         if !self.holds(row) {
             return;
         }
         let Some(slot) = self.release() else { return };
         self.notifications.dismiss(slot.row);
-        slot.removal.restore(&self.state, &self.ui);
+
+        let (state, ui) = (self.state.clone(), self.ui.clone());
+        let notifications = self.notifications.clone();
+        let restoring = slint::spawn_local(Compat::new(async move {
+            let Err(e) = slot.removal.restore(&state, &ui).await else { return };
+            log::warn!("undo: {}", describe(&e));
+            if let Some(ui) = ui.upgrade() {
+                notifications.show_failure(&ui, |ui| {
+                    let text = ui.global::<UndoText>();
+                    RowText::plain(text.invoke_couldnt_undo(), text.invoke_couldnt_undo_message())
+                });
+            }
+        }));
+        if let Err(e) = restoring {
+            log::warn!("undo spawn_local: {}", describe(&e));
+        }
+    }
+
+    /// Takes the held notice down with its hold, for a removal that replaces it.
+    fn replace_held(&self) {
+        if let Some(old) = self.release() {
+            self.notifications.dismiss(old.row);
+        }
     }
 
     fn row_removed(&self, row: i32) {

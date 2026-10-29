@@ -1802,6 +1802,25 @@ msgstr "Ο ισοσταθμιστής επαναφέρθηκε"
 msgid "Recent searches cleared"
 msgstr "Οι πρόσφατες αναζητήσεις καθαρίστηκαν"
 
+#. Translators: {} is the playlist's name.
+#: ui/globals/undo-text.slint
+msgid "{n} track removed from {}"
+msgid_plural "{n} tracks removed from {}"
+msgstr[0] "{n} κομμάτι αφαιρέθηκε από τη λίστα «{}»"
+msgstr[1] "{n} κομμάτια αφαιρέθηκαν από τη λίστα «{}»"
+
+#: ui/globals/undo-text.slint
+msgid "Too many to undo"
+msgstr "Πάρα πολλά για αναίρεση"
+
+#: ui/globals/undo-text.slint
+msgid "Couldn't undo"
+msgstr "Η αναίρεση απέτυχε"
+
+#: ui/globals/undo-text.slint ui/settings.slint
+msgid "See the log for details."
+msgstr "Δείτε το αρχείο καταγραφής για λεπτομέρειες."
+
 #. Translators: the action a click takes, expanding the sidebar
 #: ui/layout/sidebar.slint
 msgid "Expand"
@@ -1899,10 +1918,6 @@ msgstr "Αποθηκεύτηκε στο {}"
 #: ui/settings.slint
 msgid "Couldn't save the diagnostics report"
 msgstr "Δεν ήταν δυνατή η αποθήκευση της αναφοράς διαγνωστικών"
-
-#: ui/settings.slint
-msgid "See the log for details."
-msgstr "Δείτε το αρχείο καταγραφής για λεπτομέρειες."
 
 #: ui/settings.slint
 msgid "Melodia crashed last time"

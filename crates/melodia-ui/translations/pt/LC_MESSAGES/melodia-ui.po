@@ -1800,6 +1800,25 @@ msgstr "Equalizador reposto"
 msgid "Recent searches cleared"
 msgstr "Pesquisas recentes limpas"
 
+#. Translators: {} is the playlist's name.
+#: ui/globals/undo-text.slint
+msgid "{n} track removed from {}"
+msgid_plural "{n} tracks removed from {}"
+msgstr[0] "{n} faixa removida de {}"
+msgstr[1] "{n} faixas removidas de {}"
+
+#: ui/globals/undo-text.slint
+msgid "Too many to undo"
+msgstr "Demasiados para anular"
+
+#: ui/globals/undo-text.slint
+msgid "Couldn't undo"
+msgstr "Não foi possível anular"
+
+#: ui/globals/undo-text.slint ui/settings.slint
+msgid "See the log for details."
+msgstr "Consulte o registo para mais detalhes."
+
 #. Translators: the action a click takes, expanding the sidebar
 #: ui/layout/sidebar.slint
 msgid "Expand"
@@ -1897,10 +1916,6 @@ msgstr "Guardado em {}"
 #: ui/settings.slint
 msgid "Couldn't save the diagnostics report"
 msgstr "Não foi possível guardar o relatório de diagnóstico"
-
-#: ui/settings.slint
-msgid "See the log for details."
-msgstr "Consulte o registo para mais detalhes."
 
 #: ui/settings.slint
 msgid "Melodia crashed last time"

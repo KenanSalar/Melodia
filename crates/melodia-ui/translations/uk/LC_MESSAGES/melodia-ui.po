@@ -1811,6 +1811,26 @@ msgstr "Еквалайзер скинуто"
 msgid "Recent searches cleared"
 msgstr "Нещодавні запити очищено"
 
+#. Translators: {} is the playlist's name.
+#: ui/globals/undo-text.slint
+msgid "{n} track removed from {}"
+msgid_plural "{n} tracks removed from {}"
+msgstr[0] "Вилучено {n} трек з плейлиста «{}»"
+msgstr[1] "Вилучено {n} треки з плейлиста «{}»"
+msgstr[2] "Вилучено {n} треків з плейлиста «{}»"
+
+#: ui/globals/undo-text.slint
+msgid "Too many to undo"
+msgstr "Забагато, щоб скасувати"
+
+#: ui/globals/undo-text.slint
+msgid "Couldn't undo"
+msgstr "Не вдалося скасувати"
+
+#: ui/globals/undo-text.slint ui/settings.slint
+msgid "See the log for details."
+msgstr "Подробиці в журналі."
+
 #. Translators: the action a click takes, expanding the sidebar
 #: ui/layout/sidebar.slint
 msgid "Expand"
@@ -1908,10 +1928,6 @@ msgstr "Збережено в {}"
 #: ui/settings.slint
 msgid "Couldn't save the diagnostics report"
 msgstr "Не вдалося зберегти діагностичний звіт"
-
-#: ui/settings.slint
-msgid "See the log for details."
-msgstr "Подробиці в журналі."
 
 #: ui/settings.slint
 msgid "Melodia crashed last time"

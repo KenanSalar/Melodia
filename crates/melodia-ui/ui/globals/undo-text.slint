@@ -15,4 +15,24 @@ export global UndoText {
     recent-searches-cleared() => {
         return @tr("Recent searches cleared");
     }
+
+    pure callback tracks-removed-from-playlist(int /*count*/, string /*playlist*/) -> string;
+    tracks-removed-from-playlist(count, playlist) => {
+        // Translators: {} is the playlist's name.
+        return @tr("{n} track removed from {}" | "{n} tracks removed from {}" % count, playlist);
+    }
+
+    pure callback too-many-to-undo() -> string;
+    too-many-to-undo() => {
+        return @tr("Too many to undo");
+    }
+
+    pure callback couldnt-undo() -> string;
+    couldnt-undo() => {
+        return @tr("Couldn't undo");
+    }
+    pure callback couldnt-undo-message() -> string;
+    couldnt-undo-message() => {
+        return @tr("See the log for details.");
+    }
 }

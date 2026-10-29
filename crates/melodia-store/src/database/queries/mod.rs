@@ -9,6 +9,7 @@ pub mod folder;
 pub mod genre;
 pub mod ingest;
 pub mod playlist;
+pub mod playlist_restore;
 pub mod radio;
 pub mod scan;
 pub mod search;

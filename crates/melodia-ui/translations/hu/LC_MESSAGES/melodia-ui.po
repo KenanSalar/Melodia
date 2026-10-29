@@ -1802,6 +1802,25 @@ msgstr "Hangszínszabályzó visszaállítva"
 msgid "Recent searches cleared"
 msgstr "Legutóbbi keresések törölve"
 
+#. Translators: {} is the playlist's name.
+#: ui/globals/undo-text.slint
+msgid "{n} track removed from {}"
+msgid_plural "{n} tracks removed from {}"
+msgstr[0] "{n} szám eltávolítva innen: {}"
+msgstr[1] "{n} szám eltávolítva innen: {}"
+
+#: ui/globals/undo-text.slint
+msgid "Too many to undo"
+msgstr "Túl sok a visszavonáshoz"
+
+#: ui/globals/undo-text.slint
+msgid "Couldn't undo"
+msgstr "Nem sikerült visszavonni"
+
+#: ui/globals/undo-text.slint ui/settings.slint
+msgid "See the log for details."
+msgstr "A részleteket a naplóban találod."
+
 #. Translators: the action a click takes, expanding the sidebar
 #: ui/layout/sidebar.slint
 msgid "Expand"
@@ -1899,10 +1918,6 @@ msgstr "Mentve ide: {}"
 #: ui/settings.slint
 msgid "Couldn't save the diagnostics report"
 msgstr "Nem sikerült menteni a diagnosztikai jelentést"
-
-#: ui/settings.slint
-msgid "See the log for details."
-msgstr "A részleteket a naplóban találod."
 
 #: ui/settings.slint
 msgid "Melodia crashed last time"
