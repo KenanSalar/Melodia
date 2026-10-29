@@ -1,25 +1,45 @@
 import { PopupColumn } from "../popup-column.slint";
 import { PopupSurface } from "../popup-surface.slint";
-import { FlyoutOption } from "flyout-option.slint";
+import { FlyoutDivider, FlyoutOption } from "flyout-option.slint";
 import { SpeedPresets } from "flyout-presets.slint";
+import { FlyoutStepper } from "flyout-stepper.slint";
 
-// The playback-rate presets, off the shared global. Like its two siblings it
+// The playback-rate presets over a stepper, off the shared global. Like its two siblings it
 // lives *inside* the overflow menu's one PopupWindow, left of the column; the
 // host places it and this renders the rows.
 export component SpeedFlyout inherits PopupSurface {
-    in property <float> current-speed;
+    in property <int> current-percent;
     // What the host widens this by while the presets scroll, so the bar takes no width from a row.
     out property <length> gutter: col.gutter;
-    callback pick(float);
+    callback pick(int);
+    // A step plays at once, so it can be judged by ear; the release is what persists.
+    callback step(int);
+    callback commit(int);
+
+    // Follows the player until the first step writes it, so a change from outside shows while idle.
+    property <int> pending-percent: root.current-percent;
 
     col := PopupColumn {
         width: 100%;
         height: 100%;
 
         for p in SpeedPresets.list: FlyoutOption {
-            label: p.label;
-            active: abs(root.current-speed - p.value) < 0.001;
-            clicked => { root.pick(p.value); }
+            label: SpeedPresets.label(p);
+            active: p == root.current-percent;
+            clicked => { root.pick(p); }
+        }
+
+        FlyoutDivider {}
+
+        FlyoutStepper {
+            text: SpeedPresets.label(root.pending-percent);
+            at-min: root.pending-percent <= SpeedPresets.min-percent;
+            at-max: root.pending-percent >= SpeedPresets.max-percent;
+            stepped(direction) => {
+                root.pending-percent = SpeedPresets.stepped(root.pending-percent, direction);
+                root.step(root.pending-percent);
+            }
+            released => { root.commit(root.pending-percent); }
         }
     }
 }

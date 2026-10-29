@@ -454,7 +454,7 @@ async fn a_commit_that_would_change_nothing_writes_nothing() -> Result<(), AppEr
     Ok(())
 }
 
-/// The slider and the media panels commit through this one door, and the player and the file
+/// The flyout and the media panels commit through this one door, and the player and the file
 /// clamp each on their own, so both bounds are where the two could part and the next launch
 /// restore a speed the session never played at.
 #[tokio::test]
@@ -478,7 +478,7 @@ async fn a_committed_speed_lands_on_the_player_and_in_settings_alike() -> Result
 }
 
 /// The write is awaited rather than left to the blocking pool, so a file that won't take it is
-/// reported through the caller's own log line, the slider's or the media panel's.
+/// reported through the caller's own log line, the flyout's or the media panel's.
 #[tokio::test]
 async fn a_speed_the_settings_file_wont_take_is_reported_to_the_caller() -> Result<(), AppError> {
     let fx = TestPlayback::empty().await?;

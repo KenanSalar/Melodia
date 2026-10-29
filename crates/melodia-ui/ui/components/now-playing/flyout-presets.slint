@@ -1,31 +1,34 @@
 // The now-playing flyouts' option lists and metrics. Hosts size a flyout off a list's length, so
 // adding an option can't clip a popup.
 
-// The label is an untranslated token `overflow-menu.slint`'s `current-speed-label()` maps back to.
-export struct SpeedPreset {
-    value: float,
-    label: string,
-}
-
 // `value` is minutes: 0 off, -1 end of track.
 export struct SleepPreset {
     value: int,
     label: string,
 }
 
+// Speeds in whole percents of normal.
 export global SpeedPresets {
-    // Capped at 2×: the deck resamples naively, so pitch shifts with it. Mirror any change in
-    // `current-speed-label()`.
-    out property <[SpeedPreset]> list: [
-        { value: 0.25, label: "0.25x" },
-        { value: 0.5,  label: "0.5x" },
-        { value: 0.75, label: "0.75x" },
-        { value: 1.0,  label: "1x" },
-        { value: 1.25, label: "1.25x" },
-        { value: 1.5,  label: "1.5x" },
-        { value: 1.75, label: "1.75x" },
-        { value: 2.0,  label: "2x" },
-    ];
+    out property <[int]> list: [25, 50, 75, 100, 125, 150, 175, 200];
+    // Mirror `MIN_SPEED` and `MAX_SPEED` in the engine's `state/mod.rs`. Capped at 2×: the deck
+    // resamples naively, so pitch shifts with it.
+    out property <int> min-percent: 25;
+    out property <int> max-percent: 200;
+    out property <int> step-percent: 5;
+
+    public pure function percent-of(speed: float) -> int {
+        round(speed * 100)
+    }
+    public pure function label(percent: int) -> string {
+        (percent / 100) + "x"
+    }
+    // Onto the step grid first, so a speed an MPRIS client set off it steps back onto it.
+    public pure function stepped(percent: int, direction: int) -> int {
+        clamp(direction > 0
+                ? (floor(percent / root.step-percent) + 1) * root.step-percent
+                : (ceil(percent / root.step-percent) - 1) * root.step-percent,
+            root.min-percent, root.max-percent)
+    }
 }
 
 export global SleepPresets {
@@ -51,8 +54,10 @@ export global VizStylePresets {
 }
 
 export global FlyoutMetrics {
-    // The sleep flyout's stepper and pill rows match it.
+    // The steppers and the sleep flyout's Start row match it.
     out property <length> option-row-h: 32px;
+    // The rule between a flyout's presets and its stepper.
+    out property <length> divider-h: 9px;
     // The outer surface, so the coarser rhythm.
     out property <length> menu-row-h: 36px;
     // Inner pad, border and a little slack, for a flyout or a menu column.

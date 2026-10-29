@@ -1,52 +1,9 @@
 import { Theme } from "../../theme.slint";
-import { MaterialIcon } from "../material-icon.slint";
 import { PopupColumn } from "../popup-column.slint";
 import { PopupSurface } from "../popup-surface.slint";
-import { FlyoutOption } from "flyout-option.slint";
-import { FlyoutMetrics, SleepPresets } from "flyout-presets.slint";
-
-// A stepper button. It reports press *and* release rather than a click, so the
-// host can accelerate on hold — and stays enabled at a bound so that release
-// always fires (the host clamps), only dimming to signal it.
-component StepperButton inherits Rectangle {
-    in property <string> icon;
-    in property <bool> at-bound: false;
-
-    // `down == true` on press, `false` on release / cancel.
-    callback pressed-changed(bool /*down*/);
-
-    // The bound's dimming, through the brushes rather than `opacity`, which would hold a texture for
-    // as long as the flyout sits at a bound.
-    private property <float> fade: root.at-bound ? 0.4 : 1.0;
-
-    width: 26px;
-    height: 26px;
-    border-radius: self.height / 2;
-    // The content views' darker page fill, lifting on hover.
-    background: (touch.has-hover && !root.at-bound ? Theme.surface0 : Theme.base)
-        .transparentize(1.0 - root.fade);
-    animate background { duration: Theme.dur-fast; easing: ease-in-out; enabled: !Theme.recoloring; }
-
-    MaterialIcon {
-        name: root.icon;
-        icon-size: Theme.font-size-md;
-        icon-color: Theme.text;
-        fade: root.fade;
-    }
-
-    touch := TouchArea {
-        mouse-cursor: pointer;
-        pointer-event(ev) => {
-            if (ev.kind == PointerEventKind.down) {
-                root.pressed-changed(true);
-            }
-            if (ev.kind == PointerEventKind.up
-                || ev.kind == PointerEventKind.cancel) {
-                root.pressed-changed(false);
-            }
-        }
-    }
-}
+import { FlyoutDivider, FlyoutOption } from "flyout-option.slint";
+import { SleepPresets } from "flyout-presets.slint";
+import { FlyoutStepper } from "flyout-stepper.slint";
 
 // Quick presets over a custom ±stepper. It lives *inside* the overflow menu's
 // one PopupWindow — the app nests no popups — left of the menu column and
@@ -70,37 +27,12 @@ export component SleepTimerFlyout inherits PopupSurface {
     // What the stepper is dialing; resets to the default on every remount.
     property <int> pending-seconds: 10 * 60;
 
-    // Hold-to-accelerate state.
-    property <int> repeat-dir: 0;   // -1 / 0 / +1
-    property <int> hold-ticks: 0;   // 90 ms ticks since the press began
-
-    // The step grows with hold time; `t` counts 90 ms ticks.
+    // The step grows with hold time; `t` counts 90 ms ticks, 0 being the tap's ±30 s.
     pure function step-for-ticks(t: int) -> int {
         t >= 67 ? 300 : t >= 34 ? 120 : t >= 17 ? 60 : 30
     }
     function adjust(delta: int) {
         root.pending-seconds = clamp(root.pending-seconds + delta, root.min-seconds, root.max-seconds);
-    }
-    function press(dir: int) {
-        root.hold-ticks = 0;
-        root.adjust(dir * 30);   // a single tap = ±30 s
-        root.repeat-dir = dir;   // starts the repeat timer
-    }
-    function release() {
-        root.repeat-dir = 0;
-    }
-
-    repeat-timer := Timer {
-        interval: 90ms;
-        running: root.repeat-dir != 0;
-        triggered => {
-            root.hold-ticks += 1;
-            // The press already applied one step, so the repeat waits — a tap
-            // must not read as a hold.
-            if (root.hold-ticks >= 5) {
-                root.adjust(root.repeat-dir * root.step-for-ticks(root.hold-ticks));
-            }
-        }
     }
 
     col := PopupColumn {
@@ -120,44 +52,14 @@ export component SleepTimerFlyout inherits PopupSurface {
             clicked => { root.pick(p.value); }
         }
 
-        Rectangle {
-            height: 9px;
-            Rectangle {
-                width: parent.width - 2 * Theme.pad-sm;
-                height: 1px;
-                background: Theme.surface2;
-            }
-        }
+        FlyoutDivider {}
 
-        // Tap steps by the base amount; hold accelerates.
-        HorizontalLayout {
-            height: FlyoutMetrics.option-row-h;
-            padding-left: Theme.pad-sm;
-            padding-right: Theme.pad-sm;
-            spacing: Theme.pad-sm;
-            alignment: stretch;
-            cross-axis-alignment: center;
-
-            StepperButton {
-                icon: "remove";
-                at-bound: root.pending-seconds <= root.min-seconds;
-                pressed-changed(down) => {
-                    if (down) { root.press(-1); } else { root.release(); }
-                }
-            }
-            Text {
-                horizontal-stretch: 1;
-                text: Theme.format-duration(root.pending-seconds * 1000);
-                color: Theme.text;
-                font-size: Theme.font-size-md;
-                horizontal-alignment: center;
-            }
-            StepperButton {
-                icon: "add";
-                at-bound: root.pending-seconds >= root.max-seconds;
-                pressed-changed(down) => {
-                    if (down) { root.press(1); } else { root.release(); }
-                }
+        FlyoutStepper {
+            text: Theme.format-duration(root.pending-seconds * 1000);
+            at-min: root.pending-seconds <= root.min-seconds;
+            at-max: root.pending-seconds >= root.max-seconds;
+            stepped(direction, held-ticks) => {
+                root.adjust(direction * root.step-for-ticks(held-ticks));
             }
         }
 
