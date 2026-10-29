@@ -229,7 +229,10 @@ export global Player {
     // Relative, so Rust applies it to the level it holds: `vm.volume` comes back a round trip
     // later, and a fast wheel would read the same stale level for several notches.
     callback step-volume(int /*delta*/);
-    callback set-playback-speed(float);
+    // Whole percents of normal speed. `set` plays a stepper's step and persists nothing; `commit`
+    // plays and persists, from a preset or the stepper's release.
+    callback set-playback-speed(int /*percent*/);
+    callback commit-playback-speed(int /*percent*/);
     callback toggle-mute();
     callback toggle-shuffle();
     callback cycle-repeat();

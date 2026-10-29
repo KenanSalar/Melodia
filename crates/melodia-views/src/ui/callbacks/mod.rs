@@ -189,6 +189,7 @@ pub fn wire_all(ui: &AppWindow, state: &AppState) {
     wire_set_volume(&player, state);
     wire_step_volume(&player, state);
     wire_set_playback_speed(&player, state);
+    wire_commit_playback_speed(&player, state);
     // `Player.toggle-favorite` is `wire_now_playing_favorite`'s, wired after every view so
     // it can reach each one's rows.
 
@@ -267,20 +268,41 @@ fn wire_step_volume(player: &Player<'_>, state: &AppState) {
     });
 }
 
-/// Persists too, speed surviving restarts as repeat, shuffle and volume do.
 fn wire_set_playback_speed(player: &Player<'_>, state: &AppState) {
     let s = state.clone();
-    player.on_set_playback_speed(move |speed| {
+    player.on_set_playback_speed(move |percent| {
         let s = s.clone();
-        spawn_logged!(
+        spawn_logged_sync!(
             s,
             "set_playback_speed",
-            library::playback::player_set_playback_speed_committed(
+            library::playback::player_set_playback_speed(
                 &s.playback_ctx(),
-                f64::from(speed)
+                speed_from_percent(percent)
             )
         );
     });
+}
+
+/// Persists too, speed surviving restarts as repeat, shuffle and volume do.
+fn wire_commit_playback_speed(player: &Player<'_>, state: &AppState) {
+    let s = state.clone();
+    player.on_commit_playback_speed(move |percent| {
+        let s = s.clone();
+        spawn_logged!(
+            s,
+            "commit_playback_speed",
+            library::playback::player_set_playback_speed_committed(
+                &s.playback_ctx(),
+                speed_from_percent(percent)
+            )
+        );
+    });
+}
+
+/// Whole percents cross from Slint so 1.05 lands as the nearest `f64`; a widened `f32` would
+/// persist and print `1.0499999523162842`.
+fn speed_from_percent(percent: i32) -> f64 {
+    f64::from(percent) / 100.0
 }
 
 /// Fired after every sidebar click: records the history entry on the UI thread, off the

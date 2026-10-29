@@ -328,6 +328,8 @@ pub async fn commit_player_settings(ctx: &PlaybackContext) -> Result<(), AppErro
     .map_err(|e| AppError::io("commit_player_settings join", e))?
 }
 
+/// Live only: the flyout's stepper fires this per step, and
+/// [`player_set_playback_speed_committed`] persists on release.
 pub fn player_set_playback_speed(ctx: &PlaybackContext, speed: f64) -> Result<(), AppError> {
     ctx.emit_and_execute(|s| s.build_set_speed_actions(speed));
     Ok(())

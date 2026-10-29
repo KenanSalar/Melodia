@@ -67,31 +67,22 @@ export component OverflowMenu inherits Rectangle {
     property <length> menu-h:
         FlyoutMetrics.menu-row-h * (5 + root.overflow-count) + FlyoutMetrics.chrome-h;
 
-    property <length> flyout-w: 120px;
+    // Wide enough for "0.25x" between the stepper's buttons. The presets, a divider and the stepper.
+    property <length> flyout-w: 140px;
     property <length> flyout-h:
-        FlyoutMetrics.option-row-h * SpeedPresets.list.length + FlyoutMetrics.chrome-h;
+        FlyoutMetrics.option-row-h * (SpeedPresets.list.length + 1) + FlyoutMetrics.divider-h
+        + FlyoutMetrics.chrome-h;
     // Wide enough for "End of track" in translation. The presets, a divider, the stepper and the
     // Start pill.
     property <length> sleep-flyout-w: 168px;
     property <length> sleep-flyout-h:
-        FlyoutMetrics.option-row-h * (SleepPresets.list.length + 2) + 9px
+        FlyoutMetrics.option-row-h * (SleepPresets.list.length + 2) + FlyoutMetrics.divider-h
         + FlyoutMetrics.chrome-h;
     // The wider one plus its scroll gutter, so the popup keeps its box on a switch.
     property <length> left-col-w: max(root.flyout-w, root.sleep-flyout-w) + PopupFit.scroll-gutter;
     property <length> gap: 8px;
 
-    // In lock-step with `SpeedPresets.list` by hand, a Slint function being unable to loop over a
-    // model.
-    function current-speed-label() -> string {
-        if (abs(Player.vm.playback_speed - 0.25) < 0.001) { return "0.25x"; }
-        if (abs(Player.vm.playback_speed - 0.5) < 0.001) { return "0.5x"; }
-        if (abs(Player.vm.playback_speed - 0.75) < 0.001) { return "0.75x"; }
-        if (abs(Player.vm.playback_speed - 1.25) < 0.001) { return "1.25x"; }
-        if (abs(Player.vm.playback_speed - 1.5) < 0.001) { return "1.5x"; }
-        if (abs(Player.vm.playback_speed - 1.75) < 0.001) { return "1.75x"; }
-        if (abs(Player.vm.playback_speed - 2.0) < 0.001) { return "2x"; }
-        return "1x";
-    }
+    property <int> speed-percent: SpeedPresets.percent-of(Player.vm.playback_speed);
 
     btn := IconButton {
         icon: "more_vert";
@@ -134,11 +125,13 @@ export component OverflowMenu inherits Rectangle {
             y: parent.height - self.height;
             width: root.flyout-w + self.gutter;
             height: min(root.flyout-h, parent.height);
-            current-speed: Player.vm.playback_speed;
-            pick(v) => {
-                Player.set-playback-speed(v);
+            current-percent: root.speed-percent;
+            pick(percent) => {
+                Player.commit-playback-speed(percent);
                 root.dismiss();
             }
+            step(percent) => { Player.set-playback-speed(percent); }
+            commit(percent) => { Player.commit-playback-speed(percent); }
         }
 
         if root.sleep-flyout-open: SleepTimerFlyout {
@@ -175,7 +168,7 @@ export component OverflowMenu inherits Rectangle {
                 OverflowRow {
                     icon: "speed";
                     label: @tr("Speed");
-                    trailing-text: root.current-speed-label();
+                    trailing-text: SpeedPresets.label(root.speed-percent);
                     trailing-icon: "chevron_left";
                     active: root.speed-flyout-open;
                     // `build_set_speed_actions` pins a station at 1.0, any other ratio starving or

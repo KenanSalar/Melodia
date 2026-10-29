@@ -50,3 +50,13 @@ export component FlyoutOption inherits Rectangle {
         clicked => { root.clicked(); }
     }
 }
+
+export component FlyoutDivider inherits Rectangle {
+    height: FlyoutMetrics.divider-h;
+
+    Rectangle {
+        width: parent.width - 2 * Theme.pad-sm;
+        height: 1px;
+        background: Theme.surface2;
+    }
+}
