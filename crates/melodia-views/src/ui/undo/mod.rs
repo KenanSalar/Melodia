@@ -18,6 +18,7 @@ use melodia_app::state::AppState;
 use melodia_core::error::describe;
 use melodia_ui::{AppWindow, NotificationKind, NotificationVariant, Notifications, UndoText};
 
+use removal::Absorbed;
 pub use removal::{Removal, tracks_removed_from};
 
 /// How long the notice waits for a press. It runs only while nobody is reading it: hover and a
@@ -41,6 +42,7 @@ struct Slot {
 enum Landing {
     Merged { row: i32, recipe: removal::Recipe },
     Fresh(Removal),
+    OverCap(removal::Title),
 }
 
 impl UndoWindow {
@@ -50,8 +52,11 @@ impl UndoWindow {
         let Some(ui) = self.ui.upgrade() else { return };
         let landing = match self.slot.borrow_mut().as_mut() {
             Some(slot) => match slot.removal.absorb(removal) {
-                None => Landing::Merged { row: slot.row, recipe: slot.removal.recipe() },
-                Some(removal) => Landing::Fresh(removal),
+                Absorbed::Merged => {
+                    Landing::Merged { row: slot.row, recipe: slot.removal.recipe() }
+                }
+                Absorbed::Distinct(removal) => Landing::Fresh(removal),
+                Absorbed::OverCap(title) => Landing::OverCap(title),
             },
             None => Landing::Fresh(removal),
         };
@@ -61,6 +66,7 @@ impl UndoWindow {
                 self.notifications.relabel(&ui, row, recipe);
                 self.notifications.restart(row);
             }
+            Landing::OverCap(title) => self.notify_over_cap(title),
             Landing::Fresh(removal) => {
                 self.replace_held();
                 let push = LocalizedPush {
@@ -75,9 +81,9 @@ impl UndoWindow {
         }
     }
 
-    /// Raises the notice for a removal too large to hold: what went, that it can't be undone, and
-    /// no button. It still replaces the held one, so the card up is always the latest removal and
-    /// Ctrl+Z never reaches past it to an older one.
+    /// Raises the notice for a removal, or a run of them, too large to hold: what went, that it
+    /// can't be undone, and no button. It still replaces the held one, so the card up is always the
+    /// latest removal and Ctrl+Z never reaches past it to an older one.
     pub fn notify_over_cap(&self, title: impl Fn(&AppWindow) -> SharedString + 'static) {
         let Some(ui) = self.ui.upgrade() else { return };
         self.replace_held();

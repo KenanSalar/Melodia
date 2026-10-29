@@ -9,11 +9,15 @@ use crate::ui::search::RecentClearUndo;
 use crate::ui::shell::notifications::RowText;
 use crate::ui::util::len_as_i32;
 use melodia_app::state::AppState;
+use melodia_core::entities::undo::UNDO_HOLD_CAP;
 use melodia_core::error::AppError;
 use melodia_ui::{AppWindow, UndoText};
 
 /// Renders the notice in the language active now.
 pub(super) type Recipe = Box<dyn Fn(&AppWindow) -> RowText>;
+
+/// Renders a title alone, for a notice that can't undo.
+pub(super) type Title = Box<dyn Fn(&AppWindow) -> SharedString>;
 
 pub enum Removal {
     Equalizer(ResetUndo),
@@ -21,23 +25,37 @@ pub enum Removal {
     PlaylistTracks(PlaylistCutUndo),
 }
 
+/// How a later removal lands on the one held.
+pub(super) enum Absorbed {
+    Merged,
+    /// It took from somewhere else, so it replaces the hold.
+    Distinct(Removal),
+    /// Together they would hold more than [`UNDO_HOLD_CAP`] records, so none of the run can be
+    /// undone: undoing only its newest part would leave the notice's count wrong.
+    OverCap(Title),
+}
+
 impl Removal {
-    /// Takes `next` into this hold when both took from the same place, handing it back otherwise.
-    /// A whole-curve hold keeps the older curve: undoing a run newest first ends there anyway.
-    pub(super) fn absorb(&mut self, next: Removal) -> Option<Removal> {
+    /// Takes `next` into this hold when both took from the same place. A whole-curve hold keeps the
+    /// older curve: undoing a run newest first ends there anyway.
+    pub(super) fn absorb(&mut self, next: Removal) -> Absorbed {
         match (self, next) {
-            (Removal::Equalizer(_), Removal::Equalizer(_)) => None,
+            (Removal::Equalizer(_), Removal::Equalizer(_)) => Absorbed::Merged,
             (Removal::RecentSearches(held), Removal::RecentSearches(next)) => {
                 held.absorb(next);
-                None
+                Absorbed::Merged
             }
             (Removal::PlaylistTracks(held), Removal::PlaylistTracks(next))
                 if held.same_playlist(&next) =>
             {
+                let rows = held.count() + next.count();
+                if rows > UNDO_HOLD_CAP {
+                    return Absorbed::OverCap(Box::new(tracks_removed_from(rows, next.name())));
+                }
                 held.absorb(next);
-                None
+                Absorbed::Merged
             }
-            (_, next) => Some(next),
+            (_, next) => Absorbed::Distinct(next),
         }
     }
 
@@ -51,8 +69,8 @@ impl Removal {
         }
     }
 
-    /// Only a restore that writes to the library answers its failure; the others report their own
-    /// or can't fail.
+    /// Answers a failed write, for the one failure notice. The equalizer's can't fail here, its
+    /// settings write logging its own.
     pub(super) async fn restore(
         self,
         state: &AppState,
@@ -63,10 +81,7 @@ impl Removal {
                 reset.restore();
                 Ok(())
             }
-            Removal::RecentSearches(cleared) => {
-                cleared.restore(state, ui);
-                Ok(())
-            }
+            Removal::RecentSearches(cleared) => cleared.restore(state, ui).await,
             Removal::PlaylistTracks(cut) => cut.restore(state, ui).await,
         }
     }

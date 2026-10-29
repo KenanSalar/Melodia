@@ -93,7 +93,8 @@ play replaces the queue silently unless the queue it replaces was built by hand 
      navigation not being part of what went.
 5. **One cap for every hold of records, `UNDO_HOLD_CAP` rows** (provisionally 10,000, confirmed by a
    heaptrack of a full hold in the playlist phase). The unit that captures checks it before it
-   writes.
+   writes, and `Removal::absorb` checks a merged run's total: a run past the cap can't be undone
+   at all, its notice going button-less with the run's count.
    - **The queue's holds are exempt.** They are ids only, a cut's copied and a clear's or a
      replace's moved, so a hold costs what the queue cost a moment before. The same heaptrack
      measures a moved full-library queue beside the capped playlist hold.
@@ -274,7 +275,7 @@ A kept confirmation is raised from Rust once the size is known, across an await,
 | File | Owns |
 |---|---|
 | `crates/melodia-views/src/ui/undo/mod.rs` (new) | `UndoWindow`: the one slot, `offer` (merge, or replace and dismiss the old row), `notify_over_cap` (replaces the slot with a button-less notice), the Undo/Ctrl+Z handler acting only on the slot's own row id and running the restore under `spawn_local`, the one "Couldn't undo" failure branch, the slot's release when its row goes, `UNDO_NOTICE_MS`, and the app state and window it hands each restore, so a hold carries only what it took |
-| `crates/melodia-views/src/ui/undo/removal.rs` (new) | `Removal`, one variant per surface wrapping that surface's token: `absorb` (merge or hand back), its wording recipe, the title builders an over-cap notice shares, and the async `restore`, which dispatches each arm to the surface module that raised it and answers only a library write's failure. No surface names another's. |
+| `crates/melodia-views/src/ui/undo/removal.rs` (new) | `Removal`, one variant per surface wrapping that surface's token: `absorb` (merge or hand back), its wording recipe, the title builders an over-cap notice shares, and the async `restore`, which dispatches each arm to the surface module that raised it and answers a failed write. No surface names another's. |
 | `crates/melodia-views/src/ui/shell/notifications.rs` | `recipes` keeps its shape. Adds a timed localized push, an in-place `relabel`, `restart` (a bump of the row's `restarts`), one row-removed listener, and the `Undo` arm in `run_action`, which now takes the row id. `show_auto_dismiss` writes the row's `timeout-ms` instead of arming a Rust timer. `remove_at` stays the one removal path. |
 | `crates/melodia-ui/ui/globals/undo-text.slint` (new) | `UndoText`: every undo wording as `pure callback`s with plural `@tr`, spelled as `Settings.playlist-import-title` spells them (`settings.slint:434-437`), keeping `settings.slint` (625 lines) from growing. Exported from `app-window.slint`, Rust calling it. |
 | `crates/melodia-ui/ui/models.slint` | `NotificationKind.undo`; `NotificationRow` gains `timeout-ms` (0 for a sticky row) and `restarts` |
@@ -390,7 +391,8 @@ The shell and its simplest user land together, the shell having nothing to show 
 ### Phase 2: recent searches' Clear all (done 2026-10-29)
 
 - `SearchHistoryState::clear` hands back the old list (`std::mem::take`). `add`, `remove` and
-  `restore` share one `change`, which edits under the lock and flushes the snapshot.
+  `restore` share one `change`, which edits under the lock and then flushes. The write takes its
+  snapshot under a writer lock, so the last write to run saves the newest list.
 - `restore` puts the list back behind any query added since, deduped and truncated to
   `MAX_ENTRIES` (`restore_queries`, beside `add_query`, since `MAX_ENTRIES` is private).
 - The facade is `library::search::{clear,restore}_search_history`. `on_recent_clear` runs on the
@@ -464,8 +466,8 @@ The shell and its simplest user land together, the shell having nothing to show 
    Kenan's running build after the hand test, with his go between them, and recorded here.
 5. **The first restore that reports its failure.** `Removal::restore` is async and returns
    `Result`, and `UndoWindow::undo` owns the one failure branch: `show_failure`, "Couldn't undo"
-   over "See the log for details.". Phase 2's search restore, which can fail only when the history
-   file's write fails, logs that failure the way its clear does.
+   over "See the log for details.". Phase 2's search restore is awaited there too, so a failed
+   history write raises the same notice. Only the equalizer's restore can't fail.
 6. **Strings** (Kenan's read, 2026-10-29): "{n} track removed from {}" (plural), "Too many to
    undo", "Couldn't undo", in all 15 catalogs.
 

@@ -1,5 +1,5 @@
-/// The most records one undo may hold. A removal past it writes as it always has and says it can't
-/// be undone, so no hold grows with the library.
+/// The most records one undo may hold, a run merged into one notice counting as one. A removal
+/// past it writes as it always has and says it can't be undone, so no hold grows with the library.
 pub const UNDO_HOLD_CAP: usize = 10_000;
 
 /// What a removal hands back for its undo.

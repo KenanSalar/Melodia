@@ -9,7 +9,7 @@ use crate::ui::search::fetch::push_recent_rows_to_slint;
 use crate::ui::undo::{Removal, UndoWindow};
 use melodia_app::library;
 use melodia_app::state::AppState;
-use melodia_core::error::describe;
+use melodia_core::error::{AppError, describe};
 use melodia_ui::{AppWindow, Search};
 
 /// What Clear all took, newest first.
@@ -25,15 +25,14 @@ impl RecentClearUndo {
         self.cleared.extend(older);
     }
 
-    pub fn restore(self, state: &AppState, weak: &slint::Weak<AppWindow>) {
-        let s = state.clone();
-        let weak = weak.clone();
-        state.runtime.spawn(async move {
-            match library::search::restore_search_history(&s, self.cleared).await {
-                Ok(rows) => push_recent_rows_to_slint(&weak, rows),
-                Err(e) => log::warn!("search::restore_history: {}", describe(&e)),
-            }
-        });
+    pub async fn restore(
+        self,
+        state: &AppState,
+        weak: &slint::Weak<AppWindow>,
+    ) -> Result<(), AppError> {
+        let rows = library::search::restore_search_history(state, self.cleared).await?;
+        push_recent_rows_to_slint(weak, rows);
+        Ok(())
     }
 }
 
