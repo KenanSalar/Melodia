@@ -13,9 +13,10 @@ use melodia_testkit::with_env_var;
 
 use super::*;
 use crate::services::settings::{
-    BorderTint, ONBOARDING_VERSION, PausedDevice, TitlebarButtonStyle, WINDOW_BORDER_SYSTEM_COLOR,
-    WindowBorder,
+    BorderTint, DEFAULT_UNDO_NOTICE_MS, ONBOARDING_VERSION, PausedDevice, TitlebarButtonStyle,
+    UNDO_NOTICE_MS_RANGE, WINDOW_BORDER_SYSTEM_COLOR, WindowBorder,
 };
+use melodia_core::entities::undo::{RemovalSize, UndoKind};
 
 fn json_err(e: serde_json::Error) -> AppError {
     AppError::validation("json error", e)
@@ -1270,6 +1271,120 @@ fn an_unreadable_resampler_resets_to_the_default_alone() -> Result<(), AppError>
         (settings.volume, settings.output.output_resampler),
         (40, Resampler::default()),
         "(volume, resampler)"
+    );
+    Ok(())
+}
+
+// --- Undo ---
+
+#[test]
+fn a_settings_file_from_before_undo_opens_with_it_on_at_the_default_wait() -> Result<(), AppError> {
+    let settings: SettingsData =
+        reading_env(|| serde_json::from_str(r#"{"volume": 80}"#)).map_err(json_err)?;
+
+    let undo = &settings.undo;
+    assert_eq!(
+        (undo.undo_enabled, undo.undo_single_items, undo.undo_kinds_off.len(), undo.notice_ms()),
+        (true, true, 0, DEFAULT_UNDO_NOTICE_MS),
+        "(on, single items, kinds off, wait)"
+    );
+    Ok(())
+}
+
+#[test]
+fn the_notice_wait_is_held_to_the_sliders_range() {
+    let (floor, ceiling) = (*UNDO_NOTICE_MS_RANGE.start(), *UNDO_NOTICE_MS_RANGE.end());
+    let rows = [
+        ("none at all", 0, floor),
+        ("one under the floor", floor - 1, floor),
+        ("on the floor", floor, floor),
+        ("on the ceiling", ceiling, ceiling),
+        ("one over the ceiling", ceiling + 1, ceiling),
+    ];
+    for (what, saved, expected) in rows {
+        let flags = UndoFlags { undo_notice_ms: saved, ..UndoFlags::default() };
+
+        assert_eq!(flags.notice_ms(), expected, "{what}");
+    }
+}
+
+/// The kinds are spelled as `settings.json` stores them, so a renamed key strands every install
+/// that switched one off.
+#[test]
+fn undo_covers_a_removal_only_where_every_switch_lets_it() {
+    let queue_off =
+        || UndoFlags { undo_kinds_off: vec!["queue".to_owned()], ..UndoFlags::default() };
+    let all_off = || UndoFlags { undo_enabled: false, ..UndoFlags::default() };
+    let singles_off = || UndoFlags { undo_single_items: false, ..UndoFlags::default() };
+    let rows = [
+        (
+            "everything on, one item",
+            UndoFlags::default(),
+            UndoKind::Playlists,
+            RemovalSize::Items(1),
+            true,
+        ),
+        ("undo off, a whole state", all_off(), UndoKind::Equalizer, RemovalSize::Whole, false),
+        ("undo off, many items", all_off(), UndoKind::Playlists, RemovalSize::Items(5), false),
+        ("its kind off", queue_off(), UndoKind::Queue, RemovalSize::Items(3), false),
+        ("another kind off", queue_off(), UndoKind::Playlists, RemovalSize::Items(3), true),
+        (
+            "single items off, one item",
+            singles_off(),
+            UndoKind::Favorites,
+            RemovalSize::Items(1),
+            false,
+        ),
+        (
+            "single items off, two items",
+            singles_off(),
+            UndoKind::Favorites,
+            RemovalSize::Items(2),
+            true,
+        ),
+        (
+            "single items off, a whole state",
+            singles_off(),
+            UndoKind::RecentSearches,
+            RemovalSize::Whole,
+            true,
+        ),
+    ];
+    for (what, flags, kind, size, expected) in rows {
+        assert_eq!(flags.covers(kind, size), expected, "{what}");
+    }
+}
+
+#[test]
+fn a_kind_switched_off_twice_is_kept_once() {
+    let mut flags = UndoFlags::default();
+
+    flags.set_kind(UndoKind::Radio, false);
+    flags.set_kind(UndoKind::Radio, false);
+
+    assert_eq!(flags.undo_kinds_off, ["radio"]);
+}
+
+/// Only the kinds switched off are kept, so one switched back on leaves the file as it was.
+#[test]
+fn a_kind_switched_off_and_on_again_leaves_no_key() {
+    let mut flags = UndoFlags::default();
+
+    flags.set_kind(UndoKind::Radio, false);
+    flags.set_kind(UndoKind::Radio, true);
+
+    assert_eq!(flags.undo_kinds_off, Vec::<String>::new());
+}
+
+#[test]
+fn a_kind_no_build_knows_is_ignored() -> Result<(), AppError> {
+    let flags: UndoFlags =
+        serde_json::from_str(r#"{"undo_kinds_off": ["lyrics", "queue"]}"#).map_err(json_err)?;
+
+    assert_eq!(
+        (flags.kind_on(UndoKind::Queue), flags.kind_on(UndoKind::Playlists)),
+        (false, true),
+        "(queue, playlists)"
     );
     Ok(())
 }

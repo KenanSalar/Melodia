@@ -37,7 +37,9 @@ impl PlayerState {
 
     /// Puts back the queue a replace took and returns to what was playing: a track where it was,
     /// paused again if it was, a stopped one seated and stopped. A station comes back paused, since
-    /// re-tuning is network work this lock can't wait on, and play reopens it.
+    /// re-tuning is network work this lock can't wait on, and play reopens it. A start still waiting
+    /// on its record comes back stopped with its row current for Play, whether it was to start
+    /// paused being known only to the window task.
     pub fn restore_replaced_queue<R: rand::Rng + ?Sized>(
         &mut self,
         replaced: ReplacedQueue,
@@ -76,3 +78,7 @@ impl PlayerState {
         }
     }
 }
+
+#[cfg(test)]
+#[path = "../tests/replaced_tests.rs"]
+mod tests;

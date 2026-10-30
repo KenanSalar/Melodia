@@ -8,6 +8,13 @@ use crate::player::engine::state::PlayerViewModelLight;
 use crate::player::engine::types::{RadioNowPlaying, RepeatMode};
 use melodia_core::entities::track::TrackSummary;
 
+/// A queue of `ids` in their own order, nothing playing.
+pub fn queue_of(ids: &[i64]) -> QueueState {
+    let mut q = QueueState::default();
+    q.add_tracks(ids);
+    q
+}
+
 /// Cuts the rows at play-order indices `rows`, resolved to entries as the panel resolves a click.
 pub fn cut_rows(queue: &mut QueueState, rows: &[usize]) -> Option<QueueCut> {
     let entries: Vec<QueueEntry> = rows.iter().filter_map(|&row| queue.entry_at(row)).collect();

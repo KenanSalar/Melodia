@@ -11,7 +11,7 @@ use super::{
     save_station, set_artwork, set_favorite, set_local_fields, set_probed_codec,
     station_id_with_url, update_station,
 };
-use crate::database::queries::radio_removal::remove_stations;
+use crate::database::queries::radio_removal::{remove_stations, restore_stations};
 
 fn directory_station(uuid: &str, name: &str) -> radio::NewRadioStation {
     radio::NewRadioStation {
@@ -571,5 +571,185 @@ async fn each_kind_of_answer_ages_out_on_its_own_clock() -> Result<(), AppError>
     assert_eq!(kept.len(), 2, "got {kept:?}");
     assert!(kept.contains(&"fresh-hit".to_owned()), "a warm cache entry was evicted");
     assert!(kept.contains(&"live-miss".to_owned()), "a backoff still in force was forgotten");
+    Ok(())
+}
+
+// --- undoing a removal from a kept tab ---
+
+/// Stamps `id` as played `count` times, last at `when`, by hand so the stamp is a known value.
+async fn played(db: &DbPool, id: i64, when: &str, count: i32) -> Result<(), AppError> {
+    sqlx::query("UPDATE radio_stations SET last_played = ?, play_count = ? WHERE id = ?")
+        .bind(when)
+        .bind(count)
+        .bind(id)
+        .execute(db.write())
+        .await?;
+    Ok(())
+}
+
+/// What a station is kept for: its favorite, and its plays as `(last played, count)`.
+#[derive(Clone, Copy)]
+struct Keeping {
+    favorite: bool,
+    plays: Option<(&'static str, i32)>,
+}
+
+const PLAYED_FAVORITE: Keeping = Keeping { favorite: true, plays: Some((RECENT, 3)) };
+const UNPLAYED_FAVORITE: Keeping = Keeping { favorite: true, plays: None };
+const PLAYED_ONLY: Keeping = Keeping { favorite: false, plays: Some((RECENT, 3)) };
+
+/// Saves `station` kept as `keeping` says, answering its id.
+async fn kept(
+    db: &DbPool,
+    station: &radio::NewRadioStation,
+    keeping: Keeping,
+) -> Result<i64, AppError> {
+    let id = save_station(db, station).await?;
+    set_favorite(db, id, keeping.favorite).await?;
+    if let Some((when, count)) = keeping.plays {
+        played(db, id, when, count).await?;
+    }
+    Ok(id)
+}
+
+/// Each arm a removal can take, the cut and the delete alike: whichever it took, its undo has to
+/// put back exactly that, so the row reads as it did, column for column.
+#[tokio::test]
+async fn a_removal_and_its_undo_leave_the_station_as_it_was() -> Result<(), AppError> {
+    let browsed = || directory_station("uuid-1", "A");
+    let typed = || custom_station("A", "http://a.invalid/");
+    let rows = [
+        ("a played favorite off Favorites", browsed(), PLAYED_FAVORITE, radio::KeptList::Favorites),
+        (
+            "a played favorite off Recently Played",
+            browsed(),
+            PLAYED_FAVORITE,
+            radio::KeptList::Recent,
+        ),
+        (
+            "an unplayed favorite off Favorites",
+            browsed(),
+            UNPLAYED_FAVORITE,
+            radio::KeptList::Favorites,
+        ),
+        (
+            "a played non-favorite off Recently Played",
+            browsed(),
+            PLAYED_ONLY,
+            radio::KeptList::Recent,
+        ),
+        (
+            "a played hand-typed favorite off Favorites",
+            typed(),
+            PLAYED_FAVORITE,
+            radio::KeptList::Favorites,
+        ),
+    ];
+    for (what, station, keeping, from) in rows {
+        let db = DbPool::test_pool().await?;
+        let id = kept(&db, &station, keeping).await?;
+        let before = get_station_by_id(&db, id).await?;
+        let cuts = remove_stations(&db, &[id], from).await?;
+
+        restore_stations(&db, &cuts).await?;
+
+        assert_eq!(get_station_by_id(&db, id).await?, before, "{what}");
+    }
+    Ok(())
+}
+
+#[tokio::test]
+async fn a_station_the_tab_does_not_list_is_left_alone() -> Result<(), AppError> {
+    let rows = [
+        ("a played non-favorite off Favorites", PLAYED_ONLY, radio::KeptList::Favorites),
+        ("an unplayed favorite off Recently Played", UNPLAYED_FAVORITE, radio::KeptList::Recent),
+    ];
+    for (what, keeping, from) in rows {
+        let db = DbPool::test_pool().await?;
+        let id = kept(&db, &directory_station("uuid-1", "A"), keeping).await?;
+        let before = get_station_by_id(&db, id).await?;
+
+        let cuts = remove_stations(&db, &[id], from).await?;
+
+        assert_eq!(cuts, [], "{what}");
+        assert_eq!(get_station_by_id(&db, id).await?, before, "{what}");
+    }
+    Ok(())
+}
+
+#[tokio::test]
+async fn an_undone_history_keeps_a_play_made_since() -> Result<(), AppError> {
+    let db = DbPool::test_pool().await?;
+    let keeping = Keeping { favorite: true, plays: Some((OLD, 2)) };
+    let id = kept(&db, &directory_station("uuid-1", "A"), keeping).await?;
+    let cuts = remove_stations(&db, &[id], radio::KeptList::Recent).await?;
+    played(&db, id, NEWER, 1).await?;
+
+    restore_stations(&db, &cuts).await?;
+
+    let station = get_station_by_id(&db, id).await?;
+    assert_eq!((station.play_count, station.last_played.as_deref()), (3, Some(NEWER)));
+    Ok(())
+}
+
+/// `date_added` is what `restore_stations` tells the two rows apart by, so it is set by hand here:
+/// two saves can land on one millisecond.
+#[tokio::test]
+async fn an_undone_history_passes_over_a_station_that_took_its_id_since() -> Result<(), AppError> {
+    let db = DbPool::test_pool().await?;
+    let id = kept(&db, &directory_station("uuid-1", "A"), PLAYED_FAVORITE).await?;
+    sqlx::query("UPDATE radio_stations SET date_added = ? WHERE id = ?")
+        .bind(OLD)
+        .bind(id)
+        .execute(db.write())
+        .await?;
+    let history = remove_stations(&db, &[id], radio::KeptList::Recent).await?;
+    remove_stations(&db, &[id], radio::KeptList::Favorites).await?;
+    let newcomer = save_station(&db, &directory_station("uuid-2", "B")).await?;
+    assert_eq!(newcomer, id, "test setup: the newcomer takes the freed id");
+
+    restore_stations(&db, &history).await?;
+
+    let station = get_station_by_id(&db, id).await?;
+    assert_eq!((station.play_count, station.last_played), (0, None));
+    Ok(())
+}
+
+#[tokio::test]
+async fn an_undone_delete_comes_back_beside_a_station_that_took_its_id() -> Result<(), AppError> {
+    let db = DbPool::test_pool().await?;
+    let id = kept(&db, &directory_station("uuid-1", "A"), UNPLAYED_FAVORITE).await?;
+    let cuts = remove_stations(&db, &[id], radio::KeptList::Favorites).await?;
+    let newcomer = save_station(&db, &directory_station("uuid-2", "B")).await?;
+    assert_eq!(newcomer, id, "test setup: the newcomer takes the freed id");
+
+    restore_stations(&db, &cuts).await?;
+
+    let favorites: Vec<String> =
+        get_favorite_stations(&db).await?.into_iter().map(|s| s.name).collect();
+    assert_eq!(
+        (get_station_by_id(&db, id).await?.name, favorites),
+        ("B".to_owned(), vec!["A".to_owned()])
+    );
+    Ok(())
+}
+
+/// Written again, the old row would be a second card nothing tells apart from the first.
+#[tokio::test]
+async fn an_undone_delete_writes_nothing_over_a_station_kept_again_since() -> Result<(), AppError> {
+    let rows = [
+        ("kept again from Browse", directory_station("uuid-1", "A")),
+        ("its URL typed in again", custom_station("A", "http://a.invalid/")),
+    ];
+    for (what, station) in rows {
+        let db = DbPool::test_pool().await?;
+        let id = kept(&db, &station, UNPLAYED_FAVORITE).await?;
+        let cuts = remove_stations(&db, &[id], radio::KeptList::Favorites).await?;
+        kept(&db, &station, UNPLAYED_FAVORITE).await?;
+
+        restore_stations(&db, &cuts).await?;
+
+        assert_eq!(station_count(&db).await?, 1, "{what}");
+    }
     Ok(())
 }

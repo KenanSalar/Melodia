@@ -315,3 +315,7 @@ impl QueueState {
         PruneOutcome { removed, playing_was_removed }
     }
 }
+
+#[cfg(test)]
+#[path = "../tests/queue_removal_tests.rs"]
+mod tests;

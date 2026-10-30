@@ -1905,6 +1905,41 @@ fn a_restart_puts_the_queue_back_under_the_station() -> Result<(), AppError> {
     Ok(())
 }
 
+#[test]
+fn a_restart_after_the_playing_row_left_resumes_the_row_that_took_its_place() {
+    let mut state = playing_a_queue();
+    let playing: Vec<QueueEntry> = state.queue.entry_at(0).into_iter().collect();
+
+    state.cut_queue(&playing);
+
+    assert_eq!(state.resume_point(), Some((2, 0)));
+}
+
+// --- the playing row leaving the queue ---
+
+/// [`playing_a_queue`]'s queue with nothing on the deck, as after a stop at the end of the queue.
+fn a_queue_with_nothing_seated() -> PlayerState {
+    let mut state = PlayerState::default();
+    state.queue.add_tracks(&[1, 2]);
+    state.queue.seat(0);
+    state
+}
+
+#[test]
+fn a_cut_of_the_current_row_leaves_a_gap_only_under_a_seated_track() {
+    let rows = [
+        ("a track seated", playing_a_queue(), None),
+        ("nothing seated", a_queue_with_nothing_seated(), Some(0)),
+    ];
+    for (what, mut state, expected) in rows {
+        let current: Vec<QueueEntry> = state.queue.entry_at(0).into_iter().collect();
+
+        state.cut_queue(&current);
+
+        assert_eq!(state.queue.playing_index(), expected, "{what}");
+    }
+}
+
 // --- a long pause giving an exclusive device back ---
 
 /// The state's own position when the monitor decided to release, the last playing tick's.

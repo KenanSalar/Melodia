@@ -183,3 +183,50 @@ fn a_row_with_no_recipe_registers_none() {
 
     assert!(ui.recipes.borrow().is_empty());
 }
+
+/// Takes the row it is handed off the stack, one way or another.
+type Removal = fn(&NotificationsUi, i32);
+
+/// Every id the row-removed listener hears, in order.
+fn listening(ui: &NotificationsUi) -> Rc<RefCell<Vec<i32>>> {
+    let heard = Rc::new(RefCell::new(Vec::new()));
+    let sink = heard.clone();
+    ui.on_row_removed(move |id| sink.borrow_mut().push(id));
+    heard
+}
+
+/// A path that misses the listener leaves Ctrl+Z undoing a removal whose notice is gone.
+#[test]
+fn every_way_a_row_goes_tells_the_listener_once() {
+    let rows: [(&str, Removal); 3] = [
+        ("a dismiss", |ui, id| ui.dismiss(id)),
+        ("a dismiss by kind", |ui, _| ui.dismiss_by_kind(NotificationKind::Undo)),
+        ("the cap evicting it", |ui, _| {
+            for _ in 0..super::MAX_VISIBLE {
+                ui.show(make_params(NotificationKind::None), STICKY);
+            }
+        }),
+    ];
+    for (what, remove) in rows {
+        let ui = make_ui();
+        let heard = listening(&ui);
+        let id = ui.show(make_params(NotificationKind::Undo), STICKY);
+
+        remove(&ui, id);
+
+        assert_eq!(*heard.borrow(), [id], "{what}");
+    }
+}
+
+/// The card starts its clock over when `restarts` moves, which is how a merged removal earns the
+/// full wait again. The id stays, the undo slot holding its row by it.
+#[test]
+fn a_restart_moves_the_clock_and_keeps_the_row() {
+    let ui = make_ui();
+    let id = ui.show(make_params(NotificationKind::Undo), 6_000);
+
+    ui.restart(id);
+
+    let row = ui.rows.row_data(0).map(|row| (row.id, row.restarts, row.timeout_ms));
+    assert_eq!(row, Some((id, 1, 6_000)));
+}

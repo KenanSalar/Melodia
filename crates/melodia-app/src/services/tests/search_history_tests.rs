@@ -43,6 +43,31 @@ fn add_query_trims_whitespace() {
     assert_eq!(history.queries, vec!["hello"]);
 }
 
+/// A query searched again in the window is listed once, where the newer search put it.
+#[test]
+fn an_undone_clear_goes_back_behind_what_was_searched_since() {
+    let mut history = SearchHistory { queries: vec!["new".into(), "b".into()] };
+
+    restore_queries(&mut history, vec!["a".into(), "b".into(), "c".into()]);
+
+    assert_eq!(history.queries, vec!["new", "b", "a", "c"]);
+}
+
+/// The cap holds through an undo, the oldest of the cleared list being what goes.
+#[test]
+fn an_undone_clear_keeps_the_history_to_its_cap() {
+    let mut history = SearchHistory { queries: vec!["new".into()] };
+    let cleared: Vec<String> = (1..=MAX_ENTRIES).map(|i| format!("q{i}")).collect();
+
+    restore_queries(&mut history, cleared);
+
+    assert_eq!(history.queries.len(), MAX_ENTRIES);
+    assert_eq!(
+        (history.queries.first().map(String::as_str), history.queries.last().map(String::as_str)),
+        (Some("new"), Some("q9"))
+    );
+}
+
 // ---- the half that reaches disk ----
 
 /// A store rooted in `tmp`, which is all `init` needs: it takes `&Paths` rather than an

@@ -20,3 +20,7 @@ pub fn reinsert<T>(kept: Vec<T>, held: impl IntoIterator<Item = (usize, T)>) -> 
     merged.extend(held.map(|(_, item)| item));
     merged
 }
+
+#[cfg(test)]
+#[path = "tests/reinsert_tests.rs"]
+mod tests;

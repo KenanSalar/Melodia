@@ -1,6 +1,6 @@
 # Plan: Undo for removals (a notice that puts back what went)
 
-Status: **Phases 1 to 10 done** (hand-tested 2026-10-29 and 2026-10-30; Phase 3's measure moved off this branch), **Phase 11 next** · Owner: Kenan · Created: 2026-10-28 · Issue #109, branch `feat/undo-removals`
+Status: **Phases 1 to 10 done** (hand-tested 2026-10-29 and 2026-10-30; Phase 3's measure moved off this branch), **Phase 11's tests done** (2026-10-30), **its docs next** · Owner: Kenan · Created: 2026-10-28 · Issue #109, branch `feat/undo-removals`
 
 > **Validated 2026-10-28** against `5fa3d5ed` (`feat/undo-removals`): three read-only traces (the
 > toast stack, shortcuts and confirmations; the library removals; the queue, the equalizer and the
@@ -1036,92 +1036,38 @@ removing stations and Clear queue ask first again (decision 13).
 - Searching Settings for "undo" finds the section from any category.
 - The category survives a restart, and the first launch after the update opens Settings on Library.
 
-### Phase 11: tests, then docs (each on Kenan's go)
+### Phase 11: tests (done 2026-10-30), then docs (on Kenan's go)
 
-**Tests:**
-- `queue_tests`:
-  - a `cut`/`restore_cuts` round trip with the current row before, inside and after the cut,
-    under shuffle (both orders restored), a merged run of two cuts, and a cut made shuffled
-    restored after an unshuffle taking its insertion order;
-  - `restore_cleared` keeping the rows queued since, a merged run coming back oldest first, a held
-    tail gap pointing at the first row queued since, and both restores minting fresh entries;
-  - the cursor rule (`seats`): a restore after an advance keeps the live current row, one after a
-    station's seat or with nothing seated lights the old row, and `close_gap` counts no seat;
-  - `cut` of an entry already gone answering `None`, and `entry_holding` (Up Next's removal)
-    answering `None` once another track sits at that index;
-  - `playing_left` through advance, gapless peek, Next, Previous, Play Next, shuffle and persist
-    (position 0), at the tail too; a cut while `Loading` keeps today's start;
-  - the gap under a move: the gap row dragged away, a block dropped into the gap, a played row
-    moved past it, and at the tail;
-  - the gap closed by `cut_queue` with nothing seated, by a station's seat, by a restore with
-    nothing seated, and kept by a prune of the gap row (`playing_was_removed` false);
-  - `has_next` agreeing with `advance_skip` under every repeat mode, Repeat One at a tail gap and
-    with nothing current included;
-  - `hand_edited` set by each hand edit, cleared by a replace, seated by boot restore, lowered by a
-    clear and ORed back by its restore;
-  - `replace` answering `None` over a play-built, an empty and an identical queue (shuffled play
-    order, same insertion order), and the old queue over a hand-edited one, a moved one with
-    shuffle off included;
-  - `restore_replaced` putting back the cursor despite the play's seat, a gap included (mid-queue
-    and at the end), restoring insertion order with shuffle gone off and reshuffling with it come
-    on, and leaving `hand_edited` raised.
-- `playback_tests` (app): `restore_replaced_queue` over each held state: a track playing at a
-  position, paused (a `Pause` after the `PlayMedia`), stopped and seated, `Loading`, a station
-  (seated paused, its speed pinned), and nothing.
-- `up_next_tests`: the gap row starting reads as Forward, a removal of the playing row slides
-  nothing, and a moved base with the same ids re-renders.
-- `reinsert_tests` (core): ascending indices, an index past the end, an empty side, and equality
-  with inserting one by one.
-- Favorites:
-  - store: `unfavorite` answering only the hearted ids of a mixed set, nothing for none or for
-    ids no row holds, and leaving the unhearted rows alone;
-  - `favorites_tests` (app): `unfavorite` with nothing flipped bumping nothing and loving nothing,
-    and with some flipped mirroring the playing copy and queueing an unlove for those alone;
-  - `FavoriteRemovalUndo::absorb` counting a track removed twice once.
-- `playlist_tests`:
-  - a remove and restore round trip with a gap present, a track re-added in the window, a
-    hard-deleted track ahead of a kept row in the same cut (merge first, then drop), and a merged
-    run of two cuts;
-  - a removal of ids the playlist doesn't hold answering `Nothing` and leaving `updated_at` alone,
-    and one over the cap answering `OverCap`;
-  - a restore into a deleted playlist failing;
-  - the stamp put back only when untouched, and an edit between two cuts keeping its own;
-  - delete and restore of a regular and a smart playlist, its `track_count` and
-    `total_duration_ms` matching its items, plus the id-taken fallback.
-- `radio_tests`: every `StationCut` arm (`Unfavorited`, `HistoryCleared`, `Deleted`), a station
-  the tab doesn't list answering no cut, a history restore after a play in the window keeping the
-  play and the later stamp, a history restore skipping a row whose id another station took since,
-  a deleted row back under its own id and the id-taken fallback, and
-  both skips (the uuid, and a hand-typed `stream_url`).
-- `search_history` tests: restore with queries added since, and a merged run of two clears
-  restoring the newer list in front.
-- `notifications_tests`: `relabel` keeping the id, `restart` bumping `restarts`, a timed row
-  carrying its `timeout-ms`, a replace dismissing the old Undo row, an Undo naming another row
-  doing nothing, and the row-removed listener firing once on every removal path, the eviction
-  inside `show` included (the `:117-154` pattern).
-- **Slint pins:** the card's `Timer` gates on its hover and `Theme.window-focused`, the row and
-  card menus' remove entries call `FavoriteActions`, Favorites' Songs tab and Most Played send
-  their hearts there while Recently Played's Most Played keeps `CardActions`, the playlist card's
-  trash and the station card's remove hide on `CardCell.multi-selection`, and on Favorites a
-  station card's heart hides there too while its trash shows only on a hand-typed card. Up Next's
-  remove calls `Queue.remove-upcoming` with the row's track id rather than `Queue.remove`, and a
-  queue row's ✕ hides once `Queue.selected-count` reaches 2.
-- **Sweep:** a held basename survives `sweep_stores`, and so does one whose hold drops while the
-  column read is in flight.
-- **Settings:**
-  - `UndoFlags` defaulting from an older `settings.json`, the duration clamped at both ends, and an
-    unknown kind key ignored;
-  - `covers` over every kind, both counts and both switches; `set_kind` off then on leaving no key;
-  - the category's key round-tripping through `views.json`, an unknown key opening on Library, and
-    an older file's int `settings_category` left unread;
-  - `offer` dropping an uncovered removal with the held card left up, and `notify_over_cap`
-    silent when uncovered;
-  - `remove_tracks_from_playlist_for_good` answering the rows it removed, none stamping nothing,
-    and `remove_stations_for_good` holding no logo.
-- **Existing tests to recheck:** `settings_page_tests` (the category count and arrays),
-  `dialog_openers.rs` and `translations.rs`, and the timer-observing `show_completion` test.
-  Phase 7 already ported the `remove_at` and `remove_batch` tests to `cut` through
-  `fixtures::cut_rows`.
+**Tests (done 2026-10-30).** 61 new tests, chosen by risk under `testing.md`: the restores that
+write user data back, and the queue's gap, where this branch's fixes clustered. Each pin was
+checked by breaking the code it guards and watching that test alone fail. Every existing suite
+passes, `settings_page_tests`, `dialog_openers.rs` and `translations.rs` included.
+- **Engine:** `queue_removal_tests.rs` (new) covers cut, clear and replace with their restores,
+  the cursor rule (`seats`, `close_gap`), the gap under every transport step and a move, the
+  `replace` hold decision over ten queue histories, and `has_next` against `advance_skip`.
+  `replaced_tests.rs` (new) runs `restore_replaced_queue` over each held state, at the engine
+  rather than in `playback_tests`, the app wrapper adding only the emit. `state_tests` adds
+  `resume_point` past a gap and `cut_queue` closing the gap with nothing seated. `queue_of` moved
+  into `fixtures.rs`.
+- **Store:** `playlist_tests` covers item restores (a hole in the positions, a lost track, a track
+  re-added, a merged run, a deleted playlist), the stamp rules, the hold cap at
+  `UNDO_HOLD_CAP` - 1, on it and + 1, and whole-playlist restores (regular, smart, id taken, lost
+  track). `radio_tests` adds a round trip through every `StationCut` arm, an unlisted station, a
+  play since, an id taken since and both skips. `track_tests` adds `unfavorite`.
+- **Core and app:** `reinsert_tests.rs` (new); `search_history_tests` (restore, its cap);
+  `settings_tests` (`UndoFlags`: the older file, the clamp, `covers`, `set_kind`, an unknown
+  key); `artwork_sweep_tests` (a held file, two holds on one file, the last hold gone).
+- **Views:** `notifications_tests` (the row-removed listener on every removal path, `restart`).
+
+**Not written:**
+- By decision: the Slint pins (markup the hand test covered); anything needing an `AppWindow` or
+  `AppState` (`relabel`, the slot's replace and stale-Undo handling, `offer`, `notify_over_cap`,
+  the `absorb`s of `FavoriteRemovalUndo` and `RecentClearUndo`, `favorites_tests`), `covers`
+  being the decision `offer` reads; and the hold dropping mid-read in the sweep, which no seam
+  makes deterministic.
+- Not reached: `entry_holding`, the three `up_next_tests` cases, the gap under a shuffle and a
+  prune, a cut while `Loading`, the reshuffle in `restore_replaced`, the settings category's key
+  round trip, and the two `*_for_good` wrappers.
 
 **Docs:**
 - `ui-patterns.md`'s "Dialogs, toasts": the slot contract (decisions 2, 5, 6, 8 and 12), and the

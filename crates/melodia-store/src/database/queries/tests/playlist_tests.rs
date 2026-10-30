@@ -1,6 +1,8 @@
 use crate::database::queries;
 #[allow(clippy::wildcard_imports)]
 use crate::database::queries::fixtures::*;
+use melodia_core::entities::playlist::PlaylistItemsCut;
+use melodia_core::entities::undo::{UNDO_HOLD_CAP, UndoCapture};
 use melodia_core::error::AppError;
 
 #[tokio::test]
@@ -911,5 +913,311 @@ async fn a_refresh_leaves_the_playlists_updated_at_alone() -> Result<(), AppErro
     refresh(&db).await?;
 
     assert_eq!(updated_at(&db, playlist).await?, EARLIER);
+    Ok(())
+}
+
+// --- undoing a removal ---
+
+/// A stamp an edit could have left, apart from [`EARLIER`].
+const EDITED: &str = "2021-06-01T00:00:00.000+00:00";
+
+/// Removes `track_ids`, answering the hold an undo puts them back from.
+async fn cut(
+    db: &crate::database::DbPool,
+    playlist: i64,
+    track_ids: &[i64],
+) -> Result<PlaylistItemsCut, AppError> {
+    match queries::playlist::remove_tracks_from_playlist_batch(db, playlist, track_ids).await? {
+        UndoCapture::Held(cut) => Ok(cut),
+        other => Err(AppError::validation_msg(format!("expected a held cut, got {other:?}"))),
+    }
+}
+
+/// Dates each row a day apart by position, where a create dates them all alike, so a row put back
+/// under the restore's own date shows.
+async fn date_rows_apart(db: &crate::database::DbPool, playlist: i64) -> Result<(), AppError> {
+    sqlx::query(
+        "UPDATE playlist_items SET added_at = printf('2020-01-%02dT00:00:00.000+00:00', position + 1)
+         WHERE playlist_id = ?",
+    )
+    .bind(playlist)
+    .execute(db.write())
+    .await?;
+    Ok(())
+}
+
+/// `(track, position, added_at)` for each row, in position order.
+async fn items(
+    db: &crate::database::DbPool,
+    playlist: i64,
+) -> Result<Vec<(i64, i64, String)>, AppError> {
+    Ok(sqlx::query_as(
+        "SELECT track_id, position, added_at FROM playlist_items WHERE playlist_id = ?
+         ORDER BY position",
+    )
+    .bind(playlist)
+    .fetch_all(db.read())
+    .await?)
+}
+
+async fn set_updated_at(
+    db: &crate::database::DbPool,
+    playlist: i64,
+    stamp: &str,
+) -> Result<(), AppError> {
+    sqlx::query("UPDATE playlists SET updated_at = ? WHERE id = ?")
+        .bind(stamp)
+        .bind(playlist)
+        .execute(db.write())
+        .await?;
+    Ok(())
+}
+
+#[tokio::test]
+async fn an_undone_removal_puts_each_row_back_where_it_stood_with_its_own_date()
+-> Result<(), AppError> {
+    let (db, playlist, ids) = five_track_playlist().await?;
+    date_rows_apart(&db, playlist).await?;
+    let before = items(&db, playlist).await?;
+    let removal = cut(&db, playlist, &on_rows(&ids, &[1, 4])).await?;
+
+    queries::playlist_restore::restore_playlist_items(&db, &[removal]).await?;
+
+    assert_eq!(items(&db, playlist).await?, before);
+    Ok(())
+}
+
+/// A track the library lost leaves a hole in the positions, which `CutItem::row` counts past: an
+/// index read off the raw positions lands every row after the hole late.
+#[tokio::test]
+async fn a_removal_across_a_hole_in_the_positions_comes_back_in_order() -> Result<(), AppError> {
+    let (db, playlist, ids) = five_track_playlist().await?;
+    sqlx::query("DELETE FROM tracks WHERE id = ?").bind(ids[1]).execute(db.write()).await?;
+    assert_eq!(positions(&db, playlist).await?, [0, 2, 3, 4], "test setup: a hole at 1");
+    let removal = cut(&db, playlist, &[ids[3]]).await?;
+
+    queries::playlist_restore::restore_playlist_items(&db, &[removal]).await?;
+
+    assert_eq!(order(&db, playlist).await?, on_rows(&ids, &[0, 2, 3, 4]));
+    Ok(())
+}
+
+/// The one shape where `restore_playlist_items`' merge-then-drop order shows: dropped first, the
+/// lost row takes the next one's index past the end.
+#[tokio::test]
+async fn a_row_the_library_lost_since_stays_out_and_the_rest_keep_their_places()
+-> Result<(), AppError> {
+    let (db, playlist, ids) = five_track_playlist().await?;
+    let removal = cut(&db, playlist, &on_rows(&ids, &[1, 3])).await?;
+    sqlx::query("DELETE FROM tracks WHERE id = ?").bind(ids[1]).execute(db.write()).await?;
+
+    queries::playlist_restore::restore_playlist_items(&db, &[removal]).await?;
+
+    assert_eq!(order(&db, playlist).await?, on_rows(&ids, &[0, 2, 3, 4]));
+    assert_eq!(positions(&db, playlist).await?, [0, 1, 2, 3]);
+    Ok(())
+}
+
+#[tokio::test]
+async fn a_track_added_back_since_keeps_the_place_it_was_added_at() -> Result<(), AppError> {
+    let (db, playlist, ids) = five_track_playlist().await?;
+    let removal = cut(&db, playlist, &[ids[1]]).await?;
+    queries::playlist::add_tracks_to_playlist(&db, playlist, &[ids[1]]).await?;
+
+    queries::playlist_restore::restore_playlist_items(&db, &[removal]).await?;
+
+    assert_eq!(order(&db, playlist).await?, on_rows(&ids, &[0, 2, 3, 4, 1]));
+    assert_eq!(positions(&db, playlist).await?, [0, 1, 2, 3, 4]);
+    Ok(())
+}
+
+/// Undone oldest first, the first row back shifts the second's index by one.
+#[tokio::test]
+async fn a_run_of_removals_undone_together_puts_the_playlist_back_whole() -> Result<(), AppError> {
+    let (db, playlist, ids) = five_track_playlist().await?;
+    let first = cut(&db, playlist, &[ids[1]]).await?;
+    let second = cut(&db, playlist, &[ids[3]]).await?;
+
+    queries::playlist_restore::restore_playlist_items(&db, &[first, second]).await?;
+
+    assert_eq!(order(&db, playlist).await?, ids);
+    Ok(())
+}
+
+#[tokio::test]
+async fn an_undo_into_a_playlist_deleted_since_fails() -> Result<(), AppError> {
+    let (db, playlist, ids) = five_track_playlist().await?;
+    let removal = cut(&db, playlist, &[ids[1]]).await?;
+    queries::playlist_delete::delete_playlists(&db, &[playlist]).await?;
+
+    let undone = queries::playlist_restore::restore_playlist_items(&db, &[removal]).await;
+
+    assert!(matches!(undone, Err(AppError::NotFound { .. })), "{undone:?}");
+    Ok(())
+}
+
+#[tokio::test]
+async fn an_undo_puts_back_the_stamp_the_removal_replaced() -> Result<(), AppError> {
+    let (db, playlist, ids) = five_track_playlist().await?;
+    backdate(&db, playlist).await?;
+    let removal = cut(&db, playlist, &[ids[1]]).await?;
+
+    queries::playlist_restore::restore_playlist_items(&db, &[removal]).await?;
+
+    assert_eq!(updated_at(&db, playlist).await?, EARLIER);
+    Ok(())
+}
+
+/// The edit's stamp is written by hand rather than through a move, whose clock could land on the
+/// same millisecond as a removal's and read as untouched.
+#[tokio::test]
+async fn an_edit_between_two_removals_keeps_its_own_stamp() -> Result<(), AppError> {
+    let (db, playlist, ids) = five_track_playlist().await?;
+    backdate(&db, playlist).await?;
+    let first = cut(&db, playlist, &[ids[1]]).await?;
+    set_updated_at(&db, playlist, EDITED).await?;
+    let second = cut(&db, playlist, &[ids[3]]).await?;
+
+    queries::playlist_restore::restore_playlist_items(&db, &[first, second]).await?;
+
+    assert_eq!(updated_at(&db, playlist).await?, EDITED);
+    Ok(())
+}
+
+#[tokio::test]
+async fn an_undo_over_an_edit_since_is_stamped_as_an_edit() -> Result<(), AppError> {
+    let (db, playlist, ids) = five_track_playlist().await?;
+    backdate(&db, playlist).await?;
+    let removal = cut(&db, playlist, &[ids[1]]).await?;
+    set_updated_at(&db, playlist, EDITED).await?;
+
+    queries::playlist_restore::restore_playlist_items(&db, &[removal]).await?;
+
+    let stamp = updated_at(&db, playlist).await?;
+    assert_ne!(stamp, EARLIER, "the stamp before the removal belongs under the edit");
+    assert_ne!(stamp, EDITED, "the undo is an edit of its own");
+    Ok(())
+}
+
+/// A notice for a removal that removed nothing would offer an undo of nothing, and a stamp would
+/// lift the card for an edit nobody made.
+#[tokio::test]
+async fn removing_tracks_the_playlist_does_not_hold_captures_nothing_and_stamps_nothing()
+-> Result<(), AppError> {
+    let (db, ids) = numbered_library(6).await?;
+    let playlist =
+        queries::playlist::create_playlist_with_tracks(&db, "Five", None, &ids[..5]).await?;
+    backdate(&db, playlist).await?;
+
+    let capture =
+        queries::playlist::remove_tracks_from_playlist_batch(&db, playlist, &[ids[5]]).await?;
+
+    assert!(matches!(capture, UndoCapture::Nothing), "{capture:?}");
+    assert_eq!(updated_at(&db, playlist).await?, EARLIER);
+    Ok(())
+}
+
+/// What a capture amounts to, as a label and the rows it names.
+fn captured(capture: &UndoCapture<PlaylistItemsCut>) -> (&'static str, usize) {
+    match capture {
+        UndoCapture::Nothing => ("nothing", 0),
+        UndoCapture::Held(cut) => ("held", cut.rows.len()),
+        UndoCapture::OverCap { rows } => ("over the cap", *rows),
+    }
+}
+
+/// The cap reads the selection handed over, not the rows it matched, so the selection is one
+/// playlist row padded with a track the playlist doesn't hold.
+#[tokio::test]
+async fn a_selection_past_the_hold_cap_is_removed_for_good() -> Result<(), AppError> {
+    let rows = [
+        ("one under the cap", UNDO_HOLD_CAP - 1, ("held", 1)),
+        ("on the cap", UNDO_HOLD_CAP, ("held", 1)),
+        ("one past the cap", UNDO_HOLD_CAP + 1, ("over the cap", 1)),
+    ];
+    for (what, handed, expected) in rows {
+        let (db, ids) = numbered_library(2).await?;
+        let playlist =
+            queries::playlist::create_playlist_with_tracks(&db, "One", None, &ids[..1]).await?;
+        let mut selection = vec![ids[0]];
+        selection.resize(handed, ids[1]);
+
+        let capture =
+            queries::playlist::remove_tracks_from_playlist_batch(&db, playlist, &selection).await?;
+
+        assert_eq!(captured(&capture), expected, "{what}");
+        assert!(order(&db, playlist).await?.is_empty(), "{what}: the removal writes either way");
+    }
+    Ok(())
+}
+
+// --- undoing a delete ---
+
+/// The card's id, stamps, cover and counts, and every row with its own date.
+#[tokio::test]
+async fn an_undone_delete_brings_the_playlist_back_as_it_was() -> Result<(), AppError> {
+    let (db, playlist, _) = covered_five_track_playlist().await?;
+    date_rows_apart(&db, playlist).await?;
+    backdate(&db, playlist).await?;
+    let before =
+        (queries::playlist::get_playlist_by_id(&db, playlist).await?, items(&db, playlist).await?);
+    let deleted = queries::playlist_delete::delete_playlists_held(&db, &[playlist]).await?;
+
+    queries::playlist_restore::restore_playlists(&db, &deleted).await?;
+
+    let after =
+        (queries::playlist::get_playlist_by_id(&db, playlist).await?, items(&db, playlist).await?);
+    assert_eq!(after, before);
+    Ok(())
+}
+
+#[tokio::test]
+async fn an_undone_delete_of_a_smart_playlist_brings_back_its_rules() -> Result<(), AppError> {
+    let db = setup_seeded_db().await?;
+    let smart =
+        queries::playlist::create_smart_playlist(&db, "Top Rated", None, r#"{"v":1}"#).await?;
+    let before = queries::playlist::get_playlist_by_id(&db, smart.id).await?;
+    let deleted = queries::playlist_delete::delete_playlists_held(&db, &[smart.id]).await?;
+
+    queries::playlist_restore::restore_playlists(&db, &deleted).await?;
+
+    assert_eq!(queries::playlist::get_playlist_by_id(&db, smart.id).await?, before);
+    Ok(())
+}
+
+/// A playlist created in the window takes the freed id, the largest, so the restore has to take a
+/// fresh one rather than write over the newcomer.
+#[tokio::test]
+async fn a_playlist_created_since_in_the_deleted_ones_id_keeps_it() -> Result<(), AppError> {
+    let (db, playlist, _) = five_track_playlist().await?;
+    let deleted = queries::playlist_delete::delete_playlists_held(&db, &[playlist]).await?;
+    let newcomer = queries::playlist::create_playlist(&db, "Newcomer", None).await?;
+    assert_eq!(newcomer.id, playlist, "test setup: the newcomer takes the freed id");
+
+    queries::playlist_restore::restore_playlists(&db, &deleted).await?;
+
+    let mut kept: Vec<(String, i32)> = queries::playlist::get_all_playlists(&db)
+        .await?
+        .into_iter()
+        .map(|stats| (stats.name, stats.track_count))
+        .collect();
+    kept.sort_unstable();
+    assert_eq!(kept, [("Five".to_owned(), 5), ("Newcomer".to_owned(), 0)]);
+    assert_eq!(queries::playlist::get_playlist_by_id(&db, playlist).await?.name, "Newcomer");
+    Ok(())
+}
+
+/// Past `tracks_still_there`'s filter, the lost track's item fails its foreign key and the whole
+/// undo with it.
+#[tokio::test]
+async fn an_undone_delete_leaves_out_the_tracks_the_library_lost_since() -> Result<(), AppError> {
+    let (db, playlist, ids) = five_track_playlist().await?;
+    let deleted = queries::playlist_delete::delete_playlists_held(&db, &[playlist]).await?;
+    sqlx::query("DELETE FROM tracks WHERE id = ?").bind(ids[1]).execute(db.write()).await?;
+
+    queries::playlist_restore::restore_playlists(&db, &deleted).await?;
+
+    assert_eq!(order(&db, playlist).await?, on_rows(&ids, &[0, 2, 3, 4]));
+    assert_eq!(positions(&db, playlist).await?, [0, 1, 2, 3]);
     Ok(())
 }

@@ -4,18 +4,11 @@
 use std::collections::HashSet;
 
 use super::*;
-use crate::player::engine::fixtures::cut_rows;
+use crate::player::engine::fixtures::{cut_rows, queue_of};
 use melodia_core::error::AppError;
 
 /// What a row does to the queue.
 type Edit = fn(&mut QueueState);
-
-/// A queue of `ids` in their own order, nothing playing.
-fn queue_of(ids: &[i64]) -> QueueState {
-    let mut q = QueueState::default();
-    q.add_tracks(ids);
-    q
-}
 
 fn five() -> QueueState {
     queue_of(&[1, 2, 3, 4, 5])
