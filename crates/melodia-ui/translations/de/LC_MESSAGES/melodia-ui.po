@@ -21,7 +21,7 @@ msgid "Browse"
 msgstr "Durchsuchen"
 
 #: ui/app-window.slint ui/layout/sidebar.slint ui/views/favorites-view.slint
-#: ui/views/radio-view.slint
+#: ui/views/radio-view.slint ui/views/settings/undo-section.slint
 msgid "Favorites"
 msgstr "Favoriten"
 
@@ -1105,6 +1105,7 @@ msgstr "Wiederholen"
 #: ui/components/now-playing/queue-button.slint
 #: ui/views/queue-panel/queue-panel.slint
 #: ui/views/settings/overflow-menu-section.slint
+#: ui/views/settings/undo-section.slint
 msgid "Queue"
 msgstr "Warteschlange"
 
@@ -1288,7 +1289,7 @@ msgstr "Suche…"
 
 #: ui/components/settings/equalizer-controls.slint
 #: ui/views/settings/animations-section.slint
-#: ui/views/settings/output-section.slint
+#: ui/views/settings/output-section.slint ui/views/settings/undo-section.slint
 msgid "Equalizer"
 msgstr "Equalizer"
 
@@ -1612,6 +1613,10 @@ msgid "This playlist has too many tracks to undo, so deleting it can't be undone
 msgstr "Diese Playlist enthält zu viele Titel, um das Löschen rückgängig machen zu können. Die Titel selbst bleiben in deiner Bibliothek."
 
 #: ui/globals/dialog.slint
+msgid "The playlist and its track order will be removed. The tracks themselves stay in your library."
+msgstr "Die Playlist und ihre Titelreihenfolge werden entfernt. Die Titel selbst bleiben in deiner Bibliothek."
+
+#: ui/globals/dialog.slint
 msgid "Delete"
 msgstr "Löschen"
 
@@ -1624,6 +1629,33 @@ msgstr[1] "{n} Playlists löschen?"
 #: ui/globals/dialog.slint
 msgid "These playlists have too many tracks to undo, so deleting them can't be undone. The tracks themselves stay in your library."
 msgstr "Diese Playlists enthalten zu viele Titel, um das Löschen rückgängig machen zu können. Die Titel selbst bleiben in deiner Bibliothek."
+
+#: ui/globals/dialog.slint
+msgid "The playlists and their track order will be removed. The tracks themselves stay in your library."
+msgstr "Die Playlists und ihre Titelreihenfolge werden entfernt. Die Titel selbst bleiben in deiner Bibliothek."
+
+#: ui/globals/dialog.slint
+msgid "Remove from Recently Played?"
+msgstr "Aus „Zuletzt gespielt“ entfernen?"
+
+#: ui/globals/dialog.slint
+msgid "Remove from favorites?"
+msgstr "Aus Favoriten entfernen?"
+
+#. Translators: {} is the station's name.
+#: ui/globals/dialog.slint
+msgid "\"{}\" will be removed from Recently Played."
+msgstr "„{}“ wird aus „Zuletzt gespielt“ entfernt."
+
+#. Translators: {} is the station's name.
+#: ui/globals/dialog.slint
+msgid "\"{}\" will be removed from your stations, along with its play history."
+msgstr "„{}“ wird aus deinen Sendern entfernt, zusammen mit dem Wiedergabeverlauf."
+
+#. Translators: {} is the station's name.
+#: ui/globals/dialog.slint
+msgid "\"{}\" will be removed from your favorites."
+msgstr "„{}“ wird aus deinen Favoriten entfernt."
 
 #: ui/globals/dialog.slint
 msgid "Remove {n} station from Recently Played?"
@@ -1644,6 +1676,14 @@ msgstr "Es sind zu viele Sender, um das Entfernen aus „Zuletzt gespielt“ rü
 #: ui/globals/dialog.slint
 msgid "There are too many stations to undo, so removing them can't be undone. Any you added by hand are removed from your stations, along with their play history."
 msgstr "Es sind zu viele Sender, um das Entfernen rückgängig machen zu können. Von Hand hinzugefügte Sender werden aus deinen Sendern entfernt, zusammen mit ihrem Wiedergabeverlauf."
+
+#: ui/globals/dialog.slint
+msgid "The stations will be removed from Recently Played."
+msgstr "Die Sender werden aus „Zuletzt gespielt“ entfernt."
+
+#: ui/globals/dialog.slint
+msgid "The stations will be removed from your favorites. Any you added by hand are removed from your stations, along with their play history."
+msgstr "Die Sender werden aus deinen Favoriten entfernt. Von Hand hinzugefügte Sender werden aus deinen Sendern entfernt, zusammen mit ihrem Wiedergabeverlauf."
 
 #: ui/globals/dialog.slint
 msgid "Edit Rules"
@@ -1764,7 +1804,7 @@ msgstr "Verlustbehaftet"
 msgid "Converted"
 msgstr "Umgewandelt"
 
-#: ui/globals/undo-text.slint
+#: ui/globals/undo-text.slint ui/views/settings/undo-section.slint
 msgid "Undo"
 msgstr "Rückgängig"
 
@@ -2254,7 +2294,7 @@ msgstr "Künstler"
 msgid "Genres"
 msgstr "Genres"
 
-#: ui/views/my-library-view.slint
+#: ui/views/my-library-view.slint ui/views/settings/undo-section.slint
 msgid "Playlists"
 msgstr "Wiedergabelisten"
 
@@ -2610,11 +2650,6 @@ msgstr "Wiedergabe"
 msgid "Window"
 msgstr "Fenster"
 
-#: ui/views/settings-view.slint ui/views/settings/about-section.slint
-#: ui/views/settings/pages/about-page.slint
-msgid "About"
-msgstr "Über"
-
 #: ui/views/settings-view.slint ui/views/settings/pages/integrations-page.slint
 msgid "Integrations"
 msgstr "Integrationen"
@@ -2623,6 +2658,16 @@ msgstr "Integrationen"
 #: ui/views/settings/update-section.slint
 msgid "Updates"
 msgstr "Aktualisierungen"
+
+#: ui/views/settings-view.slint ui/views/settings/about-section.slint
+#: ui/views/settings/pages/about-page.slint
+msgid "About"
+msgstr "Über"
+
+#: ui/views/settings-view.slint
+#: ui/views/settings/pages/accessibility-page.slint
+msgid "Accessibility"
+msgstr "Barrierefreiheit"
 
 #: ui/views/settings-view.slint
 msgid "Search settings…"
@@ -3241,6 +3286,7 @@ msgstr "Die Musik beim Pausieren oder Stoppen aus- und beim Fortsetzen wieder ei
 
 #. Translators: `{}` is a duration in seconds, such as 2.5
 #: ui/views/settings/playback-section.slint
+#: ui/views/settings/undo-section.slint
 msgid "{} s"
 msgstr "{} s"
 
@@ -3351,6 +3397,62 @@ msgstr "Aktiviere zuerst oben Last.fm oder ListenBrainz"
 #: ui/views/settings/settings-router.slint
 msgid "No matching settings"
 msgstr "Keine passenden Einstellungen"
+
+#: ui/views/settings/undo-section.slint
+msgid "Offer undo after a removal"
+msgstr "Nach dem Entfernen Rückgängig anbieten"
+
+#: ui/views/settings/undo-section.slint
+msgid "Show a notice with an Undo button after something is removed. Ctrl+Z works too while it is up."
+msgstr "Nach dem Entfernen einen Hinweis mit der Schaltfläche „Rückgängig“ zeigen. Solange er sichtbar ist, funktioniert auch Strg+Z."
+
+#: ui/views/settings/undo-section.slint
+msgid "Also for a single item"
+msgstr "Auch für ein einzelnes Element"
+
+#: ui/views/settings/undo-section.slint
+msgid "Offer undo when only one track, playlist, station or favorite goes. Clear all, Reset and Clear queue always offer it."
+msgstr "Rückgängig auch anbieten, wenn nur ein Titel, eine Playlist, ein Sender oder ein Favorit entfernt wird. „Alle löschen“, „Zurücksetzen“ und „Warteschlange leeren“ bieten es immer an."
+
+#: ui/views/settings/undo-section.slint
+msgid "Tracks removed from a playlist, and deleted playlists."
+msgstr "Aus einer Playlist entfernte Titel und gelöschte Playlists."
+
+#: ui/views/settings/undo-section.slint
+msgid "Tracks removed from the queue, Clear queue, and a play that replaces a queue you built."
+msgstr "Aus der Warteschlange entfernte Titel, „Warteschlange leeren“ und eine Wiedergabe, die eine von dir erstellte Warteschlange ersetzt."
+
+#: ui/views/settings/undo-section.slint
+msgid "Tracks removed from Favorites."
+msgstr "Aus Favoriten entfernte Titel."
+
+#: ui/views/settings/undo-section.slint
+msgid "Radio stations"
+msgstr "Radiosender"
+
+#: ui/views/settings/undo-section.slint
+msgid "Stations removed from Favorites or Recently Played."
+msgstr "Aus Favoriten oder „Zuletzt gespielt“ entfernte Sender."
+
+#: ui/views/settings/undo-section.slint
+msgid "Resetting the equalizer."
+msgstr "Zurücksetzen des Equalizers."
+
+#: ui/views/settings/undo-section.slint
+msgid "Recent searches"
+msgstr "Letzte Suchen"
+
+#: ui/views/settings/undo-section.slint
+msgid "Clearing recent searches."
+msgstr "Löschen der letzten Suchen."
+
+#: ui/views/settings/undo-section.slint
+msgid "Keep the notice up"
+msgstr "Anzeigedauer des Hinweises"
+
+#: ui/views/settings/undo-section.slint
+msgid "How long the notice waits for a press. It also waits while the pointer is over it or Melodia is in the background."
+msgstr "Wie lange der Hinweis auf einen Klick wartet. Er wartet auch, solange der Mauszeiger darauf liegt oder Melodia im Hintergrund ist."
 
 #: ui/views/settings/update-section.slint
 msgid "Software Updates"

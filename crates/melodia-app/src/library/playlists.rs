@@ -132,6 +132,15 @@ pub async fn remove_tracks_from_playlist_batch(
     queries::playlist::remove_tracks_from_playlist_batch(db, playlist_id, &track_ids).await
 }
 
+/// Removes tracks keeping nothing to undo it, answering how many went.
+pub async fn remove_tracks_from_playlist_for_good(
+    db: &DbPool,
+    playlist_id: i64,
+    track_ids: Vec<i64>,
+) -> Result<usize, AppError> {
+    queries::playlist::remove_tracks_from_playlist_for_good(db, playlist_id, &track_ids).await
+}
+
 /// Undoes a run of removals from one playlist, `cuts` in the order they were made.
 pub async fn restore_playlist_items(
     db: &DbPool,

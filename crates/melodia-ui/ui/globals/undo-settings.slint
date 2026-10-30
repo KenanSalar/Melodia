@@ -1,0 +1,30 @@
+// The removals a kind switch covers, each a surface's.
+export enum UndoKind {
+    playlists,
+    queue,
+    favorites,
+    radio,
+    equalizer,
+    recent-searches,
+}
+
+// What Settings ▸ Accessibility asks of undo. Rust seeds every value and the slider's bounds, and
+// each callback moves the undo slot's shadow before it persists.
+export global UndoSettings {
+    in-out property <bool> enabled: true;
+    in-out property <bool> single-items: true;
+    in-out property <bool> playlists: true;
+    in-out property <bool> queue: true;
+    in-out property <bool> favorites: true;
+    in-out property <bool> radio: true;
+    in-out property <bool> equalizer: true;
+    in-out property <bool> recent-searches: true;
+    in-out property <int> notice-secs: 6;
+    in property <int> min-secs: 4;
+    in property <int> max-secs: 10;
+
+    callback enabled-changed(bool);
+    callback single-items-changed(bool);
+    callback kind-changed(UndoKind, bool);
+    callback notice-secs-committed(int);
+}

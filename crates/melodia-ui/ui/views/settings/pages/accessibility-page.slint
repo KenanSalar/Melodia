@@ -1,0 +1,13 @@
+import { UndoSection } from "../undo-section.slint";
+
+// The page shape is `library-page.slint`'s.
+export component AccessibilityPage inherits Rectangle {
+    horizontal-stretch: 1;
+    vertical-stretch: 0;
+
+    out property <bool> has-matches: undo.has-matches;
+
+    VerticalLayout {
+        undo := UndoSection { category-name: @tr("Accessibility"); }
+    }
+}

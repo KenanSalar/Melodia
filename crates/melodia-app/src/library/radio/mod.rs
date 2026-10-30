@@ -28,7 +28,10 @@ pub use playback::{
     mark_played, play_directory_station, play_station, record_probed_codec, set_directory_favorite,
     station_to_restore,
 };
-pub use removal::{RemovedStations, delete_if_unlisted, remove_stations, restore_stations};
+pub use removal::{
+    RemovedStations, delete_if_unlisted, remove_stations, remove_stations_for_good,
+    restore_stations,
+};
 
 // `library::radio_files` composes these with its own write, argued at each definition.
 pub(super) use authoring::{resolve_station_name, validated_overrides};

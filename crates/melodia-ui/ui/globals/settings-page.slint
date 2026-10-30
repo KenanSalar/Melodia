@@ -14,11 +14,11 @@ export global SettingsPage {
     out property <int> category-lyrics: 8;
     out property <int> category-integrations: 9;
     out property <int> category-updates: 10;
-    out property <int> category-about: 11;
+    out property <int> category-accessibility: 11;
+    out property <int> category-about: 12;
 
-    // **The sole definition of how many categories exist.** Rust clamps the persisted index
-    // against it rather than carrying a copy.
-    out property <int> category-count: 12;
+    // **The sole definition of how many categories exist**, every list of them pinned to it.
+    out property <int> category-count: 13;
 
     in-out property <int> category-idx: 0;
     callback category-changed(int);

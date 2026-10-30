@@ -21,7 +21,7 @@ msgid "Browse"
 msgstr "Gözat"
 
 #: ui/app-window.slint ui/layout/sidebar.slint ui/views/favorites-view.slint
-#: ui/views/radio-view.slint
+#: ui/views/radio-view.slint ui/views/settings/undo-section.slint
 msgid "Favorites"
 msgstr "Favoriler"
 
@@ -1107,6 +1107,7 @@ msgstr "Tekrarla"
 #: ui/components/now-playing/queue-button.slint
 #: ui/views/queue-panel/queue-panel.slint
 #: ui/views/settings/overflow-menu-section.slint
+#: ui/views/settings/undo-section.slint
 msgid "Queue"
 msgstr "Sıra"
 
@@ -1291,7 +1292,7 @@ msgstr "Ara…"
 
 #: ui/components/settings/equalizer-controls.slint
 #: ui/views/settings/animations-section.slint
-#: ui/views/settings/output-section.slint
+#: ui/views/settings/output-section.slint ui/views/settings/undo-section.slint
 msgid "Equalizer"
 msgstr "Ekolayzer"
 
@@ -1618,6 +1619,10 @@ msgid "This playlist has too many tracks to undo, so deleting it can't be undone
 msgstr "Bu çalma listesinde çok fazla parça olduğundan silme işlemi geri alınamaz. Parçaların kendisi kitaplığınızda kalır."
 
 #: ui/globals/dialog.slint
+msgid "The playlist and its track order will be removed. The tracks themselves stay in your library."
+msgstr "Çalma listesi ve parça sırası kaldırılacak. Parçaların kendisi kitaplığınızda kalır."
+
+#: ui/globals/dialog.slint
 msgid "Delete"
 msgstr "Sil"
 
@@ -1630,6 +1635,33 @@ msgstr[1] "{n} çalma listesi silinsin mi?"
 #: ui/globals/dialog.slint
 msgid "These playlists have too many tracks to undo, so deleting them can't be undone. The tracks themselves stay in your library."
 msgstr "Bu çalma listelerinde çok fazla parça olduğundan silme işlemi geri alınamaz. Parçaların kendisi kitaplığınızda kalır."
+
+#: ui/globals/dialog.slint
+msgid "The playlists and their track order will be removed. The tracks themselves stay in your library."
+msgstr "Çalma listeleri ve parça sırası kaldırılacak. Parçaların kendisi kitaplığınızda kalır."
+
+#: ui/globals/dialog.slint
+msgid "Remove from Recently Played?"
+msgstr "Son Çalınanlardan kaldırılsın mı?"
+
+#: ui/globals/dialog.slint
+msgid "Remove from favorites?"
+msgstr "Favorilerden kaldırılsın mı?"
+
+#. Translators: {} is the station's name.
+#: ui/globals/dialog.slint
+msgid "\"{}\" will be removed from Recently Played."
+msgstr "\"{}\" Son Çalınanlar listesinden kaldırılacak."
+
+#. Translators: {} is the station's name.
+#: ui/globals/dialog.slint
+msgid "\"{}\" will be removed from your stations, along with its play history."
+msgstr "\"{}\" dinlenme geçmişiyle birlikte istasyonlarından kaldırılacak."
+
+#. Translators: {} is the station's name.
+#: ui/globals/dialog.slint
+msgid "\"{}\" will be removed from your favorites."
+msgstr "\"{}\" favorilerinden kaldırılacak."
 
 #: ui/globals/dialog.slint
 msgid "Remove {n} station from Recently Played?"
@@ -1650,6 +1682,14 @@ msgstr "Çok fazla istasyon olduğundan Son Çalınanlardan kaldırma işlemi ge
 #: ui/globals/dialog.slint
 msgid "There are too many stations to undo, so removing them can't be undone. Any you added by hand are removed from your stations, along with their play history."
 msgstr "Çok fazla istasyon olduğundan kaldırma işlemi geri alınamaz. Elle eklediklerin, dinlenme geçmişleriyle birlikte istasyonlarından kaldırılacak."
+
+#: ui/globals/dialog.slint
+msgid "The stations will be removed from Recently Played."
+msgstr "İstasyonlar Son Çalınanlar listesinden kaldırılacak."
+
+#: ui/globals/dialog.slint
+msgid "The stations will be removed from your favorites. Any you added by hand are removed from your stations, along with their play history."
+msgstr "İstasyonlar favorilerinden kaldırılacak. Elle eklediklerin, dinlenme geçmişleriyle birlikte istasyonlarından kaldırılacak."
 
 #: ui/globals/dialog.slint
 msgid "Edit Rules"
@@ -1772,7 +1812,7 @@ msgstr "Kayıplı"
 msgid "Converted"
 msgstr "Dönüştürülmüş"
 
-#: ui/globals/undo-text.slint
+#: ui/globals/undo-text.slint ui/views/settings/undo-section.slint
 msgid "Undo"
 msgstr "Geri al"
 
@@ -2263,7 +2303,7 @@ msgstr "Sanatçılar"
 msgid "Genres"
 msgstr "Türler"
 
-#: ui/views/my-library-view.slint
+#: ui/views/my-library-view.slint ui/views/settings/undo-section.slint
 msgid "Playlists"
 msgstr "Çalma Listeleri"
 
@@ -2620,11 +2660,6 @@ msgstr "Oynatma"
 msgid "Window"
 msgstr "Pencere"
 
-#: ui/views/settings-view.slint ui/views/settings/about-section.slint
-#: ui/views/settings/pages/about-page.slint
-msgid "About"
-msgstr "Hakkında"
-
 #: ui/views/settings-view.slint ui/views/settings/pages/integrations-page.slint
 msgid "Integrations"
 msgstr "Entegrasyonlar"
@@ -2633,6 +2668,16 @@ msgstr "Entegrasyonlar"
 #: ui/views/settings/update-section.slint
 msgid "Updates"
 msgstr "Güncellemeler"
+
+#: ui/views/settings-view.slint ui/views/settings/about-section.slint
+#: ui/views/settings/pages/about-page.slint
+msgid "About"
+msgstr "Hakkında"
+
+#: ui/views/settings-view.slint
+#: ui/views/settings/pages/accessibility-page.slint
+msgid "Accessibility"
+msgstr "Erişilebilirlik"
 
 #: ui/views/settings-view.slint
 msgid "Search settings…"
@@ -3251,6 +3296,7 @@ msgstr "Duraklatırken veya durdururken müziği kıs, devam ederken yeniden aç
 
 #. Translators: `{}` is a duration in seconds, such as 2.5
 #: ui/views/settings/playback-section.slint
+#: ui/views/settings/undo-section.slint
 msgid "{} s"
 msgstr "{} sn"
 
@@ -3361,6 +3407,62 @@ msgstr "Önce yukarıdan Last.fm'i veya ListenBrainz'i aç"
 #: ui/views/settings/settings-router.slint
 msgid "No matching settings"
 msgstr "Eşleşen ayar yok"
+
+#: ui/views/settings/undo-section.slint
+msgid "Offer undo after a removal"
+msgstr "Kaldırmadan sonra geri almayı öner"
+
+#: ui/views/settings/undo-section.slint
+msgid "Show a notice with an Undo button after something is removed. Ctrl+Z works too while it is up."
+msgstr "Bir şey kaldırıldığında “Geri al” düğmeli bir bildirim göster. Bildirim görünürken Ctrl+Z de çalışır."
+
+#: ui/views/settings/undo-section.slint
+msgid "Also for a single item"
+msgstr "Tek bir öğe için de"
+
+#: ui/views/settings/undo-section.slint
+msgid "Offer undo when only one track, playlist, station or favorite goes. Clear all, Reset and Clear queue always offer it."
+msgstr "Yalnızca bir parça, çalma listesi, istasyon veya favori kaldırıldığında da geri almayı öner. “Tümünü temizle”, “Sıfırla” ve “Sırayı temizle” her zaman önerir."
+
+#: ui/views/settings/undo-section.slint
+msgid "Tracks removed from a playlist, and deleted playlists."
+msgstr "Bir çalma listesinden kaldırılan parçalar ve silinen çalma listeleri."
+
+#: ui/views/settings/undo-section.slint
+msgid "Tracks removed from the queue, Clear queue, and a play that replaces a queue you built."
+msgstr "Sıradan kaldırılan parçalar, “Sırayı temizle” ve sizin oluşturduğunuz bir sırayı değiştiren bir çalma."
+
+#: ui/views/settings/undo-section.slint
+msgid "Tracks removed from Favorites."
+msgstr "Favorilerden kaldırılan parçalar."
+
+#: ui/views/settings/undo-section.slint
+msgid "Radio stations"
+msgstr "Radyo istasyonları"
+
+#: ui/views/settings/undo-section.slint
+msgid "Stations removed from Favorites or Recently Played."
+msgstr "Favorilerden veya Son Çalınanlardan kaldırılan istasyonlar."
+
+#: ui/views/settings/undo-section.slint
+msgid "Resetting the equalizer."
+msgstr "Ekolayzeri sıfırlama."
+
+#: ui/views/settings/undo-section.slint
+msgid "Recent searches"
+msgstr "Son aramalar"
+
+#: ui/views/settings/undo-section.slint
+msgid "Clearing recent searches."
+msgstr "Son aramaları temizleme."
+
+#: ui/views/settings/undo-section.slint
+msgid "Keep the notice up"
+msgstr "Bildirimin görünme süresi"
+
+#: ui/views/settings/undo-section.slint
+msgid "How long the notice waits for a press. It also waits while the pointer is over it or Melodia is in the background."
+msgstr "Bildirimin bir tıklamayı ne kadar bekleyeceği. İşaretçi üzerindeyken veya Melodia arka plandayken de bekler."
 
 #: ui/views/settings/update-section.slint
 msgid "Software Updates"

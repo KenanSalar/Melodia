@@ -37,7 +37,7 @@ fn test_view_state_default() {
     assert_eq!(vs.browse_view_mode, 0);
     assert!(vs.last_detail_ids.is_empty());
     assert!(!vs.artist_albums_collapsed);
-    assert_eq!(vs.settings_category, 0);
+    assert_eq!(vs.settings_category_key, "");
     assert_eq!(vs.favorites_tab, 0);
     assert_eq!(vs.recently_played_tab, 0);
     assert_eq!(vs.my_library_tab, 0);
@@ -54,7 +54,7 @@ fn test_view_state_missing_fields_default() -> Result<(), AppError> {
     // not fail the whole file. Browse's presentation is the same story: a file
     // predating the card view lands on the list.
     assert_eq!(vs.browse_view_mode, 0);
-    assert_eq!(vs.settings_category, 0);
+    assert_eq!(vs.settings_category_key, "");
     assert_eq!(vs.favorites_tab, 0);
     assert_eq!(vs.recently_played_tab, 0);
     assert_eq!(vs.my_library_tab, 0);
@@ -100,7 +100,7 @@ fn the_retired_settings_tab_is_not_read_as_a_category() -> Result<(), AppError> 
 
     let vs: ViewStateData = serde_json::from_str(legacy).map_err(json_err)?;
 
-    assert_eq!(vs.settings_category, 0);
+    assert_eq!(vs.settings_category_key, "");
     Ok(())
 }
 
@@ -112,7 +112,7 @@ fn test_view_state_roundtrip() -> Result<(), AppError> {
         last_nav_index: 5,
         artist_albums_collapsed: true,
         last_detail_ids: BTreeMap::from([("album_detail".to_owned(), 42)]),
-        settings_category: 3,
+        settings_category_key: "appearance".to_owned(),
         recently_played_tab: 1,
         my_library_tab: 2,
         ..ViewStateData::default()
@@ -124,7 +124,7 @@ fn test_view_state_roundtrip() -> Result<(), AppError> {
     assert_eq!(back.last_nav_index, 5);
     assert!(back.artist_albums_collapsed);
     assert_eq!(back.last_detail_ids.get("album_detail").copied(), Some(42));
-    assert_eq!(back.settings_category, 3);
+    assert_eq!(back.settings_category_key, "appearance");
     assert_eq!(back.recently_played_tab, 1);
     assert_eq!(back.my_library_tab, 2);
     Ok(())

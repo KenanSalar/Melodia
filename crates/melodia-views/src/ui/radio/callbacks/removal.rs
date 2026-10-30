@@ -1,5 +1,6 @@
-//! Taking stations out of a kept tab: at once with an undo, or, past what an undo may hold, asked
-//! first and then for good. The Favorites heart, the trash and the menu all arrive here.
+//! Taking stations out of a kept tab: at once with an undo, or, with undo off in Settings or past
+//! what an undo may hold, asked first and then for good. The Favorites heart, the trash and the
+//! menu all arrive here.
 
 use std::rc::Rc;
 use std::sync::Arc;
@@ -8,16 +9,16 @@ use async_compat::Compat;
 use slint::{ComponentHandle, Model, ModelRc, SharedString, VecModel, Weak};
 
 use crate::ui::callbacks::DialogClaim;
-use crate::ui::radio::{RadioTab, RadioUi, kept, tab_from_index};
+use crate::ui::radio::{RadioTab, RadioUi, kept, rows, tab_from_index};
 use crate::ui::undo::{Removal, UndoWindow, stations_removed};
 use crate::ui::view_ctx::ViewCtx;
 use melodia_app::library;
 use melodia_app::library::radio::RemovedStations;
 use melodia_app::state::AppState;
 use melodia_core::entities::radio::KeptList;
-use melodia_core::entities::undo::{UNDO_HOLD_CAP, UndoCapture};
+use melodia_core::entities::undo::{RemovalSize, UNDO_HOLD_CAP, UndoCapture, UndoKind};
 use melodia_core::error::{AppError, describe};
-use melodia_ui::{AppWindow, CardSelection, Dialog, Radio};
+use melodia_ui::{AppWindow, CardSelection, Dialog, NoUndoReason, Radio};
 
 /// What a run of removals from one kept tab took, put back together.
 pub struct StationRemovalUndo {
@@ -84,36 +85,69 @@ struct Remover {
 }
 
 impl Remover {
-    /// Removes at once and offers the undo, or asks first where there are more stations than an
-    /// undo may hold.
+    /// Removes at once and offers the undo, or asks first where Settings turned undo off for it or
+    /// there are more stations than an undo may hold.
     fn request(&self, list: i32, ids: Vec<i32>) {
         let Some(from) = self.kept_list(list) else { return };
         if ids.is_empty() {
             return;
         }
+        if !self.undo.covers(UndoKind::Radio, RemovalSize::Items(ids.len())) {
+            self.confirm_first(from, ids, NoUndoReason::TurnedOff);
+            return;
+        }
         if ids.len() > UNDO_HOLD_CAP {
-            self.confirm_first(from, ids);
+            self.confirm_first(from, ids, NoUndoReason::TooLarge);
             return;
         }
         self.remove(from, ids.into_iter().map(i64::from).collect());
     }
 
-    /// The confirmation's accept, through the same removal: past the cap it holds nothing.
+    /// The confirmation's accept, holding nothing, then the button-less notice where the
+    /// confirmation was the cap's. The dialog is modal, so Settings answers here as it did at the
+    /// request.
     fn for_good(&self, list: i32, ids: Vec<i64>) {
         let Some(from) = self.kept_list(list) else { return };
-        if !ids.is_empty() {
-            self.remove(from, ids);
+        if ids.is_empty() {
+            return;
+        }
+        let this = self.clone();
+        let spawned = slint::spawn_local(Compat::new(async move {
+            let removed =
+                library::radio::remove_stations_for_good(&this.state.db, &ids, from).await;
+            this.finish();
+            match removed {
+                Ok(0) => {}
+                Ok(count) => this.tell_for_good(from, count),
+                Err(e) => log::warn!("radio::remove for good: {}", describe(&e)),
+            }
+        }));
+        if let Err(e) = spawned {
+            log::warn!("radio::remove for good spawn_local: {}", describe(&e));
         }
     }
 
     /// A tick later, a `Dialog` write inside the click tripping Slint's recursion guard, and on a
-    /// model of its own: the menu's ids can be the card selection's, rewritten on every pick.
-    fn confirm_first(&self, from: KeptList, ids: Vec<i32>) {
+    /// model of its own: the menu's ids can be the card selection's, rewritten on every pick. One
+    /// station still on its tab is named.
+    fn confirm_first(&self, from: KeptList, ids: Vec<i32>, reason: NoUndoReason) {
         let Some(claim) = DialogClaim::take_from(&self.weak) else { return };
+        let station = match ids.as_slice() {
+            &[id] => kept::resolve(&self.radio_ui, kept_tab(from), i64::from(id)),
+            _ => None,
+        };
         let raised = self.weak.upgrade_in_event_loop(move |ui| {
-            if claim.holds(&ui) {
+            if !claim.holds(&ui) {
+                return;
+            }
+            let dialog = ui.global::<Dialog>();
+            let from_recent = from == KeptList::Recent;
+            if let Some(station) = station {
+                let row = rows::to_slint_kept_station_row(&station);
+                dialog.invoke_open_remove_station(row, from_recent);
+            } else {
                 let ids = ModelRc::new(VecModel::from(ids));
-                ui.global::<Dialog>().invoke_open_remove_stations(ids, from == KeptList::Recent);
+                dialog.invoke_open_remove_stations(ids, from_recent, reason);
             }
         });
         if let Err(e) = raised {
@@ -143,13 +177,16 @@ impl Remover {
                 let radio_ui = self.radio_ui.clone();
                 self.undo.offer(Removal::RadioStations(StationRemovalUndo { removed, radio_ui }));
             }
-            UndoCapture::OverCap { rows } => {
-                log::info!("radio::remove for good: {rows} station(s)");
-                // Past the cap no one station is named.
-                self.undo.notify_over_cap(stations_removed(from, rows, SharedString::default()));
-            }
+            UndoCapture::OverCap { rows } => self.tell_for_good(from, rows),
             UndoCapture::Nothing => {}
         }
+    }
+
+    /// The button-less notice, past the cap no one station being named.
+    fn tell_for_good(&self, from: KeptList, count: usize) {
+        log::info!("radio::remove for good: {count} station(s)");
+        let title = stations_removed(from, count, SharedString::default());
+        self.undo.notify_over_cap(UndoKind::Radio, count, title);
     }
 
     /// After every removal, a failed one included, so both tabs show what survived.
@@ -168,5 +205,12 @@ impl Remover {
             RadioTab::Recent => Some(KeptList::Recent),
             RadioTab::Browse => None,
         }
+    }
+}
+
+fn kept_tab(list: KeptList) -> RadioTab {
+    match list {
+        KeptList::Favorites => RadioTab::Favorites,
+        KeptList::Recent => RadioTab::Recent,
     }
 }

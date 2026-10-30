@@ -13,6 +13,7 @@ mod io;
 mod library;
 mod playback;
 mod services;
+mod undo;
 
 pub use about::*;
 pub use data::*;
@@ -21,3 +22,4 @@ pub use io::*;
 pub use library::*;
 pub use playback::*;
 pub use services::*;
+pub use undo::*;

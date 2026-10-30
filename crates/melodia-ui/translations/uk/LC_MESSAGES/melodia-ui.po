@@ -21,7 +21,7 @@ msgid "Browse"
 msgstr "Огляд"
 
 #: ui/app-window.slint ui/layout/sidebar.slint ui/views/favorites-view.slint
-#: ui/views/radio-view.slint
+#: ui/views/radio-view.slint ui/views/settings/undo-section.slint
 msgid "Favorites"
 msgstr "Обране"
 
@@ -1107,6 +1107,7 @@ msgstr "Повтор"
 #: ui/components/now-playing/queue-button.slint
 #: ui/views/queue-panel/queue-panel.slint
 #: ui/views/settings/overflow-menu-section.slint
+#: ui/views/settings/undo-section.slint
 msgid "Queue"
 msgstr "Черга"
 
@@ -1291,7 +1292,7 @@ msgstr "Пошук…"
 
 #: ui/components/settings/equalizer-controls.slint
 #: ui/views/settings/animations-section.slint
-#: ui/views/settings/output-section.slint
+#: ui/views/settings/output-section.slint ui/views/settings/undo-section.slint
 msgid "Equalizer"
 msgstr "Еквалайзер"
 
@@ -1618,6 +1619,10 @@ msgid "This playlist has too many tracks to undo, so deleting it can't be undone
 msgstr "У цьому плейлисті забагато треків, щоб видалення можна було скасувати. Самі треки залишаться в медіатеці."
 
 #: ui/globals/dialog.slint
+msgid "The playlist and its track order will be removed. The tracks themselves stay in your library."
+msgstr "Плейлист і порядок треків у ньому буде видалено. Самі треки залишаться в медіатеці."
+
+#: ui/globals/dialog.slint
 msgid "Delete"
 msgstr "Видалити"
 
@@ -1631,6 +1636,33 @@ msgstr[2] "Видалити {n} плейлистів?"
 #: ui/globals/dialog.slint
 msgid "These playlists have too many tracks to undo, so deleting them can't be undone. The tracks themselves stay in your library."
 msgstr "У цих плейлистах забагато треків, щоб видалення можна було скасувати. Самі треки залишаться в медіатеці."
+
+#: ui/globals/dialog.slint
+msgid "The playlists and their track order will be removed. The tracks themselves stay in your library."
+msgstr "Плейлисти й порядок треків у них буде видалено. Самі треки залишаться в медіатеці."
+
+#: ui/globals/dialog.slint
+msgid "Remove from Recently Played?"
+msgstr "Вилучити з нещодавно прослуханого?"
+
+#: ui/globals/dialog.slint
+msgid "Remove from favorites?"
+msgstr "Вилучити з обраного?"
+
+#. Translators: {} is the station's name.
+#: ui/globals/dialog.slint
+msgid "\"{}\" will be removed from Recently Played."
+msgstr "Станцію «{}» буде вилучено з нещодавно прослуханого."
+
+#. Translators: {} is the station's name.
+#: ui/globals/dialog.slint
+msgid "\"{}\" will be removed from your stations, along with its play history."
+msgstr "Станцію «{}» буде вилучено з вашого списку разом з історією прослуховування."
+
+#. Translators: {} is the station's name.
+#: ui/globals/dialog.slint
+msgid "\"{}\" will be removed from your favorites."
+msgstr "Станцію «{}» буде вилучено з обраного."
 
 #: ui/globals/dialog.slint
 msgid "Remove {n} station from Recently Played?"
@@ -1653,6 +1685,14 @@ msgstr "Станцій забагато, щоб вилучення з нещод
 #: ui/globals/dialog.slint
 msgid "There are too many stations to undo, so removing them can't be undone. Any you added by hand are removed from your stations, along with their play history."
 msgstr "Станцій забагато, щоб вилучення можна було скасувати. Додані вручну буде вилучено з ваших станцій разом з історією прослуховування."
+
+#: ui/globals/dialog.slint
+msgid "The stations will be removed from Recently Played."
+msgstr "Станції буде вилучено з нещодавно прослуханого."
+
+#: ui/globals/dialog.slint
+msgid "The stations will be removed from your favorites. Any you added by hand are removed from your stations, along with their play history."
+msgstr "Станції буде вилучено з обраного. Додані вручну буде вилучено з ваших станцій разом з історією прослуховування."
 
 #: ui/globals/dialog.slint
 msgid "Edit Rules"
@@ -1775,7 +1815,7 @@ msgstr "Із втратами"
 msgid "Converted"
 msgstr "Перетворено"
 
-#: ui/globals/undo-text.slint
+#: ui/globals/undo-text.slint ui/views/settings/undo-section.slint
 msgid "Undo"
 msgstr "Скасувати"
 
@@ -2285,7 +2325,7 @@ msgstr "Виконавці"
 msgid "Genres"
 msgstr "Жанри"
 
-#: ui/views/my-library-view.slint
+#: ui/views/my-library-view.slint ui/views/settings/undo-section.slint
 msgid "Playlists"
 msgstr "Плейлисти"
 
@@ -2647,11 +2687,6 @@ msgstr "Відтворення"
 msgid "Window"
 msgstr "Вікно"
 
-#: ui/views/settings-view.slint ui/views/settings/about-section.slint
-#: ui/views/settings/pages/about-page.slint
-msgid "About"
-msgstr "Про програму"
-
 #: ui/views/settings-view.slint ui/views/settings/pages/integrations-page.slint
 msgid "Integrations"
 msgstr "Інтеграції"
@@ -2660,6 +2695,16 @@ msgstr "Інтеграції"
 #: ui/views/settings/update-section.slint
 msgid "Updates"
 msgstr "Оновлення"
+
+#: ui/views/settings-view.slint ui/views/settings/about-section.slint
+#: ui/views/settings/pages/about-page.slint
+msgid "About"
+msgstr "Про програму"
+
+#: ui/views/settings-view.slint
+#: ui/views/settings/pages/accessibility-page.slint
+msgid "Accessibility"
+msgstr "Спеціальні можливості"
 
 #: ui/views/settings-view.slint
 msgid "Search settings…"
@@ -3278,6 +3323,7 @@ msgstr "Плавно приглушувати музику під час пау�
 
 #. Translators: `{}` is a duration in seconds, such as 2.5
 #: ui/views/settings/playback-section.slint
+#: ui/views/settings/undo-section.slint
 msgid "{} s"
 msgstr "{} с"
 
@@ -3388,6 +3434,62 @@ msgstr "Спершу ввімкніть Last.fm або ListenBrainz вище"
 #: ui/views/settings/settings-router.slint
 msgid "No matching settings"
 msgstr "Відповідних налаштувань немає"
+
+#: ui/views/settings/undo-section.slint
+msgid "Offer undo after a removal"
+msgstr "Пропонувати скасування після вилучення"
+
+#: ui/views/settings/undo-section.slint
+msgid "Show a notice with an Undo button after something is removed. Ctrl+Z works too while it is up."
+msgstr "Показувати сповіщення з кнопкою «Скасувати» після вилучення. Поки воно на екрані, працює й Ctrl+Z."
+
+#: ui/views/settings/undo-section.slint
+msgid "Also for a single item"
+msgstr "Навіть для одного елемента"
+
+#: ui/views/settings/undo-section.slint
+msgid "Offer undo when only one track, playlist, station or favorite goes. Clear all, Reset and Clear queue always offer it."
+msgstr "Пропонувати скасування, навіть коли вилучено лише один трек, плейлист, станцію чи елемент обраного. «Очистити все», «Скинути» та «Очистити чергу» пропонують його завжди."
+
+#: ui/views/settings/undo-section.slint
+msgid "Tracks removed from a playlist, and deleted playlists."
+msgstr "Треки, вилучені з плейлиста, і видалені плейлисти."
+
+#: ui/views/settings/undo-section.slint
+msgid "Tracks removed from the queue, Clear queue, and a play that replaces a queue you built."
+msgstr "Треки, вилучені з черги, «Очистити чергу» та відтворення, що замінює чергу, складену вручну."
+
+#: ui/views/settings/undo-section.slint
+msgid "Tracks removed from Favorites."
+msgstr "Треки, вилучені з обраного."
+
+#: ui/views/settings/undo-section.slint
+msgid "Radio stations"
+msgstr "Радіостанції"
+
+#: ui/views/settings/undo-section.slint
+msgid "Stations removed from Favorites or Recently Played."
+msgstr "Станції, вилучені з обраного або з нещодавно прослуханого."
+
+#: ui/views/settings/undo-section.slint
+msgid "Resetting the equalizer."
+msgstr "Скидання еквалайзера."
+
+#: ui/views/settings/undo-section.slint
+msgid "Recent searches"
+msgstr "Нещодавні запити"
+
+#: ui/views/settings/undo-section.slint
+msgid "Clearing recent searches."
+msgstr "Очищення нещодавніх запитів."
+
+#: ui/views/settings/undo-section.slint
+msgid "Keep the notice up"
+msgstr "Тривалість показу сповіщення"
+
+#: ui/views/settings/undo-section.slint
+msgid "How long the notice waits for a press. It also waits while the pointer is over it or Melodia is in the background."
+msgstr "Скільки сповіщення чекає на натискання. Воно також чекає, поки над ним вказівник або Melodia працює у фоні."
 
 #: ui/views/settings/update-section.slint
 msgid "Software Updates"

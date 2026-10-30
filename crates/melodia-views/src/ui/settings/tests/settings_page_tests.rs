@@ -6,7 +6,7 @@ const SETTINGS_PAGE: &str = include_str!("../settings_page.rs");
 
 /// The category count Slint declares today. Kept local so a change to
 /// `SettingsPage.category-count` doesn't silently rewrite what these assert.
-const CATEGORIES: i32 = 12;
+const CATEGORIES: i32 = 13;
 
 const GLOBAL: &str = include_str!("../../../../../melodia-ui/ui/globals/settings-page.slint");
 const ROUTER: &str =
@@ -37,7 +37,7 @@ const CARD_CHILDREN: [(&str, &str, &str); 3] = [
 ];
 
 /// One page per category, by name so a failure says which file.
-const PAGES: [(&str, &str); 12] = [
+const PAGES: [(&str, &str); 13] = [
     (
         "library-page",
         include_str!("../../../../../melodia-ui/ui/views/settings/pages/library-page.slint"),
@@ -83,6 +83,10 @@ const PAGES: [(&str, &str); 12] = [
         include_str!("../../../../../melodia-ui/ui/views/settings/pages/updates-page.slint"),
     ),
     (
+        "accessibility-page",
+        include_str!("../../../../../melodia-ui/ui/views/settings/pages/accessibility-page.slint"),
+    ),
+    (
         "about-page",
         include_str!("../../../../../melodia-ui/ui/views/settings/pages/about-page.slint"),
     ),
@@ -98,11 +102,10 @@ fn array_body(marker: &str) -> Option<&'static str> {
     melodia_testkit::array_body(VIEW, marker)
 }
 
-/// `SettingsPage.category-count` is the sole definition of how many categories exist —
-/// Rust clamps the persisted index against it instead of carrying its own const. Nothing
-/// else in the build notices when it drifts from the categories actually declared: one
-/// added without bumping it stays clickable but can never be restored from `views.json`,
-/// and a bump without a matching router branch selects a branch that mounts nothing.
+/// `SettingsPage.category-count` is the sole definition of how many categories exist. Nothing
+/// else in the build notices when the lists drift apart: a category missing from
+/// `SettingsCategory::ALL` can't be restored from `views.json`, and a label without a matching
+/// router branch selects a branch that mounts nothing.
 #[test]
 fn category_count_matches_the_categories_slint_declares() {
     let declared = declared_category_count();

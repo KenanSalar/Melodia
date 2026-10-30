@@ -1,6 +1,6 @@
 # Plan: Undo for removals (a notice that puts back what went)
 
-Status: **Phases 1 to 9 done** (hand-tested 2026-10-29 and 2026-10-30; Phase 3's measure waits for Kenan's go), **Phase 10 next** · Owner: Kenan · Created: 2026-10-28 · Issue #109, branch `feat/undo-removals`
+Status: **Phases 1 to 10 done** (hand-tested 2026-10-29 and 2026-10-30; Phase 3's measure moved off this branch), **Phase 11 next** · Owner: Kenan · Created: 2026-10-28 · Issue #109, branch `feat/undo-removals`
 
 > **Validated 2026-10-28** against `5fa3d5ed` (`feat/undo-removals`): three read-only traces (the
 > toast stack, shortcuts and confirmations; the library removals; the queue, the equalizer and the
@@ -91,8 +91,8 @@ play replaces the queue silently unless the queue it replaces was built by hand 
      where it was, in the state it was in.
    - A deleted playlist or station comes back. The detail view its delete closed does not reopen,
      navigation not being part of what went.
-5. **One cap for every hold of records, `UNDO_HOLD_CAP` rows** (provisionally 10,000, confirmed by a
-   heaptrack of a full hold in the playlist phase). The unit that captures checks it before it
+5. **One cap for every hold of records, `UNDO_HOLD_CAP` rows** (provisionally 10,000, a heaptrack
+   of a full hold to confirm it later, off this branch). The unit that captures checks it before it
    writes, and `Removal::absorb` checks a merged run's total: a run past the cap can't be undone
    at all, its notice going button-less with the run's count.
    - **The queue's holds are exempt.** They are ids only, a cut's copied and a clear's or a
@@ -111,7 +111,7 @@ play replaces the queue silently unless the queue it replaces was built by hand 
    recent searches, resetting a flat curve, or replacing a queue with the identical list. Each
    removal returns its count, which today's queue removals drop (`library/queue.rs:147`).
 7. **Timing and hover.**
-   - `UNDO_NOTICE_MS = 6_000` (Kenan, 2026-10-29: 10 s, Material's Long snackbar, read as too
+   - `DEFAULT_UNDO_NOTICE_MS = 6_000` (Kenan, 2026-10-29: 10 s, Material's Long snackbar, read as too
      long). That sits between libadwaita's 5 s default and Material's Long, and matches the other
      timed toast with a button, the exclusive-output refusal (`subscribers.rs:219`). The pauses
      below cover anyone reading it.
@@ -265,11 +265,11 @@ The issue's Notes ask for this list before any confirmation goes. "Over the cap"
 
 | Confirmation | Raised at | Fate |
 |---|---|---|
-| Delete playlist | `Dialog.open-delete-playlist`, raised from Rust (`crud.rs`' `confirm_first`) | Gone under the cap (Phase 4). Kept over it, saying it can't be undone because the playlist has too many tracks; with undo off from Phase 10, in its own wording. |
-| Delete N playlists | `Dialog.open-delete-playlists`, raised from Rust (`crud.rs`' `confirm_first`) | Gone under the cap (Phase 4). Kept over it, naming the same reason, and a true plural; with undo off from Phase 10, in its own wording. |
+| Delete playlist | `Dialog.open-delete-playlist`, raised from Rust (`crud.rs`' `confirm_first`) | Gone under the cap (Phase 4). Kept over it, saying it can't be undone because the playlist has too many tracks; with undo off (Phase 10), in its pre-plan wording, `NoUndoReason` picking the message. |
+| Delete N playlists | `Dialog.open-delete-playlists`, raised from Rust (`crud.rs`' `confirm_first`) | Gone under the cap (Phase 4). Kept over it, naming the same reason, and a true plural; with undo off (Phase 10), in its pre-plan wording. |
 | Clear queue | `DialogKind.clear-queue`, populated inline in `queue-panel.slint` | Hidden while queue undo is on, behind `Queue.clear-confirms` (Phase 7). The queue's holds are uncapped (decision 5), so only Settings brings it back (decision 13). "Playback will stop" was never true and is reworded. |
-| Remove station (Favorites / Recently Played) | `Dialog.open-remove-station`, from the card trash and the menu | Deleted (Phase 5): one station is never past the cap. Phase 10 brings back the one-station form undo off needs, the Favorites heart's included. |
-| Remove N stations | `Dialog.open-remove-stations`, raised from Rust (`radio/callbacks/removal.rs`' `confirm_first`) | Gone under the cap (Phase 5). Kept over it, saying there are too many stations to undo; with undo off from Phase 10, in its own wording. |
+| Remove station (Favorites / Recently Played) | `Dialog.open-remove-station`, raised from Rust (`radio/callbacks/removal.rs`' `confirm_first`) | Deleted (Phase 5): one station is never past the cap. Back in Phase 10 for undo off only, in its pre-plan wording, the Favorites heart's included. |
+| Remove N stations | `Dialog.open-remove-stations`, raised from Rust (`radio/callbacks/removal.rs`' `confirm_first`) | Gone under the cap (Phase 5). Kept over it, saying there are too many stations to undo; with undo off (Phase 10), in its pre-plan wording. |
 | Remove watched folder | inline, `library-section.slint:89-102` | **Stays**: out of scope. |
 | Restart (titlebar, tray, backdrop), exclusive output | `window-chrome-section.slint`, `appearance-section.slint`, `output-section.slint` | Untouched: not removals. |
 
@@ -280,7 +280,7 @@ A kept confirmation is raised from Rust once the size is known, across an await,
 
 | File | Owns |
 |---|---|
-| `crates/melodia-views/src/ui/undo/mod.rs` (new) | `UndoWindow`: the one slot, `offer` (merge, or replace and dismiss the old row), `notify_over_cap` (replaces the slot with a button-less notice), the Undo/Ctrl+Z handler acting only on the slot's own row id and running the restore under `spawn_local`, the one "Couldn't undo" failure branch, the slot's release when its row goes, `UNDO_NOTICE_MS`, and the app state and window it hands each restore, so a hold carries only what it took |
+| `crates/melodia-views/src/ui/undo/mod.rs` (new) | `UndoWindow`: the one slot, `offer` (merge, or replace and dismiss the old row), `notify_over_cap` (replaces the slot with a button-less notice), the Undo/Ctrl+Z handler acting only on the slot's own row id and running the restore under `spawn_local`, the one "Couldn't undo" failure branch, the slot's release when its row goes, and the app state and window it hands each restore, so a hold carries only what it took. From Phase 10 also the `UndoFlags` shadow (`covers`, `set_prefs`, the `Queue.clear-confirms` mirror) and the one uncovered check, in `offer` and `notify_over_cap` |
 | `crates/melodia-views/src/ui/undo/removal.rs` (new) | `Removal`, one variant per surface wrapping that surface's token: `absorb` (merge or hand back), its wording recipe, the title builders an over-cap notice shares, and the async `restore`, which dispatches each arm to the surface module that raised it and answers a failed write. No surface names another's. |
 | `crates/melodia-views/src/ui/shell/notifications.rs` | `recipes` keeps its shape. Adds a timed localized push, an in-place `relabel`, `restart` (a bump of the row's `restarts`), one row-removed listener, and the `Undo` arm in `run_action`, which now takes the row id. `show_auto_dismiss` writes the row's `timeout-ms` instead of arming a Rust timer. `remove_at` stays the one removal path. |
 | `crates/melodia-ui/ui/globals/undo-text.slint` (new) | `UndoText`: every undo wording as `pure callback`s with plural `@tr`, spelled as `Settings.playlist-import-title` spells them (`settings.slint:434-437`), keeping `settings.slint` (625 lines) from growing. Exported from `app-window.slint`, Rust calling it. |
@@ -292,10 +292,10 @@ A kept confirmation is raised from Rust once the size is known, across an await,
 | `crates/melodia-ui/ui/globals/favorite-actions.slint` (new) | `FavoriteActions`: `remove-tracks` and `remove-entities`, the explicit removals, raised by the row and card menus and by the Favorites page's hearts |
 | `crates/melodia-ui/ui/components/grid/entity-card-grid.slint` | The heart calls the host's `favorite-clicked`, the page deciding whether it is a removal |
 | `crates/melodia/src/boot/ui_setup/` | `notifications::install` and `UndoWindow` move ahead of `install_views` (`install.rs:68`) |
-| `crates/melodia-core/src/entities/undo.rs` (new) | `UndoCapture<T>` (`Nothing`, `Held(T)` or `OverCap { rows }`) and `UNDO_HOLD_CAP`, named by store, app and views |
+| `crates/melodia-core/src/entities/undo.rs` (new) | `UndoCapture<T>` (`Nothing`, `Held(T)` or `OverCap { rows }`) and `UNDO_HOLD_CAP`, named by store, app and views; from Phase 10 `UndoKind` (its persisted `key()`) and `RemovalSize` (`Items(n)` or `Whole`) |
 | `crates/melodia-core/src/entities/{playlist,radio}.rs` | The plain tokens beside their entity: `PlaylistItemsCut`, `PlaylistSnapshot` (a `Playlist` and its `CutItem`s), `KeptList` and `StationCut`, plus `RadioStation::is_listed`, which the store's removal reads |
 | `crates/melodia-core/src/utils/reinsert.rs` (new) | `reinsert`: held items back at their indices in one linear walk, the playlist restore's and the queue's `restore_cut`'s |
-| `crates/melodia-store/src/database/queries/playlist.rs` | Capture inside the removal transactions. `insert_items_tx` takes explicit `(track_id, position, added_at)` rows, its two callers building contiguous ones. `update_playlist_thumbnail_and_timestamp_tx` takes its stamp from the caller, which minted it inside (`:515`). |
+| `crates/melodia-store/src/database/queries/playlist.rs` | Capture inside the removal transactions. `insert_items_tx` takes explicit `(track_id, position, added_at)` rows, its two callers building contiguous ones. `update_playlist_thumbnail_and_timestamp_tx` takes its stamp from the caller, which minted it inside (`:515`). `remove_tracks_from_playlist_for_good`, the plain removal undo off takes and the held form calls past the cap. |
 | `crates/melodia-store/src/database/queries/playlist_restore.rs` (new) | `restore_playlist_items`, `restore_playlists`, keeping `playlist.rs` (550 lines) under the 800-line cap |
 | `crates/melodia-store/src/database/queries/playlist_delete.rs` (new) | Both deletes, each one transaction: `delete_playlists` (for good, answering the names) and `delete_playlists_held` (answering `PlaylistSnapshot`s), plus `item_count` and `custom_covers` |
 | `crates/melodia-store/src/database/queries/radio_removal.rs` (new) | `remove_stations` and `restore_stations`, each one transaction, `delete_if_unlisted` (Browse's un-heart) and `station_artwork`; `radio.rs` loses `delete_station` and `clear_play_history` |
@@ -303,7 +303,7 @@ A kept confirmation is raised from Rust once the size is known, across an await,
 | `crates/melodia-app/src/library/favorites.rs` | `unfavorite`, and `FavoriteWrite::propagate`, the tail `set` and it share, loving only what was written |
 | `crates/melodia-app/src/tasks/artwork_sweep.rs` | `ArtworkHold` (refcounted per basename, released on drop) beside its one reader, unioned into `sweep_stores`' reference set |
 | `crates/melodia-app/src/library/{playlists,radio/removal,queue,search,favorites}.rs` | Each removal returns its capture, and each surface gets one restore fn |
-| `crates/melodia-views/src/ui/radio/callbacks/removal.rs` (new) | `Remover` (the heart, the trash and the menu, and the confirmation past the cap) and `StationRemovalUndo` |
+| `crates/melodia-views/src/ui/radio/callbacks/removal.rs` (new) | `Remover` (the heart, the trash and the menu, and the confirmation past the cap or with undo off, its accept through `library::radio::remove_stations_for_good`) and `StationRemovalUndo` |
 | `crates/melodia-app/src/services/search_history.rs` | `clear` hands back the list; `restore` puts it back |
 | `crates/melodia-engine/src/player/engine/queue.rs` (783 lines after Phase 8) | `cut`/`restore_cuts` replacing `remove_at` and `remove_batch`, one `drop_rows` under `cut` and `prune_missing`, `take_cleared`/`restore_cleared`, `replace`/`restore_replaced` sharing the clear's `splice_ahead` and `place_held_cursor`, the `playing_left` and `hand_edited` flags, the `seats` count the restores' cursor rule reads, and one `seat` method. Split into `queue/` if it passes 800. |
 | `crates/melodia-engine/src/player/engine/state/replaced.rs` (new) | `ReplacedQueue` (the moved queue and the playback over it), `PlayerState::replace_queue` and `restore_replaced_queue`, which resumes what was playing |
@@ -312,8 +312,11 @@ A kept confirmation is raised from Rust once the size is known, across an await,
 | `crates/melodia-views/src/ui/callbacks/favorite_removal.rs` (new) | `FavoriteRemovalUndo` and `Unfavoriter`, wiring both `FavoriteActions` callbacks: resolve, un-heart, mirror, offer |
 | `crates/melodia-views/src/ui/callbacks/row_flag_mirrors.rs` (new) | `RowFlagMirrors`, lifted out of `now_playing.rs`: every surface's per-row heart and star, patched in one hop per surface, shared by the Now Playing heart and stars, the removal and its undo |
 | `crates/melodia-views/src/ui/equalizer.rs` | `apply_curve`, shared by preset select, reset and restore |
-| `crates/melodia-app/src/services/settings/undo.rs` (new) | `UndoFlags`, flattened into `SettingsData`; `library::settings::undo` holds its setters |
+| `crates/melodia-app/src/services/settings/undo.rs` (new) | `UndoFlags`, flattened into `SettingsData`: its defaults, `covers`, `kind_on`/`set_kind` (shared by the shadow and the setter) and `notice_ms`, clamped to `UNDO_NOTICE_MS_RANGE`; `library::settings::undo` holds its setters |
 | `crates/melodia-views/src/ui/settings/undo_settings.rs` (new) | The Accessibility page's undo section: seeds it, and each callback sets the slot's shadow, then persists |
+| `crates/melodia-views/src/ui/settings/settings_page.rs` | `SettingsCategory::Accessibility`, and `key`/`from_key`, the category persisted by key |
+| `crates/melodia-ui/ui/globals/undo-settings.slint` (new) | `UndoSettings` and the Slint `UndoKind`, off `settings.slint` |
+| `crates/melodia-ui/ui/globals/dialog.slint` | `NoUndoReason`, which the three plural-or-playlist openers take, and the one-station opener undo off brings back |
 | `crates/melodia-ui/ui/views/settings/{pages/accessibility-page,undo-section}.slint` (new) | The category's page and its first section |
 
 **Duplication collapsed on the way through:**
@@ -435,7 +438,7 @@ The shell and its simplest user land together, the shell having nothing to show 
 - An undone clear is still there after a restart.
 - A language switch with the notice up re-renders it.
 
-### Phase 3: tracks removed from a playlist (done 2026-10-29, its measure pending)
+### Phase 3: tracks removed from a playlist (done 2026-10-29)
 
 1. **Core.**
    - `UndoCapture<T>` and `UNDO_HOLD_CAP`. A third arm, `Nothing`, puts decision 6 in the type: a
@@ -478,10 +481,9 @@ The shell and its simplest user land together, the shell having nothing to show 
    - `PlaylistCutUndo` merges only on the same playlist. Its restore ends in `refresh_after_edit`,
      which reloads the grid, and the detail only while it still shows that playlist.
    - `callbacks::wire` takes `ViewCtx` whole, as Search's does.
-4. **Measure.** One heaptrack of a held cap-sized cut confirms `UNDO_HOLD_CAP`, and one of a moved
-   full-library queue confirms the queue's exemption (decision 5). Both are taken by attaching to
-   Kenan's running build after the hand test, with his go between them, and recorded here. The
-   second needs Phase 7's `take_cleared`, so it can be taken from Phase 7 on.
+4. **Measure, moved off this branch** (Kenan, 2026-10-30). One heaptrack of a held cap-sized cut
+   confirms `UNDO_HOLD_CAP`, and one of a moved full-library queue confirms the queue's exemption
+   (decision 5), each by attaching to Kenan's running build with his go between them.
 5. **The first restore that reports its failure.** `Removal::restore` is async and returns
    `Result`, and `UndoWindow::undo` owns the one failure branch: `show_failure`, "Couldn't undo"
    over "See the log for details.". Phase 2's search restore is awaited there too, so a failed
@@ -916,7 +918,7 @@ correct.
 - With love sync on, a removal then Undo queues an unlove, then a love (the log).
 - A language switch with the notice up re-renders it.
 
-### Phase 10: undo in Settings, in a new Accessibility category
+### Phase 10: undo in Settings, in a new Accessibility category (done 2026-10-30)
 
 **What you'll see.** Settings gains an Accessibility category, whose first section is Undo:
 
@@ -943,74 +945,91 @@ removing stations and Clear queue ask first again (decision 13).
      - `undo_kinds_off`, the keys of the kinds turned off. A list of keys rather than a bool per
        kind: a key never repoints, an unknown one is ignored, a kind added later starts on, and the
        struct stays under clippy's `struct_excessive_bools`;
-     - `undo_notice_ms`, clamped to 4,000..=10,000 on read.
-   - Setters in `library::settings::undo` over `mutate_settings`. They kick nothing, since only the
-     slot reads these, through its shadow.
-2. **The slot.**
-   - `UndoKind` (Playlists, Queue, Favorites, Radio, Equalizer, RecentSearches) with its persisted
-     `key()`. Each `Removal` arm names its kind.
-   - `UndoWindow` holds an `UndoPrefs` shadow, seeded at install from the settings and set by the
-     Settings callbacks before their write is spawned (the shared-shadow rule).
-   - `covers(kind, count)`, with the count `Items(n)` or `Whole`: undo on, the kind on, and
-     `Items(1)` only with single items on. `UNDO_NOTICE_MS` becomes the shadow's default, and
-     `offer` and `notify_over_cap` read the shadow's duration.
-3. **Every removal asks first, before it captures**, so an uncovered one holds nothing:
-   - Equalizer Reset, Clear all, queue rows, a replace and favorites: uncovered is the plain write
-     and no notice.
-   - A replace is captured by the play on the runtime, away from the shadow, so
-     `follow_replaces` asks `covers(Queue, Whole)` and drops an uncovered capture: a moved queue
-     freed a moment later, which the plain replace frees anyway.
-   - Playlist tracks: the store fn splits into a plain form and a held one, the held form's
-     over-cap branch already being the plain write.
-   - Deleting playlists and removing stations: uncovered takes the over-cap path, its confirmation
-     raised from Rust with a `DialogClaim` (Phases 4 and 5 build it).
-   - **The playlist delete confirmations need a second wording for undo off.** Phase 4's messages
-     give the over-cap reason, "too many tracks to undo", which is wrong when the user turned undo
-     off. The undo-off form says only that the delete can't be undone, so the openers take which
-     reason applies. Phase 5's station confirmation owes the same, naming the cap too.
-   - **Stations need a one-station confirmation back.** Phase 5 deleted it, one station never
-     being past the cap. With radio undo off, `Remover::request` asks first for every removal,
-     the Favorites heart's included (Kenan, 2026-10-30), and one card's removal names the station
-     and says what a hand-typed one loses.
-   - Clear queue: Rust writes `Queue.clear-confirms` from the shadow, which shows Phase 7's kept
-     inline confirmation.
-4. **The category** (`ui-patterns.md`'s "A new category" list):
-   - `pages/accessibility-page.slint`, a `category-accessibility` constant, a router branch and a
-     search mount, both inline arrays in `settings-nav.slint`, `SettingsCategory::Accessibility` in
-     `ALL`, `category-count` at 13, and `category-name:` on its section.
-   - The icon (`accessibility_new`) owes `scripts/icons.txt`, a re-subset by glyph id and a clean
-     `scripts/check-icons.py`.
-   - **Placed above About**, near the end, where GNOME and Windows put theirs. Inserting it
-     renumbers every later index, so **the persisted category moves to a string key** in
-     `views.json` (`settings_category_key`). The old int is left unread, as `settings_tab` was
-     before it. The first launch after the update opens Settings on Library, and no later
-     category, #36's included, renumbers anything.
+     - `undo_notice_ms`, clamped to `UNDO_NOTICE_MS_RANGE` (4,000..=10,000) on read by
+       `notice_ms()`.
+   - `covers(kind, size)`, `kind_on` and `set_kind` live on `UndoFlags` (`services/settings/undo.rs`),
+     `set_kind` shared by the shadow and the setter.
+   - Setters in `library::settings::undo` over `mutate_settings`, whose lock lets two kind toggles
+     compose. They kick nothing, since only the slot reads these, through its shadow.
+2. **Core.** `UndoKind` (Playlists, Queue, Favorites, Radio, Equalizer, RecentSearches) with its
+   persisted `key()`, and `RemovalSize`, `Items(n)` or `Whole`, beside `UndoCapture`. **A single
+   item is a removal whose notice would read 1**; Clear all, Reset, Clear and a replace are `Whole`.
+3. **The slot.**
+   - The shadow is an `UndoFlags` itself (`RefCell`), seeded by `undo::install` from the
+     `SettingsData` `install_shell` already read, and moved by `set_prefs` before a Settings write
+     is spawned (the shared-shadow rule). `set_prefs` also writes `Queue.clear-confirms`, the
+     shadow's one Slint mirror, seeded at install.
+   - **`offer` drops a removal undo doesn't cover**, through `Removal::kind()` and `size()`. That is
+     the one check for the six removals whose capture is their write's own answer: Reset's curve,
+     Clear all's list, a queue cut, a clear, a replace (so `follow_replaces` is unchanged) and
+     favorites' flipped ids, which the mirrors need anyway. An uncovered removal leaves the card up
+     alone, which still names exactly what Ctrl+Z undoes.
+   - `notify_over_cap(kind, count, title)` raises nothing for an uncovered removal; the merge's own
+     over-cap goes through a private push. Both read the shadow's `notice_ms()`, `UNDO_NOTICE_MS`
+     giving way to the setting's `DEFAULT_UNDO_NOTICE_MS`.
+4. **The removals with a confirmation or a capture of their own ask first**, `covers(kind,
+   Items(ids asked for))` at the click:
+   - Playlist tracks: uncovered runs `remove_tracks_from_playlist_for_good`, which the held form
+     also calls past the cap, and offers nothing.
+   - Deleting playlists: uncovered raises the confirmation from the `spawn_local` the count already
+     ran in, skipping the count (its first poll is a later tick, so no recursion guard). The accept
+     calls `notify_over_cap`, silent when the confirmation was undo off's: the dialog is modal, so
+     Settings answers there as it did at the request.
+   - Stations: uncovered confirms, one station still on its tab through the restored
+     `open-remove-station` (the Favorites heart's included, Kenan 2026-10-30). The accept removes
+     through `library::radio::remove_stations_for_good`, so it never holds or offers.
+   - Clear queue: Phase 7's inline confirmation reads the mirror.
+5. **Confirmations.** `NoUndoReason { too-large, turned-off }` picks the message of
+   `open-delete-playlist`, `open-delete-playlists` and `open-remove-stations`. **The undo-off
+   messages are the pre-plan strings** rather than new "can't be undone" ones: an uncovered removal
+   behaves as before the plan (decision 13), and their translations came back from `5fa3d5ed`'s
+   catalogs. Menu labels keep no "…", as "Delete Playlist" and "Clear queue" never had one over a
+   conditional confirmation.
+6. **The category** (`ui-patterns.md`'s "A new category" list):
+   - `pages/accessibility-page.slint`, `category-accessibility: 11` (About moves to 12), a router
+     branch, a search mount and the no-match term, both inline arrays in `settings-view.slint`,
+     `SettingsCategory::Accessibility` in `ALL`, `category-count` at 13, and `category-name:` on
+     its section.
+   - The icons `accessibility_new`, `undo`, `looks_one` and `timer` joined `scripts/icons.txt`,
+     re-subset by glyph id, `scripts/check-icons.py` clean. The kinds reuse `playlist_remove`,
+     `queue_music`, `heart_minus`, `radio`, `graphic_eq` and `history`.
+   - **Placed above About**, where GNOME and Windows put theirs, so **the persisted category is a
+     string key** (`SettingsCategory::key`) in a new field, `settings_category_key`: an old file's
+     int under the same name would fail the whole `views.json` parse. The old int is left unread, as
+     `settings_tab` was. The setter keeps its name, `set_settings_category`, which
+     `index_persist.rs` finds writers by, and `IndexPersist` keeps publishing the live index. The
+     first launch after the update opens Settings on Library, and no later category, #36's
+     included, renumbers anything.
    - `animations-section` stays under Appearance. Whether it moves is #36's call.
-5. **The section** (`undo-section.slint`):
-   - A `SectionCard` holding the master `SettingRow` toggle and its sub-rows: single items, then
-     the six kinds, disabled while the master is off.
-   - The duration is a `SettingSlider` snapping to whole seconds, its readout reusing crossfade's
-     `@tr("{} s", …)`. It is the Settings page's numeric control already; `FlyoutStepper` is built
-     around a flyout row and hold-to-repeat, which seven values don't need.
-   - Each row's label and description are declared once, read by the row and by `row-visible`, and
-     each sub-row owes its pair.
-6. **Views.** `ui/settings/undo_settings.rs` seeds the section from the settings, and each callback
-   sets the shadow, then persists.
-7. **Strings:**
-   - "Accessibility" and "Undo";
-   - "Offer undo after a removal" and "Also for a single item", each with a description;
-   - the six kind names;
-   - "Keep the notice up";
-   - the reworded confirmations, if Phases 4, 5 and 7 haven't already settled them;
-   - the undo-off wording of the two playlist delete confirmations and of the station
-     confirmation, one message each, and the one-station confirmation's strings.
+7. **The section** (`undo-section.slint`, `globals/undo-settings.slint`'s `UndoSettings` and Slint
+   `UndoKind`, off `settings.slint`):
+   - Crossfade's shape (Kenan, 2026-10-30, the dimmed rows taking too much room): single items,
+     the six kinds and the slider mount only while the master is on, keeping their values while
+     hidden. The card searches as one unit, so any row's words find the master switch, and dividers
+     part the master, single items, the kinds and the slider.
+   - The duration is a `SettingSlider` snapping to whole seconds through `secs-step`, as
+     `output-section.slint`'s `resync-step` does, its readout reusing crossfade's `@tr("{} s", …)`
+     and its bounds seeded from `UNDO_NOTICE_MS_RANGE`.
+   - Each row's label and description are declared once, read by the row and by `row-visible`.
+8. **Views.** `ui/settings/undo_settings.rs` seeds the section from `undo.prefs()`, and each callback
+   calls `set_prefs`, then `persist_blocking`; `kind-changed` maps the Slint enum onto core's in one
+   exhaustive match.
+9. **Strings**, in all 15 catalogs: "Accessibility", the card title "Undo" (the button's msgid),
+   "Offer undo after a removal", "Also for a single item", the six kind labels ("Radio stations"
+   and "Recent searches" new), "Keep the notice up", a description each, and the nine restored
+   confirmation strings.
 
 **By hand.**
 - Undo off: no notice anywhere and Ctrl+Z does nothing. Deleting a playlist, removing a station and
-  Clear queue ask first.
-- Single items off: removing one playlist track raises nothing, and two raise the notice. Clear all
-  and Reset still raise theirs.
-- One kind off: only that kind goes quiet.
+  Clear queue ask first, in the pre-plan wording.
+- Radio off: Favorites' heart and Recently Played's trash ask first, naming the station; a
+  hand-typed one says its history goes too.
+- Queue off: Clear asks first, and a play over a hand-built queue raises nothing.
+- Single items off: removing one playlist track raises nothing, and two raise the notice. Deleting
+  one playlist asks first. Clear all and Reset still raise theirs.
+- One kind off: only that kind goes quiet, and a card already up stays.
+- The master off hides every row below it, the slider included; back on, each shows its old value.
+  With it off, searching "equalizer" still finds the master switch.
 - The slider at 4 s and at 10 s: the notice lasts that long, and hover still holds it.
 - A restart keeps every choice. An older `settings.json` opens with undo on at 6 s.
 - Searching Settings for "undo" finds the section from any category.
@@ -1091,8 +1110,13 @@ removing stations and Clear queue ask first again (decision 13).
 - **Settings:**
   - `UndoFlags` defaulting from an older `settings.json`, the duration clamped at both ends, and an
     unknown kind key ignored;
-  - `covers` over every kind, both counts and both switches;
-  - the category's key round-tripping through `views.json`.
+  - `covers` over every kind, both counts and both switches; `set_kind` off then on leaving no key;
+  - the category's key round-tripping through `views.json`, an unknown key opening on Library, and
+    an older file's int `settings_category` left unread;
+  - `offer` dropping an uncovered removal with the held card left up, and `notify_over_cap`
+    silent when uncovered;
+  - `remove_tracks_from_playlist_for_good` answering the rows it removed, none stamping nothing,
+    and `remove_stations_for_good` holding no logo.
 - **Existing tests to recheck:** `settings_page_tests` (the category count and arrays),
   `dialog_openers.rs` and `translations.rs`, and the timer-observing `show_completion` test.
   Phase 7 already ported the `remove_at` and `remove_batch` tests to `cut` through

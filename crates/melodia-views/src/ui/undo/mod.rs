@@ -4,6 +4,9 @@
 //! One slot rather than a stack: a run of the same removal merges into the notice already up,
 //! and anything else replaces it, the earlier removal standing. The hold goes with its notice,
 //! however that leaves.
+//!
+//! A removal Settings leaves uncovered raises nothing here and leaves the card up alone, which
+//! still names exactly what Ctrl+Z undoes.
 
 mod removal;
 
@@ -14,16 +17,16 @@ use async_compat::Compat;
 use slint::{ComponentHandle, SharedString};
 
 use crate::ui::shell::notifications::{LocalizedPush, NotificationsUi, RowText};
+use melodia_app::services::settings::UndoFlags;
 use melodia_app::state::AppState;
+use melodia_core::entities::undo::{RemovalSize, UndoKind};
 use melodia_core::error::describe;
-use melodia_ui::{AppWindow, NotificationKind, NotificationVariant, Notifications, UndoText};
+use melodia_ui::{
+    AppWindow, NotificationKind, NotificationVariant, Notifications, Queue, UndoText,
+};
 
 use removal::Absorbed;
 pub use removal::{Removal, playlists_deleted, stations_removed, tracks_removed_from};
-
-/// How long the notice waits for a press. It runs only while nobody is reading it: hover and a
-/// window in the background both hold the clock.
-pub const UNDO_NOTICE_MS: u32 = 6_000;
 
 /// The state and the window are handed to each restore, so a hold carries only what it took.
 pub struct UndoWindow {
@@ -31,6 +34,9 @@ pub struct UndoWindow {
     state: AppState,
     ui: slint::Weak<AppWindow>,
     slot: RefCell<Option<Slot>>,
+    /// What Settings asks of undo, moved by its callbacks before they persist, so a removal right
+    /// after a toggle already reads the new answer.
+    prefs: RefCell<UndoFlags>,
 }
 
 struct Slot {
@@ -46,9 +52,37 @@ enum Landing {
 }
 
 impl UndoWindow {
-    /// Raises the notice for a removal that has already been written. **No slot borrow is held
-    /// across a `NotificationsUi` call**, any of which can remove a row and call back in.
+    /// [`UndoFlags::covers`], asked of what Settings holds now.
+    pub fn covers(&self, kind: UndoKind, size: RemovalSize) -> bool {
+        self.prefs.borrow().covers(kind, size)
+    }
+
+    /// A copy, for the Settings section to seed from.
+    pub fn prefs(&self) -> UndoFlags {
+        self.prefs.borrow().clone()
+    }
+
+    /// Moves the shadow, for a Settings callback to call before it persists.
+    pub fn set_prefs(&self, change: impl FnOnce(&mut UndoFlags)) {
+        change(&mut self.prefs.borrow_mut());
+        self.mirror_prefs();
+    }
+
+    /// Clear's confirmation, the one removal whose ask lives in Slint.
+    fn mirror_prefs(&self) {
+        if let Some(ui) = self.ui.upgrade() {
+            let clear_covered = self.covers(UndoKind::Queue, RemovalSize::Whole);
+            ui.global::<Queue>().set_clear_confirms(!clear_covered);
+        }
+    }
+
+    /// Raises the notice for a removal that has already been written, unless Settings leaves it
+    /// uncovered. **No slot borrow is held across a `NotificationsUi` call**, any of which can
+    /// remove a row and call back in.
     pub fn offer(&self, removal: Removal) {
+        if !self.covers(removal.kind(), removal.size()) {
+            return;
+        }
         let Some(ui) = self.ui.upgrade() else { return };
         let landing = match self.slot.borrow_mut().as_mut() {
             Some(slot) => match slot.removal.absorb(removal) {
@@ -66,13 +100,13 @@ impl UndoWindow {
                 self.notifications.relabel(&ui, row, recipe);
                 self.notifications.restart(row);
             }
-            Landing::OverCap(title) => self.notify_over_cap(title),
+            Landing::OverCap(title) => self.raise_over_cap(title),
             Landing::Fresh(removal) => {
                 self.replace_held();
                 let push = LocalizedPush {
                     variant: NotificationVariant::Info,
                     kind: NotificationKind::Undo,
-                    timeout_ms: UNDO_NOTICE_MS,
+                    timeout_ms: self.prefs.borrow().notice_ms(),
                 };
                 let row = self.notifications.show_localized_timed(&ui, push, removal.recipe());
                 *self.slot.borrow_mut() = Some(Slot { row, removal });
@@ -81,16 +115,29 @@ impl UndoWindow {
         }
     }
 
-    /// Raises the notice for a removal, or a run of them, too large to hold: what went, that it
-    /// can't be undone, and no button. It still replaces the held one, so the card up is always the
-    /// latest removal and Ctrl+Z never reaches past it to an older one.
-    pub fn notify_over_cap(&self, title: impl Fn(&AppWindow) -> SharedString + 'static) {
+    /// Raises the notice for `count` removed by a removal too large to hold: what went, that it
+    /// can't be undone, and no button. Nothing is raised where Settings leaves the removal
+    /// uncovered, its confirmation having said undo was off rather than that it was too large.
+    pub fn notify_over_cap(
+        &self,
+        kind: UndoKind,
+        count: usize,
+        title: impl Fn(&AppWindow) -> SharedString + 'static,
+    ) {
+        if self.covers(kind, RemovalSize::Items(count)) {
+            self.raise_over_cap(title);
+        }
+    }
+
+    /// It still replaces the held notice, so the card up is always the latest removal and Ctrl+Z
+    /// never reaches past it to an older one.
+    fn raise_over_cap(&self, title: impl Fn(&AppWindow) -> SharedString + 'static) {
         let Some(ui) = self.ui.upgrade() else { return };
         self.replace_held();
         let push = LocalizedPush {
             variant: NotificationVariant::Info,
             kind: NotificationKind::None,
-            timeout_ms: UNDO_NOTICE_MS,
+            timeout_ms: self.prefs.borrow().notice_ms(),
         };
         self.notifications.show_localized_timed(&ui, push, move |ui| {
             RowText::plain(title(ui), ui.global::<UndoText>().invoke_too_many_to_undo())
@@ -157,13 +204,16 @@ pub fn install(
     ui: &AppWindow,
     state: &AppState,
     notifications: &Rc<NotificationsUi>,
+    prefs: UndoFlags,
 ) -> Rc<UndoWindow> {
     let window = Rc::new(UndoWindow {
         notifications: notifications.clone(),
         state: state.clone(),
         ui: ui.as_weak(),
         slot: RefCell::new(None),
+        prefs: RefCell::new(prefs),
     });
+    window.mirror_prefs();
 
     let weak = Rc::downgrade(&window);
     notifications.on_row_removed(move |row| {

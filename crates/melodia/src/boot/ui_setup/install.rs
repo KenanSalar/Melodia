@@ -67,7 +67,7 @@ fn install_shell(
         install_backdrop_dither(app);
     }
     // Ahead of every installer whose removals offer an undo, which takes the slot.
-    let (notifications, undo) = install_notice_stack(app, state);
+    let (notifications, undo) = install_notice_stack(app, state, settings);
     let views = install_views(app, state, &undo, view_state);
     install_library_settings_and_friends(app, state, &notifications, &undo)?;
 
@@ -98,6 +98,7 @@ fn install_shell(
 fn install_notice_stack(
     app: &AppWindow,
     state: &AppState,
+    settings: Option<&SettingsData>,
 ) -> (Rc<NotificationsUi>, Rc<UndoWindow>) {
     let notifications = ui::shell::notifications::install(app);
     // Toast rows carry strings Rust resolved once and outlive every navigation, so a language
@@ -110,7 +111,8 @@ fn install_notice_stack(
             log::warn!("notifications locale refresher: {}", describe(&e));
         }
     }
-    let undo = ui::undo::install(app, state, &notifications);
+    let prefs = settings.map(|s| s.undo.clone()).unwrap_or_default();
+    let undo = ui::undo::install(app, state, &notifications, prefs);
     (notifications, undo)
 }
 

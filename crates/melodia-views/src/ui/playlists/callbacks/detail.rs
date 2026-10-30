@@ -17,7 +17,7 @@ use crate::ui::view_ctx::ViewCtx;
 use melodia_app::library;
 use melodia_app::state::AppState;
 use melodia_core::entities::playlist::PlaylistItemsCut;
-use melodia_core::entities::undo::UndoCapture;
+use melodia_core::entities::undo::{RemovalSize, UndoCapture, UndoKind};
 use melodia_core::error::{AppError, describe};
 use melodia_core::utils::block_move;
 use melodia_ui::{AppWindow, PlaylistDetail};
@@ -183,9 +183,9 @@ fn wire_edit_artwork(ui: &AppWindow, state: &AppState, playlists_ui: &Arc<Playli
     });
 }
 
-/// The row menu's removal, one row or a selection, as one batched write that offers its undo. Once
-/// it lands the rows and their picks leave on that tick, filtered or not, and `refresh_detail`
-/// reloads the rest. On the UI thread, where the undo slot lives.
+/// The row menu's removal, one row or a selection, as one batched write that offers its undo where
+/// Settings covers it. Once it lands the rows and their picks leave on that tick, filtered or not,
+/// and `refresh_detail` reloads the rest. On the UI thread, where the undo slot lives.
 fn wire_remove_track(cx: ViewCtx<'_>, playlists_ui: &Arc<PlaylistsUi>) {
     let s = cx.state.clone();
     let pu = playlists_ui.clone();
@@ -199,15 +199,27 @@ fn wire_remove_track(cx: ViewCtx<'_>, playlists_ui: &Arc<PlaylistsUi>) {
         }
         let Some(ui) = weak.upgrade() else { return };
         let name = ui.global::<PlaylistDetail>().get_playlist().name;
+        let covered = undo.covers(UndoKind::Playlists, RemovalSize::Items(id_vec.len()));
         let (s, pu, undo, weak) = (s.clone(), pu.clone(), undo.clone(), weak.clone());
         let spawned = slint::spawn_local(Compat::new(async move {
-            let removed = match library::playlists::remove_tracks_from_playlist_batch(
-                &s.db,
-                playlist_id,
-                id_vec.clone(),
-            )
-            .await
-            {
+            let removed = if covered {
+                library::playlists::remove_tracks_from_playlist_batch(
+                    &s.db,
+                    playlist_id,
+                    id_vec.clone(),
+                )
+                .await
+            } else {
+                // Undo off: nothing held, so nothing to tell.
+                library::playlists::remove_tracks_from_playlist_for_good(
+                    &s.db,
+                    playlist_id,
+                    id_vec.clone(),
+                )
+                .await
+                .map(|_| UndoCapture::Nothing)
+            };
+            let removed = match removed {
                 Ok(removed) => removed,
                 Err(e) => {
                     log::warn!("playlists::remove_track: {}", describe(&e));
@@ -224,7 +236,8 @@ fn wire_remove_track(cx: ViewCtx<'_>, playlists_ui: &Arc<PlaylistsUi>) {
                     undo.offer(Removal::PlaylistTracks(hold));
                 }
                 UndoCapture::OverCap { rows } => {
-                    undo.notify_over_cap(tracks_removed_from(rows, name));
+                    let title = tracks_removed_from(rows, name);
+                    undo.notify_over_cap(UndoKind::Playlists, rows, title);
                 }
             }
         }));

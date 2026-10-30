@@ -318,7 +318,7 @@ pub(crate) async fn insert_items_tx(
 }
 
 /// Removes `track_ids` from a playlist, answering what puts them back, or only how many went where
-/// there were more than [`UNDO_HOLD_CAP`]: those are removed as they always were, nothing kept.
+/// there were more than [`UNDO_HOLD_CAP`]: those are removed for good, nothing kept.
 pub async fn remove_tracks_from_playlist_batch(
     db: &DbPool,
     playlist_id: i64,
@@ -327,21 +327,12 @@ pub async fn remove_tracks_from_playlist_batch(
     if track_ids.is_empty() {
         return Ok(UndoCapture::Nothing);
     }
-
-    let mut tx = db.write().begin().await?;
-
     if track_ids.len() > UNDO_HOLD_CAP {
-        let removed = delete_items_tx(&mut tx, playlist_id, track_ids).await?;
-        if removed == 0 {
-            return Ok(UndoCapture::Nothing);
-        }
-        renumber_playlist_positions_tx(&mut tx, playlist_id).await?;
-        let now = melodia_core::utils::now_rfc3339();
-        update_playlist_thumbnail_and_timestamp_tx(&mut tx, playlist_id, &now).await?;
-        tx.commit().await?;
-        return Ok(UndoCapture::OverCap { rows: removed });
+        let rows = remove_tracks_from_playlist_for_good(db, playlist_id, track_ids).await?;
+        return Ok(if rows == 0 { UndoCapture::Nothing } else { UndoCapture::OverCap { rows } });
     }
 
+    let mut tx = db.write().begin().await?;
     let rows = cut_rows_tx(&mut tx, playlist_id, track_ids).await?;
     if rows.is_empty() {
         return Ok(UndoCapture::Nothing);
@@ -359,6 +350,28 @@ pub async fn remove_tracks_from_playlist_batch(
     tx.commit().await?;
 
     Ok(UndoCapture::Held(PlaylistItemsCut { playlist_id, rows, updated_before, stamped_at }))
+}
+
+/// Removes `track_ids` from a playlist keeping nothing, and answers how many rows went. Removing
+/// none renumbers and stamps nothing.
+pub async fn remove_tracks_from_playlist_for_good(
+    db: &DbPool,
+    playlist_id: i64,
+    track_ids: &[i64],
+) -> Result<usize, AppError> {
+    if track_ids.is_empty() {
+        return Ok(0);
+    }
+    let mut tx = db.write().begin().await?;
+    let removed = delete_items_tx(&mut tx, playlist_id, track_ids).await?;
+    if removed == 0 {
+        return Ok(0);
+    }
+    renumber_playlist_positions_tx(&mut tx, playlist_id).await?;
+    let now = melodia_core::utils::now_rfc3339();
+    update_playlist_thumbnail_and_timestamp_tx(&mut tx, playlist_id, &now).await?;
+    tx.commit().await?;
+    Ok(removed)
 }
 
 /// The rows `track_ids` hold in the playlist, ascending, each with its index in the playlist's

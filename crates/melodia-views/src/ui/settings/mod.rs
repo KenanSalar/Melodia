@@ -22,4 +22,5 @@ pub mod rating_writeback;
 pub mod scrobbling_settings;
 pub mod settings_page;
 pub mod signal_path;
+pub mod undo_settings;
 pub mod updater_settings;

@@ -1,0 +1,170 @@
+import { SettingsPage } from "../../globals/settings-page.slint";
+import { UndoKind, UndoSettings } from "../../globals/undo-settings.slint";
+import { SectionCard } from "../../components/settings/section-card.slint";
+import { SectionDivider } from "../../components/settings/section-divider.slint";
+import { SettingRow } from "../../components/settings/setting-row.slint";
+import { SettingRowStacked } from "../../components/settings/setting-row-stacked.slint";
+import { SettingSlider } from "../../components/settings/setting-slider.slint";
+import { ToggleSwitch } from "../../components/settings/toggle-switch.slint";
+
+// The undo notice's switch and the rows it governs, which mount only while it is on and keep their
+// values while hidden. The card searches as one unit, as crossfade's does, so any row's words find
+// the switch.
+export component UndoSection inherits Rectangle {
+    background: transparent;
+    horizontal-stretch: 1;
+    vertical-stretch: 0;
+
+    in property <string> category-name;
+
+    property <string> card-title: @tr("Undo");
+
+    pure function row-visible(label: string, desc: string) -> bool {
+        return SettingsPage.row-visible(root.category-name, root.card-title,
+                                        label + " " + desc,
+                                        SettingsPage.search-query);
+    }
+
+    // A slider fraction as the whole seconds the readout shows.
+    pure function secs-step(fraction: float) -> int {
+        return round(UndoSettings.min-secs + fraction * (UndoSettings.max-secs - UndoSettings.min-secs));
+    }
+
+    property <string> enabled-label: @tr("Offer undo after a removal");
+    property <string> enabled-desc: @tr("Show a notice with an Undo button after something is removed. Ctrl+Z works too while it is up.");
+    property <string> single-label: @tr("Also for a single item");
+    property <string> single-desc: @tr("Offer undo when only one track, playlist, station or favorite goes. Clear all, Reset and Clear queue always offer it.");
+    property <string> playlists-label: @tr("Playlists");
+    property <string> playlists-desc: @tr("Tracks removed from a playlist, and deleted playlists.");
+    property <string> queue-label: @tr("Queue");
+    property <string> queue-desc: @tr("Tracks removed from the queue, Clear queue, and a play that replaces a queue you built.");
+    property <string> favorites-label: @tr("Favorites");
+    property <string> favorites-desc: @tr("Tracks removed from Favorites.");
+    property <string> radio-label: @tr("Radio stations");
+    property <string> radio-desc: @tr("Stations removed from Favorites or Recently Played.");
+    property <string> equalizer-label: @tr("Equalizer");
+    property <string> equalizer-desc: @tr("Resetting the equalizer.");
+    property <string> recent-label: @tr("Recent searches");
+    property <string> recent-desc: @tr("Clearing recent searches.");
+    property <string> notice-label: @tr("Keep the notice up");
+    property <string> notice-desc: @tr("How long the notice waits for a press. It also waits while the pointer is over it or Melodia is in the background.");
+
+    property <bool> show-undo: row-visible(enabled-label, enabled-desc)
+        || row-visible(single-label, single-desc)
+        || row-visible(playlists-label, playlists-desc)
+        || row-visible(queue-label, queue-desc)
+        || row-visible(favorites-label, favorites-desc)
+        || row-visible(radio-label, radio-desc)
+        || row-visible(equalizer-label, equalizer-desc)
+        || row-visible(recent-label, recent-desc)
+        || row-visible(notice-label, notice-desc);
+    property <bool> show-details: root.show-undo && UndoSettings.enabled;
+
+    out property <bool> has-matches: show-undo;
+
+    VerticalLayout {
+    if has-matches: SectionCard {
+        title: root.card-title;
+
+        if root.show-undo: SettingRow {
+            icon: "undo";
+            label: root.enabled-label;
+            description: root.enabled-desc;
+            ToggleSwitch {
+                checked <=> UndoSettings.enabled;
+                toggled(v) => { UndoSettings.enabled-changed(v); }
+            }
+        }
+
+        if root.show-details: SectionDivider {}
+
+        if root.show-details: SettingRow {
+            icon: "looks_one";
+            label: root.single-label;
+            description: root.single-desc;
+            ToggleSwitch {
+                checked <=> UndoSettings.single-items;
+                toggled(v) => { UndoSettings.single-items-changed(v); }
+            }
+        }
+
+        if root.show-details: SectionDivider {}
+
+        if root.show-details: SettingRow {
+            icon: "playlist_remove";
+            label: root.playlists-label;
+            description: root.playlists-desc;
+            ToggleSwitch {
+                checked <=> UndoSettings.playlists;
+                toggled(v) => { UndoSettings.kind-changed(UndoKind.playlists, v); }
+            }
+        }
+
+        if root.show-details: SettingRow {
+            icon: "queue_music";
+            label: root.queue-label;
+            description: root.queue-desc;
+            ToggleSwitch {
+                checked <=> UndoSettings.queue;
+                toggled(v) => { UndoSettings.kind-changed(UndoKind.queue, v); }
+            }
+        }
+
+        if root.show-details: SettingRow {
+            icon: "heart_minus";
+            label: root.favorites-label;
+            description: root.favorites-desc;
+            ToggleSwitch {
+                checked <=> UndoSettings.favorites;
+                toggled(v) => { UndoSettings.kind-changed(UndoKind.favorites, v); }
+            }
+        }
+
+        if root.show-details: SettingRow {
+            icon: "radio";
+            label: root.radio-label;
+            description: root.radio-desc;
+            ToggleSwitch {
+                checked <=> UndoSettings.radio;
+                toggled(v) => { UndoSettings.kind-changed(UndoKind.radio, v); }
+            }
+        }
+
+        if root.show-details: SettingRow {
+            icon: "graphic_eq";
+            label: root.equalizer-label;
+            description: root.equalizer-desc;
+            ToggleSwitch {
+                checked <=> UndoSettings.equalizer;
+                toggled(v) => { UndoSettings.kind-changed(UndoKind.equalizer, v); }
+            }
+        }
+
+        if root.show-details: SettingRow {
+            icon: "history";
+            label: root.recent-label;
+            description: root.recent-desc;
+            ToggleSwitch {
+                checked <=> UndoSettings.recent-searches;
+                toggled(v) => { UndoSettings.kind-changed(UndoKind.recent-searches, v); }
+            }
+        }
+
+        if root.show-details: SectionDivider {}
+
+        if root.show-details: SettingRowStacked {
+            icon: "timer";
+            label: root.notice-label;
+            description: root.notice-desc;
+            SettingSlider {
+                value: (UndoSettings.notice-secs - UndoSettings.min-secs)
+                    / (UndoSettings.max-secs - UndoSettings.min-secs);
+                readout: @tr("{} s", UndoSettings.notice-secs);
+                readout-width: 48px;
+                changed(v) => { UndoSettings.notice-secs = root.secs-step(v); }
+                committed(v) => { UndoSettings.notice-secs-committed(root.secs-step(v)); }
+            }
+        }
+    }
+    }
+}

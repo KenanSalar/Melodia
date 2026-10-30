@@ -21,7 +21,7 @@ msgid "Browse"
 msgstr "Böngészés"
 
 #: ui/app-window.slint ui/layout/sidebar.slint ui/views/favorites-view.slint
-#: ui/views/radio-view.slint
+#: ui/views/radio-view.slint ui/views/settings/undo-section.slint
 msgid "Favorites"
 msgstr "Kedvencek"
 
@@ -1107,6 +1107,7 @@ msgstr "Ismétlés"
 #: ui/components/now-playing/queue-button.slint
 #: ui/views/queue-panel/queue-panel.slint
 #: ui/views/settings/overflow-menu-section.slint
+#: ui/views/settings/undo-section.slint
 msgid "Queue"
 msgstr "Lejátszási sor"
 
@@ -1290,7 +1291,7 @@ msgstr "Keresés…"
 
 #: ui/components/settings/equalizer-controls.slint
 #: ui/views/settings/animations-section.slint
-#: ui/views/settings/output-section.slint
+#: ui/views/settings/output-section.slint ui/views/settings/undo-section.slint
 msgid "Equalizer"
 msgstr "Hangszínszabályzó"
 
@@ -1613,6 +1614,10 @@ msgid "This playlist has too many tracks to undo, so deleting it can't be undone
 msgstr "Ez a lejátszási lista túl sok számot tartalmaz ahhoz, hogy a törlése visszavonható legyen. Maguk a számok a könyvtáradban maradnak."
 
 #: ui/globals/dialog.slint
+msgid "The playlist and its track order will be removed. The tracks themselves stay in your library."
+msgstr "A lejátszási lista és a számok sorrendje törlődik. Maguk a számok a könyvtáradban maradnak."
+
+#: ui/globals/dialog.slint
 msgid "Delete"
 msgstr "Törlés"
 
@@ -1625,6 +1630,33 @@ msgstr[1] "Törölsz {n} lejátszási listát?"
 #: ui/globals/dialog.slint
 msgid "These playlists have too many tracks to undo, so deleting them can't be undone. The tracks themselves stay in your library."
 msgstr "Ezek a lejátszási listák túl sok számot tartalmaznak ahhoz, hogy a törlésük visszavonható legyen. Maguk a számok a könyvtáradban maradnak."
+
+#: ui/globals/dialog.slint
+msgid "The playlists and their track order will be removed. The tracks themselves stay in your library."
+msgstr "A lejátszási listák és a számok sorrendje törlődik. Maguk a számok a könyvtáradban maradnak."
+
+#: ui/globals/dialog.slint
+msgid "Remove from Recently Played?"
+msgstr "Eltávolítod a Nemrég lejátszottak közül?"
+
+#: ui/globals/dialog.slint
+msgid "Remove from favorites?"
+msgstr "Eltávolítod a kedvencek közül?"
+
+#. Translators: {} is the station's name.
+#: ui/globals/dialog.slint
+msgid "\"{}\" will be removed from Recently Played."
+msgstr "„{}” kikerül a Nemrég lejátszottak közül."
+
+#. Translators: {} is the station's name.
+#: ui/globals/dialog.slint
+msgid "\"{}\" will be removed from your stations, along with its play history."
+msgstr "„{}” kikerül az állomásaid közül, a lejátszási előzményeivel együtt."
+
+#. Translators: {} is the station's name.
+#: ui/globals/dialog.slint
+msgid "\"{}\" will be removed from your favorites."
+msgstr "„{}” kikerül a kedvenceid közül."
 
 #: ui/globals/dialog.slint
 msgid "Remove {n} station from Recently Played?"
@@ -1645,6 +1677,14 @@ msgstr "Túl sok az állomás ahhoz, hogy a Nemrég lejátszottak közüli eltá
 #: ui/globals/dialog.slint
 msgid "There are too many stations to undo, so removing them can't be undone. Any you added by hand are removed from your stations, along with their play history."
 msgstr "Túl sok az állomás ahhoz, hogy az eltávolításuk visszavonható legyen. A kézzel hozzáadottak az állomásaid közül is törlődnek, a lejátszási előzményeikkel együtt."
+
+#: ui/globals/dialog.slint
+msgid "The stations will be removed from Recently Played."
+msgstr "Az állomások kikerülnek a Nemrég lejátszottak közül."
+
+#: ui/globals/dialog.slint
+msgid "The stations will be removed from your favorites. Any you added by hand are removed from your stations, along with their play history."
+msgstr "Az állomások kikerülnek a kedvenceid közül. A kézzel hozzáadottak az állomásaid közül is törlődnek, a lejátszási előzményeikkel együtt."
 
 #: ui/globals/dialog.slint
 msgid "Edit Rules"
@@ -1765,7 +1805,7 @@ msgstr "Veszteséges"
 msgid "Converted"
 msgstr "Átalakított"
 
-#: ui/globals/undo-text.slint
+#: ui/globals/undo-text.slint ui/views/settings/undo-section.slint
 msgid "Undo"
 msgstr "Visszavonás"
 
@@ -2255,7 +2295,7 @@ msgstr "Előadók"
 msgid "Genres"
 msgstr "Műfajok"
 
-#: ui/views/my-library-view.slint
+#: ui/views/my-library-view.slint ui/views/settings/undo-section.slint
 msgid "Playlists"
 msgstr "Lejátszási listák"
 
@@ -2611,11 +2651,6 @@ msgstr "Lejátszás"
 msgid "Window"
 msgstr "Ablak"
 
-#: ui/views/settings-view.slint ui/views/settings/about-section.slint
-#: ui/views/settings/pages/about-page.slint
-msgid "About"
-msgstr "Névjegy"
-
 #: ui/views/settings-view.slint ui/views/settings/pages/integrations-page.slint
 msgid "Integrations"
 msgstr "Integrációk"
@@ -2624,6 +2659,16 @@ msgstr "Integrációk"
 #: ui/views/settings/update-section.slint
 msgid "Updates"
 msgstr "Frissítések"
+
+#: ui/views/settings-view.slint ui/views/settings/about-section.slint
+#: ui/views/settings/pages/about-page.slint
+msgid "About"
+msgstr "Névjegy"
+
+#: ui/views/settings-view.slint
+#: ui/views/settings/pages/accessibility-page.slint
+msgid "Accessibility"
+msgstr "Akadálymentesség"
 
 #: ui/views/settings-view.slint
 msgid "Search settings…"
@@ -3242,6 +3287,7 @@ msgstr "A zene elhalkul szüneteltetéskor vagy leállításkor, és visszaerős
 
 #. Translators: `{}` is a duration in seconds, such as 2.5
 #: ui/views/settings/playback-section.slint
+#: ui/views/settings/undo-section.slint
 msgid "{} s"
 msgstr "{} mp"
 
@@ -3352,6 +3398,62 @@ msgstr "Előbb kapcsold be fent a Last.fm-et vagy a ListenBrainzt"
 #: ui/views/settings/settings-router.slint
 msgid "No matching settings"
 msgstr "Nincs egyező beállítás"
+
+#: ui/views/settings/undo-section.slint
+msgid "Offer undo after a removal"
+msgstr "Visszavonás felajánlása eltávolítás után"
+
+#: ui/views/settings/undo-section.slint
+msgid "Show a notice with an Undo button after something is removed. Ctrl+Z works too while it is up."
+msgstr "Értesítés megjelenítése „Visszavonás” gombbal, ha eltávolítasz valamit. Amíg látható, a Ctrl+Z is működik."
+
+#: ui/views/settings/undo-section.slint
+msgid "Also for a single item"
+msgstr "Egyetlen elemnél is"
+
+#: ui/views/settings/undo-section.slint
+msgid "Offer undo when only one track, playlist, station or favorite goes. Clear all, Reset and Clear queue always offer it."
+msgstr "Visszavonás felajánlása akkor is, ha csak egy szám, lejátszási lista, állomás vagy kedvenc kerül eltávolításra. Az „Összes törlése”, a „Visszaállítás” és a „Lejátszási sor törlése” mindig felajánlja."
+
+#: ui/views/settings/undo-section.slint
+msgid "Tracks removed from a playlist, and deleted playlists."
+msgstr "Lejátszási listából eltávolított számok és törölt lejátszási listák."
+
+#: ui/views/settings/undo-section.slint
+msgid "Tracks removed from the queue, Clear queue, and a play that replaces a queue you built."
+msgstr "A lejátszási sorból eltávolított számok, a „Lejátszási sor törlése” és egy lejátszás, amely egy általad összeállított sort cserél le."
+
+#: ui/views/settings/undo-section.slint
+msgid "Tracks removed from Favorites."
+msgstr "A kedvencek közül eltávolított számok."
+
+#: ui/views/settings/undo-section.slint
+msgid "Radio stations"
+msgstr "Rádióállomások"
+
+#: ui/views/settings/undo-section.slint
+msgid "Stations removed from Favorites or Recently Played."
+msgstr "A kedvencek vagy a nemrég lejátszottak közül eltávolított állomások."
+
+#: ui/views/settings/undo-section.slint
+msgid "Resetting the equalizer."
+msgstr "A hangszínszabályzó visszaállítása."
+
+#: ui/views/settings/undo-section.slint
+msgid "Recent searches"
+msgstr "Legutóbbi keresések"
+
+#: ui/views/settings/undo-section.slint
+msgid "Clearing recent searches."
+msgstr "A legutóbbi keresések törlése."
+
+#: ui/views/settings/undo-section.slint
+msgid "Keep the notice up"
+msgstr "Értesítés megjelenítési ideje"
+
+#: ui/views/settings/undo-section.slint
+msgid "How long the notice waits for a press. It also waits while the pointer is over it or Melodia is in the background."
+msgstr "Mennyi ideig vár az értesítés egy kattintásra. Akkor is vár, amíg a mutató felette van, vagy a Melodia a háttérben fut."
 
 #: ui/views/settings/update-section.slint
 msgid "Software Updates"

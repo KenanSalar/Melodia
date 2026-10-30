@@ -1,4 +1,4 @@
-import { PlaylistPickRow, PlaylistExportPickRow } from "../models.slint";
+import { PlaylistPickRow, PlaylistExportPickRow, RadioStationRow } from "../models.slint";
 import { SmartEditor, TagEditor, ScrobbleUi, RadioForm } from "dialog-forms.slint";
 import { Radio } from "radio.slint";
 import { LibrarySettings } from "library-settings.slint";
@@ -33,6 +33,12 @@ export enum DialogKind {
     scrobble-lastfm-login,
     equalizer,
     replaygain,
+}
+
+// Why a removal asks first where an undo would otherwise follow, each with its own message.
+export enum NoUndoReason {
+    too-large,
+    turned-off,
 }
 
 // A caller writes the chrome and a routing payload, `kind` and `target-id`, and `accepted` below
@@ -258,12 +264,14 @@ export global Dialog {
         root.open = true;
     }
 
-    // Rust raises both delete confirmations, and only where the playlists hold too many tracks to
-    // undo: a delete under that is undone instead of confirmed.
-    public function open-delete-playlist(id: int) {
+    // Rust raises both delete confirmations, and only where no undo would follow: Settings turned
+    // it off, or the playlists hold too many tracks to undo.
+    public function open-delete-playlist(id: int, reason: NoUndoReason) {
         root.claim-request();
         root.title = @tr("Delete playlist?");
-        root.message = @tr("This playlist has too many tracks to undo, so deleting it can't be undone. The tracks themselves stay in your library.");
+        root.message = reason == NoUndoReason.too-large
+            ? @tr("This playlist has too many tracks to undo, so deleting it can't be undone. The tracks themselves stay in your library.")
+            : @tr("The playlist and its track order will be removed. The tracks themselves stay in your library.");
         root.confirm-label = @tr("Delete");
         root.cancel-label = @tr("Cancel");
         root.destructive = true;
@@ -274,10 +282,12 @@ export global Dialog {
 
     // Its own opener rather than a count ternary in the one above: the singular copy speaks of one
     // playlist and the plural of a set.
-    public function open-delete-playlists(ids: [int]) {
+    public function open-delete-playlists(ids: [int], reason: NoUndoReason) {
         root.claim-request();
         root.title = @tr("Delete {n} playlist?" | "Delete {n} playlists?" % ids.length);
-        root.message = @tr("These playlists have too many tracks to undo, so deleting them can't be undone. The tracks themselves stay in your library.");
+        root.message = reason == NoUndoReason.too-large
+            ? @tr("These playlists have too many tracks to undo, so deleting them can't be undone. The tracks themselves stay in your library.")
+            : @tr("The playlists and their track order will be removed. The tracks themselves stay in your library.");
         root.confirm-label = @tr("Delete");
         root.cancel-label = @tr("Cancel");
         root.destructive = true;
@@ -286,17 +296,48 @@ export global Dialog {
         root.open = true;
     }
 
-    // Rust raises it only past what an undo may hold. The kind carries the tab, so the accept acts
-    // on the list the cards were on, and the Favorites copy says what a hand-typed station in the
-    // set loses: its history, with no uuid to keep it listed.
-    public function open-remove-stations(ids: [int], from-recent: bool) {
+    // Rust raises both station confirmations, only where no undo would follow, and one station only
+    // with undo off. The kind carries the tab, so the accept acts on the list the cards were on; the
+    // Favorites copy says what a hand-typed station loses, its history, with no uuid to keep it.
+    public function open-remove-station(station: RadioStationRow, from-recent: bool) {
+        root.claim-request();
+        root.title = from-recent
+            ? @tr("Remove from Recently Played?")
+            : @tr("Remove from favorites?");
+        root.message = from-recent
+            // Translators: {} is the station's name.
+            ? @tr("\"{}\" will be removed from Recently Played.", station.name)
+            : station.uuid == ""
+                // Translators: {} is the station's name.
+                ? @tr("\"{}\" will be removed from your stations, along with its play history.", station.name)
+                // Translators: {} is the station's name.
+                : @tr("\"{}\" will be removed from your favorites.", station.name);
+        root.confirm-label = @tr("Remove");
+        root.cancel-label = @tr("Cancel");
+        root.destructive = true;
+        if (from-recent) {
+            root.kind = DialogKind.remove-from-recent;
+        } else {
+            root.kind = DialogKind.remove-from-favorites;
+        }
+        root.pending-card-ids = [station.id];
+        root.open = true;
+    }
+
+    // A set may hold hand-typed stations the menu can't see, so the Favorites copy always says what
+    // removing one of those costs.
+    public function open-remove-stations(ids: [int], from-recent: bool, reason: NoUndoReason) {
         root.claim-request();
         root.title = from-recent
             ? @tr("Remove {n} station from Recently Played?" | "Remove {n} stations from Recently Played?" % ids.length)
             : @tr("Remove {n} station from favorites?" | "Remove {n} stations from favorites?" % ids.length);
-        root.message = from-recent
-            ? @tr("There are too many stations to undo, so removing them from Recently Played can't be undone.")
-            : @tr("There are too many stations to undo, so removing them can't be undone. Any you added by hand are removed from your stations, along with their play history.");
+        root.message = reason == NoUndoReason.too-large
+            ? (from-recent
+                ? @tr("There are too many stations to undo, so removing them from Recently Played can't be undone.")
+                : @tr("There are too many stations to undo, so removing them can't be undone. Any you added by hand are removed from your stations, along with their play history."))
+            : (from-recent
+                ? @tr("The stations will be removed from Recently Played.")
+                : @tr("The stations will be removed from your favorites. Any you added by hand are removed from your stations, along with their play history."));
         root.confirm-label = @tr("Remove");
         root.cancel-label = @tr("Cancel");
         root.destructive = true;

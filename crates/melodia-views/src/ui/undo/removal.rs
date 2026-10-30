@@ -13,7 +13,7 @@ use crate::ui::shell::notifications::RowText;
 use crate::ui::util::len_as_i32;
 use melodia_app::state::AppState;
 use melodia_core::entities::radio::KeptList;
-use melodia_core::entities::undo::UNDO_HOLD_CAP;
+use melodia_core::entities::undo::{RemovalSize, UNDO_HOLD_CAP, UndoKind};
 use melodia_core::error::AppError;
 use melodia_ui::{AppWindow, UndoText};
 
@@ -100,6 +100,34 @@ impl Removal {
                 Absorbed::Merged
             }
             (_, next) => Absorbed::Distinct(next),
+        }
+    }
+
+    pub(super) fn kind(&self) -> UndoKind {
+        match self {
+            Removal::Equalizer(_) => UndoKind::Equalizer,
+            Removal::RecentSearches(_) => UndoKind::RecentSearches,
+            Removal::PlaylistTracks(_) | Removal::Playlists(_) => UndoKind::Playlists,
+            Removal::RadioStations(_) => UndoKind::Radio,
+            Removal::Favorites(_) => UndoKind::Favorites,
+            Removal::QueueRows(_) | Removal::QueueCleared(_) | Removal::QueueReplaced(_) => {
+                UndoKind::Queue
+            }
+        }
+    }
+
+    /// What the notice would count, a whole state counting nothing.
+    pub(super) fn size(&self) -> RemovalSize {
+        match self {
+            Removal::Equalizer(_)
+            | Removal::RecentSearches(_)
+            | Removal::QueueCleared(_)
+            | Removal::QueueReplaced(_) => RemovalSize::Whole,
+            Removal::PlaylistTracks(cut) => RemovalSize::Items(cut.count()),
+            Removal::Playlists(deleted) => RemovalSize::Items(deleted.count()),
+            Removal::RadioStations(removed) => RemovalSize::Items(removed.count()),
+            Removal::Favorites(removed) => RemovalSize::Items(removed.count()),
+            Removal::QueueRows(cut) => RemovalSize::Items(cut.count()),
         }
     }
 

@@ -2,7 +2,7 @@
 //! dispatcher in `globals/dialog.slint`, their opens being inline Slint: crossing into Rust to
 //! write `Dialog` properties *synchronously* from a click handler trips Slint's "Recursion
 //! detected" property guard (`i_slint_core::properties`). A delete runs at once and offers its
-//! undo, raising a confirmation from past an `await` only where it can't be undone.
+//! undo, raising a confirmation from a later tick only where it can't be undone.
 
 use std::rc::Rc;
 use std::sync::Arc;
@@ -21,9 +21,9 @@ use crate::ui::view_ctx::ViewCtx;
 use melodia_app::library;
 use melodia_app::library::playlists::DeletedPlaylists;
 use melodia_app::state::AppState;
-use melodia_core::entities::undo::UNDO_HOLD_CAP;
+use melodia_core::entities::undo::{RemovalSize, UNDO_HOLD_CAP, UndoKind};
 use melodia_core::error::{AppError, describe};
-use melodia_ui::{AppWindow, CardSelection, Dialog, PlaylistDetail, Playlists};
+use melodia_ui::{AppWindow, CardSelection, Dialog, NoUndoReason, PlaylistDetail, Playlists};
 
 pub(super) fn wire(cx: ViewCtx<'_>, playlists_ui: &Arc<PlaylistsUi>) {
     let ViewCtx { app: ui, state, .. } = cx;
@@ -166,20 +166,27 @@ struct Deleter {
 }
 
 impl Deleter {
-    /// Deletes at once and offers the undo, or asks first where the playlists hold more tracks
-    /// than an undo may.
+    /// Deletes at once and offers the undo, or asks first where Settings turned undo off for it or
+    /// the playlists hold more tracks than an undo may.
     fn request(&self, ids: Vec<i32>) {
         if ids.is_empty() {
             return;
         }
         let id_vec: Vec<i64> = ids.iter().copied().map(i64::from).collect();
         let Some(claim) = DialogClaim::take_from(&self.weak) else { return };
+        let covered = self.undo.covers(UndoKind::Playlists, RemovalSize::Items(ids.len()));
         let this = self.clone();
         let spawned = slint::spawn_local(Compat::new(async move {
+            if !covered {
+                this.confirm_first(claim, ids, NoUndoReason::TurnedOff);
+                return;
+            }
             let counted =
                 library::playlists::playlist_item_count(&this.state.db, id_vec.clone()).await;
             match counted {
-                Ok(items) if items > UNDO_HOLD_CAP => this.confirm_first(claim, ids),
+                Ok(items) if items > UNDO_HOLD_CAP => {
+                    this.confirm_first(claim, ids, NoUndoReason::TooLarge);
+                }
                 Ok(_) => this.delete_held(id_vec).await,
                 Err(e) => log::warn!("playlists::delete count: {}", describe(&e)),
             }
@@ -204,24 +211,24 @@ impl Deleter {
         }
     }
 
-    /// Raises the confirmation, unless another dialog claimed the global during the count. Its
+    /// Raises the confirmation, unless another dialog claimed the global since the click. Its
     /// accept arrives at [`Self::for_good`]. The dialog gets a model of its own: the menu's ids can
     /// be the card selection's model, which every pick and clear rewrites in place
     /// (`card_selection::publish`).
-    fn confirm_first(&self, claim: DialogClaim, ids: Vec<i32>) {
+    fn confirm_first(&self, claim: DialogClaim, ids: Vec<i32>, reason: NoUndoReason) {
         let Some(ui) = self.weak.upgrade() else { return };
         if !claim.holds(&ui) {
             return;
         }
         let dialog = ui.global::<Dialog>();
         match ids.as_slice() {
-            &[id] => dialog.invoke_open_delete_playlist(id),
-            _ => dialog.invoke_open_delete_playlists(ModelRc::new(VecModel::from(ids))),
+            &[id] => dialog.invoke_open_delete_playlist(id, reason),
+            _ => dialog.invoke_open_delete_playlists(ModelRc::new(VecModel::from(ids)), reason),
         }
     }
 
-    /// Deletes for good, then raises a notice with no button. It still replaces a held one, so
-    /// Ctrl+Z never reaches past it.
+    /// Deletes for good, then raises a notice with no button where the confirmation was the cap's.
+    /// The dialog is modal, so Settings answers here as it did at the request.
     fn for_good(&self, ids: Vec<i64>) {
         if ids.is_empty() {
             return;
@@ -240,8 +247,8 @@ impl Deleter {
             };
             let Some(name) = names.first() else { return };
             log::info!("playlists::delete_for_good: {} playlist(s)", names.len());
-            let name = SharedString::from(name.as_str());
-            this.undo.notify_over_cap(playlists_deleted(names.len(), name));
+            let title = playlists_deleted(names.len(), SharedString::from(name.as_str()));
+            this.undo.notify_over_cap(UndoKind::Playlists, names.len(), title);
         }));
         if let Err(e) = spawned {
             log::warn!("playlists::delete_for_good spawn_local: {}", describe(&e));
