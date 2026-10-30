@@ -43,7 +43,7 @@ pub struct QueueState {
     pub(crate) play_order: Vec<usize>,
     /// Insertion order, which unshuffling restores.
     pub(crate) original_order: Vec<usize>,
-    /// Into `play_order`; `-1` stands for `None` at the disk and Slint boundaries.
+    /// Into `play_order`; `-1` stands for `None` on disk.
     pub current_index: Option<usize>,
     /// The playing track's row has left while the track plays on, so `current_index` names the row
     /// that took its place, not yet started, or `None` past the end. Held only while a track is
@@ -397,6 +397,11 @@ impl QueueState {
         let next = self.next_slot(self.repeat_mode.wraps())?;
         self.seat(next);
         self.current_id()
+    }
+
+    /// Whether Next has a row to step to.
+    pub fn has_next(&self) -> bool {
+        self.next_slot(self.repeat_mode.wraps()).is_some()
     }
 
     pub fn peek_next(&self) -> Option<i64> {

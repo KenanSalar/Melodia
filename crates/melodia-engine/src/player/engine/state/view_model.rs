@@ -103,7 +103,7 @@ impl PlayerState {
     }
 
     fn has_next(&self) -> bool {
-        self.source_allows(PlaybackSource::advances_queue) && self.queue.peek_next().is_some()
+        self.source_allows(PlaybackSource::advances_queue) && self.queue.has_next()
     }
 
     fn has_previous(&self) -> bool {

@@ -659,6 +659,8 @@ This is Strawberry's behaviour (`RemoveItemsWithoutUndo`, `playlist.cpp:2218-229
     row, then repeats it.
   - `previous` and `has_previous` step back from the gap, and return `None` with nothing before it
     so the seated track restarts.
+  - `has_next` asks what Next does (`advance_skip`) rather than `peek_next`, which differs under
+    Repeat One: at a tail gap, or with nothing current, Next still has a row to go to.
   - A shuffle keeps a tail gap at `None`.
 - **A reorder keeps the gap in place.** `move_rows` holds the gap between the rows it sat between
   (`block_move::landing`), a block dropped into it playing next. Following the gap row would carry
@@ -889,6 +891,8 @@ removing stations and Clear queue ask first again (decision 13).
     moved past it, and at the tail;
   - the gap closed by `remove_queue_rows` with nothing seated, by a station's seat, and kept by a
     prune of the gap row (`playing_was_removed` false);
+  - `has_next` agreeing with `advance_skip` under every repeat mode, Repeat One at a tail gap and
+    with nothing current included;
   - `hand_edited` set by each hand edit, cleared by a replace, seated by boot restore.
 - `up_next_tests`: the gap row starting reads as Forward, a removal of the playing row slides
   nothing, and a moved base with the same ids re-renders.
