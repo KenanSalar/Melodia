@@ -31,8 +31,9 @@ couples the store to the app or the UI, or breaks from outside its owner. `sqlx.
   ledger every read, re-point and clear of a stored path is pinned to. **A column naming a stored
   file joins that ledger in the migration that adds it**, or the sweep deletes what it names; the
   last three (a playlist's composite, a station's logo, a browsed station's cached logo) can't be
-  rebuilt. `artwork::sweep` argues the gates and the grace window, `tasks::radio_logo_cache` why
-  its prune runs first.
+  rebuilt, so an undo that writes such a row back holds its files in an `ArtworkHold` taken before
+  the delete commits. `artwork::sweep` argues the gates and the grace window,
+  `tasks::radio_logo_cache` why its prune runs first.
 - **Every scan entry repairs before it walks**, the sweep's inverse (`library::scan::repair`).
 - **Play-count flushes bump `stats_changed` alone**; everything structural (scans, the watcher,
   imports, favourites) bumps `library_changed`. `AppState` argues both.

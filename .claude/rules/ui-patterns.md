@@ -204,9 +204,11 @@ Paths are under `crates/melodia-ui/ui/components/` unless stated.
 
 - **A raise that crosses an `await` owes a `DialogClaim`, and a deferred raise is an opener too**,
   single caller or not: inline chrome bumps nothing. `dialog_openers.rs` walks for both.
-- **Notifications** route through `ui::shell::notifications::run_action`; a card prop is `data:`,
-  Slint reserving `row`. **Backend failures toast through `utils::toast`**; routine ones (favorite,
-  rating, nav) stay `spawn_logged!`.
+- **Notifications** route through `ui::shell::notifications::run_action` by kind, and Undo through
+  `ui::undo`; a card prop is `data:`, Slint reserving `row`. **A new removal offers its undo through
+  `ui::undo` rather than asking first**, keeping a confirmation only where undo doesn't cover it.
+  **Backend failures toast through `utils::toast`**; routine ones (favorite, rating, nav) stay
+  `spawn_logged!`.
 
 ## Filtering
 
@@ -353,9 +355,8 @@ block first; each page's section below is deltas only.**
   search; `search-input` and `search-query` are joined by a `FilterThrottle` for that reason.
 - **A new category** is a page file, a `category-*` constant, a router branch and a search mount,
   both inline arrays in the panel, a `SettingsCategory` variant, and `category-name:` on every
-  section. `category-count` is the sole count, and `settings_page_tests` holds the rest to it.
-  Reordering renumbers `views.json`'s index, so it takes a new key. A link from outside the page
-  goes through `SettingsPage.open-category`.
+  section. `category-count` is the sole count, and `settings_page_tests` holds the rest to it. A
+  link from outside the page goes through `SettingsPage.open-category`.
 - **A card's search term carries its category's name** as a term of its own, users typing it.
   **A row's label and description are declared once**, read by both the row and `row-visible`, or a
   reworded description stops matching its own row; a toggle whose sub-rows hang off it owes each

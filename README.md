@@ -75,7 +75,7 @@ The shots below are a handful of the themes, all on the default aurora backdrop;
 <table>
   <tr>
     <td width="50%"><img src="assets/screenshots/radio-browse.png" alt="Radio browse view"><br><sub><b>Internet Radio</b>: a worldwide directory, narrowed by country, language, genre, codec, or bitrate. Off until you switch it on, under Settings ▸ Radio.</sub></td>
-    <td width="50%"><img src="assets/screenshots/settings.png" alt="Settings on the Appearance category"><br><sub><b>Settings</b>: twelve categories beside the cards, searched all at once, here on the theme, variant, accent, and color style.</sub></td>
+    <td width="50%"><img src="assets/screenshots/settings.png" alt="Settings on the Appearance category"><br><sub><b>Settings</b>: thirteen categories beside the cards, searched all at once, here on the theme, variant, accent, and color style.</sub></td>
   </tr>
 </table>
 
@@ -109,6 +109,7 @@ Shrink the window and the full UI collapses into a mini-player that grows with i
 - Star ratings, play and skip counts, natural sort, resizable and toggleable columns
 - Multi-selection on every list and card grid: tick one to start, click to add, shift-click for a range, and right-click to queue, rate or tag the whole set. `Esc` clears it
 - Copy from any right-click menu: a song's title, artist, album, "Artist - Title" or file path, an album's name, or a station's name, stream URL or website, one line per selected item
+- Undo for removals: tracks taken out of a playlist or the queue, deleted playlists, Clear queue, a play that replaces a queue you built, favorites, radio stations, the equalizer's Reset, and recent searches' Clear all. A notice names what went and offers Undo, or `Ctrl+Z` while it is up, and waits while the pointer is over it or Melodia is in the background. Settings ▸ Accessibility turns undo off altogether, per kind, or for single items, and sets how long the notice stays
 - Tag editing for one track or many, cover art included, written straight back to the files. Artists, genres and the ten studio credits are each an editable list, beside work and movement, key, mood, ISRC, label, catalog number, barcode and medium
 - Manual and smart playlists, the latter rule-based and resolved live; `.m3u8` import and export, several at once as one `.zip` that imports back without extracting, drag-and-drop import, and reordering that moves a whole selection
 - A database backup before every schema migration, three kept
@@ -366,6 +367,7 @@ Windows keeps no PSS, so **Commit** is the figure to compare: the private memory
 | Queue panel | `Q` |
 | Select all in the queue, after clicking it | `Ctrl+A` |
 | Remove the queue's selected tracks, after clicking it | `Delete` or `Backspace` |
+| Undo a removal, while its notice is up | `Ctrl+Z` |
 | Now Playing view | `F` |
 | Maximize | `F11` |
 | Toggle sidebar | `Ctrl+B` |
