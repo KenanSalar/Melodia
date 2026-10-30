@@ -23,6 +23,7 @@ use melodia_app::state::AppState;
 use melodia_artwork::media::image::cover_thumbs::CoverThumbs;
 use melodia_ui::{AppWindow, Queue};
 
+pub(in crate::ui) use callbacks::patch_rows;
 pub use removal::{QueueClearUndo, QueueCutUndo, QueueReplaceUndo};
 
 /// Installs the row model and wires the panel. UI thread.

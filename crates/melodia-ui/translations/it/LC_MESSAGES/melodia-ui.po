@@ -1816,6 +1816,12 @@ msgstr[0] "{n} stazione rimossa da Riprodotti di recente"
 msgstr[1] "{n} stazioni rimosse da Riprodotti di recente"
 
 #: ui/globals/undo-text.slint
+msgid "{n} track removed from Favorites"
+msgid_plural "{n} tracks removed from Favorites"
+msgstr[0] "{n} brano rimosso dai preferiti"
+msgstr[1] "{n} brani rimossi dai preferiti"
+
+#: ui/globals/undo-text.slint
 msgid "{n} track removed from the queue"
 msgid_plural "{n} tracks removed from the queue"
 msgstr[0] "{n} brano rimosso dalla coda"

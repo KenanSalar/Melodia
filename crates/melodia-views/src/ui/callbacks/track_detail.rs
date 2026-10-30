@@ -95,18 +95,14 @@ fn wire_row_flags<V: TrackDetail>(g: &V::Global, state: &AppState, view: &Arc<V>
     library::favorites::set_favorite, collect_track_ids,
     captures: [view],
     after: |id_vec, fav| {
-        for id in id_vec {
-            track_rows::patch_row(&*view, id, move |r| r.is_favorite = fav);
-        }
+        track_rows::patch_rows(&*view, id_vec, move |r| r.is_favorite = fav);
     });
     wire_row_flag!(g, bind_set_row_rating, state,
     format_args!("{}::set_rating", V::VIEW_ID),
     library::ratings::set_rating, collect_track_ids,
     captures: [view],
     after: |id_vec, rating| {
-        for id in id_vec {
-            track_rows::patch_row(&*view, id, move |r| r.rating = rating);
-        }
+        track_rows::patch_rows(&*view, id_vec, move |r| r.rating = rating);
     });
 }
 

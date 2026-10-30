@@ -116,8 +116,8 @@ pub fn install_views(
     let artists_ui = ui::artists::install(cx, &albums_ui);
     let genres_ui = ui::genres::install(cx);
     let playlists_ui = ui::playlists::install(cx);
-    ui::favorites::install(cx, &artists_ui);
-    ui::recently_played::install(cx);
+    let favorites_ui = ui::favorites::install(cx, &artists_ui);
+    let recently_played_ui = ui::recently_played::install(cx);
     let radio_ui = ui::radio::install(cx);
     let search_ui = ui::search::install(cx, &albums_ui, &artists_ui);
 
@@ -141,18 +141,25 @@ pub fn install_views(
     // globals while still `-1`; each reopen appends its own entry once it lands.
     ui::nav_history::record_current(app);
 
-    // The Now-Playing heart and star rating fan into every per-row cache.
-    let row_flags = ui::callbacks::RowFlagHandles {
-        tracks: &tracks_ui,
-        browse: &browse_ui,
-        albums: &albums_ui,
-        artists: &artists_ui,
-        genres: &genres_ui,
-        playlists: &playlists_ui,
-        search: &search_ui,
-    };
-    ui::callbacks::wire_now_playing_favorite(app, state, row_flags);
-    ui::callbacks::wire_now_playing_rating(app, state, row_flags);
+    // The Now-Playing heart and star rating, and every removal from Favorites, fan into every
+    // per-row cache.
+    let mirrors = ui::callbacks::RowFlagMirrors::new(
+        app,
+        ui::callbacks::RowFlagHandles {
+            tracks: &tracks_ui,
+            browse: &browse_ui,
+            albums: &albums_ui,
+            artists: &artists_ui,
+            genres: &genres_ui,
+            playlists: &playlists_ui,
+            favorites: &favorites_ui,
+            recently_played: &recently_played_ui,
+            search: &search_ui,
+        },
+    );
+    ui::callbacks::wire_now_playing_favorite(app, state, &mirrors);
+    ui::callbacks::wire_now_playing_rating(app, state, &mirrors);
+    ui::callbacks::wire_favorite_removals(app, state, undo, &mirrors);
     // Deferred past `app.show()`: until the window is on a monitor its scale factor reads 1.0, and
     // a `HiDPI` display would get the 1× decode size.
     let (tune_rows, tune_radio) = (cover_thumbs.clone(), radio_ui.clone());

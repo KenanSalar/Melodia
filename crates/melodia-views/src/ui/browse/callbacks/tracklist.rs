@@ -1,5 +1,6 @@
 //! The Browse file list's callbacks.
 
+use std::collections::HashSet;
 use std::sync::Arc;
 
 use slint::{ComponentHandle, Global as _, Model, SharedString};
@@ -68,10 +69,9 @@ fn wire_row_flags(ui: &AppWindow, state: &AppState, browse_ui: &Arc<BrowseUi>) {
         library::favorites::set_favorite, collect_nonzero_track_ids,
         captures: [weak, bu],
         after: |id_vec, fav| {
-            for id in &id_vec {
-                bu.flip_favorite(*id, fav);
-                browse_ui_mod::apply_row_favorite(&weak, *id, fav);
-            }
+            let ids: HashSet<i64> = id_vec.into_iter().collect();
+            bu.flip_favorites(&ids, fav);
+            browse_ui_mod::apply_rows_favorite(&weak, ids, fav);
         });
     }
     {
@@ -80,10 +80,9 @@ fn wire_row_flags(ui: &AppWindow, state: &AppState, browse_ui: &Arc<BrowseUi>) {
         library::ratings::set_rating, collect_nonzero_track_ids,
         captures: [weak, bu],
         after: |id_vec, rating| {
-            for id in &id_vec {
-                bu.flip_rating(*id, rating);
-                browse_ui_mod::apply_row_rating(&weak, *id, rating);
-            }
+            let ids: HashSet<i64> = id_vec.into_iter().collect();
+            bu.flip_ratings(&ids, rating);
+            browse_ui_mod::apply_rows_rating(&weak, ids, rating);
         });
     }
 }

@@ -1,0 +1,10 @@
+// The explicit removals from Favorites: a menu's entry, and a heart that takes its row or card off
+// the Favorites page. Each offers an undo, where a heart toggled on a list that keeps its row
+// writes through that list and raises nothing.
+//
+// **Stateless, as `CardActions` is.**
+export global FavoriteActions {
+    callback remove-tracks([int] /*track_ids*/);
+    // `kind` is an `EntityKind` token, resolved to track ids in one query.
+    callback remove-entities(string /*kind*/, [int] /*entity_ids*/);
+}

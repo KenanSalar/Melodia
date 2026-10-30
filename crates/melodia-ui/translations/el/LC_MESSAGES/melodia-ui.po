@@ -1818,6 +1818,12 @@ msgstr[0] "{n} σταθμός αφαιρέθηκε από τα πρόσφατα 
 msgstr[1] "{n} σταθμοί αφαιρέθηκαν από τα πρόσφατα αναπαραγόμενα"
 
 #: ui/globals/undo-text.slint
+msgid "{n} track removed from Favorites"
+msgid_plural "{n} tracks removed from Favorites"
+msgstr[0] "{n} κομμάτι αφαιρέθηκε από τα αγαπημένα"
+msgstr[1] "{n} κομμάτια αφαιρέθηκαν από τα αγαπημένα"
+
+#: ui/globals/undo-text.slint
 msgid "{n} track removed from the queue"
 msgid_plural "{n} tracks removed from the queue"
 msgstr[0] "{n} κομμάτι αφαιρέθηκε από την ουρά"

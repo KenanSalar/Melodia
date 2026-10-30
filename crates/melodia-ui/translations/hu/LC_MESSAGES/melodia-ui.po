@@ -1818,6 +1818,12 @@ msgstr[0] "{n} állomás eltávolítva a Nemrég lejátszottak közül"
 msgstr[1] "{n} állomás eltávolítva a Nemrég lejátszottak közül"
 
 #: ui/globals/undo-text.slint
+msgid "{n} track removed from Favorites"
+msgid_plural "{n} tracks removed from Favorites"
+msgstr[0] "{n} szám eltávolítva a kedvencek közül"
+msgstr[1] "{n} szám eltávolítva a kedvencek közül"
+
+#: ui/globals/undo-text.slint
 msgid "{n} track removed from the queue"
 msgid_plural "{n} tracks removed from the queue"
 msgstr[0] "{n} szám eltávolítva a lejátszási sorból"

@@ -1800,6 +1800,11 @@ msgid_plural "{n} stations removed from Recently Played"
 msgstr[0] "Đã xóa {n} đài khỏi Đã phát gần đây"
 
 #: ui/globals/undo-text.slint
+msgid "{n} track removed from Favorites"
+msgid_plural "{n} tracks removed from Favorites"
+msgstr[0] "Đã xóa {n} bản nhạc khỏi Yêu thích"
+
+#: ui/globals/undo-text.slint
 msgid "{n} track removed from the queue"
 msgid_plural "{n} tracks removed from the queue"
 msgstr[0] "Đã xóa {n} bản nhạc khỏi hàng đợi"

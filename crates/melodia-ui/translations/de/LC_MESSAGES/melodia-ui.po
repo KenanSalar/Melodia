@@ -1817,6 +1817,12 @@ msgstr[0] "{n} Sender aus „Zuletzt gespielt“ entfernt"
 msgstr[1] "{n} Sender aus „Zuletzt gespielt“ entfernt"
 
 #: ui/globals/undo-text.slint
+msgid "{n} track removed from Favorites"
+msgid_plural "{n} tracks removed from Favorites"
+msgstr[0] "{n} Lied aus Favoriten entfernt"
+msgstr[1] "{n} Lieder aus Favoriten entfernt"
+
+#: ui/globals/undo-text.slint
 msgid "{n} track removed from the queue"
 msgid_plural "{n} tracks removed from the queue"
 msgstr[0] "{n} Lied aus der Warteschlange entfernt"

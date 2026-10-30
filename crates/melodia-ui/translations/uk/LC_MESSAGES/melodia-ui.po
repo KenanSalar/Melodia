@@ -1832,6 +1832,13 @@ msgstr[1] "З нещодавно прослуханого вилучено {n} �
 msgstr[2] "З нещодавно прослуханого вилучено {n} станцій"
 
 #: ui/globals/undo-text.slint
+msgid "{n} track removed from Favorites"
+msgid_plural "{n} tracks removed from Favorites"
+msgstr[0] "З обраного вилучено {n} трек"
+msgstr[1] "З обраного вилучено {n} треки"
+msgstr[2] "З обраного вилучено {n} треків"
+
+#: ui/globals/undo-text.slint
 msgid "{n} track removed from the queue"
 msgid_plural "{n} tracks removed from the queue"
 msgstr[0] "Вилучено {n} трек з черги"

@@ -1,6 +1,7 @@
 //! The Songs tab: the capped recency set, fetched once per refresh and filtered in memory in its
 //! own order.
 
+use std::collections::HashSet;
 use std::path::PathBuf;
 use std::sync::Arc;
 
@@ -139,23 +140,23 @@ fn write_filtered_tracks(ui: &AppWindow, rp_ui: &RecentlyPlayedUi, mut rows: Vec
     crate::ui::model_diff::apply_rows_keyed(vec, rows, |r| r.id);
 }
 
-/// Patches the one row in place, recency membership not depending on the flag.
-pub fn apply_row_favorite(weak: &Weak<AppWindow>, id: i64, fav: bool) {
+/// Patches the rows in place, recency membership not depending on the flag.
+pub fn apply_rows_favorite(weak: &Weak<AppWindow>, ids: HashSet<i64>, fav: bool) {
     let _ = weak.upgrade_in_event_loop(move |ui| {
-        crate::ui::model_patch::patch_track_row_by_id(
+        crate::ui::model_patch::patch_track_rows_by_ids(
             &ui.global::<RecentlyPlayed>().get_tracks(),
-            id,
+            &ids,
             |r| r.is_favorite = fav,
         );
     });
 }
 
-/// [`apply_row_favorite`]'s star-rating twin.
-pub fn apply_row_rating(weak: &Weak<AppWindow>, id: i64, rating: i32) {
+/// [`apply_rows_favorite`]'s star-rating twin.
+pub fn apply_rows_rating(weak: &Weak<AppWindow>, ids: HashSet<i64>, rating: i32) {
     let _ = weak.upgrade_in_event_loop(move |ui| {
-        crate::ui::model_patch::patch_track_row_by_id(
+        crate::ui::model_patch::patch_track_rows_by_ids(
             &ui.global::<RecentlyPlayed>().get_tracks(),
-            id,
+            &ids,
             |r| r.rating = rating,
         );
     });

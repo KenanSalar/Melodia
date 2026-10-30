@@ -201,7 +201,7 @@ export component QueueRowItem inherits Rectangle {
             selection-count: Queue.selected-count;
 
             play-single => { Queue.skip-to(root.row-index); }
-            toggle-favorite(ids, on) => { Queue.toggle-row-favorite(ids, on); }
+            add-favorites(ids) => { Queue.toggle-row-favorite(ids, true); }
             rate(ids, n) => { Queue.set-row-rating(ids, n); }
             select-all => { Queue.select-all(); }
             clear-selection => { Queue.clear-selection(); }

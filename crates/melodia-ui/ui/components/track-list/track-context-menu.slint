@@ -1,6 +1,7 @@
 import { CopyActions } from "../../globals/copy-actions.slint";
 import { TagEditor } from "../../globals/dialog-forms.slint";
 import { Dialog } from "../../globals/dialog.slint";
+import { FavoriteActions } from "../../globals/favorite-actions.slint";
 import { Nav } from "../../globals/nav.slint";
 import { Playlists } from "../../globals/playlists.slint";
 import { Selection } from "../../globals/selection.slint";
@@ -85,7 +86,9 @@ export component TrackContextMenu inherits Rectangle {
     // Batch-shaped, a single row being a one-element array.
     callback play-next([int]);
     callback add-to-queue([int]);
-    callback toggle-favorite([int] /*track_ids*/, bool /*new_state*/);
+    // Adding writes through the host's list; a removal goes to `FavoriteActions`, which offers
+    // its undo.
+    callback add-favorites([int] /*track_ids*/);
     callback rate([int] /*track_ids*/, int /*rating*/);
     callback request-remove([int] /*track_ids*/);
     // No payload: the host owns the set, the queue's being a different shape.
@@ -192,7 +195,11 @@ export component TrackContextMenu inherits Rectangle {
             multi-active: root.multi-active;
             multi-count: root.multi-count;
             clicked => {
-                root.toggle-favorite(pop.effective-ids, !root.row-is-favorite);
+                if (root.row-is-favorite) {
+                    FavoriteActions.remove-tracks(pop.effective-ids);
+                } else {
+                    root.add-favorites(pop.effective-ids);
+                }
                 root.dismiss();
             }
         }

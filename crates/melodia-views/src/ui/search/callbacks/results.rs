@@ -1,5 +1,6 @@
 //! The results' callbacks: the cross-tab opens, Top Result routing and the Songs list.
 
+use std::collections::HashSet;
 use std::sync::Arc;
 
 use slint::{ComponentHandle, Global as _, SharedString};
@@ -117,10 +118,9 @@ fn wire_row_flags(ui: &AppWindow, state: &AppState, search_ui: &Arc<SearchUi>) {
         library::favorites::set_favorite, collect_track_ids,
         captures: [weak, su],
         after: |id_vec, fav| {
-            for id in &id_vec {
-                su.flip_favorite(*id, fav);
-                apply::apply_row_favorite(&weak, *id, fav);
-            }
+            let ids: HashSet<i64> = id_vec.into_iter().collect();
+            su.flip_favorites(&ids, fav);
+            apply::apply_rows_favorite(&weak, ids, fav);
         });
     }
     {
@@ -129,10 +129,9 @@ fn wire_row_flags(ui: &AppWindow, state: &AppState, search_ui: &Arc<SearchUi>) {
         library::ratings::set_rating, collect_track_ids,
         captures: [weak, su],
         after: |id_vec, rating| {
-            for id in &id_vec {
-                su.flip_rating(*id, rating);
-                apply::apply_row_rating(&weak, *id, rating);
-            }
+            let ids: HashSet<i64> = id_vec.into_iter().collect();
+            su.flip_ratings(&ids, rating);
+            apply::apply_rows_rating(&weak, ids, rating);
         });
     }
 }

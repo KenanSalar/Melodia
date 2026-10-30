@@ -110,13 +110,14 @@ fn wire_drop_in(ui: &AppWindow, state: &AppState, rows: &Rc<QueueRows>) {
     });
 }
 
-/// The row menu's favourite and rating, over the clicked row or the picks: the write, then the
-/// rows it covers patched, as on every track list.
+/// The row menu's Add to Favorites and rating, over the clicked row or the picks: the write, then
+/// the rows it covers patched, as on every track list. A removal from Favorites patches them
+/// through `RowFlagMirrors`.
 ///
 /// Each write reaches the playing track and bumps `library_changed`, which re-reads every row the
 /// panel holds and the records the player starts from. The patch is what moves the row now rather
 /// than a fetch later, and the favourite's is also what the menu reads its next direction from,
-/// which would otherwise compute `!false` again and write nothing.
+/// which would otherwise offer the add again and write nothing.
 fn wire_row_flags(ui: &AppWindow, state: &AppState) {
     let g = ui.global::<Queue>();
     let weak = ui.as_weak();
@@ -135,7 +136,7 @@ fn wire_row_flags(ui: &AppWindow, state: &AppState) {
 }
 
 /// Apply `edit` to the cached rows of `ids`, every copy of a track queued twice included.
-fn patch_rows(
+pub(in crate::ui) fn patch_rows(
     weak: &Weak<AppWindow>,
     ids: Vec<i64>,
     edit: impl Fn(&mut QueueRow) + Send + 'static,

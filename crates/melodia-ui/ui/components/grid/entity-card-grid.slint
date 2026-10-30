@@ -1,6 +1,5 @@
 import { ListView } from "std-widgets.slint";
 import { EntityGridRow } from "../../models.slint";
-import { CardActions } from "../../globals/card-actions.slint";
 import { EntityCard } from "entity-card.slint";
 import { CardCell } from "card-cell.slint";
 import { CardFavoriteButton } from "card-favorite-button.slint";
@@ -33,6 +32,8 @@ export component EntityCardGrid inherits Rectangle {
     in property <int> covers-generation: 0;
 
     callback row-clicked(int /*entity_id*/);
+    // The page's, which alone knows whether a click takes the card off it and so is a removal.
+    callback favorite-clicked(int /*entity_id*/, bool /*favorite*/);
     callback request-blur-search();
     pure callback request-cover(string /*artwork_path*/, int /*generation*/) -> image;
 
@@ -112,10 +113,7 @@ export component EntityCardGrid inherits Rectangle {
                             is-favorite: entity.is_favorite;
                             marks-kept: root.favorite-marks-kept;
                             card-hovered: card.card-hovered;
-                            clicked => {
-                                CardActions.set-favorites(
-                                    root.card-kind, [entity.id], !entity.is_favorite);
-                            }
+                            clicked => { root.favorite-clicked(entity.id, !entity.is_favorite); }
                         }
                     }
                 }

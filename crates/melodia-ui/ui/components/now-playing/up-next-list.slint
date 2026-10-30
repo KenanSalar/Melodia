@@ -120,7 +120,7 @@ component UpNextRow inherits Rectangle {
             selection-count: 0;
 
             play-single => { Queue.skip-to(root.play-index); }
-            toggle-favorite(ids, on) => { Queue.toggle-row-favorite(ids, on); }
+            add-favorites(ids) => { Queue.toggle-row-favorite(ids, true); }
             rate(ids, n) => { Queue.set-row-rating(ids, n); }
             request-remove(ids) => { Queue.remove-upcoming(root.play-index, root.data.id); }
         }

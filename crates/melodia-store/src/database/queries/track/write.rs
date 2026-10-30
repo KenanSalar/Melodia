@@ -2,7 +2,9 @@
 
 use sqlx::AssertSqlSafe;
 
-use crate::database::{DbPool, IDS_PER_SET, set_where_id_in};
+use crate::database::{
+    DbPool, IDS_PER_SET, MAX_BINDS_PER_STATEMENT, placeholders, set_where_id_in,
+};
 use melodia_core::error::AppError;
 
 pub async fn update_play_count(db: &DbPool, id: i64) -> Result<(), AppError> {
@@ -89,6 +91,30 @@ pub async fn set_favorite(db: &DbPool, ids: &[i64], favorite: bool) -> Result<()
             .await?;
     }
     Ok(())
+}
+
+/// Clears the heart on those of `ids` that carry one, answering exactly those, so an undo puts
+/// back only what this took. One transaction: a failed chunk leaves nothing cleared that the
+/// answer doesn't name.
+pub async fn unfavorite(db: &DbPool, ids: &[i64]) -> Result<Vec<i64>, AppError> {
+    if ids.is_empty() {
+        return Ok(Vec::new());
+    }
+    let mut tx = db.write().begin().await?;
+    let mut cleared = Vec::new();
+    for chunk in ids.chunks(MAX_BINDS_PER_STATEMENT) {
+        let sql = format!(
+            "UPDATE tracks SET is_favorite = 0 WHERE is_favorite = 1 AND id IN ({}) RETURNING id",
+            placeholders(chunk.len())
+        );
+        let mut query = sqlx::query_scalar::<_, i64>(AssertSqlSafe(sql)).persistent(false);
+        for &id in chunk {
+            query = query.bind(id);
+        }
+        cleared.extend(query.fetch_all(&mut *tx).await?);
+    }
+    tx.commit().await?;
+    Ok(cleared)
 }
 
 /// Sets the star `rating`, which `library::ratings::set_rating` has already clamped.

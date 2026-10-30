@@ -1825,6 +1825,12 @@ msgstr[0] "{n} istasyon Son Çalınanlardan kaldırıldı"
 msgstr[1] "{n} istasyon Son Çalınanlardan kaldırıldı"
 
 #: ui/globals/undo-text.slint
+msgid "{n} track removed from Favorites"
+msgid_plural "{n} tracks removed from Favorites"
+msgstr[0] "{n} parça Favorilerden kaldırıldı"
+msgstr[1] "{n} parça Favorilerden kaldırıldı"
+
+#: ui/globals/undo-text.slint
 msgid "{n} track removed from the queue"
 msgid_plural "{n} tracks removed from the queue"
 msgstr[0] "{n} parça sıradan kaldırıldı"

@@ -332,7 +332,7 @@ export component TrackListRowItem inherits Rectangle {
             play-single => { root.play-row(root.row-data.id, root.row-index); }
             play-next(ids) => { root.play-next(ids); }
             add-to-queue(ids) => { root.add-to-queue(ids); }
-            toggle-favorite(ids, on) => { root.toggle-row-favorite(ids, on); }
+            add-favorites(ids) => { root.toggle-row-favorite(ids, true); }
             rate(ids, n) => { root.set-row-rating(ids, n); }
             request-remove(ids) => { root.request-remove-from-playlist(ids); }
             select-all => { root.select-all(); }

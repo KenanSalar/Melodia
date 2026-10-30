@@ -1832,6 +1832,13 @@ msgstr[1] "Из недавно прослушанного удалены {n} с�
 msgstr[2] "Из недавно прослушанного удалено {n} станций"
 
 #: ui/globals/undo-text.slint
+msgid "{n} track removed from Favorites"
+msgid_plural "{n} tracks removed from Favorites"
+msgstr[0] "Из избранного удалён {n} трек"
+msgstr[1] "Из избранного удалено {n} трека"
+msgstr[2] "Из избранного удалено {n} треков"
+
+#: ui/globals/undo-text.slint
 msgid "{n} track removed from the queue"
 msgid_plural "{n} tracks removed from the queue"
 msgstr[0] "Удалён {n} трек из очереди"

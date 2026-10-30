@@ -1,6 +1,6 @@
 # Plan: Undo for removals (a notice that puts back what went)
 
-Status: **Phases 1 to 8 done** (hand-tested 2026-10-29 and 2026-10-30; Phase 3's measure waits for Kenan's go), **Phase 9 next** · Owner: Kenan · Created: 2026-10-28 · Issue #109, branch `feat/undo-removals`
+Status: **Phases 1 to 9 done** (hand-tested 2026-10-29 and 2026-10-30; Phase 3's measure waits for Kenan's go), **Phase 10 next** · Owner: Kenan · Created: 2026-10-28 · Issue #109, branch `feat/undo-removals`
 
 > **Validated 2026-10-28** against `5fa3d5ed` (`feat/undo-removals`): three read-only traces (the
 > toast stack, shortcuts and confirmations; the library removals; the queue, the equalizer and the
@@ -98,6 +98,8 @@ play replaces the queue silently unless the queue it replaces was built by hand 
    - **The queue's holds are exempt.** They are ids only, a cut's copied and a clear's or a
      replace's moved, so a hold costs what the queue cost a moment before. The same heaptrack
      measures a moved full-library queue beside the capped playlist hold.
+   - **So are favorites' (Phase 9).** A removal holds the track ids it un-hearted and nothing
+     else, a cut's copy by the same argument.
    - **Over the cap a removal behaves exactly as it does today.** Its confirmation stays where it
      has one, now saying it can't be undone, and its notice names what went with no button.
    - **A removal undo covers is never confirmed.** Every removal gets one answer, never both. One
@@ -155,15 +157,15 @@ play replaces the queue silently unless the queue it replaces was built by hand 
     - A small hold registry is unioned into `sweep_stores`' one reference set (`:149`). It is
       released when the slot drops, after which the next sweep reaps as it does today.
 11. **Favorites: the explicit removals raise the notice. A lone heart that stays on screen doesn't.**
-    - Raising it: the row and card menus' "Remove … from Favorites", a card's heart (a whole artist
-      or album), and any heart on the Favorites page, whose row then leaves the list.
-    - Not raising it: a single heart toggled on another list, Now Playing's heart, or L. Each still
+    - Raising it: the row and card menus' "Remove … from Favorites" (the bar's, the queue's and Up
+      Next's menus included, the row menu being mounted once), and any heart on the Favorites page,
+      a row's or a Most Played card's, which then leaves the page.
+    - Not raising it: a single heart toggled on another list (a row's, or a track card's on Recently
+      Played's Most Played and Browse), Now Playing's heart and its overflow row, or L. Each still
       shows its new state, and pressing it again is its own undo.
-    - Rust can't tell a row's heart from its menu entry today: both call the list global's
-      `toggle-row-favorite` (`track-list.slint:149`, `:153`). The menu's remove entry, mounted once
-      (`track-context-menu.slint:190-197`), calls one new shared callback instead. The Favorites
-      page's heart raises through its own handler (`favorites/callbacks/tracklist.rs:44-57`), and a
-      card's heart and menu already share `CardActions.set-favorites`.
+    - No artist or album card has a heart; those un-heart through their menu alone.
+    - Rust couldn't tell a row's heart from its menu entry: both called the list global's
+      `toggle-row-favorite`. Every explicit removal now goes through `FavoriteActions` (Phase 9).
     - Stations follow the same rule (Kenan, 2026-10-30). On Radio's Favorites tab the heart takes
       the card off the tab, so it is the removal: it goes through the menu's `remove-stations`,
       raising the notice, and asks first with undo off (Phase 10). A directory card there loses its
@@ -286,7 +288,9 @@ A kept confirmation is raised from Rust once the size is known, across an await,
 | `crates/melodia-ui/ui/globals/notifications.slint` | `undo-row` (the slot's row id, `-1` with none) and `undo(int)` |
 | `crates/melodia-ui/ui/components/dialog/notification-stack.slint` | Per card: a hover sentinel wrapping the layout, the `Timer` that is its clock, and the polite live region |
 | `crates/melodia-ui/ui/layout/shortcut-scope.slint` | The Ctrl+Z arm, ahead of the modal gate |
-| `crates/melodia-ui/ui/components/track-list/track-context-menu.slint` | The remove-from-Favorites entry calls one shared callback rather than the list's `toggle-row-favorite` (decision 11) |
+| `crates/melodia-ui/ui/components/track-list/track-context-menu.slint` | The remove-from-Favorites entry calls `FavoriteActions.remove-tracks`, and the add calls the host's `add-favorites` (decision 11) |
+| `crates/melodia-ui/ui/globals/favorite-actions.slint` (new) | `FavoriteActions`: `remove-tracks` and `remove-entities`, the explicit removals, raised by the row and card menus and by the Favorites page's hearts |
+| `crates/melodia-ui/ui/components/grid/entity-card-grid.slint` | The heart calls the host's `favorite-clicked`, the page deciding whether it is a removal |
 | `crates/melodia/src/boot/ui_setup/` | `notifications::install` and `UndoWindow` move ahead of `install_views` (`install.rs:68`) |
 | `crates/melodia-core/src/entities/undo.rs` (new) | `UndoCapture<T>` (`Nothing`, `Held(T)` or `OverCap { rows }`) and `UNDO_HOLD_CAP`, named by store, app and views |
 | `crates/melodia-core/src/entities/{playlist,radio}.rs` | The plain tokens beside their entity: `PlaylistItemsCut`, `PlaylistSnapshot` (a `Playlist` and its `CutItem`s), `KeptList` and `StationCut`, plus `RadioStation::is_listed`, which the store's removal reads |
@@ -295,7 +299,8 @@ A kept confirmation is raised from Rust once the size is known, across an await,
 | `crates/melodia-store/src/database/queries/playlist_restore.rs` (new) | `restore_playlist_items`, `restore_playlists`, keeping `playlist.rs` (550 lines) under the 800-line cap |
 | `crates/melodia-store/src/database/queries/playlist_delete.rs` (new) | Both deletes, each one transaction: `delete_playlists` (for good, answering the names) and `delete_playlists_held` (answering `PlaylistSnapshot`s), plus `item_count` and `custom_covers` |
 | `crates/melodia-store/src/database/queries/radio_removal.rs` (new) | `remove_stations` and `restore_stations`, each one transaction, `delete_if_unlisted` (Browse's un-heart) and `station_artwork`; `radio.rs` loses `delete_station` and `clear_play_history` |
-| `crates/melodia-store/src/database/queries/track/write.rs` | `unfavorite`, returning the ids it flipped |
+| `crates/melodia-store/src/database/queries/track/write.rs` | `unfavorite`, one transaction returning the ids it flipped |
+| `crates/melodia-app/src/library/favorites.rs` | `unfavorite`, and `FavoriteWrite::propagate`, the tail `set` and it share, loving only what was written |
 | `crates/melodia-app/src/tasks/artwork_sweep.rs` | `ArtworkHold` (refcounted per basename, released on drop) beside its one reader, unioned into `sweep_stores`' reference set |
 | `crates/melodia-app/src/library/{playlists,radio/removal,queue,search,favorites}.rs` | Each removal returns its capture, and each surface gets one restore fn |
 | `crates/melodia-views/src/ui/radio/callbacks/removal.rs` (new) | `Remover` (the heart, the trash and the menu, and the confirmation past the cap) and `StationRemovalUndo` |
@@ -304,6 +309,8 @@ A kept confirmation is raised from Rust once the size is known, across an await,
 | `crates/melodia-engine/src/player/engine/state/replaced.rs` (new) | `ReplacedQueue` (the moved queue and the playback over it), `PlayerState::replace_queue` and `restore_replaced_queue`, which resumes what was playing |
 | `crates/melodia-app/src/library/playback.rs` | `player_play_tracks` capturing through `replace_queue`, and `REPLACED_QUEUES`, the bridge the capture leaves the runtime by |
 | `crates/melodia-views/src/ui/queue_panel/removal.rs` (new) | `QueueCutUndo`, `QueueClearUndo`, `QueueReplaceUndo`, the panel's ✕, menu and Delete, Up Next's `remove-upcoming` and Clear, each removing then offering, and `follow_replaces`, which offers what the bridge carries |
+| `crates/melodia-views/src/ui/callbacks/favorite_removal.rs` (new) | `FavoriteRemovalUndo` and `Unfavoriter`, wiring both `FavoriteActions` callbacks: resolve, un-heart, mirror, offer |
+| `crates/melodia-views/src/ui/callbacks/row_flag_mirrors.rs` (new) | `RowFlagMirrors`, lifted out of `now_playing.rs`: every surface's per-row heart and star, patched in one hop per surface, shared by the Now Playing heart and stars, the removal and its undo |
 | `crates/melodia-views/src/ui/equalizer.rs` | `apply_curve`, shared by preset select, reset and restore |
 | `crates/melodia-app/src/services/settings/undo.rs` (new) | `UndoFlags`, flattened into `SettingsData`; `library::settings::undo` holds its setters |
 | `crates/melodia-views/src/ui/settings/undo_settings.rs` (new) | The Accessibility page's undo section: seeds it, and each callback sets the slot's shadow, then persists |
@@ -318,6 +325,8 @@ A kept confirmation is raised from Rust once the size is known, across an await,
 - The station removal loop lives in the view (`radio/callbacks/kept.rs:106-114`), with a second in
   `set_kept_favorites` (`radio/callbacks/stations.rs:179`).
 - `restore_cleared` and `restore_replaced` share the splice and the held cursor's placement.
+- Every list's heart and star patch looped one id at a time; `track_rows::patch_rows` and
+  `model_patch::patch_track_rows_by_ids` take the set, and each list's loop is one call.
 
 **Threading.** `NotificationsUi` and `UndoWindow` are installed ahead of `install_views`
 (`install.rs:68`). `notifications::install` needs only the window (`notifications.rs:237`), while
@@ -852,19 +861,60 @@ correct.
   first queue.
 - A language switch with the notice up re-renders it.
 
-### Phase 9: favorites
+### Phase 9: favorites (done 2026-10-30)
 
-- **Store.** `unfavorite(ids)` is `UPDATE … SET is_favorite = 0 WHERE id IN (…) AND is_favorite = 1
-  RETURNING id`, chunked. It returns exactly the ids it flipped, so un-hearting an artist card
-  restores only the tracks that were hearted.
-- **App.** `library::favorites` wraps it in `FavoriteWrite` (the `library_changed` bump and the love
-  sync). The love sync covers only the flipped ids, where today it covers every id passed
-  (`favorites.rs:86-100`). The restore is `set_favorite(flipped, true)`, which queues the matching
-  re-love.
-- **Slint.** The row menu's remove entry calls the one shared callback (decision 11).
-- **Views.** The paths in decision 11 offer: `favorites/callbacks/tracklist.rs:44-57`,
-  `card_actions.rs:86-99`, and the shared callback's handler.
-- **String:** "{n} track removed from Favorites" (plural).
+1. **Store.** `unfavorite(ids)` is `UPDATE tracks SET is_favorite = 0 WHERE is_favorite = 1 AND
+   id IN (…) RETURNING id`, chunked inside one transaction, so a failed chunk leaves nothing
+   un-hearted that the answer doesn't name. It returns exactly the ids it flipped, so un-hearting
+   an album from its menu restores only the tracks that were hearted.
+2. **App.** `library::favorites::unfavorite` goes through `FavoriteWrite`, whose `set` and
+   `unfavorite` share one `propagate` (the playing copy, the bump, the love sync). Nothing flipped
+   writes nothing anywhere (decision 6), and the love sync covers only the flipped ids. The
+   restore is `set_favorite(ids, true)`, which queues the matching re-love.
+3. **Slint.**
+   - `FavoriteActions` (new), shaped like `CopyActions`: `remove-tracks([int])` and
+     `remove-entities(kind, [int])`.
+   - The row menu's remove arm calls `remove-tracks`. Its `toggle-favorite([int], bool)`, then
+     only ever an add, is `add-favorites([int])` on all four hosts.
+   - The card menu's two remove arms call `remove-entities`; the adds keep `CardActions`.
+   - `EntityCardGrid`'s heart calls the host's `favorite-clicked`. Favorites' Most Played binds
+     it to `remove-tracks`, Recently Played's to `CardActions.set-favorites`.
+   - Favorites' Songs tab sends its heart to `remove-tracks`, every row there being a favorite,
+     and `Favorites.toggle-row-favorite` is gone.
+4. **Views.**
+   - **Every list's rows move through one fan-out.** A removal from a menu reaches no list's own
+     handler, and Search has no `library_changed` subscriber, so without one its hearts would stay
+     wrong after a removal and after an undo. `RowFlagMirrors` (`callbacks/row_flag_mirrors.rs`)
+     is the Now Playing heart's old mirror, widened to Favorites (rows and picks leave), Recently
+     Played and the queue panel, in one hop per surface.
+   - **The row patches take a set**, or the fan-out would post one closure per id per surface and
+     walk Browse's, Search's and Recently Played's models once per id.
+   - `callbacks/favorite_removal.rs`: `Unfavoriter` runs on the UI thread, resolving a card's
+     tracks first, then un-hearts, mirrors and offers. `FavoriteRemovalUndo` holds a set of ids,
+     so a track re-hearted and removed again inside the window counts once. Any two merge, the
+     target being Favorites, uncapped (decision 5).
+5. **String:** "{n} track removed from Favorites" (plural), in all 15 catalogs.
+
+**By hand.**
+- Tracks: a hearted row's menu Remove from Favorites empties its heart at once with "1 track
+  removed from Favorites"; Undo and Ctrl+Z refill it. Three picked: "3 tracks removed from
+  Favorites".
+- A row's heart on any list but Favorites, Now Playing's heart, its overflow Unfavorite and L
+  raise nothing.
+- Favorites Songs: the heart takes the row off with the notice, and Undo brings it back. A picked
+  set removed from the menu leaves no pick behind.
+- Favorites Most Played: the card's heart takes the card off with the notice. Recently Played's
+  Most Played heart raises nothing.
+- An album card's menu Remove from Favorites counts only its hearted tracks, and Undo re-hearts
+  only those. An album with none hearted raises nothing.
+- Search: remove from a song row's menu, then Undo with Search still up: the heart empties, then
+  refills.
+- The bar's right-click menu, the queue panel's and Up Next's menus each raise the notice, and the
+  bar's heart follows.
+- Two removals from different pages inside the window: one card, the count adds, the clock
+  restarts, and Undo restores both. A track re-hearted by its heart and removed again counts once.
+- With love sync on, a removal then Undo queues an unlove, then a love (the log).
+- A language switch with the notice up re-renders it.
 
 ### Phase 10: undo in Settings, in a new Accessibility category
 
@@ -1002,6 +1052,12 @@ removing stations and Clear queue ask first again (decision 13).
   nothing, and a moved base with the same ids re-renders.
 - `reinsert_tests` (core): ascending indices, an index past the end, an empty side, and equality
   with inserting one by one.
+- Favorites:
+  - store: `unfavorite` answering only the hearted ids of a mixed set, nothing for none or for
+    ids no row holds, and leaving the unhearted rows alone;
+  - `favorites_tests` (app): `unfavorite` with nothing flipped bumping nothing and loving nothing,
+    and with some flipped mirroring the playing copy and queueing an unlove for those alone;
+  - `FavoriteRemovalUndo::absorb` counting a track removed twice once.
 - `playlist_tests`:
   - a remove and restore round trip with a gap present, a track re-added in the window, a
     hard-deleted track ahead of a kept row in the same cut (merge first, then drop), and a merged
@@ -1023,8 +1079,9 @@ removing stations and Clear queue ask first again (decision 13).
   carrying its `timeout-ms`, a replace dismissing the old Undo row, an Undo naming another row
   doing nothing, and the row-removed listener firing once on every removal path, the eviction
   inside `show` included (the `:117-154` pattern).
-- **Slint pins:** the card's `Timer` gates on its hover and `Theme.window-focused`, the row menu's
-  remove entry calls the shared callback rather than `toggle-row-favorite`, the playlist card's
+- **Slint pins:** the card's `Timer` gates on its hover and `Theme.window-focused`, the row and
+  card menus' remove entries call `FavoriteActions`, Favorites' Songs tab and Most Played send
+  their hearts there while Recently Played's Most Played keeps `CardActions`, the playlist card's
   trash and the station card's remove hide on `CardCell.multi-selection`, and on Favorites a
   station card's heart hides there too while its trash shows only on a hand-typed card. Up Next's
   remove calls `Queue.remove-upcoming` with the row's track id rather than `Queue.remove`, and a
@@ -1046,6 +1103,9 @@ removing stations and Clear queue ask first again (decision 13).
   card owning its clock.
 - `ui-patterns.md`'s "Selection": a hover control that deletes its own card or row hides under a
   multi-selection (`CardCell.multi-selection`, the queue row's `shows-remove`).
+- `ui-patterns.md`'s "Lists and playback": an explicit removal from Favorites goes through
+  `FavoriteActions`, a heart on a list that keeps its row through that list, and a write made off
+  any one list reaches the rest through `RowFlagMirrors`.
 - `library-data.md`: restores as units of work, and the artwork hold.
 - `audio-stack.md`: `playing_left`, and the `seats` count the queue's restores read.
 - `ui-patterns.md`'s "The Settings page": the category persisted by key, and Accessibility as #36's

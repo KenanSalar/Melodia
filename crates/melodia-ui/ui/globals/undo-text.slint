@@ -50,6 +50,11 @@ export global UndoText {
         return @tr("{n} station removed from Recently Played" | "{n} stations removed from Recently Played" % count);
     }
 
+    pure callback tracks-removed-from-favorites(int /*count*/) -> string;
+    tracks-removed-from-favorites(count) => {
+        return @tr("{n} track removed from Favorites" | "{n} tracks removed from Favorites" % count);
+    }
+
     pure callback tracks-removed-from-queue(int /*count*/) -> string;
     tracks-removed-from-queue(count) => {
         return @tr("{n} track removed from the queue" | "{n} tracks removed from the queue" % count);

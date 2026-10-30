@@ -20,7 +20,7 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, fav_ui: &Arc<FavoritesUi>) 
     let g = ui.global::<Favorites>();
     wire_play_row(ui, state);
     wire_queue_actions(&g, state, collect_track_ids);
-    wire_row_flags(ui, state, fav_ui);
+    wire_row_rating(ui, state, fav_ui);
     wire_filter(ui, state, fav_ui);
     wire_sort(ui, state, fav_ui);
     wire_toggle_column(&g.as_weak(), state);
@@ -38,33 +38,16 @@ fn wire_play_row(ui: &AppWindow, state: &AppState) {
     });
 }
 
-fn wire_row_flags(ui: &AppWindow, state: &AppState, fav_ui: &Arc<FavoritesUi>) {
+/// The heart goes to `FavoriteActions`, every row here being a favorite. Rating never changes
+/// membership and there's no in-table rating sort, so each row is patched in place.
+fn wire_row_rating(ui: &AppWindow, state: &AppState, fav_ui: &Arc<FavoritesUi>) {
     let g = ui.global::<Favorites>();
     let fu = fav_ui.clone();
-    // An unfavourite drops the rows on this tick, and the `library_changed` refresh behind it
-    // reloads the list, an undo landing first included.
-    wire_row_flag!(g, on_toggle_row_favorite, state, "favorites::set_favorite",
-    library::favorites::set_favorite, collect_track_ids,
-    captures: [fu],
-    after: |id_vec, fav| {
-        if !fav {
-            track_rows::remove_rows(&*fu, id_vec);
-            return;
-        }
-        for id in id_vec {
-            track_rows::patch_row(&*fu, id, |row| row.is_favorite = true);
-        }
-    });
-
-    // Rating never changes membership and there's no in-table rating sort, so
-    // each row is patched in place.
     wire_row_flag!(g, on_set_row_rating, state, "favorites::set_rating",
     library::ratings::set_rating, collect_track_ids,
     captures: [fu],
     after: |id_vec, rating| {
-        for id in id_vec {
-            track_rows::patch_row(&*fu, id, move |row| row.rating = rating);
-        }
+        track_rows::patch_rows(&*fu, id_vec, move |row| row.rating = rating);
     });
 }
 

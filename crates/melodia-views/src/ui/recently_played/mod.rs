@@ -10,6 +10,7 @@ mod songs;
 mod state;
 mod tabs;
 
+use std::collections::HashSet;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicU8, Ordering};
 
@@ -21,6 +22,7 @@ use crate::ui::paged_rows::ScrollPoint;
 use crate::ui::section_state::{SectionState, impl_section_state_helpers};
 use crate::ui::view_ctx::ViewCtx;
 use melodia_artwork::media::image::cover_thumbs::CoverThumbs;
+use melodia_core::entities::track::TrackListRow as RsTrackListRow;
 use melodia_core::entities::track_list::MostPlayedTotals;
 
 use state::{RecentlyPlayedUiState, SongsTotals};
@@ -32,7 +34,7 @@ pub(super) use grid::{
     most_played_ids, prewarm_covers, release_grid, reload_grid, requery_grid, set_columns,
 };
 pub(super) use songs::{
-    apply_filtered_tracks, apply_filtered_tracks_now, apply_row_favorite, apply_row_rating,
+    apply_filtered_tracks, apply_filtered_tracks_now, apply_rows_favorite, apply_rows_rating,
     current_filter, refresh_tracks, set_filter,
 };
 pub use tabs::RecentlyPlayedTab;
@@ -155,17 +157,20 @@ impl RecentlyPlayedUi {
             .collect()
     }
 
-    /// Patches the cached row, which stays: recency membership doesn't depend on the flag.
-    pub fn flip_track_favorite(&self, id: i64, fav: bool) {
-        if let Some(r) = self.inner.tracks_all.lock().iter_mut().find(|r| r.id == id) {
-            r.is_favorite = fav;
-        }
+    /// Patches the cached rows, which stay: recency membership doesn't depend on the flag.
+    pub fn flip_track_favorites(&self, ids: &HashSet<i64>, fav: bool) {
+        self.patch_cached_tracks(ids, |r| r.is_favorite = fav);
     }
 
-    /// [`Self::flip_track_favorite`]'s star-rating twin.
-    pub fn flip_track_rating(&self, id: i64, rating: i32) {
-        if let Some(r) = self.inner.tracks_all.lock().iter_mut().find(|r| r.id == id) {
-            r.rating = rating;
+    /// [`Self::flip_track_favorites`]' star-rating twin.
+    pub fn flip_track_ratings(&self, ids: &HashSet<i64>, rating: i32) {
+        self.patch_cached_tracks(ids, |r| r.rating = rating);
+    }
+
+    fn patch_cached_tracks(&self, ids: &HashSet<i64>, edit: impl Fn(&mut RsTrackListRow)) {
+        let mut tracks = self.inner.tracks_all.lock();
+        for track in tracks.iter_mut().filter(|r| ids.contains(&r.id)) {
+            edit(track);
         }
     }
 }

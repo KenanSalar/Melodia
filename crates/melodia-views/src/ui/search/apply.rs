@@ -1,6 +1,8 @@
 //! Every write and clear the Search view's models take. Rows are built on the worker, and only
 //! what needs the UI thread, the translated plurals, waits for the event-loop closure.
 
+use std::collections::HashSet;
+
 use slint::{ComponentHandle, SharedString, Weak};
 
 use super::state::COMPACT_TRACK_LIMIT;
@@ -155,19 +157,19 @@ pub fn clear_results_on_ui(weak: &Weak<AppWindow>) {
     });
 }
 
-/// Patches the one row on screen, so the scroll holds.
-pub fn apply_row_favorite(weak: &Weak<AppWindow>, id: i64, fav: bool) {
+/// Patches the rows on screen, so the scroll holds.
+pub fn apply_rows_favorite(weak: &Weak<AppWindow>, ids: HashSet<i64>, fav: bool) {
     let _ = weak.upgrade_in_event_loop(move |ui| {
-        model_patch::patch_track_row_by_id(&ui.global::<Search>().get_tracks(), id, |r| {
+        model_patch::patch_track_rows_by_ids(&ui.global::<Search>().get_tracks(), &ids, |r| {
             r.is_favorite = fav;
         });
     });
 }
 
-/// [`apply_row_favorite`]'s star-rating twin.
-pub fn apply_row_rating(weak: &Weak<AppWindow>, id: i64, rating: i32) {
+/// [`apply_rows_favorite`]'s star-rating twin.
+pub fn apply_rows_rating(weak: &Weak<AppWindow>, ids: HashSet<i64>, rating: i32) {
     let _ = weak.upgrade_in_event_loop(move |ui| {
-        model_patch::patch_track_row_by_id(&ui.global::<Search>().get_tracks(), id, |r| {
+        model_patch::patch_track_rows_by_ids(&ui.global::<Search>().get_tracks(), &ids, |r| {
             r.rating = rating;
         });
     });

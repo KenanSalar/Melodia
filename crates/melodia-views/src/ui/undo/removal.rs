@@ -3,6 +3,7 @@
 
 use slint::{ComponentHandle, SharedString};
 
+use crate::ui::callbacks::FavoriteRemovalUndo;
 use crate::ui::equalizer::ResetUndo;
 use crate::ui::playlists::{PlaylistCutUndo, PlaylistDeleteUndo};
 use crate::ui::queue_panel::{QueueClearUndo, QueueCutUndo, QueueReplaceUndo};
@@ -28,6 +29,7 @@ pub enum Removal {
     PlaylistTracks(PlaylistCutUndo),
     Playlists(PlaylistDeleteUndo),
     RadioStations(StationRemovalUndo),
+    Favorites(FavoriteRemovalUndo),
     QueueRows(QueueCutUndo),
     QueueCleared(QueueClearUndo),
     QueueReplaced(QueueReplaceUndo),
@@ -83,7 +85,12 @@ impl Removal {
                 held.absorb(next);
                 Absorbed::Merged
             }
-            // No cap check, which `QueueCut` and `take_cleared` argue.
+            // No cap check on these three, which `FavoriteRemovalUndo`, `QueueCut` and
+            // `take_cleared` argue.
+            (Removal::Favorites(held), Removal::Favorites(next)) => {
+                held.absorb(next);
+                Absorbed::Merged
+            }
             (Removal::QueueRows(held), Removal::QueueRows(next)) => {
                 held.absorb(next);
                 Absorbed::Merged
@@ -108,6 +115,12 @@ impl Removal {
             }
             Removal::RadioStations(removed) => {
                 titled(stations_removed(removed.list(), removed.count(), removed.name()))
+            }
+            Removal::Favorites(removed) => {
+                let count = len_as_i32(removed.count());
+                titled(move |ui| {
+                    ui.global::<UndoText>().invoke_tracks_removed_from_favorites(count)
+                })
             }
             Removal::QueueRows(cut) => {
                 let count = len_as_i32(cut.count());
@@ -137,6 +150,7 @@ impl Removal {
             Removal::PlaylistTracks(cut) => cut.restore(state, ui).await,
             Removal::Playlists(deleted) => deleted.restore(state, ui).await,
             Removal::RadioStations(removed) => removed.restore(state, ui).await,
+            Removal::Favorites(removed) => removed.restore(state).await,
             Removal::QueueRows(cut) => {
                 cut.restore(state);
                 Ok(())

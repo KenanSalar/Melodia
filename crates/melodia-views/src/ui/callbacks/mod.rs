@@ -10,10 +10,12 @@ pub(in crate::ui) mod card_selection;
 mod clipboard;
 pub(in crate::ui) mod cross_tab_nav;
 mod dialog_closed;
+mod favorite_removal;
 pub(in crate::ui) mod grid_tab;
 pub(in crate::ui) mod index_persist;
 mod library_settings;
 mod now_playing;
+mod row_flag_mirrors;
 mod tags;
 pub(in crate::ui) mod track_detail;
 pub(in crate::ui) mod track_list;
@@ -36,8 +38,11 @@ use index_persist::IndexPersist;
 use macros::{spawn_logged, spawn_logged_sync, wire_pb, wire_sync, wire_sync_pb};
 
 pub use cross_tab_nav::wire_cross_tab_nav;
+pub(crate) use favorite_removal::FavoriteRemovalUndo;
+pub use favorite_removal::wire as wire_favorite_removals;
 pub use library_settings::wire_library_settings;
-pub use now_playing::{RowFlagHandles, wire_now_playing_favorite, wire_now_playing_rating};
+pub use now_playing::{wire_now_playing_favorite, wire_now_playing_rating};
+pub use row_flag_mirrors::{RowFlagHandles, RowFlagMirrors};
 pub use tags::wire_tags;
 pub use updater::{check_painter, wire as wire_updater};
 
@@ -190,8 +195,8 @@ pub fn wire_all(ui: &AppWindow, state: &AppState) {
     wire_step_volume(&player, state);
     wire_set_playback_speed(&player, state);
     wire_commit_playback_speed(&player, state);
-    // `Player.toggle-favorite` is `wire_now_playing_favorite`'s, wired after every view so
-    // it can reach each one's rows.
+    // `Player.toggle-favorite` and `FavoriteActions` are wired after every view, so they can
+    // reach each one's rows.
 
     wire_persist_selected_index(ui, state);
     wire_reveal_in_folder(ui, state);
