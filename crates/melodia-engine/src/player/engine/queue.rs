@@ -96,7 +96,7 @@ pub struct QueueState {
     pub current_index: Option<usize>,
     /// The playing track's row has left while the track plays on, so `current_index` names the row
     /// that took its place, not yet started, or `None` past the end. Held only while a track is
-    /// seated: `PlayerState::cut_queue` and a station's seat close it.
+    /// seated: `PlayerState::close_gap_unless_seated` and a station's seat close it.
     playing_left: bool,
     /// Bumped by every [`Self::seat`], so a restore can tell whether a row has started since its
     /// removal.
@@ -200,6 +200,13 @@ impl QueueState {
     /// The entry at `play_index`, for a caller that has to find its row again after an await.
     pub fn entry_at(&self, play_index: usize) -> Option<QueueEntry> {
         self.play_order.get(play_index).map(|&slot| self.entry(slot))
+    }
+
+    /// The entry at `play_index` while its row still holds `track_id`, for a caller drawing from a
+    /// publish that can trail the queue.
+    pub fn entry_holding(&self, play_index: usize, track_id: i64) -> Option<QueueEntry> {
+        let slot = *self.play_order.get(play_index)?;
+        (self.tracks.get(slot) == Some(&track_id)).then(|| self.entry(slot))
     }
 
     fn entry(&self, slot: usize) -> QueueEntry {

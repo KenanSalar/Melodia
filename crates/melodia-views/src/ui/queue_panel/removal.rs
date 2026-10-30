@@ -104,12 +104,9 @@ impl Remover {
         }
     }
 
-    /// The row Up Next drew at play-order `index`, only while it still holds `track_id`: Up Next
-    /// draws from a publish, which can trail the queue.
+    /// The row Up Next drew at play-order `index`, if it still holds `track_id`.
     fn upcoming_entry(&self, index: i32, track_id: i32) -> Option<QueueEntry> {
         let index = usize::try_from(index).ok()?;
-        let player = lock_state(&self.state.player_state);
-        let drawn = player.queue.id_at(index) == Some(i64::from(track_id));
-        drawn.then(|| player.queue.entry_at(index)).flatten()
+        lock_state(&self.state.player_state).queue.entry_holding(index, i64::from(track_id))
     }
 }

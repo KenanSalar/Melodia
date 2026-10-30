@@ -933,7 +933,8 @@ removing stations and Clear queue ask first again (decision 13).
     tail gap pointing at the first row queued since, and both restores minting fresh entries;
   - the cursor rule (`seats`): a restore after an advance keeps the live current row, one after a
     station's seat or with nothing seated lights the old row, and `close_gap` counts no seat;
-  - `cut` of an entry already gone answering `None`;
+  - `cut` of an entry already gone answering `None`, and `entry_holding` (Up Next's removal)
+    answering `None` once another track sits at that index;
   - `playing_left` through advance, gapless peek, Next, Previous, Play Next, shuffle and persist
     (position 0), at the tail too; a cut while `Loading` keeps today's start;
   - the gap under a move: the gap row dragged away, a block dropped into the gap, a played row
@@ -974,8 +975,6 @@ removing stations and Clear queue ask first again (decision 13).
   station card's heart hides there too while its trash shows only on a hand-typed card. Up Next's
   remove calls `Queue.remove-upcoming` with the row's track id rather than `Queue.remove`, and a
   queue row's ✕ hides once `Queue.selected-count` reaches 2.
-- **Queue panel:** Up Next's removal takes nothing once the queue holds another track at that
-  index.
 - **Sweep:** a held basename survives `sweep_stores`, and so does one whose hold drops while the
   column read is in flight.
 - **Settings:**
