@@ -101,7 +101,7 @@ impl RowFlagMirrors {
         queue_panel::patch_rows(&self.weak, vec![id], move |row| row.rating = rating);
     }
 
-    /// Tracks and the four details, every list over `PagedRows` but Favorites.
+    /// Tracks and the four details, every `TrackRows` list but Favorites.
     fn patch_paged(&self, ids: &[i64], edit: impl Fn(&mut UiTrackListRow) + Copy + Send + 'static) {
         track_rows::patch_rows(&*self.tracks, ids.to_vec(), edit);
         track_rows::patch_rows(&*self.albums, ids.to_vec(), edit);

@@ -5,6 +5,6 @@
 // **Stateless, as `CardActions` is.**
 export global FavoriteActions {
     callback remove-tracks([int] /*track_ids*/);
-    // `kind` is an `EntityKind` token, resolved to track ids in one query.
+    // `kind` is an `EntityKind` token, Rust resolving the cards to their tracks.
     callback remove-entities(string /*kind*/, [int] /*entity_ids*/);
 }

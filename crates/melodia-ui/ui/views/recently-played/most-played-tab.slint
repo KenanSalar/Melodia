@@ -34,7 +34,7 @@ export component RecentlyPlayedMostPlayedTab inherits Rectangle {
         covers-generation: RecentlyPlayed.covers-generation;
         request-cover(p, gen) => { RecentlyPlayed.request-most-played-cover(p, gen) }
         row-clicked(id) => { RecentlyPlayed.play-track(id); }
-        favorite-clicked(id, on) => { CardActions.set-favorites("track", [id], on); }
+        favorite-clicked(id, on) => { CardActions.set-favorites(mp.card-kind, [id], on); }
         request-blur-search => { RecentlyPlayed.blur-search-tick += 1; }
     }
 
