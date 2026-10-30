@@ -42,8 +42,8 @@ pub fn install_ui(
     view_state: Option<&ViewStateData>,
     file_open_listener: Option<platform::single_instance::Listener>,
 ) -> AppResult<()> {
-    let (views, notifications) = install_shell(app, state, spawner, settings, view_state)?;
-    install_player_surfaces(app, state, &views)?;
+    let (views, notifications, undo) = install_shell(app, state, spawner, settings, view_state)?;
+    install_player_surfaces(app, state, &views, &undo)?;
     seed_and_fetch(app, state, &views, view_state);
     install_notices(app, state, &views, &notifications)?;
     install_updater_and_onboarding(app, state, spawner, settings, &notifications);
@@ -59,7 +59,7 @@ fn install_shell(
     spawner: &tasks::TaskSpawner,
     settings: Option<&SettingsData>,
     view_state: Option<&ViewStateData>,
-) -> AppResult<(UiHandles, Rc<NotificationsUi>)> {
+) -> AppResult<(UiHandles, Rc<NotificationsUi>, Rc<UndoWindow>)> {
     install_locale(app, state, settings);
     install_app_chrome(app, state);
     // Ahead of `install_views`, which builds the artwork tiers this decides the shape of.
@@ -91,7 +91,7 @@ fn install_shell(
     }
 
     hydrate_ui_from_settings(app, state, settings, view_state);
-    Ok((views, notifications))
+    Ok((views, notifications, undo))
 }
 
 /// The toast stack and the undo slot that raises its notices through it.
@@ -116,7 +116,12 @@ fn install_notice_stack(
 
 /// The player's subscribers and the surfaces that render it: the queue panel, Now Playing and the
 /// miniplayer.
-fn install_player_surfaces(app: &AppWindow, state: &AppState, views: &UiHandles) -> AppResult<()> {
+fn install_player_surfaces(
+    app: &AppWindow,
+    state: &AppState,
+    views: &UiHandles,
+    undo: &Rc<UndoWindow>,
+) -> AppResult<()> {
     let weak = app.as_weak();
     let shown = ui::shell::bridge::ShownPosition::default();
     ui::shell::bridge::spawn_view_model_subscriber(
@@ -138,7 +143,7 @@ fn install_player_surfaces(app: &AppWindow, state: &AppState, views: &UiHandles)
     ui::radio::install_history(weak, &views.radio_ui, &state.sinks)
         .map_err(|e| AppError::io("station history subscriber", e))?;
 
-    if let Err(e) = ui::queue_panel::install(app, state, &views.cover_thumbs) {
+    if let Err(e) = ui::queue_panel::install(app, state, &views.cover_thumbs, undo) {
         log::warn!("queue_panel::install: {}", describe(&e));
     }
 

@@ -1816,6 +1816,16 @@ msgstr[0] "{n} estação removida de Tocadas recentemente"
 msgstr[1] "{n} estações removidas de Tocadas recentemente"
 
 #: ui/globals/undo-text.slint
+msgid "{n} track removed from the queue"
+msgid_plural "{n} tracks removed from the queue"
+msgstr[0] "{n} faixa removida da fila"
+msgstr[1] "{n} faixas removidas da fila"
+
+#: ui/globals/undo-text.slint
+msgid "Queue cleared"
+msgstr "Fila limpa"
+
+#: ui/globals/undo-text.slint
 msgid "Too many to undo"
 msgstr "Itens demais para desfazer"
 
@@ -2404,8 +2414,8 @@ msgid "Clear queue?"
 msgstr "Limpar a fila?"
 
 #: ui/views/queue-panel/queue-panel.slint
-msgid "Remove all tracks from the queue? Playback will stop."
-msgstr "Remover todas as faixas da fila? A reprodução vai parar."
+msgid "Remove all tracks from the queue? This can't be undone. The playing track plays to its end."
+msgstr "Remover todas as faixas da fila? Não é possível desfazer. A faixa em reprodução toca até o fim."
 
 #: ui/views/queue-panel/queue-panel.slint
 msgid "Queue is empty"

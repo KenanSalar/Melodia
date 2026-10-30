@@ -1,6 +1,6 @@
 # Plan: Undo for removals (a notice that puts back what went)
 
-Status: **Phases 1 to 6 done** (hand-tested 2026-10-29 and 2026-10-30; Phase 3's measure waits for Kenan's go), **Phase 7 next** · Owner: Kenan · Created: 2026-10-28 · Issue #109, branch `feat/undo-removals`
+Status: **Phases 1 to 7 done** (hand-tested 2026-10-29 and 2026-10-30; Phase 3's measure waits for Kenan's go), **Phase 8 next** · Owner: Kenan · Created: 2026-10-28 · Issue #109, branch `feat/undo-removals`
 
 > **Validated 2026-10-28** against `5fa3d5ed` (`feat/undo-removals`): three read-only traces (the
 > toast stack, shortcuts and confirmations; the library removals; the queue, the equalizer and the
@@ -265,7 +265,7 @@ The issue's Notes ask for this list before any confirmation goes. "Over the cap"
 |---|---|---|
 | Delete playlist | `Dialog.open-delete-playlist`, raised from Rust (`crud.rs`' `confirm_first`) | Gone under the cap (Phase 4). Kept over it, saying it can't be undone because the playlist has too many tracks; with undo off from Phase 10, in its own wording. |
 | Delete N playlists | `Dialog.open-delete-playlists`, raised from Rust (`crud.rs`' `confirm_first`) | Gone under the cap (Phase 4). Kept over it, naming the same reason, and a true plural; with undo off from Phase 10, in its own wording. |
-| Clear queue | inline, `queue-panel.slint:240-249` | Hidden while queue undo is on. The queue's holds are uncapped (decision 5), so only Settings brings it back (decision 13). "Playback will stop" was never true and is reworded. |
+| Clear queue | `DialogKind.clear-queue`, populated inline in `queue-panel.slint` | Hidden while queue undo is on, behind `Queue.clear-confirms` (Phase 7). The queue's holds are uncapped (decision 5), so only Settings brings it back (decision 13). "Playback will stop" was never true and is reworded. |
 | Remove station (Favorites / Recently Played) | `Dialog.open-remove-station`, from the card trash and the menu | Deleted (Phase 5): one station is never past the cap. Phase 10 brings back the one-station form undo off needs, the Favorites heart's included. |
 | Remove N stations | `Dialog.open-remove-stations`, raised from Rust (`radio/callbacks/removal.rs`' `confirm_first`) | Gone under the cap (Phase 5). Kept over it, saying there are too many stations to undo; with undo off from Phase 10, in its own wording. |
 | Remove watched folder | inline, `library-section.slint:89-102` | **Stays**: out of scope. |
@@ -300,7 +300,8 @@ A kept confirmation is raised from Rust once the size is known, across an await,
 | `crates/melodia-app/src/library/{playlists,radio/removal,queue,search,favorites}.rs` | Each removal returns its capture, and each surface gets one restore fn |
 | `crates/melodia-views/src/ui/radio/callbacks/removal.rs` (new) | `Remover` (the heart, the trash and the menu, and the confirmation past the cap) and `StationRemovalUndo` |
 | `crates/melodia-app/src/services/search_history.rs` | `clear` hands back the list; `restore` puts it back |
-| `crates/melodia-engine/src/player/engine/queue.rs` (534 lines) | `cut`/`restore_cut` replacing `remove_at` and `remove_batch` (`prune_missing` built on `cut`), `take_cleared`/`restore_cleared`, the `playing_left` and `hand_edited` flags, and one `seat` method. Split into `queue/` if it passes 800. |
+| `crates/melodia-engine/src/player/engine/queue.rs` (723 lines after Phase 7) | `cut`/`restore_cuts` replacing `remove_at` and `remove_batch`, one `drop_rows` under `cut` and `prune_missing`, `take_cleared`/`restore_cleared`, the `playing_left` and `hand_edited` flags, the `seats` count the restores' cursor rule reads, and one `seat` method. Split into `queue/` if it passes 800. |
+| `crates/melodia-views/src/ui/queue_panel/removal.rs` (new) | `QueueCutUndo`, `QueueClearUndo`, and the panel's ✕, menu and Delete, Up Next's `remove-upcoming` and Clear, each removing then offering |
 | `crates/melodia-views/src/ui/equalizer.rs` | `apply_curve`, shared by preset select, reset and restore |
 | `crates/melodia-app/src/services/settings/undo.rs` (new) | `UndoFlags`, flattened into `SettingsData`; `library::settings::undo` holds its setters |
 | `crates/melodia-views/src/ui/settings/undo_settings.rs` (new) | The Accessibility page's undo section: seeds it, and each callback sets the slot's shadow, then persists |
@@ -469,7 +470,8 @@ The shell and its simplest user land together, the shell having nothing to show 
    - `callbacks::wire` takes `ViewCtx` whole, as Search's does.
 4. **Measure.** One heaptrack of a held cap-sized cut confirms `UNDO_HOLD_CAP`, and one of a moved
    full-library queue confirms the queue's exemption (decision 5). Both are taken by attaching to
-   Kenan's running build after the hand test, with his go between them, and recorded here.
+   Kenan's running build after the hand test, with his go between them, and recorded here. The
+   second needs Phase 7's `take_cleared`, so it can be taken from Phase 7 on.
 5. **The first restore that reports its failure.** `Removal::restore` is async and returns
    `Result`, and `UndoWindow::undo` owns the one failure branch: `show_failure`, "Couldn't undo"
    over "See the log for details.". Phase 2's search restore is awaited there too, so a failed
@@ -696,41 +698,84 @@ This lands before Phase 7, whose queue token restores the flag with the cursor.
 - Remove a row above the playing one, then click Up Next's first row: that row plays.
 - A station over the queue: removing the queue's current row lights the row below, as today.
 
-### Phase 7: queue rows and Clear
+### Phase 7: queue rows and Clear (done 2026-10-30)
 
 1. **Engine.**
-   - `QueueState::cut(&[QueueEntry]) -> QueueCut` replaces `remove_at` and `remove_batch`, and
-     `prune_missing` is built on it. It names rows by entry because the UI computes a play index
-     the runtime applies later (`queue_panel/callbacks.rs:37-64`), so a removal racing an undo
-     would cut whatever sits there by then; the drop-in already takes an entry
-     (`library/queue.rs:108`). The cut holds plain ids, `(track_id, play_index, original_index)`
-     per row, plus the cursor and `playing_left`, and returns its count.
-   - `restore_cut` pushes the held ids as new slots, inserting in ascending index order into both
-     `play_order` and `original_order` through `melodia_core::utils::reinsert`. Fresh entries keep `QueueEntry`'s "never handed out again"
-     (`:25-27`) true and need no generation check.
-   - `take_cleared` moves the three vectors out, clearing as `clear` does. `restore_cleared`
-     re-adds the held rows under fresh entries, ahead of anything queued since.
-   - **One cursor rule for both restores**: the held cursor and flag come back only if nothing was
-     seated since the removal. Otherwise the live current row stands, found again after the
-     insert.
-   - The live shuffle and repeat flags stand, since they persist on their own
-     (`library/queue.rs:292-302`), and restored rows take the order the live shuffle flag implies.
-   - Each restore bumps the version, `with_state_emit` publishing only on a change
-     (`state/mod.rs:195-205`).
-2. **App.**
-   - `queue_remove`, `queue_remove_batch` and `queue_clear` return their capture. The queue's
-     holds are uncapped (decision 5), so Clear always clears.
-   - The two restores go through `with_state_emit`, playback untouched (decision 4).
-3. **Slint and views.**
-   - The Clear button calls `Queue.clear-queue()` directly. Rust clears and offers.
-   - The inline confirmation stays, shown only while `Queue.clear-confirms` is up. Rust holds it
-     down until Phase 10 writes it from the undo preferences (decision 13). Its "Playback will
-     stop" line is reworded, since the playing track runs to its end.
-   - The removal callbacks in `queue_panel/callbacks.rs` resolve their rows to entries at the click
-     (`QueueRows::entry_at`, `paged_rows/queue_rows.rs:119`) and offer. The ✕, the menu, Delete
-     and Up Next's menu all arrive there.
-4. **Strings:** "{n} track removed from the queue" (plural), "Queue cleared", and the clear
-   confirmation's reworded line.
+   - `QueueState::cut(&[QueueEntry]) -> Option<QueueCut>` replaces `remove_at` and
+     `remove_batch`. It names rows by entry because a click's play index can go stale before it
+     lands; the drop-in already takes an entry (`library/queue.rs:108`). It holds plain ids,
+     `(track_id, play_index, original_index)` per row, plus the cursor, `playing_left` and the
+     shuffle flag. It answers `None` when no entry is still queued (decision 6).
+   - `cut` and `prune_missing` share one private `drop_rows`, so the three copies of one cut
+     became one. A prune still never opens a gap.
+   - `restore_cuts` walks a run newest first. It pushes the held ids as fresh slots and reinserts
+     them at their indices in both orders through `melodia_core::utils::reinsert`. Fresh entries
+     keep `QueueEntry`'s "never handed out again" true.
+   - `take_cleared` moves the three vectors out, retiring the slots as `clear` did, and `clear`
+     discards it. `restore_cleared` puts each held queue ahead of anything queued since, so a
+     merged run comes back oldest first.
+   - **The cursor rule rests on `seats`**, a count `seat()` bumps and nothing else does. The held
+     cursor comes back only while it is unchanged; otherwise the live current row stands, found
+     again by slot. `close_gap` doesn't count, so:
+     - a removal with nothing seated restores the old current row;
+     - a station started since leaves the restored row current under it, which is what its stop
+       would have handed back.
+     A held gap at the end of a cleared queue points at the first row queued since.
+   - **Shuffle.** The live shuffle and repeat flags stand. A hold made shuffled and restored with
+     shuffle off takes its insertion order, which the unshuffle rebuilt the play order from.
+   - `PlayerState::cut_queue` and both restores close a gap once nothing is seated, as
+     `remove_queue_rows` did.
+2. **App.** `queue_remove(&[QueueEntry]) -> Option<QueueCut>` replaces `queue_remove` and
+   `queue_remove_batch`. `queue_clear` answers `Option<ClearedQueue>`, and each restore is one
+   `with_state_emit` with playback untouched (decision 4). None of them can fail, so none returns
+   `Result`.
+3. **Slint and views** (`queue_panel/removal.rs`).
+   - The removals run on the UI thread with no runtime hop: each is a short state lock, as
+     `read_queue` takes there, and the slot is an `Rc`.
+   - The panel's ✕, its menu and Delete resolve their rows through `QueueRows::entry_at`.
+   - **Up Next resolves its own row.** The panel's rows exist only while `Queue.shown`, which Now
+     Playing and the miniplayer both turn off. So `Queue.remove-upcoming(play-index, track-id)`
+     finds the entry under the state lock, and takes it only where the queue still holds the
+     track Up Next drew.
+   - The Clear pill calls `Queue.clear-queue()` unless `Queue.clear-confirms` is up, in which case
+     it raises the `DialogKind.clear-queue` populated inline. Nothing writes the flag until Phase
+     10.
+   - A cut merges with a cut and a clear with a clear, uncapped (decision 5). A Clear after a cut
+     replaces it (decision 2).
+   - **A row's ✕ hides while two or more rows are picked** (Kenan, 2026-10-30), as the playlist
+     card's trash does (Phase 4). Beside a selection it read as the set's yet took one row, while
+     the menu and Delete take the set. Hovering a row then shows its duration.
+   - `queue_panel::install` takes the slot, `install_shell` handing it back beside the
+     notifications.
+4. **Strings:** "{n} track removed from the queue" (plural), "Queue cleared", and the
+   confirmation's "Remove all tracks from the queue? This can't be undone. The playing track
+   plays to its end.", in all 15 catalogs.
+
+**A gap left for Phase 8.** A play from a list inside the notice's window replaces the queue
+without taking the slot, so Undo splices the cut rows into the new queue. Phase 8 closes it: a cut
+sets `hand_edited`, so that replace offers and takes the slot. There is no guard here, since one
+would also block Undo after a replace with an identical queue, where splicing the rows back in is
+correct.
+
+**By hand.**
+- The ✕ on one row: "1 track removed from the queue". Undo and Ctrl+Z put it back in place.
+- Pick three and press Delete, shuffled: Undo restores them, and unshuffling afterwards gives the
+  insertion order.
+- Remove twice inside the window: one card, the count adds, the clock restarts, and Undo restores
+  both.
+- Remove the playing row, then Undo while it plays: the row is back and lit, and the row below
+  plays next.
+- Remove the playing row and let it end before Undo: the next row plays, and Undo puts the row back
+  before it, unlit.
+- Remove from Up Next's menu in Now Playing and in the miniplayer: the notice, and Undo puts the
+  row back.
+- Clear while playing: no dialog, "Queue cleared", and the track plays on. Undo brings the queue
+  back with the playing row lit.
+- Clear, add tracks, Undo: the old queue comes back ahead of the new tracks.
+- Remove rows, then Clear: the clear's notice replaces the removal's.
+- Remove a row, drag others around, Undo: the row lands at its old index.
+- Pick two or more rows: hovering any row shows no ✕. With one picked, the ✕ is back.
+- A language switch with the notice up re-renders it.
 
 ### Phase 8: a play replacing the queue
 
@@ -881,16 +926,20 @@ removing stations and Clear queue ask first again (decision 13).
 
 **Tests:**
 - `queue_tests`:
-  - a `cut`/`restore_cut` round trip with the current row before, inside and after the cut, under
-    shuffle (both orders restored);
-  - `restore_cleared` keeping the rows queued since, and both restores minting fresh entries;
-  - the cursor rule: a restore after a seat keeps the live current row;
+  - a `cut`/`restore_cuts` round trip with the current row before, inside and after the cut,
+    under shuffle (both orders restored), a merged run of two cuts, and a cut made shuffled
+    restored after an unshuffle taking its insertion order;
+  - `restore_cleared` keeping the rows queued since, a merged run coming back oldest first, a held
+    tail gap pointing at the first row queued since, and both restores minting fresh entries;
+  - the cursor rule (`seats`): a restore after an advance keeps the live current row, one after a
+    station's seat or with nothing seated lights the old row, and `close_gap` counts no seat;
+  - `cut` of an entry already gone answering `None`;
   - `playing_left` through advance, gapless peek, Next, Previous, Play Next, shuffle and persist
     (position 0), at the tail too; a cut while `Loading` keeps today's start;
   - the gap under a move: the gap row dragged away, a block dropped into the gap, a played row
     moved past it, and at the tail;
-  - the gap closed by `remove_queue_rows` with nothing seated, by a station's seat, and kept by a
-    prune of the gap row (`playing_was_removed` false);
+  - the gap closed by `cut_queue` with nothing seated, by a station's seat, by a restore with
+    nothing seated, and kept by a prune of the gap row (`playing_was_removed` false);
   - `has_next` agreeing with `advance_skip` under every repeat mode, Repeat One at a tail gap and
     with nothing current included;
   - `hand_edited` set by each hand edit, cleared by a replace, seated by boot restore.
@@ -922,7 +971,11 @@ removing stations and Clear queue ask first again (decision 13).
 - **Slint pins:** the card's `Timer` gates on its hover and `Theme.window-focused`, the row menu's
   remove entry calls the shared callback rather than `toggle-row-favorite`, the playlist card's
   trash and the station card's remove hide on `CardCell.multi-selection`, and on Favorites a
-  station card's heart hides there too while its trash shows only on a hand-typed card.
+  station card's heart hides there too while its trash shows only on a hand-typed card. Up Next's
+  remove calls `Queue.remove-upcoming` with the row's track id rather than `Queue.remove`, and a
+  queue row's ✕ hides once `Queue.selected-count` reaches 2.
+- **Queue panel:** Up Next's removal takes nothing once the queue holds another track at that
+  index.
 - **Sweep:** a held basename survives `sweep_stores`, and so does one whose hold drops while the
   column read is in flight.
 - **Settings:**
@@ -931,20 +984,22 @@ removing stations and Clear queue ask first again (decision 13).
   - `covers` over every kind, both counts and both switches;
   - the category's key round-tripping through `views.json`.
 - **Existing tests to recheck:** `settings_page_tests` (the category count and arrays),
-  `dialog_openers.rs` and `translations.rs`; the `remove_at` and
-  `remove_batch` tests in `queue_tests`, `queue_entry_tests`, `state_tests` and the views crate's
-  `paged_rows/tests/queue_rows_tests.rs:183,216`; and the timer-observing `show_completion` test.
+  `dialog_openers.rs` and `translations.rs`, and the timer-observing `show_completion` test.
+  Phase 7 already ported the `remove_at` and `remove_batch` tests to `cut` through
+  `fixtures::cut_rows`.
 
 **Docs:**
 - `ui-patterns.md`'s "Dialogs, toasts": the slot contract (decisions 2, 5, 6, 8 and 12), and the
   card owning its clock.
-- `ui-patterns.md`'s "Selection": a card's hover control that deletes it hides under a
-  multi-selection (`CardCell.multi-selection`).
+- `ui-patterns.md`'s "Selection": a hover control that deletes its own card or row hides under a
+  multi-selection (`CardCell.multi-selection`, the queue row's `shows-remove`).
 - `library-data.md`: restores as units of work, and the artwork hold.
-- `audio-stack.md`: `playing_left`.
+- `audio-stack.md`: `playing_left`, and the `seats` count the queue's restores read.
 - `ui-patterns.md`'s "The Settings page": the category persisted by key, and Accessibility as #36's
   home.
-- Offer the `CLAUDE.md` and `README.md` edits.
+- `README.md`, here and in no earlier phase: one feature line for undo (the notice, Ctrl+Z, what
+  it covers) and the Accessibility category's settings.
+- Offer the `CLAUDE.md` edits.
 
 ## Cross-cutting
 

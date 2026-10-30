@@ -1,7 +1,8 @@
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, OnceLock};
 
 use melodia_core::utils::block_move;
+use melodia_core::utils::reinsert::reinsert;
 
 use super::types::{PersistableQueue, RepeatMode};
 
@@ -20,6 +21,54 @@ pub struct PruneOutcome {
     pub removed: usize,
     /// The playing row went, so the caller skips on.
     pub playing_was_removed: bool,
+}
+
+/// What [`QueueState::cut`] took, for [`QueueState::restore_cuts`] to put back. Ids and indices
+/// only, so it costs what its rows did in the queue.
+#[derive(Debug)]
+pub struct QueueCut {
+    /// In play order, each where it sat in both orders the moment it was cut.
+    rows: Vec<CutRow>,
+    /// `slot` is the index in `rows` of the row that was current, where the cut took it.
+    cursor: HeldCursor,
+    shuffled: bool,
+}
+
+impl QueueCut {
+    pub fn len(&self) -> usize {
+        self.rows.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.rows.is_empty()
+    }
+}
+
+#[derive(Debug)]
+struct CutRow {
+    track_id: i64,
+    play_index: usize,
+    original_index: usize,
+}
+
+/// What [`QueueState::take_cleared`] moved out, for [`QueueState::restore_cleared`].
+#[derive(Debug)]
+pub struct ClearedQueue {
+    tracks: Vec<i64>,
+    play_order: Vec<usize>,
+    original_order: Vec<usize>,
+    /// `slot` is the current row's slot in `tracks`.
+    cursor: HeldCursor,
+    shuffled: bool,
+}
+
+/// The cursor as a removal found it. Its restore puts it back only while nothing has been seated
+/// since: once a row has started, that row stays current.
+#[derive(Debug, Clone, Copy)]
+struct HeldCursor {
+    slot: Option<usize>,
+    playing_left: bool,
+    seats: u64,
 }
 
 /// One queued copy of a track, which tells a track queued twice apart from itself. It keeps its
@@ -47,8 +96,11 @@ pub struct QueueState {
     pub current_index: Option<usize>,
     /// The playing track's row has left while the track plays on, so `current_index` names the row
     /// that took its place, not yet started, or `None` past the end. Held only while a track is
-    /// seated: `PlayerState::remove_queue_rows` and a station's seat close it.
+    /// seated: `PlayerState::cut_queue` and a station's seat close it.
     playing_left: bool,
+    /// Bumped by every [`Self::seat`], so a restore can tell whether a row has started since its
+    /// removal.
+    seats: u64,
     pub shuffle_enabled: bool,
     pub repeat_mode: RepeatMode,
     /// Bumped on every mutation, so `with_state_emit` publishes the queue only when it moved.
@@ -67,6 +119,7 @@ impl Default for QueueState {
             original_order: Vec::new(),
             current_index: None,
             playing_left: false,
+            seats: 0,
             shuffle_enabled: false,
             repeat_mode: RepeatMode::Off,
             version: 0,
@@ -253,42 +306,101 @@ impl QueueState {
         self.order_changed();
     }
 
-    pub fn remove_at(&mut self, index: usize) -> bool {
-        if index >= self.play_order.len() {
-            return false;
+    /// Takes the rows `entries` name, wherever they sit now, handing back what puts them back, or
+    /// `None` where none is still queued. Taking the playing row leaves a gap where it was
+    /// (`playing_left`), the row that took its place playing next.
+    pub fn cut(&mut self, entries: &[QueueEntry]) -> Option<QueueCut> {
+        let slots: HashSet<usize> =
+            entries.iter().filter_map(|entry| entry.0.checked_sub(self.retired)).collect();
+        let rows = self.rows_at(&slots);
+        if rows.is_empty() {
+            return None;
         }
-        self.remove_batch(&[index]);
-        true
+        let current_row = rows.iter().position(|row| Some(row.play_index) == self.current_index);
+        let cursor =
+            HeldCursor { slot: current_row, playing_left: self.playing_left, seats: self.seats };
+
+        self.playing_left |= current_row.is_some();
+        self.drop_rows(&slots);
+        Some(QueueCut { rows, cursor, shuffled: self.shuffle_enabled })
     }
 
-    /// Removes play-order slots in one pass. Taking the playing row leaves a gap where it was
-    /// (`playing_left`), the row that took its place playing next.
-    pub fn remove_batch(&mut self, indices: &[usize]) {
-        if indices.is_empty() {
-            return;
-        }
+    /// The queued rows among `slots`, in play order.
+    fn rows_at(&self, slots: &HashSet<usize>) -> Vec<CutRow> {
+        let original_index: HashMap<usize, usize> = self
+            .original_order
+            .iter()
+            .enumerate()
+            .filter(|(_, slot)| slots.contains(slot))
+            .map(|(index, &slot)| (slot, index))
+            .collect();
+        self.play_order
+            .iter()
+            .enumerate()
+            .filter_map(|(play_index, slot)| {
+                Some(CutRow {
+                    original_index: *original_index.get(slot)?,
+                    track_id: *self.tracks.get(*slot)?,
+                    play_index,
+                })
+            })
+            .collect()
+    }
 
-        let index_set: HashSet<usize> = indices.iter().copied().collect();
-
-        let removed_track_indices: HashSet<usize> =
-            index_set.iter().filter_map(|&i| self.play_order.get(i).copied()).collect();
-
-        let current_removed = self.current_index.is_some_and(|ci| index_set.contains(&ci));
-        let survivors_before_current =
-            self.current_index.map(|ci| ci - index_set.iter().filter(|&&i| i < ci).count());
-
-        let mut pos = 0usize;
-        self.play_order.retain(|_| {
-            let keep = !index_set.contains(&pos);
-            pos += 1;
-            keep
-        });
-        // `tracks` keeps the slots so every other index stays valid; `clear` drops them.
-        self.original_order.retain(|ti| !removed_track_indices.contains(ti));
-
-        self.playing_left |= current_removed;
+    /// Drops the rows at `gone` from both orders and lands the cursor on the row that took the
+    /// current one's place. `tracks` keeps the slots so every other index stays valid; `clear`
+    /// drops them.
+    fn drop_rows(&mut self, gone: &HashSet<usize>) {
+        let survivors_before_current = self
+            .current_index
+            .map(|ci| self.play_order.iter().take(ci).filter(|slot| !gone.contains(slot)).count());
+        self.play_order.retain(|slot| !gone.contains(slot));
+        self.original_order.retain(|slot| !gone.contains(slot));
         self.land_cursor(survivors_before_current);
         self.order_changed();
+    }
+
+    /// Puts back what a run of [`Self::cut`]s took, newest first, so each lands in the coordinates
+    /// of the moment it was made.
+    pub fn restore_cuts(&mut self, cuts: Vec<QueueCut>) {
+        for cut in cuts.into_iter().rev() {
+            self.restore_cut(cut);
+        }
+    }
+
+    /// The rows go back under fresh slots, so no entry is handed out twice. Under shuffle off a
+    /// cut made shuffled takes its insertion order, which the unshuffle rebuilt the play order from.
+    fn restore_cut(&mut self, cut: QueueCut) {
+        let QueueCut { rows, cursor, shuffled } = cut;
+        let live = self.current_slot();
+        let start = self.tracks.len();
+        self.tracks.extend(rows.iter().map(|row| row.track_id));
+
+        let mut by_original: Vec<(usize, usize)> =
+            rows.iter().zip(start..).map(|(row, slot)| (row.original_index, slot)).collect();
+        by_original.sort_unstable();
+        let by_play = if shuffled && !self.shuffle_enabled {
+            by_original.clone()
+        } else {
+            rows.iter().zip(start..).map(|(row, slot)| (row.play_index, slot)).collect()
+        };
+        self.original_order = reinsert(std::mem::take(&mut self.original_order), by_original);
+        self.play_order = reinsert(std::mem::take(&mut self.play_order), by_play);
+
+        match cursor.slot {
+            Some(row) if self.seats == cursor.seats => {
+                self.place_cursor(Some(start + row), cursor.playing_left);
+            }
+            _ => self.place_cursor(live, self.playing_left),
+        }
+        self.order_changed();
+    }
+
+    /// Makes the row in `slot` current without counting a seat, a restore putting the cursor back
+    /// rather than starting anything.
+    fn place_cursor(&mut self, slot: Option<usize>, playing_left: bool) {
+        self.current_index = slot.and_then(|slot| self.play_index_of_slot(slot));
+        self.playing_left = playing_left;
     }
 
     /// Puts the cursor on the row that took the current one's place, `survivors_before` rows in.
@@ -339,12 +451,61 @@ impl QueueState {
     }
 
     pub fn clear(&mut self) {
-        self.retired += self.tracks.len();
-        self.tracks.clear();
-        self.play_order.clear();
-        self.original_order.clear();
+        drop(self.take_cleared());
+    }
+
+    /// Empties the queue, handing back what it held, or `None` where nothing was queued. Moved
+    /// rather than copied, so the hold costs what the queue did a moment before.
+    pub fn take_cleared(&mut self) -> Option<ClearedQueue> {
+        let held = ClearedQueue {
+            cursor: HeldCursor {
+                slot: self.current_slot(),
+                playing_left: self.playing_left,
+                seats: self.seats,
+            },
+            shuffled: self.shuffle_enabled,
+            tracks: std::mem::take(&mut self.tracks),
+            play_order: std::mem::take(&mut self.play_order),
+            original_order: std::mem::take(&mut self.original_order),
+        };
+        self.retired += held.tracks.len();
         self.current_index = None;
         self.playing_left = false;
+        self.order_changed();
+        (!held.play_order.is_empty()).then_some(held)
+    }
+
+    /// Puts back what a run of [`Self::take_cleared`]s took, newest first, each ahead of anything
+    /// queued since, so the oldest ends up first.
+    pub fn restore_cleared(&mut self, cleared: Vec<ClearedQueue>) {
+        for held in cleared.into_iter().rev() {
+            self.restore_one_cleared(held);
+        }
+    }
+
+    /// Under fresh slots, as [`Self::restore_cut`] does, and in insertion order where shuffle has
+    /// gone off since.
+    fn restore_one_cleared(&mut self, held: ClearedQueue) {
+        let ClearedQueue { tracks, play_order, original_order, cursor, shuffled } = held;
+        let live = self.current_slot();
+        let start = self.tracks.len();
+        let restored_rows = play_order.len();
+        self.tracks.extend(tracks);
+
+        let held_play =
+            if shuffled && !self.shuffle_enabled { &original_order } else { &play_order };
+        self.play_order.splice(0..0, held_play.iter().map(|slot| start + slot));
+        self.original_order.splice(0..0, original_order.iter().map(|slot| start + slot));
+
+        if self.seats == cursor.seats {
+            // A gap held at the end leaves what was queued since still to play.
+            let first_since = || self.play_order.get(restored_rows).copied();
+            let slot = cursor.slot.map(|slot| start + slot);
+            let slot = if cursor.playing_left { slot.or_else(first_since) } else { slot };
+            self.place_cursor(slot, cursor.playing_left);
+        } else {
+            self.place_cursor(live, self.playing_left);
+        }
         self.order_changed();
     }
 
@@ -352,6 +513,7 @@ impl QueueState {
     pub fn seat(&mut self, index: usize) {
         self.current_index = Some(index);
         self.playing_left = false;
+        self.seats += 1;
     }
 
     pub fn skip_to_index(&mut self, index: usize) -> Option<i64> {
@@ -528,27 +690,20 @@ impl QueueState {
     /// last, or past a gap's end on none: a prune keeps a gap but never opens one, the caller
     /// moving on instead. Bumps `version` only when a row went.
     pub fn prune_missing(&mut self, ids_to_remove: &HashSet<i64>) -> PruneOutcome {
-        let tracks = &self.tracks;
-        let gone = |slot: usize| tracks.get(slot).is_some_and(|id| ids_to_remove.contains(id));
-
-        let removed = self.play_order.iter().filter(|&&slot| gone(slot)).count();
-        if removed == 0 {
+        let gone: HashSet<usize> = self
+            .play_order
+            .iter()
+            .copied()
+            .filter(|&slot| self.tracks.get(slot).is_some_and(|id| ids_to_remove.contains(id)))
+            .collect();
+        if gone.is_empty() {
             return PruneOutcome::default();
         }
 
-        let playing_was_removed = !self.playing_left && self.current_slot().is_some_and(gone);
-        // The first survivor at or after the old slot takes the index of the survivors before it.
-        let survivors_before_current = self
-            .current_index
-            .map(|ci| self.play_order.iter().take(ci).filter(|&&slot| !gone(slot)).count());
-
-        self.play_order.retain(|&slot| !gone(slot));
-        self.original_order.retain(|&slot| !gone(slot));
-
-        self.land_cursor(survivors_before_current);
-        self.order_changed();
-
-        PruneOutcome { removed, playing_was_removed }
+        let playing_was_removed =
+            !self.playing_left && self.current_slot().is_some_and(|slot| gone.contains(&slot));
+        self.drop_rows(&gone);
+        PruneOutcome { removed: gone.len(), playing_was_removed }
     }
 
     pub fn to_persistable(&self) -> PersistableQueue {

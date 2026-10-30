@@ -1816,6 +1816,16 @@ msgstr[0] "{n} station retirée des écoutés récemment"
 msgstr[1] "{n} stations retirées des écoutés récemment"
 
 #: ui/globals/undo-text.slint
+msgid "{n} track removed from the queue"
+msgid_plural "{n} tracks removed from the queue"
+msgstr[0] "{n} piste retirée de la file d'attente"
+msgstr[1] "{n} pistes retirées de la file d'attente"
+
+#: ui/globals/undo-text.slint
+msgid "Queue cleared"
+msgstr "File d'attente vidée"
+
+#: ui/globals/undo-text.slint
 msgid "Too many to undo"
 msgstr "Trop d'éléments pour annuler"
 
@@ -2404,8 +2414,8 @@ msgid "Clear queue?"
 msgstr "Vider la file d'attente ?"
 
 #: ui/views/queue-panel/queue-panel.slint
-msgid "Remove all tracks from the queue? Playback will stop."
-msgstr "Retirer toutes les pistes de la file d'attente ? La lecture s'arrêtera."
+msgid "Remove all tracks from the queue? This can't be undone. The playing track plays to its end."
+msgstr "Retirer toutes les pistes de la file d'attente ? Cette action est irréversible. La piste en cours sera lue jusqu'à la fin."
 
 #: ui/views/queue-panel/queue-panel.slint
 msgid "Queue is empty"

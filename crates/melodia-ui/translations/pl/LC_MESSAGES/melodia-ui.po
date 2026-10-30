@@ -1832,6 +1832,17 @@ msgstr[1] "Usunięto {n} stacje z ostatnio odtwarzanych"
 msgstr[2] "Usunięto {n} stacji z ostatnio odtwarzanych"
 
 #: ui/globals/undo-text.slint
+msgid "{n} track removed from the queue"
+msgid_plural "{n} tracks removed from the queue"
+msgstr[0] "Usunięto {n} utwór z kolejki"
+msgstr[1] "Usunięto {n} utwory z kolejki"
+msgstr[2] "Usunięto {n} utworów z kolejki"
+
+#: ui/globals/undo-text.slint
+msgid "Queue cleared"
+msgstr "Wyczyszczono kolejkę"
+
+#: ui/globals/undo-text.slint
 msgid "Too many to undo"
 msgstr "Zbyt wiele, by cofnąć"
 
@@ -2439,8 +2450,8 @@ msgid "Clear queue?"
 msgstr "Wyczyścić kolejkę?"
 
 #: ui/views/queue-panel/queue-panel.slint
-msgid "Remove all tracks from the queue? Playback will stop."
-msgstr "Usunąć wszystkie utwory z kolejki? Odtwarzanie zostanie zatrzymane."
+msgid "Remove all tracks from the queue? This can't be undone. The playing track plays to its end."
+msgstr "Usunąć wszystkie utwory z kolejki? Tej operacji nie można cofnąć. Odtwarzany utwór zostanie odtworzony do końca."
 
 #: ui/views/queue-panel/queue-panel.slint
 msgid "Queue is empty"

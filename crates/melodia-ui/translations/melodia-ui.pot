@@ -1816,6 +1816,16 @@ msgstr[0] ""
 msgstr[1] ""
 
 #: ui/globals/undo-text.slint
+msgid "{n} track removed from the queue"
+msgid_plural "{n} tracks removed from the queue"
+msgstr[0] ""
+msgstr[1] ""
+
+#: ui/globals/undo-text.slint
+msgid "Queue cleared"
+msgstr ""
+
+#: ui/globals/undo-text.slint
 msgid "Too many to undo"
 msgstr ""
 
@@ -2404,7 +2414,7 @@ msgid "Clear queue?"
 msgstr ""
 
 #: ui/views/queue-panel/queue-panel.slint
-msgid "Remove all tracks from the queue? Playback will stop."
+msgid "Remove all tracks from the queue? This can't be undone. The playing track plays to its end."
 msgstr ""
 
 #: ui/views/queue-panel/queue-panel.slint

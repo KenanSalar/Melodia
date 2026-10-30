@@ -1,5 +1,5 @@
-//! `Queue.*` callback wiring: the transport rows, the drags that move rows, a drop from another
-//! list, the row menu's favourite and rating, and the picks.
+//! `Queue.*` callback wiring: a row's play, the drags that move rows, a drop from another list,
+//! the row menu's favourite and rating, and the picks. Removals are `removal`'s.
 
 use std::rc::Rc;
 
@@ -8,7 +8,7 @@ use slint::{ComponentHandle, Weak};
 use super::publish_picks;
 use crate::ui::callbacks::card_actions::spawn_with_track_ids;
 use crate::ui::callbacks::collect_track_ids;
-use crate::ui::callbacks::macros::{wire_row_flag, wire_sync};
+use crate::ui::callbacks::macros::wire_row_flag;
 use crate::ui::drag;
 use crate::ui::paged_rows::queue_rows::QueueRows;
 use melodia_app::library;
@@ -18,68 +18,28 @@ use melodia_core::utils::block_move;
 use melodia_ui::{AppWindow, Queue, QueueRow};
 
 pub(super) fn wire_callbacks(ui: &AppWindow, state: &AppState, rows: &Rc<QueueRows>) {
-    wire_transport(ui, state, rows);
+    wire_skip_to(ui, state);
     wire_moves(ui, state, rows);
     wire_drop_in(ui, state, rows);
     wire_row_flags(ui, state);
     wire_selection(ui, rows);
 }
 
-/// The four rows that only ask the engine for something.
-///
-/// None of them reports anything back: the mutation lands on `sinks.queue` and the subscriber
+/// A row's play, which reports nothing back: the skip lands on `sinks.queue` and the subscriber
 /// shows it from there.
-fn wire_transport(ui: &AppWindow, state: &AppState, rows: &Rc<QueueRows>) {
-    let queue = ui.global::<Queue>();
-
-    {
-        let s = state.clone();
-        queue.on_remove(move |idx| {
-            let Ok(idx) = usize::try_from(idx) else {
-                return;
-            };
-            let s_inner = s.clone();
-            s.runtime.clone().spawn(async move {
-                if let Err(e) = library::queue::queue_remove(&s_inner, idx) {
-                    log::warn!("queue_remove({idx}): {}", describe(&e));
-                }
-            });
-        });
-    }
-
-    {
-        let s = state.clone();
-        let rows = rows.clone();
-        queue.on_remove_selected(move || {
-            let indices = rows.picked_rows();
-            if indices.is_empty() {
-                return;
+fn wire_skip_to(ui: &AppWindow, state: &AppState) {
+    let s = state.clone();
+    ui.global::<Queue>().on_skip_to(move |idx| {
+        let Ok(idx) = usize::try_from(idx) else {
+            return;
+        };
+        let s_inner = s.clone();
+        s.runtime.clone().spawn(async move {
+            if let Err(e) = library::queue::queue_skip_to_index(&s_inner, idx).await {
+                log::warn!("queue_skip_to_index({idx}): {}", describe(&e));
             }
-            let s_inner = s.clone();
-            s.runtime.clone().spawn(async move {
-                if let Err(e) = library::queue::queue_remove_batch(&s_inner, &indices) {
-                    log::warn!("queue_remove_batch({} rows): {}", indices.len(), describe(&e));
-                }
-            });
         });
-    }
-
-    {
-        let s = state.clone();
-        queue.on_skip_to(move |idx| {
-            let Ok(idx) = usize::try_from(idx) else {
-                return;
-            };
-            let s_inner = s.clone();
-            s.runtime.clone().spawn(async move {
-                if let Err(e) = library::queue::queue_skip_to_index(&s_inner, idx).await {
-                    log::warn!("queue_skip_to_index({idx}): {}", describe(&e));
-                }
-            });
-        });
-    }
-
-    wire_sync!(queue, on_clear_queue, state, "queue_clear", library::queue::queue_clear);
+    });
 }
 
 /// The two drags that move rows: one row, or every picked row gathered at a slot.

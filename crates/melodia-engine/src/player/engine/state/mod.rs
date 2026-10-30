@@ -3,7 +3,7 @@ use std::sync::atomic::{AtomicU8, Ordering};
 use std::sync::{MutexGuard, TryLockError};
 
 use super::event_sink::PlayerSinks;
-use super::queue::QueueState;
+use super::queue::{ClearedQueue, QueueCut, QueueEntry, QueueState};
 use super::queue_window::TrackWindow;
 use super::types::{PlaybackSource, PlaybackStatus, RadioNowPlaying};
 use melodia_core::entities::track::TrackSummary;
@@ -144,10 +144,27 @@ impl PlayerState {
         self.source.as_mut().and_then(PlaybackSource::track_mut)
     }
 
-    /// Takes the queue rows at `indices`. A seated track whose row goes plays on, the row that took
-    /// its place next; with none seated, nothing plays on to leave a gap for.
-    pub fn remove_queue_rows(&mut self, indices: &[usize]) {
-        self.queue.remove_batch(indices);
+    /// Takes the queue rows `entries` name. A seated track whose row goes plays on, the row that
+    /// took its place next.
+    pub fn cut_queue(&mut self, entries: &[QueueEntry]) -> Option<QueueCut> {
+        let cut = self.queue.cut(entries);
+        self.close_gap_unless_seated();
+        cut
+    }
+
+    pub fn restore_queue_cuts(&mut self, cuts: Vec<QueueCut>) {
+        self.queue.restore_cuts(cuts);
+        self.close_gap_unless_seated();
+    }
+
+    pub fn restore_cleared_queue(&mut self, cleared: Vec<ClearedQueue>) {
+        self.queue.restore_cleared(cleared);
+        self.close_gap_unless_seated();
+    }
+
+    /// With no track seated nothing plays on to leave a gap for, so a removal or a restore that
+    /// opened one closes it.
+    fn close_gap_unless_seated(&mut self) {
         if self.current_track().is_none() {
             self.queue.close_gap();
         }

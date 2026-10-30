@@ -1817,6 +1817,16 @@ msgstr[0] "{n} Sender aus „Zuletzt gespielt“ entfernt"
 msgstr[1] "{n} Sender aus „Zuletzt gespielt“ entfernt"
 
 #: ui/globals/undo-text.slint
+msgid "{n} track removed from the queue"
+msgid_plural "{n} tracks removed from the queue"
+msgstr[0] "{n} Lied aus der Warteschlange entfernt"
+msgstr[1] "{n} Lieder aus der Warteschlange entfernt"
+
+#: ui/globals/undo-text.slint
+msgid "Queue cleared"
+msgstr "Warteschlange geleert"
+
+#: ui/globals/undo-text.slint
 msgid "Too many to undo"
 msgstr "Zu viele zum Rückgängigmachen"
 
@@ -2405,8 +2415,8 @@ msgid "Clear queue?"
 msgstr "Warteschlange leeren?"
 
 #: ui/views/queue-panel/queue-panel.slint
-msgid "Remove all tracks from the queue? Playback will stop."
-msgstr "Alle Lieder aus der Warteschlange entfernen? Die Wiedergabe wird gestoppt."
+msgid "Remove all tracks from the queue? This can't be undone. The playing track plays to its end."
+msgstr "Alle Lieder aus der Warteschlange entfernen? Das lässt sich nicht rückgängig machen. Das laufende Lied wird bis zum Ende gespielt."
 
 #: ui/views/queue-panel/queue-panel.slint
 msgid "Queue is empty"

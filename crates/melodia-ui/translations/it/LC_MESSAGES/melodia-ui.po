@@ -1816,6 +1816,16 @@ msgstr[0] "{n} stazione rimossa da Riprodotti di recente"
 msgstr[1] "{n} stazioni rimosse da Riprodotti di recente"
 
 #: ui/globals/undo-text.slint
+msgid "{n} track removed from the queue"
+msgid_plural "{n} tracks removed from the queue"
+msgstr[0] "{n} brano rimosso dalla coda"
+msgstr[1] "{n} brani rimossi dalla coda"
+
+#: ui/globals/undo-text.slint
+msgid "Queue cleared"
+msgstr "Coda svuotata"
+
+#: ui/globals/undo-text.slint
 msgid "Too many to undo"
 msgstr "Troppi elementi da annullare"
 
@@ -2404,8 +2414,8 @@ msgid "Clear queue?"
 msgstr "Svuotare la coda?"
 
 #: ui/views/queue-panel/queue-panel.slint
-msgid "Remove all tracks from the queue? Playback will stop."
-msgstr "Rimuovere tutti i brani dalla coda? La riproduzione verrà interrotta."
+msgid "Remove all tracks from the queue? This can't be undone. The playing track plays to its end."
+msgstr "Rimuovere tutti i brani dalla coda? L'operazione non può essere annullata. Il brano in riproduzione continua fino alla fine."
 
 #: ui/views/queue-panel/queue-panel.slint
 msgid "Queue is empty"

@@ -5,6 +5,7 @@ use slint::{ComponentHandle, SharedString};
 
 use crate::ui::equalizer::ResetUndo;
 use crate::ui::playlists::{PlaylistCutUndo, PlaylistDeleteUndo};
+use crate::ui::queue_panel::{QueueClearUndo, QueueCutUndo};
 use crate::ui::radio::StationRemovalUndo;
 use crate::ui::search::RecentClearUndo;
 use crate::ui::shell::notifications::RowText;
@@ -27,6 +28,8 @@ pub enum Removal {
     PlaylistTracks(PlaylistCutUndo),
     Playlists(PlaylistDeleteUndo),
     RadioStations(StationRemovalUndo),
+    QueueRows(QueueCutUndo),
+    QueueCleared(QueueClearUndo),
 }
 
 /// How a later removal lands on the one held.
@@ -78,6 +81,15 @@ impl Removal {
                 held.absorb(next);
                 Absorbed::Merged
             }
+            // No cap check, which `QueueCut` and `take_cleared` argue.
+            (Removal::QueueRows(held), Removal::QueueRows(next)) => {
+                held.absorb(next);
+                Absorbed::Merged
+            }
+            (Removal::QueueCleared(held), Removal::QueueCleared(next)) => {
+                held.absorb(next);
+                Absorbed::Merged
+            }
             (_, next) => Absorbed::Distinct(next),
         }
     }
@@ -95,11 +107,16 @@ impl Removal {
             Removal::RadioStations(removed) => {
                 titled(stations_removed(removed.list(), removed.count(), removed.name()))
             }
+            Removal::QueueRows(cut) => {
+                let count = len_as_i32(cut.count());
+                titled(move |ui| ui.global::<UndoText>().invoke_tracks_removed_from_queue(count))
+            }
+            Removal::QueueCleared(_) => titled(|ui| ui.global::<UndoText>().invoke_queue_cleared()),
         }
     }
 
-    /// Answers a failed write, for the one failure notice. The equalizer's can't fail here, its
-    /// settings write logging its own.
+    /// Answers a failed write, for the one failure notice. The equalizer's and the queue's can't
+    /// fail here: the first's settings write logs its own, and the second touches no disk.
     pub(super) async fn restore(
         self,
         state: &AppState,
@@ -114,6 +131,14 @@ impl Removal {
             Removal::PlaylistTracks(cut) => cut.restore(state, ui).await,
             Removal::Playlists(deleted) => deleted.restore(state, ui).await,
             Removal::RadioStations(removed) => removed.restore(state, ui).await,
+            Removal::QueueRows(cut) => {
+                cut.restore(state);
+                Ok(())
+            }
+            Removal::QueueCleared(cleared) => {
+                cleared.restore(state);
+                Ok(())
+            }
         }
     }
 }

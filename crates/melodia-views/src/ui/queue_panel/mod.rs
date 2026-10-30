@@ -6,6 +6,7 @@
 
 mod callbacks;
 mod lifecycle;
+mod removal;
 mod rows;
 
 use std::rc::Rc;
@@ -17,15 +18,19 @@ use slint::{ComponentHandle, ModelRc, VecModel};
 use crate::ui::grid_prewarm::nonempty_artwork_path;
 use crate::ui::list_selection::write_selection_ids;
 use crate::ui::paged_rows::queue_rows::{self, QueueRows};
+use crate::ui::undo::UndoWindow;
 use melodia_app::state::AppState;
 use melodia_artwork::media::image::cover_thumbs::CoverThumbs;
 use melodia_ui::{AppWindow, Queue};
+
+pub use removal::{QueueClearUndo, QueueCutUndo};
 
 /// Installs the row model and wires the panel. UI thread.
 pub fn install(
     ui: &AppWindow,
     state: &AppState,
     row_covers: &Arc<CoverThumbs>,
+    undo: &Rc<UndoWindow>,
 ) -> Result<(), slint::EventLoopError> {
     let rows = QueueRows::new(queue_rows::fetcher(state));
     ui.global::<Queue>().set_rows(ModelRc::from(rows.clone()));
@@ -53,6 +58,7 @@ pub fn install(
     });
 
     callbacks::wire_callbacks(ui, state, &rows);
+    removal::wire(ui, state, &rows, undo);
     lifecycle::wire(ui, state, &rows, &queue_covers, &shown);
     // No seed: the panel starts hidden, and its first show seats the queue.
     rows::spawn_queue_rows_subscriber(ui, state, rows, shown)?;

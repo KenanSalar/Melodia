@@ -1832,6 +1832,17 @@ msgstr[1] "Из недавно прослушанного удалены {n} с�
 msgstr[2] "Из недавно прослушанного удалено {n} станций"
 
 #: ui/globals/undo-text.slint
+msgid "{n} track removed from the queue"
+msgid_plural "{n} tracks removed from the queue"
+msgstr[0] "Удалён {n} трек из очереди"
+msgstr[1] "Удалено {n} трека из очереди"
+msgstr[2] "Удалено {n} треков из очереди"
+
+#: ui/globals/undo-text.slint
+msgid "Queue cleared"
+msgstr "Очередь очищена"
+
+#: ui/globals/undo-text.slint
 msgid "Too many to undo"
 msgstr "Слишком много для отмены"
 
@@ -2439,8 +2450,8 @@ msgid "Clear queue?"
 msgstr "Очистить очередь?"
 
 #: ui/views/queue-panel/queue-panel.slint
-msgid "Remove all tracks from the queue? Playback will stop."
-msgstr "Удалить все треки из очереди? Воспроизведение остановится."
+msgid "Remove all tracks from the queue? This can't be undone. The playing track plays to its end."
+msgstr "Удалить все треки из очереди? Это действие нельзя отменить. Текущий трек доиграет до конца."
 
 #: ui/views/queue-panel/queue-panel.slint
 msgid "Queue is empty"

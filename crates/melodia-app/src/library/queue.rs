@@ -8,7 +8,9 @@ use melodia_core::entities::track::TrackSummary;
 use melodia_core::error::{AppError, AppResult};
 use melodia_engine::player::engine::actions::emit_and_execute;
 use melodia_engine::player::engine::event_sink::PlayerSinks;
-use melodia_engine::player::engine::queue::{QueueEntry, QueueState, current_index_from_i32};
+use melodia_engine::player::engine::queue::{
+    ClearedQueue, QueueCut, QueueEntry, QueueState, current_index_from_i32,
+};
 use melodia_engine::player::engine::state::{
     PlayerAction, PlayerState, PlayerStateHandle, lock_state, restore_queue, restore_station,
     with_state_emit,
@@ -141,10 +143,16 @@ async fn play_next_many(
     Ok(())
 }
 
-pub fn queue_remove(state: &AppState, index: usize) -> Result<(), AppError> {
-    log::debug!("queue: remove index {index}");
-    with_state_emit(&state.player_state, &state.sinks, |s| s.remove_queue_rows(&[index]));
-    Ok(())
+/// Takes the rows `entries` name, one row or every pick, and hands back what puts them back.
+pub fn queue_remove(state: &AppState, entries: &[QueueEntry]) -> Option<QueueCut> {
+    log::debug!("queue: remove {} row(s)", entries.len());
+    with_state_emit(&state.player_state, &state.sinks, |s| s.cut_queue(entries))
+}
+
+/// Puts back a run of removals, playback untouched: the removals never touched it.
+pub fn queue_restore_cuts(state: &AppState, cuts: Vec<QueueCut>) {
+    log::debug!("queue: undo {} removal(s)", cuts.len());
+    with_state_emit(&state.player_state, &state.sinks, |s| s.restore_queue_cuts(cuts));
 }
 
 /// Moves the play-order slots `rows` together to `to`, counted once they have left: one dragged
@@ -158,19 +166,17 @@ pub fn queue_move(state: &AppState, rows: &[usize], to: usize) -> Result<(), App
     Ok(())
 }
 
-pub fn queue_remove_batch(state: &AppState, indices: &[usize]) -> Result<(), AppError> {
-    log::debug!("queue: remove {} selected", indices.len());
-    with_state_emit(&state.player_state, &state.sinks, |s| s.remove_queue_rows(indices));
-    Ok(())
-}
-
-pub fn queue_clear(state: &AppState) -> Result<(), AppError> {
+/// Empties the queue, the playing track playing on, and hands back what it held.
+pub fn queue_clear(state: &AppState) -> Option<ClearedQueue> {
     // The one queue edit that can leave no other trace: with nothing playing it emits no action.
     log::debug!("queue: clear");
-    with_state_emit(&state.player_state, &state.sinks, |s| {
-        s.queue.clear();
-    });
-    Ok(())
+    with_state_emit(&state.player_state, &state.sinks, |s| s.queue.take_cleared())
+}
+
+/// Puts back a run of clears, ahead of anything queued since.
+pub fn queue_restore_cleared(state: &AppState, cleared: Vec<ClearedQueue>) {
+    log::debug!("queue: undo {} clear(s)", cleared.len());
+    with_state_emit(&state.player_state, &state.sinks, |s| s.restore_cleared_queue(cleared));
 }
 
 /// Play the queue's track at `index`. Its record is fetched first unless the window holds it, a

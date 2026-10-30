@@ -1,6 +1,7 @@
 use std::sync::Arc;
 
 use super::*;
+use crate::player::engine::fixtures::cut_rows;
 use crate::player::engine::queue::current_index_from_i32;
 use crate::player::engine::types::{PersistableQueue, PersistedPlayback, RepeatMode};
 use melodia_core::error::AppError;
@@ -304,7 +305,7 @@ fn test_queue_add_and_remove() {
     queue_up(&mut state, tracks);
     assert_eq!(state.queue.play_order.len(), 3);
 
-    state.queue.remove_at(1);
+    cut_rows(&mut state.queue, &[1]);
     assert_eq!(state.queue.play_order.len(), 2);
     // After removing index 1 (Song 2), play order should be [Song 1, Song 3]
     assert_eq!(*state.queue.play_ids(), [1, 3]);
@@ -2223,7 +2224,7 @@ fn an_edit_during_the_fetch_moves_what_the_deferred_start_plays() -> Result<(), 
         (
             "a remove above the current row",
             |q| {
-                q.remove_at(0);
+                cut_rows(q, &[0]);
             },
             "/music/2.mp3",
         ),

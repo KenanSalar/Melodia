@@ -1816,6 +1816,16 @@ msgstr[0] "{n} zender verwijderd uit Recent afgespeeld"
 msgstr[1] "{n} zenders verwijderd uit Recent afgespeeld"
 
 #: ui/globals/undo-text.slint
+msgid "{n} track removed from the queue"
+msgid_plural "{n} tracks removed from the queue"
+msgstr[0] "{n} nummer verwijderd uit de wachtrij"
+msgstr[1] "{n} nummers verwijderd uit de wachtrij"
+
+#: ui/globals/undo-text.slint
+msgid "Queue cleared"
+msgstr "Wachtrij gewist"
+
+#: ui/globals/undo-text.slint
 msgid "Too many to undo"
 msgstr "Te veel om ongedaan te maken"
 
@@ -2404,8 +2414,8 @@ msgid "Clear queue?"
 msgstr "Wachtrij wissen?"
 
 #: ui/views/queue-panel/queue-panel.slint
-msgid "Remove all tracks from the queue? Playback will stop."
-msgstr "Alle nummers uit de wachtrij verwijderen? Het afspelen stopt."
+msgid "Remove all tracks from the queue? This can't be undone. The playing track plays to its end."
+msgstr "Alle nummers uit de wachtrij verwijderen? Dit kan niet ongedaan worden gemaakt. Het huidige nummer speelt tot het einde door."
 
 #: ui/views/queue-panel/queue-panel.slint
 msgid "Queue is empty"

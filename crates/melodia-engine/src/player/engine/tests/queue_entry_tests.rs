@@ -4,6 +4,7 @@
 use std::collections::HashSet;
 
 use super::*;
+use crate::player::engine::fixtures::cut_rows;
 use melodia_core::error::AppError;
 
 /// What a row does to the queue.
@@ -81,11 +82,17 @@ fn an_entry_stays_on_its_row_through_every_edit_that_keeps_it() -> Result<(), Ap
         (
             "a removal of a row above it",
             |q| {
-                q.remove_at(0);
+                cut_rows(q, &[0]);
             },
             1,
         ),
-        ("a removal of other rows either side", |q| q.remove_batch(&[1, 3]), 1),
+        (
+            "a removal of other rows either side",
+            |q| {
+                cut_rows(q, &[1, 3]);
+            },
+            1,
+        ),
         (
             "a prune of another track",
             |q| {
@@ -237,7 +244,7 @@ fn a_drop_lands_directly_ahead_of_its_row_however_the_queue_moved_first() -> Res
             "a removal above it",
             five(),
             |q| {
-                q.remove_at(0);
+                cut_rows(q, &[0]);
             },
             &[2, 3, 10, 11, 4, 5],
         ),
@@ -286,7 +293,7 @@ fn a_drop_whose_row_has_left_lands_at_the_end() -> Result<(), AppError> {
         (
             "its row removed",
             |q| {
-                q.remove_at(3);
+                cut_rows(q, &[3]);
             },
             &[1, 2, 3, 5, 10, 11],
         ),
@@ -356,7 +363,7 @@ fn a_skip_plays_the_row_clicked_wherever_the_queue_has_moved_it() -> Result<(), 
 fn a_skip_to_a_row_that_has_left_plays_nothing() -> Result<(), AppError> {
     let rows: [(&str, Edit); 3] = [
         ("its row removed", |q| {
-            q.remove_at(3);
+            cut_rows(q, &[3]);
         }),
         ("its track pruned", |q| {
             q.prune_missing(&HashSet::from([4]));

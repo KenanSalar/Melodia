@@ -1800,6 +1800,15 @@ msgid_plural "{n} stations removed from Recently Played"
 msgstr[0] "Đã xóa {n} đài khỏi Đã phát gần đây"
 
 #: ui/globals/undo-text.slint
+msgid "{n} track removed from the queue"
+msgid_plural "{n} tracks removed from the queue"
+msgstr[0] "Đã xóa {n} bản nhạc khỏi hàng đợi"
+
+#: ui/globals/undo-text.slint
+msgid "Queue cleared"
+msgstr "Đã xóa hàng đợi"
+
+#: ui/globals/undo-text.slint
 msgid "Too many to undo"
 msgstr "Quá nhiều để hoàn tác"
 
@@ -2369,8 +2378,8 @@ msgid "Clear queue?"
 msgstr "Xóa hàng đợi?"
 
 #: ui/views/queue-panel/queue-panel.slint
-msgid "Remove all tracks from the queue? Playback will stop."
-msgstr "Xóa tất cả bản nhạc khỏi hàng đợi? Nhạc sẽ dừng phát."
+msgid "Remove all tracks from the queue? This can't be undone. The playing track plays to its end."
+msgstr "Xóa tất cả bản nhạc khỏi hàng đợi? Không thể hoàn tác thao tác này. Bản nhạc đang phát sẽ phát hết."
 
 #: ui/views/queue-panel/queue-panel.slint
 msgid "Queue is empty"
