@@ -1835,6 +1835,10 @@ msgid "Queue cleared"
 msgstr "Sıra temizlendi"
 
 #: ui/globals/undo-text.slint
+msgid "Queue replaced"
+msgstr "Sıra değiştirildi"
+
+#: ui/globals/undo-text.slint
 msgid "Too many to undo"
 msgstr "Geri alınamayacak kadar çok"
 

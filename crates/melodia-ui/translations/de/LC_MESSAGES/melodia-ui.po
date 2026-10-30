@@ -1827,6 +1827,10 @@ msgid "Queue cleared"
 msgstr "Warteschlange geleert"
 
 #: ui/globals/undo-text.slint
+msgid "Queue replaced"
+msgstr "Warteschlange ersetzt"
+
+#: ui/globals/undo-text.slint
 msgid "Too many to undo"
 msgstr "Zu viele zum Rückgängigmachen"
 

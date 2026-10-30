@@ -1828,6 +1828,10 @@ msgid "Queue cleared"
 msgstr "Lejátszási sor törölve"
 
 #: ui/globals/undo-text.slint
+msgid "Queue replaced"
+msgstr "Lejátszási sor lecserélve"
+
+#: ui/globals/undo-text.slint
 msgid "Too many to undo"
 msgstr "Túl sok a visszavonáshoz"
 

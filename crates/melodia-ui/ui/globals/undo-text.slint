@@ -60,6 +60,11 @@ export global UndoText {
         return @tr("Queue cleared");
     }
 
+    pure callback queue-replaced() -> string;
+    queue-replaced() => {
+        return @tr("Queue replaced");
+    }
+
     pure callback too-many-to-undo() -> string;
     too-many-to-undo() => {
         return @tr("Too many to undo");

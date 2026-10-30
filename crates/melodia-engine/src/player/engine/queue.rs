@@ -51,7 +51,8 @@ struct CutRow {
     original_index: usize,
 }
 
-/// What [`QueueState::take_cleared`] moved out, for [`QueueState::restore_cleared`].
+/// What [`QueueState::take_cleared`] moved out, for [`QueueState::restore_cleared`] or
+/// [`QueueState::restore_replaced`].
 #[derive(Debug)]
 pub struct ClearedQueue {
     tracks: Vec<i64>,
@@ -60,6 +61,7 @@ pub struct ClearedQueue {
     /// `slot` is the current row's slot in `tracks`.
     cursor: HeldCursor,
     shuffled: bool,
+    hand_edited: bool,
 }
 
 /// The cursor as a removal found it. Its restore puts it back only while nothing has been seated
@@ -101,6 +103,9 @@ pub struct QueueState {
     /// Bumped by every [`Self::seat`], so a restore can tell whether a row has started since its
     /// removal.
     seats: u64,
+    /// Someone placed these rows: an append, a Play Next, a drop-in, a move or a cut. Only then
+    /// does [`Self::replace`] hold what it takes.
+    hand_edited: bool,
     pub shuffle_enabled: bool,
     pub repeat_mode: RepeatMode,
     /// Bumped on every mutation, so `with_state_emit` publishes the queue only when it moved.
@@ -120,6 +125,7 @@ impl Default for QueueState {
             current_index: None,
             playing_left: false,
             seats: 0,
+            hand_edited: false,
             shuffle_enabled: false,
             repeat_mode: RepeatMode::Off,
             version: 0,
@@ -159,7 +165,8 @@ pub fn window_slots(
 
 impl QueueState {
     /// A queue of `ids` in their own order, as `queue.json` saved it. An index past the end names
-    /// no track, so it seats none.
+    /// no track, so it seats none. Where the queue came from isn't saved, so it counts as built by
+    /// hand.
     pub fn restored(ids: Vec<i64>, current_index: Option<usize>) -> Self {
         let len = ids.len();
         Self {
@@ -167,6 +174,7 @@ impl QueueState {
             play_order: (0..len).collect(),
             original_order: (0..len).collect(),
             current_index: current_index.filter(|&ci| ci < len),
+            hand_edited: true,
             ..Self::default()
         }
     }
@@ -310,6 +318,7 @@ impl QueueState {
         {
             self.current_index = Some(ci + ids.len());
         }
+        self.hand_edited = true;
         self.order_changed();
     }
 
@@ -328,6 +337,7 @@ impl QueueState {
             HeldCursor { slot: current_row, playing_left: self.playing_left, seats: self.seats };
 
         self.playing_left |= current_row.is_some();
+        self.hand_edited = true;
         self.drop_rows(&slots);
         Some(QueueCut { rows, cursor, shuffled: self.shuffle_enabled })
     }
@@ -453,6 +463,7 @@ impl QueueState {
         } else if let Some(slot) = current {
             self.current_index = self.play_index_of_slot(slot);
         }
+        self.hand_edited = true;
         self.order_changed();
         true
     }
@@ -471,6 +482,7 @@ impl QueueState {
                 seats: self.seats,
             },
             shuffled: self.shuffle_enabled,
+            hand_edited: std::mem::take(&mut self.hand_edited),
             tracks: std::mem::take(&mut self.tracks),
             play_order: std::mem::take(&mut self.play_order),
             original_order: std::mem::take(&mut self.original_order),
@@ -482,6 +494,23 @@ impl QueueState {
         (!held.play_order.is_empty()).then_some(held)
     }
 
+    /// Makes `ids` the queue with the row at `start` playing, handing back the queue it took where
+    /// that one was built by hand and held other tracks. A play over a queue only a play built
+    /// holds nothing: a notice on every double-click teaches the eye to skip the one that matters.
+    pub fn replace(&mut self, ids: &[i64], start: usize) -> Option<ClearedQueue> {
+        let worth_holding = self.hand_edited && !self.holds_in_insertion_order(ids);
+        let taken = self.take_cleared();
+        self.insert_at(0, ids);
+        self.hand_edited = false;
+        self.seat(start);
+        taken.filter(|_| worth_holding)
+    }
+
+    /// The play order isn't asked: a shuffled replace randomizes it.
+    fn holds_in_insertion_order(&self, ids: &[i64]) -> bool {
+        self.original_order.iter().map(|&slot| self.tracks.get(slot)).eq(ids.iter().map(Some))
+    }
+
     /// Puts back what a run of [`Self::take_cleared`]s took, newest first, each ahead of anything
     /// queued since, so the oldest ends up first.
     pub fn restore_cleared(&mut self, cleared: Vec<ClearedQueue>) {
@@ -490,30 +519,54 @@ impl QueueState {
         }
     }
 
-    /// Under fresh slots, as [`Self::restore_cut`] does, and in insertion order where shuffle has
-    /// gone off since.
     fn restore_one_cleared(&mut self, held: ClearedQueue) {
-        let ClearedQueue { tracks, play_order, original_order, cursor, shuffled } = held;
         let live = self.current_slot();
+        let cursor = held.cursor;
+        let (start, rows) = self.splice_ahead(held);
+        if self.seats == cursor.seats {
+            self.place_held_cursor(cursor, start, rows);
+        } else {
+            self.place_cursor(live, self.playing_left);
+        }
+        self.order_changed();
+    }
+
+    /// Puts back the queue a [`Self::replace`] took in place of the one it built, its cursor where it
+    /// was whatever has been seated since: the play seated a row, and its undo takes that back too.
+    /// A hold made unshuffled is shuffled where shuffle has come on since, or the lit button would
+    /// walk it straight through.
+    pub fn restore_replaced<R: rand::Rng + ?Sized>(&mut self, held: ClearedQueue, rng: &mut R) {
+        self.clear();
+        let (cursor, shuffled) = (held.cursor, held.shuffled);
+        let (start, rows) = self.splice_ahead(held);
+        self.place_held_cursor(cursor, start, rows);
+        self.order_changed();
+        if self.shuffle_enabled && !shuffled {
+            self.shuffle_play_order_in_place(rng, /* anchor_to_current */ true);
+        }
+    }
+
+    /// Under fresh slots, as [`Self::restore_cut`] does, and in insertion order where shuffle has
+    /// gone off since. Answers its first slot and its row count.
+    fn splice_ahead(&mut self, held: ClearedQueue) -> (usize, usize) {
+        let ClearedQueue { tracks, play_order, original_order, shuffled, hand_edited, .. } = held;
         let start = self.tracks.len();
-        let restored_rows = play_order.len();
         self.tracks.extend(tracks);
 
         let held_play =
             if shuffled && !self.shuffle_enabled { &original_order } else { &play_order };
         self.play_order.splice(0..0, held_play.iter().map(|slot| start + slot));
         self.original_order.splice(0..0, original_order.iter().map(|slot| start + slot));
+        self.hand_edited |= hand_edited;
+        (start, play_order.len())
+    }
 
-        if self.seats == cursor.seats {
-            // A gap held at the end leaves what was queued since still to play.
-            let first_since = || self.play_order.get(restored_rows).copied();
-            let slot = cursor.slot.map(|slot| start + slot);
-            let slot = if cursor.playing_left { slot.or_else(first_since) } else { slot };
-            self.place_cursor(slot, cursor.playing_left);
-        } else {
-            self.place_cursor(live, self.playing_left);
-        }
-        self.order_changed();
+    fn place_held_cursor(&mut self, cursor: HeldCursor, start: usize, rows: usize) {
+        // A gap held at the end leaves what was queued since still to play.
+        let first_since = || self.play_order.get(rows).copied();
+        let slot = cursor.slot.map(|slot| start + slot);
+        let slot = if cursor.playing_left { slot.or_else(first_since) } else { slot };
+        self.place_cursor(slot, cursor.playing_left);
     }
 
     /// Makes `index` the current row, its track the one playing.

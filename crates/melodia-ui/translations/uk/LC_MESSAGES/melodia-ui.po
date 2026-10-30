@@ -1843,6 +1843,10 @@ msgid "Queue cleared"
 msgstr "Чергу очищено"
 
 #: ui/globals/undo-text.slint
+msgid "Queue replaced"
+msgstr "Чергу замінено"
+
+#: ui/globals/undo-text.slint
 msgid "Too many to undo"
 msgstr "Забагато, щоб скасувати"
 

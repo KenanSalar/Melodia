@@ -23,7 +23,7 @@ use melodia_app::state::AppState;
 use melodia_artwork::media::image::cover_thumbs::CoverThumbs;
 use melodia_ui::{AppWindow, Queue};
 
-pub use removal::{QueueClearUndo, QueueCutUndo};
+pub use removal::{QueueClearUndo, QueueCutUndo, QueueReplaceUndo};
 
 /// Installs the row model and wires the panel. UI thread.
 pub fn install(
@@ -59,6 +59,7 @@ pub fn install(
 
     callbacks::wire_callbacks(ui, state, &rows);
     removal::wire(ui, state, &rows, undo);
+    removal::follow_replaces(undo)?;
     lifecycle::wire(ui, state, &rows, &queue_covers, &shown);
     // No seed: the panel starts hidden, and its first show seats the queue.
     rows::spawn_queue_rows_subscriber(ui, state, rows, shown)?;

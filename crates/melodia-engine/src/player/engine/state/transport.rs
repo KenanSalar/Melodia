@@ -186,7 +186,7 @@ impl PlayerState {
 
     /// Never faded: the `PlayMedia` before it just started the deck, and a fade would ramp the
     /// incoming track down audibly instead of pausing it.
-    fn restore_paused(&mut self, was_paused: bool, actions: &mut Vec<PlayerAction>) {
+    pub(super) fn restore_paused(&mut self, was_paused: bool, actions: &mut Vec<PlayerAction>) {
         if was_paused {
             self.status = PlaybackStatus::Paused;
             actions.push(PlayerAction::Pause { fade_ms: 0 });

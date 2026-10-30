@@ -1828,6 +1828,10 @@ msgid "Queue cleared"
 msgstr "Η ουρά εκκαθαρίστηκε"
 
 #: ui/globals/undo-text.slint
+msgid "Queue replaced"
+msgstr "Η ουρά αντικαταστάθηκε"
+
+#: ui/globals/undo-text.slint
 msgid "Too many to undo"
 msgstr "Πάρα πολλά για αναίρεση"
 

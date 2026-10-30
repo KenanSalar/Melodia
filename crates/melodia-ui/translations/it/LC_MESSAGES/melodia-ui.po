@@ -1826,6 +1826,10 @@ msgid "Queue cleared"
 msgstr "Coda svuotata"
 
 #: ui/globals/undo-text.slint
+msgid "Queue replaced"
+msgstr "Coda sostituita"
+
+#: ui/globals/undo-text.slint
 msgid "Too many to undo"
 msgstr "Troppi elementi da annullare"
 

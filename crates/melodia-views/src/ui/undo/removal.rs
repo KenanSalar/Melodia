@@ -5,7 +5,7 @@ use slint::{ComponentHandle, SharedString};
 
 use crate::ui::equalizer::ResetUndo;
 use crate::ui::playlists::{PlaylistCutUndo, PlaylistDeleteUndo};
-use crate::ui::queue_panel::{QueueClearUndo, QueueCutUndo};
+use crate::ui::queue_panel::{QueueClearUndo, QueueCutUndo, QueueReplaceUndo};
 use crate::ui::radio::StationRemovalUndo;
 use crate::ui::search::RecentClearUndo;
 use crate::ui::shell::notifications::RowText;
@@ -30,6 +30,7 @@ pub enum Removal {
     RadioStations(StationRemovalUndo),
     QueueRows(QueueCutUndo),
     QueueCleared(QueueClearUndo),
+    QueueReplaced(QueueReplaceUndo),
 }
 
 /// How a later removal lands on the one held.
@@ -43,11 +44,12 @@ pub(super) enum Absorbed {
 }
 
 impl Removal {
-    /// Takes `next` into this hold when both took from the same place. A whole-curve hold keeps the
-    /// older curve: undoing a run newest first ends there anyway.
+    /// Takes `next` into this hold when both took from the same place. A hold of a whole state, the
+    /// curve or a replaced queue, keeps the older one: undoing a run newest first ends there anyway.
     pub(super) fn absorb(&mut self, next: Removal) -> Absorbed {
         match (self, next) {
-            (Removal::Equalizer(_), Removal::Equalizer(_)) => Absorbed::Merged,
+            (Removal::Equalizer(_), Removal::Equalizer(_))
+            | (Removal::QueueReplaced(_), Removal::QueueReplaced(_)) => Absorbed::Merged,
             (Removal::RecentSearches(held), Removal::RecentSearches(next)) => {
                 held.absorb(next);
                 Absorbed::Merged
@@ -112,6 +114,9 @@ impl Removal {
                 titled(move |ui| ui.global::<UndoText>().invoke_tracks_removed_from_queue(count))
             }
             Removal::QueueCleared(_) => titled(|ui| ui.global::<UndoText>().invoke_queue_cleared()),
+            Removal::QueueReplaced(_) => {
+                titled(|ui| ui.global::<UndoText>().invoke_queue_replaced())
+            }
         }
     }
 
@@ -137,6 +142,10 @@ impl Removal {
             }
             Removal::QueueCleared(cleared) => {
                 cleared.restore(state);
+                Ok(())
+            }
+            Removal::QueueReplaced(replaced) => {
+                replaced.restore(state);
                 Ok(())
             }
         }

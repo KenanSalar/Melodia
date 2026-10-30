@@ -1,6 +1,6 @@
 # Plan: Undo for removals (a notice that puts back what went)
 
-Status: **Phases 1 to 7 done** (hand-tested 2026-10-29 and 2026-10-30; Phase 3's measure waits for Kenan's go), **Phase 8 next** · Owner: Kenan · Created: 2026-10-28 · Issue #109, branch `feat/undo-removals`
+Status: **Phases 1 to 8 done** (hand-tested 2026-10-29 and 2026-10-30; Phase 3's measure waits for Kenan's go), **Phase 9 next** · Owner: Kenan · Created: 2026-10-28 · Issue #109, branch `feat/undo-removals`
 
 > **Validated 2026-10-28** against `5fa3d5ed` (`feat/undo-removals`): three read-only traces (the
 > toast stack, shortcuts and confirmations; the library removals; the queue, the equalizer and the
@@ -300,8 +300,10 @@ A kept confirmation is raised from Rust once the size is known, across an await,
 | `crates/melodia-app/src/library/{playlists,radio/removal,queue,search,favorites}.rs` | Each removal returns its capture, and each surface gets one restore fn |
 | `crates/melodia-views/src/ui/radio/callbacks/removal.rs` (new) | `Remover` (the heart, the trash and the menu, and the confirmation past the cap) and `StationRemovalUndo` |
 | `crates/melodia-app/src/services/search_history.rs` | `clear` hands back the list; `restore` puts it back |
-| `crates/melodia-engine/src/player/engine/queue.rs` (723 lines after Phase 7) | `cut`/`restore_cuts` replacing `remove_at` and `remove_batch`, one `drop_rows` under `cut` and `prune_missing`, `take_cleared`/`restore_cleared`, the `playing_left` and `hand_edited` flags, the `seats` count the restores' cursor rule reads, and one `seat` method. Split into `queue/` if it passes 800. |
-| `crates/melodia-views/src/ui/queue_panel/removal.rs` (new) | `QueueCutUndo`, `QueueClearUndo`, and the panel's ✕, menu and Delete, Up Next's `remove-upcoming` and Clear, each removing then offering |
+| `crates/melodia-engine/src/player/engine/queue.rs` (783 lines after Phase 8) | `cut`/`restore_cuts` replacing `remove_at` and `remove_batch`, one `drop_rows` under `cut` and `prune_missing`, `take_cleared`/`restore_cleared`, `replace`/`restore_replaced` sharing the clear's `splice_ahead` and `place_held_cursor`, the `playing_left` and `hand_edited` flags, the `seats` count the restores' cursor rule reads, and one `seat` method. Split into `queue/` if it passes 800. |
+| `crates/melodia-engine/src/player/engine/state/replaced.rs` (new) | `ReplacedQueue` (the moved queue and the playback over it), `PlayerState::replace_queue` and `restore_replaced_queue`, which resumes what was playing |
+| `crates/melodia-app/src/library/playback.rs` | `player_play_tracks` capturing through `replace_queue`, and `REPLACED_QUEUES`, the bridge the capture leaves the runtime by |
+| `crates/melodia-views/src/ui/queue_panel/removal.rs` (new) | `QueueCutUndo`, `QueueClearUndo`, `QueueReplaceUndo`, the panel's ✕, menu and Delete, Up Next's `remove-upcoming` and Clear, each removing then offering, and `follow_replaces`, which offers what the bridge carries |
 | `crates/melodia-views/src/ui/equalizer.rs` | `apply_curve`, shared by preset select, reset and restore |
 | `crates/melodia-app/src/services/settings/undo.rs` (new) | `UndoFlags`, flattened into `SettingsData`; `library::settings::undo` holds its setters |
 | `crates/melodia-views/src/ui/settings/undo_settings.rs` (new) | The Accessibility page's undo section: seeds it, and each callback sets the slot's shadow, then persists |
@@ -315,8 +317,7 @@ A kept confirmation is raised from Rust once the size is known, across an await,
   `prune_missing` a third.
 - The station removal loop lives in the view (`radio/callbacks/kept.rs:106-114`), with a second in
   `set_kept_favorites` (`radio/callbacks/stations.rs:179`).
-- The six views callers of `player_play_tracks` each spell the play, and will each owe the offer.
-  They converge on one views helper.
+- `restore_cleared` and `restore_replaced` share the splice and the held cursor's placement.
 
 **Threading.** `NotificationsUi` and `UndoWindow` are installed ahead of `install_views`
 (`install.rs:68`). `notifications::install` needs only the window (`notifications.rs:237`), while
@@ -751,10 +752,10 @@ This lands before Phase 7, whose queue token restores the flag with the cursor.
    confirmation's "Remove all tracks from the queue? This can't be undone. The playing track
    plays to its end.", in all 15 catalogs.
 
-**A gap left for Phase 8.** A play from a list inside the notice's window replaces the queue
-without taking the slot, so Undo splices the cut rows into the new queue. Phase 8 closes it: a cut
-sets `hand_edited`, so that replace offers and takes the slot. There is no guard here, since one
-would also block Undo after a replace with an identical queue, where splicing the rows back in is
+**A gap Phase 8 closes.** A play from a list inside the notice's window would replace the queue
+without taking the slot, so Undo would splice the cut rows into the new queue. A cut raises
+`hand_edited`, so that replace offers and takes the slot. There is no guard here, since one would
+also block Undo after a replace with an identical queue, where splicing the rows back in is
 correct.
 
 **By hand.**
@@ -777,39 +778,77 @@ correct.
 - Pick two or more rows: hovering any row shows no ✕. With one picked, the ✕ is back.
 - A language switch with the notice up re-renders it.
 
-### Phase 8: a play replacing the queue
+### Phase 8: a play replacing the queue (done 2026-10-30)
 
-1. **Capture.**
-   - Only over a queue built by hand (decision 12). With `hand_edited` down, nothing is held.
-   - Inside the same `emit_and_execute` closure as the replace (`playback.rs:67-81`), before
-     `clear`, `player_play_tracks` takes the old queue as `take_cleared` does, and a
-     `ResumePoint`: the old current entry, `position_ms` and the status, from `s.source` and
-     `status`. The closure returns actions, so the capture leaves through an outer binding, as
-     `resume_station`'s does (`playback.rs:117-128`).
-   - It answers `None` when the old queue was empty or held the same tracks in the same insertion
-     order. That compares `original_order`, not the play ids, which a shuffled replace
-     randomizes (`playback.rs:72-74`).
-2. **Restore.**
-   - Fetch the records around the old current row ahead of the lock, reusing `player_play_tracks`'
-     prefetch.
-   - Then, in one `emit_and_execute`: put the queue back, seat the window, and resume.
-     `start_queued` takes no position (`transport.rs:141-148`), so a track that was playing or
-     paused resumes through `play_track_inner(…, Some(pos))` (`:415-431`), a paused one paused
-     again as `start_queued`'s `re_pause` does (`:189-194`). `Loading` or a stopped seated track
-     comes back stopped.
-   - A station that was playing comes back seated paused through `restore_station`
-     (`persistence.rs:40-49`): re-tuning is network work (`playback.rs:147-194`) that can't run
-     inside the lock.
-   - The live shuffle flag stands. `spawn_play_then_shuffle` (`callbacks/mod.rs:104-125`) persists
-     one after its play.
-3. **Callers.**
-   - The six views callers (`track_list.rs:113`, `callbacks/mod.rs:114`, `card_actions.rs:34`,
-     `favorites/callbacks/subviews.rs:50`, `recently_played/callbacks/subviews.rs:40`,
-     `browse/callbacks/folder_actions.rs:27`) converge on one helper that plays and offers.
-   - `open_files` (`library/queue.rs:90`) returns its capture too. A forwarded launch
-     (`boot/tasks.rs:121`) offers it; the boot open (`:98`) drops it, the notice bridge not being
-     up yet.
-4. **String:** "Queue replaced".
+1. **Engine.**
+   - **`QueueState::hand_edited`** (decision 12). `insert_at` (append, Play Next, a drop-in), a
+     move and a cut raise it. `take_cleared` lowers it, `ClearedQueue` carrying the held value for
+     `restore_cleared` to OR back in. `QueueState::restored` seats it, a saved queue's origin not
+     being saved.
+   - **`replace(ids, start)`** is the play's clear, fill and seat in one. It holds the old queue
+     only while that was built by hand and its insertion order differs from `ids`: it compares
+     `original_order`, not the play ids, which a shuffled replace randomizes. An empty or identical
+     queue holds nothing (decision 6).
+   - **`restore_replaced` puts the held queue in place of the play's.** The play built what is
+     live, so its undo takes that back, where a Clear's undo goes ahead of what was queued since.
+     It shares `splice_ahead` and `place_held_cursor` with `restore_cleared` and skips the `seats`
+     test: the play seated a row, and its undo takes that back too.
+   - **Shuffle.** The live flag stands. A hold made unshuffled is reshuffled behind its current row
+     where shuffle has come on since, the mirror of the rule for shuffle gone off. The Shuffle pill
+     turns it on after its play, and without this its Undo leaves a lit button over a queue
+     playing straight through.
+   - **`state/replaced.rs`.** `PlayerState::replace_queue` holds `ReplacedQueue`: the moved queue
+     and the playback over it, the source itself (an `Arc`), status, position and duration. The
+     source rather than the current entry, since under a gap the playing track is in no row.
+   - **`restore_replaced_queue` resumes it** (decision 4). A track playing or paused goes through
+     `play_track_inner(…, Some(position))`, a paused one paused again through `restore_paused`. A
+     seated stopped track (a restart, Stop) and nothing seated (`Loading` included) come back
+     stopped as held. A station comes back seated paused through `restore_station`, re-tuning
+     being network work the lock can't wait on. A gap closes once nothing is seated, as after the
+     other restores.
+2. **App.**
+   - `player_play_tracks` calls `replace_queue` inside its `emit_and_execute`, the capture leaving
+     through an outer binding as `resume_station`'s does.
+   - **The capture leaves by a bridge, `REPLACED_QUEUES`**, an `EventBridge` in the
+     `rating_writeback` shape. A play runs on the runtime, its `PlayMedia` opening the file, while
+     the slot is the UI thread's `Rc`. The bridge reaches every play surface and the forwarded
+     launch with no caller changed, where a return value would have threaded the slot through
+     every list's wiring. The boot open runs before the UI claims the bridge (`main.rs`), so its
+     capture drops.
+   - `queue_restore_replaced` is one `emit_and_execute`. It fetches nothing: the resume's record is
+     the held source, and the window task fills the neighbours on the queue's publish. So it can't
+     fail.
+3. **Views.**
+   - `queue_panel::removal::follow_replaces` drains the bridge on the UI thread and offers
+     `Removal::QueueReplaced`, whose restore runs on the runtime, as transport calls do.
+   - Two replaces merge keeping the older hold, as the equalizer's curve does.
+   - A play over a queue only a play built offers nothing, so the slot keeps what it held. After a
+     Clear, Undo puts the cleared queue ahead of the play's, which plays on.
+4. **String:** "Queue replaced", in all 15 catalogs.
+
+**By hand.**
+- Build a queue by hand, play a track, then double-click a track in Songs: "Queue replaced". Undo
+  and Ctrl+Z bring the queue back with its row lit, and the old track resumes where it was.
+- The same while paused: it comes back paused at its position.
+- Play an album, then double-click another list: no notice.
+- Play an album, remove a row, then play another list: "Queue replaced" replaces the removal's
+  card, and Undo returns the album less that row with its track.
+- Append album A to an empty queue, then play A from its card: no notice.
+- The Shuffle pill over a hand-built unshuffled queue: Undo returns the queue, shuffle stays on and
+  the queue is shuffled behind the old track.
+- A station over a hand-built queue, then play an album: Undo shows the station paused in the bar,
+  the queue beneath; Play reconnects.
+- Remove the playing row, then play an album: Undo resumes the track with no row lit, and the row
+  that took its place plays next.
+- After a restart, double-click a track: the notice (a restored queue counts as built by hand), and
+  Undo returns the queue with the track stopped at its saved position.
+- "Open with" Melodia while it runs, over a hand-built queue: the notice. A cold launch with a
+  file: none.
+- Clear, then play an album: no second notice. Undo puts the old queue ahead of the album, which
+  plays on.
+- Replace, add a track by hand, replace again: one card, its clock restarted, and Undo returns the
+  first queue.
+- A language switch with the notice up re-renders it.
 
 ### Phase 9: favorites
 
@@ -866,6 +905,9 @@ removing stations and Clear queue ask first again (decision 13).
 3. **Every removal asks first, before it captures**, so an uncovered one holds nothing:
    - Equalizer Reset, Clear all, queue rows, a replace and favorites: uncovered is the plain write
      and no notice.
+   - A replace is captured by the play on the runtime, away from the shadow, so
+     `follow_replaces` asks `covers(Queue, Whole)` and drops an uncovered capture: a moved queue
+     freed a moment later, which the plain replace frees anyway.
    - Playlist tracks: the store fn splits into a plain form and a held one, the held form's
      over-cap branch already being the plain write.
    - Deleting playlists and removing stations: uncovered takes the over-cap path, its confirmation
@@ -943,7 +985,16 @@ removing stations and Clear queue ask first again (decision 13).
     nothing seated, and kept by a prune of the gap row (`playing_was_removed` false);
   - `has_next` agreeing with `advance_skip` under every repeat mode, Repeat One at a tail gap and
     with nothing current included;
-  - `hand_edited` set by each hand edit, cleared by a replace, seated by boot restore.
+  - `hand_edited` set by each hand edit, cleared by a replace, seated by boot restore, lowered by a
+    clear and ORed back by its restore;
+  - `replace` answering `None` over a play-built, an empty and an identical queue (shuffled play
+    order, same insertion order), and the old queue over a hand-edited one;
+  - `restore_replaced` putting back the cursor despite the play's seat, a gap included (mid-queue
+    and at the end), restoring insertion order with shuffle gone off and reshuffling with it come
+    on, and leaving `hand_edited` raised.
+- `playback_tests` (app): `restore_replaced_queue` over each held state: a track playing at a
+  position, paused (a `Pause` after the `PlayMedia`), stopped and seated, `Loading`, a station
+  (seated paused, its speed pinned), and nothing.
 - `up_next_tests`: the gap row starting reads as Forward, a removal of the playing row slides
   nothing, and a moved base with the same ids re-renders.
 - `reinsert_tests` (core): ascending indices, an index past the end, an empty side, and equality

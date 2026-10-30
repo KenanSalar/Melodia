@@ -1826,6 +1826,10 @@ msgid "Queue cleared"
 msgstr "File d'attente vidée"
 
 #: ui/globals/undo-text.slint
+msgid "Queue replaced"
+msgstr "File d'attente remplacée"
+
+#: ui/globals/undo-text.slint
 msgid "Too many to undo"
 msgstr "Trop d'éléments pour annuler"
 

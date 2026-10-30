@@ -1826,6 +1826,10 @@ msgid "Queue cleared"
 msgstr ""
 
 #: ui/globals/undo-text.slint
+msgid "Queue replaced"
+msgstr ""
+
+#: ui/globals/undo-text.slint
 msgid "Too many to undo"
 msgstr ""
 

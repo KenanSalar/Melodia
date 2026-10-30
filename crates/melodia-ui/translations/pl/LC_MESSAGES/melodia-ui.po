@@ -1843,6 +1843,10 @@ msgid "Queue cleared"
 msgstr "Wyczyszczono kolejkę"
 
 #: ui/globals/undo-text.slint
+msgid "Queue replaced"
+msgstr "Zastąpiono kolejkę"
+
+#: ui/globals/undo-text.slint
 msgid "Too many to undo"
 msgstr "Zbyt wiele, by cofnąć"
 

@@ -1,8 +1,9 @@
-//! Taking rows out of the queue, and Clear, each at once with an undo. The panel's ✕, its menu,
-//! Delete and Up Next's menu all arrive here.
+//! Taking rows out of the queue, Clear, and a play replacing a queue built by hand, each at once
+//! with an undo. The panel's ✕, its menu, Delete and Up Next's menu all arrive here.
 
 use std::rc::Rc;
 
+use async_compat::Compat;
 use slint::ComponentHandle;
 
 use crate::ui::paged_rows::queue_rows::QueueRows;
@@ -10,7 +11,7 @@ use crate::ui::undo::{Removal, UndoWindow};
 use melodia_app::library;
 use melodia_app::state::AppState;
 use melodia_engine::player::engine::queue::{ClearedQueue, QueueCut, QueueEntry};
-use melodia_engine::player::engine::state::lock_state;
+use melodia_engine::player::engine::state::{ReplacedQueue, lock_state};
 use melodia_ui::{AppWindow, Queue};
 
 /// What a run of removals from the queue took.
@@ -46,6 +47,36 @@ impl QueueClearUndo {
     pub fn restore(self, state: &AppState) {
         library::queue::queue_restore_cleared(state, self.cleared);
     }
+}
+
+/// What a play replaced: the queue and the playback over it.
+pub struct QueueReplaceUndo {
+    replaced: ReplacedQueue,
+}
+
+impl QueueReplaceUndo {
+    /// On the runtime, as the transport's calls are: resuming starts a track, opening its file.
+    pub fn restore(self, state: &AppState) {
+        let state = state.clone();
+        state.runtime.clone().spawn(async move {
+            library::queue::queue_restore_replaced(&state, self.replaced);
+        });
+    }
+}
+
+/// Offers each queue a play replaced, the capture arriving from the runtime the play ran on.
+pub(super) fn follow_replaces(undo: &Rc<UndoWindow>) -> Result<(), slint::EventLoopError> {
+    let Some(mut replaces) = library::playback::replaced_queues() else {
+        return Ok(());
+    };
+    let undo = Rc::downgrade(undo);
+    slint::spawn_local(Compat::new(async move {
+        while let Some(replaced) = replaces.recv().await {
+            let Some(undo) = undo.upgrade() else { break };
+            undo.offer(Removal::QueueReplaced(QueueReplaceUndo { replaced }));
+        }
+    }))
+    .map(|_| ())
 }
 
 /// Each removal is a short state lock, so it runs here on the UI thread, where the undo slot lives,

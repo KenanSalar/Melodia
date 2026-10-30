@@ -12,8 +12,8 @@ use melodia_engine::player::engine::queue::{
     ClearedQueue, QueueCut, QueueEntry, QueueState, current_index_from_i32,
 };
 use melodia_engine::player::engine::state::{
-    PlayerAction, PlayerState, PlayerStateHandle, lock_state, restore_queue, restore_station,
-    with_state_emit,
+    PlayerAction, PlayerState, PlayerStateHandle, ReplacedQueue, lock_state, restore_queue,
+    restore_station, with_state_emit,
 };
 use melodia_engine::player::engine::types::{PersistedPlayback, RadioNowPlaying, RepeatMode};
 use melodia_store::database::{DbPool, queries};
@@ -177,6 +177,14 @@ pub fn queue_clear(state: &AppState) -> Option<ClearedQueue> {
 pub fn queue_restore_cleared(state: &AppState, cleared: Vec<ClearedQueue>) {
     log::debug!("queue: undo {} clear(s)", cleared.len());
     with_state_emit(&state.player_state, &state.sinks, |s| s.restore_cleared_queue(cleared));
+}
+
+/// Puts back the queue a play replaced, and what was playing over it.
+pub fn queue_restore_replaced(state: &AppState, replaced: ReplacedQueue) {
+    log::debug!("queue: undo a replace");
+    emit_and_execute(&*state.engine, &state.player_state, &state.sinks, |s| {
+        s.restore_replaced_queue(replaced, &mut rand::rng())
+    });
 }
 
 /// Play the queue's track at `index`. Its record is fetched first unless the window holds it, a

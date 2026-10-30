@@ -1826,6 +1826,10 @@ msgid "Queue cleared"
 msgstr "Fila limpa"
 
 #: ui/globals/undo-text.slint
+msgid "Queue replaced"
+msgstr "Fila substituída"
+
+#: ui/globals/undo-text.slint
 msgid "Too many to undo"
 msgstr "Itens demais para desfazer"
 

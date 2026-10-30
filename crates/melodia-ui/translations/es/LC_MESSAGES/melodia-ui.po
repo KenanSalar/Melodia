@@ -1826,6 +1826,10 @@ msgid "Queue cleared"
 msgstr "Cola vaciada"
 
 #: ui/globals/undo-text.slint
+msgid "Queue replaced"
+msgstr "Cola reemplazada"
+
+#: ui/globals/undo-text.slint
 msgid "Too many to undo"
 msgstr "Demasiados para deshacer"
 
