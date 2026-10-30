@@ -202,7 +202,8 @@ fn seed_always_on_top(app: &AppWindow, state: &AppState, persisted_pinned: bool)
 
 /// Mirror each pin the window manager reports into `WindowChrome` and the persisted setting, so
 /// `KWin`'s keep-above titlebar button moves Melodia's pin button too. A report matching the
-/// button is a toggle of Melodia's own coming back, and changes nothing.
+/// button is a toggle of Melodia's own coming back, and changes nothing. GNOME and winit report
+/// nothing, so there a pin moved from the titlebar leaves the button behind.
 #[cfg(target_os = "linux")]
 fn follow_reported_pin(
     app: &AppWindow,

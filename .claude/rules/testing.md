@@ -12,7 +12,8 @@ paths:
 
 Siblings own the slices this file does not: `unsafe-rust.md` has the env-var mutation
 contract, `tokio.md` the async runtime flavours, `rust-performance.md` criterion and the
-profilers, `ci-packaging.md` the gate and coverage flags.
+profilers, and `pr-validation.yml` and `deploy-coverage.yml` argue the gate and the coverage
+flags.
 
 ## Principles
 

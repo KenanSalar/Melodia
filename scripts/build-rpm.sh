@@ -71,8 +71,9 @@ cp "$REPO_ROOT/LICENSE" "$PKG_DIR/LICENSE"
 # redistributes them and owes their license text — Apache-2.0 §4(a),
 # GPLv3 §4 and MPL-2.0 §3.2 outright, and SIL's OFL FAQ
 # recommends it for a bundled font even though the name-table metadata
-# would technically do. `%license` below globs this directory and
-# flattens the paths, so its contents land beside LICENSE in
+# would technically do. `%license` below globs this directory, so a new
+# licence file needs no edit here, and flattens the paths, so its
+# contents land beside LICENSE in
 # %{_licensedir}/melodia/ rather than in a `licenses/` subdirectory the
 # way the DEB and AppImage lay them out. That still reads as
 # licenses/ATTRIBUTION.txt describes it — "the full license text for

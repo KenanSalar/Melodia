@@ -70,9 +70,8 @@ fn run<B: PlayerBackend>(
             }
             PlayerAction::SetVolume(v) => engine.set_volume(v),
             PlayerAction::SetSpeed(s) => engine.set_speed(s),
-            PlayerAction::PreloadGapless(path) => {
-                // Only ever clears a stale preload; the monitor stages the real one.
-                engine.preload_gapless(path.as_deref(), TrackReplayGain::default());
+            PlayerAction::ClearGaplessPreload => {
+                engine.preload_gapless(None, TrackReplayGain::default());
             }
             PlayerAction::PlayStream { generation, volume } => {
                 // Not `start_or_skip`: no file to pre-flight, and a station has no next.

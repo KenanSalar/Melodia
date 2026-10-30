@@ -1,5 +1,6 @@
 //! Backend failures surfaced as UI toasts from any thread. It holds no `ui` type, so `tasks` and
-//! `player` raise one without naming the UI; the UI-thread consumer drains and localizes.
+//! `player` raise one without naming the UI; the UI-thread consumer drains and localizes. A routine
+//! failure (a favorite, a rating, a nav) is only logged, through `spawn_logged!`.
 
 use tokio::sync::mpsc::UnboundedReceiver;
 

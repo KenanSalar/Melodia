@@ -463,21 +463,15 @@ async fn execute_set_volume_and_speed() -> Result<(), AppError> {
 }
 
 #[tokio::test]
-async fn execute_preload_gapless_with_and_without_path() -> Result<(), AppError> {
+async fn execute_clear_gapless_preload_stages_nothing() -> Result<(), AppError> {
     let fx = fixture()?;
     let mock = MockBackend::new();
 
-    let actions = vec![
-        PlayerAction::PreloadGapless(Some("/music/next.mp3".to_owned())),
-        PlayerAction::PreloadGapless(None),
-    ];
+    let actions = vec![PlayerAction::ClearGaplessPreload];
 
     crate::player::engine::actions::execute_actions(actions, &mock, &fx.player_state, &fx.sinks);
 
-    let inner = mock.inner();
-    assert_eq!(inner.preload_calls.len(), 2);
-    assert_eq!(inner.preload_calls[0], Some("/music/next.mp3".to_owned()));
-    assert_eq!(inner.preload_calls[1], None);
+    assert_eq!(mock.inner().preload_calls, vec![None]);
     Ok(())
 }
 
@@ -494,7 +488,7 @@ async fn execute_multiple_actions_in_order() -> Result<(), AppError> {
             start_position_ms: None,
             replaygain: TrackReplayGain::default(),
         },
-        PlayerAction::PreloadGapless(Some("/music/next.mp3".to_owned())),
+        PlayerAction::ClearGaplessPreload,
         PlayerAction::SetVolume(0.5),
     ];
 

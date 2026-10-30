@@ -226,7 +226,8 @@ export component AppWindow inherits Window {
     property <bool> watched-mini-render: mini-switch.render-active;
     changed watched-mini-render => {
         CompositeScroll.reset();
-        // The rail dies with no leave event, so its last row would read as hovered on return.
+        // The rail dies with no leave event, so its last row would read as hovered on return. Any
+        // other path destroying the rail owes the same clear.
         Nav.sidebar-tip-idx = -1;
         // So do both drag regions, and one unmounted under a still pointer never reports it gone,
         // leaving every press a window drag.
@@ -273,7 +274,8 @@ export component AppWindow inherits Window {
     }
 
     // Here because the miniplayer unmounts the panel, which a mirror there would miss. Only the
-    // overlay's own `open` floats it, so narrowing hides a docked panel rather than floating it.
+    // overlay's own `open` floats it, so narrowing hides a docked panel rather than floating it:
+    // a resize must never raise something that dims the page and takes the keys.
     property <bool> queue-shown: !mini-switch.render-active && !Nav.now-playing-open
         && (Queue.overlay-open || (Queue.open && root.queue-fits));
     property <bool> queue-docked: root.queue-shown && root.queue-fits;
@@ -328,7 +330,8 @@ export component AppWindow inherits Window {
     }
 
     // Here because Rust reaches only the root's functions. `geometry::restore` calls it once the
-    // restored size is in, before the window maps.
+    // restored size is in, before the window maps; without it a relaunched miniplayer is built
+    // framed and drops the frame a pass later, on Win32 growing by it every launch.
     public function adopt-restored-size() {
         mini-switch.adopt-restored-size();
     }
@@ -433,7 +436,8 @@ export component AppWindow inherits Window {
     }
 
     // **One gate for all three tabs**: a per-tab gate makes a tab flip a section leave, handing
-    // back a directory answer paid for in a network round trip.
+    // back a directory answer paid for in a network round trip. No `if` around it: its tracker
+    // reads `Nav`, which outlives a branch, so the switch gates the row and the router instead.
     SectionActiveGate {
         index: 10;
         mini-active: mini-switch.active;

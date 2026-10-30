@@ -3,7 +3,9 @@ use std::path::Path;
 
 use sqlx::AssertSqlSafe;
 
-use crate::database::{DbPool, MAX_BINDS_PER_STATEMENT, placeholders, queries};
+use crate::database::{
+    DbPool, MAX_BINDS_PER_STATEMENT, placeholders, queries, values_placeholders,
+};
 use melodia_core::error::AppError;
 
 /// Every column that points into the artwork stores, as `(table, column)`.
@@ -124,7 +126,7 @@ pub async fn repoint_all(db: &DbPool, moves: &[(String, String)]) -> Result<u64,
     let mut tx = db.write().begin().await?;
     let mut touched = 0;
     for chunk in moves.chunks(MAX_BINDS_PER_STATEMENT / COLS_PER_ROW) {
-        let rows = std::iter::repeat_n("(?,?)", chunk.len()).collect::<Vec<_>>().join(",");
+        let rows = values_placeholders(chunk.len(), COLS_PER_ROW);
         for (table, column) in ARTWORK_COLUMNS {
             let sql = format!(
                 "WITH m(old_path, new_path) AS (VALUES {rows})

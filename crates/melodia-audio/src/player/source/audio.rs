@@ -99,6 +99,9 @@ pub enum SeekError {
 
 /// A pullable stream of interleaved samples that knows its own shape. `Send` as a supertrait, its
 /// one consumer being the audio callback thread.
+///
+/// **Never ends, starves or re-polls mid-frame**, in a source or any stage wrapping one: half a
+/// frame flips the deck's channel parity for everything after it.
 pub trait AudioSource: Iterator<Item = Sample> + Send {
     /// Channels per frame. Constant for the life of the source — a mount whose shape changes under
     /// a reconnect ends instead, since the deck fixed its converter when the source was appended.

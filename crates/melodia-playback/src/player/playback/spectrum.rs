@@ -2,6 +2,9 @@
 //! Pure DSP over slices, unit-tested directly: a Hann window, two real FFTs (no one window serves
 //! both ends), [`NUM_BANDS`] geometric bands, a tilt, a decibel compression, then peak-follow
 //! smoothing. Nothing in the analysis path allocates.
+//!
+//! The tuning constants are set against each band's p90 over real tracks, never the mean, which a
+//! track with nothing in a band drags to zero.
 
 use std::sync::Arc;
 

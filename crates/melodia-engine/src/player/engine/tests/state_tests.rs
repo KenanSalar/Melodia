@@ -174,7 +174,7 @@ fn test_play_track_with_resume_does_not_eager_preload() {
     // monitor (see PRELOAD_LEAD_MS in `handlers.rs`), so it must NOT come from
     // play_track_inner — otherwise mid-track repeat-mode changes get clobbered.
     assert!(actions.iter().any(|a| matches!(a, PlayerAction::PlayMedia { .. })));
-    assert!(!actions.iter().any(|a| matches!(a, PlayerAction::PreloadGapless(_))));
+    assert!(!actions.iter().any(|a| matches!(a, PlayerAction::ClearGaplessPreload)));
 }
 
 #[test]
@@ -1052,11 +1052,7 @@ fn every_player_action_names_what_it_did() {
         ),
         (PlayerAction::SetVolume(0.5), &["volume", "0.50"]),
         (PlayerAction::SetSpeed(1.25), &["speed", "1.25"]),
-        (
-            PlayerAction::PreloadGapless(Some("/music/d.flac".to_owned())),
-            &["preload", "/music/d.flac"],
-        ),
-        (PlayerAction::PreloadGapless(None), &["clear"]),
+        (PlayerAction::ClearGaplessPreload, &["clear"]),
         (PlayerAction::UpdatePlayCount(7), &["play count", "7"]),
         (PlayerAction::UpdateSkipCount(8), &["skip count", "8"]),
     ];

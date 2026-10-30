@@ -2,7 +2,9 @@
 
 use sqlx::AssertSqlSafe;
 
-use crate::database::{DbPool, IDS_PER_SET, chunked_in_query_on, set_where_id_in};
+use crate::database::{
+    DbPool, IDS_PER_SET, chunked_in_query_on, set_where_id_in, values_placeholders,
+};
 use melodia_core::error::AppError;
 
 pub async fn update_play_count(db: &DbPool, id: i64) -> Result<(), AppError> {
@@ -159,10 +161,9 @@ pub async fn batch_update_hashes(
 
     let mut tx = db.write().begin().await?;
     for chunk in updates.chunks(CHUNK_SIZE) {
-        let placeholders =
-            std::iter::repeat_n("(?,?,?)", chunk.len()).collect::<Vec<_>>().join(",");
+        let rows = values_placeholders(chunk.len(), COLS_PER_ROW);
         let sql = format!(
-            "WITH v(id, h, m) AS (VALUES {placeholders})
+            "WITH v(id, h, m) AS (VALUES {rows})
              UPDATE tracks
                 SET file_hash = (SELECT h FROM v WHERE v.id = tracks.id),
                     date_modified = (SELECT m FROM v WHERE v.id = tracks.id)

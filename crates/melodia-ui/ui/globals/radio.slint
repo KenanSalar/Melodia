@@ -79,9 +79,10 @@ export global Radio {
     callback import-stations();
     callback export-stations();
 
-    // **The station detail's seat: which tab the painted page belongs to, `-1` for none**, since
-    // `id == 0` is a browsed station worth opening. `ui::radio::detail::reseat` points these at the
-    // mounted tab, so a missed reseat unmounts the page rather than painting the wrong station.
+    // **The station detail's seat: which tab the painted page belongs to, `-1` for none**
+    // (`ui::radio::detail::NO_SEAT`), since `id == 0` is a browsed station worth opening.
+    // `ui::radio::detail::reseat` points these at the mounted tab, so a missed reseat unmounts the
+    // page rather than painting the wrong station.
     // Written last, in the tick of the facts below and **after** the navigation has landed.
     in-out property <int> detail-tab: -1;
     out property <bool> detail-open: root.detail-tab >= 0 && root.detail-tab == root.tab-idx;
@@ -95,7 +96,7 @@ export global Radio {
     in-out property <bool> detail-check-known: false;
     in-out property <bool> detail-check-ok: false;
     in-out property <bool> detail-votable: false;
-    // `-1` until the directory answers, `0` being a real count.
+    // `-1` until the directory answers (`ui::radio::detail::VOTES_UNKNOWN`), `0` being real.
     in-out property <int> detail-votes: -1;
 
     in-out property <image> cover;

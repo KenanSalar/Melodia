@@ -4,13 +4,17 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use super::{
-    BAND_FREQS, EqShared, EqSource, MAX_GAIN_DB, MAX_PREAMP_DB, MIN_GAIN_DB, MIN_PREAMP_DB,
-    NUM_BANDS, PRESETS, clamp_gain, clamp_preamp, normalize_gains, preset_index,
+    BAND_FREQS, CUSTOM_PRESET, EqShared, EqSource, MAX_GAIN_DB, MAX_PREAMP_DB, MIN_GAIN_DB,
+    MIN_PREAMP_DB, NUM_BANDS, PRESETS, clamp_gain, clamp_preamp, normalize_gains, preset_index,
 };
 use crate::player::playback::crossfade::FadeShared;
 use crate::player::playback::replaygain::{ReplayGainShared, RgMode, TrackReplayGain};
 use crate::player::playback::tests::helpers::{TestSource, approx_eq as approx, bits};
 use melodia_audio::player::source::audio::AudioSource;
+use melodia_testkit::{array_body, strip_line_comments};
+
+const EQUALIZER_CONTROLS: &str =
+    include_str!("../../../../../melodia-ui/ui/components/settings/equalizer-controls.slint");
 
 // --- helpers ---------------------------------------------------------------
 
@@ -85,6 +89,27 @@ fn presets_well_formed() {
         assert!(p.gains.iter().all(|g| *g >= MIN_GAIN_DB && *g <= MAX_GAIN_DB));
     }
     assert_eq!(BAND_FREQS.len(), NUM_BANDS);
+}
+
+/// The msgids of `EqPresetPicker`'s inline `preset-names`, in order, comments stripped so a note
+/// naming a preset can't stand in for one. Empty once the array is renamed or gone.
+fn picker_preset_names() -> Vec<String> {
+    let source = strip_line_comments(EQUALIZER_CONTROLS);
+    let list = array_body(&source, "property <[string]> preset-names: [").unwrap_or_default();
+    list.split("@tr(\"")
+        .skip(1)
+        .filter_map(|entry| entry.split_once("\")"))
+        .map(|(msgid, _)| msgid.to_owned())
+        .collect()
+}
+
+/// The picker maps its row index straight into `PRESETS` and selects "Custom" one past them, so a
+/// list drifting from Rust's applies another preset's curve under the row's name.
+#[test]
+fn the_preset_picker_lists_every_preset_in_order_then_custom() {
+    let expected: Vec<&str> = PRESETS.iter().map(|p| p.name).chain([CUSTOM_PRESET]).collect();
+
+    assert_eq!(picker_preset_names(), expected);
 }
 
 #[test]

@@ -41,6 +41,10 @@ jobs:
       # `assets/` and `.github/` are excluded per file, both holding real inputs
       # (`melodia.ico`, the `include_*!`d payloads, the composites the jobs run):
       # a file leaves only once nothing builds, reads or runs it before a merge.
+      # The release workflows and CODEOWNERS stay in too: nothing exercises them
+      # before a tag, and a control of that reach failing closed is worth a run.
+      # `.claude/` is the one exception, though `rules_globs.rs` reads it: a stale
+      # glob reddens only the next code PR, not worth a full run per rules edit.
       - uses: dorny/paths-filter@7b450fff21473bca461d4b92ce414b9d0420d706 # v4.0.2
         id: paths
         if: github.event_name == 'pull_request'
@@ -51,7 +55,6 @@ jobs:
               - '**'
               - '!**/*.md'
               - '!.claude/**'
-              - '!.github/workflows/refresh-manifest.yml'
               - '!.github/ISSUE_TEMPLATE/**'
               - '!.github/FUNDING.yml'
               - '!assets/screenshots/**'
@@ -114,9 +117,12 @@ jobs:
   # reads a coverage delta to decide a merge, so deploy-coverage.yml runs the
   # instrumented build on demand. The `CARGO_BUILD_JOBS: 4` memory cap overrides
   # .cargo/config.toml's jobs=8: past the ceiling nothing fails, it swaps, and
-  # the job looks like a hang. `line-tables-only` is a build-time cap rather
-  # than a memory one: `cargo test` links each test target and full debuginfo
-  # is most of that tail, while file:line survives for the backtraces this job
+  # the job looks like a hang. The peak is one `rustc` on `melodia-ui`, so the
+  # next lever is a smaller generated unit: `split-debuginfo`, `debug = 0`,
+  # `codegen-units` and fewer test binaries were measured and don't move it.
+  # `line-tables-only` is a build-time cap rather than a memory one: `cargo test`
+  # links each test target and full debuginfo is most of that tail, while
+  # file:line survives for the backtraces this job
   # exists to print — hence not the `0` deploy-coverage.yml sets. Both profiles,
   # since `cargo test` builds dependencies under `dev` and test targets under
   # `test`.
@@ -144,7 +150,11 @@ jobs:
   # `[workspace.lints.clippy]` needs clippy-driver and nothing had ever pointed
   # one at a `cfg(windows)` arm: `release-build.yml` is `cargo build`, lib and
   # bin. A sibling so a lint failure doesn't hide the test results, and it sets
-  # no `CARGO_BUILD_JOBS`, a check-only build never reaching that peak.
+  # no `CARGO_BUILD_JOBS`, a check-only build never reaching that peak. Folding
+  # it into `test-windows` saves nothing, check and build units sharing nothing
+  # past proc-macros and build scripts. A Linux cross-check is no substitute:
+  # `ring`, `aws-lc-sys`, `libsqlite3-sys` and `blake3` compile C, and the MSVC
+  # target wants MSVC.
   clippy-windows:
     name: clippy-windows
     runs-on: windows-latest
@@ -166,6 +176,10 @@ jobs:
   # form of it: it took over 40% off this job's build against Linux's 30%.
   # Neither Windows job takes system deps, which Slint and cpal don't need here,
   # or a pinned image label, so a runner rollover reddens a PR before a tag.
+  # A Defender exclusion buys nothing, the image already excluding both drives
+  # from real-time monitoring, and rust-cache already sets `CARGO_INCREMENTAL: 0`.
+  # `RUST_TEST_THREADS` keeps the config's 8; on a timeout, the tightest budgets
+  # are `single_instance_tests`' two 1 s `recv_timeout`s.
   test-windows:
     name: test-windows
     runs-on: windows-latest

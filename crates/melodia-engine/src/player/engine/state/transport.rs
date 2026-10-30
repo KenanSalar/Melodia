@@ -241,7 +241,8 @@ impl PlayerState {
     }
 
     /// Counts the play and advances, or stops where the queue ends or the sleep timer's
-    /// end-of-track mode is armed, disarming it.
+    /// end-of-track mode is armed, disarming it. It stops in place because `player_pause` would
+    /// take the state lock this already runs under.
     pub fn build_end_of_stream_actions(&mut self) -> Vec<PlayerAction> {
         // A station drains only once its reconnect budget is spent, and wandering into the
         // library's queue then would be a silent change of source.

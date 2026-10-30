@@ -258,6 +258,8 @@ export component NowPlayingView inherits Rectangle {
                 }
             }
 
+            // One column with three arms: a fourth column would reflow the artwork whenever one
+            // became available, `content-width` driving the chip wrap, strip and cover.
             VerticalLayout {
                 width: root.up-next-width;
                 spacing: Theme.pad-sm;

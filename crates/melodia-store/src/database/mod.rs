@@ -44,6 +44,19 @@ pub(crate) fn placeholders(n: usize) -> String {
     s
 }
 
+/// `rows` comma-separated tuples of `width` `?`s each, for a CTE's `VALUES` list.
+pub(crate) fn values_placeholders(rows: usize, width: usize) -> String {
+    let row = format!("({})", placeholders(width));
+    let mut s = String::with_capacity(rows * (row.len() + 2));
+    for i in 0..rows {
+        if i > 0 {
+            s.push_str(", ");
+        }
+        s.push_str(&row);
+    }
+    s
+}
+
 /// What one row spends in an `UPDATE … SET col = CASE id WHEN ? THEN ? … END WHERE id IN (…)`: the
 /// `WHEN ? THEN ?` pair, then its id again in the `IN` list.
 pub(crate) const CASE_BINDS_PER_ROW: usize = 3;

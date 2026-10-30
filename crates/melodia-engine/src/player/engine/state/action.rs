@@ -41,7 +41,8 @@ pub enum PlayerAction {
     },
     SetVolume(f64),
     SetSpeed(f64),
-    PreloadGapless(Option<String>),
+    /// Only ever clears: the monitor stages a real preload itself.
+    ClearGaplessPreload,
     /// Starts the stream the backend staged for session `generation`; the open, a network round
     /// trip, belongs to the async task that started the station.
     PlayStream {
@@ -85,8 +86,7 @@ impl std::fmt::Display for PlayerAction {
             Self::Seek { position_ms, .. } => write!(f, "seek to {position_ms}ms"),
             Self::SetVolume(v) => write!(f, "volume {v:.2}"),
             Self::SetSpeed(s) => write!(f, "speed {s:.2}"),
-            Self::PreloadGapless(Some(path)) => write!(f, "preload gapless {path}"),
-            Self::PreloadGapless(None) => f.write_str("clear gapless preload"),
+            Self::ClearGaplessPreload => f.write_str("clear gapless preload"),
             // No URL: a station's stream URL can carry a session token, and this line goes into
             // the log tail users attach to public issues.
             Self::PlayStream { generation, .. } => write!(f, "play radio stream #{generation}"),

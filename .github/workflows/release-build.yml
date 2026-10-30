@@ -114,6 +114,9 @@ jobs:
       # declaring the package AGPL by one author, which the bundled fonts and
       # vendored winit falsify, and no test sees it — the pin on that file reads
       # the source, not the built package. Bumping means re-reading that function.
+      # Lintian's `unused-license-paragraph-in-dep5-copyright` on the file's
+      # MPL-2.0 and GPL-3.0 paragraphs is expected: if lintian ever gates, add an
+      # override asset rather than delete them.
       - name: Install cargo-deb
         if: inputs.kind == 'linux-deb'
         run: cargo install --locked --version 3.7.0 cargo-deb

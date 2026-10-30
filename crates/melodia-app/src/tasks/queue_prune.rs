@@ -88,7 +88,7 @@ async fn reconcile_once(
         let mut acts = stop_end_of_queue(s);
         // So the bar stops showing a track the queue no longer holds.
         s.source = None;
-        acts.push(PlayerAction::PreloadGapless(None));
+        acts.push(PlayerAction::ClearGaplessPreload);
         acts
     });
     Ok(())

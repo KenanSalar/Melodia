@@ -301,7 +301,8 @@ export component TrackContextMenu inherits Rectangle {
             }
         }
 
-        // Two arms rather than a host-supplied label, which would ship untranslated.
+        // Two arms rather than a host-supplied label, which would ship untranslated; a third list
+        // removing rows is a third arm.
         if root.show-remove: MenuSeparator {}
         if root.view-context == "playlist-detail": MenuItem {
             label: root.multi-active

@@ -192,6 +192,8 @@ export component SettingsView inherits Rectangle {
                     padding-right: Theme.pad-lg;
                     alignment: start;
 
+                    // A box layout, never a flex, which measures each card at a width it hasn't
+                    // committed to; only the strips inside a card wrap.
                     VerticalLayout {
                         // Inside the viewport, so it scrolls with the cards; under the search row
                         // the clearance splits around `clip-gap`.

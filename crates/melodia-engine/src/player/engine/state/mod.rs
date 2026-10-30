@@ -25,7 +25,8 @@ pub use view_model::{PlayerViewModel, PlayerViewModelLight, PositionTick, QueueV
 
 /// Restart-from-beginning threshold for Previous command (ms).
 pub const RESTART_THRESHOLD_MS: u64 = 3000;
-/// Percent, and the true ceiling: amplitude tops out at unity, with no boost band above it.
+/// Percent, and the true ceiling: amplitude tops out at unity, with no boost band above it. The
+/// mixer sums unclamped, so raising it owes clip protection.
 pub const MAX_VOLUME: u32 = 100;
 pub const MIN_SPEED: f64 = 0.25;
 /// Capped at 2×: speed is plain resampling, so it shifts pitch with it.
@@ -62,7 +63,8 @@ pub struct PlayerState {
     pub playback_speed: f64,
     pub gapless_enabled: bool,
     /// The sleep timer's end-of-track mode: the monitor stops at the next end of stream instead
-    /// of advancing, disarming it. Session-only.
+    /// of advancing, disarming it. Session-only. Armed once the next track has staged, it stops at
+    /// that track's end instead, the gapless advance never reading it.
     pub pause_after_current_track: bool,
     /// Bumped by every transition that starts or ends a station session, so a connect finishing
     /// after the user moved on is refused rather than played late.

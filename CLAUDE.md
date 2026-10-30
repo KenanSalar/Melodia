@@ -10,14 +10,12 @@ hit, so this table finds them. A rule missed where needed gets a wider glob, nev
 
 | file | covers |
 |------|--------|
-| `.claude/rules/audio-stack.md` | playback state machine, DSP chain (EQ / ReplayGain / limiter), crossfade + decks, visualizer tap |
-| `.claude/rules/library-data.md` | scan ingest, the two change channels, track projections, ratings, tag write-through, M3U8, smart playlists |
-| `.claude/rules/ui-patterns.md` | shared components (pills, pickers, grids, toasts), cover prewarm, the two teardown paths, shortcuts, the three tabbed pages, the Settings page |
-| `.claude/rules/desktop-shell.md` | window chrome + winit, tray, media keys, always-on-top, force-exit shutdown |
-| `.claude/rules/updater.md` | install methods, manifest signing, the release matrix |
-| `.claude/rules/visualizer.md` | the visualizer's UI half: arming, the tick's gates, the strip and its pickers |
-| `.claude/rules/radio.md` | the directory facade and its off switch, the two station tables, the stream's prohibitions, the numbers both trees spell |
-| `.claude/rules/ci-packaging.md` | the PR gate, the skip matrix, coverage, action pinning, the five package formats and their licence pins |
+| `.claude/rules/library-data.md` | the artwork ledger and its undo hold, the audio-extension predicate, query shape and the folded search columns, smart-playlist membership |
+| `.claude/rules/ui-patterns.md` | the component catalogue, the UI contracts no one file holds, where to reach for grids, lists, filtering and covers, the three tabbed pages, the Settings page |
+| `.claude/rules/desktop-shell.md` | window chrome + winit, caption styles, restart-gated settings, the unfocused tint, tray, the volume conversion |
+| `.claude/rules/updater.md` | the polkit helper's four spellings, the three platform-key tables |
+| `.claude/rules/radio.md` | a new way onto nav 10, stream URLs in logs, the `id == 0` sentinel |
+| `.claude/rules/ci-packaging.md` | action pinning, the shared composites, adding a workspace member |
 | `.claude/rules/testing.md` | testing practice, not this tree's inventory: the ISTQB principles, how to pick cases, what a corpus walk owes, the Rust attribute and determinism rules, assertion discipline |
 | `.claude/rules/*.md` (rest) | per-crate best practices (tokio, sqlx, slint, symphonia, lofty, rayon, serde, blake3, rust-performance) plus `slint-pitfalls`, `unsafe-rust` and `code-style` |
 
@@ -122,6 +120,8 @@ cargo llvm-cov --workspace --html          # coverage → target/llvm-cov/html/
   Linux truncates it silently (`packaging.rs`).
 - **`--version` and `--logs` are literal-first branches in `main()`**, ahead of everything that can
   fail. `--version` is a contract older clients' updaters depend on (`cli_contract.rs`).
+- **`main()` ends in `std::process::exit`, so no destructor runs at quit**: a resource whose drop
+  matters closes explicitly ahead of it (`shutdown.rs`, `main_order_tests.rs`).
 
 ## Slint
 
@@ -172,7 +172,7 @@ Three rules share the UI globs: `slint.md` general, `slint-pitfalls.md` what bui
 - **A corpus walk lives in `crates/melodia/tests/`, a pin on one named file beside that file**, so
   `cargo test -p <crate>` stays a question about that crate.
 - **The suite assumes an LF checkout**, which `.gitattributes` guarantees.
-- **Read `.claude/rules/ci-packaging.md` before touching `.github/` or `packaging/`.**
+- **Read `.claude/rules/ci-packaging.md` before touching `.github/`.**
 - **A release is a pushed `v*.*.*` tag, never a merge.** Land the version bump as a PR, tag the
   merge commit, then QA the draft `release.yml` leaves and publish it by hand.
 - **No closing keyword**: link the issue in the Development sidebar, which closes it on merge.

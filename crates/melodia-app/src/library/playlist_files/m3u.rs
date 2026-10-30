@@ -2,7 +2,8 @@
 //! players' files import too.
 //!
 //! Our exports add a `#MELODIA-HASH:<blake3-hex>` line per track, which other players skip as a
-//! comment, so a restored playlist re-matches a track whose file has moved.
+//! comment, so a restored playlist re-matches a track whose file has moved. A tag edit changes the
+//! file's hash, which is why the import tries the path first.
 
 use melodia_core::entities::track::PlaylistExportRow;
 
