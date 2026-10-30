@@ -43,14 +43,15 @@ pub fn restore_queue(state: &mut PlayerState, queue: QueueState, records: Vec<Ar
     }
 }
 
-/// Puts the last session's station back over the queue [`restore_queue`] seated, `Paused`: the
-/// one status holding a station with no connection, which `player_play` reopens from. The caller
-/// owes an `emit_and_execute` for the speed pin, boot restoring a rate from `settings.json`.
+/// Puts a station back over the queue, `Paused` with its session ended: the one status holding a
+/// station with no connection, which `player_play` reopens from. The caller owes an
+/// `emit_and_execute` for the speed pin, boot restoring a rate from `settings.json`.
 pub fn restore_station(
     state: &mut PlayerState,
     station: Arc<RadioNowPlaying>,
 ) -> Vec<PlayerAction> {
     state.source = Some(PlaybackSource::Station(station));
+    state.end_stream_session();
     state.status = PlaybackStatus::Paused;
     state.duration_ms = 0;
     state.position_ms = 0;

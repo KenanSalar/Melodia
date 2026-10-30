@@ -786,9 +786,9 @@ correct.
      `restore_cleared` to OR back in. `QueueState::restored` seats it, a saved queue's origin not
      being saved.
    - **`replace(ids, start)`** is the play's clear, fill and seat in one. It holds the old queue
-     only while that was built by hand and its insertion order differs from `ids`: it compares
-     `original_order`, not the play ids, which a shuffled replace randomizes. An empty or identical
-     queue holds nothing (decision 6).
+     only while that was built by hand and differs from `ids`. Unshuffled it compares the play
+     order, the one a move edits; shuffled, `original_order`, the replace randomizing the play
+     order. An empty or identical queue holds nothing (decision 6).
    - **`restore_replaced` puts the held queue in place of the play's.** The play built what is
      live, so its undo takes that back, where a Clear's undo goes ahead of what was queued since.
      It shares `splice_ahead` and `place_held_cursor` with `restore_cleared` and skips the `seats`
@@ -834,6 +834,8 @@ correct.
 - Play an album, remove a row, then play another list: "Queue replaced" replaces the removal's
   card, and Undo returns the album less that row with its track.
 - Append album A to an empty queue, then play A from its card: no notice.
+- Play an album, drag a row, then double-click a track of the same album: "Queue replaced", and
+  Undo returns the reordered queue.
 - The Shuffle pill over a hand-built unshuffled queue: Undo returns the queue, shuffle stays on and
   the queue is shuffled behind the old track.
 - A station over a hand-built queue, then play an album: Undo shows the station paused in the bar,
@@ -988,7 +990,8 @@ removing stations and Clear queue ask first again (decision 13).
   - `hand_edited` set by each hand edit, cleared by a replace, seated by boot restore, lowered by a
     clear and ORed back by its restore;
   - `replace` answering `None` over a play-built, an empty and an identical queue (shuffled play
-    order, same insertion order), and the old queue over a hand-edited one;
+    order, same insertion order), and the old queue over a hand-edited one, a moved one with
+    shuffle off included;
   - `restore_replaced` putting back the cursor despite the play's seat, a gap included (mid-queue
     and at the end), restoring insertion order with shuffle gone off and reshuffling with it come
     on, and leaving `hand_edited` raised.

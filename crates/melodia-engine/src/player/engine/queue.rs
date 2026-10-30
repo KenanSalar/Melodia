@@ -495,10 +495,10 @@ impl QueueState {
     }
 
     /// Makes `ids` the queue with the row at `start` playing, handing back the queue it took where
-    /// that one was built by hand and held other tracks. A play over a queue only a play built
+    /// that one was built by hand and differs from `ids`. A play over a queue only a play built
     /// holds nothing: a notice on every double-click teaches the eye to skip the one that matters.
     pub fn replace(&mut self, ids: &[i64], start: usize) -> Option<ClearedQueue> {
-        let worth_holding = self.hand_edited && !self.holds_in_insertion_order(ids);
+        let worth_holding = self.hand_edited && !self.already_holds(ids);
         let taken = self.take_cleared();
         self.insert_at(0, ids);
         self.hand_edited = false;
@@ -506,9 +506,11 @@ impl QueueState {
         taken.filter(|_| worth_holding)
     }
 
-    /// The play order isn't asked: a shuffled replace randomizes it.
-    fn holds_in_insertion_order(&self, ids: &[i64]) -> bool {
-        self.original_order.iter().map(|&slot| self.tracks.get(slot)).eq(ids.iter().map(Some))
+    /// Shuffled, only the insertion order can match, the replace randomizing the play order;
+    /// unshuffled, the play order is the one a move edits.
+    fn already_holds(&self, ids: &[i64]) -> bool {
+        let order = if self.shuffle_enabled { &self.original_order } else { &self.play_order };
+        order.iter().map(|&slot| self.tracks.get(slot)).eq(ids.iter().map(Some))
     }
 
     /// Puts back what a run of [`Self::take_cleared`]s took, newest first, each ahead of anything
