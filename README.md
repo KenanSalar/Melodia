@@ -217,13 +217,13 @@ Sixteen locales (English, German, French, Spanish, Turkish, Greek, Italian, Braz
 
 Release builds on one dual-boot PC, a Ryzen 7 9800X3D (8 cores, 16 threads) with an RTX 3080 and the window on a 144 Hz display. Melodia opened on a playlist's detail view, the visualizer in the Mirrored style, and each scenario is sampled every second for 60 s: memory is the median sample, CPU and GPU the total over that minute. With a 512-track library, the native titlebar, and each platform's default sample-rate conversion:
 
-| Scenario | Linux, Anonymous | Linux, CPU (1 core) | Windows, Commit | Windows, CPU (1 core) |
+| Scenario | Linux, PSS | Linux, CPU (1 core) | Windows, Private WS | Windows, CPU (1 core) |
 | --- | --- | --- | --- | --- |
-| Idle | 29.44 MiB | 0.08% | 109.62 MiB | 0.16% |
-| Playing, list view | 30.05 MiB | 0.60% | 112.26 MiB | 0.78% |
-| Playing, visualizer live | 31.50 MiB | 2.42% | 118.77 MiB | 7.19% |
+| Idle | 84.43 MiB | 0.08% | 62.80 MiB | 0.16% |
+| Playing, list view | 86.01 MiB | 0.60% | 64.05 MiB | 0.78% |
+| Playing, visualizer live | 90.25 MiB | 2.42% | 68.34 MiB | 7.19% |
 
-Each platform's figure is what its own kernel accounts for, so the two memory columns don't compare with each other. The full tables add startup, the Songs tab, the whole library queued, the custom titlebar, and a second library of 50,500 tracks beside the first, 51,012 in all.
+Each memory column is what that platform's own monitor shows, KDE System Monitor's Memory column on Linux and Task Manager's on Windows. The two don't compare with each other: PSS counts a share of the file-backed pages, mostly the binary and the shared graphics stack, which Private WS leaves out. The full tables add startup, the Songs tab, the whole library queued, the custom titlebar, and a second library of 50,500 tracks beside the first, 51,012 in all.
 
 <details>
 <summary><b>Linux (Fedora)</b>: every scenario, both titlebars, both libraries</summary>
