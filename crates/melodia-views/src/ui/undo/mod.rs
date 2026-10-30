@@ -103,11 +103,7 @@ impl UndoWindow {
             Landing::OverCap(title) => self.raise_over_cap(title),
             Landing::Fresh(removal) => {
                 self.replace_held();
-                let push = LocalizedPush {
-                    variant: NotificationVariant::Info,
-                    kind: NotificationKind::Undo,
-                    timeout_ms: self.prefs.borrow().notice_ms(),
-                };
+                let push = self.timed_notice(NotificationKind::Undo);
                 let row = self.notifications.show_localized_timed(&ui, push, removal.recipe());
                 *self.slot.borrow_mut() = Some(Slot { row, removal });
                 ui.global::<Notifications>().set_undo_row(row);
@@ -134,14 +130,18 @@ impl UndoWindow {
     fn raise_over_cap(&self, title: impl Fn(&AppWindow) -> SharedString + 'static) {
         let Some(ui) = self.ui.upgrade() else { return };
         self.replace_held();
-        let push = LocalizedPush {
-            variant: NotificationVariant::Info,
-            kind: NotificationKind::None,
-            timeout_ms: self.prefs.borrow().notice_ms(),
-        };
+        let push = self.timed_notice(NotificationKind::None);
         self.notifications.show_localized_timed(&ui, push, move |ui| {
             RowText::plain(title(ui), ui.global::<UndoText>().invoke_too_many_to_undo())
         });
+    }
+
+    fn timed_notice(&self, kind: NotificationKind) -> LocalizedPush {
+        LocalizedPush {
+            variant: NotificationVariant::Info,
+            kind,
+            timeout_ms: self.prefs.borrow().notice_ms(),
+        }
     }
 
     /// The card's button and Ctrl+Z both arrive here. Only the slot's own row acts, so a press

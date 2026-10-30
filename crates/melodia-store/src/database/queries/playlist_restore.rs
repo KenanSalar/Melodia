@@ -2,14 +2,12 @@
 
 use std::collections::HashSet;
 
-use sqlx::AssertSqlSafe;
-
 use super::playlist::{
     NewItem, batch_update_positions_pairs, insert_items_tx,
     update_playlist_thumbnail_and_timestamp_tx,
 };
 use super::search_name;
-use crate::database::DbPool;
+use crate::database::{DbPool, chunked_in_query_tx};
 use melodia_core::entities::playlist::{CutItem, Playlist, PlaylistItemsCut, PlaylistSnapshot};
 use melodia_core::error::AppError;
 use melodia_core::utils::reinsert::reinsert;
@@ -178,15 +176,9 @@ async fn tracks_still_there(
     tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
     track_ids: &[i64],
 ) -> Result<HashSet<i64>, AppError> {
-    let mut present = HashSet::with_capacity(track_ids.len());
-    for chunk in track_ids.chunks(crate::database::MAX_BINDS_PER_STATEMENT) {
-        let placeholders = crate::database::placeholders(chunk.len());
-        let sql = format!("SELECT id FROM tracks WHERE id IN ({placeholders})");
-        let mut query = sqlx::query_scalar::<_, i64>(AssertSqlSafe(sql)).persistent(false);
-        for &id in chunk {
-            query = query.bind(id);
-        }
-        present.extend(query.fetch_all(&mut **tx).await?);
-    }
-    Ok(present)
+    let present: Vec<(i64,)> = chunked_in_query_tx(tx, track_ids, |placeholders| {
+        format!("SELECT id FROM tracks WHERE id IN ({placeholders})")
+    })
+    .await?;
+    Ok(present.into_iter().map(|(id,)| id).collect())
 }

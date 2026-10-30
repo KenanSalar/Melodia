@@ -3,9 +3,7 @@
 
 use std::collections::HashMap;
 
-use sqlx::AssertSqlSafe;
-
-use crate::database::{DbPool, MAX_BINDS_PER_STATEMENT, chunked_in_query, placeholders};
+use crate::database::{DbPool, chunked_in_query, chunked_in_query_tx};
 use melodia_core::entities::playlist::{CutItem, Playlist, PlaylistSnapshot};
 use melodia_core::error::AppError;
 
@@ -69,37 +67,29 @@ async fn snapshots_tx(
     tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
     ids: &[i64],
 ) -> Result<Vec<PlaylistSnapshot>, AppError> {
-    let mut playlists: Vec<Playlist> = Vec::with_capacity(ids.len());
-    let mut items: HashMap<i64, Vec<CutItem>> = HashMap::new();
-    for chunk in ids.chunks(MAX_BINDS_PER_STATEMENT) {
-        let placeholders = placeholders(chunk.len());
-
-        let sql = format!(
+    let playlists: Vec<Playlist> = chunked_in_query_tx(tx, ids, |placeholders| {
+        format!(
             "SELECT id, name, description, thumbnail_path, is_smart, smart_criteria, created_at,
                     updated_at, custom_thumbnail
              FROM playlists WHERE id IN ({placeholders})"
-        );
-        let mut query = sqlx::query_as::<_, Playlist>(AssertSqlSafe(sql)).persistent(false);
-        for &id in chunk {
-            query = query.bind(id);
-        }
-        playlists.extend(query.fetch_all(&mut **tx).await?);
+        )
+    })
+    .await?;
 
-        // Chunked by playlist, so each one's items come from this one ordered query.
-        let sql = format!(
+    // Chunked by playlist, so each one's items come from one ordered statement.
+    let rows: Vec<(i64, i64, String)> = chunked_in_query_tx(tx, ids, |placeholders| {
+        format!(
             "SELECT playlist_id, track_id, added_at FROM playlist_items
              WHERE playlist_id IN ({placeholders}) ORDER BY playlist_id, position, id"
-        );
-        let mut query =
-            sqlx::query_as::<_, (i64, i64, String)>(AssertSqlSafe(sql)).persistent(false);
-        for &id in chunk {
-            query = query.bind(id);
-        }
-        for (playlist_id, track_id, added_at) in query.fetch_all(&mut **tx).await? {
-            let held = items.entry(playlist_id).or_default();
-            held.push(CutItem { track_id, row: held.len(), added_at });
-        }
+        )
+    })
+    .await?;
+    let mut items: HashMap<i64, Vec<CutItem>> = HashMap::new();
+    for (playlist_id, track_id, added_at) in rows {
+        let held = items.entry(playlist_id).or_default();
+        held.push(CutItem { track_id, row: held.len(), added_at });
     }
+
     Ok(playlists
         .into_iter()
         .map(|playlist| {
@@ -114,17 +104,9 @@ async fn delete_tx(
     tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
     ids: &[i64],
 ) -> Result<Vec<String>, AppError> {
-    let mut names = Vec::with_capacity(ids.len());
-    for chunk in ids.chunks(MAX_BINDS_PER_STATEMENT) {
-        let sql = format!(
-            "DELETE FROM playlists WHERE id IN ({}) RETURNING name",
-            placeholders(chunk.len())
-        );
-        let mut query = sqlx::query_scalar::<_, String>(AssertSqlSafe(sql)).persistent(false);
-        for &id in chunk {
-            query = query.bind(id);
-        }
-        names.extend(query.fetch_all(&mut **tx).await?);
-    }
-    Ok(names)
+    let names: Vec<(String,)> = chunked_in_query_tx(tx, ids, |placeholders| {
+        format!("DELETE FROM playlists WHERE id IN ({placeholders}) RETURNING name")
+    })
+    .await?;
+    Ok(names.into_iter().map(|(name,)| name).collect())
 }

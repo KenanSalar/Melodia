@@ -2,9 +2,7 @@
 
 use sqlx::AssertSqlSafe;
 
-use crate::database::{
-    DbPool, IDS_PER_SET, MAX_BINDS_PER_STATEMENT, placeholders, set_where_id_in,
-};
+use crate::database::{DbPool, IDS_PER_SET, chunked_in_query_tx, set_where_id_in};
 use melodia_core::error::AppError;
 
 pub async fn update_play_count(db: &DbPool, id: i64) -> Result<(), AppError> {
@@ -101,20 +99,15 @@ pub async fn unfavorite(db: &DbPool, ids: &[i64]) -> Result<Vec<i64>, AppError> 
         return Ok(Vec::new());
     }
     let mut tx = db.write().begin().await?;
-    let mut cleared = Vec::new();
-    for chunk in ids.chunks(MAX_BINDS_PER_STATEMENT) {
-        let sql = format!(
-            "UPDATE tracks SET is_favorite = 0 WHERE is_favorite = 1 AND id IN ({}) RETURNING id",
-            placeholders(chunk.len())
-        );
-        let mut query = sqlx::query_scalar::<_, i64>(AssertSqlSafe(sql)).persistent(false);
-        for &id in chunk {
-            query = query.bind(id);
-        }
-        cleared.extend(query.fetch_all(&mut *tx).await?);
-    }
+    let cleared: Vec<(i64,)> = chunked_in_query_tx(&mut tx, ids, |placeholders| {
+        format!(
+            "UPDATE tracks SET is_favorite = 0 WHERE is_favorite = 1 AND id IN ({placeholders})
+             RETURNING id"
+        )
+    })
+    .await?;
     tx.commit().await?;
-    Ok(cleared)
+    Ok(cleared.into_iter().map(|(id,)| id).collect())
 }
 
 /// Sets the star `rating`, which `library::ratings::set_rating` has already clamped.

@@ -4,7 +4,9 @@
 use sqlx::AssertSqlSafe;
 
 use super::radio::kept_station_matching;
-use crate::database::{DbPool, MAX_BINDS_PER_STATEMENT, chunked_in_query, placeholders};
+use crate::database::{
+    DbPool, MAX_BINDS_PER_STATEMENT, chunked_in_query, chunked_in_query_tx, placeholders,
+};
 use melodia_core::entities::radio::{KeptList, RadioStation, StationCut};
 use melodia_core::error::AppError;
 
@@ -20,11 +22,12 @@ pub async fn remove_stations(
     }
     let mut tx = db.write().begin().await?;
 
-    let cuts: Vec<StationCut> = stations_tx(&mut tx, ids)
-        .await?
-        .into_iter()
-        .filter_map(|station| cut_from(station, from))
-        .collect();
+    let stations: Vec<RadioStation> = chunked_in_query_tx(&mut tx, ids, |placeholders| {
+        format!("SELECT * FROM radio_stations WHERE id IN ({placeholders})")
+    })
+    .await?;
+    let cuts: Vec<StationCut> =
+        stations.into_iter().filter_map(|station| cut_from(station, from)).collect();
     let mut kept = Vec::new();
     let mut gone = Vec::new();
     for cut in &cuts {
@@ -207,24 +210,6 @@ async fn reinsert_tx(
     .execute(&mut **tx)
     .await?;
     Ok(())
-}
-
-/// Every row of `ids` still there.
-async fn stations_tx(
-    tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
-    ids: &[i64],
-) -> Result<Vec<RadioStation>, AppError> {
-    let mut stations = Vec::with_capacity(ids.len());
-    for chunk in ids.chunks(MAX_BINDS_PER_STATEMENT) {
-        let sql =
-            format!("SELECT * FROM radio_stations WHERE id IN ({})", placeholders(chunk.len()));
-        let mut query = sqlx::query_as::<_, RadioStation>(AssertSqlSafe(sql)).persistent(false);
-        for &id in chunk {
-            query = query.bind(id);
-        }
-        stations.extend(query.fetch_all(&mut **tx).await?);
-    }
-    Ok(stations)
 }
 
 /// `statement` is handed each chunk's placeholder list.
