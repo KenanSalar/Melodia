@@ -564,9 +564,9 @@ The shell and its simplest user land together, the shell having nothing to show 
 ### Phase 5: radio stations (done 2026-10-30)
 
 1. **Core.** `KeptList { Favorites, Recent }`, which decides what a removal takes, and
-   `StationCut`: `Unfavorited { id, name }`, `HistoryCleared { id, name, last_played,
-   play_count }`, or `Deleted(Box<RadioStation>)`, the row as it stood. `is_listed` moved onto
-   `RadioStation`, the store's transaction reading it.
+   `StationCut`: `Unfavorited { id, date_added, name }`, `HistoryCleared { id, date_added, name,
+   last_played, play_count }`, or `Deleted(Box<RadioStation>)`, the row as it stood. `is_listed`
+   moved onto `RadioStation`, the store's transaction reading it.
 2. **Store** (`queries/radio_removal.rs`).
    - `remove_stations(ids, from)` is one transaction: it reads the rows, takes the heart or the
      plays, and deletes a row `is_listed` no longer holds, all as chunked statements. A station
@@ -577,7 +577,9 @@ The shell and its simplest user land together, the shell having nothing to show 
        so a play in the window survives;
      - a deleted row goes back whole under its id, or a fresh one where another took it, unless
        `kept_station_matching` finds it back already (by uuid, then `stream_url`);
-     - a row gone since stays gone.
+     - a row gone since stays gone, the first two arms matching `date_added` as well as the id:
+       SQLite re-issues the largest id, and Browse's un-heart can delete a row whose plays the
+       undo holds without retiring it.
    - Browse's un-heart keeps `delete_if_unlisted`, now read and delete in one transaction.
 3. **App** (`library/radio/removal.rs`). `remove_stations` holds every station's logo in an
    `ArtworkHold` before the transaction, which alone knows which rows go (decision 10). Past
@@ -866,7 +868,8 @@ removing stations and Clear queue ask first again (decision 13).
     `total_duration_ms` matching its items, plus the id-taken fallback.
 - `radio_tests`: every `StationCut` arm (`Unfavorited`, `HistoryCleared`, `Deleted`), a station
   the tab doesn't list answering no cut, a history restore after a play in the window keeping the
-  play and the later stamp, a deleted row back under its own id and the id-taken fallback, and
+  play and the later stamp, a history restore skipping a row whose id another station took since,
+  a deleted row back under its own id and the id-taken fallback, and
   both skips (the uuid, and a hand-typed `stream_url`).
 - `search_history` tests: restore with queries added since, and a merged run of two clears
   restoring the newer list in front.

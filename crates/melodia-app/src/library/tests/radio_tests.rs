@@ -150,9 +150,8 @@ fn no_other_facet_list_is_rebuilt() {
 /// The whole truth table behind removal, and the only place it is stated once.
 ///
 /// A wrong arm here is silent both ways and each way loses something: read as listed, an
-/// unfavorited never-played row survives forever with nothing able to show it; read as unlisted,
-/// removing a station from one tab deletes it out of the other — the play history a favorite's
-/// trash used to take with it.
+/// unfavorited never-played row stays with no tab able to show or remove it; read as unlisted,
+/// removing a station from one tab deletes it out of the other, play history included.
 #[test]
 fn a_row_survives_exactly_while_one_of_the_two_tabs_still_shows_it() {
     let mut station = stored(Some("uuid-1"));
@@ -243,7 +242,7 @@ fn a_field_is_the_users_only_while_the_directory_has_not_answered_for_it() {
 ///
 /// The card refuses a heart to a row no directory names, so an unfavorited one is stranded rather
 /// than merely unfavorited: Recently Played goes on showing it and nothing anywhere can put it
-/// back in Favorites. Removing it there has to be the delete it was before the two tabs split.
+/// back in Favorites. So removing it from Favorites deletes it, plays and all.
 #[test]
 fn a_hand_typed_station_is_listed_by_its_favorite_and_never_by_its_plays() {
     let mut station = stored(None);

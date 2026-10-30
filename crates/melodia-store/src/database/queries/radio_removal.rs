@@ -59,7 +59,11 @@ fn cut_from(station: RadioStation, from: KeptList) -> Option<StationCut> {
     let taken = match from {
         KeptList::Favorites if station.is_favorite => {
             left.is_favorite = false;
-            StationCut::Unfavorited { id: station.id, name: station.name.clone() }
+            StationCut::Unfavorited {
+                id: station.id,
+                date_added: station.date_added.clone(),
+                name: station.name.clone(),
+            }
         }
         KeptList::Favorites => return None,
         KeptList::Recent => {
@@ -68,6 +72,7 @@ fn cut_from(station: RadioStation, from: KeptList) -> Option<StationCut> {
             left.play_count = 0;
             StationCut::HistoryCleared {
                 id: station.id,
+                date_added: station.date_added.clone(),
                 name: station.name.clone(),
                 last_played,
                 play_count: station.play_count,
@@ -113,24 +118,30 @@ pub async fn restore_stations(db: &DbPool, cuts: &[StationCut]) -> Result<(), Ap
     let mut tx = db.write().begin().await?;
     for cut in cuts.iter().rev() {
         match cut {
-            StationCut::Unfavorited { id, .. } => {
-                sqlx::query("UPDATE radio_stations SET is_favorite = TRUE WHERE id = ?")
-                    .bind(id)
-                    .execute(&mut *tx)
-                    .await?;
+            // Both arms match `date_added`: SQLite re-issues the largest id once its row goes, and
+            // Browse's un-heart can delete a row whose plays this undo holds without retiring it.
+            StationCut::Unfavorited { id, date_added, .. } => {
+                sqlx::query(
+                    "UPDATE radio_stations SET is_favorite = TRUE WHERE id = ? AND date_added = ?",
+                )
+                .bind(id)
+                .bind(date_added)
+                .execute(&mut *tx)
+                .await?;
             }
-            StationCut::HistoryCleared { id, last_played, play_count, .. } => {
+            StationCut::HistoryCleared { id, date_added, last_played, play_count, .. } => {
                 // `MAX` answers NULL when either side is, so a station unplayed since takes the
                 // held stamp.
                 sqlx::query(
                     "UPDATE radio_stations
                      SET play_count = play_count + ?, last_played = COALESCE(MAX(last_played, ?), ?)
-                     WHERE id = ?",
+                     WHERE id = ? AND date_added = ?",
                 )
                 .bind(play_count)
                 .bind(last_played)
                 .bind(last_played)
                 .bind(id)
+                .bind(date_added)
                 .execute(&mut *tx)
                 .await?;
             }

@@ -215,9 +215,15 @@ pub enum KeptList {
 #[derive(Debug, PartialEq)]
 pub enum StationCut {
     /// The favorite, the row staying for its plays.
-    Unfavorited { id: i64, name: String },
+    Unfavorited { id: i64, date_added: String, name: String },
     /// The plays, the row staying for its favorite.
-    HistoryCleared { id: i64, name: String, last_played: String, play_count: i32 },
+    HistoryCleared {
+        id: i64,
+        date_added: String,
+        name: String,
+        last_played: String,
+        play_count: i32,
+    },
     /// The row as it stood before the removal, which left nothing listing it.
     Deleted(Box<RadioStation>),
 }
