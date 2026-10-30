@@ -7,7 +7,7 @@ use super::playlist::{
     update_playlist_thumbnail_and_timestamp_tx,
 };
 use super::search_name;
-use crate::database::{DbPool, chunked_in_query_tx};
+use crate::database::{DbPool, chunked_in_query_on};
 use melodia_core::entities::playlist::{CutItem, Playlist, PlaylistItemsCut, PlaylistSnapshot};
 use melodia_core::error::AppError;
 use melodia_core::utils::reinsert::reinsert;
@@ -176,7 +176,7 @@ async fn tracks_still_there(
     tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
     track_ids: &[i64],
 ) -> Result<HashSet<i64>, AppError> {
-    let present: Vec<(i64,)> = chunked_in_query_tx(tx, track_ids, |placeholders| {
+    let present: Vec<(i64,)> = chunked_in_query_on(tx, track_ids, |placeholders| {
         format!("SELECT id FROM tracks WHERE id IN ({placeholders})")
     })
     .await?;

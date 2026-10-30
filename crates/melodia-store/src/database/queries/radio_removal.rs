@@ -5,7 +5,7 @@ use sqlx::AssertSqlSafe;
 
 use super::radio::kept_station_matching;
 use crate::database::{
-    DbPool, MAX_BINDS_PER_STATEMENT, chunked_in_query, chunked_in_query_tx, placeholders,
+    DbPool, MAX_BINDS_PER_STATEMENT, chunked_in_query, chunked_in_query_on, placeholders,
 };
 use melodia_core::entities::radio::{KeptList, RadioStation, StationCut};
 use melodia_core::error::AppError;
@@ -22,7 +22,7 @@ pub async fn remove_stations(
     }
     let mut tx = db.write().begin().await?;
 
-    let stations: Vec<RadioStation> = chunked_in_query_tx(&mut tx, ids, |placeholders| {
+    let stations: Vec<RadioStation> = chunked_in_query_on(&mut tx, ids, |placeholders| {
         format!("SELECT * FROM radio_stations WHERE id IN ({placeholders})")
     })
     .await?;

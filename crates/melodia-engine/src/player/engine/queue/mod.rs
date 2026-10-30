@@ -25,7 +25,7 @@ pub struct QueueEntry(usize);
 /// The queue as track ids. The records a transition needs live in the player's `TrackWindow`.
 ///
 /// The three vectors are crate-private because [`Self::play_ids`] caches what they spell, and a
-/// write that went round its mutators would leave it describing an order nobody holds.
+/// write that went round the queue's mutators would leave it describing an order nobody holds.
 #[derive(Debug, Clone)]
 pub struct QueueState {
     /// Every entry's track id, each queued entry once, so a track queued twice is two entries.

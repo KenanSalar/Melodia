@@ -148,12 +148,12 @@ where
         return Ok(Vec::new());
     }
     let mut conn = pool.acquire().await?;
-    chunked_in_query_tx(&mut conn, items, build_sql).await
+    chunked_in_query_on(&mut conn, items, build_sql).await
 }
 
 /// [`chunked_in_query`] on a connection the caller holds, a transaction's included. Concrete, since
 /// over `sqlx::Acquire` rustc can't prove a spawned caller's future `Send`.
-pub(crate) async fn chunked_in_query_tx<T, B>(
+pub(crate) async fn chunked_in_query_on<T, B>(
     conn: &mut SqliteConnection,
     items: &[B],
     build_sql: impl Fn(&str) -> String,

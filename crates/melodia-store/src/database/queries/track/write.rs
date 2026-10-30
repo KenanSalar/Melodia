@@ -2,7 +2,7 @@
 
 use sqlx::AssertSqlSafe;
 
-use crate::database::{DbPool, IDS_PER_SET, chunked_in_query_tx, set_where_id_in};
+use crate::database::{DbPool, IDS_PER_SET, chunked_in_query_on, set_where_id_in};
 use melodia_core::error::AppError;
 
 pub async fn update_play_count(db: &DbPool, id: i64) -> Result<(), AppError> {
@@ -99,7 +99,7 @@ pub async fn unfavorite(db: &DbPool, ids: &[i64]) -> Result<Vec<i64>, AppError> 
         return Ok(Vec::new());
     }
     let mut tx = db.write().begin().await?;
-    let cleared: Vec<(i64,)> = chunked_in_query_tx(&mut tx, ids, |placeholders| {
+    let cleared: Vec<(i64,)> = chunked_in_query_on(&mut tx, ids, |placeholders| {
         format!(
             "UPDATE tracks SET is_favorite = 0 WHERE is_favorite = 1 AND id IN ({placeholders})
              RETURNING id"

@@ -3,7 +3,7 @@
 
 use std::collections::HashMap;
 
-use crate::database::{DbPool, chunked_in_query, chunked_in_query_tx};
+use crate::database::{DbPool, chunked_in_query, chunked_in_query_on};
 use melodia_core::entities::playlist::{CutItem, Playlist, PlaylistSnapshot};
 use melodia_core::error::AppError;
 
@@ -67,7 +67,7 @@ async fn snapshots_tx(
     tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
     ids: &[i64],
 ) -> Result<Vec<PlaylistSnapshot>, AppError> {
-    let playlists: Vec<Playlist> = chunked_in_query_tx(tx, ids, |placeholders| {
+    let playlists: Vec<Playlist> = chunked_in_query_on(tx, ids, |placeholders| {
         format!(
             "SELECT id, name, description, thumbnail_path, is_smart, smart_criteria, created_at,
                     updated_at, custom_thumbnail
@@ -77,7 +77,7 @@ async fn snapshots_tx(
     .await?;
 
     // Chunked by playlist, so each one's items come from one ordered statement.
-    let rows: Vec<(i64, i64, String)> = chunked_in_query_tx(tx, ids, |placeholders| {
+    let rows: Vec<(i64, i64, String)> = chunked_in_query_on(tx, ids, |placeholders| {
         format!(
             "SELECT playlist_id, track_id, added_at FROM playlist_items
              WHERE playlist_id IN ({placeholders}) ORDER BY playlist_id, position, id"
@@ -104,7 +104,7 @@ async fn delete_tx(
     tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
     ids: &[i64],
 ) -> Result<Vec<String>, AppError> {
-    let names: Vec<(String,)> = chunked_in_query_tx(tx, ids, |placeholders| {
+    let names: Vec<(String,)> = chunked_in_query_on(tx, ids, |placeholders| {
         format!("DELETE FROM playlists WHERE id IN ({placeholders}) RETURNING name")
     })
     .await?;

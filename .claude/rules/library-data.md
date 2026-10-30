@@ -51,8 +51,9 @@ couples the store to the app or the UI, or breaks from outside its owner. `sqlx.
 
 ## Query shape
 
-- **`database::placeholders(n)` builds every IN list**, paired with `chunked_in_query`; never
-  re-roll `repeat_n("?", n)`. A per-row UPDATE is one chunked CTE statement per batch, the shape
+- **`database::placeholders(n)` builds every IN list**, paired with `chunked_in_query`, or
+  `chunked_in_query_on` on a connection or transaction already held; never re-roll
+  `repeat_n("?", n)`. A per-row UPDATE is one chunked CTE statement per batch, the shape
   `batch_update_hashes` writes.
 - **Each `tracks` projection is a narrow `FromRow` struct in `entities::track`**, its columns in
   `queries::track::columns`. Pick the slimmest; a list never takes the full `Track`.
