@@ -1,4 +1,4 @@
-use std::collections::{HashMap, HashSet};
+use std::collections::HashSet;
 use std::sync::{Arc, OnceLock};
 
 use melodia_core::utils::block_move;
@@ -326,9 +326,9 @@ impl QueueState {
     /// `None` where none is still queued. Taking the playing row leaves a gap where it was
     /// (`playing_left`), the row that took its place playing next.
     pub fn cut(&mut self, entries: &[QueueEntry]) -> Option<QueueCut> {
-        let slots: HashSet<usize> =
-            entries.iter().filter_map(|entry| entry.0.checked_sub(self.retired)).collect();
-        let rows = self.rows_at(&slots);
+        let gone =
+            self.slot_mask(entries.iter().filter_map(|entry| entry.0.checked_sub(self.retired)));
+        let rows = self.rows_at(&gone);
         if rows.is_empty() {
             return None;
         }
@@ -338,41 +338,55 @@ impl QueueState {
 
         self.playing_left |= current_row.is_some();
         self.hand_edited = true;
-        self.drop_rows(&slots);
+        self.drop_rows(&gone);
         Some(QueueCut { rows, cursor, shuffled: self.shuffle_enabled })
     }
 
-    /// The queued rows among `slots`, in play order.
-    fn rows_at(&self, slots: &HashSet<usize>) -> Vec<CutRow> {
-        let original_index: HashMap<usize, usize> = self
+    /// Marks `slots` by index, slots being dense, so walking a library-sized queue hashes no row.
+    fn slot_mask(&self, slots: impl Iterator<Item = usize>) -> Vec<bool> {
+        let mut mask = vec![false; self.tracks.len()];
+        for slot in slots {
+            if let Some(marked) = mask.get_mut(slot) {
+                *marked = true;
+            }
+        }
+        mask
+    }
+
+    /// The queued rows marked in `gone`, in play order.
+    fn rows_at(&self, gone: &[bool]) -> Vec<CutRow> {
+        let mut original_index: Vec<(usize, usize)> = self
             .original_order
             .iter()
             .enumerate()
-            .filter(|(_, slot)| slots.contains(slot))
+            .filter(|&(_, &slot)| gone[slot])
             .map(|(index, &slot)| (slot, index))
             .collect();
+        original_index.sort_unstable();
         self.play_order
             .iter()
             .enumerate()
-            .filter_map(|(play_index, slot)| {
+            .filter(|&(_, &slot)| gone[slot])
+            .filter_map(|(play_index, &slot)| {
+                let found = original_index.binary_search_by_key(&slot, |&(slot, _)| slot).ok()?;
                 Some(CutRow {
-                    original_index: *original_index.get(slot)?,
-                    track_id: *self.tracks.get(*slot)?,
+                    original_index: original_index[found].1,
+                    track_id: self.tracks[slot],
                     play_index,
                 })
             })
             .collect()
     }
 
-    /// Drops the rows at `gone` from both orders and lands the cursor on the row that took the
-    /// current one's place. `tracks` keeps the slots so every other index stays valid; `clear`
+    /// Drops the rows marked in `gone` from both orders and lands the cursor on the row that took
+    /// the current one's place. `tracks` keeps the slots so every other index stays valid; `clear`
     /// drops them.
-    fn drop_rows(&mut self, gone: &HashSet<usize>) {
+    fn drop_rows(&mut self, gone: &[bool]) {
         let survivors_before_current = self
             .current_index
-            .map(|ci| self.play_order.iter().take(ci).filter(|slot| !gone.contains(slot)).count());
-        self.play_order.retain(|slot| !gone.contains(slot));
-        self.original_order.retain(|slot| !gone.contains(slot));
+            .map(|ci| self.play_order.iter().take(ci).filter(|&&slot| !gone[slot]).count());
+        self.play_order.retain(|&slot| !gone[slot]);
+        self.original_order.retain(|&slot| !gone[slot]);
         self.land_cursor(survivors_before_current);
         self.order_changed();
     }
@@ -752,20 +766,18 @@ impl QueueState {
     /// last, or past a gap's end on none: a prune keeps a gap but never opens one, the caller
     /// moving on instead. Bumps `version` only when a row went.
     pub fn prune_missing(&mut self, ids_to_remove: &HashSet<i64>) -> PruneOutcome {
-        let gone: HashSet<usize> = self
-            .play_order
-            .iter()
-            .copied()
-            .filter(|&slot| self.tracks.get(slot).is_some_and(|id| ids_to_remove.contains(id)))
-            .collect();
-        if gone.is_empty() {
+        let missing =
+            |&slot: &usize| self.tracks.get(slot).is_some_and(|id| ids_to_remove.contains(id));
+        let gone = self.slot_mask(self.play_order.iter().copied().filter(missing));
+        let removed = gone.iter().filter(|&&marked| marked).count();
+        if removed == 0 {
             return PruneOutcome::default();
         }
 
         let playing_was_removed =
-            !self.playing_left && self.current_slot().is_some_and(|slot| gone.contains(&slot));
+            !self.playing_left && self.current_slot().is_some_and(|slot| gone[slot]);
         self.drop_rows(&gone);
-        PruneOutcome { removed: gone.len(), playing_was_removed }
+        PruneOutcome { removed, playing_was_removed }
     }
 
     pub fn to_persistable(&self) -> PersistableQueue {

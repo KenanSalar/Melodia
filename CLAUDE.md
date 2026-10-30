@@ -5,9 +5,8 @@ direct calls and tokio channels. No WebView, and the only IPC is the single-inst
 
 ## Where things go
 
-Subsystem contracts live in rules that load only when Claude *reads* a file their `paths:` glob
-matches, so a grep hit or a clippy failure won't pull one in. This table is how you find them, and
-a rule missing where it was needed gets a wider glob, never a copy here.
+Rules load only when Claude *reads* a file their `paths:` glob matches, never on a grep or clippy
+hit, so this table finds them. A rule missed where needed gets a wider glob, never a copy here.
 
 | file | covers |
 |------|--------|
@@ -29,10 +28,9 @@ a rule missing where it was needed gets a wider glob, never a copy here.
   is the failure mode, and a rule restating a doc comment holds the copy to delete.
 - **A code comment never cites a rule or this file.** Every comment, doc comment and `.slint` note
   states its own reason; the pointing runs the other way, a rule naming the code.
-- **Re-read `.claude/rules/code-style.md` before writing comments, and audit every comment a
-  change adds against its "Auditing a change" before reporting the work done**, since after
-  `/compact` only this file comes back. Explain why, never what; be terse; never narrate or write
-  a changelog.
+- **Re-read `.claude/rules/code-style.md` before writing comments, and audit each one a change adds
+  against its "Auditing a change" before reporting the work done**: only this file survives
+  `/compact`. Explain why, never what; be terse; never narrate or write a changelog.
 - **A shipped plan doc owes no ADR by itself**: what it built is argued at its anchors before it is
   deleted, and the deletion is the last check that no significant decision went unrecorded.
 
@@ -48,8 +46,7 @@ cargo llvm-cov --workspace --html          # coverage → target/llvm-cov/html/
 /usr/bin/time -v target/release/Melodia    # peak RSS (release only)
 ```
 
-The toolchain is pinned by `rust-toolchain.toml`, whose comments argue the pin and list what a bump
-moves. System packages are `README.md`'s prerequisites.
+`rust-toolchain.toml` argues its pin and what a bump moves; `README.md` lists the system packages.
 
 ## Prohibitions violable from anywhere
 
@@ -67,6 +64,8 @@ moves. System packages are `README.md`'s prerequisites.
   takes it from its caller. `melodia-platform` names `melodia-core` and nothing else.
 - **An engine or cover cache that raises a toast, counts a play or reports a missing file** goes
   through `melodia-core`'s `utils` bridges (`toast`, `play_counts`, `missing_artwork`).
+- **No Rust or `.slint` file under `crates/` runs past 800 lines** (`tests/` excepted): split by
+  cohesion where logic dominates, compress comments where prose does; a plan counts each grown file.
 
 ### Facades and primitives
 
@@ -92,8 +91,7 @@ moves. System packages are `README.md`'s prerequisites.
   the invariant in its message. A test reaches for `?`, `assert_eq!`, `matches!` or `let … else`.
 - **No `unsafe` outside platform FFI, and never for performance** (`unsafe_code = "deny"`;
   `.claude/rules/unsafe-rust.md` lists the sites).
-- **`#[expect]`, never `allow`**, for a suppression that is genuinely needed: `expect` fires once
-  it stops being needed. There is no hand-written `#[allow(dead_code)]`; keep it that way.
+- **`#[expect]`, never `allow`**, for a genuinely needed suppression: it fires once it goes stale.
 - **A `log::` call handed an error formats it with `error::describe`**, never a bare `{e}`,
   whatever the error's type (`logged_errors.rs`). Failure text the user reads takes it too.
 - **An `AppError` keeps its cause**: `x(msg, source)`, never `x_msg(format!("…{e}"))`; no error
@@ -177,8 +175,7 @@ Three rules share the UI globs: `slint.md` general, `slint-pitfalls.md` what bui
 - **Read `.claude/rules/ci-packaging.md` before touching `.github/` or `packaging/`.**
 - **A release is a pushed `v*.*.*` tag, never a merge.** Land the version bump as a PR, tag the
   merge commit, then QA the draft `release.yml` leaves and publish it by hand.
-- **Never write a closing keyword**: link the issue from the branch's Development sidebar, and
-  GitHub closes it when the PR merges into `main`.
+- **No closing keyword**: link the issue in the Development sidebar, which closes it on merge.
 
 ## Memory
 
