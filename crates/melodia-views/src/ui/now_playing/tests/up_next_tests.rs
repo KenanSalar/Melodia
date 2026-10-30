@@ -6,7 +6,8 @@
 
 use super::super::UP_NEXT_N;
 use super::{
-    SlideKind, classify_step, outgoing_row, play_order_move, upcoming_id_slice, upcoming_indices,
+    SlideKind, UpNextAnchor, classify_step, outgoing_row, play_order_move, upcoming_id_slice,
+    upcoming_indices,
 };
 use melodia_engine::player::engine::queue::{QueueState, current_index_to_i32};
 use melodia_engine::player::engine::state::QueueViewModel;
@@ -17,6 +18,7 @@ fn queue(len: i64, index: i32, repeat_mode: RepeatMode) -> QueueViewModel {
     QueueViewModel {
         ids: (1..=len).collect(),
         queue_index: index,
+        upcoming_from: usize::try_from(index + 1).unwrap_or(0),
         shuffle_enabled: false,
         repeat_mode,
         has_next: true,
@@ -52,8 +54,8 @@ fn a_queue_of_one_has_nothing_up_next() {
     assert_eq!(upcoming(1, 0, RepeatMode::Off), (Vec::new(), 1));
 }
 
-/// `queue_index` is `-1` with nothing playing, so the base clamps to zero and the whole queue is
-/// what comes next — and the wrap arm is off, there being no current track to stop before.
+/// `queue_index` is `-1` with nothing playing, so the base is zero and the whole queue is what
+/// comes next, the cycle having no playing row to stop short of.
 #[test]
 fn nothing_playing_lists_the_queue_from_its_head() {
     assert_eq!(upcoming(3, -1, RepeatMode::All), (vec![0, 1, 2], 0));
@@ -79,7 +81,8 @@ fn a_queue_longer_than_the_list_is_cut_to_the_cap() {
 }
 
 fn step(len: i64, old_idx: i32, new_idx: i32) -> i32 {
-    classify_step(old_idx, &queue(len, new_idx, RepeatMode::All)).direction()
+    let previous = UpNextAnchor::of(&queue(len, old_idx, RepeatMode::All));
+    classify_step(previous, &queue(len, new_idx, RepeatMode::All)).direction()
 }
 
 /// A single step is recognised **with wrap**, which is the whole reason repeat-all navigation
@@ -180,7 +183,8 @@ fn a_move_between_up_next_rows_maps_onto_the_play_order_within_one_run() {
 fn view_of(q: &QueueState) -> QueueViewModel {
     QueueViewModel {
         ids: q.play_ids(),
-        queue_index: current_index_to_i32(q.current_index),
+        queue_index: current_index_to_i32(q.playing_index()),
+        upcoming_from: q.upcoming_from(),
         shuffle_enabled: q.shuffle_enabled,
         repeat_mode: q.repeat_mode,
         has_next: true,

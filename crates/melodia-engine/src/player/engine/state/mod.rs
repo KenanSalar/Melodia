@@ -144,6 +144,15 @@ impl PlayerState {
         self.source.as_mut().and_then(PlaybackSource::track_mut)
     }
 
+    /// Takes the queue rows at `indices`. A seated track whose row goes plays on, the row that took
+    /// its place next; with none seated, nothing plays on to leave a gap for.
+    pub fn remove_queue_rows(&mut self, indices: &[usize]) {
+        self.queue.remove_batch(indices);
+        if self.current_track().is_none() {
+            self.queue.close_gap();
+        }
+    }
+
     /// The record for queued track `id`, from the window or, where it is the one playing, the deck.
     pub fn record(&self, id: i64) -> Option<Arc<TrackSummary>> {
         self.window.get(id).or_else(|| self.current_track().filter(|track| track.id == id)).cloned()

@@ -67,7 +67,7 @@ pub async fn player_play_tracks(
     ctx.emit_and_execute(|s| {
         s.queue.clear();
         s.queue.add_tracks(&queued);
-        s.queue.current_index = Some(start);
+        s.queue.seat(start);
         if s.queue.shuffle_enabled {
             s.queue
                 .shuffle_play_order_in_place(&mut rand::rng(), /* anchor_to_current */ true);

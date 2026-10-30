@@ -78,7 +78,7 @@ pub(super) fn read_queue(state: &AppState, rows: &QueueRows) -> QueueRead {
     let player = lock_state(&state.player_state);
     let ids = player.queue.play_ids();
     let entries = (!rows.shows(&ids)).then(|| player.queue.play_entries());
-    QueueRead { ids, entries, index: current_index_to_i32(player.queue.current_index) }
+    QueueRead { ids, entries, index: current_index_to_i32(player.queue.playing_index()) }
 }
 
 /// Show the queue `read` describes and point the panel at its current row.

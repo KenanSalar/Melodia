@@ -1,6 +1,6 @@
 # Plan: Undo for removals (a notice that puts back what went)
 
-Status: **Phases 1 to 5 done** (hand-tested 2026-10-29 and 2026-10-30; Phase 3's measure waits for Kenan's go), **Phase 6 next** · Owner: Kenan · Created: 2026-10-28 · Issue #109, branch `feat/undo-removals`
+Status: **Phases 1 to 6 done** (hand-tested 2026-10-29 and 2026-10-30; Phase 3's measure waits for Kenan's go), **Phase 7 next** · Owner: Kenan · Created: 2026-10-28 · Issue #109, branch `feat/undo-removals`
 
 > **Validated 2026-10-28** against `5fa3d5ed` (`feat/undo-removals`): three read-only traces (the
 > toast stack, shortcuts and confirmations; the library removals; the queue, the equalizer and the
@@ -623,44 +623,76 @@ The radio facade holds: only `library::radio` and `library::radio_files` name `q
 - Remove an unplayed station, heart it again from Browse, then Undo: nothing is duplicated.
 - A language switch with the notice up re-renders it.
 
-### Phase 6: the playing row leaving the queue (a defect today)
+### Phase 6: the playing row leaving the queue (done 2026-10-30)
 
 **What you'll see.**
 - The track keeps playing.
 - No row shows as playing.
 - Up Next starts at the row that took its place, and that row plays next: at the track's end, on
-  Next, under gapless preload and under crossfade. Play Next lands ahead of it.
-- Previous goes to the row before the gap.
-- Removing the last row lets the track end the queue, or wrap under Repeat All.
-- While a track is still loading, removing it starts the row that took its place, as today.
+  Next, under gapless preload and under crossfade. Play Next and a drop there land ahead of it.
+- Previous goes to the row before the gap. With nothing before it under repeat off, the track
+  restarts.
+- Removing the last row lets the track end the queue, or wrap under Repeat All. An append made
+  meanwhile plays next.
+- A stopped track still in the bar (a restart, or Stop) is treated like a paused one (Kenan,
+  2026-10-30): Play plays it, then the row that took its place.
+- While a track is still loading, or a station plays over the queue, removing the current row makes
+  the row that took its place current, as today.
 
 This is Strawberry's behaviour (`RemoveItemsWithoutUndo`, `playlist.cpp:2218-2290`).
 
 **Mechanism: one flag over today's index, not a second cursor.**
-- `remove_at`, `remove_batch` and `prune_missing` already land `current_index` on the row that took
-  the removed row's place (`queue.rs:242-252`), and every reorder already keeps `current_index` on
-  its row (`insert_at`, `move_rows`). A second index would need every one of those taught again.
-  The defect is only that the next step goes past that row, and the highlight claims it plays.
-- **`playing_left: bool` says the current row hasn't started.** The app sets it under the same
-  lock, only when the cut took the current row while the status is Playing or Paused; at the tail
-  the index becomes `None`. `Loading`, whose deck is already empty (`transport.rs:152-165`), and
-  Stopped keep today's behaviour.
-- Readers that change:
-  - `advance`, `advance_skip` and `peek_next` return the current row rather than step past it;
-    at `None` they wrap under All and end otherwise;
-  - the view model's highlight;
-  - Up Next starts at the current row (`up_next.rs:275-285`);
-  - Play Next inserts at it rather than after it (`queue.rs:199`);
-  - `previous` at `None` goes to the last row, the one before the gap;
-  - `begin_shuffle` keeps `None` at the tail, where it would seat row 0 (`:436`, `:457`).
-- Every seat clears the flag. `player_play_tracks`' direct write (`playback.rs:70`) moves behind
-  one `seat` method.
-- `queue.json` saves the current index as today, with position 0 for that row: `last_position` is
-  still the removed track's.
-- The prune's landing rule, which boot restore relies on (`library/queue.rs:357-358`), stays as it
-  is.
+- **`QueueState::playing_left` says the current row hasn't started.** `remove_batch` sets it when
+  it takes the current row (`remove_at` delegates to it), and at the tail the index becomes `None`.
+- **It holds only while a track is seated.** `PlayerState::remove_queue_rows`, the queue panel's
+  one removal path, closes it when `current_track()` is `None` (`Loading`, a station, nothing
+  seated), which gives today's landing. A station's seat closes it too, or a stop after the station
+  would hand back a queue whose next row is past its end.
+- **Two answers with one home each:** `upcoming_from()` (the first row still to play) and
+  `playing_index()` (the highlight, `None` under the gap).
+  - The step forward, Play Next, an insert or append landing in the gap, the window anchor and Up
+    Next's base all read `upcoming_from()`.
+  - The panel's highlight and the queue view model's `queue_index` read `playing_index()`, and the
+    view model gains `upcoming_from`.
+- **The readers that change:**
+  - `advance`, `advance_skip` and `peek_next` step to `upcoming_from()`. Repeat One plays the gap
+    row, then repeats it.
+  - `previous` and `has_previous` step back from the gap, and return `None` with nothing before it
+    so the seated track restarts.
+  - A shuffle keeps a tail gap at `None`.
+- **A reorder keeps the gap in place.** `move_rows` holds the gap between the rows it sat between
+  (`block_move::landing`), a block dropped into it playing next. Following the gap row would carry
+  the gap away with it.
+- **Every seat clears the flag** through `seat`, which `player_play_tracks` now calls
+  (`playback.rs:70`).
+- **The prune keeps a gap but never opens one.** Its landing rule, which boot restore relies on,
+  stands. `PruneOutcome::current_was_removed` becomes `playing_was_removed`, false under the gap.
+- **Saving.** `PlayerState::resume_point()` serves both the periodic save and the shutdown save.
+  Under the gap it answers the gap row from 0, since `position_ms` is the removed track's.
+- **Up Next.**
+  - `classify_step` reads the last render's `UpNextAnchor` (index, base, length). A step is
+    Forward when the new playing row was the old slice's top, which covers the gap row starting.
+  - A render whose rows stay put doesn't slide.
+  - `follow` re-renders whenever the anchor moved. That also fixes a stale `NowPlaying.base-index`
+    after removing a row above the playing one, which put Up Next's clicks and drags one row off.
 
 This lands before Phase 7, whose queue token restores the flag with the cursor.
+
+**By hand.**
+- Remove the playing row mid-queue: the track plays on, no row is lit, and Up Next's top is the row
+  below. That row plays at the end; repeat with Next, gapless on and crossfade on.
+- Remove the playing row, then Play Next a track: it plays first, then the row below.
+- Remove the playing row, then Previous early in the track: the row before plays. On the first row
+  with repeat off, the track restarts.
+- Remove the playing last row: the queue ends (Off) or row 0 follows (All). Append during it, and
+  the append plays next.
+- Remove the playing row, then drag Up Next's top row down two places: the rows above it stay. Drag
+  a later row to the top: it plays next.
+- After a restart, remove the restored row and press Play: the bar's track plays, then the row
+  below.
+- Remove the playing row, quit and relaunch: the row that took its place is current, from 0:00.
+- Remove a row above the playing one, then click Up Next's first row: that row plays.
+- A station over the queue: removing the queue's current row lights the row below, as today.
 
 ### Phase 7: queue rows and Clear
 
@@ -853,7 +885,13 @@ removing stations and Clear queue ask first again (decision 13).
   - the cursor rule: a restore after a seat keeps the live current row;
   - `playing_left` through advance, gapless peek, Next, Previous, Play Next, shuffle and persist
     (position 0), at the tail too; a cut while `Loading` keeps today's start;
+  - the gap under a move: the gap row dragged away, a block dropped into the gap, a played row
+    moved past it, and at the tail;
+  - the gap closed by `remove_queue_rows` with nothing seated, by a station's seat, and kept by a
+    prune of the gap row (`playing_was_removed` false);
   - `hand_edited` set by each hand edit, cleared by a replace, seated by boot restore.
+- `up_next_tests`: the gap row starting reads as Forward, a removal of the playing row slides
+  nothing, and a moved base with the same ids re-renders.
 - `reinsert_tests` (core): ascending indices, an index past the end, an empty side, and equality
   with inserting one by one.
 - `playlist_tests`:

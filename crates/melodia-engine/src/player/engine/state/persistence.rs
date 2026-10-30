@@ -19,6 +19,15 @@ impl PlayerState {
             station_id: self.station().map(|s| s.station_id).filter(|id| *id != 0),
         }
     }
+
+    /// The track a restart seats and how far into it. With the playing track gone from the queue
+    /// that is the row which took its place, from the top, the position being the gone track's.
+    pub fn resume_point(&self) -> Option<(i64, u64)> {
+        if self.queue.playing_left() {
+            return self.queue.current_id().map(|id| (id, 0));
+        }
+        self.current_track().map(|track| (track.id, self.position_ms))
+    }
 }
 
 /// Seats a restored queue and its window's records, the current track where it was left.

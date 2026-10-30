@@ -143,9 +143,7 @@ async fn play_next_many(
 
 pub fn queue_remove(state: &AppState, index: usize) -> Result<(), AppError> {
     log::debug!("queue: remove index {index}");
-    with_state_emit(&state.player_state, &state.sinks, |s| {
-        s.queue.remove_at(index);
-    });
+    with_state_emit(&state.player_state, &state.sinks, |s| s.remove_queue_rows(&[index]));
     Ok(())
 }
 
@@ -162,9 +160,7 @@ pub fn queue_move(state: &AppState, rows: &[usize], to: usize) -> Result<(), App
 
 pub fn queue_remove_batch(state: &AppState, indices: &[usize]) -> Result<(), AppError> {
     log::debug!("queue: remove {} selected", indices.len());
-    with_state_emit(&state.player_state, &state.sinks, |s| {
-        s.queue.remove_batch(indices);
-    });
+    with_state_emit(&state.player_state, &state.sinks, |s| s.remove_queue_rows(indices));
     Ok(())
 }
 

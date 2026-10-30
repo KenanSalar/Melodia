@@ -79,7 +79,7 @@ async fn reconcile_once(
         s.window.seat(&s.queue.window_ids(), successor.into_iter().map(Arc::new));
         // A station plays over the queue rather than from it, so a row missing from it is no
         // playback event: reacting would stop the station over a track it was never playing.
-        if !outcome.current_was_removed || !s.source_allows(PlaybackSource::advances_queue) {
+        if !outcome.playing_was_removed || !s.source_allows(PlaybackSource::advances_queue) {
             return Vec::new();
         }
         if let Some(id) = s.queue.current_id() {
@@ -99,7 +99,8 @@ async fn reconcile_once(
 /// `prune_missing`'s own; a playing entry going missing is rare enough to pay for one.
 fn unheld_successor(player_state: &PlayerStateHandle, gone: &HashSet<i64>) -> Option<i64> {
     let s = lock_state(player_state);
-    if !s.queue.current_id().is_some_and(|id| gone.contains(&id)) {
+    let playing_id = s.queue.playing_index().and_then(|index| s.queue.id_at(index));
+    if !playing_id.is_some_and(|id| gone.contains(&id)) {
         return None;
     }
     let mut after = s.queue.clone();
