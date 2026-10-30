@@ -129,8 +129,8 @@ impl UndoWindow {
         }
     }
 
-    /// It still replaces the held notice, so the card up is always the latest removal and Ctrl+Z
-    /// never reaches past it to an older one.
+    /// The button-less notice. It still replaces the held one, so the card up is always the latest
+    /// removal and Ctrl+Z never reaches past it to an older one.
     fn raise_over_cap(&self, title: impl Fn(&AppWindow) -> SharedString + 'static) {
         let Some(ui) = self.ui.upgrade() else { return };
         self.replace_held();

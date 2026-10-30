@@ -210,7 +210,7 @@ fn wire_remove_track(cx: ViewCtx<'_>, playlists_ui: &Arc<PlaylistsUi>) {
                 )
                 .await
             } else {
-                // Undo off: nothing held, so nothing to tell.
+                // Uncovered: nothing held, so nothing to tell.
                 library::playlists::remove_tracks_from_playlist_for_good(
                     &s.db,
                     playlist_id,
