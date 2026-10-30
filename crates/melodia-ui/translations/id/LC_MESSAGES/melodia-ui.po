@@ -67,6 +67,7 @@ msgstr "Tutup"
 
 #. Translators: `{}` is how many items are selected
 #: ui/components/context-menu.slint
+#: ui/components/grid/station-context-menu.slint
 msgid "Remove {} from Favorites"
 msgstr "Hapus {} dari Favorit"
 
@@ -80,6 +81,7 @@ msgid "Add to Favorites"
 msgstr "Tambahkan ke Favorit"
 
 #: ui/components/context-menu.slint ui/components/grid/card-context-menu.slint
+#: ui/components/grid/station-context-menu.slint
 msgid "Remove from Favorites"
 msgstr "Hapus dari Favorit"
 
@@ -894,21 +896,12 @@ msgstr "Edit…"
 
 #. Translators: `{}` is how many stations are selected
 #: ui/components/grid/station-context-menu.slint
-msgid "Remove {} from Recently Played…"
-msgstr "Hapus {} dari Terakhir Diputar…"
+msgid "Remove {} from Recently Played"
+msgstr "Hapus {} dari Terakhir Diputar"
 
 #: ui/components/grid/station-context-menu.slint
-msgid "Remove from Recently Played…"
-msgstr "Hapus dari Terakhir Diputar…"
-
-#. Translators: `{}` is how many stations are selected
-#: ui/components/grid/station-context-menu.slint
-msgid "Remove {} from Favorites…"
-msgstr "Hapus {} dari Favorit…"
-
-#: ui/components/grid/station-context-menu.slint
-msgid "Remove from Favorites…"
-msgstr "Hapus dari Favorit…"
+msgid "Remove from Recently Played"
+msgstr "Hapus dari Terakhir Diputar"
 
 #: ui/components/mini-player/mini-captions.slint
 msgid "Full Player"
@@ -1624,26 +1617,6 @@ msgid "These playlists have too many tracks to undo, so deleting them can't be u
 msgstr "Playlist yang dipilih memiliki terlalu banyak lagu sehingga penghapusannya tidak dapat diurungkan. Lagu-lagunya tetap ada di pustaka Anda."
 
 #: ui/globals/dialog.slint
-msgid "Remove from Recently Played?"
-msgstr "Hapus dari Terakhir Diputar?"
-
-#: ui/globals/dialog.slint
-msgid "Remove from favorites?"
-msgstr "Hapus dari favorit?"
-
-#: ui/globals/dialog.slint
-msgid "\"{}\" will be removed from Recently Played."
-msgstr "\"{}\" akan dihapus dari Terakhir Diputar."
-
-#: ui/globals/dialog.slint
-msgid "\"{}\" will be removed from your stations, along with its play history."
-msgstr "\"{}\" akan dihapus dari stasiun Anda, beserta riwayat putarnya."
-
-#: ui/globals/dialog.slint
-msgid "\"{}\" will be removed from your favorites."
-msgstr "\"{}\" akan dihapus dari favorit Anda."
-
-#: ui/globals/dialog.slint
 msgid "Remove {n} station from Recently Played?"
 msgid_plural "Remove {n} stations from Recently Played?"
 msgstr[0] "Hapus {n} stasiun dari Terakhir Diputar?"
@@ -1654,12 +1627,12 @@ msgid_plural "Remove {n} stations from favorites?"
 msgstr[0] "Hapus {n} stasiun dari favorit?"
 
 #: ui/globals/dialog.slint
-msgid "The stations will be removed from Recently Played."
-msgstr "Stasiun tersebut akan dihapus dari Terakhir Diputar."
+msgid "There are too many stations to undo, so removing them from Recently Played can't be undone."
+msgstr "Stasiun yang dipilih terlalu banyak sehingga penghapusannya dari Terakhir Diputar tidak dapat diurungkan."
 
 #: ui/globals/dialog.slint
-msgid "The stations will be removed from your favorites. Any you added by hand are removed from your stations, along with their play history."
-msgstr "Stasiun tersebut akan dihapus dari favorit Anda. Stasiun yang Anda tambahkan secara manual akan dihapus dari stasiun Anda, beserta riwayat putarnya."
+msgid "There are too many stations to undo, so removing them can't be undone. Any you added by hand are removed from your stations, along with their play history."
+msgstr "Stasiun yang dipilih terlalu banyak sehingga penghapusannya tidak dapat diurungkan. Stasiun yang Anda tambahkan secara manual akan dihapus dari stasiun Anda, beserta riwayat putarnya."
 
 #: ui/globals/dialog.slint
 msgid "Edit Rules"
@@ -1805,6 +1778,26 @@ msgstr "{} dihapus"
 msgid "{n} playlist deleted"
 msgid_plural "{n} playlists deleted"
 msgstr[0] "{n} playlist dihapus"
+
+#. Translators: {} is the station's name.
+#: ui/globals/undo-text.slint
+msgid "{} removed from Favorites"
+msgstr "{} dihapus dari Favorit"
+
+#: ui/globals/undo-text.slint
+msgid "{n} station removed from Favorites"
+msgid_plural "{n} stations removed from Favorites"
+msgstr[0] "{n} stasiun dihapus dari Favorit"
+
+#. Translators: {} is the station's name.
+#: ui/globals/undo-text.slint
+msgid "{} removed from Recently Played"
+msgstr "{} dihapus dari Terakhir Diputar"
+
+#: ui/globals/undo-text.slint
+msgid "{n} station removed from Recently Played"
+msgid_plural "{n} stations removed from Recently Played"
+msgstr[0] "{n} stasiun dihapus dari Terakhir Diputar"
 
 #: ui/globals/undo-text.slint
 msgid "Too many to undo"

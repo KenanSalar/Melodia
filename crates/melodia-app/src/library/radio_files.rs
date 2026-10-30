@@ -36,10 +36,10 @@ const STATION_TAG: &str = "#MELODIA-STATION:";
 /// What an import did, for the toast that reports it.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct ImportStationsResult {
-    /// Entries the kept list gained, a station starred again counting whether or not its row
+    /// Entries the kept list gained, a station favorited again counting whether or not its row
     /// existed: the Favorites tab is what the user checks against.
     pub imported: u32,
-    /// Entries already starred. Skipped rather than refused, so a file the user has grown since
+    /// Entries already favorites. Skipped rather than refused, so a file the user has grown since
     /// re-imports cleanly.
     pub skipped: u32,
 }
@@ -150,9 +150,9 @@ pub async fn import_stations_from_files(db: &DbPool, paths: &[PathBuf]) -> Impor
 /// Read a station playlist back into the kept list.
 ///
 /// **A merge rather than an insert, which is what makes an export a backup**: `is_listed` keeps a
-/// played directory station's row after its star goes, so an entry can land on a row Recently
-/// Played holds, and putting the star back is the point. **Not probed**: fifty stations would be
-/// fifty connects, and a dead entry reports at the click like a station gone off air.
+/// played directory station's row after its favorite goes, so an entry can land on a row Recently
+/// Played holds, and putting the favorite back is the point. **Not probed**: fifty stations would
+/// be fifty connects, and a dead entry reports at the click like a station gone off air.
 pub async fn import_stations_from_file(
     db: &DbPool,
     src: &Path,

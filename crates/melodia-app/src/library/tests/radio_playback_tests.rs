@@ -72,8 +72,8 @@ async fn a_re_import_carrying_a_logo_re_points_the_row() -> Result<(), AppError>
     Ok(())
 }
 
-/// The crossing writes the row whichever way the star went, which is what makes deleting an
-/// unstarred one the calling surface's job rather than this door's — the argument
+/// The crossing writes the row whichever way the favorite went, which is what makes deleting an
+/// unfavorited one the calling surface's job rather than this door's — the argument
 /// `delete_if_unlisted` exists to finish.
 #[tokio::test]
 async fn releasing_a_browsed_station_still_leaves_its_row() -> Result<(), AppError> {
@@ -82,7 +82,7 @@ async fn releasing_a_browsed_station_still_leaves_its_row() -> Result<(), AppErr
     let id = set_directory_favorite(&db, &browsed("uuid-1"), false, None).await?;
 
     let station = queries::radio::get_station_by_id(&db, id).await?;
-    assert!(!station.is_favorite, "the star is what the caller asked to clear");
+    assert!(!station.is_favorite, "the favorite is what the caller asked to clear");
     assert_eq!(station.station_uuid.as_deref(), Some("uuid-1"), "and the row it hangs on stays");
     Ok(())
 }

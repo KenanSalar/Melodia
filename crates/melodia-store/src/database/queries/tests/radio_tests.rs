@@ -6,11 +6,12 @@ use melodia_core::entities::radio;
 use melodia_core::error::AppError;
 
 use super::{
-    clear_play_history, delete_station, get_favorite_stations, get_recent_stations,
-    get_station_by_id, logo_answers, logo_miss_attempts, mark_played, prune_logo_answers,
-    record_logo_hit, record_logo_miss, save_station, set_artwork, set_favorite, set_local_fields,
-    set_probed_codec, station_id_with_url, update_station,
+    get_favorite_stations, get_recent_stations, get_station_by_id, logo_answers,
+    logo_miss_attempts, mark_played, prune_logo_answers, record_logo_hit, record_logo_miss,
+    save_station, set_artwork, set_favorite, set_local_fields, set_probed_codec,
+    station_id_with_url, update_station,
 };
+use crate::database::queries::radio_removal::remove_stations;
 
 fn directory_station(uuid: &str, name: &str) -> radio::NewRadioStation {
     radio::NewRadioStation {
@@ -58,7 +59,7 @@ async fn a_re_import_rewrites_the_directory_column_and_never_the_user_s() -> Res
     };
     set_local_fields(&db, id, &mine).await?;
 
-    // A play or a star re-sends the same directory row, still carrying none of this.
+    // A play or a favorite re-sends the same directory row, still carrying none of this.
     save_station(&db, &directory_station("uuid-1", "Nidaa")).await?;
     let kept = get_station_by_id(&db, id).await?;
     assert_eq!(
@@ -130,7 +131,7 @@ async fn re_importing_a_station_updates_it_without_touching_the_user_side() -> R
 
 /// **The whole reason `probed_codec` is its own column.** `DIRECTORY_CONFLICT` rewrites every
 /// directory field on each re-import, and `codec` is one of them, so a measured value written
-/// there would stand until the user re-starred or re-browsed the station and then silently revert
+/// there would stand until the user re-favorited or re-browsed the station and then silently revert
 /// to the container name it was correcting.
 #[tokio::test]
 async fn a_probed_codec_survives_the_re_import_that_rewrites_the_directorys_columns()
@@ -241,10 +242,10 @@ async fn marking_a_play_counts_it_and_stamps_the_time() -> Result<(), AppError> 
 /// recents list filters on, and a count left behind would show a station seven plays deep on a
 /// Favorites tab sorted by plays, with no history to back it.
 ///
-/// The star is deliberately untouched — clearing a history is the Recently Played tab's action and
-/// says nothing about whether the station is a favorite.
+/// The favorite is deliberately untouched — clearing a history is the Recently Played tab's action
+/// and says nothing about whether the station is a favorite.
 #[tokio::test]
-async fn clearing_a_history_drops_the_station_out_of_recents_and_leaves_the_star()
+async fn clearing_a_history_drops_the_station_out_of_recents_and_leaves_the_favorite()
 -> Result<(), AppError> {
     let db = DbPool::test_pool().await?;
 
@@ -252,12 +253,12 @@ async fn clearing_a_history_drops_the_station_out_of_recents_and_leaves_the_star
     set_favorite(&db, id, true).await?;
     mark_played(&db, id).await?;
 
-    clear_play_history(&db, id).await?;
+    remove_stations(&db, &[id], radio::KeptList::Recent).await?;
 
     let cleared = get_station_by_id(&db, id).await?;
     assert!(cleared.last_played.is_none());
     assert_eq!(cleared.play_count, 0);
-    assert!(cleared.is_favorite, "the star belongs to the other tab");
+    assert!(cleared.is_favorite, "the favorite belongs to the other tab");
 
     assert!(get_recent_stations(&db, 10).await?.is_empty());
     assert_eq!(get_favorite_stations(&db).await?.len(), 1);
@@ -296,7 +297,7 @@ async fn a_station_that_was_deleted_between_render_and_click_is_not_found() -> R
     let db = DbPool::test_pool().await?;
 
     let id = save_station(&db, &custom_station("A", "http://a.invalid/")).await?;
-    delete_station(&db, id).await?;
+    sqlx::query("DELETE FROM radio_stations WHERE id = ?").bind(id).execute(db.write()).await?;
 
     let Err(err) = get_station_by_id(&db, id).await else {
         return Err(AppError::validation_msg("expected a deleted station to be NotFound"));

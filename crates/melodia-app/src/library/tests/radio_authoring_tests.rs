@@ -13,7 +13,7 @@ use super::merged_onto_existing;
 
 const STREAM_URL: &str = "https://example.test/stream";
 
-/// A hand-typed row as `add_custom_station` writes one, minus the star.
+/// A hand-typed row as `add_custom_station` writes one, minus the favorite.
 fn typed() -> NewRadioStation {
     NewRadioStation {
         station_uuid: None,
@@ -51,10 +51,10 @@ async fn a_url_nothing_holds_is_left_to_the_probe() -> Result<(), AppError> {
     Ok(())
 }
 
-/// The merge stars what it finds, so re-adding a station that was only ever played promotes it
+/// The merge favorites what it finds, so re-adding a station that was only ever played promotes it
 /// into the kept list instead of spending a whole connect to produce a second identical card.
 #[tokio::test]
-async fn a_url_already_here_is_starred_rather_than_added_again() -> Result<(), AppError> {
+async fn a_url_already_here_is_favorited_rather_than_added_again() -> Result<(), AppError> {
     let db = DbPool::test_pool().await?;
     let id = queries::radio::save_station(&db, &typed()).await?;
 

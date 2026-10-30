@@ -168,14 +168,14 @@ impl StationSource {
         }
     }
 
-    /// UI thread only — the browsed arm reads the star shadow the grid is built from.
+    /// UI thread only — the browsed arm reads `favorite_uuids`, which the grid is built from.
     fn to_row(&self, radio_ui: &RadioUi) -> RadioStationRow {
         match self {
             Self::Kept(station) => rows::to_slint_kept_station_row(station),
             Self::Browsed(station, logo) => {
-                // The logo the page was seated with, not a fresh resolve. The star shadow is read
-                // before the answers are locked, `browse::apply` nesting them the other way round.
-                let is_favorite = radio_ui.starred.lock().contains(&station.station_uuid);
+                // The logo the page was seated with, not a fresh resolve. `favorite_uuids` is
+                // locked before the answers, `browse::apply` nesting the two the other way round.
+                let is_favorite = radio_ui.favorite_uuids.lock().contains(&station.station_uuid);
                 let kept = radio_ui.kept_answers.lock();
                 let local = rows::LocalAnswers {
                     is_favorite,
@@ -279,7 +279,7 @@ fn paint_seat(
     open: &OpenStation,
     animate: bool,
 ) {
-    // Built here, not carried across an await: it holds `SharedString`s and reads the star shadow.
+    // Built here, not carried across an await: it holds `SharedString`s and reads `favorite_uuids`.
     g.set_detail_station(open.source.to_row(radio_ui));
     g.set_detail_stream_url(open.source.stream_url().into());
     g.set_detail_votable(open.votable);
@@ -474,7 +474,7 @@ pub fn restamp(ui: &AppWindow, radio_ui: &RadioUi) {
         let Some(source) = from_cache(radio_ui, &station) else {
             continue;
         };
-        // Before the seat takes the source: `to_row` locks the star shadow.
+        // Before the seat takes the source: `to_row` locks `favorite_uuids`.
         let row = (tab == mounted).then(|| source.to_row(radio_ui));
         if let Some(open) = radio_ui.detail.lock().seat_mut(tab).as_mut() {
             open.source = source;
@@ -488,7 +488,7 @@ pub fn restamp(ui: &AppWindow, radio_ui: &RadioUi) {
 /// Closes a kept station's page on any tab once its row is gone.
 ///
 /// Called only from `kept::refresh`'s landing, which has just rebuilt both caches, so a miss there
-/// is authoritative. Un-starring an unplayed station deletes its row (`delete_if_unlisted`), and a
+/// is authoritative. Un-favoriting an unplayed station deletes its row, as a removal can, and a
 /// page left open would offer Play and Remove against a dead id.
 pub fn close_if_gone(ui: &AppWindow, radio_ui: &RadioUi) {
     let g = ui.global::<Radio>();
@@ -564,7 +564,7 @@ pub fn rewarm_hero(ui: &AppWindow, state: &AppState, radio_ui: &Arc<RadioUi>) {
                 if mounted_tab(&g) != tab {
                     return;
                 }
-                // Cloned out: `paint_seat` locks the star shadow.
+                // Cloned out: `paint_seat` locks `favorite_uuids`.
                 let Some(open) = radio_ui.detail.lock().seat(tab).cloned() else {
                     return;
                 };

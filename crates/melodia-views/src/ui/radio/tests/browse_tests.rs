@@ -2,8 +2,8 @@
 //!
 //! A browsed row has no id, so a selection names it by its place in the answer: [`select_key_at`]
 //! writes the key into the card and [`resolve_keys`] reads it back for every batch action and copy.
-//! Nothing on screen reports the two disagreeing by one; the menu just stars or copies the station
-//! beside the one picked.
+//! Nothing on screen reports the two disagreeing by one; the menu just favorites or copies the
+//! station beside the one picked.
 
 use super::*;
 

@@ -392,7 +392,7 @@ fn an_id_the_tab_no_longer_lists_resolves_to_nothing() {
 #[test]
 fn each_kept_tab_resolves_against_its_own_list() {
     let radio_ui = RadioUi::new(false, None);
-    radio_ui.kept.lock().stations = vec![numbered(1, "Starred")];
+    radio_ui.kept.lock().stations = vec![numbered(1, "Favorite")];
     radio_ui.recent.lock().stations = vec![numbered(2, "Played")];
 
     assert_eq!(resolved(&radio_ui, RadioTab::Recent, &[1, 2]), ["Played"]);

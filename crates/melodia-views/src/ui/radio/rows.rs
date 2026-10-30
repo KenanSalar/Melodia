@@ -1,6 +1,6 @@
 //! Stations projected onto the Slint boundary structs.
 //!
-//! A browsed card's star, logo and measured format are facts about this install rather than the
+//! A browsed card's heart, logo and measured format are facts about this install rather than the
 //! station, so they arrive as [`LocalAnswers`] from a caller already holding the handle; a kept
 //! station carries all three as columns.
 
@@ -30,7 +30,7 @@ pub fn station_has_row(id: i64) -> bool {
 ///
 /// A reset rebuilds every delegate, and a rebuilt card has no pointer state until the next mouse
 /// event: the card under the cursor drops its hover, and one destroyed mid-press loses the click.
-/// Playing or starring a station and the logo sweep's repaints all reach it. Cards written before
+/// Playing or favoriting a station and the logo sweep's repaints all reach it. Cards written before
 /// a `false` are covered by the full write.
 pub fn patch_grid(
     grid: &slint::ModelRc<RadioStationGridRow>,
@@ -119,7 +119,7 @@ pub fn to_slint_radio_station_row(
 }
 
 /// One kept station as the local tabs draw it, off the row alone. `uuid` stays empty for a
-/// hand-typed station, which is what the card splits its star and Edit control on.
+/// hand-typed station, which is what the card splits its heart and Edit control on.
 pub fn to_slint_kept_station_row(station: &RadioStation) -> RadioStationRow {
     let tile = identity::station_tile(&station.name);
     let format = station.format();

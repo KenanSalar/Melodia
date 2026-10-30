@@ -19,7 +19,7 @@ use melodia_core::error::describe;
 use melodia_ui::{AppWindow, NotificationKind, NotificationVariant, Notifications, UndoText};
 
 use removal::Absorbed;
-pub use removal::{Removal, playlists_deleted, tracks_removed_from};
+pub use removal::{Removal, playlists_deleted, stations_removed, tracks_removed_from};
 
 /// How long the notice waits for a press. It runs only while nobody is reading it: hover and a
 /// window in the background both hold the clock.

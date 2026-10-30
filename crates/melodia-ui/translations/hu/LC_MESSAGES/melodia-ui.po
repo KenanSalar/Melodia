@@ -67,6 +67,7 @@ msgstr "Bezárás"
 
 #. Translators: `{}` is how many items are selected
 #: ui/components/context-menu.slint
+#: ui/components/grid/station-context-menu.slint
 msgid "Remove {} from Favorites"
 msgstr "{} elem eltávolítása a kedvencek közül"
 
@@ -80,6 +81,7 @@ msgid "Add to Favorites"
 msgstr "Hozzáadás a kedvencekhez"
 
 #: ui/components/context-menu.slint ui/components/grid/card-context-menu.slint
+#: ui/components/grid/station-context-menu.slint
 msgid "Remove from Favorites"
 msgstr "Eltávolítás a kedvencek közül"
 
@@ -898,21 +900,12 @@ msgstr "Szerkesztés…"
 
 #. Translators: `{}` is how many stations are selected
 #: ui/components/grid/station-context-menu.slint
-msgid "Remove {} from Recently Played…"
-msgstr "{} állomás eltávolítása a Nemrég lejátszottak közül…"
+msgid "Remove {} from Recently Played"
+msgstr "{} állomás eltávolítása a Nemrég lejátszottak közül"
 
 #: ui/components/grid/station-context-menu.slint
-msgid "Remove from Recently Played…"
-msgstr "Eltávolítás a Nemrég lejátszottak közül…"
-
-#. Translators: `{}` is how many stations are selected
-#: ui/components/grid/station-context-menu.slint
-msgid "Remove {} from Favorites…"
-msgstr "{} állomás eltávolítása a kedvencek közül…"
-
-#: ui/components/grid/station-context-menu.slint
-msgid "Remove from Favorites…"
-msgstr "Eltávolítás a kedvencek közül…"
+msgid "Remove from Recently Played"
+msgstr "Eltávolítás a Nemrég lejátszottak közül"
 
 #: ui/components/mini-player/mini-captions.slint
 msgid "Full Player"
@@ -1634,26 +1627,6 @@ msgid "These playlists have too many tracks to undo, so deleting them can't be u
 msgstr "Ezek a lejátszási listák túl sok számot tartalmaznak ahhoz, hogy a törlésük visszavonható legyen. Maguk a számok a könyvtáradban maradnak."
 
 #: ui/globals/dialog.slint
-msgid "Remove from Recently Played?"
-msgstr "Eltávolítod a Nemrég lejátszottak közül?"
-
-#: ui/globals/dialog.slint
-msgid "Remove from favorites?"
-msgstr "Eltávolítod a kedvencek közül?"
-
-#: ui/globals/dialog.slint
-msgid "\"{}\" will be removed from Recently Played."
-msgstr "„{}” kikerül a Nemrég lejátszottak közül."
-
-#: ui/globals/dialog.slint
-msgid "\"{}\" will be removed from your stations, along with its play history."
-msgstr "„{}” kikerül az állomásaid közül, a lejátszási előzményeivel együtt."
-
-#: ui/globals/dialog.slint
-msgid "\"{}\" will be removed from your favorites."
-msgstr "„{}” kikerül a kedvenceid közül."
-
-#: ui/globals/dialog.slint
 msgid "Remove {n} station from Recently Played?"
 msgid_plural "Remove {n} stations from Recently Played?"
 msgstr[0] "Eltávolítasz {n} állomást a Nemrég lejátszottak közül?"
@@ -1666,12 +1639,12 @@ msgstr[0] "Eltávolítasz {n} állomást a kedvencek közül?"
 msgstr[1] "Eltávolítasz {n} állomást a kedvencek közül?"
 
 #: ui/globals/dialog.slint
-msgid "The stations will be removed from Recently Played."
-msgstr "Az állomások kikerülnek a Nemrég lejátszottak közül."
+msgid "There are too many stations to undo, so removing them from Recently Played can't be undone."
+msgstr "Túl sok az állomás ahhoz, hogy a Nemrég lejátszottak közüli eltávolításuk visszavonható legyen."
 
 #: ui/globals/dialog.slint
-msgid "The stations will be removed from your favorites. Any you added by hand are removed from your stations, along with their play history."
-msgstr "Az állomások kikerülnek a kedvenceid közül. A kézzel hozzáadottak az állomásaid közül is törlődnek, a lejátszási előzményeikkel együtt."
+msgid "There are too many stations to undo, so removing them can't be undone. Any you added by hand are removed from your stations, along with their play history."
+msgstr "Túl sok az állomás ahhoz, hogy az eltávolításuk visszavonható legyen. A kézzel hozzáadottak az állomásaid közül is törlődnek, a lejátszási előzményeikkel együtt."
 
 #: ui/globals/dialog.slint
 msgid "Edit Rules"
@@ -1821,6 +1794,28 @@ msgid "{n} playlist deleted"
 msgid_plural "{n} playlists deleted"
 msgstr[0] "{n} lejátszási lista törölve"
 msgstr[1] "{n} lejátszási lista törölve"
+
+#. Translators: {} is the station's name.
+#: ui/globals/undo-text.slint
+msgid "{} removed from Favorites"
+msgstr "{} eltávolítva a kedvencek közül"
+
+#: ui/globals/undo-text.slint
+msgid "{n} station removed from Favorites"
+msgid_plural "{n} stations removed from Favorites"
+msgstr[0] "{n} állomás eltávolítva a kedvencek közül"
+msgstr[1] "{n} állomás eltávolítva a kedvencek közül"
+
+#. Translators: {} is the station's name.
+#: ui/globals/undo-text.slint
+msgid "{} removed from Recently Played"
+msgstr "{} eltávolítva a Nemrég lejátszottak közül"
+
+#: ui/globals/undo-text.slint
+msgid "{n} station removed from Recently Played"
+msgid_plural "{n} stations removed from Recently Played"
+msgstr[0] "{n} állomás eltávolítva a Nemrég lejátszottak közül"
+msgstr[1] "{n} állomás eltávolítva a Nemrég lejátszottak közül"
 
 #: ui/globals/undo-text.slint
 msgid "Too many to undo"

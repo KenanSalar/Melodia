@@ -6,7 +6,7 @@
 //! every time the user glanced at their favorites.
 //!
 //! **Station history is a tab rather than a sort of the kept list**: playing a station out of
-//! Browse keeps it without starring it, and a favorites-only list could never reach that row.
+//! Browse keeps it without favoriting it, and a favorites-only list could never reach that row.
 //!
 //! **The section leave drops the logo tier and the seated heroes and keeps every list**, so it
 //! rewinds no count and its dirty flag describes the hero alone (`callbacks::lifecycle`). It is
@@ -40,6 +40,7 @@ use melodia_ui::{AppWindow, Nav, Radio, RadioFacetRow, RadioStationGridRow, Radi
 
 use tabs::section_is_up;
 
+pub(crate) use callbacks::StationRemovalUndo;
 pub use callbacks::files::wire as wire_files;
 pub use covers::tune_cache_for_display;
 pub use detail::{StationRef, open_station_with, seed_detail_from_settings};
@@ -125,7 +126,7 @@ pub fn install(cx: ViewCtx<'_>) -> Arc<RadioUi> {
     }
     // A landed decode changes nothing the card binding read, so the generation re-runs it.
     crate::ui::cover_generation::notify_on_decode(&radio_ui.covers, cx.app, covers::repaint);
-    callbacks::wire(cx.app, cx.state, cx.view_state, &radio_ui);
+    callbacks::wire(cx, &radio_ui);
     radio_ui
 }
 

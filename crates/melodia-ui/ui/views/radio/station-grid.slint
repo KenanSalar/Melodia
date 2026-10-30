@@ -23,8 +23,11 @@ export component StationGrid inherits Rectangle {
     // The kept tabs only.
     in property <bool> manageable;
 
-    // Off on Favorites, whose rows are starred by definition.
-    in property <bool> star-marks-kept: true;
+    // Off on Favorites, whose rows are favorites by definition.
+    in property <bool> favorite-marks-kept: true;
+    // On Favorites the heart is the removal: the trash shows only where there is no heart, and the
+    // heart hides beside a selection as the trash does.
+    in property <bool> unfavorite-removes: false;
 
     // Off by default, as on `EntityCardGrid`: a badge says nothing on a list not ranked by it.
     in property <bool> show-play-count: false;
@@ -97,12 +100,14 @@ export component StationGrid inherits Rectangle {
                         monogram: station.monogram;
                         is-favorite: station.is_favorite;
                         // An empty uuid is a station typed in by hand.
-                        starrable: station.uuid != "";
-                        star-marks-kept: root.star-marks-kept;
+                        can-favorite: station.uuid != ""
+                            && !(root.unfavorite-removes && cell.multi-selection);
+                        favorite-marks-kept: root.favorite-marks-kept;
                         // On the row rather than the uuid: a directory entry already naming a site
                         // has nothing to set and everything to lose.
                         editable: root.manageable && station.editable;
-                        removable: root.manageable && !cell.multi-selection;
+                        removable: root.manageable && !cell.multi-selection
+                            && !(root.unfavorite-removes && station.uuid != "");
                         homepage-known: station.homepage != "";
                         play-count: root.show-play-count ? station.play_count : 0;
                         clicked => { root.station-clicked(station); }

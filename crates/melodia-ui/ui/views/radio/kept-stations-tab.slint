@@ -1,7 +1,6 @@
 import { Theme } from "../../theme.slint";
 import { RadioStationGridRow } from "../../models.slint";
 import { Radio } from "../../globals/radio.slint";
-import { Dialog } from "../../globals/dialog.slint";
 import { GridEmptyState } from "../../components/grid/grid-empty-state.slint";
 import { OverlayScrollbar } from "../../components/overlay-scrollbar.slint";
 import { StationGrid } from "station-grid.slint";
@@ -48,18 +47,25 @@ export component KeptStationsTab inherits Rectangle {
                 list: root.is-recent ? Radio.tab-recent : Radio.tab-favorites;
                 // On Favorites the mark would be on every card; Recently Played mixes both, and
                 // its list is built by listening, which the count ranks.
-                star-marks-kept: root.is-recent;
+                favorite-marks-kept: root.is-recent;
+                unfavorite-removes: !root.is-recent;
                 show-play-count: root.is-recent;
                 covers-generation: Radio.covers-generation;
                 logo-decode-size: Radio.logo-decode-size;
                 request-logo(p, g) => { Radio.request-logo(p, g) }
                 station-clicked(s) => { Radio.open-station(s); }
                 play-clicked(s) => { Radio.play-station(s); }
-                favorite-clicked(s) => { Radio.toggle-favorite(s); }
+                // On Favorites the heart is the removal, undo and all.
+                favorite-clicked(s) => {
+                    if (root.is-recent) {
+                        Radio.toggle-favorite(s);
+                    } else {
+                        Radio.remove-stations(Radio.tab-favorites, [s.id]);
+                    }
+                }
                 homepage-clicked(s) => { Radio.open-homepage(s.homepage); }
                 edit-clicked(s) => { Radio.edit-station(s); }
-                // The card menu raises the same confirm, so its copy is the opener's.
-                remove-clicked(s) => { Dialog.open-remove-station(s, root.is-recent); }
+                remove-clicked(s) => { Radio.remove-stations(grid.list, [s.id]); }
             }
 
             if root.is-empty: GridEmptyState {

@@ -5,10 +5,12 @@ use slint::{ComponentHandle, SharedString};
 
 use crate::ui::equalizer::ResetUndo;
 use crate::ui::playlists::{PlaylistCutUndo, PlaylistDeleteUndo};
+use crate::ui::radio::StationRemovalUndo;
 use crate::ui::search::RecentClearUndo;
 use crate::ui::shell::notifications::RowText;
 use crate::ui::util::len_as_i32;
 use melodia_app::state::AppState;
+use melodia_core::entities::radio::KeptList;
 use melodia_core::entities::undo::UNDO_HOLD_CAP;
 use melodia_core::error::AppError;
 use melodia_ui::{AppWindow, UndoText};
@@ -24,6 +26,7 @@ pub enum Removal {
     RecentSearches(RecentClearUndo),
     PlaylistTracks(PlaylistCutUndo),
     Playlists(PlaylistDeleteUndo),
+    RadioStations(StationRemovalUndo),
 }
 
 /// How a later removal lands on the one held.
@@ -64,6 +67,17 @@ impl Removal {
                 held.absorb(next);
                 Absorbed::Merged
             }
+            (Removal::RadioStations(held), Removal::RadioStations(next))
+                if held.same_list(&next) =>
+            {
+                let count = held.count() + next.count();
+                if count > UNDO_HOLD_CAP {
+                    let title = stations_removed(next.list(), count, next.name());
+                    return Absorbed::OverCap(Box::new(title));
+                }
+                held.absorb(next);
+                Absorbed::Merged
+            }
             (_, next) => Absorbed::Distinct(next),
         }
     }
@@ -77,6 +91,9 @@ impl Removal {
             Removal::PlaylistTracks(cut) => titled(tracks_removed_from(cut.count(), cut.name())),
             Removal::Playlists(deleted) => {
                 titled(playlists_deleted(deleted.count(), deleted.name()))
+            }
+            Removal::RadioStations(removed) => {
+                titled(stations_removed(removed.list(), removed.count(), removed.name()))
             }
         }
     }
@@ -96,6 +113,7 @@ impl Removal {
             Removal::RecentSearches(cleared) => cleared.restore(state, ui).await,
             Removal::PlaylistTracks(cut) => cut.restore(state, ui).await,
             Removal::Playlists(deleted) => deleted.restore(state, ui).await,
+            Removal::RadioStations(removed) => removed.restore(state, ui).await,
         }
     }
 }
@@ -116,6 +134,23 @@ pub fn playlists_deleted(
 ) -> impl Fn(&AppWindow) -> SharedString + 'static {
     let count = len_as_i32(count);
     move |ui| ui.global::<UndoText>().invoke_playlists_deleted(count, name.clone())
+}
+
+/// "Jazz FM removed from Favorites", or "3 stations removed from Recently Played", whether the
+/// notice can undo it or not.
+pub fn stations_removed(
+    from: KeptList,
+    count: usize,
+    name: SharedString,
+) -> impl Fn(&AppWindow) -> SharedString + 'static {
+    let count = len_as_i32(count);
+    move |ui| {
+        let text = ui.global::<UndoText>();
+        match from {
+            KeptList::Favorites => text.invoke_stations_removed_from_favorites(count, name.clone()),
+            KeptList::Recent => text.invoke_stations_removed_from_recent(count, name.clone()),
+        }
+    }
 }
 
 /// A notice whose title says it all.

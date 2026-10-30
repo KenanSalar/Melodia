@@ -15,6 +15,7 @@ mod authoring;
 mod directory;
 mod logos;
 mod playback;
+mod removal;
 
 pub use authoring::{add_custom_station, set_station_overrides, update_custom_station};
 pub use directory::{facets, search, station_details, vote};
@@ -27,6 +28,7 @@ pub use playback::{
     mark_played, play_directory_station, play_station, record_probed_codec, set_directory_favorite,
     station_to_restore,
 };
+pub use removal::{RemovedStations, delete_if_unlisted, remove_stations, restore_stations};
 
 // `library::radio_files` composes these with its own write, argued at each definition.
 pub(super) use authoring::{resolve_station_name, validated_overrides};
@@ -80,39 +82,6 @@ pub async fn save_station(db: &DbPool, station: &radio::NewRadioStation) -> Resu
 
 pub async fn set_favorite(db: &DbPool, id: i64, favorite: bool) -> Result<(), AppError> {
     queries::radio::set_favorite(db, id, favorite).await
-}
-
-/// Drop a station out of the Favorites tab, deleting the row if nothing else lists it. A directory
-/// station keeps its play history, which isn't the star's to take.
-pub async fn remove_from_favorites(db: &DbPool, id: i64) -> Result<(), AppError> {
-    queries::radio::set_favorite(db, id, false).await?;
-    delete_if_unlisted(db, id).await
-}
-
-/// Drop a station out of the Recently Played tab, keeping the row while a star still lists it.
-pub async fn remove_from_recent(db: &DbPool, id: i64) -> Result<(), AppError> {
-    queries::radio::clear_play_history(db, id).await?;
-    delete_if_unlisted(db, id).await
-}
-
-/// Delete a row neither local tab would list, which nothing could reach. **Every un-star owes
-/// this, not just the trash**: [`set_directory_favorite`] doesn't decide.
-pub async fn delete_if_unlisted(db: &DbPool, id: i64) -> Result<(), AppError> {
-    let station = queries::radio::get_station_by_id(db, id).await?;
-    if is_listed(&station) {
-        return Ok(());
-    }
-    queries::radio::delete_station(db, id).await
-}
-
-/// Whether either local tab would still show a station. **A hand-typed one is listed by its star
-/// alone**: its card offers no star to set (`starrable: station.uuid != ""`), so kept for its play
-/// stamp it could never get back into Favorites.
-fn is_listed(station: &radio::RadioStation) -> bool {
-    if station.station_uuid.as_deref().is_none_or(str::is_empty) {
-        return station.is_favorite;
-    }
-    station.is_favorite || station.last_played.is_some()
 }
 
 #[cfg(test)]

@@ -67,6 +67,7 @@ msgstr "Κλείσιμο"
 
 #. Translators: `{}` is how many items are selected
 #: ui/components/context-menu.slint
+#: ui/components/grid/station-context-menu.slint
 msgid "Remove {} from Favorites"
 msgstr "Αφαίρεση {} από τα αγαπημένα"
 
@@ -80,6 +81,7 @@ msgid "Add to Favorites"
 msgstr "Προσθήκη στα αγαπημένα"
 
 #: ui/components/context-menu.slint ui/components/grid/card-context-menu.slint
+#: ui/components/grid/station-context-menu.slint
 msgid "Remove from Favorites"
 msgstr "Κατάργηση από τα αγαπημένα"
 
@@ -897,21 +899,12 @@ msgstr "Επεξεργασία…"
 
 #. Translators: `{}` is how many stations are selected
 #: ui/components/grid/station-context-menu.slint
-msgid "Remove {} from Recently Played…"
-msgstr "Αφαίρεση {} από τα πρόσφατα αναπαραγόμενα…"
+msgid "Remove {} from Recently Played"
+msgstr "Αφαίρεση {} από τα πρόσφατα αναπαραγόμενα"
 
 #: ui/components/grid/station-context-menu.slint
-msgid "Remove from Recently Played…"
-msgstr "Αφαίρεση από τα πρόσφατα αναπαραγόμενα…"
-
-#. Translators: `{}` is how many stations are selected
-#: ui/components/grid/station-context-menu.slint
-msgid "Remove {} from Favorites…"
-msgstr "Αφαίρεση {} από τα αγαπημένα…"
-
-#: ui/components/grid/station-context-menu.slint
-msgid "Remove from Favorites…"
-msgstr "Κατάργηση από τα αγαπημένα…"
+msgid "Remove from Recently Played"
+msgstr "Αφαίρεση από τα πρόσφατα αναπαραγόμενα"
 
 #: ui/components/mini-player/mini-captions.slint
 msgid "Full Player"
@@ -1634,26 +1627,6 @@ msgid "These playlists have too many tracks to undo, so deleting them can't be u
 msgstr "Αυτές οι λίστες έχουν πάρα πολλά κομμάτια για αναίρεση, οπότε η διαγραφή τους δεν αναιρείται. Τα ίδια τα κομμάτια παραμένουν στη βιβλιοθήκη σας."
 
 #: ui/globals/dialog.slint
-msgid "Remove from Recently Played?"
-msgstr "Αφαίρεση από τα πρόσφατα αναπαραγόμενα;"
-
-#: ui/globals/dialog.slint
-msgid "Remove from favorites?"
-msgstr "Αφαίρεση από τα αγαπημένα;"
-
-#: ui/globals/dialog.slint
-msgid "\"{}\" will be removed from Recently Played."
-msgstr "Ο σταθμός «{}» θα αφαιρεθεί από τα πρόσφατα αναπαραγόμενα."
-
-#: ui/globals/dialog.slint
-msgid "\"{}\" will be removed from your stations, along with its play history."
-msgstr "Ο σταθμός «{}» θα αφαιρεθεί μαζί με το ιστορικό αναπαραγωγής του."
-
-#: ui/globals/dialog.slint
-msgid "\"{}\" will be removed from your favorites."
-msgstr "Ο σταθμός «{}» θα αφαιρεθεί από τα αγαπημένα σας."
-
-#: ui/globals/dialog.slint
 msgid "Remove {n} station from Recently Played?"
 msgid_plural "Remove {n} stations from Recently Played?"
 msgstr[0] "Αφαίρεση {n} σταθμού από τα πρόσφατα αναπαραγόμενα;"
@@ -1666,12 +1639,12 @@ msgstr[0] "Αφαίρεση {n} σταθμού από τα αγαπημένα;"
 msgstr[1] "Αφαίρεση {n} σταθμών από τα αγαπημένα;"
 
 #: ui/globals/dialog.slint
-msgid "The stations will be removed from Recently Played."
-msgstr "Οι σταθμοί θα αφαιρεθούν από τα πρόσφατα αναπαραγόμενα."
+msgid "There are too many stations to undo, so removing them from Recently Played can't be undone."
+msgstr "Οι σταθμοί είναι πάρα πολλοί για αναίρεση, οπότε η αφαίρεσή τους από τα πρόσφατα αναπαραγόμενα δεν αναιρείται."
 
 #: ui/globals/dialog.slint
-msgid "The stations will be removed from your favorites. Any you added by hand are removed from your stations, along with their play history."
-msgstr "Οι σταθμοί θα αφαιρεθούν από τα αγαπημένα σας. Όσοι προστέθηκαν χειροκίνητα θα αφαιρεθούν από τους σταθμούς σας, μαζί με το ιστορικό αναπαραγωγής τους."
+msgid "There are too many stations to undo, so removing them can't be undone. Any you added by hand are removed from your stations, along with their play history."
+msgstr "Οι σταθμοί είναι πάρα πολλοί για αναίρεση, οπότε η αφαίρεσή τους δεν αναιρείται. Όσοι προστέθηκαν χειροκίνητα θα αφαιρεθούν από τους σταθμούς σας, μαζί με το ιστορικό αναπαραγωγής τους."
 
 #: ui/globals/dialog.slint
 msgid "Edit Rules"
@@ -1821,6 +1794,28 @@ msgid "{n} playlist deleted"
 msgid_plural "{n} playlists deleted"
 msgstr[0] "{n} λίστα διαγράφηκε"
 msgstr[1] "{n} λίστες διαγράφηκαν"
+
+#. Translators: {} is the station's name.
+#: ui/globals/undo-text.slint
+msgid "{} removed from Favorites"
+msgstr "Ο σταθμός «{}» αφαιρέθηκε από τα αγαπημένα"
+
+#: ui/globals/undo-text.slint
+msgid "{n} station removed from Favorites"
+msgid_plural "{n} stations removed from Favorites"
+msgstr[0] "{n} σταθμός αφαιρέθηκε από τα αγαπημένα"
+msgstr[1] "{n} σταθμοί αφαιρέθηκαν από τα αγαπημένα"
+
+#. Translators: {} is the station's name.
+#: ui/globals/undo-text.slint
+msgid "{} removed from Recently Played"
+msgstr "Ο σταθμός «{}» αφαιρέθηκε από τα πρόσφατα αναπαραγόμενα"
+
+#: ui/globals/undo-text.slint
+msgid "{n} station removed from Recently Played"
+msgid_plural "{n} stations removed from Recently Played"
+msgstr[0] "{n} σταθμός αφαιρέθηκε από τα πρόσφατα αναπαραγόμενα"
+msgstr[1] "{n} σταθμοί αφαιρέθηκαν από τα πρόσφατα αναπαραγόμενα"
 
 #: ui/globals/undo-text.slint
 msgid "Too many to undo"

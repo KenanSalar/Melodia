@@ -1,4 +1,4 @@
-import { PlaylistPickRow, PlaylistExportPickRow, RadioStationRow } from "../models.slint";
+import { PlaylistPickRow, PlaylistExportPickRow } from "../models.slint";
 import { SmartEditor, TagEditor, ScrobbleUi, RadioForm } from "dialog-forms.slint";
 import { Radio } from "radio.slint";
 import { LibrarySettings } from "library-settings.slint";
@@ -155,9 +155,9 @@ export global Dialog {
         } else if (root.kind == DialogKind.add-station || root.kind == DialogKind.edit-station) {
             RadioForm.submit();
         } else if (root.kind == DialogKind.remove-from-favorites) {
-            Radio.remove-from-favorites(root.pending-card-ids);
+            Radio.remove-stations-confirmed(Radio.tab-favorites, root.pending-card-ids);
         } else if (root.kind == DialogKind.remove-from-recent) {
-            Radio.remove-from-recent(root.pending-card-ids);
+            Radio.remove-stations-confirmed(Radio.tab-recent, root.pending-card-ids);
         } else if (root.kind == DialogKind.scrobble-listenbrainz-login) {
             ScrobbleUi.listenbrainz-verify(ScrobbleUi.lb-token);
         } else if (root.kind == DialogKind.scrobble-lastfm-login) {
@@ -286,42 +286,25 @@ export global Dialog {
         root.open = true;
     }
 
-    // The kind carries the tab, so a removal means the list the card was on rather than whichever
-    // is mounted when the confirm lands. **A hand-typed station's copy says it goes for good**:
-    // with no uuid it is listed by its star alone, so `is_listed` deletes it with its history, and
-    // understating that is a destructive action with no undo.
-    public function open-remove-station(station: RadioStationRow, from-recent: bool) {
-        root.claim-request();
-        root.title = from-recent
-            ? @tr("Remove from Recently Played?")
-            : @tr("Remove from favorites?");
-        root.message = from-recent
-            ? @tr("\"{}\" will be removed from Recently Played.", station.name)
-            : station.uuid == ""
-                ? @tr("\"{}\" will be removed from your stations, along with its play history.", station.name)
-                : @tr("\"{}\" will be removed from your favorites.", station.name);
-        root.confirm-label = @tr("Remove");
-        root.cancel-label = @tr("Cancel");
-        root.destructive = true;
-        root.kind = from-recent ? DialogKind.remove-from-recent : DialogKind.remove-from-favorites;
-        root.pending-card-ids = [station.id];
-        root.open = true;
-    }
-
-    // A selection may hold hand-typed stations the menu can't see, so the Favorites copy always
-    // says what removing one of those costs.
+    // Rust raises it only past what an undo may hold. The kind carries the tab, so the accept acts
+    // on the list the cards were on, and the Favorites copy says what a hand-typed station in the
+    // set loses: its history, with no uuid to keep it listed.
     public function open-remove-stations(ids: [int], from-recent: bool) {
         root.claim-request();
         root.title = from-recent
             ? @tr("Remove {n} station from Recently Played?" | "Remove {n} stations from Recently Played?" % ids.length)
             : @tr("Remove {n} station from favorites?" | "Remove {n} stations from favorites?" % ids.length);
         root.message = from-recent
-            ? @tr("The stations will be removed from Recently Played.")
-            : @tr("The stations will be removed from your favorites. Any you added by hand are removed from your stations, along with their play history.");
+            ? @tr("There are too many stations to undo, so removing them from Recently Played can't be undone.")
+            : @tr("There are too many stations to undo, so removing them can't be undone. Any you added by hand are removed from your stations, along with their play history.");
         root.confirm-label = @tr("Remove");
         root.cancel-label = @tr("Cancel");
         root.destructive = true;
-        root.kind = from-recent ? DialogKind.remove-from-recent : DialogKind.remove-from-favorites;
+        if (from-recent) {
+            root.kind = DialogKind.remove-from-recent;
+        } else {
+            root.kind = DialogKind.remove-from-favorites;
+        }
         root.pending-card-ids = ids;
         root.open = true;
     }

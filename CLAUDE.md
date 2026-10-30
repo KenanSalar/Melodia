@@ -29,8 +29,10 @@ a rule missing where it was needed gets a wider glob, never a copy here.
   is the failure mode, and a rule restating a doc comment holds the copy to delete.
 - **A code comment never cites a rule or this file.** Every comment, doc comment and `.slint` note
   states its own reason; the pointing runs the other way, a rule naming the code.
-- **Re-read `.claude/rules/code-style.md` before writing comments**, since after `/compact` only
-  this file comes back. Explain why, never what; be terse; never narrate or write a changelog.
+- **Re-read `.claude/rules/code-style.md` before writing comments, and audit every comment a
+  change adds against its "Auditing a change" before reporting the work done**, since after
+  `/compact` only this file comes back. Explain why, never what; be terse; never narrate or write
+  a changelog.
 - **A shipped plan doc owes no ADR by itself**: what it built is argued at its anchors before it is
   deleted, and the deletion is the last check that no significant decision went unrecorded.
 

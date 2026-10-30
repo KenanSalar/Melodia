@@ -4,8 +4,8 @@ export global Radio {
     // **`tab-count` is the sole definition of how many there are.**
     out property <int> tab-browse: 0;
     out property <int> tab-favorites: 1;
-    // A tab rather than a Favorites sort: a station played from Browse is kept but not starred, so
-    // this is the only place it can be reached again.
+    // A tab rather than a Favorites sort: a station played from Browse is kept but not a favorite,
+    // so this is the only place it can be reached again.
     out property <int> tab-recent: 2;
     out property <int> tab-count: 3;
 
@@ -54,7 +54,7 @@ export global Radio {
     callback toggle-favorite(RadioStationRow);
     callback open-homepage(string);
 
-    // Favorites holds the hand-typed stations too (`uuid == ""`), starred on the way in.
+    // Favorites holds the hand-typed stations too (`uuid == ""`), favorited on the way in.
     in-out property <[RadioStationGridRow]> favorites-rows;
     in-out property <[RadioStationGridRow]> recent-rows;
 
@@ -66,12 +66,12 @@ export global Radio {
     // Custom stations only, and the facade checks again: `save_station`'s conflict clause would
     // revert a browsed one on its next play.
     callback edit-station(RadioStationRow);
-    // One per tab, removal meaning the star on one and the play history on the other. By id, and
-    // picked by the dialog *kind*, so the confirm acts on what the click saw.
-    callback remove-from-favorites([int] /*ids*/);
-    callback remove-from-recent([int] /*ids*/);
+    // `list` is a kept tab's `tab-*`: removal takes the favorite on Favorites, the plays on
+    // Recently Played. `-confirmed` accepts the confirmation a removal past the undo cap raises.
+    callback remove-stations(int /*list*/, [int] /*ids*/);
+    callback remove-stations-confirmed(int /*list*/, [int] /*ids*/);
     // `keys` are `select_key`s resolved against `tab`'s list, every browsed row's id being 0; a
-    // hand-typed station is skipped, its card offering no star.
+    // hand-typed station is skipped, its card offering no heart.
     callback set-favorites(int /*tab*/, [int] /*keys*/, bool /*favorite*/);
     // `field` is "name" | "stream-url" | "website". Here rather than on `CopyActions` because the
     // caches the keys resolve from are this slice's.

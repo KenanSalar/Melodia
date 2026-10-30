@@ -1,6 +1,6 @@
 # Plan: Undo for removals (a notice that puts back what went)
 
-Status: **Phases 1 to 4 done** (hand-tested 2026-10-29 and 2026-10-30; Phase 3's measure waits for Kenan's go), **Phase 5 next** · Owner: Kenan · Created: 2026-10-28 · Issue #109, branch `feat/undo-removals`
+Status: **Phases 1 to 5 done** (hand-tested 2026-10-29 and 2026-10-30; Phase 3's measure waits for Kenan's go), **Phase 6 next** · Owner: Kenan · Created: 2026-10-28 · Issue #109, branch `feat/undo-removals`
 
 > **Validated 2026-10-28** against `5fa3d5ed` (`feat/undo-removals`): three read-only traces (the
 > toast stack, shortcuts and confirmations; the library removals; the queue, the equalizer and the
@@ -164,9 +164,13 @@ play replaces the queue silently unless the queue it replaces was built by hand 
       (`track-context-menu.slint:190-197`), calls one new shared callback instead. The Favorites
       page's heart raises through its own handler (`favorites/callbacks/tracklist.rs:44-57`), and a
       card's heart and menu already share `CardActions.set-favorites`.
-    - Stations follow the same rule. The star on Radio's Favorites tab, whose card then leaves
-      (`set_kept_favorites`, `radio/callbacks/stations.rs:170-196`), raises it; Browse's star
-      (`:201-254`) stays on screen and doesn't.
+    - Stations follow the same rule (Kenan, 2026-10-30). On Radio's Favorites tab the heart takes
+      the card off the tab, so it is the removal: it goes through the menu's `remove-stations`,
+      raising the notice, and asks first with undo off (Phase 10). A directory card there loses its
+      trash, which did the same thing, and Edit takes the trash's slot; a hand-typed card has no
+      heart and keeps its trash.
+    - The heart on Recently Played and Browse, the menu's heart entry there included, leaves the
+      card where it is and raises nothing.
 12. **A play raises "Queue replaced" only over a queue built by hand.**
     - A routine play over a queue an earlier play built stays silent: a notice on every
       double-click teaches the eye to skip the one that matters. GNOME's HIG asks for a toast's
@@ -262,8 +266,8 @@ The issue's Notes ask for this list before any confirmation goes. "Over the cap"
 | Delete playlist | `Dialog.open-delete-playlist`, raised from Rust (`crud.rs`' `confirm_first`) | Gone under the cap (Phase 4). Kept over it, saying it can't be undone because the playlist has too many tracks; with undo off from Phase 10, in its own wording. |
 | Delete N playlists | `Dialog.open-delete-playlists`, raised from Rust (`crud.rs`' `confirm_first`) | Gone under the cap (Phase 4). Kept over it, naming the same reason, and a true plural; with undo off from Phase 10, in its own wording. |
 | Clear queue | inline, `queue-panel.slint:240-249` | Hidden while queue undo is on. The queue's holds are uncapped (decision 5), so only Settings brings it back (decision 13). "Playback will stop" was never true and is reworded. |
-| Remove station (Favorites / Recently Played) | `Dialog.open-remove-station` (`dialog.slint:291-307`), from `station-context-menu.slint:186` and `kept-stations-tab.slint:62` | Goes. Kept over the cap and with undo off, reworded. |
-| Remove N stations | `Dialog.open-remove-stations` (`dialog.slint:311-325`), from `station-context-menu.slint:184` | Goes. Kept over the cap and with undo off, reworded. |
+| Remove station (Favorites / Recently Played) | `Dialog.open-remove-station`, from the card trash and the menu | Deleted (Phase 5): one station is never past the cap. Phase 10 brings back the one-station form undo off needs, the Favorites heart's included. |
+| Remove N stations | `Dialog.open-remove-stations`, raised from Rust (`radio/callbacks/removal.rs`' `confirm_first`) | Gone under the cap (Phase 5). Kept over it, saying there are too many stations to undo; with undo off from Phase 10, in its own wording. |
 | Remove watched folder | inline, `library-section.slint:89-102` | **Stays**: out of scope. |
 | Restart (titlebar, tray, backdrop), exclusive output | `window-chrome-section.slint`, `appearance-section.slint`, `output-section.slint` | Untouched: not removals. |
 
@@ -285,15 +289,16 @@ A kept confirmation is raised from Rust once the size is known, across an await,
 | `crates/melodia-ui/ui/components/track-list/track-context-menu.slint` | The remove-from-Favorites entry calls one shared callback rather than the list's `toggle-row-favorite` (decision 11) |
 | `crates/melodia/src/boot/ui_setup/` | `notifications::install` and `UndoWindow` move ahead of `install_views` (`install.rs:68`) |
 | `crates/melodia-core/src/entities/undo.rs` (new) | `UndoCapture<T>` (`Nothing`, `Held(T)` or `OverCap { rows }`) and `UNDO_HOLD_CAP`, named by store, app and views |
-| `crates/melodia-core/src/entities/{playlist,radio}.rs` | The plain tokens beside their entity: `PlaylistItemsCut`, `PlaylistSnapshot` (a `Playlist` and its `CutItem`s), `StationCut` |
+| `crates/melodia-core/src/entities/{playlist,radio}.rs` | The plain tokens beside their entity: `PlaylistItemsCut`, `PlaylistSnapshot` (a `Playlist` and its `CutItem`s), `KeptList` and `StationCut`, plus `RadioStation::is_listed`, which the store's removal reads |
 | `crates/melodia-core/src/utils/reinsert.rs` (new) | `reinsert`: held items back at their indices in one linear walk, the playlist restore's and the queue's `restore_cut`'s |
 | `crates/melodia-store/src/database/queries/playlist.rs` | Capture inside the removal transactions. `insert_items_tx` takes explicit `(track_id, position, added_at)` rows, its two callers building contiguous ones. `update_playlist_thumbnail_and_timestamp_tx` takes its stamp from the caller, which minted it inside (`:515`). |
 | `crates/melodia-store/src/database/queries/playlist_restore.rs` (new) | `restore_playlist_items`, `restore_playlists`, keeping `playlist.rs` (550 lines) under the 800-line cap |
 | `crates/melodia-store/src/database/queries/playlist_delete.rs` (new) | Both deletes, each one transaction: `delete_playlists` (for good, answering the names) and `delete_playlists_held` (answering `PlaylistSnapshot`s), plus `item_count` and `custom_covers` |
-| `crates/melodia-store/src/database/queries/radio.rs` | `remove_stations`: the per-id loop now in `radio/callbacks/kept.rs:106-114`, as one transaction. Also `restore_stations`. |
+| `crates/melodia-store/src/database/queries/radio_removal.rs` (new) | `remove_stations` and `restore_stations`, each one transaction, `delete_if_unlisted` (Browse's un-heart) and `station_artwork`; `radio.rs` loses `delete_station` and `clear_play_history` |
 | `crates/melodia-store/src/database/queries/track/write.rs` | `unfavorite`, returning the ids it flipped |
 | `crates/melodia-app/src/tasks/artwork_sweep.rs` | `ArtworkHold` (refcounted per basename, released on drop) beside its one reader, unioned into `sweep_stores`' reference set |
-| `crates/melodia-app/src/library/{playlists,radio/mod,queue,search,favorites}.rs` | Each removal returns its capture, and each surface gets one restore fn |
+| `crates/melodia-app/src/library/{playlists,radio/removal,queue,search,favorites}.rs` | Each removal returns its capture, and each surface gets one restore fn |
+| `crates/melodia-views/src/ui/radio/callbacks/removal.rs` (new) | `Remover` (the heart, the trash and the menu, and the confirmation past the cap) and `StationRemovalUndo` |
 | `crates/melodia-app/src/services/search_history.rs` | `clear` hands back the list; `restore` puts it back |
 | `crates/melodia-engine/src/player/engine/queue.rs` (534 lines) | `cut`/`restore_cut` replacing `remove_at` and `remove_batch` (`prune_missing` built on `cut`), `take_cleared`/`restore_cleared`, the `playing_left` and `hand_edited` flags, and one `seat` method. Split into `queue/` if it passes 800. |
 | `crates/melodia-views/src/ui/equalizer.rs` | `apply_curve`, shared by preset select, reset and restore |
@@ -556,36 +561,65 @@ The shell and its simplest user land together, the shell having nothing to show 
   Delete gives a notice with no button.
 - A language switch with the notice up re-renders it.
 
-### Phase 5: radio stations
+### Phase 5: radio stations (done 2026-10-30)
 
-1. **Store.**
-   - `remove_stations(ids, from)` is one transaction: capture each row, unstar or clear its history,
-     and delete it if it's no longer listed (today's `delete_if_unlisted` rule,
-     `library/radio/mod.rs:98-116`). That rule reads outside any transaction today, so the unit
-     re-reads inside it.
-   - It answers a `StationCut` per station: `Unstarred { id }`,
-     `HistoryCleared { id, last_played, play_count }`, or `Deleted(full row)`.
-   - `restore_stations` reverses only what its removal wrote (decision 4):
-     - an unstarred row is starred again;
-     - a cleared history is added back, `play_count = play_count + held` and
-       `last_played = max(last_played, held)`, so a play in the window survives;
-     - a deleted row is re-inserted under its id;
-     - a station that is back already is skipped: by `station_uuid` when Browse starred it again,
-       or by `stream_url` (`station_id_with_url`, `radio.rs:145-153`) for a hand-typed one, whose
-       NULL uuid never conflicts and which a file import can re-create (`radio.rs:226-229`).
-2. **Views.**
-   - `radio/callbacks/kept.rs`' loop becomes one facade call that offers, and so does
-     `set_kept_favorites`' (`radio/callbacks/stations.rs:170-196`) where the Favorites tab's star
-     drops a card (decision 11). The restore ends in `kept::refresh` (`radio/kept.rs:204`).
-   - A deleted row's logo is held (decision 10), hand-typed or from the directory.
-3. **Confirmations.** Both retire under the cap. Over it they stay, reworded, raised from Rust with
-   a `DialogClaim`. Neither opener is in `FOLDED_KINDS`, and their kind write is a ternary
-   (`dialog.slint:304`, `:322`) the test's needle can't match.
-4. **Strings:** "{n} station removed from Favorites", "… from Recently Played" (plurals), and a
-   one-station form naming it.
+1. **Core.** `KeptList { Favorites, Recent }`, which decides what a removal takes, and
+   `StationCut`: `Unfavorited { id, name }`, `HistoryCleared { id, name, last_played,
+   play_count }`, or `Deleted(Box<RadioStation>)`, the row as it stood. `is_listed` moved onto
+   `RadioStation`, the store's transaction reading it.
+2. **Store** (`queries/radio_removal.rs`).
+   - `remove_stations(ids, from)` is one transaction: it reads the rows, takes the heart or the
+     plays, and deletes a row `is_listed` no longer holds, all as chunked statements. A station
+     the tab doesn't list yields no cut (decision 6).
+   - `restore_stations` undoes the cuts newest first, reversing only what each wrote (decision 4):
+     - the heart goes back on;
+     - the plays are added back, `play_count + held` and the later `last_played`, a NULL losing,
+       so a play in the window survives;
+     - a deleted row goes back whole under its id, or a fresh one where another took it, unless
+       `kept_station_matching` finds it back already (by uuid, then `stream_url`);
+     - a row gone since stays gone.
+   - Browse's un-heart keeps `delete_if_unlisted`, now read and delete in one transaction.
+3. **App** (`library/radio/removal.rs`). `remove_stations` holds every station's logo in an
+   `ArtworkHold` before the transaction, which alone knows which rows go (decision 10). Past
+   `UNDO_HOLD_CAP` stations it holds nothing and answers `OverCap`.
+4. **Views** (`radio/callbacks/removal.rs`).
+   - `Remover` takes the heart on Favorites, the trash and the menu, all through
+     `Radio.remove-stations(list, ids)`. Under the cap it removes and offers; past it,
+     `confirm_first` takes a `DialogClaim` and raises `open-remove-stations` a tick later on a
+     model of its own. The accept is `remove-stations-confirmed`.
+   - `StationRemovalUndo` merges on the same tab, and its restore ends in `kept::refresh`. A
+     station page the removal closed stays closed.
+   - Recently Played's heart still un-hearts through `remove_stations`, dropping the capture.
+5. **Cards** (decision 11). On Favorites a directory card has no trash and its heart hides beside
+   a multi-selection, as the trash does; a hand-typed card keeps its trash. Edit takes the
+   trash's slot wherever no trash shows.
+6. **Confirmations.** The one-station opener is deleted. The plural one is raised from Rust past
+   the cap only, saying there are too many stations to undo. Both kinds joined `FOLDED_KINDS`,
+   written through an `if` the walk can match.
+7. **Strings:** "{} removed from Favorites", "{} removed from Recently Played", "{n} station
+   removed from Favorites", "{n} station removed from Recently Played" (plurals), the menu's
+   remove labels without "…", and the two over-cap messages.
 
 The radio facade holds: only `library::radio` and `library::radio_files` name `queries::radio`
-(`radio_facade.rs`).
+(`radio_facade.rs`), `queries::radio_removal` included by prefix.
+
+**By hand.**
+- Favorites, a directory station: no trash, and Edit sits bottom left. The heart removes it with
+  "Jazz FM removed from Favorites", and Undo or Ctrl+Z brings it back with its logo and play
+  count. An unplayed one comes back under its own id, and the station page it closed stays closed.
+- Favorites, a hand-typed station: the trash removes it with its history at once, and Undo
+  restores both.
+- Recently Played: the trash clears the plays and Undo restores them. Play it inside the window,
+  then Undo: the count adds and the newer stamp stands.
+- The heart on Recently Played or Browse raises nothing.
+- Two removals from one tab inside the window: one card, the count added, its clock restarted, and
+  Undo restores both. A removal from the other tab replaces the card.
+- Pick three on Favorites: no card shows its heart or trash, the menu's "Remove 3 from Favorites"
+  raises "3 stations removed from Favorites", and Undo brings all three back.
+- Remove a station with a logo, leave the Radio page (the logo prune) while hovering the notice,
+  then Undo: the logo is still there.
+- Remove an unplayed station, heart it again from Browse, then Undo: nothing is duplicated.
+- A language switch with the notice up re-renders it.
 
 ### Phase 6: the playing row leaving the queue (a defect today)
 
@@ -758,7 +792,11 @@ removing stations and Clear queue ask first again (decision 13).
    - **The playlist delete confirmations need a second wording for undo off.** Phase 4's messages
      give the over-cap reason, "too many tracks to undo", which is wrong when the user turned undo
      off. The undo-off form says only that the delete can't be undone, so the openers take which
-     reason applies. Phase 5's station confirmations owe the same if they name the cap.
+     reason applies. Phase 5's station confirmation owes the same, naming the cap too.
+   - **Stations need a one-station confirmation back.** Phase 5 deleted it, one station never
+     being past the cap. With radio undo off, `Remover::request` asks first for every removal,
+     the Favorites heart's included (Kenan, 2026-10-30), and one card's removal names the station
+     and says what a hand-typed one loses.
    - Clear queue: Rust writes `Queue.clear-confirms` from the shadow, which shows Phase 7's kept
      inline confirmation.
 4. **The category** (`ui-patterns.md`'s "A new category" list):
@@ -789,7 +827,8 @@ removing stations and Clear queue ask first again (decision 13).
    - the six kind names;
    - "Keep the notice up";
    - the reworded confirmations, if Phases 4, 5 and 7 haven't already settled them;
-   - the undo-off wording of the two playlist delete confirmations, one message each.
+   - the undo-off wording of the two playlist delete confirmations and of the station
+     confirmation, one message each, and the one-station confirmation's strings.
 
 **By hand.**
 - Undo off: no notice anywhere and Ctrl+Z does nothing. Deleting a playlist, removing a station and
@@ -825,8 +864,10 @@ removing stations and Clear queue ask first again (decision 13).
   - the stamp put back only when untouched, and an edit between two cuts keeping its own;
   - delete and restore of a regular and a smart playlist, its `track_count` and
     `total_duration_ms` matching its items, plus the id-taken fallback.
-- `radio_tests`: every `StationCut` arm, a history restore after a play in the window keeping the
-  play, and both skips (the uuid, and a hand-typed `stream_url`).
+- `radio_tests`: every `StationCut` arm (`Unfavorited`, `HistoryCleared`, `Deleted`), a station
+  the tab doesn't list answering no cut, a history restore after a play in the window keeping the
+  play and the later stamp, a deleted row back under its own id and the id-taken fallback, and
+  both skips (the uuid, and a hand-typed `stream_url`).
 - `search_history` tests: restore with queries added since, and a merged run of two clears
   restoring the newer list in front.
 - `notifications_tests`: `relabel` keeping the id, `restart` bumping `restarts`, a timed row
@@ -834,8 +875,9 @@ removing stations and Clear queue ask first again (decision 13).
   doing nothing, and the row-removed listener firing once on every removal path, the eviction
   inside `show` included (the `:117-154` pattern).
 - **Slint pins:** the card's `Timer` gates on its hover and `Theme.window-focused`, the row menu's
-  remove entry calls the shared callback rather than `toggle-row-favorite`, and the playlist
-  card's trash and the station card's remove hide on `CardCell.multi-selection`.
+  remove entry calls the shared callback rather than `toggle-row-favorite`, the playlist card's
+  trash and the station card's remove hide on `CardCell.multi-selection`, and on Favorites a
+  station card's heart hides there too while its trash shows only on a hand-typed card.
 - **Sweep:** a held basename survives `sweep_stores`, and so does one whose hold drops while the
   column read is in flight.
 - **Settings:**

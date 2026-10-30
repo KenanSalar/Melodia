@@ -67,6 +67,7 @@ msgstr "Đóng"
 
 #. Translators: `{}` is how many items are selected
 #: ui/components/context-menu.slint
+#: ui/components/grid/station-context-menu.slint
 msgid "Remove {} from Favorites"
 msgstr "Xóa {} mục khỏi Yêu thích"
 
@@ -80,6 +81,7 @@ msgid "Add to Favorites"
 msgstr "Thêm vào Yêu thích"
 
 #: ui/components/context-menu.slint ui/components/grid/card-context-menu.slint
+#: ui/components/grid/station-context-menu.slint
 msgid "Remove from Favorites"
 msgstr "Xóa khỏi Yêu thích"
 
@@ -894,21 +896,12 @@ msgstr "Sửa…"
 
 #. Translators: `{}` is how many stations are selected
 #: ui/components/grid/station-context-menu.slint
-msgid "Remove {} from Recently Played…"
-msgstr "Xóa {} đài khỏi Đã phát gần đây…"
+msgid "Remove {} from Recently Played"
+msgstr "Xóa {} đài khỏi Đã phát gần đây"
 
 #: ui/components/grid/station-context-menu.slint
-msgid "Remove from Recently Played…"
-msgstr "Xóa khỏi Đã phát gần đây…"
-
-#. Translators: `{}` is how many stations are selected
-#: ui/components/grid/station-context-menu.slint
-msgid "Remove {} from Favorites…"
-msgstr "Xóa {} đài khỏi Yêu thích…"
-
-#: ui/components/grid/station-context-menu.slint
-msgid "Remove from Favorites…"
-msgstr "Xóa khỏi Yêu thích…"
+msgid "Remove from Recently Played"
+msgstr "Xóa khỏi Đã phát gần đây"
 
 #: ui/components/mini-player/mini-captions.slint
 msgid "Full Player"
@@ -1624,26 +1617,6 @@ msgid "These playlists have too many tracks to undo, so deleting them can't be u
 msgstr "Các danh sách phát này có quá nhiều bản nhạc nên không thể hoàn tác việc xóa. Bản thân các bản nhạc vẫn ở trong thư viện của bạn."
 
 #: ui/globals/dialog.slint
-msgid "Remove from Recently Played?"
-msgstr "Xóa khỏi Đã phát gần đây?"
-
-#: ui/globals/dialog.slint
-msgid "Remove from favorites?"
-msgstr "Xóa khỏi mục yêu thích?"
-
-#: ui/globals/dialog.slint
-msgid "\"{}\" will be removed from Recently Played."
-msgstr "\"{}\" sẽ bị xóa khỏi Đã phát gần đây."
-
-#: ui/globals/dialog.slint
-msgid "\"{}\" will be removed from your stations, along with its play history."
-msgstr "\"{}\" sẽ bị xóa khỏi danh sách đài của bạn, cùng với lịch sử phát của đài."
-
-#: ui/globals/dialog.slint
-msgid "\"{}\" will be removed from your favorites."
-msgstr "\"{}\" sẽ bị xóa khỏi mục yêu thích của bạn."
-
-#: ui/globals/dialog.slint
 msgid "Remove {n} station from Recently Played?"
 msgid_plural "Remove {n} stations from Recently Played?"
 msgstr[0] "Xóa {n} đài khỏi Đã phát gần đây?"
@@ -1654,12 +1627,12 @@ msgid_plural "Remove {n} stations from favorites?"
 msgstr[0] "Xóa {n} đài khỏi mục yêu thích?"
 
 #: ui/globals/dialog.slint
-msgid "The stations will be removed from Recently Played."
-msgstr "Các đài sẽ bị xóa khỏi Đã phát gần đây."
+msgid "There are too many stations to undo, so removing them from Recently Played can't be undone."
+msgstr "Có quá nhiều đài nên không thể hoàn tác việc xóa khỏi Đã phát gần đây."
 
 #: ui/globals/dialog.slint
-msgid "The stations will be removed from your favorites. Any you added by hand are removed from your stations, along with their play history."
-msgstr "Các đài sẽ bị xóa khỏi mục yêu thích của bạn. Những đài bạn tự thêm sẽ bị xóa khỏi danh sách đài, cùng với lịch sử phát của chúng."
+msgid "There are too many stations to undo, so removing them can't be undone. Any you added by hand are removed from your stations, along with their play history."
+msgstr "Có quá nhiều đài nên không thể hoàn tác việc xóa. Những đài bạn tự thêm sẽ bị xóa khỏi danh sách đài, cùng với lịch sử phát của chúng."
 
 #: ui/globals/dialog.slint
 msgid "Edit Rules"
@@ -1805,6 +1778,26 @@ msgstr "Đã xóa {}"
 msgid "{n} playlist deleted"
 msgid_plural "{n} playlists deleted"
 msgstr[0] "Đã xóa {n} danh sách phát"
+
+#. Translators: {} is the station's name.
+#: ui/globals/undo-text.slint
+msgid "{} removed from Favorites"
+msgstr "Đã xóa {} khỏi Yêu thích"
+
+#: ui/globals/undo-text.slint
+msgid "{n} station removed from Favorites"
+msgid_plural "{n} stations removed from Favorites"
+msgstr[0] "Đã xóa {n} đài khỏi Yêu thích"
+
+#. Translators: {} is the station's name.
+#: ui/globals/undo-text.slint
+msgid "{} removed from Recently Played"
+msgstr "Đã xóa {} khỏi Đã phát gần đây"
+
+#: ui/globals/undo-text.slint
+msgid "{n} station removed from Recently Played"
+msgid_plural "{n} stations removed from Recently Played"
+msgstr[0] "Đã xóa {n} đài khỏi Đã phát gần đây"
 
 #: ui/globals/undo-text.slint
 msgid "Too many to undo"

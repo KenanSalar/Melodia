@@ -67,6 +67,7 @@ msgstr ""
 
 #. Translators: `{}` is how many items are selected
 #: ui/components/context-menu.slint
+#: ui/components/grid/station-context-menu.slint
 msgid "Remove {} from Favorites"
 msgstr ""
 
@@ -80,6 +81,7 @@ msgid "Add to Favorites"
 msgstr ""
 
 #: ui/components/context-menu.slint ui/components/grid/card-context-menu.slint
+#: ui/components/grid/station-context-menu.slint
 msgid "Remove from Favorites"
 msgstr ""
 
@@ -896,20 +898,11 @@ msgstr ""
 
 #. Translators: `{}` is how many stations are selected
 #: ui/components/grid/station-context-menu.slint
-msgid "Remove {} from Recently Played…"
+msgid "Remove {} from Recently Played"
 msgstr ""
 
 #: ui/components/grid/station-context-menu.slint
-msgid "Remove from Recently Played…"
-msgstr ""
-
-#. Translators: `{}` is how many stations are selected
-#: ui/components/grid/station-context-menu.slint
-msgid "Remove {} from Favorites…"
-msgstr ""
-
-#: ui/components/grid/station-context-menu.slint
-msgid "Remove from Favorites…"
+msgid "Remove from Recently Played"
 msgstr ""
 
 #: ui/components/mini-player/mini-captions.slint
@@ -1632,26 +1625,6 @@ msgid "These playlists have too many tracks to undo, so deleting them can't be u
 msgstr ""
 
 #: ui/globals/dialog.slint
-msgid "Remove from Recently Played?"
-msgstr ""
-
-#: ui/globals/dialog.slint
-msgid "Remove from favorites?"
-msgstr ""
-
-#: ui/globals/dialog.slint
-msgid "\"{}\" will be removed from Recently Played."
-msgstr ""
-
-#: ui/globals/dialog.slint
-msgid "\"{}\" will be removed from your stations, along with its play history."
-msgstr ""
-
-#: ui/globals/dialog.slint
-msgid "\"{}\" will be removed from your favorites."
-msgstr ""
-
-#: ui/globals/dialog.slint
 msgid "Remove {n} station from Recently Played?"
 msgid_plural "Remove {n} stations from Recently Played?"
 msgstr[0] ""
@@ -1664,11 +1637,11 @@ msgstr[0] ""
 msgstr[1] ""
 
 #: ui/globals/dialog.slint
-msgid "The stations will be removed from Recently Played."
+msgid "There are too many stations to undo, so removing them from Recently Played can't be undone."
 msgstr ""
 
 #: ui/globals/dialog.slint
-msgid "The stations will be removed from your favorites. Any you added by hand are removed from your stations, along with their play history."
+msgid "There are too many stations to undo, so removing them can't be undone. Any you added by hand are removed from your stations, along with their play history."
 msgstr ""
 
 #: ui/globals/dialog.slint
@@ -1817,6 +1790,28 @@ msgstr ""
 #: ui/globals/undo-text.slint
 msgid "{n} playlist deleted"
 msgid_plural "{n} playlists deleted"
+msgstr[0] ""
+msgstr[1] ""
+
+#. Translators: {} is the station's name.
+#: ui/globals/undo-text.slint
+msgid "{} removed from Favorites"
+msgstr ""
+
+#: ui/globals/undo-text.slint
+msgid "{n} station removed from Favorites"
+msgid_plural "{n} stations removed from Favorites"
+msgstr[0] ""
+msgstr[1] ""
+
+#. Translators: {} is the station's name.
+#: ui/globals/undo-text.slint
+msgid "{} removed from Recently Played"
+msgstr ""
+
+#: ui/globals/undo-text.slint
+msgid "{n} station removed from Recently Played"
+msgid_plural "{n} stations removed from Recently Played"
 msgstr[0] ""
 msgstr[1] ""
 

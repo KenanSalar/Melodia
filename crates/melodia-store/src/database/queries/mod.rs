@@ -12,6 +12,7 @@ pub mod playlist;
 pub mod playlist_delete;
 pub mod playlist_restore;
 pub mod radio;
+pub mod radio_removal;
 pub mod scan;
 pub mod search;
 pub mod search_name;

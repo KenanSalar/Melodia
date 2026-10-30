@@ -31,6 +31,25 @@ export global UndoText {
         return @tr("{n} playlist deleted" | "{n} playlists deleted" % count);
     }
 
+    // An empty `station` always takes the count.
+    pure callback stations-removed-from-favorites(int /*count*/, string /*station*/) -> string;
+    stations-removed-from-favorites(count, station) => {
+        if (count == 1 && station != "") {
+            // Translators: {} is the station's name.
+            return @tr("{} removed from Favorites", station);
+        }
+        return @tr("{n} station removed from Favorites" | "{n} stations removed from Favorites" % count);
+    }
+
+    pure callback stations-removed-from-recent(int /*count*/, string /*station*/) -> string;
+    stations-removed-from-recent(count, station) => {
+        if (count == 1 && station != "") {
+            // Translators: {} is the station's name.
+            return @tr("{} removed from Recently Played", station);
+        }
+        return @tr("{n} station removed from Recently Played" | "{n} stations removed from Recently Played" % count);
+    }
+
     pure callback too-many-to-undo() -> string;
     too-many-to-undo() => {
         return @tr("Too many to undo");

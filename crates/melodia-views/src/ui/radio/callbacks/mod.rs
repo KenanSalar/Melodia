@@ -6,6 +6,7 @@ mod facets;
 pub(super) mod files;
 mod kept;
 mod lifecycle;
+mod removal;
 mod stations;
 
 use std::sync::Arc;
@@ -13,14 +14,16 @@ use std::sync::Arc;
 use slint::ComponentHandle;
 
 use crate::ui::callbacks::index_persist::IndexPersist;
+use crate::ui::view_ctx::ViewCtx;
 use crate::ui::view_tag;
 use melodia_app::library;
-use melodia_app::services::view_state::ViewStateData;
 use melodia_app::state::AppState;
 use melodia_core::error::describe;
-use melodia_ui::{AppWindow, Radio};
+use melodia_ui::Radio;
 
 use super::{RadioTab, RadioUi, filter, tab_from_index};
+
+pub(crate) use removal::StationRemovalUndo;
 
 /// Writes the active tab to `views.json`, ordered through `persist`: a reversed pair from a bounce
 /// would restore the tab the user only passed through, and that tab's station page with it.
@@ -37,12 +40,8 @@ fn persist_tab(state: &AppState, persist: &Arc<IndexPersist>, tab: i32) {
     });
 }
 
-pub(super) fn wire(
-    ui: &AppWindow,
-    state: &AppState,
-    view_state: Option<&ViewStateData>,
-    radio_ui: &Arc<RadioUi>,
-) {
+pub(super) fn wire(cx: ViewCtx<'_>, radio_ui: &Arc<RadioUi>) {
+    let ViewCtx { app: ui, state, view_state, .. } = cx;
     let g = ui.global::<Radio>();
 
     {
@@ -87,4 +86,5 @@ pub(super) fn wire(
     facets::wire(ui, state, radio_ui);
     stations::wire(ui, state, radio_ui);
     kept::wire(ui, state, view_state, radio_ui);
+    removal::wire(cx, radio_ui);
 }

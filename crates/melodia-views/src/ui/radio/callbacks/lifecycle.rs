@@ -36,7 +36,7 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, radio_ui: &Arc<RadioUi>) {
 }
 
 /// Brings the page up to date. The two `browse` calls guard each other's case; the kept lists are
-/// re-read unconditionally, being `SQLite` and the fetch Browse's stars come from.
+/// re-read unconditionally, being `SQLite` and the fetch Browse's hearts come from.
 fn enter(ui: &AppWindow, state: &AppState, radio_ui: &Arc<RadioUi>) {
     kept::refresh(ui, state, radio_ui);
     browse::ensure_loaded(ui, state, radio_ui);

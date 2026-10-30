@@ -38,17 +38,17 @@ pub(in crate::library) fn resolve_station_name(
         .unwrap_or_else(|| stream_url.to_owned())
 }
 
-/// Keep a station the user typed in, after proving it plays, and star it.
+/// Keep a station the user typed in, after proving it plays, and favorite it.
 ///
 /// **The probe is the validation**: the whole connect, so a web page, a segmented playlist or a
 /// codec with no decoder is refused while the dialog is open. A URL already here merges onto its
-/// row and stars it, promoting a station that was only played.
+/// row and favorites it, promoting a station that was only played.
 pub async fn add_custom_station(
     state: &AppState,
     stream_url: &str,
     name: &str,
 ) -> Result<i64, AppError> {
-    // Ahead of the merge and the probe, so a refused station costs no network and stars no row.
+    // Ahead of the merge and the probe, so a refused station costs no network and writes no row.
     // The URL is the one handle a typed station has to match on.
     if radio_blocklist::blocks(radio_blocklist::StationTerms {
         station_uuid: None,

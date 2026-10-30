@@ -302,27 +302,27 @@ fn a_dangling_extinf_names_nothing_below_it() {
 
 /// The failure that shipped: an export re-imported put nothing back.
 ///
-/// Un-starring a directory station that has been played does not delete its row — `is_listed`
+/// Unfavoriting a directory station that has been played does not delete its row — `is_listed`
 /// keeps it for Recently Played's sake — so the by-URL guard the import used to open with found
 /// that row and refused the entry. It reported "0 stations added" over a file naming every station
 /// the user had, and the only way past it was to clear Recently Played as well.
 #[tokio::test]
-async fn a_re_import_stars_the_row_a_leftover_play_kept() -> Result<(), AppError> {
+async fn a_re_import_favorites_the_row_a_leftover_play_kept() -> Result<(), AppError> {
     let db = DbPool::test_pool().await?;
     let mut listed = station("Listed", "https://example.test/one");
     listed.station_uuid = Some("uuid-1".to_owned());
     let saved = seed(&db, &listed).await?;
     let text = serialize(&queries::radio::get_favorite_stations(&db).await?);
 
-    // Played, then un-starred: the row outlives the star, which is the state the import could not
-    // see past.
+    // Played, then unfavorited: the row outlives the favorite, which is the state the import could
+    // not see past.
     queries::radio::mark_played(&db, saved.id).await?;
     queries::radio::set_favorite(&db, saved.id, false).await?;
 
     assert_eq!(
         import_text(&db, &text).await?,
         ImportStationsResult { imported: 1, skipped: 0 },
-        "putting the star back is what an import is for"
+        "putting the favorite back is what an import is for"
     );
     let kept = queries::radio::get_favorite_stations(&db).await?;
     assert_eq!(kept.len(), 1, "and it lands on the row that was there rather than beside it");
@@ -355,7 +355,7 @@ async fn a_file_naming_one_station_twice_imports_it_once() -> Result<(), AppErro
     assert_eq!(
         import_text(&db, text).await?,
         ImportStationsResult { imported: 1, skipped: 1 },
-        "the second entry is the first one's row, already starred, so it is skipped"
+        "the second entry is the first one's row, already a favorite, so it is skipped"
     );
     let kept = queries::radio::get_favorite_stations(&db).await?;
     assert_eq!(kept.len(), 1, "one card, not two the user has to tell apart by hand");
@@ -385,8 +385,12 @@ async fn an_import_restores_each_station_as_the_kind_it_was_exported_as() -> Res
     queries::radio::set_local_fields(&db, hand_typed.id, &mine).await?;
 
     let text = serialize(&queries::radio::get_favorite_stations(&db).await?);
-    queries::radio::delete_station(&db, from_browse.id).await?;
-    queries::radio::delete_station(&db, hand_typed.id).await?;
+    queries::radio_removal::remove_stations(
+        &db,
+        &[from_browse.id, hand_typed.id],
+        radio::KeptList::Favorites,
+    )
+    .await?;
 
     assert_eq!(import_text(&db, &text).await?, ImportStationsResult { imported: 2, skipped: 0 });
 
@@ -419,7 +423,7 @@ async fn an_import_restores_each_station_as_the_kind_it_was_exported_as() -> Res
 ///
 /// Both arms of the existing-row branch are walked. The first acts on the row and must still leave
 /// its columns alone, which is what makes it sharper than a no-op; the second is the one a user
-/// meets, a backup re-imported over a library they still hold landing on rows already starred.
+/// meets, a backup re-imported over a library they still hold landing on rows already favorites.
 #[tokio::test]
 async fn a_re_import_leaves_the_columns_the_file_says_nothing_about() -> Result<(), AppError> {
     let db = DbPool::test_pool().await?;
@@ -432,7 +436,7 @@ async fn a_re_import_leaves_the_columns_the_file_says_nothing_about() -> Result<
 
     let text = serialize(&queries::radio::get_favorite_stations(&db).await?);
 
-    // Grown since the export, and un-starred so the import has something to do for the row.
+    // Grown since the export, and unfavorited so the import has something to do for the row.
     queries::radio::set_local_fields(
         &db,
         saved.id,
@@ -448,7 +452,7 @@ async fn a_re_import_leaves_the_columns_the_file_says_nothing_about() -> Result<
     assert_eq!(import_text(&db, &text).await?, ImportStationsResult { imported: 1, skipped: 0 });
 
     let back = queries::radio::get_station_by_id(&db, saved.id).await?;
-    assert!(back.is_favorite, "the star is what a re-import is for");
+    assert!(back.is_favorite, "the favorite is what a re-import is for");
     assert_eq!(back.website(), Some("https://typed.example/"), "and the file's own field stands");
     assert_eq!(back.genre(), Some("Talk"), "the edits since the export outrank the file");
     assert_eq!(back.country_name(), Some("Tunisia"));
@@ -456,7 +460,7 @@ async fn a_re_import_leaves_the_columns_the_file_says_nothing_about() -> Result<
     assert_eq!(
         import_text(&db, &text).await?,
         ImportStationsResult { imported: 0, skipped: 1 },
-        "starred already, so there is nothing left to put back"
+        "a favorite already, so there is nothing left to put back"
     );
     let again = queries::radio::get_station_by_id(&db, saved.id).await?;
     assert_eq!(again.genre(), Some("Talk"), "and a skipped entry rewrites nothing either");
@@ -543,7 +547,7 @@ async fn an_export_writes_a_file_the_import_reads_back() -> Result<(), AppError>
     assert_eq!(
         import_stations_from_file(&db, &path).await?,
         ImportStationsResult { imported: 0, skipped: 2 },
-        "both rows are still starred, so the round trip has nothing to do"
+        "both rows are still favorites, so the round trip has nothing to do"
     );
     Ok(())
 }

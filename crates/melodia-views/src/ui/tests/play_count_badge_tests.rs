@@ -70,7 +70,7 @@ fn the_leaf_owns_the_hide_at_zero_rule() {
 }
 
 /// Radio's Recently Played is the one tab that asks for the badge, and it asks off the same
-/// predicate the star mark rides. Bound to `true`, every Favorites card carries a count under a
+/// predicate the favorite mark rides. Bound to `true`, every Favorites card carries a count under a
 /// list that ranks by name.
 #[test]
 fn only_recently_played_turns_the_station_badge_on() {

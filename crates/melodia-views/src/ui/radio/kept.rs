@@ -200,7 +200,7 @@ fn sort_stations(stations: &mut [&RadioStation], field: &str, dir: SortDir) {
 }
 
 /// Re-reads both lists and repaints the mounted tab. One fetch answers both tabs' rows and the
-/// uuid set Browse fills its stars from.
+/// uuid set Browse fills its hearts from.
 pub fn refresh(ui: &AppWindow, state: &AppState, radio_ui: &Arc<RadioUi>) {
     // Read here, out of the task's reach; a tab picked mid-fetch warms its own.
     let (mounted, sort) = {
@@ -236,9 +236,9 @@ pub fn refresh(ui: &AppWindow, state: &AppState, radio_ui: &Arc<RadioUi>) {
             return;
         };
 
-        let starred: HashSet<String> =
+        let favorite_uuids: HashSet<String> =
             favorites.iter().filter_map(|station| station.station_uuid.clone()).collect();
-        *ru.starred.lock() = starred;
+        *ru.favorite_uuids.lock() = favorite_uuids;
         ru.kept.lock().stations = favorites;
         ru.recent.lock().stations = recent;
         remember_kept_answers(&ru);
@@ -296,9 +296,9 @@ const HEAL_BATCH: usize = 4;
 /// Re-fetches logos for kept stations whose row has none and repaints what lands, after the paint
 /// and the warm.
 ///
-/// Once per station per session: `refresh` runs on every enter, star flip and removal. The stored
-/// answers are read for the whole set up front (`library::radio::AnswerSeed` argues why) and
-/// shared, a station's answers having nothing to do with its seat in the window.
+/// Once per station per session: `refresh` runs on every enter, favorite flip and removal. The
+/// stored answers are read for the whole set up front (`library::radio::AnswerSeed` argues why)
+/// and shared, a station's answers having nothing to do with its seat in the window.
 async fn heal_logos(state: &AppState, radio_ui: &Arc<RadioUi>, weak: &Weak<AppWindow>) {
     let logoless = logoless_stations(radio_ui);
     let seed = Arc::new(
@@ -371,7 +371,7 @@ fn adopt_logo_path(radio_ui: &RadioUi, id: i64, path: &str) {
     }
 }
 
-/// Repaints the mounted local tab and Browse's stars: on [`refresh`]'s landing and after a heal.
+/// Repaints the mounted local tab and Browse's hearts: on [`refresh`]'s landing and after a heal.
 fn paint_mounted(weak: &Weak<AppWindow>, radio_ui: &Arc<RadioUi>) {
     let ru = radio_ui.clone();
     let _ = weak.upgrade_in_event_loop(move |ui| {

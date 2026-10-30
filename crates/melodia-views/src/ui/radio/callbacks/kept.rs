@@ -1,9 +1,9 @@
-//! The kept tabs' own wiring: the sort, the add / edit form, and remove. Import and export are
-//! [`super::files`]'s.
+//! The kept tabs' own wiring: the sort and the add / edit form. Removal is [`super::removal`]'s,
+//! import and export [`super::files`]'s.
 
 use std::sync::Arc;
 
-use slint::{ComponentHandle, Model, SharedString, Weak};
+use slint::{ComponentHandle, SharedString, Weak};
 
 use crate::ui::callbacks::{next_sort, persist_view_sort, persisted_sort};
 use crate::ui::radio::{RadioTab, RadioUi, kept};
@@ -14,7 +14,7 @@ use melodia_app::services::view_state::ViewStateData;
 use melodia_app::state::AppState;
 use melodia_core::entities::radio;
 use melodia_core::error::AppError;
-use melodia_ui::{AppWindow, CardSelection, Dialog, DialogKind, Radio, RadioForm};
+use melodia_ui::{AppWindow, Dialog, DialogKind, Radio, RadioForm};
 
 pub(super) fn wire(
     ui: &AppWindow,
@@ -60,64 +60,11 @@ pub(super) fn wire(
         let s = state.clone();
         let ru = radio_ui.clone();
         let weak = weak.clone();
-        g.on_remove_from_favorites(move |ids| {
-            remove(&s, &ru, &weak, ids.iter().map(i64::from).collect(), RemoveFrom::Favorites);
-        });
-    }
-
-    {
-        let s = state.clone();
-        let ru = radio_ui.clone();
-        let weak = weak.clone();
-        g.on_remove_from_recent(move |ids| {
-            remove(&s, &ru, &weak, ids.iter().map(i64::from).collect(), RemoveFrom::Recent);
-        });
-    }
-
-    {
-        let s = state.clone();
-        let ru = radio_ui.clone();
-        let weak = weak.clone();
         ui.global::<RadioForm>().on_submit(move || {
             let Some(ui) = weak.upgrade() else { return };
             submit(&ui, &s, &ru, &weak);
         });
     }
-}
-
-/// Which list the removal was asked on, and so what removal means there.
-#[derive(Clone, Copy)]
-enum RemoveFrom {
-    Favorites,
-    Recent,
-}
-
-/// Drops stations out of one tab, then re-reads both lists; whether a row survives is the facade's
-/// call. One failure leaves the rest to go, the confirm having been for all of them.
-fn remove(
-    state: &AppState,
-    radio_ui: &Arc<RadioUi>,
-    weak: &Weak<AppWindow>,
-    ids: Vec<i64>,
-    from: RemoveFrom,
-) {
-    let (s, ru, weak) = (state.clone(), radio_ui.clone(), weak.clone());
-    state.runtime.spawn(async move {
-        for id in ids {
-            let removed = match from {
-                RemoveFrom::Favorites => library::radio::remove_from_favorites(&s.db, id).await,
-                RemoveFrom::Recent => library::radio::remove_from_recent(&s.db, id).await,
-            };
-            if let Err(e) = removed {
-                log::warn!("radio: station removal failed: {}", melodia_core::error::describe(&e));
-            }
-        }
-        let _ = weak.upgrade_in_event_loop(move |ui| {
-            // A removed id left in the card selection would still be counted by the menu.
-            ui.global::<CardSelection>().invoke_clear();
-            kept::refresh(&ui, &s, &ru);
-        });
-    });
 }
 
 /// Fills the form from a card's station and opens the dialog, from a fresh event-loop tick: a

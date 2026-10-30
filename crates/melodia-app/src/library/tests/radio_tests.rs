@@ -1,14 +1,14 @@
 use std::sync::Arc;
 
 use melodia_core::entities::radio::{
-    DirectoryStation, Facet, FacetKind, RadioStation, StationPage,
+    DirectoryStation, Facet, FacetKind, KeptList, RadioStation, StationPage,
 };
 use melodia_core::error::AppError;
 use melodia_store::database::{DbPool, queries};
 
 use super::authoring::{ensure_editable, resolve_station_name, website_url};
 use super::directory::{hide_segmented, hide_segmented_codecs, names_segmented};
-use super::{is_listed, remove_from_favorites, remove_from_recent};
+use super::remove_stations;
 
 /// One directory row, segmented or not. Spelled out rather than defaulted: `DirectoryStation` has
 /// no `Default`, a station with no uuid and no URL being one nothing may keep.
@@ -149,26 +149,26 @@ fn no_other_facet_list_is_rebuilt() {
 
 /// The whole truth table behind removal, and the only place it is stated once.
 ///
-/// A wrong arm here is silent both ways and each way loses something: read as listed, an unstarred
-/// never-played row survives forever with nothing able to show it; read as unlisted, removing a
-/// station from one tab deletes it out of the other — the play history a favorite's trash used to
-/// take with it.
+/// A wrong arm here is silent both ways and each way loses something: read as listed, an
+/// unfavorited never-played row survives forever with nothing able to show it; read as unlisted,
+/// removing a station from one tab deletes it out of the other — the play history a favorite's
+/// trash used to take with it.
 #[test]
 fn a_row_survives_exactly_while_one_of_the_two_tabs_still_shows_it() {
     let mut station = stored(Some("uuid-1"));
     station.is_favorite = false;
     station.last_played = None;
-    assert!(!is_listed(&station), "neither tab holds it, so the row is the user's to lose");
+    assert!(!station.is_listed(), "neither tab holds it, so the row is the user's to lose");
 
     station.is_favorite = true;
-    assert!(is_listed(&station), "Favorites filters on the star");
+    assert!(station.is_listed(), "Favorites filters on the favorite flag");
 
     station.is_favorite = false;
     station.last_played = Some("2026-08-23T00:00:00.000+00:00".to_owned());
-    assert!(is_listed(&station), "Recently Played filters on the stamp, star or no star");
+    assert!(station.is_listed(), "Recently Played filters on the stamp, favorite or not");
 
     station.is_favorite = true;
-    assert!(is_listed(&station), "and both at once is still one row worth keeping");
+    assert!(station.is_listed(), "and both at once is still one row worth keeping");
 }
 
 /// The one field a directory-owned row takes from the user, so it is the one that has to be
@@ -239,29 +239,29 @@ fn a_field_is_the_users_only_while_the_directory_has_not_answered_for_it() {
     assert!(typed.is_editable() && typed.can_set_website() && typed.can_set_genre());
 }
 
-/// A hand-typed station is listed by its star alone, and the stamp does not stand in for one.
+/// A hand-typed station is listed by its favorite alone, and the stamp does not stand in for one.
 ///
-/// The card refuses a star to a row no directory names, so an unstarred one is stranded rather
-/// than merely unstarred: Recently Played goes on showing it and nothing anywhere can put it back
-/// in Favorites. Removing it there has to be the delete it was before the two tabs split.
+/// The card refuses a heart to a row no directory names, so an unfavorited one is stranded rather
+/// than merely unfavorited: Recently Played goes on showing it and nothing anywhere can put it
+/// back in Favorites. Removing it there has to be the delete it was before the two tabs split.
 #[test]
-fn a_hand_typed_station_is_listed_by_its_star_and_never_by_its_plays() {
+fn a_hand_typed_station_is_listed_by_its_favorite_and_never_by_its_plays() {
     let mut station = stored(None);
     station.last_played = Some("2026-08-23T00:00:00.000+00:00".to_owned());
 
-    assert!(is_listed(&station), "the star still lists it");
+    assert!(station.is_listed(), "the favorite still lists it");
 
     station.is_favorite = false;
     assert!(
-        !is_listed(&station),
-        "no page can name it and the card offers no star, so the plays list nothing"
+        !station.is_listed(),
+        "no page can name it and the card offers no heart, so the plays list nothing"
     );
 
     // The directory's own rows keep the play history that removal takes from a hand-typed one.
     let mut from_directory = stored(Some("uuid-1"));
     from_directory.is_favorite = false;
     from_directory.last_played = Some("2026-08-23T00:00:00.000+00:00".to_owned());
-    assert!(is_listed(&from_directory), "Browse can restore this one, so the plays still count");
+    assert!(from_directory.is_listed(), "Browse can restore this one, so the plays still count");
 }
 
 /// Three ways a station ends up named, in the order they win. The host fallback is what stops a
@@ -287,8 +287,8 @@ fn a_station_takes_the_best_name_on_offer() {
     );
 }
 
-/// A row in the table, from the same shape the cases above are spelled in. The star and the stamp
-/// go on through their own writers, `save_station` owning neither.
+/// A row in the table, from the same shape the cases above are spelled in. The favorite and the
+/// stamp go on through their own writers, `save_station` owning neither.
 async fn seed(db: &DbPool, station: &RadioStation) -> Result<i64, AppError> {
     let id = queries::radio::save_station(db, &station.to_new_station()).await?;
     queries::radio::set_favorite(db, id, station.is_favorite).await?;
@@ -308,84 +308,84 @@ async fn stored_row(db: &DbPool, id: i64) -> Result<Option<RadioStation>, AppErr
     }
 }
 
-/// A station Browse can rewrite keeps its plays when the star goes, which is the whole reason the
-/// removal is a ladder rather than a delete: Recently Played is still showing it.
+/// A station Browse can rewrite keeps its plays when the favorite goes, which is the whole reason
+/// the removal is a ladder rather than a delete: Recently Played is still showing it.
 #[tokio::test]
-async fn un_starring_a_played_directory_station_keeps_its_row() -> Result<(), AppError> {
+async fn unfavoriting_a_played_directory_station_keeps_its_row() -> Result<(), AppError> {
     let db = DbPool::test_pool().await?;
     let mut station = stored(Some("uuid-1"));
     station.last_played = Some("2026-08-23T00:00:00.000+00:00".to_owned());
     let id = seed(&db, &station).await?;
 
-    remove_from_favorites(&db, id).await?;
+    remove_stations(&db, vec![id], KeptList::Favorites).await?;
 
     let kept = stored_row(&db, id).await?;
-    assert!(matches!(&kept, Some(row) if !row.is_favorite), "the star is what was asked for");
+    assert!(matches!(&kept, Some(row) if !row.is_favorite), "the favorite is what was asked for");
     assert!(
         matches!(kept, Some(row) if row.last_played.is_some()),
-        "and the history the other tab lists it by is not the star's to take"
+        "and the history the other tab lists it by is not the favorite's to take"
     );
     Ok(())
 }
 
-/// The row nothing would list any more. Left behind it accumulates on every browse-and-unstar, and
-/// no tab can show the user what they have.
+/// The row nothing would list any more. Left behind it accumulates on every browse-and-unfavorite,
+/// and no tab can show the user what they have.
 #[tokio::test]
-async fn un_starring_a_never_played_directory_station_deletes_its_row() -> Result<(), AppError> {
+async fn unfavoriting_a_never_played_directory_station_deletes_its_row() -> Result<(), AppError> {
     let db = DbPool::test_pool().await?;
     let id = seed(&db, &stored(Some("uuid-1"))).await?;
 
-    remove_from_favorites(&db, id).await?;
+    remove_stations(&db, vec![id], KeptList::Favorites).await?;
 
     assert!(stored_row(&db, id).await?.is_none());
     Ok(())
 }
 
-/// A hand-typed station has no directory page to be restored from and its card offers no star, so
+/// A hand-typed station has no directory page to be restored from and its card offers no heart, so
 /// leaving it on its plays alone strands it: Recently Played goes on showing a row nothing can put
 /// back in Favorites.
 #[tokio::test]
-async fn un_starring_a_hand_typed_station_deletes_it_however_often_it_was_played()
+async fn unfavoriting_a_hand_typed_station_deletes_it_however_often_it_was_played()
 -> Result<(), AppError> {
     let db = DbPool::test_pool().await?;
     let mut station = stored(None);
     station.last_played = Some("2026-08-23T00:00:00.000+00:00".to_owned());
     let id = seed(&db, &station).await?;
 
-    remove_from_favorites(&db, id).await?;
+    remove_stations(&db, vec![id], KeptList::Favorites).await?;
 
     assert!(stored_row(&db, id).await?.is_none());
     Ok(())
 }
 
-/// The mirror, and the half that says the ladder reads the star as well as the stamp: clearing a
-/// history under a starred row must leave Favorites holding it.
+/// The mirror, and the half that says the ladder reads the favorite as well as the stamp: clearing
+/// a history under a favorite row must leave Favorites holding it.
 #[tokio::test]
-async fn clearing_the_history_of_a_starred_station_keeps_its_row() -> Result<(), AppError> {
+async fn clearing_the_history_of_a_favorite_station_keeps_its_row() -> Result<(), AppError> {
     let db = DbPool::test_pool().await?;
     let mut station = stored(Some("uuid-1"));
     station.last_played = Some("2026-08-23T00:00:00.000+00:00".to_owned());
     let id = seed(&db, &station).await?;
 
-    remove_from_recent(&db, id).await?;
+    remove_stations(&db, vec![id], KeptList::Recent).await?;
 
     let kept = stored_row(&db, id).await?;
     assert!(matches!(&kept, Some(row) if row.last_played.is_none()), "the plays are forgotten");
-    assert!(matches!(kept, Some(row) if row.is_favorite), "and the star still lists it");
+    assert!(matches!(kept, Some(row) if row.is_favorite), "and the favorite still lists it");
     Ok(())
 }
 
 /// Removing from Recently Played what only its plays were holding. This is the trash on that tab,
 /// and a row surviving it is one the user has just removed from the only place it appeared.
 #[tokio::test]
-async fn clearing_the_history_of_an_unstarred_station_deletes_its_row() -> Result<(), AppError> {
+async fn clearing_the_history_of_an_unfavorited_station_deletes_its_row() -> Result<(), AppError> {
     let db = DbPool::test_pool().await?;
     let mut station = stored(Some("uuid-1"));
     station.is_favorite = false;
     station.last_played = Some("2026-08-23T00:00:00.000+00:00".to_owned());
     let id = seed(&db, &station).await?;
 
-    remove_from_recent(&db, id).await?;
+    remove_stations(&db, vec![id], KeptList::Recent).await?;
 
     assert!(stored_row(&db, id).await?.is_none());
     Ok(())
