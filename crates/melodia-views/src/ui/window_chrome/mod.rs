@@ -1,5 +1,5 @@
 //! The window itself, through winit where Slint's window API falls short: controls, dragging and
-//! resizing, geometry, file drops and the restart flow.
+//! resizing, geometry, the resting pointer, file drops and the restart flow.
 //!
 //! **Dragging and resizing belong at the winit layer.** `drag_window()` from a `pointer-event`
 //! leaks the grab: the compositor takes the pointer for the move, the matching `Released` never

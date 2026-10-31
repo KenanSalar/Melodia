@@ -217,6 +217,10 @@ there, never in the `.slint`.
   the wheel, the flag stays down until the pointer moves**, so a control or sentinel that must keep
   its hover answers `accept` to every wheel event, an empty one included.
 
+- **A row rebuilt under a still pointer stays unhovered until the pointer moves**: Slint hit-tests
+  only on input, so a hover-mounted control takes a click to appear. Re-hover through
+  `window_chrome::pointer::rehover`, whose doc says where it may run (`queue_panel/rows.rs`).
+
 - **A `TouchArea` grabs on a press of any button; only `pressed` is left-only.** `mouse-x`/`y`
   follow a held right button, so a menu takes its anchor once (`show-at`), and a slider filters
   the button itself (`SliderPointer`).

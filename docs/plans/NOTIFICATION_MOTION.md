@@ -1,8 +1,8 @@
 # Plan: Notification motion (cards that arrive, leave and make room)
 
-Status: **in progress** (Phase 0 done, Phase 1 committed as `1092cfed`, Phase 2 as `2c9261e3`,
-Phase 3 as `feb01476`, Phase 4 as `6e3789dc` and `6c68fdeb`, awaiting Kenan's hand test) ·
-Owner: Kenan · Created: 2026-10-31
+Status: **in progress** (Phase 0 done, Phase 1 committed as `1092cfed`, Phase 2 as `2c9261e3`
+and `e5536584`, Phase 3 as `feb01476` and `fbaaef9f`, Phase 4 as `6e3789dc` and `6c68fdeb`,
+awaiting Kenan's hand test) · Owner: Kenan · Created: 2026-10-31
 
 > **Validated 2026-10-31** against `0b6d11b5` (`main`): direct reads of `notification-stack.slint`,
 > `globals/notifications.slint`, `models.slint`, `notifications.rs` and its tests, `undo/mod.rs`,
@@ -194,8 +194,9 @@ above `body`, its anchor, rather than in the header.
 
 ### Phase 2: every way out leaves the same way
 
-Status: committed as `2c9261e3` (2026-10-31). fmt, clippy, the full suite and the build were
-green. In the generated card, opacity follows `up`, and its animation's duration and
+Status: committed as `2c9261e3`, with `e5536584` collecting `dismiss_by_kind`'s matches through
+`live_rows()` (2026-10-31). fmt, clippy, the full suite and the build were green. In the generated
+card, opacity follows `up`, and its animation's duration and
 easing both branch on `leaving`. `live_rows()` is the one filter for live rows, which `find_live`,
 `is_live`, the cap and `dismiss_by_kind` all read. Beyond the renames, two test changes:
 `max_visible_evicts_oldest_on_overflow` collapses to one equality on the live ids, and the
@@ -213,9 +214,9 @@ test-local `Removal` alias becomes `Retirement`. Undo's `offer` doc says "retire
    - `find_live` skips leaving rows and serves `dismiss`, `relabel` and `restart`.
      `is_live(id)` guards `on_action` before `run_action`, so a press on a leaving card does
      nothing.
-   - `dismiss_by_kind` retires the live matches in a forward walk. Its back-to-front reason goes,
-     because nothing is removed synchronously any more.
-   - The cap becomes `while self.live_count() >= MAX_VISIBLE`, retiring the oldest live row.
+   - `dismiss_by_kind` collects the live matches from `live_rows()`, then retires each. Its
+     back-to-front reason goes, because nothing is removed synchronously any more.
+   - The cap becomes `while self.live_rows().count() >= MAX_VISIBLE`, retiring the oldest live row.
      `MAX_VISIBLE`'s doc says it counts the cards still up.
 3. **`undo/mod.rs`:** rename `row_removed` to `row_retired` along with the listener call. The
    module doc still holds ("the hold goes with its notice, however that leaves").
@@ -247,8 +248,8 @@ Status: committed as `feb01476` (2026-10-31). fmt, clippy, the full suite and th
 green. In the generated card, `user_init` reads `opacity`, `slot-h` and `rise`, the
 icon is a `Conditional` folded into the content layout, `settle`'s `running` binds to `lifted`,
 and the vertical layout info is still `min 0` with `slot-h` as preferred and max. Kenan's hand
-test found the lift late behind its count, so it was retuned to rise over `lift-dur` and settle
-from there.
+test found the lift late behind its count, so `fbaaef9f` retuned it to rise over `lift-dur` and
+settle from there.
 
 1. **`neutral` variant:**
    - Append `NotificationVariant.neutral` in `models.slint`.
