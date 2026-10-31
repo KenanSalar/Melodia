@@ -14,10 +14,11 @@ export component NotificationCard inherits Rectangle {
     in property <NotificationRow> data;
     private property <bool> shown: false;
 
-    // Read at mount so each eases from its `shown: false` value, as in `ViewTransition`.
+    // Read at mount so each eases from its mount value, as in `ViewTransition`.
     init => {
         root.opacity;
         root.slot-h;
+        root.rise;
     }
 
     enter := Timer {
@@ -44,8 +45,24 @@ export component NotificationCard inherits Rectangle {
     // when it changes, so a bump under the pointer would dismiss the card being read.
     private property <int> watched-restarts: root.data.restarts;
     changed watched-restarts => {
+        root.lifted = true;
         if (clock.running) {
             clock.restart();
+        }
+    }
+
+    // A merge rewrites the card in place, so the body lifts and settles to draw the eye to it.
+    private property <bool> lifted: false;
+    // Less than `gap`, so the lifted body stays inside the card, clipped or not.
+    private property <length> bump-rise: 4px;
+    private property <length> rise: root.lifted ? root.bump-rise : 0px;
+    animate rise { duration: Theme.dur-fast; easing: cubic-bezier(0.2, 0, 0, 1); }
+
+    settle := Timer {
+        interval: Theme.dur-fast;
+        running: root.lifted;
+        triggered => {
+            root.lifted = false;
         }
     }
 
@@ -53,6 +70,7 @@ export component NotificationCard inherits Rectangle {
         root.data.variant == NotificationVariant.success ? { accent: Theme.green, icon: "check_circle" }
         : root.data.variant == NotificationVariant.warning ? { accent: Theme.yellow, icon: "warning" }
         : root.data.variant == NotificationVariant.error ? { accent: Theme.danger, icon: "error" }
+        : root.data.variant == NotificationVariant.neutral ? { accent: Theme.accent, icon: "" }
         : { accent: Theme.accent, icon: "info" };
 
     // In the card rather than the column's spacing, so it opens and closes with the slot.
@@ -86,7 +104,7 @@ export component NotificationCard inherits Rectangle {
     // up out of the stack's edge rather than being uncovered in place.
     body := Rectangle {
         x: 0;
-        y: root.gap;
+        y: root.gap - root.rise;
         width: 100%;
         height: root.content-h;
 
@@ -150,7 +168,7 @@ export component NotificationCard inherits Rectangle {
                 // The glyph box outgrows the title's line box: top-aligned, it sits off centre.
                 cross-axis-alignment: center;
 
-                MaterialIcon {
+                if root.look.icon != "": MaterialIcon {
                     name: root.look.icon;
                     icon-size: 20px;
                     icon-color: root.look.accent;

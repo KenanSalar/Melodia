@@ -138,7 +138,7 @@ impl UndoWindow {
 
     fn timed_notice(&self, kind: NotificationKind) -> LocalizedPush {
         LocalizedPush {
-            variant: NotificationVariant::Info,
+            variant: NotificationVariant::Neutral,
             kind,
             timeout_ms: self.prefs.borrow().notice_ms(),
         }

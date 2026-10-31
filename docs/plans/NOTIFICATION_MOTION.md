@@ -1,7 +1,7 @@
 # Plan: Notification motion (cards that arrive, leave and make room)
 
-Status: **in progress** (Phase 0 done, Phase 1 committed as `1092cfed`, Phase 2 awaiting Kenan's
-hand test) · Owner: Kenan ·
+Status: **in progress** (Phase 0 done, Phase 1 committed as `1092cfed`, Phase 2 as `2c9261e3`,
+Phase 3 awaiting Kenan's hand test) · Owner: Kenan ·
 Created: 2026-10-31
 
 > **Validated 2026-10-31** against `0b6d11b5` (`main`): direct reads of `notification-stack.slint`,
@@ -192,8 +192,8 @@ above `body`, its anchor, rather than in the header.
 
 ### Phase 2: every way out leaves the same way
 
-Status: implemented (2026-10-31), awaiting the hand test below. fmt, clippy, the full suite and the
-build are green. In the generated card, opacity follows `up`, and its animation's duration and
+Status: committed as `2c9261e3` (2026-10-31). fmt, clippy, the full suite and the build were
+green. In the generated card, opacity follows `up`, and its animation's duration and
 easing both branch on `leaving`. `live_rows()` is the one filter for live rows, which `find_live`,
 `is_live`, the cap and `dismiss_by_kind` all read. Beyond the renames, two test changes:
 `max_visible_evicts_oldest_on_overflow` collapses to one equality on the live ids, and the
@@ -241,6 +241,11 @@ test-local `Removal` alias becomes `Retirement`. Undo's `offer` doc says "retire
 
 ### Phase 3: the undo notice, with no glyph and a cue when its count moves
 
+Status: implemented (2026-10-31), awaiting the hand test below. fmt, clippy, the full suite and the
+build are green. In the generated card, `user_init` reads `opacity`, `slot-h` and `rise`, the
+icon is a `Conditional` folded into the content layout, `settle`'s `running` binds to `lifted`,
+and the vertical layout info is still `min 0` with `slot-h` as preferred and max.
+
 1. **`neutral` variant:**
    - Append `NotificationVariant.neutral` in `models.slint`.
    - The card's `look` gains `{ accent: Theme.accent, icon: "" }` for it, and `MaterialIcon`
@@ -248,11 +253,12 @@ test-local `Removal` alias becomes `Retirement`. Undo's `offer` doc says "retire
    - `timed_notice` returns `NotificationVariant::Neutral`.
    - No Rust code matches on the variant, so nothing else moves.
 2. **Count cue:**
-   - A private `rise` length, with the body at `y: root.gap - root.rise`, and
+   - A private `lifted` bool drives `rise: root.lifted ? root.bump-rise : 0px` (4px), with the
+     body at `y: root.gap - root.rise`, and
      `animate rise { duration: Theme.dur-fast; easing: cubic-bezier(0.2, 0, 0, 1); }`.
-   - The existing `changed watched-restarts` sets `rise` to a named `bump-rise` (4px) and starts a
-     one-shot `settle` `Timer` on `Theme.dur-fast`, which sets it back to 0.
-   - `init` also reads `root.rise`.
+   - The existing `changed watched-restarts` sets `lifted`. A `settle` `Timer` on `Theme.dur-fast`
+     runs while `lifted` holds and clears it, so its `running` stays a binding.
+   - `init` also reads `root.rise`, and its comment says each layer eases from its mount value.
    - The undo merge is the only caller of `restart` (`undo/mod.rs:101`), so only the undo notice
      lifts.
 

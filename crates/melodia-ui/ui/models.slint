@@ -344,8 +344,9 @@ export struct BreadcrumbRow {
     path: string,
 }
 
-// `info` first, being both the default and the card's fallback styling.
-export enum NotificationVariant { info, success, warning, error }
+// `info` first, being both the default and the card's fallback styling. `neutral` is the accent
+// bar with no glyph, for a notice that offers something rather than announces it.
+export enum NotificationVariant { info, success, warning, error, neutral }
 
 // Routes a row's action button through `ui::shell::notifications::run_action`'s exhaustive match,
 // and groups rows for `dismiss_by_kind`.
