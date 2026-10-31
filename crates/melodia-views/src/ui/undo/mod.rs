@@ -78,7 +78,7 @@ impl UndoWindow {
 
     /// Raises the notice for a removal that has already been written, unless Settings leaves it
     /// uncovered. **No slot borrow is held across a `NotificationsUi` call**, any of which can
-    /// remove a row and call back in.
+    /// retire a row and call back in.
     pub fn offer(&self, removal: Removal) {
         if !self.covers(removal.kind(), removal.size()) {
             return;
@@ -178,7 +178,7 @@ impl UndoWindow {
         }
     }
 
-    fn row_removed(&self, row: i32) {
+    fn row_retired(&self, row: i32) {
         if self.holds(row) {
             self.release();
         }
@@ -216,9 +216,9 @@ pub fn install(
     window.mirror_prefs();
 
     let weak = Rc::downgrade(&window);
-    notifications.on_row_removed(move |row| {
+    notifications.on_row_retired(move |row| {
         if let Some(window) = weak.upgrade() {
-            window.row_removed(row);
+            window.row_retired(row);
         }
     });
 

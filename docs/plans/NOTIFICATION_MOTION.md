@@ -1,6 +1,7 @@
 # Plan: Notification motion (cards that arrive, leave and make room)
 
-Status: **in progress** (Phase 0 done, Phase 1 awaiting Kenan's hand test) · Owner: Kenan ·
+Status: **in progress** (Phase 0 done, Phase 1 committed as `1092cfed`, Phase 2 awaiting Kenan's
+hand test) · Owner: Kenan ·
 Created: 2026-10-31
 
 > **Validated 2026-10-31** against `0b6d11b5` (`main`): direct reads of `notification-stack.slint`,
@@ -156,8 +157,8 @@ fmt, clippy, the full suite and the build are green.
 
 ### Phase 1: cards rise in and the stack makes room
 
-Status: implemented (2026-10-31), awaiting the hand test below. fmt, clippy, the full suite and the
-build are green. The generated card's vertical layout info is `min 0`, with `slot-h` as both its
+Status: committed as `1092cfed` (2026-10-31). fmt, clippy, the full suite and the build were
+green. The generated card's vertical layout info is `min 0`, with `slot-h` as both its
 preferred and max values and no body term folded in, and its clip has no radius. The stack drops
 its `spacing` line, since 0 is `VerticalLayout`'s default. The note on the top-anchored body sits
 above `body`, its anchor, rather than in the header.
@@ -190,6 +191,13 @@ above `body`, its anchor, rather than in the header.
 - Exits are still instant until Phase 2.
 
 ### Phase 2: every way out leaves the same way
+
+Status: implemented (2026-10-31), awaiting the hand test below. fmt, clippy, the full suite and the
+build are green. In the generated card, opacity follows `up`, and its animation's duration and
+easing both branch on `leaving`. `live_rows()` is the one filter for live rows, which `find_live`,
+`is_live`, the cap and `dismiss_by_kind` all read. Beyond the renames, two test changes:
+`max_visible_evicts_oldest_on_overflow` collapses to one equality on the live ids, and the
+test-local `Removal` alias becomes `Retirement`. Undo's `offer` doc says "retire" too.
 
 1. **`models.slint`:** add `NotificationRow.leaving: bool`, with a one-line why. `show` builds it
    `false`.
@@ -225,6 +233,8 @@ above `body`, its anchor, rather than in the header.
 **Hand test:**
 - Each way out (✕, Undo, Ctrl+Z, the clock, a removal of another kind replacing the undo notice,
   a sixth notice evicting the oldest) fades the card, and its neighbours glide down.
+- There is no snap on the frame the row is finally dropped. Rust's timer and the slot's collapse
+  both run `dur-med`, but from different clocks.
 - Clicking Undo or ✕ on a card that is already leaving does nothing.
 - Ctrl+Z after the card starts leaving does nothing.
 - A language switch with a card up still relabels it.

@@ -4,15 +4,17 @@
 use std::cell::{Cell, OnceCell, RefCell};
 use std::collections::HashMap;
 use std::rc::Rc;
+use std::time::Duration;
 
 use slint::{ComponentHandle, Model, ModelRc, SharedString, VecModel};
 
+use crate::ui::appearance::token_duration;
 use melodia_ui::{
     AppWindow, MelodiaUpdater, NotificationKind, NotificationRow, NotificationVariant,
-    Notifications, Settings, SettingsPage,
+    Notifications, Settings, SettingsPage, Theme,
 };
 
-/// Past it the oldest is dropped, so the stack never grows off-screen.
+/// Live cards only: past it the oldest live one retires, so the stack never grows off-screen.
 const MAX_VISIBLE: usize = 5;
 
 /// How long a confirmation stays up. Errors stay sticky: a failure nobody was looking at is one
@@ -94,9 +96,11 @@ pub struct NotificationsUi {
     /// Keyed by row id rather than position, positions moving under an eviction.
     recipes: RefCell<HashMap<i32, Relabel>>,
     next_id: Cell<i32>,
-    /// Told every row that goes, by whatever path: the undo slot has to drop its hold with its
-    /// notice.
-    row_removed: OnceCell<Box<dyn Fn(i32)>>,
+    /// How long a leaving card takes to fade and close, after which its row is dropped.
+    exit: Duration,
+    /// Told every row that starts leaving, by whatever path: the undo slot has to drop its hold
+    /// with its notice.
+    row_retired: OnceCell<Box<dyn Fn(i32)>>,
 }
 
 impl NotificationsUi {
@@ -109,9 +113,11 @@ impl NotificationsUi {
         let id = self.next_id.get();
         self.next_id.set(id.saturating_add(1));
 
-        // Down to `MAX_VISIBLE - 1`, leaving room for the push to settle at the cap.
-        while self.rows.row_count() >= MAX_VISIBLE {
-            self.remove_at(0);
+        // Down to `MAX_VISIBLE - 1` live, leaving room for the push to settle at the cap.
+        while self.live_rows().count() >= MAX_VISIBLE
+            && let Some((oldest, _)) = self.live_rows().next()
+        {
+            self.retire_at(oldest);
         }
 
         self.rows.push(NotificationRow {
@@ -123,6 +129,7 @@ impl NotificationsUi {
             kind: p.kind,
             timeout_ms: i32::try_from(timeout_ms).unwrap_or(i32::MAX),
             restarts: 0,
+            leaving: false,
         });
         id
     }
@@ -174,7 +181,7 @@ impl NotificationsUi {
     where
         F: Fn(&AppWindow) -> RowText + 'static,
     {
-        let Some((pos, row)) = self.find(id) else { return };
+        let Some((pos, row)) = self.find_live(id) else { return };
         let text = relabel(ui);
         self.recipes.borrow_mut().insert(id, Box::new(relabel));
         self.rows.set_row_data(
@@ -190,15 +197,15 @@ impl NotificationsUi {
 
     /// Starts a live row's clock over.
     pub fn restart(&self, id: i32) {
-        let Some((pos, row)) = self.find(id) else { return };
+        let Some((pos, row)) = self.find_live(id) else { return };
         let restarts = row.restarts.wrapping_add(1);
         self.rows.set_row_data(pos, NotificationRow { restarts, ..row });
     }
 
     /// The one listener, which the undo slot registers.
-    pub fn on_row_removed(&self, listener: impl Fn(i32) + 'static) {
-        if self.row_removed.set(Box::new(listener)).is_err() {
-            log::warn!("notifications: a second row-removed listener was ignored");
+    pub fn on_row_retired(&self, listener: impl Fn(i32) + 'static) {
+        if self.row_retired.set(Box::new(listener)).is_err() {
+            log::warn!("notifications: a second row-retired listener was ignored");
         }
     }
 
@@ -255,35 +262,53 @@ impl NotificationsUi {
     }
 
     pub fn dismiss(&self, id: i32) {
-        if let Some((pos, _)) = self.find(id) {
-            self.remove_at(pos);
+        if let Some((pos, _)) = self.find_live(id) {
+            self.retire_at(pos);
         }
     }
 
-    /// Back to front, so a remove doesn't shift the matches still to come.
     pub fn dismiss_by_kind(&self, kind: NotificationKind) {
-        for i in (0..self.rows.row_count()).rev() {
-            if self.rows.row_data(i).is_some_and(|r| r.kind == kind) {
-                self.remove_at(i);
+        for i in 0..self.rows.row_count() {
+            if self.rows.row_data(i).is_some_and(|r| !r.leaving && r.kind == kind) {
+                self.retire_at(i);
             }
         }
     }
 
-    /// A row closed or evicted first is simply not found, ids never being reused.
-    fn find(&self, id: i32) -> Option<(usize, NotificationRow)> {
-        self.rows.iter().enumerate().find(|(_, row)| row.id == id)
+    fn live_rows(&self) -> impl Iterator<Item = (usize, NotificationRow)> + '_ {
+        self.rows.iter().enumerate().filter(|(_, row)| !row.leaving)
     }
 
-    /// **Every removal goes through here**: a recipe outliving its row is a closure kept for the
+    /// A row retired first is simply not found, ids never being reused.
+    fn find_live(&self, id: i32) -> Option<(usize, NotificationRow)> {
+        self.live_rows().find(|(_, row)| row.id == id)
+    }
+
+    fn is_live(&self, id: i32) -> bool {
+        self.find_live(id).is_some()
+    }
+
+    /// **Every way out goes through here**: a recipe outliving its row is a closure kept for the
     /// session, and an undo hold outliving its notice an undo nobody can reach. The listener runs
-    /// with nothing borrowed, the eviction inside `show` reaching it too.
-    fn remove_at(&self, pos: usize) {
+    /// with nothing borrowed, the eviction inside `show` reaching it too. The row itself stays
+    /// until its card has closed, a repeated instance having no exit hook.
+    fn retire_at(&self, pos: usize) {
         let Some(row) = self.rows.row_data(pos) else { return };
-        self.recipes.borrow_mut().remove(&row.id);
-        self.rows.remove(pos);
-        if let Some(listener) = self.row_removed.get() {
-            listener(row.id);
+        let id = row.id;
+        self.recipes.borrow_mut().remove(&id);
+        self.rows.set_row_data(pos, NotificationRow { leaving: true, ..row });
+        if let Some(listener) = self.row_retired.get() {
+            listener(id);
         }
+        let rows = self.rows.clone();
+        slint::Timer::single_shot(self.exit, move || remove_row(&rows, id));
+    }
+}
+
+/// By id, the rows ahead of it having moved since it was retired.
+fn remove_row(rows: &VecModel<NotificationRow>, id: i32) {
+    if let Some(pos) = rows.iter().position(|row| row.id == id) {
+        rows.remove(pos);
     }
 }
 
@@ -296,7 +321,8 @@ pub fn install(ui: &AppWindow) -> Rc<NotificationsUi> {
         rows,
         recipes: RefCell::new(HashMap::new()),
         next_id: Cell::new(0),
-        row_removed: OnceCell::new(),
+        exit: token_duration(ui.global::<Theme>().get_dur_med()),
+        row_retired: OnceCell::new(),
     });
 
     {
@@ -309,6 +335,9 @@ pub fn install(ui: &AppWindow) -> Rc<NotificationsUi> {
         let state = state.clone();
         let weak = ui.as_weak();
         ui.global::<Notifications>().on_action(move |id, kind| {
+            if !state.is_live(id) {
+                return;
+            }
             if let Some(ui) = weak.upgrade() {
                 run_action(&ui, id, kind);
             }

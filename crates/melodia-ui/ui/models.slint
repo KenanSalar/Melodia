@@ -377,6 +377,8 @@ export struct NotificationRow {
     timeout-ms: int,
     // A bump restarts that clock: a run of one removal keeps its card.
     restarts: int,
+    // No longer live, its card closing; Rust drops the row once it has (`retire_at`).
+    leaving: bool,
 }
 
 // **`id` is `0` for a station only in the directory**, results never being persisted until the

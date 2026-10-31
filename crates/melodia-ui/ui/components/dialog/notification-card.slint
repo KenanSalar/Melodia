@@ -6,7 +6,7 @@ import { IconButton } from "../icon-button.slint";
 import { SectionButton } from "../settings/section-button.slint";
 import { TuckedFill } from "../tucked-fill.slint";
 
-// One card in the notification stack. No exit animation: a dismiss drops the row from the model.
+// One card in the notification stack. A dismiss only marks the row leaving; Rust drops it later.
 // The pointer is caught by the card's body alone, never the stack, so the gaps between cards don't
 // block the layers underneath.
 export component NotificationCard inherits Rectangle {
@@ -33,7 +33,8 @@ export component NotificationCard inherits Rectangle {
     // the background; a resume runs the whole interval again.
     clock := Timer {
         interval: root.data.timeout-ms * 1ms;
-        running: root.data.timeout-ms > 0 && !sentinel.has-hover && Theme.window-focused;
+        running: root.data.timeout-ms > 0 && !root.data.leaving && !sentinel.has-hover
+            && Theme.window-focused;
         triggered => {
             Notifications.dismiss(root.data.id);
         }
@@ -58,7 +59,8 @@ export component NotificationCard inherits Rectangle {
     private property <length> gap: 8px;
     private property <length> content-h: layout.preferred-height;
     private property <length> full-h: root.gap + root.content-h;
-    private property <length> slot-h: root.shown ? root.full-h : 0px;
+    private property <bool> up: root.shown && !root.data.leaving;
+    private property <length> slot-h: root.up ? root.full-h : 0px;
     animate slot-h { duration: Theme.dur-med; easing: cubic-bezier(0.2, 0, 0, 1); }
 
     min-height: 0px;
@@ -66,8 +68,14 @@ export component NotificationCard inherits Rectangle {
     max-height: root.slot-h;
     // Only while the slot is short, so at rest nothing the body paints past its edge is cut.
     clip: root.slot-h < root.full-h;
-    opacity: root.shown ? 1.0 : 0.0;
-    animate opacity { duration: Theme.dur-med; easing: cubic-bezier(0.2, 0, 0, 1); }
+    opacity: root.up ? 1.0 : 0.0;
+    // Out faster than it came in, accelerating away.
+    animate opacity {
+        duration: root.data.leaving ? Theme.dur-fast : Theme.dur-med;
+        easing: root.data.leaving
+            ? ease-in
+            : cubic-bezier(0.2, 0, 0, 1);
+    }
 
     private property <length> radius: Theme.radius-md;
     private property <length> border-w: 1px;
