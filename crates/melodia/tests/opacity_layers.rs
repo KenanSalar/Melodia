@@ -80,7 +80,12 @@ impl<'a> Declared<'a> {
                 let Some(body) = block_body(src, open) else { continue };
                 match head(src, open) {
                     Some(Head::Root { name, base }) => {
-                        roots.insert(name, Root { body, base });
+                        let earlier = roots.insert(name, Root { body, base });
+                        assert!(
+                            earlier.is_none(),
+                            "`{name}` is declared twice, and the walk keys components by name, so \
+                             one declaration would be read as the other"
+                        );
                     }
                     Some(Head::Mount(kind)) if has_children(body) => {
                         handed_children.insert(kind);

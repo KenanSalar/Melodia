@@ -2,7 +2,8 @@
 
 Status: **in progress** (Phase 0 done, Phase 1 committed as `1092cfed`, Phase 2 as `2c9261e3`
 and `e5536584`, Phase 3 as `feb01476` and `fbaaef9f`, Phase 4 as `6e3789dc` and `6c68fdeb`,
-awaiting Kenan's hand test) · Owner: Kenan · Created: 2026-10-31
+with `6611d4b6` fading the card through its brushes, awaiting Kenan's hand test) · Owner: Kenan ·
+Created: 2026-10-31
 
 > **Validated 2026-10-31** against `0b6d11b5` (`main`): direct reads of `notification-stack.slint`,
 > `globals/notifications.slint`, `models.slint`, `notifications.rs` and its tests, `undo/mod.rs`,
@@ -80,10 +81,11 @@ Working doc. Delete when every phase has shipped and passed Kenan's hand test.
    curve `ViewTransition` uses. The exit fades on `Theme.dur-fast` with `ease-in` and collapses on
    `Theme.dur-med` with the enter curve. Something leaving should go faster than it came. The hand
    test tunes the curves, while the tokens stay.
-6. **One opacity, on the card.** An `opacity` below 1 renders the subtree into a texture sized to
-   its children, which crops marks above a line box while the fade runs (`slint-pitfalls.md`,
-   Text). `ViewTransition` accepts this for a whole page. A card fades for at most a quarter
-   second, so it accepts it too.
+6. **One `fade`, through the card's brushes.** An `opacity` on the card is a layer sized to its
+   children, which stop at the slot's easing clip and, in a fling, follow the sliding body, so
+   femtovg allocated a new texture on every frame of an entry, an exit or a fling
+   (`opacity_layers.rs`). The card eases a `fade` float into each brush instead and hands it to
+   `MaterialIcon`, `SectionButton` and `IconButton`.
 7. **No pause on keyboard focus.** Nothing in the card can take focus, because `ShortcutScope` is
    the only `FocusScope`. Ctrl+Z is the keyboard path.
 8. **The undo family gets a `neutral` variant rather than a kind test in the card.** `timed_notice`
@@ -345,7 +347,7 @@ now also clears the flag.
 
 1. **New pins:**
    - `mount_fade_tests.rs`: the card reads every bound animated layer at mount
-     (`root.opacity`, `root.slot-h`, `root.rise`, in whatever order its `init` settles on).
+     (`root.fade`, `root.slot-h`, `root.rise`, in whatever order its `init` settles on).
    - The three pick boxes pick on `clicked`, and `SliderPointer` clears its flag at the release,
      so none of them acts on a release it didn't take.
    - `notifications_tests.rs`, covering all of the following:

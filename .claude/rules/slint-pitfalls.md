@@ -338,10 +338,9 @@ there, never in the `.slint`.
     geometry.** `Opacity::need_layer` (`i-slint-core/items.rs`) bails at 1.0 and on an element with
     no children; else `item_children_bounding_rect` sizes it, a `Text`'s `bounding_rect` being its
     line box. A fade crops while it runs, a dimmed state or a rest at `0` for as long as it lasts,
-    and bounds that move under it (a clip easing, a child sliding) allocate a new texture every
-    frame, femtovg's `create_layer_target` reusing one only at an equal size. Fold the alpha into
-    the brush (`transparentize`, which multiplies where `with-alpha` sets), pass a `fade` float
-    where there is none (`ArtworkImage`), or, where the brushes feed the component's own
+    and one whose bounds move is re-allocated every frame (`opacity_layers.rs`). Fold the alpha
+    into the brush (`transparentize`, which multiplies where `with-alpha` sets), pass a `fade`
+    float where there is none (`ArtworkImage`), or, where the brushes feed the component's own
     `animate`s, leave the faded element childless (`IconButton`). Verify by names in the enclosing
     struct's item fields, a sub-component having no `ITEM_TREE`. `view-transition.slint` has no
     cure, one of the layers `opacity_layers.rs` keeps.

@@ -15,13 +15,11 @@ export component HorizontalCardStrip inherits Rectangle {
     in property <length>             card-gap: 12px;
     in property <bool>               circular: false;
     in property <bool>               show-play-count: false;
-    in property <bool>               show-play-overlay: true;
     in property <string>             fallback-icon: "music-note";
     in property <string>             empty-text;
 
     pure callback request-cover(string) -> image;
     callback row-clicked(int);
-    callback play-clicked(int);
 
     private property <length> strip-height: root.card-height + 18px;
 
@@ -61,58 +59,17 @@ export component HorizontalCardStrip inherits Rectangle {
                     spacing: root.card-gap;
                     alignment: start;
 
-                    for row[i] in root.rows: card-slot := Rectangle {
-                        width: root.card-width;
-                        height: root.card-height;
-                        clip: false;
-
-                        EntityCard {
-                            width: 100%;
-                            height: 100%;
-                            artwork-path: row.artwork_path;
-                            cover: root.request-cover(row.artwork_path);
-                            title: row.title;
-                            subtitle: row.subtitle;
-                            card-width: root.card-width;
-                            card-height: root.card-height;
-                            circular: root.circular;
-                            fallback-icon: root.fallback-icon;
-                            play-count: root.show-play-count ? row.play_count : 0;
-                            clicked => { root.row-clicked(row.id); }
-                        }
-
-                        // The tile's bottom right, at `EntityCard`'s inset.
-                        if root.show-play-overlay: play-pill := Rectangle {
-                            property <float> fade: play-touch.has-hover || card-touch.has-hover ? 1.0 : 0.0;
-                            animate fade { duration: Theme.dur-fast; easing: ease-in-out; }
-
-                            x: root.card-width - self.width - Theme.pad-md;
-                            y: root.card-width - self.height - Theme.pad-md;
-                            width: 36px;
-                            height: 36px;
-                            border-radius: 18px;
-                            background: Theme.accent.transparentize(1.0 - self.fade);
-
-                            // `MaterialIcon`'s collapsed em-box, spelled inline.
-                            Text {
-                                text: "play_arrow";
-                                color: Theme.accent-text.transparentize(1.0 - play-pill.fade);
-                                font-family: "Material Symbols Rounded";
-                                font-size: 22px;
-                                horizontal-alignment: center;
-                                vertical-alignment: center;
-                            }
-
-                            play-touch := TouchArea {
-                                mouse-cursor: pointer;
-                                clicked => { root.play-clicked(row.id); }
-                            }
-                        }
-
-                        card-touch := TouchArea {
-                            mouse-cursor: pointer;
-                            enabled: false;
-                        }
+                    for row in root.rows: EntityCard {
+                        artwork-path: row.artwork_path;
+                        cover: root.request-cover(row.artwork_path);
+                        title: row.title;
+                        subtitle: row.subtitle;
+                        card-width: root.card-width;
+                        card-height: root.card-height;
+                        circular: root.circular;
+                        fallback-icon: root.fallback-icon;
+                        play-count: root.show-play-count ? row.play_count : 0;
+                        clicked => { root.row-clicked(row.id); }
                     }
                 }
             }

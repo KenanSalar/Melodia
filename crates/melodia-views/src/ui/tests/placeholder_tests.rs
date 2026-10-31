@@ -279,8 +279,9 @@ fn a_field_reads_as_focused_while_its_edit_menu_is_open() {
     assert_eq!(read, ("ti.has-focus || menu.is-open", "menu.is-open"), "(field, menu)");
 }
 
-/// An idle tooltip is hidden rather than drawn transparent, and every mount in the tree carries one.
-/// Hidden on `shown` alone, the fade-out never plays: the pill vanishes on the frame the hover ends.
+/// Every icon button and caption mounts a tooltip, so an idle one is hidden rather than painted at
+/// zero alpha. Hidden on `shown` alone, the fade-out never plays: the pill vanishes on the frame the
+/// hover ends.
 #[test]
 fn an_idle_tooltip_is_hidden_once_its_fade_out_lands() {
     let src = normalized(&code(TOOLTIP));
