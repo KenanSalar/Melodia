@@ -1,5 +1,6 @@
 //! The folder fetch, the in-memory re-sort and the row patches.
 
+use std::collections::HashSet;
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::sync::atomic::Ordering;
@@ -250,19 +251,19 @@ pub fn resort_and_apply(ui: &AppWindow, browse_ui: &BrowseUi) {
     apply_selection_to_rows(&g);
 }
 
-/// Patches the one row on screen, so the scroll holds.
-pub fn apply_row_favorite(weak: &Weak<AppWindow>, id: i64, fav: bool) {
+/// Patches the rows on screen, so the scroll holds.
+pub fn apply_rows_favorite(weak: &Weak<AppWindow>, ids: HashSet<i64>, fav: bool) {
     let _ = weak.upgrade_in_event_loop(move |ui| {
-        model_patch::patch_track_row_by_id(&ui.global::<Browse>().get_rows(), id, |r| {
+        model_patch::patch_track_rows_by_ids(&ui.global::<Browse>().get_rows(), &ids, |r| {
             r.is_favorite = fav;
         });
     });
 }
 
-/// [`apply_row_favorite`]'s star-rating twin.
-pub fn apply_row_rating(weak: &Weak<AppWindow>, id: i64, rating: i32) {
+/// [`apply_rows_favorite`]'s star-rating twin.
+pub fn apply_rows_rating(weak: &Weak<AppWindow>, ids: HashSet<i64>, rating: i32) {
     let _ = weak.upgrade_in_event_loop(move |ui| {
-        model_patch::patch_track_row_by_id(&ui.global::<Browse>().get_rows(), id, |r| {
+        model_patch::patch_track_rows_by_ids(&ui.global::<Browse>().get_rows(), &ids, |r| {
             r.rating = rating;
         });
     });

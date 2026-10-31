@@ -193,18 +193,20 @@ pub fn requery<L: PagedTrackList>(state: &AppState, list: &Arc<L>) {
     }
 }
 
-/// Patch the row showing `id` after a heart or a star, a no-op where the list doesn't hold it.
+/// Patch the rows showing `ids` after a heart or a star, a no-op for an id the list doesn't hold.
 /// Neither moves a track in or out of a list, so nothing is fetched and the scroll holds. Safe
 /// from any thread.
-pub fn patch_row<L: PagedTrackList>(
+pub fn patch_rows<L: PagedTrackList>(
     list: &L,
-    id: i64,
-    edit: impl FnOnce(&mut UiTrackListRow) + Send + 'static,
+    ids: Vec<i64>,
+    edit: impl Fn(&mut UiTrackListRow) + Send + 'static,
 ) {
     let _ = list.global().upgrade_in_event_loop(move |g| {
         let rows = g.track_rows();
         if let Some(model) = TrackRows::installed(&rows, L::LABEL) {
-            model.patch(id, edit);
+            for id in ids {
+                model.patch(id, &edit);
+            }
         }
     });
 }

@@ -1,5 +1,4 @@
 import { RadioStationRow } from "../../models.slint";
-import { Dialog } from "../../globals/dialog.slint";
 import { Radio } from "../../globals/radio.slint";
 import { Selection } from "../../globals/selection.slint";
 import { ContextMenuPopup, CopyField, FavoriteMenuItem, MenuItem, MenuSeparator } from "../context-menu.slint";
@@ -8,7 +7,7 @@ import { ContextMenuPopup, CopyField, FavoriteMenuItem, MenuItem, MenuSeparator 
 // than a kind of `CardContextMenu`, nothing here resolving to tracks: a station goes through
 // `Radio`, and none of `CardActions` applies.
 //
-// Every entry is gated on what its operation needs, never on the tab: the star needs a uuid,
+// Every entry is gated on what its operation needs, never on the tab: the heart needs a uuid,
 // removal a kept list, Browse's stations having no row.
 export component StationContextMenu inherits Rectangle {
     in property <RadioStationRow> station;
@@ -25,14 +24,14 @@ export component StationContextMenu inherits Rectangle {
     property <bool> kept: root.list != Radio.tab-browse;
     property <bool> on-favorites: root.list == Radio.tab-favorites;
     property <bool> on-recent: root.list == Radio.tab-recent;
-    // A hand-typed station has nothing in the directory to star against, so its card has no star.
-    property <bool> starrable: root.station.uuid != "";
-    // **No star entry on Favorites**: there the star and the trash leave the card in the same
-    // place, and the trash's confirm is the one that says what a hand-typed station loses.
-    property <bool> has-star: root.starrable && !root.on-favorites;
+    // A hand-typed station has no directory entry to favorite against, so its card has no heart.
+    property <bool> can-favorite: root.station.uuid != "";
+    // **No favorite entry on Favorites**: there un-favoriting is removing, which the remove entry
+    // below offers for every station, a hand-typed one included.
+    property <bool> has-favorite: root.can-favorite && !root.on-favorites;
     property <bool> can-edit: !root.multi-active && root.kept && root.station.editable;
     property <bool> has-play-group: !root.multi-active;
-    property <bool> has-keep-group: root.has-star || root.can-edit;
+    property <bool> has-keep-group: root.has-favorite || root.can-edit;
     // A selection may mix stations with and without a site, so it is offered whatever this one has.
     property <bool> copy-website: root.multi-active || root.station.homepage != "";
     property <[CopyField]> copy-fields: root.copy-website
@@ -110,7 +109,7 @@ export component StationContextMenu inherits Rectangle {
         }
 
         if root.has-play-group && root.has-keep-group: MenuSeparator {}
-        if root.has-star: FavoriteMenuItem {
+        if root.has-favorite: FavoriteMenuItem {
             is-favorite: root.station.is_favorite;
             multi-active: root.multi-active;
             multi-count: root.multi-count;
@@ -164,27 +163,23 @@ export component StationContextMenu inherits Rectangle {
             }
         }
 
-        // The trash button's confirm, over one card or the whole selection. Two labels
-        // rather than one taking the tab's name, `@tr` resolving literals at codegen.
+        // The trash's removal, over one card or the whole selection. Two labels rather than one
+        // taking the tab's name, `@tr` resolving literals at codegen.
         if root.kept: MenuSeparator {}
         if root.kept: MenuItem {
             label: root.on-recent
                 ? (root.multi-active
                     // Translators: `{}` is how many stations are selected
-                    ? @tr("Remove {} from Recently Played…", root.multi-count)
-                    : @tr("Remove from Recently Played…"))
+                    ? @tr("Remove {} from Recently Played", root.multi-count)
+                    : @tr("Remove from Recently Played"))
                 : (root.multi-active
-                    // Translators: `{}` is how many stations are selected
-                    ? @tr("Remove {} from Favorites…", root.multi-count)
-                    : @tr("Remove from Favorites…"));
+                    ? @tr("Remove {} from Favorites", root.multi-count)
+                    : @tr("Remove from Favorites"));
             icon: "delete";
             destructive: true;
             clicked => {
-                if (root.multi-active) {
-                    Dialog.open-remove-stations(pop.effective-ids, root.on-recent);
-                } else {
-                    Dialog.open-remove-station(root.station, root.on-recent);
-                }
+                Radio.remove-stations(
+                    root.list, root.multi-active ? pop.effective-ids : [root.station.id]);
                 root.dismiss();
             }
         }

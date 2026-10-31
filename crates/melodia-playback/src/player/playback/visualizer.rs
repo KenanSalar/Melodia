@@ -233,7 +233,8 @@ const _: fn() = || {
 
 /// One source's claim on its deck's ring, which tells the reader what to mix: a dead deck's frozen
 /// tail would ghost into every later frame. Released within a frame of the audio stopping, though
-/// not strictly ordered against a control op.
+/// not strictly ordered against a control op. Scoped to the source rather than read off a cursor
+/// delta, which takes a live deck for dead between cpal's period-sized pulls.
 pub struct DeckRun {
     viz: Arc<VisualizerShared>,
     deck: usize,

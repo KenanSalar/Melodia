@@ -177,7 +177,8 @@ impl FileDecoder {
     /// [`Self::skip`], above the cursor the stream decoder shares; [`super::opus`] has already
     /// dropped Opus's, leaving an offset; a tail is the container's, which only
     /// [`super::mkv_trim`] answers. Never on the audio callback, every caller opening off the deck
-    /// lock.
+    /// lock. Here rather than in [`super::decode`]: a mount has no container header to read a trim
+    /// from and no gapless seam for one to spoil.
     fn install_trim(&mut self, edits: &[aac_trim::Edit], discards: &[mkv_trim::Discard]) {
         let tail = mkv_trim::resolve(discards, self.track, self.cursor.shape().rate).unwrap_or(0);
 

@@ -24,8 +24,8 @@ export component MyLibraryPlaylistsTab inherits Rectangle {
         gap: root.gap;
         open-playlist(id) => { Playlists.open-playlist(id); }
         request-blur-search => { MyLibrary.blur-search-tick += 1; }
+        delete-playlists(ids) => { Playlists.delete-playlists(ids); }
         // Edit-artwork goes through Rust, which fetches the track artworks before opening.
-        delete-playlist(id) => { Dialog.open-delete-playlist(id); }
         edit-playlist-artwork(id) => {
             Playlists.request-edit-artwork-for(id);
         }
@@ -33,8 +33,7 @@ export component MyLibraryPlaylistsTab inherits Rectangle {
             // The grid model carries no description, so both come off Rust's cached stats.
             Dialog.open-rename-playlist(id, Playlists.row-name(id), Playlists.row-description(id));
         }
-        // Menu-only, both of them; the detail view's pill row raises the same two dialogs.
-        delete-playlists(ids) => { Dialog.open-delete-playlists(ids); }
+        // Menu-only; the detail view's pill row raises the same dialog.
         edit-playlist-rules(id) => { Dialog.open-edit-smart-rules(id); }
         covers-generation: Playlists.covers-generation;
         request-cover(p, g) => { Playlists.request-cover(p, g) }

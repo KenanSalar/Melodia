@@ -1,14 +1,17 @@
 use std::sync::Arc;
 use std::time::Duration;
 
+use tokio::sync::mpsc::UnboundedReceiver;
+
 use crate::state::PlaybackContext;
 use melodia_audio::player::source::stream_source;
 use melodia_core::error::AppError;
 use melodia_core::error::describe;
+use melodia_core::utils::event_bridge::EventBridge;
 use melodia_engine::player::engine::backend::{OutputChoice, PlaybackEngine};
 use melodia_engine::player::engine::queue::window_slots;
 use melodia_engine::player::engine::state::{
-    MAX_VOLUME, PlayerAction, PlayerState, lock_state, with_state_emit,
+    MAX_VOLUME, PlayerAction, PlayerState, ReplacedQueue, lock_state, with_state_emit,
 };
 use melodia_engine::player::engine::types::{PlaybackSource, PlaybackStatus, RadioNowPlaying};
 use melodia_playback::player::playback::output::convert::Resampler;
@@ -27,8 +30,13 @@ fn resolve_start_slot(
     queued.iter().position(|&id| id == wanted)
 }
 
+/// A bridge rather than a return value: a play runs on the runtime, and the undo slot it offers to
+/// lives on the UI thread. Unclaimed, as at boot before the UI installs, a capture drops.
+static REPLACED_QUEUES: EventBridge<ReplacedQueue> = EventBridge::new();
+
 /// Replace the queue with `track_ids` and start at `start_index` (`None` = head). Every browsing
-/// surface starts playback here, so the queue is always the list the user was looking at.
+/// surface starts playback here, so the queue is always the list the user was looking at, and a
+/// queue built by hand that it replaces goes out over [`REPLACED_QUEUES`].
 ///
 /// With shuffle on, the rest is shuffled behind the chosen track: a freshly seeded `play_order` is
 /// the identity, so the lit shuffle button would otherwise walk the album straight through.
@@ -64,10 +72,9 @@ pub async fn player_play_tracks(
         .collect();
     let records =
         queries::track::get_track_summaries_by_ids(&ctx.db, &near).await?.into_iter().map(Arc::new);
+    let mut replaced = None;
     ctx.emit_and_execute(|s| {
-        s.queue.clear();
-        s.queue.add_tracks(&queued);
-        s.queue.current_index = Some(start);
+        replaced = s.replace_queue(&queued, start);
         if s.queue.shuffle_enabled {
             s.queue
                 .shuffle_play_order_in_place(&mut rand::rng(), /* anchor_to_current */ true);
@@ -79,7 +86,15 @@ pub async fn player_play_tracks(
             None => vec![],
         }
     });
+    if let Some(replaced) = replaced {
+        REPLACED_QUEUES.send(replaced);
+    }
     Ok(())
+}
+
+/// Claims the receiving end of [`REPLACED_QUEUES`], `None` once claimed.
+pub fn replaced_queues() -> Option<UnboundedReceiver<ReplacedQueue>> {
+    REPLACED_QUEUES.install()
 }
 
 pub fn player_play(ctx: &PlaybackContext) -> Result<(), AppError> {

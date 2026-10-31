@@ -2,7 +2,9 @@
 
 use sqlx::AssertSqlSafe;
 
-use crate::database::{DbPool, IDS_PER_SET, set_where_id_in};
+use crate::database::{
+    DbPool, IDS_PER_SET, chunked_in_query_on, set_where_id_in, values_placeholders,
+};
 use melodia_core::error::AppError;
 
 pub async fn update_play_count(db: &DbPool, id: i64) -> Result<(), AppError> {
@@ -91,6 +93,25 @@ pub async fn set_favorite(db: &DbPool, ids: &[i64], favorite: bool) -> Result<()
     Ok(())
 }
 
+/// Clears the heart on those of `ids` that carry one, answering exactly those, so an undo puts
+/// back only what this took. One transaction: a failed chunk leaves nothing cleared that the
+/// answer doesn't name.
+pub async fn unfavorite(db: &DbPool, ids: &[i64]) -> Result<Vec<i64>, AppError> {
+    if ids.is_empty() {
+        return Ok(Vec::new());
+    }
+    let mut tx = db.write().begin().await?;
+    let cleared: Vec<(i64,)> = chunked_in_query_on(&mut tx, ids, |placeholders| {
+        format!(
+            "UPDATE tracks SET is_favorite = 0 WHERE is_favorite = 1 AND id IN ({placeholders})
+             RETURNING id"
+        )
+    })
+    .await?;
+    tx.commit().await?;
+    Ok(cleared.into_iter().map(|(id,)| id).collect())
+}
+
 /// Sets the star `rating`, which `library::ratings::set_rating` has already clamped.
 pub async fn set_rating(db: &DbPool, ids: &[i64], rating: i32) -> Result<(), AppError> {
     for chunk in ids.chunks(IDS_PER_SET) {
@@ -140,10 +161,9 @@ pub async fn batch_update_hashes(
 
     let mut tx = db.write().begin().await?;
     for chunk in updates.chunks(CHUNK_SIZE) {
-        let placeholders =
-            std::iter::repeat_n("(?,?,?)", chunk.len()).collect::<Vec<_>>().join(",");
+        let rows = values_placeholders(chunk.len(), COLS_PER_ROW);
         let sql = format!(
-            "WITH v(id, h, m) AS (VALUES {placeholders})
+            "WITH v(id, h, m) AS (VALUES {rows})
              UPDATE tracks
                 SET file_hash = (SELECT h FROM v WHERE v.id = tracks.id),
                     date_modified = (SELECT m FROM v WHERE v.id = tracks.id)

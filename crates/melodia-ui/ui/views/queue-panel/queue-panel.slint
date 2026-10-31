@@ -238,8 +238,12 @@ export component QueuePanel inherits Rectangle {
                             PillButton {
                                 text: @tr("Clear queue");
                                 clicked => {
+                                    if (!Queue.clear-confirms) {
+                                        Queue.clear-queue();
+                                        return;
+                                    }
                                     Dialog.title = @tr("Clear queue?");
-                                    Dialog.message = @tr("Remove all tracks from the queue? Playback will stop.");
+                                    Dialog.message = @tr("Remove all tracks from the queue? This can't be undone. The playing track plays to its end.");
                                     Dialog.confirm-label = @tr("Clear");
                                     Dialog.cancel-label = @tr("Cancel");
                                     Dialog.destructive = true;
@@ -279,9 +283,13 @@ export component QueuePanel inherits Rectangle {
                 }
             }
 
-            Rectangle {
-                height: 1px;
-                background: Theme.border;
+            HorizontalLayout {
+                padding-left: Theme.pad-sm;
+                padding-right: Theme.pad-sm;
+                Rectangle {
+                    height: 1px;
+                    background: Theme.border;
+                }
             }
 
             Rectangle {
@@ -346,9 +354,9 @@ export component QueuePanel inherits Rectangle {
 
                 OverlayScrollbar {
                     x: parent.width - self.width - 2px;
-                    y: 0;
+                    y: Theme.pad-sm;
                     width: Theme.scrollbar-slot;
-                    height: parent.height;
+                    height: parent.height - Theme.pad-sm;
                     visible-size: inner-list.visible-height;
                     content-size: inner-list.content-height;
                     offset: -inner-list.content-y;

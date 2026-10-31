@@ -7,6 +7,8 @@ import { IconButton } from "../icon-button.slint";
 // `overlay-hovered: <this>.has-hover`.
 export component CardFavoriteButton inherits IconButton {
     in property <length> card-width;
+    // Read off the row that keeps the card, `EntityStripRow.is_favorite` or Browse's list row, so
+    // one toggle patches both presentations.
     in property <bool> is-favorite;
     in property <bool> marks-kept: true;
     in property <bool> card-hovered;

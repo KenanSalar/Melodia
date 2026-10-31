@@ -2,6 +2,7 @@ use std::collections::HashSet;
 use std::sync::Arc;
 
 use super::*;
+use crate::player::engine::fixtures::cut_rows;
 use melodia_core::error::AppError;
 
 /// A queue of the tracks `1..=count`, in that order.
@@ -76,77 +77,81 @@ fn insert_next_clamps_to_end() -> Result<(), AppError> {
     Ok(())
 }
 
-// ── remove_at ───────────────────────────────────────────────────────
+// ── cut ─────────────────────────────────────────────────────────────
 
 #[test]
-fn remove_at_out_of_bounds() {
+fn cut_of_a_row_already_gone_takes_nothing() -> Result<(), AppError> {
     let mut q = make_queue(2);
-    assert!(!q.remove_at(5));
+    let entry = q.entry_at(1).ok_or_else(|| AppError::validation_msg("row 1 is queued"))?;
+    q.cut(&[entry]);
+    assert!(q.cut(&[entry]).is_none());
+    Ok(())
 }
 
 #[test]
-fn remove_at_adjusts_current_when_before() {
+fn cut_adjusts_current_when_before() {
     let mut q = make_queue(3);
     q.current_index = Some(2);
-    q.remove_at(0);
+    cut_rows(&mut q, &[0]);
     assert_eq!(q.current_index, Some(1));
 }
 
 #[test]
-fn remove_at_no_change_when_after() {
+fn cut_no_change_when_after() {
     let mut q = make_queue(3);
     q.current_index = Some(0);
-    q.remove_at(2);
+    cut_rows(&mut q, &[2]);
     assert_eq!(q.current_index, Some(0));
 }
 
 #[test]
-fn remove_at_current_clamps_to_len() {
+fn cut_of_the_current_last_item_leaves_the_gap_at_the_end_and_closing_it_clamps() {
     let mut q = make_queue(2);
-    q.current_index = Some(1); // last item
-    q.remove_at(1);
-    // Queue has 1 item left, current_index should clamp to 0
+    q.current_index = Some(1);
+    cut_rows(&mut q, &[1]);
+    assert_eq!(q.current_index, None);
+    assert!(q.playing_left());
+
+    q.close_gap();
     assert_eq!(q.current_index, Some(0));
 }
 
 #[test]
-fn remove_at_last_item_sets_minus_one() {
+fn cut_last_item_sets_minus_one() {
     let mut q = make_queue(1);
     q.current_index = Some(0);
-    q.remove_at(0);
+    cut_rows(&mut q, &[0]);
     assert_eq!(q.current_index, None);
     assert!(q.play_order.is_empty());
 }
 
 #[test]
-fn remove_at_increments_version() {
+fn cut_increments_version() {
     let mut q = make_queue(2);
     let v0 = q.version;
-    q.remove_at(0);
+    cut_rows(&mut q, &[0]);
     assert!(q.version > v0);
 }
 
-// ── remove_batch ────────────────────────────────────────────────────
-
 #[test]
-fn remove_batch_multiple() {
+fn cut_multiple() {
     let mut q = make_queue(5);
-    q.remove_batch(&[1, 3]);
+    cut_rows(&mut q, &[1, 3]);
     assert_eq!(q.play_order.len(), 3);
 }
 
 #[test]
-fn remove_batch_deduplicates() {
+fn cut_deduplicates() {
     let mut q = make_queue(3);
-    q.remove_batch(&[1, 1, 1]);
+    cut_rows(&mut q, &[1, 1, 1]);
     assert_eq!(q.play_order.len(), 2);
 }
 
 #[test]
-fn remove_batch_empty_is_noop() {
+fn cut_of_nothing_is_noop() {
     let mut q = make_queue(3);
     let v0 = q.version;
-    q.remove_batch(&[]);
+    cut_rows(&mut q, &[]);
     assert_eq!(q.version, v0);
     assert_eq!(q.play_order.len(), 3);
 }
@@ -515,14 +520,21 @@ fn every_change_to_the_order_publishes_the_new_order() {
         ("add_tracks", make_queue(3), |q| q.add_tracks(&[4]), &[1, 2, 3, 4]),
         ("insert_next", make_queue(3), |q| q.insert_next(&[4]), &[4, 1, 2, 3]),
         (
-            "remove_at",
+            "cut",
             make_queue(3),
             |q| {
-                q.remove_at(0);
+                cut_rows(q, &[0]);
             },
             &[2, 3],
         ),
-        ("remove_batch", make_queue(3), |q| q.remove_batch(&[0, 2]), &[2]),
+        (
+            "cut of two rows",
+            make_queue(3),
+            |q| {
+                cut_rows(q, &[0, 2]);
+            },
+            &[2],
+        ),
         (
             "move_rows",
             make_queue(3),
@@ -610,7 +622,7 @@ fn prune_missing_empty_set_is_noop() {
     let outcome = q.prune_missing(&HashSet::new());
 
     assert_eq!(outcome.removed, 0);
-    assert!(!outcome.current_was_removed);
+    assert!(!outcome.playing_was_removed);
     assert_eq!(q.play_order, vec![0, 1, 2]);
     assert_eq!(q.current_index, Some(1));
     assert_eq!(q.version, v0);
@@ -631,14 +643,14 @@ fn prune_missing_no_matches_is_noop() {
 fn prune_missing_keeps_current_when_other_removed() -> Result<(), AppError> {
     // tracks 1..=5, current = play_order[2] = track id 3. Prune ids {1, 5}.
     // Expected: the rows of 2, 3 and 4 survive in their own slots, current_index
-    // moves to 1 (still pointing at id 3), `current_was_removed = false`.
+    // moves to 1 (still pointing at id 3), `playing_was_removed = false`.
     let mut q = make_queue(5);
     q.current_index = Some(2);
 
     let outcome = q.prune_missing(&HashSet::from([1, 5]));
 
     assert_eq!(outcome.removed, 2);
-    assert!(!outcome.current_was_removed);
+    assert!(!outcome.playing_was_removed);
     assert_eq!(q.play_order, vec![1, 2, 3]);
     assert_eq!(q.original_order, vec![1, 2, 3]);
     let current =
@@ -651,13 +663,13 @@ fn prune_missing_keeps_current_when_other_removed() -> Result<(), AppError> {
 fn prune_missing_advances_when_current_removed() -> Result<(), AppError> {
     // tracks 1..=3, current = play_order[1] = id 2. Prune {2}.
     // Expected: rows [1, 3] survive, current_index = 1 (next survivor,
-    // which is id 3), `current_was_removed = true`.
+    // which is id 3), `playing_was_removed = true`.
     let mut q = make_queue(3);
     q.current_index = Some(1);
 
     let outcome = q.prune_missing(&HashSet::from([2]));
 
-    assert!(outcome.current_was_removed);
+    assert!(outcome.playing_was_removed);
     assert_eq!(outcome.removed, 1);
     assert_eq!(*q.play_ids(), [1, 3]);
     let current =
@@ -670,14 +682,14 @@ fn prune_missing_advances_when_current_removed() -> Result<(), AppError> {
 fn prune_missing_clamps_to_last_survivor_when_tail_removed() -> Result<(), AppError> {
     // tracks 1..=4, current = 3 (id 4). Prune {3, 4}.
     // Expected: surviving [1, 2], no surviving slot at or after old current,
-    // so we clamp to the last survivor (index 1, id 2). current_was_removed
+    // so we clamp to the last survivor (index 1, id 2). playing_was_removed
     // is true.
     let mut q = make_queue(4);
     q.current_index = Some(3);
 
     let outcome = q.prune_missing(&HashSet::from([3, 4]));
 
-    assert!(outcome.current_was_removed);
+    assert!(outcome.playing_was_removed);
     assert_eq!(q.current_index, Some(1));
     let current =
         q.current_id().ok_or_else(|| AppError::validation_msg("current_id None after prune"))?;
@@ -693,7 +705,7 @@ fn prune_missing_everything_empties_queue() {
     let outcome = q.prune_missing(&HashSet::from([1, 2, 3]));
 
     assert_eq!(outcome.removed, 3);
-    assert!(outcome.current_was_removed);
+    assert!(outcome.playing_was_removed);
     assert!(q.play_order.is_empty());
     assert!(q.original_order.is_empty());
     assert_eq!(q.current_index, None);
@@ -712,7 +724,7 @@ fn prune_missing_keeps_the_shuffled_order_of_the_survivors() {
     let outcome = q.prune_missing(&HashSet::from([1]));
 
     assert_eq!(outcome.removed, 1);
-    assert!(!outcome.current_was_removed);
+    assert!(!outcome.playing_was_removed);
     assert_eq!(q.play_order, vec![2, 3, 1]);
     assert_eq!(q.original_order, vec![1, 2, 3]);
 }

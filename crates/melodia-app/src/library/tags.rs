@@ -187,8 +187,8 @@ pub async fn apply_tag_edit(
             forget_stored_lyrics(state, &updated_ids).await;
         }
 
-        // Also refreshes Now Playing and the queue: the window task re-reads every record the
-        // player holds.
+        // A bump rather than a row patch, a retag being able to change what a list holds; the
+        // window task re-reading every record the player holds refreshes Now Playing and the queue.
         state.library_changed.bump();
     }
 

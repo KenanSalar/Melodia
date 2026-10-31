@@ -409,7 +409,7 @@ there, never in the `.slint`.
 
 - **Stock Slint 1.18 + winit 0.30 have no OS file drop on Wayland, and no pointer during one
   anywhere**: `DragArea`/`DropArea` is in-process, with no `PathBuf`. The vendored fork reports the
-  pointer and Rust routes the drop (`desktop-shell.md`); winit #4571 is the upstream fix.
+  pointer and Rust routes the drop (`window_chrome::file_drop`); winit #4571 is the upstream fix.
 
 ## Filter boxes
 

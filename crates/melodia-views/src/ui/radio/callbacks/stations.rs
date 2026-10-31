@@ -11,7 +11,7 @@ use crate::ui::{clipboard, launcher};
 use melodia_app::library;
 use melodia_app::library::clipboard::{StationField, StationText, station_lines};
 use melodia_app::state::AppState;
-use melodia_core::entities::radio::{DirectoryStation, RadioStation};
+use melodia_core::entities::radio::{DirectoryStation, KeptList, RadioStation};
 use melodia_core::error::AppError;
 use melodia_ui::{AppWindow, Radio, RadioStationRow};
 
@@ -68,8 +68,8 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, radio_ui: &Arc<RadioUi>) {
                     set_browsed_favorites(&s, &ru, &weak, stations, favorite);
                 }
                 tab => {
-                    // A hand-typed station's card has no star, so the set's star skips it too:
-                    // un-starring one drops it from the only list that shows it.
+                    // A hand-typed station's card has no heart, so the set's favorite skips it too:
+                    // un-favoriting one drops it from the only list that shows it.
                     let ids: Vec<i64> = kept::resolve_keys(&ru, tab, keys.iter().map(i64::from))
                         .into_iter()
                         .filter(|station| station.station_uuid.is_some())
@@ -158,15 +158,16 @@ fn play_browsed(
 }
 
 /// Re-reads the kept lists after any action that moved a row, a tab pick painting from cache: a
-/// play stamps the row (a browsed one writes it first) and a star moves membership. A failed play
-/// refreshes too, the play being counted before the stream opens.
+/// play stamps the row (a browsed one writes it first) and a favorite moves membership. A failed
+/// play refreshes too, the play being counted before the stream opens.
 fn refresh_lists(state: &AppState, radio_ui: &Arc<RadioUi>, weak: &slint::Weak<AppWindow>) {
     let (s, ru) = (state.clone(), radio_ui.clone());
     let _ = weak.upgrade_in_event_loop(move |ui| kept::refresh(&ui, &s, &ru));
 }
 
-/// The star over every kept station in `ids`, then one re-read. Not optimistic: un-starring drops
-/// the row out of Favorites, so the refetch is the update.
+/// The favorite over every kept station in `ids`, then one re-read. Not optimistic: un-favoriting
+/// moves the row out of Favorites, so the refetch is the update. Favorites' own heart is
+/// `super::removal`'s.
 fn set_kept_favorites(
     state: &AppState,
     radio_ui: &Arc<RadioUi>,
@@ -176,28 +177,33 @@ fn set_kept_favorites(
 ) {
     let (s, ru, weak) = (state.clone(), radio_ui.clone(), weak.clone());
     state.runtime.spawn(async move {
-        for id in ids {
-            if let Err(e) = set_kept_favorite(&s, id, favorite).await {
-                log::warn!("radio: favorite toggle failed: {}", melodia_core::error::describe(&e));
-            }
+        if let Err(e) = set_kept_favorite(&s, ids, favorite).await {
+            log::warn!("radio: favorite toggle failed: {}", melodia_core::error::describe(&e));
         }
         refresh_lists(&s, &ru, &weak);
     });
 }
 
-/// Un-starring goes through the removal door, the star and the trash owing the same cleanup: a row
+/// Un-favoriting goes through the removal, the heart and the trash owing the same cleanup: a row
 /// neither tab lists is one nothing can reach.
-async fn set_kept_favorite(state: &AppState, id: i64, favorite: bool) -> Result<(), AppError> {
+async fn set_kept_favorite(
+    state: &AppState,
+    ids: Vec<i64>,
+    favorite: bool,
+) -> Result<(), AppError> {
     if favorite {
-        library::radio::set_favorite(&state.db, id, true).await
-    } else {
-        library::radio::remove_from_favorites(&state.db, id).await
+        for id in ids {
+            library::radio::set_favorite(&state.db, id, true).await?;
+        }
+        return Ok(());
     }
+    // No undo: the card stays, and pressing its heart again is one.
+    library::radio::remove_stations(&state.db, ids, KeptList::Favorites).await.map(drop)
 }
 
-/// Keeps or releases directory stations with their session logos, optimistically, a star not being
-/// list membership on Browse. A station already where `wanted` puts it is left alone, so a failed
-/// write puts back exactly what was there.
+/// Keeps or releases directory stations with their session logos, optimistically, a favorite not
+/// being list membership on Browse. A station already where `wanted` puts it is left alone, so a
+/// failed write puts back exactly what was there.
 fn set_browsed_favorites(
     state: &AppState,
     radio_ui: &Arc<RadioUi>,
@@ -207,10 +213,10 @@ fn set_browsed_favorites(
 ) {
     let Some(ui) = weak.upgrade() else { return };
     let moving: Vec<(DirectoryStation, Option<String>)> = {
-        let starred = radio_ui.starred.lock();
+        let favorite_uuids = radio_ui.favorite_uuids.lock();
         stations
             .into_iter()
-            .filter(|(station, _)| starred.contains(&station.station_uuid) != wanted)
+            .filter(|(station, _)| favorite_uuids.contains(&station.station_uuid) != wanted)
             .collect()
     };
     if moving.is_empty() {
@@ -227,7 +233,7 @@ fn set_browsed_favorites(
         for (station, logo) in moving {
             if let Err(e) = set_browsed_favorite(&s, &station, logo.as_deref(), wanted).await {
                 log::warn!("radio: favorite toggle failed: {}", melodia_core::error::describe(&e));
-                // Put the star back; a routine failure, so a log line rather than a toast.
+                // Put the heart back; a routine failure, so a log line rather than a toast.
                 ru.set_local_favorite(&station.station_uuid, !wanted);
                 reverted = true;
             }
@@ -236,13 +242,13 @@ fn set_browsed_favorites(
             let ru = ru.clone();
             let _ = weak.upgrade_in_event_loop(move |ui| browse::apply(&ui, &ru));
         }
-        // The kept list gained or lost stations, and Browse's own stars come off the same fetch.
+        // The kept list gained or lost stations, and Browse's own hearts come off the same fetch.
         refresh_lists(&s, &ru, &weak);
     });
 }
 
-/// The write is unconditional so the facade has a row to resolve, and un-starring takes the trash's
-/// cleanup: a station released without a play behind it is listed by neither tab.
+/// The write is unconditional so the facade has a row to resolve, and un-favoriting takes the
+/// trash's cleanup: a station released without a play behind it is listed by neither tab.
 async fn set_browsed_favorite(
     state: &AppState,
     station: &DirectoryStation,

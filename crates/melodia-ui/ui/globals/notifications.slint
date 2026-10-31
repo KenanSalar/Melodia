@@ -7,4 +7,9 @@ export global Notifications {
     // skip lives in Settings, where that's what it obviously means.
     callback dismiss(int /*id*/);
     callback action(int /*id*/, NotificationKind);
+
+    // The undo notice's row, `-1` with none. Ctrl+Z hands it to `undo`, the handler the card's
+    // button reaches through `action`.
+    in-out property <int> undo-row: -1;
+    callback undo(int /*id*/);
 }

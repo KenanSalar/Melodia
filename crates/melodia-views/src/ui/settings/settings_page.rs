@@ -10,7 +10,6 @@ use slint::ComponentHandle;
 
 use crate::ui::callbacks::index_persist::IndexPersist;
 use crate::ui::nav_transition;
-use crate::ui::tab_bar::clamp_tab;
 use melodia_app::library;
 use melodia_app::state::AppState;
 use melodia_core::error::describe;
@@ -34,13 +33,14 @@ pub enum SettingsCategory {
     Lyrics,
     Integrations,
     Updates,
+    Accessibility,
     About,
 }
 
 impl SettingsCategory {
     /// Every variant, so a category added to the `.slint` without one here fails a test rather
     /// than falling through [`category_from_index`]'s default.
-    pub const ALL: [Self; 12] = [
+    pub const ALL: [Self; 13] = [
         Self::Library,
         Self::Playback,
         Self::Effects,
@@ -52,8 +52,32 @@ impl SettingsCategory {
         Self::Lyrics,
         Self::Integrations,
         Self::Updates,
+        Self::Accessibility,
         Self::About,
     ];
+
+    /// What `views.json` keeps, so a category inserted mid-list moves no saved choice.
+    pub fn key(self) -> &'static str {
+        match self {
+            Self::Library => "library",
+            Self::Playback => "playback",
+            Self::Effects => "effects",
+            Self::Output => "output",
+            Self::Appearance => "appearance",
+            Self::Language => "language",
+            Self::Window => "window",
+            Self::Radio => "radio",
+            Self::Lyrics => "lyrics",
+            Self::Integrations => "integrations",
+            Self::Updates => "updates",
+            Self::Accessibility => "accessibility",
+            Self::About => "about",
+        }
+    }
+
+    fn from_key(key: &str) -> Option<Self> {
+        Self::ALL.into_iter().find(|category| category.key() == key)
+    }
 }
 
 /// Resolve the page's live index against the Slint-declared `category-*` constants, read
@@ -79,6 +103,7 @@ fn category_index(page: &SettingsPage<'_>, category: SettingsCategory) -> i32 {
         SettingsCategory::Lyrics => page.get_category_lyrics(),
         SettingsCategory::Integrations => page.get_category_integrations(),
         SettingsCategory::Updates => page.get_category_updates(),
+        SettingsCategory::Accessibility => page.get_category_accessibility(),
         SettingsCategory::About => page.get_category_about(),
     }
 }
@@ -106,12 +131,12 @@ pub fn open_on(ui: &AppWindow, category: SettingsCategory) {
     }
 }
 
-/// Seed the active category from `views.json`. Call from
+/// Seed the active category from `views.json`'s key, Library where it names none. Call from
 /// `boot::ui_setup::hydrate::hydrate_ui_from_settings`, which already has the view state loaded.
-pub fn seed_category(ui: &AppWindow, persisted_category: i32) {
+pub fn seed_category(ui: &AppWindow, persisted_key: &str) {
     let page = ui.global::<SettingsPage>();
-    let clamped = clamp_tab(persisted_category, page.get_category_count());
-    page.set_category_idx(clamped);
+    let category = SettingsCategory::from_key(persisted_key).unwrap_or(SettingsCategory::Library);
+    page.set_category_idx(category_index(&page, category));
 }
 
 pub fn install(ui: &AppWindow, state: &AppState) {
@@ -144,22 +169,21 @@ pub fn install(ui: &AppWindow, state: &AppState) {
     let weak = ui.as_weak();
     let persist = Arc::new(IndexPersist::new(page.get_category_idx()));
     page.on_category_changed(move |category| {
+        let Some(ui) = weak.upgrade() else { return };
         // As on the two curated pages' tabs: a pick moves no nav index, so
         // `nav_history::record_current` never hears about it.
-        if let Some(ui) = weak.upgrade() {
-            ui.global::<SettingsPage>().invoke_clear_search();
-            crate::ui::view_tag::log_current(&ui);
-        }
+        let page = ui.global::<SettingsPage>();
+        page.invoke_clear_search();
+        crate::ui::view_tag::log_current(&ui);
+        let key = category_from_index(&page, category).key();
+
         persist.publish(category);
         let s_disk = s.clone();
         let persist = Arc::clone(&persist);
         s.runtime.spawn_blocking(move || {
             persist.write_if_current(category, || {
-                if let Err(e) = library::settings::set_settings_category(&s_disk.paths, category) {
-                    log::warn!(
-                        "settings_page: set_settings_category({category}): {}",
-                        describe(&e)
-                    );
+                if let Err(e) = library::settings::set_settings_category(&s_disk.paths, key) {
+                    log::warn!("settings_page: set_settings_category({key}): {}", describe(&e));
                 }
             });
         });

@@ -131,6 +131,20 @@ each earn its place, and re-read every comment before moving on.
   a dense neighbour is not a budget, and the rules above outrank it.
 - **Document public APIs** using the doc-comment format below. Start with a single-sentence
   summary; don't just repeat the member name.
+- **No changelog** - no "used to", "no longer" or "previously", no bug story, nothing about what
+  shipped before. Git holds the history.
+- **No second copy** - an argument lives at its anchor, the doc comment on what it constrains.
+  Anywhere else names the anchor rather than arguing it again.
+- **A `//!` header is the module's contract and its one non-obvious why** - not its history, and
+  not a tour of the functions below it.
+- **One or two sentences carry a rationale** - a paragraph means a name, a type or a split should
+  be saying it.
+- **Don't overstate** - no "never", "always" or "forever" without the mechanism that makes it so;
+  no benchmark figures, which go stale with the next change; a tunable's doc says what it does,
+  not the value or rank it has today.
+- **Some comments are kept whole** - `// SAFETY:` invariants, `// Translators:` notes byte for
+  byte (they are catalog input), and a comment a rule, test or ADR points at, condensed with the
+  pointer kept true.
 
 **The budget is about 0.25 comment lines per line of code**, each corpus measured on its own:
 
@@ -145,6 +159,20 @@ cloc --force-lang=C++,slint --include-ext=slint crates/melodia-ui/ui
 It holds across the corpus, not per file: a module of `SAFETY:` invariants and tuned constants
 can sit above it while a plain one sits well below. It shows drift and is never an allowance; a
 comment the rules above don't justify goes whatever the count says.
+
+**Auditing a change.** After `cargo fmt` and clippy pass (clippy's doc lints read `///` and
+`//!`), and before the work is reported done:
+
+```bash
+# every comment line the change adds; `main...` in place of `HEAD` for a whole branch
+git diff -U0 HEAD -- '*.rs' '*.slint' | rg '^\+\s*(//|/\*)'
+# each file the change created, against the budget
+cloc --by-file <new files>
+```
+
+- Each listed line passes the rules above or goes. A reworded or moved comment counts as new, so
+  a rename that pushes a comment onto a second line gets rewritten back to one.
+- The two corpus commands above confirm the tree-wide figure hasn't drifted.
 
 **Doc comments in this tree:**
 

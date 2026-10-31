@@ -1,6 +1,7 @@
 import { CardActions } from "../../globals/card-actions.slint";
 import { CopyActions } from "../../globals/copy-actions.slint";
 import { Dialog } from "../../globals/dialog.slint";
+import { FavoriteActions } from "../../globals/favorite-actions.slint";
 import { Nav } from "../../globals/nav.slint";
 import { Selection } from "../../globals/selection.slint";
 import { ContextMenuPopup, CopyField, FavoriteMenuItem, MenuItem, MenuSeparator } from "../context-menu.slint";
@@ -8,7 +9,8 @@ import { TrackCopyFields } from "../track-copy-items.slint";
 
 // The right-click menu every entity card raises, and the only place its entries are mounted.
 // `TrackContextMenu`'s contract one layer over, a card being a set of tracks: the actions go
-// through `CardActions` with a kind and ids, and Rust resolves the set once.
+// through `CardActions` with a kind and ids, a removal from Favorites through `FavoriteActions`,
+// and Rust resolves the set once.
 export component CardContextMenu inherits Rectangle {
     // "album" | "artist" | "genre" | "playlist" | "track" | "folder", the last not an
     // `EntityKind`: a folder is a path, routed through Browse's own callbacks.
@@ -189,8 +191,11 @@ export component CardContextMenu inherits Rectangle {
             multi-active: root.multi-active;
             multi-count: root.multi-count;
             clicked => {
-                CardActions.set-favorites(
-                    root.card-kind, pop.effective-ids, !root.card-is-favorite);
+                if (root.card-is-favorite) {
+                    FavoriteActions.remove-entities(root.card-kind, pop.effective-ids);
+                } else {
+                    CardActions.set-favorites(root.card-kind, pop.effective-ids, true);
+                }
                 root.dismiss();
             }
         }
@@ -206,7 +211,7 @@ export component CardContextMenu inherits Rectangle {
             label: @tr("Remove from Favorites");
             icon: "heart_minus";
             clicked => {
-                CardActions.set-favorites(root.card-kind, pop.effective-ids, false);
+                FavoriteActions.remove-entities(root.card-kind, pop.effective-ids);
                 root.dismiss();
             }
         }

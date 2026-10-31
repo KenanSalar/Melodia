@@ -558,13 +558,7 @@ impl PlaybackEngine {
 
     /// Stages the next track behind the current one on the active deck. Exclusive with a
     /// crossfade per transition (`crossfade::crossfade_eligible`).
-    pub fn preload_gapless(&self, file_path: Option<&str>, baked_rg: TrackReplayGain) {
-        let Some(path) = file_path else {
-            // The action layer only ever clears a stale preload through here.
-            self.gapless_pending.store(false, Ordering::Release);
-            return;
-        };
-
+    pub fn preload_gapless(&self, path: &str, baked_rg: TrackReplayGain) {
         // Snapshot before the unlocked decode: if the decks move meanwhile, staging would queue
         // the wrong track and, on a flipped deck, under the other deck's ramp cell.
         let epoch = self.deck_epoch.load(Ordering::Acquire);
@@ -587,7 +581,7 @@ impl PlaybackEngine {
         let deck = decks.active();
         // `stop()` and the deferred `ClearAll` empty the decks without bumping the epoch, and a
         // stage behind nothing leaves the flag set, read as a phantom `GaplessTransition`. Refuses
-        // no real stage: only the monitor's late preload passes a path, from `Playing`.
+        // no real stage: only the monitor's late preload calls this, from `Playing`.
         if deck.voice.is_empty() {
             log::debug!("Dropping gapless preload of {path}: nothing left to follow");
             return;

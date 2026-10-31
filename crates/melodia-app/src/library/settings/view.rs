@@ -84,9 +84,9 @@ pub fn set_artist_albums_collapsed(paths: &Paths, collapsed: bool) -> Result<(),
     })
 }
 
-pub fn set_settings_category(paths: &Paths, category: i32) -> Result<(), AppError> {
+pub fn set_settings_category(paths: &Paths, key: &str) -> Result<(), AppError> {
     services::view_state::mutate_view_state(paths, move |s| {
-        s.settings_category = category;
+        key.clone_into(&mut s.settings_category_key);
     })
 }
 

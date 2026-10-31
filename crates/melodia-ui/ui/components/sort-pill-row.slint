@@ -7,8 +7,8 @@ import { ActionPill, PillButton, PillDivider } from "action-pill.slint";
 // mount**, an array from Rust rendering untranslated.
 export component SortPillRow inherits ActionPill {
     in property <[string]> labels;
-    // The bare tokens Rust's comparator matches on: a typo sorts by the default arm while the arrow
-    // paints as though it worked.
+    // The bare tokens Rust's comparator matches on, one per label: a typo sorts by the default arm
+    // while the arrow paints as though it worked.
     in property <[string]> fields;
 
     in property <string> sort-field;

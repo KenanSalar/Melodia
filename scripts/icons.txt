@@ -1,3 +1,4 @@
+accessibility_new
 add
 album
 animation
@@ -52,6 +53,7 @@ info
 library_add
 library_music
 link
+looks_one
 lyrics
 minimize
 more_vert
@@ -94,11 +96,13 @@ swap_horiz
 system_update
 theater_comedy
 thumb_up
+timer
 title
 tonality
 translate
 travel_explore
 tune
+undo
 update
 upload
 view_list

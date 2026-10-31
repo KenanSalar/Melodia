@@ -87,15 +87,20 @@ async fn follow(
     let current_id = current_track_id(qvm);
     let track_changed = current_id != np_state.last_current_id.get();
     let ids_changed = *np_state.rendered_ids.borrow() != new_ids;
-    if !ids_changed && !track_changed {
+    // The same rows can sit at a new base after a removal above the playing one, and a click or
+    // drag maps its row through the base.
+    let anchor = UpNextAnchor::of(qvm);
+    let previous = np_state.last_anchor.get();
+    if !ids_changed && !track_changed && anchor == previous {
         return;
     }
 
     // Read off the rows on show before the fetch replaces them: on a forward step the promoted
     // track was the top row, and on a backward one the row falling off the bottom was the last,
-    // but only where it really fell off, a short list that grew by one dropping nothing.
-    let outgoing = track_changed.then(|| {
-        let kind = classify_step(np_state.last_queue_index.get(), qvm);
+    // but only where it really fell off, a short list that grew by one dropping nothing. Rows
+    // that stay put don't slide, as when the playing row leaves the queue.
+    let outgoing = (track_changed && ids_changed).then(|| {
+        let kind = classify_step(previous, qvm);
         let shown: Vec<QueueRow> = up_next_model.iter().collect();
         let dropped_tail_id =
             np_state.rendered_ids.borrow().last().copied().filter(|id| !new_ids.contains(id));
@@ -107,12 +112,12 @@ async fn follow(
     };
     let Some(ui) = weak.upgrade() else { return };
     show_slice(&ui, up_next_model, np_state, qvm, new_ids, fetched);
+    np_state.last_current_id.set(current_id);
+    np_state.last_anchor.set(anchor);
 
     let Some((kind, outgoing_row)) = outgoing else {
         return;
     };
-    np_state.last_current_id.set(current_id);
-    np_state.last_queue_index.set(qvm.queue_index);
     // Direct writes, landing in the same render as the model swap above, so there is no
     // post-advance flash. Direction and outgoing row go *before* the phase reset, so the timer's
     // first tick already has the right offset and content.
@@ -144,7 +149,7 @@ pub(super) async fn seed_from_stash(
     let Some(ui) = weak.upgrade() else { return };
     show_slice(&ui, up_next_model, np_state, &qvm, ids, fetched);
     np_state.last_current_id.set(current_track_id(&qvm));
-    np_state.last_queue_index.set(qvm.queue_index);
+    np_state.last_anchor.set(UpNextAnchor::of(&qvm));
 }
 
 /// [`seed_from_stash`] off a synchronous caller, on the event loop.
@@ -237,16 +242,33 @@ impl SlideKind {
     }
 }
 
-/// Single steps count across the wrap, so repeat navigation slides the right way.
-fn classify_step(old_idx: i32, qvm: &QueueViewModel) -> SlideKind {
+/// The cursor and bounds the slice on show was cut at, which the next publish is compared with.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub(super) struct UpNextAnchor {
+    queue_index: i32,
+    base: usize,
+    len: usize,
+}
+
+impl UpNextAnchor {
+    pub(super) fn of(qvm: &QueueViewModel) -> Self {
+        Self { queue_index: qvm.queue_index, base: qvm.upcoming_from, len: qvm.ids.len() }
+    }
+}
+
+/// Single steps count across the wrap, so repeat navigation slides the right way. Forward is the
+/// old slice's top row starting, the row after the playing one or the row that took its place.
+fn classify_step(previous: UpNextAnchor, qvm: &QueueViewModel) -> SlideKind {
     let new_idx = qvm.queue_index;
     let len = len_as_i32(qvm.ids.len());
-    if len <= 0 || old_idx < 0 || new_idx < 0 {
+    if len <= 0 || new_idx < 0 {
         return SlideKind::Other;
     }
-    if new_idx == (old_idx + 1) % len {
+    let old_base = i32::try_from(previous.base).unwrap_or(i32::MAX);
+    let old_idx = previous.queue_index;
+    if new_idx == old_base % len {
         SlideKind::Forward
-    } else if new_idx == (old_idx - 1).rem_euclid(len) {
+    } else if old_idx >= 0 && new_idx == (old_idx - 1).rem_euclid(len) {
         SlideKind::Backward
     } else {
         SlideKind::Other
@@ -269,15 +291,14 @@ fn outgoing_row(
     shown.iter().find(|row| i64::from(row.id) == id).cloned()
 }
 
-/// Play-order indices of the next `UP_NEXT_N` tracks, and the base, clamped for the `-1` of
-/// nothing playing. A repeating queue is a cycle, so the slice wraps and stops short of the
-/// current track.
+/// Play-order indices of the next `UP_NEXT_N` tracks, and the base. A repeating queue is a cycle,
+/// so the slice wraps and stops short of the row playing, where one is.
 pub(super) fn upcoming_indices(qvm: &QueueViewModel) -> (Vec<usize>, usize) {
     let len = qvm.ids.len();
-    let base = usize::try_from(qvm.queue_index + 1).unwrap_or(0);
-    let wrap = qvm.repeat_mode.wraps() && qvm.queue_index >= 0;
-    let indices: Vec<usize> = if wrap && len > 0 {
-        (0..(len - 1).min(UP_NEXT_N)).map(|n| (base + n) % len).collect()
+    let base = qvm.upcoming_from;
+    let indices: Vec<usize> = if qvm.repeat_mode.wraps() && len > 0 {
+        let playing = usize::from(qvm.queue_index >= 0);
+        (0..(len - playing).min(UP_NEXT_N)).map(|n| (base + n) % len).collect()
     } else {
         (base..len.min(base + UP_NEXT_N)).collect()
     };

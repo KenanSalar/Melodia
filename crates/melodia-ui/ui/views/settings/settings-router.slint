@@ -11,6 +11,7 @@ import { RadioPage } from "pages/radio-page.slint";
 import { LyricsPage } from "pages/lyrics-page.slint";
 import { IntegrationsPage } from "pages/integrations-page.slint";
 import { UpdatesPage } from "pages/updates-page.slint";
+import { AccessibilityPage } from "pages/accessibility-page.slint";
 import { AboutPage } from "pages/about-page.slint";
 
 // One category, or every page at once while a search runs: search escapes the categories, so a
@@ -35,6 +36,7 @@ export component SettingsRouter inherits Rectangle {
             lyrics := LyricsPage {}
             integrations := IntegrationsPage {}
             updates := UpdatesPage {}
+            accessibility := AccessibilityPage {}
             about := AboutPage {}
 
             // Only reachable here — outside search every card is visible. One term per page
@@ -42,7 +44,8 @@ export component SettingsRouter inherits Rectangle {
             if !library.has-matches && !playback.has-matches && !effects.has-matches
                     && !output.has-matches && !appearance.has-matches && !language.has-matches && !window.has-matches
                     && !radio.has-matches && !lyrics.has-matches && !integrations.has-matches
-                    && !updates.has-matches && !about.has-matches: Rectangle {
+                    && !updates.has-matches && !accessibility.has-matches
+                    && !about.has-matches: Rectangle {
                 height: 200px;
                 // A card's width, so the line centres in the column the cards would fill rather
                 // than hugging the panel.
@@ -70,6 +73,7 @@ export component SettingsRouter inherits Rectangle {
         if !root.searching && root.category-index == SettingsPage.category-lyrics: LyricsPage {}
         if !root.searching && root.category-index == SettingsPage.category-integrations: IntegrationsPage {}
         if !root.searching && root.category-index == SettingsPage.category-updates: UpdatesPage {}
+        if !root.searching && root.category-index == SettingsPage.category-accessibility: AccessibilityPage {}
         if !root.searching && root.category-index == SettingsPage.category-about: AboutPage {}
     }
 }

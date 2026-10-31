@@ -19,6 +19,15 @@ impl PlayerState {
             station_id: self.station().map(|s| s.station_id).filter(|id| *id != 0),
         }
     }
+
+    /// The track a restart seats and how far into it. With the playing track gone from the queue
+    /// that is the row which took its place, from the top, the position being the gone track's.
+    pub fn resume_point(&self) -> Option<(i64, u64)> {
+        if self.queue.playing_left() {
+            return self.queue.current_id().map(|id| (id, 0));
+        }
+        self.current_track().map(|track| (track.id, self.position_ms))
+    }
 }
 
 /// Seats a restored queue and its window's records, the current track where it was left.
@@ -34,14 +43,15 @@ pub fn restore_queue(state: &mut PlayerState, queue: QueueState, records: Vec<Ar
     }
 }
 
-/// Puts the last session's station back over the queue [`restore_queue`] seated, `Paused`: the
-/// one status holding a station with no connection, which `player_play` reopens from. The caller
-/// owes an `emit_and_execute` for the speed pin, boot restoring a rate from `settings.json`.
+/// Puts a station back over the queue, `Paused` with its session ended: the one status holding a
+/// station with no connection, which `player_play` reopens from. The caller owes an
+/// `emit_and_execute` for the speed pin, boot restoring a rate from `settings.json`.
 pub fn restore_station(
     state: &mut PlayerState,
     station: Arc<RadioNowPlaying>,
 ) -> Vec<PlayerAction> {
     state.source = Some(PlaybackSource::Station(station));
+    state.end_stream_session();
     state.status = PlaybackStatus::Paused;
     state.duration_ms = 0;
     state.position_ms = 0;

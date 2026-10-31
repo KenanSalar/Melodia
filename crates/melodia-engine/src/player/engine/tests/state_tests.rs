@@ -1,6 +1,7 @@
 use std::sync::Arc;
 
 use super::*;
+use crate::player::engine::fixtures::cut_rows;
 use crate::player::engine::queue::current_index_from_i32;
 use crate::player::engine::types::{PersistableQueue, PersistedPlayback, RepeatMode};
 use melodia_core::error::AppError;
@@ -158,25 +159,6 @@ fn test_play_track_some_zero_filtered_to_none() {
 }
 
 #[test]
-fn test_play_track_with_resume_does_not_eager_preload() {
-    let mut state = PlayerState { gapless_enabled: true, ..Default::default() };
-
-    let track1 = make_summary(1, "Song 1", 180_000);
-    let track2 = make_summary(2, "Song 2", 180_000);
-    queue_up(&mut state, vec![track1.clone(), track2]);
-    state.queue.current_index = Some(0);
-
-    let actions = play_track_inner(&mut state, track1, Some(60_000));
-
-    assert_eq!(state.position_ms, 60_000);
-    // PlayMedia is issued; gapless preload is now staged late by the playback
-    // monitor (see PRELOAD_LEAD_MS in `handlers.rs`), so it must NOT come from
-    // play_track_inner — otherwise mid-track repeat-mode changes get clobbered.
-    assert!(actions.iter().any(|a| matches!(a, PlayerAction::PlayMedia { .. })));
-    assert!(!actions.iter().any(|a| matches!(a, PlayerAction::PreloadGapless(_))));
-}
-
-#[test]
 fn test_stop_end_of_queue_helper() {
     let mut state = PlayerState {
         status: PlaybackStatus::Playing,
@@ -304,7 +286,7 @@ fn test_queue_add_and_remove() {
     queue_up(&mut state, tracks);
     assert_eq!(state.queue.play_order.len(), 3);
 
-    state.queue.remove_at(1);
+    cut_rows(&mut state.queue, &[1]);
     assert_eq!(state.queue.play_order.len(), 2);
     // After removing index 1 (Song 2), play order should be [Song 1, Song 3]
     assert_eq!(*state.queue.play_ids(), [1, 3]);
@@ -1051,11 +1033,6 @@ fn every_player_action_names_what_it_did() {
         ),
         (PlayerAction::SetVolume(0.5), &["volume", "0.50"]),
         (PlayerAction::SetSpeed(1.25), &["speed", "1.25"]),
-        (
-            PlayerAction::PreloadGapless(Some("/music/d.flac".to_owned())),
-            &["preload", "/music/d.flac"],
-        ),
-        (PlayerAction::PreloadGapless(None), &["clear"]),
         (PlayerAction::UpdatePlayCount(7), &["play count", "7"]),
         (PlayerAction::UpdateSkipCount(8), &["skip count", "8"]),
     ];
@@ -1904,6 +1881,41 @@ fn a_restart_puts_the_queue_back_under_the_station() -> Result<(), AppError> {
     Ok(())
 }
 
+#[test]
+fn a_restart_after_the_playing_row_left_resumes_the_row_that_took_its_place() {
+    let mut state = playing_a_queue();
+    let playing: Vec<QueueEntry> = state.queue.entry_at(0).into_iter().collect();
+
+    state.cut_queue(&playing);
+
+    assert_eq!(state.resume_point(), Some((2, 0)));
+}
+
+// --- the playing row leaving the queue ---
+
+/// [`playing_a_queue`]'s queue with nothing on the deck, as after a stop at the end of the queue.
+fn a_queue_with_nothing_seated() -> PlayerState {
+    let mut state = PlayerState::default();
+    state.queue.add_tracks(&[1, 2]);
+    state.queue.seat(0);
+    state
+}
+
+#[test]
+fn a_cut_of_the_current_row_leaves_a_gap_only_under_a_seated_track() {
+    let rows = [
+        ("a track seated", playing_a_queue(), None),
+        ("nothing seated", a_queue_with_nothing_seated(), Some(0)),
+    ];
+    for (what, mut state, expected) in rows {
+        let current: Vec<QueueEntry> = state.queue.entry_at(0).into_iter().collect();
+
+        state.cut_queue(&current);
+
+        assert_eq!(state.queue.playing_index(), expected, "{what}");
+    }
+}
+
 // --- a long pause giving an exclusive device back ---
 
 /// The state's own position when the monitor decided to release, the last playing tick's.
@@ -2223,7 +2235,7 @@ fn an_edit_during_the_fetch_moves_what_the_deferred_start_plays() -> Result<(), 
         (
             "a remove above the current row",
             |q| {
-                q.remove_at(0);
+                cut_rows(q, &[0]);
             },
             "/music/2.mp3",
         ),

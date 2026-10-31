@@ -8,6 +8,7 @@ pub mod missing_artwork;
 pub mod needle;
 pub mod play_counts;
 pub mod redact;
+pub mod reinsert;
 pub mod self_writes;
 pub mod text;
 pub mod toast;

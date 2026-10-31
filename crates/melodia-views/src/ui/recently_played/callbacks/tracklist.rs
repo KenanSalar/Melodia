@@ -1,6 +1,7 @@
 //! The Songs tab's callbacks, and the filter both tabs share. There is no sort callback, recency
 //! being the list's only order.
 
+use std::collections::HashSet;
 use std::sync::Arc;
 
 use slint::{ComponentHandle, Global as _};
@@ -49,10 +50,9 @@ fn wire_row_flags(ui: &AppWindow, state: &AppState, rp_ui: &Arc<RecentlyPlayedUi
         library::favorites::set_favorite, collect_track_ids,
         captures: [weak, ru],
         after: |id_vec, fav| {
-            for id in &id_vec {
-                ru.flip_track_favorite(*id, fav);
-                recently_played_ui_mod::apply_row_favorite(&weak, *id, fav);
-            }
+            let ids: HashSet<i64> = id_vec.into_iter().collect();
+            ru.flip_track_favorites(&ids, fav);
+            recently_played_ui_mod::apply_rows_favorite(&weak, ids, fav);
         });
     }
 
@@ -62,10 +62,9 @@ fn wire_row_flags(ui: &AppWindow, state: &AppState, rp_ui: &Arc<RecentlyPlayedUi
         library::ratings::set_rating, collect_track_ids,
         captures: [weak, ru],
         after: |id_vec, rating| {
-            for id in &id_vec {
-                ru.flip_track_rating(*id, rating);
-                recently_played_ui_mod::apply_row_rating(&weak, *id, rating);
-            }
+            let ids: HashSet<i64> = id_vec.into_iter().collect();
+            ru.flip_track_ratings(&ids, rating);
+            recently_played_ui_mod::apply_rows_rating(&weak, ids, rating);
         });
     }
 }

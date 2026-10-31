@@ -28,3 +28,31 @@ pub struct PlaylistStats {
     pub track_count: i32,
     pub total_duration_ms: i64,
 }
+
+/// What one removal from a playlist took, enough to put each row back where it stood.
+#[derive(Debug, PartialEq)]
+pub struct PlaylistItemsCut {
+    pub playlist_id: i64,
+    /// Ascending by `row`.
+    pub rows: Vec<CutItem>,
+    pub updated_before: String,
+    /// The removal's own `updated_at`, which a restore puts back only while it is still there.
+    pub stamped_at: String,
+}
+
+/// A deleted playlist as a restore writes it back: the row under its own id, and every item.
+#[derive(Debug, PartialEq)]
+pub struct PlaylistSnapshot {
+    pub playlist: Playlist,
+    /// Ascending, each `row` its index in the playlist.
+    pub items: Vec<CutItem>,
+}
+
+#[derive(Debug, PartialEq)]
+pub struct CutItem {
+    pub track_id: i64,
+    /// Its index in the playlist's order at the moment it was cut, not its raw position, which can
+    /// carry gaps.
+    pub row: usize,
+    pub added_at: String,
+}

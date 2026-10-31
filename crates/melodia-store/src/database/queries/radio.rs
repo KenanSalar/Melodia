@@ -157,8 +157,8 @@ pub async fn station_id_with_url(db: &DbPool, stream_url: &str) -> Result<Option
 /// The uuid first, the directory's identity for a station whose `stream_url` has moved, then the
 /// URL, for an entry with no uuid or one typed in before the directory listed it. Executor-generic
 /// because the import asks through its own transaction, which alone sees what earlier entries
-/// wrote.
-async fn kept_station_matching<'e, E>(
+/// wrote, and an undo through its own for the same reason.
+pub(super) async fn kept_station_matching<'e, E>(
     executor: E,
     station_uuid: Option<&str>,
     stream_url: &str,
@@ -207,7 +207,7 @@ pub struct ImportedStation {
 /// Puts every station in the kept list, answering how many entries that changed.
 ///
 /// One transaction, so the list doesn't queue its statements one commit at a time behind other
-/// writers, and so a station listed twice is starred once. All-or-nothing on an error, which here
+/// writers, and so a station listed twice is favorited once. All-or-nothing on an error, which here
 /// means an unwritable database, as [`super::artwork::repoint_all`] argues for its own pass.
 pub async fn import_stations(db: &DbPool, stations: &[ImportedStation]) -> Result<u32, AppError> {
     let mut tx = db.write().begin().await?;
@@ -221,12 +221,12 @@ pub async fn import_stations(db: &DbPool, stations: &[ImportedStation]) -> Resul
     Ok(changed)
 }
 
-/// Stars one entry, answering whether that changed anything.
+/// Favorites one entry, answering whether that changed anything.
 ///
-/// **A row already here takes only its star from the file**: [`set_local_fields`] writes all four
-/// columns at once, so a file naming one would clear the three it says nothing about. Nothing is
-/// lost, a deleted station arriving as a new row, and the rows overrides land on stay logo-less,
-/// the state the logo repair needs.
+/// **A row already here takes only its favorite from the file**: [`set_local_fields`] writes all
+/// four columns at once, so a file naming one would clear the three it says nothing about. Nothing
+/// is lost, a deleted station arriving as a new row, and the rows overrides land on stay
+/// logo-less, the state the logo repair needs.
 async fn import_one(
     conn: &mut sqlx::SqliteConnection,
     entry: &ImportedStation,
@@ -256,11 +256,6 @@ async fn import_one(
     Ok(true)
 }
 
-pub async fn delete_station(db: &DbPool, id: i64) -> Result<(), AppError> {
-    sqlx::query("DELETE FROM radio_stations WHERE id = ?").bind(id).execute(db.write()).await?;
-    Ok(())
-}
-
 /// Records what a station's stream was measured to hold, which only a successful open knows.
 /// Written on every tune rather than compared, a station that changed what it serves being the one
 /// a stale value is wrong for.
@@ -282,18 +277,6 @@ pub async fn mark_played(db: &DbPool, id: i64) -> Result<(), AppError> {
     .bind(id)
     .execute(db.write())
     .await?;
-    Ok(())
-}
-
-/// Forget a station's plays, which is what drops it out of the recents list.
-///
-/// The count goes with the stamp: Favorites sorts on it, and a station showing seven plays and no
-/// last-played is a history half-erased.
-pub async fn clear_play_history(db: &DbPool, id: i64) -> Result<(), AppError> {
-    sqlx::query("UPDATE radio_stations SET last_played = NULL, play_count = 0 WHERE id = ?")
-        .bind(id)
-        .execute(db.write())
-        .await?;
     Ok(())
 }
 

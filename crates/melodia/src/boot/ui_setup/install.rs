@@ -12,6 +12,7 @@ use melodia_platform::services::platform;
 use melodia_ui::AppWindow;
 use melodia_views::ui;
 use melodia_views::ui::shell::notifications::NotificationsUi;
+use melodia_views::ui::undo::UndoWindow;
 use slint::ComponentHandle;
 use tokio::sync::watch;
 
@@ -41,8 +42,8 @@ pub fn install_ui(
     view_state: Option<&ViewStateData>,
     file_open_listener: Option<platform::single_instance::Listener>,
 ) -> AppResult<()> {
-    let (views, notifications) = install_shell(app, state, spawner, settings, view_state)?;
-    install_player_surfaces(app, state, &views)?;
+    let (views, notifications, undo) = install_shell(app, state, spawner, settings, view_state)?;
+    install_player_surfaces(app, state, &views, &undo)?;
     seed_and_fetch(app, state, &views, view_state);
     install_notices(app, state, &views, &notifications)?;
     install_updater_and_onboarding(app, state, spawner, settings, &notifications);
@@ -58,15 +59,17 @@ fn install_shell(
     spawner: &tasks::TaskSpawner,
     settings: Option<&SettingsData>,
     view_state: Option<&ViewStateData>,
-) -> AppResult<(UiHandles, Rc<NotificationsUi>)> {
+) -> AppResult<(UiHandles, Rc<NotificationsUi>, Rc<UndoWindow>)> {
     install_locale(app, state, settings);
     install_app_chrome(app, state);
     // Ahead of `install_views`, which builds the artwork tiers this decides the shape of.
     if apply_backdrop_style(app, settings) {
         install_backdrop_dither(app);
     }
-    let views = install_views(app, state, view_state);
-    let notifications = install_library_settings_and_friends(app, state)?;
+    // Ahead of every installer whose removals offer an undo, which takes the slot.
+    let (notifications, undo) = install_notice_stack(app, state, settings);
+    let views = install_views(app, state, &undo, view_state);
+    install_library_settings_and_friends(app, state, &notifications, &undo)?;
 
     // These three wire here rather than inside their slices because their
     // completion toasts need the `Rc<NotificationsUi>`.
@@ -88,12 +91,39 @@ fn install_shell(
     }
 
     hydrate_ui_from_settings(app, state, settings, view_state);
-    Ok((views, notifications))
+    Ok((views, notifications, undo))
+}
+
+/// The toast stack and the undo slot that raises its notices through it.
+fn install_notice_stack(
+    app: &AppWindow,
+    state: &AppState,
+    settings: Option<&SettingsData>,
+) -> (Rc<NotificationsUi>, Rc<UndoWindow>) {
+    let notifications = ui::shell::notifications::install(app);
+    // Toast rows carry strings Rust resolved once and outlive every navigation, so a language
+    // switch reaches them only through this. Not in the locale callback, which wires first.
+    {
+        let notifications = notifications.clone();
+        if let Err(e) = ui::locale_refresh::on_locale_changed(state, app.as_weak(), move |ui| {
+            notifications.refresh_for_locale(ui);
+        }) {
+            log::warn!("notifications locale refresher: {}", describe(&e));
+        }
+    }
+    let prefs = settings.map(|s| s.undo.clone()).unwrap_or_default();
+    let undo = ui::undo::install(app, state, &notifications, prefs);
+    (notifications, undo)
 }
 
 /// The player's subscribers and the surfaces that render it: the queue panel, Now Playing and the
 /// miniplayer.
-fn install_player_surfaces(app: &AppWindow, state: &AppState, views: &UiHandles) -> AppResult<()> {
+fn install_player_surfaces(
+    app: &AppWindow,
+    state: &AppState,
+    views: &UiHandles,
+    undo: &Rc<UndoWindow>,
+) -> AppResult<()> {
     let weak = app.as_weak();
     let shown = ui::shell::bridge::ShownPosition::default();
     ui::shell::bridge::spawn_view_model_subscriber(
@@ -115,7 +145,7 @@ fn install_player_surfaces(app: &AppWindow, state: &AppState, views: &UiHandles)
     ui::radio::install_history(weak, &views.radio_ui, &state.sinks)
         .map_err(|e| AppError::io("station history subscriber", e))?;
 
-    if let Err(e) = ui::queue_panel::install(app, state, &views.cover_thumbs) {
+    if let Err(e) = ui::queue_panel::install(app, state, &views.cover_thumbs, undo) {
         log::warn!("queue_panel::install: {}", describe(&e));
     }
 

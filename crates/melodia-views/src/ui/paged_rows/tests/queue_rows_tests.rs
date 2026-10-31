@@ -11,6 +11,7 @@ use super::{QueueRows, to_queue_row};
 use crate::ui::fixtures::track_row;
 use crate::ui::util::StringPool;
 use melodia_core::entities::track::TrackListRow;
+use melodia_engine::player::engine::fixtures::cut_rows;
 use melodia_engine::player::engine::queue::QueueState;
 use melodia_ui::QueueRow;
 
@@ -180,7 +181,7 @@ fn a_pick_stays_on_its_row_through_every_edit_that_keeps_it() {
         (
             "a removal of another row",
             &[|q| {
-                q.remove_at(0);
+                cut_rows(q, &[0]);
             }],
             &[false, true, false],
         ),
@@ -213,7 +214,7 @@ fn removing_the_picked_row_takes_its_pick_with_it() {
     let rows = panel_over(&queue);
     rows.click(2, true, false);
 
-    queue.remove_at(2);
+    cut_rows(&mut queue, &[2]);
     rows.show(queue.play_ids(), queue.play_entries());
 
     assert_eq!(marked(&rows), [false, false, false]);

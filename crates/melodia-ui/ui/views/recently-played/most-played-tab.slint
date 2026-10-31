@@ -1,5 +1,6 @@
 import { Theme } from "../../theme.slint";
 import { RecentlyPlayed } from "../../globals/curated.slint";
+import { CardActions } from "../../globals/card-actions.slint";
 import { EntityCardGrid } from "../../components/grid/entity-card-grid.slint";
 import { GridEmptyState } from "../../components/grid/grid-empty-state.slint";
 import { OverlayScrollbar } from "../../components/overlay-scrollbar.slint";
@@ -33,6 +34,7 @@ export component RecentlyPlayedMostPlayedTab inherits Rectangle {
         covers-generation: RecentlyPlayed.covers-generation;
         request-cover(p, gen) => { RecentlyPlayed.request-most-played-cover(p, gen) }
         row-clicked(id) => { RecentlyPlayed.play-track(id); }
+        favorite-clicked(id, on) => { CardActions.set-favorites(mp.card-kind, [id], on); }
         request-blur-search => { RecentlyPlayed.blur-search-tick += 1; }
     }
 

@@ -1,7 +1,7 @@
-//! The toast stack's Rust half: the `Notifications` rows, their cap, and the recipes sticky rows
+//! The toast stack's Rust half: the `Notifications` rows, their cap, and the recipes localized rows
 //! are rebuilt from after a language switch, which reaches only live `@tr` bindings.
 
-use std::cell::{Cell, RefCell};
+use std::cell::{Cell, OnceCell, RefCell};
 use std::collections::HashMap;
 use std::rc::Rc;
 
@@ -18,6 +18,9 @@ const MAX_VISIBLE: usize = 5;
 /// How long a confirmation stays up. Errors stay sticky: a failure nobody was looking at is one
 /// nobody heard about.
 pub const TOAST_AUTO_DISMISS_MS: u32 = 3000;
+
+/// A row's timeout when only a close or Rust removes it.
+const STICKY: u32 = 0;
 
 pub struct NotificationParams {
     pub variant: NotificationVariant,
@@ -42,6 +45,15 @@ impl NotificationParams {
             kind: NotificationKind::None,
         }
     }
+}
+
+/// What a localized row is besides its text.
+#[derive(Clone, Copy)]
+pub struct LocalizedPush {
+    pub variant: NotificationVariant,
+    pub kind: NotificationKind,
+    /// `0` ⇒ sticky.
+    pub timeout_ms: u32,
 }
 
 /// The three translated strings a row paints, rebuilt in whatever language is active now.
@@ -80,16 +92,20 @@ type Relabel = Box<dyn Fn(&AppWindow) -> RowText>;
 pub struct NotificationsUi {
     rows: Rc<VecModel<NotificationRow>>,
     /// Keyed by row id rather than position, positions moving under an eviction.
-    recipes: Rc<RefCell<HashMap<i32, Relabel>>>,
+    recipes: RefCell<HashMap<i32, Relabel>>,
     next_id: Cell<i32>,
+    /// Told every row that goes, by whatever path: the undo slot has to drop its hold with its
+    /// notice.
+    row_removed: OnceCell<Box<dyn Fn(i32)>>,
 }
 
 impl NotificationsUi {
     /// **Private, which is the whole enforcement of the locale rule**: the public pushes are
     /// [`show_auto_dismiss`](Self::show_auto_dismiss), gone before anyone reaches the language
-    /// picker, and [`show_localized`](Self::show_localized), which keeps the recipe. A sticky push
+    /// picker, and [`show_localized`](Self::show_localized) and
+    /// [`show_localized_timed`](Self::show_localized_timed), which keep the recipe. A sticky push
     /// of rendered strings fails only in a locale nobody reviews in, so it is put out of reach.
-    fn show(&self, p: NotificationParams) -> i32 {
+    fn show(&self, p: NotificationParams, timeout_ms: u32) -> i32 {
         let id = self.next_id.get();
         self.next_id.set(id.saturating_add(1));
 
@@ -105,22 +121,16 @@ impl NotificationsUi {
             message: p.message,
             action_label: p.action_label,
             kind: p.kind,
+            timeout_ms: i32::try_from(timeout_ms).unwrap_or(i32::MAX),
+            restarts: 0,
         });
         id
     }
 
-    /// For a confirmation that shouldn't need a close. A row closed or evicted first is simply not
-    /// found, ids never being reused.
+    /// For a confirmation that shouldn't need a close. The card runs the clock, holding it while
+    /// the card is hovered or the window is in the background.
     pub fn show_auto_dismiss(&self, p: NotificationParams, ms: u32) -> i32 {
-        let id = self.show(p);
-        let rows = self.rows.clone();
-        let recipes = self.recipes.clone();
-        slint::Timer::single_shot(std::time::Duration::from_millis(u64::from(ms)), move || {
-            if let Some(pos) = rows.iter().position(|r: NotificationRow| r.id == id) {
-                remove_at(&rows, &recipes, pos);
-            }
-        });
-        id
+        self.show(p, ms)
     }
 
     /// For a sticky row, which has to survive a language switch: the recipe renders the push and
@@ -135,16 +145,61 @@ impl NotificationsUi {
     where
         F: Fn(&AppWindow) -> RowText + 'static,
     {
+        self.show_localized_timed(ui, LocalizedPush { variant, kind, timeout_ms: STICKY }, relabel)
+    }
+
+    /// For a timed row that can still be up across a language switch, its clock standing still
+    /// while it is read.
+    pub fn show_localized_timed<F>(&self, ui: &AppWindow, push: LocalizedPush, relabel: F) -> i32
+    where
+        F: Fn(&AppWindow) -> RowText + 'static,
+    {
         let text = relabel(ui);
-        let id = self.show(NotificationParams {
-            variant,
-            title: text.title,
-            message: text.message,
-            action_label: text.action_label,
-            kind,
-        });
+        let id = self.show(
+            NotificationParams {
+                variant: push.variant,
+                title: text.title,
+                message: text.message,
+                action_label: text.action_label,
+                kind: push.kind,
+            },
+            push.timeout_ms,
+        );
         self.recipes.borrow_mut().insert(id, Box::new(relabel));
         id
+    }
+
+    /// Swaps a live row's recipe and re-renders it in place, so its card and clock carry on.
+    pub fn relabel<F>(&self, ui: &AppWindow, id: i32, relabel: F)
+    where
+        F: Fn(&AppWindow) -> RowText + 'static,
+    {
+        let Some((pos, row)) = self.find(id) else { return };
+        let text = relabel(ui);
+        self.recipes.borrow_mut().insert(id, Box::new(relabel));
+        self.rows.set_row_data(
+            pos,
+            NotificationRow {
+                title: text.title,
+                message: text.message,
+                action_label: text.action_label,
+                ..row
+            },
+        );
+    }
+
+    /// Starts a live row's clock over.
+    pub fn restart(&self, id: i32) {
+        let Some((pos, row)) = self.find(id) else { return };
+        let restarts = row.restarts.wrapping_add(1);
+        self.rows.set_row_data(pos, NotificationRow { restarts, ..row });
+    }
+
+    /// The one listener, which the undo slot registers.
+    pub fn on_row_removed(&self, listener: impl Fn(i32) + 'static) {
+        if self.row_removed.set(Box::new(listener)).is_err() {
+            log::warn!("notifications: a second row-removed listener was ignored");
+        }
     }
 
     /// The transient toast for an action that landed, whole or in part.
@@ -200,7 +255,7 @@ impl NotificationsUi {
     }
 
     pub fn dismiss(&self, id: i32) {
-        if let Some(pos) = self.rows.iter().position(|r: NotificationRow| r.id == id) {
+        if let Some((pos, _)) = self.find(id) {
             self.remove_at(pos);
         }
     }
@@ -214,23 +269,22 @@ impl NotificationsUi {
         }
     }
 
-    fn remove_at(&self, pos: usize) {
-        remove_at(&self.rows, &self.recipes, pos);
+    /// A row closed or evicted first is simply not found, ids never being reused.
+    fn find(&self, id: i32) -> Option<(usize, NotificationRow)> {
+        self.rows.iter().enumerate().find(|(_, row)| row.id == id)
     }
-}
 
-/// **Every removal goes through here**: a recipe outliving its row is a closure kept for the
-/// session. Free, so the auto-dismiss timer, holding the two halves rather than the handle, shares
-/// it.
-fn remove_at(
-    rows: &VecModel<NotificationRow>,
-    recipes: &RefCell<HashMap<i32, Relabel>>,
-    pos: usize,
-) {
-    if let Some(row) = rows.row_data(pos) {
-        recipes.borrow_mut().remove(&row.id);
+    /// **Every removal goes through here**: a recipe outliving its row is a closure kept for the
+    /// session, and an undo hold outliving its notice an undo nobody can reach. The listener runs
+    /// with nothing borrowed, the eviction inside `show` reaching it too.
+    fn remove_at(&self, pos: usize) {
+        let Some(row) = self.rows.row_data(pos) else { return };
+        self.recipes.borrow_mut().remove(&row.id);
+        self.rows.remove(pos);
+        if let Some(listener) = self.row_removed.get() {
+            listener(row.id);
+        }
     }
-    rows.remove(pos);
 }
 
 /// Installs the row model and both callbacks, answering the handle toast raisers take.
@@ -240,8 +294,9 @@ pub fn install(ui: &AppWindow) -> Rc<NotificationsUi> {
 
     let state = Rc::new(NotificationsUi {
         rows,
-        recipes: Rc::new(RefCell::new(HashMap::new())),
+        recipes: RefCell::new(HashMap::new()),
         next_id: Cell::new(0),
+        row_removed: OnceCell::new(),
     });
 
     {
@@ -255,7 +310,7 @@ pub fn install(ui: &AppWindow) -> Rc<NotificationsUi> {
         let weak = ui.as_weak();
         ui.global::<Notifications>().on_action(move |id, kind| {
             if let Some(ui) = weak.upgrade() {
-                run_action(&ui, kind);
+                run_action(&ui, id, kind);
             }
             state.dismiss(id);
         });
@@ -267,7 +322,7 @@ pub fn install(ui: &AppWindow) -> Rc<NotificationsUi> {
 /// Runs a row's action through the callback its control in Settings or the update card fires.
 /// Here rather than in Slint because only Rust matches exhaustively: a new kind doesn't build until
 /// it has an arm, where a missing Slint branch paints a button that does nothing.
-fn run_action(ui: &AppWindow, kind: NotificationKind) {
+fn run_action(ui: &AppWindow, id: i32, kind: NotificationKind) {
     match kind {
         NotificationKind::InstallUpdate => ui.global::<MelodiaUpdater>().invoke_install(),
         NotificationKind::UpdateRestart => ui.global::<MelodiaUpdater>().invoke_restart(),
@@ -277,6 +332,8 @@ fn run_action(ui: &AppWindow, kind: NotificationKind) {
             let page = ui.global::<SettingsPage>();
             page.invoke_open_category(page.get_category_output());
         }
+        // The slot acts only on its own row, so a stale card's button does nothing.
+        NotificationKind::Undo => ui.global::<Notifications>().invoke_undo(id),
         // Kinds that only group rows; their rows carry no button.
         NotificationKind::None
         | NotificationKind::UpdateFailed

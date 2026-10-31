@@ -134,8 +134,9 @@ fn neither_update_row_offers_the_auto_check_switch_on_a_system_install() {
     }
 }
 
-/// Every non-Escape shortcut early-outs while the card is up, or Space pauses playback through the
-/// backdrop. The card has no text input of its own, so nothing else swallows those keys.
+/// Every shortcut but Escape and an undo's Ctrl+Z early-outs while the card is up, or Space pauses
+/// playback through the backdrop. The card has no text input of its own, so nothing else swallows
+/// those keys.
 #[test]
 fn the_card_gates_the_non_escape_shortcuts() {
     let keys = strip_line_comments(SHORTCUT_SCOPE);

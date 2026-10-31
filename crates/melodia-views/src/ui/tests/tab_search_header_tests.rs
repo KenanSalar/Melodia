@@ -120,7 +120,7 @@ fn the_sub_view_slide_is_disarmed_until_the_first_switch() {
 /// F11) anchored to its tooltip.
 ///
 /// The other half — that the row draws no pill of its own — is
-/// `placeholder_tests::no_shared_band_draws_its_own_tooltip`, which walks
+/// `crates/melodia/tests/tooltip_mounts.rs`'s `no_shared_band_draws_its_own_tooltip`, which walks
 /// `components/hero/`. Publishing an anchor and drawing nothing are two rules: this one
 /// is the row's alone, that one every band's.
 #[test]

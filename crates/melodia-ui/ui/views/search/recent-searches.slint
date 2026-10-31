@@ -32,7 +32,11 @@ component RecentChip inherits Rectangle {
 
     term-text := Text {
         x: 10px;
-        y: (root.height - self.height) / 2;
+        // Centred inside the full height rather than by a computed `y`: femtovg rounds the item's
+        // origin and the baseline separately, and both rounding down sits the line a pixel low.
+        y: 0px;
+        height: root.height;
+        vertical-alignment: center;
         // Bound and elided, elide alone never firing in a non-layout parent: unbounded, the
         // label paints through the pill's edge.
         width: max(0px, root.width - root.chrome-w);

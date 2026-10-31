@@ -152,7 +152,7 @@ export component MyLibraryTabPills inherits Rectangle {
                 danger: true;
                 tooltip-text: @tr("Delete playlist");
                 clicked => {
-                    Dialog.open-delete-playlist(PlaylistDetail.playlist-id);
+                    Playlists.delete-playlists([PlaylistDetail.playlist-id]);
                 }
             }
             PillDivider { }

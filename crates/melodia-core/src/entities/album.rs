@@ -29,6 +29,9 @@ pub struct AlbumStats {
 /// the track sits on and writes them back to every selected file. Strings rather than `Option`s
 /// because the form folds a selection with `common_str`, which has no third state to show for a
 /// NULL that a blank box doesn't already mean.
+///
+/// Editing a subset of a release isn't durable: the untouched files keep the old value, and the
+/// next re-ingest of any of them puts it back.
 #[derive(Clone, Debug, Default, PartialEq, FromRow)]
 pub struct ReleaseTagRow {
     pub label: String,

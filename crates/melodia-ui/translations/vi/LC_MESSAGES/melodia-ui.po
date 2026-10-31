@@ -21,7 +21,7 @@ msgid "Browse"
 msgstr "Duyệt"
 
 #: ui/app-window.slint ui/layout/sidebar.slint ui/views/favorites-view.slint
-#: ui/views/radio-view.slint
+#: ui/views/radio-view.slint ui/views/settings/undo-section.slint
 msgid "Favorites"
 msgstr "Yêu thích"
 
@@ -67,6 +67,7 @@ msgstr "Đóng"
 
 #. Translators: `{}` is how many items are selected
 #: ui/components/context-menu.slint
+#: ui/components/grid/station-context-menu.slint
 msgid "Remove {} from Favorites"
 msgstr "Xóa {} mục khỏi Yêu thích"
 
@@ -80,6 +81,7 @@ msgid "Add to Favorites"
 msgstr "Thêm vào Yêu thích"
 
 #: ui/components/context-menu.slint ui/components/grid/card-context-menu.slint
+#: ui/components/grid/station-context-menu.slint
 msgid "Remove from Favorites"
 msgstr "Xóa khỏi Yêu thích"
 
@@ -894,21 +896,12 @@ msgstr "Sửa…"
 
 #. Translators: `{}` is how many stations are selected
 #: ui/components/grid/station-context-menu.slint
-msgid "Remove {} from Recently Played…"
-msgstr "Xóa {} đài khỏi Đã phát gần đây…"
+msgid "Remove {} from Recently Played"
+msgstr "Xóa {} đài khỏi Đã phát gần đây"
 
 #: ui/components/grid/station-context-menu.slint
-msgid "Remove from Recently Played…"
-msgstr "Xóa khỏi Đã phát gần đây…"
-
-#. Translators: `{}` is how many stations are selected
-#: ui/components/grid/station-context-menu.slint
-msgid "Remove {} from Favorites…"
-msgstr "Xóa {} đài khỏi Yêu thích…"
-
-#: ui/components/grid/station-context-menu.slint
-msgid "Remove from Favorites…"
-msgstr "Xóa khỏi Yêu thích…"
+msgid "Remove from Recently Played"
+msgstr "Xóa khỏi Đã phát gần đây"
 
 #: ui/components/mini-player/mini-captions.slint
 msgid "Full Player"
@@ -1110,6 +1103,7 @@ msgstr "Lặp lại"
 #: ui/components/now-playing/queue-button.slint
 #: ui/views/queue-panel/queue-panel.slint
 #: ui/views/settings/overflow-menu-section.slint
+#: ui/views/settings/undo-section.slint
 msgid "Queue"
 msgstr "Hàng đợi"
 
@@ -1292,7 +1286,7 @@ msgstr "Tìm kiếm…"
 
 #: ui/components/settings/equalizer-controls.slint
 #: ui/views/settings/animations-section.slint
-#: ui/views/settings/output-section.slint
+#: ui/views/settings/output-section.slint ui/views/settings/undo-section.slint
 msgid "Equalizer"
 msgstr "Bộ chỉnh âm"
 
@@ -1607,6 +1601,10 @@ msgid "Delete playlist?"
 msgstr "Xóa danh sách phát?"
 
 #: ui/globals/dialog.slint
+msgid "This playlist has too many tracks to undo, so deleting it can't be undone. The tracks themselves stay in your library."
+msgstr "Danh sách phát này có quá nhiều bản nhạc nên không thể hoàn tác việc xóa. Bản thân các bản nhạc vẫn ở trong thư viện của bạn."
+
+#: ui/globals/dialog.slint
 msgid "The playlist and its track order will be removed. The tracks themselves stay in your library."
 msgstr "Danh sách phát và thứ tự bản nhạc của nó sẽ bị xóa. Bản thân các bản nhạc vẫn ở trong thư viện của bạn."
 
@@ -1615,8 +1613,13 @@ msgid "Delete"
 msgstr "Xóa"
 
 #: ui/globals/dialog.slint
-msgid "Delete {} playlists?"
-msgstr "Xóa {} danh sách phát?"
+msgid "Delete {n} playlist?"
+msgid_plural "Delete {n} playlists?"
+msgstr[0] "Xóa {n} danh sách phát?"
+
+#: ui/globals/dialog.slint
+msgid "These playlists have too many tracks to undo, so deleting them can't be undone. The tracks themselves stay in your library."
+msgstr "Các danh sách phát này có quá nhiều bản nhạc nên không thể hoàn tác việc xóa. Bản thân các bản nhạc vẫn ở trong thư viện của bạn."
 
 #: ui/globals/dialog.slint
 msgid "The playlists and their track order will be removed. The tracks themselves stay in your library."
@@ -1630,14 +1633,17 @@ msgstr "Xóa khỏi Đã phát gần đây?"
 msgid "Remove from favorites?"
 msgstr "Xóa khỏi mục yêu thích?"
 
+#. Translators: {} is the station's name.
 #: ui/globals/dialog.slint
 msgid "\"{}\" will be removed from Recently Played."
 msgstr "\"{}\" sẽ bị xóa khỏi Đã phát gần đây."
 
+#. Translators: {} is the station's name.
 #: ui/globals/dialog.slint
 msgid "\"{}\" will be removed from your stations, along with its play history."
 msgstr "\"{}\" sẽ bị xóa khỏi danh sách đài của bạn, cùng với lịch sử phát của đài."
 
+#. Translators: {} is the station's name.
 #: ui/globals/dialog.slint
 msgid "\"{}\" will be removed from your favorites."
 msgstr "\"{}\" sẽ bị xóa khỏi mục yêu thích của bạn."
@@ -1651,6 +1657,14 @@ msgstr[0] "Xóa {n} đài khỏi Đã phát gần đây?"
 msgid "Remove {n} station from favorites?"
 msgid_plural "Remove {n} stations from favorites?"
 msgstr[0] "Xóa {n} đài khỏi mục yêu thích?"
+
+#: ui/globals/dialog.slint
+msgid "There are too many stations to undo, so removing them from Recently Played can't be undone."
+msgstr "Có quá nhiều đài nên không thể hoàn tác việc xóa khỏi Đã phát gần đây."
+
+#: ui/globals/dialog.slint
+msgid "There are too many stations to undo, so removing them can't be undone. Any you added by hand are removed from your stations, along with their play history."
+msgstr "Có quá nhiều đài nên không thể hoàn tác việc xóa. Những đài bạn tự thêm sẽ bị xóa khỏi danh sách đài, cùng với lịch sử phát của chúng."
 
 #: ui/globals/dialog.slint
 msgid "The stations will be removed from Recently Played."
@@ -1777,6 +1791,84 @@ msgstr "Nén mất dữ liệu"
 msgid "Converted"
 msgstr "Đã chuyển đổi"
 
+#: ui/globals/undo-text.slint ui/views/settings/undo-section.slint
+msgid "Undo"
+msgstr "Hoàn tác"
+
+#: ui/globals/undo-text.slint
+msgid "Equalizer reset"
+msgstr "Đã đặt lại bộ chỉnh âm"
+
+#: ui/globals/undo-text.slint
+msgid "Recent searches cleared"
+msgstr "Đã xóa các tìm kiếm gần đây"
+
+#. Translators: {} is the playlist's name.
+#: ui/globals/undo-text.slint
+msgid "{n} track removed from {}"
+msgid_plural "{n} tracks removed from {}"
+msgstr[0] "Đã xóa {n} bản nhạc khỏi {}"
+
+#. Translators: {} is the playlist's name.
+#: ui/globals/undo-text.slint
+msgid "{} deleted"
+msgstr "Đã xóa {}"
+
+#: ui/globals/undo-text.slint
+msgid "{n} playlist deleted"
+msgid_plural "{n} playlists deleted"
+msgstr[0] "Đã xóa {n} danh sách phát"
+
+#. Translators: {} is the station's name.
+#: ui/globals/undo-text.slint
+msgid "{} removed from Favorites"
+msgstr "Đã xóa {} khỏi Yêu thích"
+
+#: ui/globals/undo-text.slint
+msgid "{n} station removed from Favorites"
+msgid_plural "{n} stations removed from Favorites"
+msgstr[0] "Đã xóa {n} đài khỏi Yêu thích"
+
+#. Translators: {} is the station's name.
+#: ui/globals/undo-text.slint
+msgid "{} removed from Recently Played"
+msgstr "Đã xóa {} khỏi Đã phát gần đây"
+
+#: ui/globals/undo-text.slint
+msgid "{n} station removed from Recently Played"
+msgid_plural "{n} stations removed from Recently Played"
+msgstr[0] "Đã xóa {n} đài khỏi Đã phát gần đây"
+
+#: ui/globals/undo-text.slint
+msgid "{n} track removed from Favorites"
+msgid_plural "{n} tracks removed from Favorites"
+msgstr[0] "Đã xóa {n} bản nhạc khỏi Yêu thích"
+
+#: ui/globals/undo-text.slint
+msgid "{n} track removed from the queue"
+msgid_plural "{n} tracks removed from the queue"
+msgstr[0] "Đã xóa {n} bản nhạc khỏi hàng đợi"
+
+#: ui/globals/undo-text.slint
+msgid "Queue cleared"
+msgstr "Đã xóa hàng đợi"
+
+#: ui/globals/undo-text.slint
+msgid "Queue replaced"
+msgstr "Đã thay thế hàng đợi"
+
+#: ui/globals/undo-text.slint
+msgid "Too many to undo"
+msgstr "Quá nhiều để hoàn tác"
+
+#: ui/globals/undo-text.slint
+msgid "Couldn't undo"
+msgstr "Không thể hoàn tác"
+
+#: ui/globals/undo-text.slint ui/settings.slint
+msgid "See the log for details."
+msgstr "Xem nhật ký để biết chi tiết."
+
 #. Translators: the action a click takes, expanding the sidebar
 #: ui/layout/sidebar.slint
 msgid "Expand"
@@ -1874,10 +1966,6 @@ msgstr "Đã lưu vào {}"
 #: ui/settings.slint
 msgid "Couldn't save the diagnostics report"
 msgstr "Không thể lưu báo cáo chẩn đoán"
-
-#: ui/settings.slint
-msgid "See the log for details."
-msgstr "Xem nhật ký để biết chi tiết."
 
 #: ui/settings.slint
 msgid "Melodia crashed last time"
@@ -2173,7 +2261,7 @@ msgstr "Nghệ sĩ"
 msgid "Genres"
 msgstr "Thể loại"
 
-#: ui/views/my-library-view.slint
+#: ui/views/my-library-view.slint ui/views/settings/undo-section.slint
 msgid "Playlists"
 msgstr "Danh sách phát"
 
@@ -2339,8 +2427,8 @@ msgid "Clear queue?"
 msgstr "Xóa hàng đợi?"
 
 #: ui/views/queue-panel/queue-panel.slint
-msgid "Remove all tracks from the queue? Playback will stop."
-msgstr "Xóa tất cả bản nhạc khỏi hàng đợi? Nhạc sẽ dừng phát."
+msgid "Remove all tracks from the queue? This can't be undone. The playing track plays to its end."
+msgstr "Xóa tất cả bản nhạc khỏi hàng đợi? Không thể hoàn tác thao tác này. Bản nhạc đang phát sẽ phát hết."
 
 #: ui/views/queue-panel/queue-panel.slint
 msgid "Queue is empty"
@@ -2523,11 +2611,6 @@ msgstr "Phát nhạc"
 msgid "Window"
 msgstr "Cửa sổ"
 
-#: ui/views/settings-view.slint ui/views/settings/about-section.slint
-#: ui/views/settings/pages/about-page.slint
-msgid "About"
-msgstr "Giới thiệu"
-
 #: ui/views/settings-view.slint ui/views/settings/pages/integrations-page.slint
 msgid "Integrations"
 msgstr "Tích hợp"
@@ -2536,6 +2619,16 @@ msgstr "Tích hợp"
 #: ui/views/settings/update-section.slint
 msgid "Updates"
 msgstr "Cập nhật"
+
+#: ui/views/settings-view.slint ui/views/settings/about-section.slint
+#: ui/views/settings/pages/about-page.slint
+msgid "About"
+msgstr "Giới thiệu"
+
+#: ui/views/settings-view.slint
+#: ui/views/settings/pages/accessibility-page.slint
+msgid "Accessibility"
+msgstr "Trợ năng"
 
 #: ui/views/settings-view.slint
 msgid "Search settings…"
@@ -3154,6 +3247,7 @@ msgstr "Giảm dần âm lượng khi tạm dừng hoặc dừng, và tăng dầ
 
 #. Translators: `{}` is a duration in seconds, such as 2.5
 #: ui/views/settings/playback-section.slint
+#: ui/views/settings/undo-section.slint
 msgid "{} s"
 msgstr "{} giây"
 
@@ -3264,6 +3358,62 @@ msgstr "Hãy bật Last.fm hoặc ListenBrainz ở trên trước"
 #: ui/views/settings/settings-router.slint
 msgid "No matching settings"
 msgstr "Không có cài đặt phù hợp"
+
+#: ui/views/settings/undo-section.slint
+msgid "Offer undo after a removal"
+msgstr "Đề nghị hoàn tác sau khi xóa"
+
+#: ui/views/settings/undo-section.slint
+msgid "Show a notice with an Undo button after something is removed. Ctrl+Z works too while it is up."
+msgstr "Hiện thông báo có nút Hoàn tác sau khi xóa một thứ gì đó. Ctrl+Z cũng hoạt động khi thông báo còn hiện."
+
+#: ui/views/settings/undo-section.slint
+msgid "Also for a single item"
+msgstr "Cả khi chỉ có một mục"
+
+#: ui/views/settings/undo-section.slint
+msgid "Offer undo when only one track, playlist, station or favorite goes. Clear all, Reset and Clear queue always offer it."
+msgstr "Đề nghị hoàn tác cả khi chỉ xóa một bản nhạc, danh sách phát, đài hoặc mục yêu thích. Xóa tất cả, Đặt lại và Xóa hàng đợi luôn đề nghị hoàn tác."
+
+#: ui/views/settings/undo-section.slint
+msgid "Tracks removed from a playlist, and deleted playlists."
+msgstr "Bản nhạc bị xóa khỏi danh sách phát và các danh sách phát đã xóa."
+
+#: ui/views/settings/undo-section.slint
+msgid "Tracks removed from the queue, Clear queue, and a play that replaces a queue you built."
+msgstr "Bản nhạc bị xóa khỏi hàng đợi, Xóa hàng đợi và việc phát nhạc thay thế hàng đợi do bạn tạo."
+
+#: ui/views/settings/undo-section.slint
+msgid "Tracks removed from Favorites."
+msgstr "Bản nhạc bị xóa khỏi Yêu thích."
+
+#: ui/views/settings/undo-section.slint
+msgid "Radio stations"
+msgstr "Đài radio"
+
+#: ui/views/settings/undo-section.slint
+msgid "Stations removed from Favorites or Recently Played."
+msgstr "Đài bị xóa khỏi Yêu thích hoặc Đã phát gần đây."
+
+#: ui/views/settings/undo-section.slint
+msgid "Resetting the equalizer."
+msgstr "Đặt lại bộ chỉnh âm."
+
+#: ui/views/settings/undo-section.slint
+msgid "Recent searches"
+msgstr "Tìm kiếm gần đây"
+
+#: ui/views/settings/undo-section.slint
+msgid "Clearing recent searches."
+msgstr "Xóa các tìm kiếm gần đây."
+
+#: ui/views/settings/undo-section.slint
+msgid "Keep the notice up"
+msgstr "Thời gian hiện thông báo"
+
+#: ui/views/settings/undo-section.slint
+msgid "How long the notice waits for a press. It also waits while the pointer is over it or Melodia is in the background."
+msgstr "Thông báo chờ bạn nhấn trong bao lâu. Thông báo cũng chờ khi con trỏ đang ở trên nó hoặc Melodia chạy ở nền."
 
 #: ui/views/settings/update-section.slint
 msgid "Software Updates"

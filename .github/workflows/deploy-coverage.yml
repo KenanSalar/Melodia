@@ -5,7 +5,8 @@ name: Deploy Coverage
 # not what anyone reads to decide a merge. `workflow_dispatch` takes a ref, so
 # the dropdown picks what gets measured and runs THAT branch's copy; `deploy` is
 # then gated by the `github-pages` environment, whose branch policy allows `main`
-# only, so any other ref builds and uploads and fails at the publish.
+# only, so any other ref builds and uploads and fails at the publish. Pages
+# itself must be on with Source = GitHub Actions, a setting no file holds.
 on:
   workflow_dispatch:
 

@@ -19,6 +19,7 @@ pub mod ratings;
 pub mod replaygain;
 pub mod scrobble;
 pub mod support;
+pub mod undo;
 pub mod updates;
 pub mod view;
 pub mod visualizer;
@@ -35,7 +36,9 @@ pub use diagnostics::set_verbose_logging;
 pub use discord::{
     set_discord_rpc_artwork, set_discord_rpc_enabled, set_discord_rpc_hide_when_paused,
 };
-pub use equalizer::{set_eq_band_gains_and_preset, set_eq_enabled, set_eq_preamp};
+pub use equalizer::{
+    EqCurve, set_eq_band_gains_and_preset, set_eq_curve, set_eq_enabled, set_eq_preamp,
+};
 pub use folders::{
     add_folder, get_folders, remove_folder, set_folder_watching_enabled, suggested_music_folder,
     toggle_folder_watching,
@@ -60,6 +63,7 @@ pub use scrobble::{
     set_scrobble_listenbrainz_enabled, set_scrobble_listenbrainz_love_enabled,
 };
 pub use support::{mark_support_prompt_seen, record_launch};
+pub use undo::{set_undo_enabled, set_undo_kind, set_undo_notice_ms, set_undo_single_items};
 pub use updates::{set_auto_check_enabled, set_skipped_release};
 pub use view::{
     get_view_sort, set_artist_albums_collapsed, set_browse_path, set_browse_view_mode,

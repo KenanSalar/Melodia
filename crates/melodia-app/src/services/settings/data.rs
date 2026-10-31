@@ -13,6 +13,7 @@ use super::playback::{
     VisualizerFlags,
 };
 use super::services::{LyricsFlags, RadioFlags};
+use super::undo::UndoFlags;
 use melodia_core::entities::integrations::{DiscordFlags, ScrobbleFlags};
 use melodia_core::entities::locale::{DEFAULT_LOCALE, SUPPORTED_LOCALES};
 use melodia_core::entities::track_list::SortDir;
@@ -167,6 +168,8 @@ pub struct SettingsData {
     pub support: SupportFlags,
     #[serde(flatten)]
     pub onboarding: OnboardingFlags,
+    #[serde(flatten)]
+    pub undo: UndoFlags,
 }
 
 impl SettingsData {
@@ -218,6 +221,7 @@ impl Default for SettingsData {
             diagnostics: DiagnosticsFlags::default(),
             support: SupportFlags::default(),
             onboarding: OnboardingFlags::default(),
+            undo: UndoFlags::default(),
         }
     }
 }

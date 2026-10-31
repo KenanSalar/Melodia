@@ -4,17 +4,11 @@
 use std::collections::HashSet;
 
 use super::*;
+use crate::player::engine::fixtures::{cut_rows, queue_of};
 use melodia_core::error::AppError;
 
 /// What a row does to the queue.
 type Edit = fn(&mut QueueState);
-
-/// A queue of `ids` in their own order, nothing playing.
-fn queue_of(ids: &[i64]) -> QueueState {
-    let mut q = QueueState::default();
-    q.add_tracks(ids);
-    q
-}
 
 fn five() -> QueueState {
     queue_of(&[1, 2, 3, 4, 5])
@@ -34,7 +28,7 @@ fn entry_on(q: &QueueState, row: usize) -> Result<QueueEntry, AppError> {
 }
 
 /// The entry on the row holding `id`, for a queue holding it once.
-fn entry_holding(q: &QueueState, id: i64) -> Result<QueueEntry, AppError> {
+fn entry_of_track(q: &QueueState, id: i64) -> Result<QueueEntry, AppError> {
     let row = q.play_ids().iter().position(|&queued| queued == id);
     row.and_then(|row| q.entry_at(row))
         .ok_or_else(|| AppError::validation_msg(format!("track {id} is not queued")))
@@ -81,11 +75,17 @@ fn an_entry_stays_on_its_row_through_every_edit_that_keeps_it() -> Result<(), Ap
         (
             "a removal of a row above it",
             |q| {
-                q.remove_at(0);
+                cut_rows(q, &[0]);
             },
             1,
         ),
-        ("a removal of other rows either side", |q| q.remove_batch(&[1, 3]), 1),
+        (
+            "a removal of other rows either side",
+            |q| {
+                cut_rows(q, &[1, 3]);
+            },
+            1,
+        ),
         (
             "a prune of another track",
             |q| {
@@ -224,7 +224,7 @@ fn a_block_played_next_under_shuffle_unshuffles_in_the_order_handed_over() {
 /// What `q` holds once `edit` has run between a drop reading the row holding track 4 and the drop
 /// landing 10 and 11 ahead of it, the library awaiting between the two.
 fn dropped_ahead_of_four(mut q: QueueState, edit: Edit) -> Result<Vec<i64>, AppError> {
-    let target = entry_holding(&q, 4)?;
+    let target = entry_of_track(&q, 4)?;
     edit(&mut q);
     q.insert_before(Some(target), &[10, 11]);
     Ok(q.play_ids().to_vec())
@@ -237,7 +237,7 @@ fn a_drop_lands_directly_ahead_of_its_row_however_the_queue_moved_first() -> Res
             "a removal above it",
             five(),
             |q| {
-                q.remove_at(0);
+                cut_rows(q, &[0]);
             },
             &[2, 3, 10, 11, 4, 5],
         ),
@@ -286,7 +286,7 @@ fn a_drop_whose_row_has_left_lands_at_the_end() -> Result<(), AppError> {
         (
             "its row removed",
             |q| {
-                q.remove_at(3);
+                cut_rows(q, &[3]);
             },
             &[1, 2, 3, 5, 10, 11],
         ),
@@ -318,7 +318,7 @@ fn a_drop_whose_row_has_left_lands_at_the_end() -> Result<(), AppError> {
 /// `edit` has run between the click reading the row and the skip.
 fn skipped_to_four(edit: Edit) -> Result<(Option<i64>, Option<usize>), AppError> {
     let mut q = five();
-    let clicked = entry_holding(&q, 4)?;
+    let clicked = entry_of_track(&q, 4)?;
     edit(&mut q);
     let played = q.skip_to_entry(clicked);
     Ok((played, q.current_index))
@@ -356,7 +356,7 @@ fn a_skip_plays_the_row_clicked_wherever_the_queue_has_moved_it() -> Result<(), 
 fn a_skip_to_a_row_that_has_left_plays_nothing() -> Result<(), AppError> {
     let rows: [(&str, Edit); 3] = [
         ("its row removed", |q| {
-            q.remove_at(3);
+            cut_rows(q, &[3]);
         }),
         ("its track pruned", |q| {
             q.prune_missing(&HashSet::from([4]));

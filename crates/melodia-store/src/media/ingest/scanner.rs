@@ -177,7 +177,8 @@ impl WalkIndex {
     }
 
     /// The files `keep` admits that need reading: no row yet, or a size or mtime that has moved
-    /// since. Runs on the current rayon pool, a `stat` per file that has a row.
+    /// since. Runs on the current rayon pool, a `stat` per file that has a row. Every launch with
+    /// watching on re-scans each folder to find almost nothing, so this is the scan's common case.
     pub fn changed(&self, keep: impl Fn(&Path) -> bool + Sync) -> Vec<PathBuf> {
         self.files
             .par_iter()

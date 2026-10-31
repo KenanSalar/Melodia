@@ -34,18 +34,18 @@ pub struct RadioUi {
     pub(super) section: SectionState,
     /// The directory page on screen, and the query it answers.
     pub(super) browse: Mutex<BrowseState>,
-    /// The directory uuids this install has starred, flipped optimistically so the star answers on
-    /// the click's own frame. Derived from the fetch that fills [`Self::kept`].
-    pub(super) starred: Mutex<HashSet<String>>,
+    /// The directory uuids this install has favorited, flipped optimistically so the heart answers
+    /// on the click's own frame. Derived from the fetch that fills [`Self::kept`].
+    pub(super) favorite_uuids: Mutex<HashSet<String>>,
     /// What a kept station's own row answers about it, keyed on directory uuid: one map for both
     /// answers, off the same fetch and stale on the same write.
     pub(super) kept_answers: Mutex<HashMap<String, KeptAnswers>>,
     /// The station ids the logo repair has asked about this session, so a refresh on every enter,
-    /// star flip and removal doesn't re-ask what a stored backoff already answered.
+    /// favorite flip and removal doesn't re-ask what a stored backoff already answered.
     pub(super) healed: Mutex<HashSet<i64>>,
-    /// The Favorites tab: everything starred, plus every station typed in by hand.
+    /// The Favorites tab: every favorite, plus every station typed in by hand.
     pub(super) kept: Mutex<kept::KeptState>,
-    /// The Recently Played tab: every station with a play behind it, starred or not.
+    /// The Recently Played tab: every station with a play behind it, favorite or not.
     pub(super) recent: Mutex<kept::KeptState>,
     /// What this session knows about station logos, keyed on the URL they came from.
     pub(super) logos: LogoMemo,
@@ -77,7 +77,7 @@ impl RadioUi {
         Self {
             section,
             browse: Mutex::new(BrowseState::default()),
-            starred: Mutex::new(HashSet::new()),
+            favorite_uuids: Mutex::new(HashSet::new()),
             kept_answers: Mutex::new(HashMap::new()),
             healed: Mutex::new(HashSet::new()),
             kept: Mutex::new(kept::KeptState::default()),
@@ -116,14 +116,14 @@ impl RadioUi {
         self.healed.lock().remove(&id);
     }
 
-    /// Flips a station's star in the grid's shadow: the optimistic half of the toggle, and its
+    /// Flips a station's favorite in the grid's shadow: the optimistic half of the toggle, and its
     /// revert.
     pub(super) fn set_local_favorite(&self, station_uuid: &str, favorite: bool) {
-        let mut starred = self.starred.lock();
+        let mut favorite_uuids = self.favorite_uuids.lock();
         if favorite {
-            starred.insert(station_uuid.to_owned());
+            favorite_uuids.insert(station_uuid.to_owned());
         } else {
-            starred.remove(station_uuid);
+            favorite_uuids.remove(station_uuid);
         }
     }
 }

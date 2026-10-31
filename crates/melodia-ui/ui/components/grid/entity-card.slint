@@ -57,7 +57,7 @@ export component EntityCard inherits Rectangle {
     callback pressed();
 
     // Every hover binding here reads this, not `touch.has-hover`, which goes false under any
-    // nested button. `out` so a control beside the card (a station's star) can ride it too.
+    // nested button. `out` so a control beside the card (a station's heart) can ride it too.
     out property <bool> card-hovered:
         touch.has-hover || box-touch.has-hover || root.overlay-hovered || root.menu-open;
 

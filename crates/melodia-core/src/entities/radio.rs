@@ -172,6 +172,16 @@ impl RadioStation {
             || self.can_set_country()
     }
 
+    /// Whether either local tab would still show this station. **A hand-typed one is listed by its
+    /// favorite alone**: its card offers no heart to set (`can-favorite: station.uuid != ""`), so
+    /// kept for its play stamp it could never get back into Favorites.
+    pub fn is_listed(&self) -> bool {
+        if self.station_uuid.as_deref().is_none_or(str::is_empty) {
+            return self.is_favorite;
+        }
+        self.is_favorite || self.last_played.is_some()
+    }
+
     /// The save input that recreates this row, for an export. `station_uuid` is the point, telling
     /// a directory station from a hand-typed lookalike. Nothing derived crosses, nor `artwork_path`
     /// (a file in this install's store), nor the `local_*` columns, which [`StationOverrides`]
@@ -190,6 +200,39 @@ impl RadioStation {
             codec: self.codec.clone(),
             bitrate: self.bitrate,
             hls: self.hls,
+        }
+    }
+}
+
+/// The kept tab a removal was asked on, which decides what it takes: the favorite, or the plays.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum KeptList {
+    Favorites,
+    Recent,
+}
+
+/// What removing one station from a kept tab took, enough to reverse exactly that.
+#[derive(Debug, PartialEq)]
+pub enum StationCut {
+    /// The favorite, the row staying for its plays.
+    Unfavorited { id: i64, date_added: String, name: String },
+    /// The plays, the row staying for its favorite.
+    HistoryCleared {
+        id: i64,
+        date_added: String,
+        name: String,
+        last_played: String,
+        play_count: i32,
+    },
+    /// The row as it stood before the removal, which left nothing listing it.
+    Deleted(Box<RadioStation>),
+}
+
+impl StationCut {
+    pub fn name(&self) -> &str {
+        match self {
+            Self::Unfavorited { name, .. } | Self::HistoryCleared { name, .. } => name,
+            Self::Deleted(station) => &station.name,
         }
     }
 }

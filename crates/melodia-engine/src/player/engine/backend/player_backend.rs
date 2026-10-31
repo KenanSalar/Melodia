@@ -32,7 +32,6 @@ pub trait PlayerBackend: Send + Sync {
     fn seek(&self, file_path: &str, position_ms: u64, baked_rg: TrackReplayGain);
     fn set_volume(&self, volume: f64);
     fn set_speed(&self, speed: f64);
-    fn preload_gapless(&self, file_path: Option<&str>, baked_rg: TrackReplayGain);
     /// Fails where nothing is staged under `generation`, which is how a superseded station is
     /// refused rather than played late.
     fn play_stream(&self, generation: u64, volume: f64) -> Result<(), AppError>;
@@ -79,9 +78,6 @@ impl PlayerBackend for PlaybackEngine {
     }
     fn set_speed(&self, speed: f64) {
         self.set_speed(speed);
-    }
-    fn preload_gapless(&self, file_path: Option<&str>, baked_rg: TrackReplayGain) {
-        self.preload_gapless(file_path, baked_rg);
     }
     fn play_stream(&self, generation: u64, volume: f64) -> Result<(), AppError> {
         self.play_stream(generation, volume)

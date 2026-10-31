@@ -1,8 +1,8 @@
 // What a card's right-click menu does, for every entity kind.
 //
 // **Stateless**: each call carries its `kind` and ids, so nothing goes stale between grids. `kind`
-// is an `EntityKind` token ("album", "artist", "genre", "playlist", "track"), resolved to track
-// ids in one query. Browse's folder cards go through `Browse`.
+// is an `EntityKind` token ("album", "artist", "genre", "playlist", "track"), Rust resolving the
+// cards to their tracks. Browse's folder cards go through `Browse`.
 export global CardActions {
     // **Replaces the queue.** A card click opens its detail, so this is a grid's only play path.
     // A lone track card's Play routes through `CardContextMenu.play-single` instead, its grid

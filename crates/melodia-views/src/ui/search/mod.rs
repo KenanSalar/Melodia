@@ -3,8 +3,8 @@
 //! artist strips. Recent searches show on an empty box, a query joining them only after a pause.
 //!
 //! There is deliberately no `library_changed` subscriber: a scan landing mid-query must not swap
-//! the results out from under the user. A row edit is patched instead, into the cached row
-//! ([`SearchUi::flip_favorite`]) and the one on screen (`apply::apply_row_*`).
+//! the results out from under the user. A row edit is patched instead, into the cached rows
+//! ([`SearchUi::flip_favorites`]) and those on screen (`apply::apply_rows_*`).
 
 mod apply;
 mod callbacks;
@@ -12,6 +12,7 @@ mod fetch;
 mod state;
 mod top_result;
 
+use std::collections::HashSet;
 use std::rc::Rc;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
@@ -32,7 +33,8 @@ use melodia_ui::{
 
 use state::{ALBUM_STRIP_THUMB_SIZE, ARTIST_STRIP_THUMB_SIZE, STRIP_THUMB_CAP, SearchUiState};
 
-pub(super) use apply::{apply_row_favorite, apply_row_rating};
+pub(super) use apply::{apply_rows_favorite, apply_rows_rating};
+pub(crate) use callbacks::RecentClearUndo;
 
 /// Wires every `Search.*` callback. The two peers are the open-album and open-artist hand-offs,
 /// parameters so the install order is a compile error. There is no initial fetch, the page
@@ -46,7 +48,7 @@ pub fn install(
 ) -> Arc<SearchUi> {
     install_models(cx.app);
     let search_ui = Arc::new(SearchUi::new(cx.cover_thumbs.clone()));
-    callbacks::wire(cx.app, cx.state, cx.view_state, &search_ui, albums_ui, artists_ui);
+    callbacks::wire(cx, &search_ui, albums_ui, artists_ui);
     search_ui
 }
 
@@ -117,22 +119,22 @@ impl SearchUi {
         melodia_platform::services::platform::allocator::trim();
     }
 
-    /// Patches the cached row, which "Show all" and a re-sort re-derive the visible slice from.
-    pub fn flip_favorite(&self, id: i64, fav: bool) {
-        self.patch_cached_track(id, |t| t.is_favorite = fav);
+    /// Patches the cached rows, which "Show all" and a re-sort re-derive the visible slice from.
+    pub fn flip_favorites(&self, ids: &HashSet<i64>, fav: bool) {
+        self.patch_cached_tracks(ids, |t| t.is_favorite = fav);
     }
 
-    /// [`Self::flip_favorite`]'s star-rating twin.
-    pub fn flip_rating(&self, id: i64, rating: i32) {
-        self.patch_cached_track(id, |t| t.rating = rating);
+    /// [`Self::flip_favorites`]' star-rating twin.
+    pub fn flip_ratings(&self, ids: &HashSet<i64>, rating: i32) {
+        self.patch_cached_tracks(ids, |t| t.rating = rating);
     }
 
-    /// A no-op when the id isn't cached, the common case for an edit made from Now Playing.
-    fn patch_cached_track(&self, id: i64, edit: impl FnOnce(&mut RsTrackListRow)) {
-        if let Some(results) = self.inner.last_results.lock().as_mut()
-            && let Some(track) = results.tracks.iter_mut().find(|t| t.id == id)
-        {
-            edit(track);
+    /// A no-op where no id is cached, the common case for an edit made from Now Playing.
+    fn patch_cached_tracks(&self, ids: &HashSet<i64>, edit: impl Fn(&mut RsTrackListRow)) {
+        if let Some(results) = self.inner.last_results.lock().as_mut() {
+            for track in results.tracks.iter_mut().filter(|t| ids.contains(&t.id)) {
+                edit(track);
+            }
         }
     }
 

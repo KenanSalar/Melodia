@@ -44,8 +44,13 @@ export global Queue {
     callback remove(int /*play_order_index*/);
     // Every picked row, and no other copy of their tracks.
     callback remove-selected();
+    // Up Next's removal. The panel's rows aren't held while Up Next is on screen, so Rust finds
+    // the row in the queue itself.
+    callback remove-upcoming(int /*play_order_index*/, int /*track_id*/);
     callback skip-to(int /*play_order_index*/);
     callback clear-queue();
+    // Clear asks first only where no undo would follow it.
+    in property <bool> clear-confirms: false;
     // Rust's: a press under Now Playing closes it to bring the panel up, and `Nav` is not this
     // file's to import.
     callback toggle();

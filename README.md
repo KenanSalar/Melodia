@@ -75,7 +75,7 @@ The shots below are a handful of the themes, all on the default aurora backdrop;
 <table>
   <tr>
     <td width="50%"><img src="assets/screenshots/radio-browse.png" alt="Radio browse view"><br><sub><b>Internet Radio</b>: a worldwide directory, narrowed by country, language, genre, codec, or bitrate. Off until you switch it on, under Settings ▸ Radio.</sub></td>
-    <td width="50%"><img src="assets/screenshots/settings.png" alt="Settings on the Appearance category"><br><sub><b>Settings</b>: twelve categories beside the cards, searched all at once, here on the theme, variant, accent, and color style.</sub></td>
+    <td width="50%"><img src="assets/screenshots/settings.png" alt="Settings on the Appearance category"><br><sub><b>Settings</b>: thirteen categories beside the cards, searched all at once, here on the theme, variant, accent, and color style.</sub></td>
   </tr>
 </table>
 
@@ -109,6 +109,7 @@ Shrink the window and the full UI collapses into a mini-player that grows with i
 - Star ratings, play and skip counts, natural sort, resizable and toggleable columns
 - Multi-selection on every list and card grid: tick one to start, click to add, shift-click for a range, and right-click to queue, rate or tag the whole set. `Esc` clears it
 - Copy from any right-click menu: a song's title, artist, album, "Artist - Title" or file path, an album's name, or a station's name, stream URL or website, one line per selected item
+- Undo for removals: tracks taken out of a playlist or the queue, deleted playlists, Clear queue, a play that replaces a queue you built, favorites, radio stations, the equalizer's Reset, and recent searches' Clear all. A notice names what went and offers Undo, or `Ctrl+Z` while it is up, and waits while the pointer is over it or Melodia is in the background. Settings ▸ Accessibility turns undo off altogether, per kind, or for single items, and sets how long the notice stays
 - Tag editing for one track or many, cover art included, written straight back to the files. Artists, genres and the ten studio credits are each an editable list, beside work and movement, key, mood, ISRC, label, catalog number, barcode and medium
 - Manual and smart playlists, the latter rule-based and resolved live; `.m3u8` import and export, several at once as one `.zip` that imports back without extracting, drag-and-drop import, and reordering that moves a whole selection
 - A database backup before every schema migration, three kept
@@ -172,7 +173,7 @@ Shrink the window and the full UI collapses into a mini-player that grows with i
 - Your own stream URLs, checked at the dialog rather than at the first click; `.pls`, `.m3u`, and `.asx` resolve to the audio behind them
 - Live titles reach the player bar, Now Playing, your desktop's media controls, and Discord, with buffering and reconnection handled underneath
 - Favorites, Recently Played, station pages, cached logos, and playlist-file import and export
-- Station cards select like any other card, with a right-click menu to play, star, copy, edit, or remove them
+- Station cards select like any other card, with a right-click menu to play, favorite, copy, edit, or remove them
 - The titles a station announced this session, listed under it and copyable
 - Segmented (HLS) stations play like any other
 
@@ -217,13 +218,13 @@ Sixteen locales (English, German, French, Spanish, Turkish, Greek, Italian, Braz
 
 Release builds on one dual-boot PC, a Ryzen 7 9800X3D (8 cores, 16 threads) with an RTX 3080 and the window on a 144 Hz display. Melodia opened on a playlist's detail view, the visualizer in the Mirrored style, and each scenario is sampled every second for 60 s: memory is the median sample, CPU and GPU the total over that minute. With a 512-track library, the native titlebar, and each platform's default sample-rate conversion:
 
-| Scenario | Linux, Anonymous | Linux, CPU (1 core) | Windows, Commit | Windows, CPU (1 core) |
+| Scenario | Linux, PSS | Linux, CPU (1 core) | Windows, Private WS | Windows, CPU (1 core) |
 | --- | --- | --- | --- | --- |
-| Idle | 29.44 MiB | 0.08% | 109.62 MiB | 0.16% |
-| Playing, list view | 30.05 MiB | 0.60% | 112.26 MiB | 0.78% |
-| Playing, visualizer live | 31.50 MiB | 2.42% | 118.77 MiB | 7.19% |
+| Idle | 84.43 MiB | 0.08% | 62.80 MiB | 0.16% |
+| Playing, list view | 86.01 MiB | 0.60% | 64.05 MiB | 0.78% |
+| Playing, visualizer live | 90.25 MiB | 2.42% | 68.34 MiB | 7.19% |
 
-Each platform's figure is what its own kernel accounts for, so the two memory columns don't compare with each other. The full tables add startup, the Songs tab, the whole library queued, the custom titlebar, and a second library of 50,500 tracks beside the first, 51,012 in all.
+Each memory column is what that platform's own monitor shows, KDE System Monitor's Memory column on Linux and Task Manager's on Windows. The two don't compare with each other: PSS counts a share of the file-backed pages, mostly the binary and the shared graphics stack, which Private WS leaves out. The full tables add startup, the Songs tab, the whole library queued, the custom titlebar, and a second library of 50,500 tracks beside the first, 51,012 in all.
 
 <details>
 <summary><b>Linux (Fedora)</b>: every scenario, both titlebars, both libraries</summary>
@@ -366,6 +367,7 @@ Windows keeps no PSS, so **Commit** is the figure to compare: the private memory
 | Queue panel | `Q` |
 | Select all in the queue, after clicking it | `Ctrl+A` |
 | Remove the queue's selected tracks, after clicking it | `Delete` or `Backspace` |
+| Undo a removal, while its notice is up | `Ctrl+Z` |
 | Now Playing view | `F` |
 | Maximize | `F11` |
 | Toggle sidebar | `Ctrl+B` |

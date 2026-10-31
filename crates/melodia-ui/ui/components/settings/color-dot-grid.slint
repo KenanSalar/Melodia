@@ -63,7 +63,8 @@ component ColorDot inherits Rectangle {
 export component ColorDotGrid inherits Rectangle {
     in property <[brush]> colors;
     in property <[string]> labels;
-    // -1 checks no swatch, for a host whose colour is following something rather than picked.
+    // -1 checks no swatch, for a host whose colour is following something rather than picked: the
+    // follow is a switch above the grid, never a swatch in it.
     in-out property <int> selected-index;
 
     callback selected(int);

@@ -30,7 +30,8 @@ pub use install::{
 pub use run::{Finding, PanelPaint, run_check};
 
 /// Whether this build has an in-app updater at all: not a source build, whose `target/` belongs to
-/// cargo and would lose a swapped-in release at the next build.
+/// cargo and would lose a swapped-in release at the next build. A gate of its own rather than a
+/// case of `is_system_install`, whose package-manager hint `cargo run` would then be offered.
 #[must_use]
 pub fn is_available() -> bool {
     !melodia_core::utils::exe::is_dev_build()

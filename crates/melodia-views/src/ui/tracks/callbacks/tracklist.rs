@@ -93,17 +93,13 @@ fn wire_row_flags(ui: &AppWindow, state: &AppState, tracks_ui: &Arc<TracksUi>) {
     library::favorites::set_favorite, collect_track_ids,
     captures: [tu],
     after: |id_vec, fav| {
-        for id in id_vec {
-            track_rows::patch_row(&*tu, id, move |row| row.is_favorite = fav);
-        }
+        track_rows::patch_rows(&*tu, id_vec, move |row| row.is_favorite = fav);
     });
     wire_row_flag!(tracks, on_set_row_rating, state, "tracks::set_rating",
     library::ratings::set_rating, collect_track_ids,
     captures: [tu],
     after: |id_vec, rating| {
-        for id in id_vec {
-            track_rows::patch_row(&*tu, id, move |row| row.rating = rating);
-        }
+        track_rows::patch_rows(&*tu, id_vec, move |row| row.rating = rating);
     });
 }
 

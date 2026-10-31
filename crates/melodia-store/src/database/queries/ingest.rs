@@ -9,7 +9,7 @@ use sqlx::AssertSqlSafe;
 use crate::database::queries;
 use crate::database::queries::artist::UNKNOWN_ARTIST_ID;
 use crate::database::queries::scan::NameCache;
-use crate::database::{DbPool, MAX_BINDS_PER_STATEMENT};
+use crate::database::{DbPool, MAX_BINDS_PER_STATEMENT, values_placeholders};
 use crate::media::ingest::scan_pool::ScanPool;
 use melodia_core::entities::scan::{ExtractedMetadata, ScannedFile};
 use melodia_core::error::AppError;
@@ -443,10 +443,9 @@ async fn flush_artwork_backfill(
     }
 
     for chunk in pairs.chunks(chunk_size) {
-        let row_placeholders =
-            std::iter::repeat_n("(?,?)", chunk.len()).collect::<Vec<_>>().join(",");
+        let rows = values_placeholders(chunk.len(), COLS_PER_ROW);
         let sql = format!(
-            "WITH v(path, art) AS (VALUES {row_placeholders})
+            "WITH v(path, art) AS (VALUES {rows})
              UPDATE tracks
                 SET artwork_path = (SELECT art FROM v WHERE v.path = tracks.file_path)
               WHERE file_path IN (SELECT path FROM v)

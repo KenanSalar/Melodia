@@ -25,10 +25,12 @@ use melodia_testkit::{MIN_SLINT_SOURCES, UI_DIR, stripped_sources};
 /// dialog, two headings, and two msgids translated separately in every catalogue,
 /// with nothing failing.
 ///
-/// **Nor is a second caller the only trigger.** `delete-playlists` has one, the card menu's batch
-/// arm, and is folded because the singular copy names one playlist's track order and the plural
-/// cannot: two openers rather than a count-ternary inside one, so each heading and message is
-/// stated where it is written.
+/// **Nor is a second caller the only trigger.** Both delete confirmations are raised from Rust,
+/// once it has counted the tracks a delete would take and found too many to undo. Two openers
+/// rather than a count-ternary inside one, because the singular copy speaks of one playlist and
+/// the plural of a set, so each heading and message is stated where it is written. The station
+/// removal's is raised the same way, past as many stations as an undo may hold, its two kinds
+/// naming the tab the cards were on.
 ///
 /// **The other trigger is a deferred raise.** Export and New Smart Playlist have one caller
 /// each and are folded anyway: both leave `open` false while Rust fetches or hops a tick, and
@@ -52,7 +54,7 @@ use melodia_testkit::{MIN_SLINT_SOURCES, UI_DIR, stripped_sources};
 #[test]
 fn every_multi_caller_dialog_opens_through_its_own_function() {
     const OWNER: &str = "globals/dialog.slint";
-    const FOLDED_KINDS: [&str; 9] = [
+    const FOLDED_KINDS: [&str; 11] = [
         "create-playlist",
         "rename-playlist",
         "delete-playlist",
@@ -62,6 +64,8 @@ fn every_multi_caller_dialog_opens_through_its_own_function() {
         "edit-playlist-artwork",
         "export-playlists",
         "smart-playlist-editor",
+        "remove-from-favorites",
+        "remove-from-recent",
     ];
 
     let sources = stripped_sources(UI_DIR, "slint", MIN_SLINT_SOURCES);

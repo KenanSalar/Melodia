@@ -27,7 +27,9 @@ use async_compat::Compat;
 
 pub(crate) use source_change::republish_for_palette;
 use source_change::{apply_source_change, spawn_source_change_subscriber};
-use up_next::{spawn_seed, spawn_up_next_subscriber, wire_now_playing_open, wire_reorder};
+use up_next::{
+    UpNextAnchor, spawn_seed, spawn_up_next_subscriber, wire_now_playing_open, wire_reorder,
+};
 
 /// Re-fills a surface `NowPlayingState` shadows, or hands the cover back. Set once [`install`] has
 /// built the state each reads: the subscribers stash while nothing renders, so a session shrinking
@@ -101,8 +103,8 @@ pub struct NowPlayingState {
     pub(super) up_next_ticket: Cell<u64>,
     /// A change drives the slide.
     pub(super) last_current_id: Cell<Option<i64>>,
-    /// A forward step, wrap included, slides up.
-    pub(super) last_queue_index: Cell<i32>,
+    /// A forward step, wrap included, slides up, and a moved base re-renders.
+    last_anchor: Cell<UpNextAnchor>,
     /// Kept while the view is closed, so opening it can seed the artwork and chips.
     pub(super) current_source: RefCell<Option<NowPlayingSource>>,
     /// The source in the `Player` global, so an open with nothing changed skips the re-seed.
@@ -273,7 +275,7 @@ impl NowPlayingState {
             rendered_ids: RefCell::new(Vec::new()),
             up_next_ticket: Cell::new(0),
             last_current_id: Cell::new(current_track_id(qvm)),
-            last_queue_index: Cell::new(qvm.queue_index),
+            last_anchor: Cell::new(UpNextAnchor::of(qvm)),
             current_source: RefCell::new(current_source),
             applied_source: RefCell::new(None),
             up_next_seeder: RefCell::new(None),

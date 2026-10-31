@@ -266,7 +266,7 @@ fn reconcile_live_stream(
 
 /// What the monitor knows at a save point, for whoever owns the writing.
 pub struct PlaybackSnapshot {
-    /// The playing track and how far into it, `None` when nothing is.
+    /// What a restart resumes, [`PlayerState::resume_point`].
     pub track: Option<(i64, u64)>,
     pub playback: PersistedPlayback,
 }
@@ -451,7 +451,7 @@ impl Monitor {
             });
         } else if let Some(track) = late_preload {
             // Its own tags' gain, baked into its own source.
-            self.engine.preload_gapless(Some(&track.file_path), track.as_ref().into());
+            self.engine.preload_gapless(&track.file_path, track.as_ref().into());
             self.staged = Some(track);
         }
         Poll::Counted
@@ -507,10 +507,7 @@ impl Monitor {
         }
         let snapshot = {
             let state = lock_state(&self.player_state);
-            PlaybackSnapshot {
-                track: state.current_track().map(|t| (t.id, state.position_ms)),
-                playback: state.to_persisted(),
-            }
+            PlaybackSnapshot { track: state.resume_point(), playback: state.to_persisted() }
         };
         (self.save)(snapshot).await;
     }

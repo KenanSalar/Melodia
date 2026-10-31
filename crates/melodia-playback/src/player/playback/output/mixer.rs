@@ -124,7 +124,8 @@ impl MixerPull {
     }
 }
 
-/// Build a mixer and its puller, with `voices` many brought to `device`.
+/// Build a mixer and its puller, with `voices` many brought to `device`. A voice's `clear()`
+/// blocks until the puller services it, so a test driving the puller runs it on its own thread.
 pub fn pair(voices: usize, device: Shape) -> (Mixer, MixerPull) {
     let (controls, pulls): (Vec<_>, Vec<_>) =
         (0..voices).map(|_| super::voice::pair(device)).map(|(v, p)| (Arc::new(v), p)).unzip();

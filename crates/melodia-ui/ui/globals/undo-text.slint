@@ -1,0 +1,86 @@
+// The undo notice's wording, asked by Rust so a run of one removal can re-render its card, and a
+// language switch the card it left up.
+export global UndoText {
+    pure callback undo-label() -> string;
+    undo-label() => {
+        return @tr("Undo");
+    }
+
+    pure callback equalizer-reset() -> string;
+    equalizer-reset() => {
+        return @tr("Equalizer reset");
+    }
+
+    pure callback recent-searches-cleared() -> string;
+    recent-searches-cleared() => {
+        return @tr("Recent searches cleared");
+    }
+
+    pure callback tracks-removed-from-playlist(int /*count*/, string /*playlist*/) -> string;
+    tracks-removed-from-playlist(count, playlist) => {
+        // Translators: {} is the playlist's name.
+        return @tr("{n} track removed from {}" | "{n} tracks removed from {}" % count, playlist);
+    }
+
+    pure callback playlists-deleted(int /*count*/, string /*playlist*/) -> string;
+    playlists-deleted(count, playlist) => {
+        if (count == 1) {
+            // Translators: {} is the playlist's name.
+            return @tr("{} deleted", playlist);
+        }
+        return @tr("{n} playlist deleted" | "{n} playlists deleted" % count);
+    }
+
+    // An empty `station` always takes the count.
+    pure callback stations-removed-from-favorites(int /*count*/, string /*station*/) -> string;
+    stations-removed-from-favorites(count, station) => {
+        if (count == 1 && station != "") {
+            // Translators: {} is the station's name.
+            return @tr("{} removed from Favorites", station);
+        }
+        return @tr("{n} station removed from Favorites" | "{n} stations removed from Favorites" % count);
+    }
+
+    pure callback stations-removed-from-recent(int /*count*/, string /*station*/) -> string;
+    stations-removed-from-recent(count, station) => {
+        if (count == 1 && station != "") {
+            // Translators: {} is the station's name.
+            return @tr("{} removed from Recently Played", station);
+        }
+        return @tr("{n} station removed from Recently Played" | "{n} stations removed from Recently Played" % count);
+    }
+
+    pure callback tracks-removed-from-favorites(int /*count*/) -> string;
+    tracks-removed-from-favorites(count) => {
+        return @tr("{n} track removed from Favorites" | "{n} tracks removed from Favorites" % count);
+    }
+
+    pure callback tracks-removed-from-queue(int /*count*/) -> string;
+    tracks-removed-from-queue(count) => {
+        return @tr("{n} track removed from the queue" | "{n} tracks removed from the queue" % count);
+    }
+
+    pure callback queue-cleared() -> string;
+    queue-cleared() => {
+        return @tr("Queue cleared");
+    }
+
+    pure callback queue-replaced() -> string;
+    queue-replaced() => {
+        return @tr("Queue replaced");
+    }
+
+    pure callback too-many-to-undo() -> string;
+    too-many-to-undo() => {
+        return @tr("Too many to undo");
+    }
+
+    pure callback couldnt-undo() -> string;
+    couldnt-undo() => {
+        return @tr("Couldn't undo");
+    }
+    pure callback couldnt-undo-message() -> string;
+    couldnt-undo-message() => {
+        return @tr("See the log for details.");
+    }
+}

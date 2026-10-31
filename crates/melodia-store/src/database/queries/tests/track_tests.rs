@@ -423,6 +423,51 @@ async fn set_favorite_empty_ids_is_noop() -> Result<(), AppError> {
     Ok(())
 }
 
+/// Every selection also names a track the library doesn't hold, as one deleted under the menu
+/// would.
+#[tokio::test]
+async fn unfavoriting_answers_only_the_tracks_that_carried_a_heart() -> Result<(), AppError> {
+    /// Positions in the seed's tracks.
+    type Rows = &'static [usize];
+    const NO_SUCH_TRACK: i64 = 9_999;
+    let rows: [(&str, Rows, Rows, Rows); 3] = [
+        ("a mixed selection", &[0, 2], &[0, 1, 2], &[0, 2]),
+        ("a selection with no heart", &[], &[0, 1], &[]),
+        ("a heart outside the selection", &[1], &[0, 2], &[]),
+    ];
+    for (what, hearted, handed, expected) in rows {
+        let db = seed_db().await?;
+        let ids: Vec<i64> =
+            queries::track::get_all_tracks(&db).await?.iter().map(|t| t.id).collect();
+        let pick = |rows: &[usize]| -> Vec<i64> { rows.iter().map(|&row| ids[row]).collect() };
+        queries::track::set_favorite(&db, &pick(hearted), true).await?;
+        let mut handed = pick(handed);
+        handed.push(NO_SUCH_TRACK);
+
+        let mut cleared = queries::track::unfavorite(&db, &handed).await?;
+
+        cleared.sort_unstable();
+        assert_eq!(cleared, pick(expected), "{what}");
+    }
+    Ok(())
+}
+
+/// One heart still on after a removal is a track the user just took out of Favorites.
+#[tokio::test]
+async fn unfavoriting_takes_every_heart_it_answers() -> Result<(), AppError> {
+    let db = seed_db().await?;
+    let ids: Vec<i64> = queries::track::get_all_tracks(&db).await?.iter().map(|t| t.id).collect();
+    queries::track::set_favorite(&db, &ids, true).await?;
+
+    queries::track::unfavorite(&db, &ids[..2]).await?;
+
+    let hearted: Vec<i64> = sqlx::query_scalar("SELECT id FROM tracks WHERE is_favorite = 1")
+        .fetch_all(db.read())
+        .await?;
+    assert_eq!(hearted, [ids[2]]);
+    Ok(())
+}
+
 #[tokio::test]
 async fn set_rating_updates_value() -> Result<(), AppError> {
     let db = seed_db().await?;

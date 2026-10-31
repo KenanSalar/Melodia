@@ -186,7 +186,7 @@ impl PlayerState {
 
     /// Never faded: the `PlayMedia` before it just started the deck, and a fade would ramp the
     /// incoming track down audibly instead of pausing it.
-    fn restore_paused(&mut self, was_paused: bool, actions: &mut Vec<PlayerAction>) {
+    pub(super) fn restore_paused(&mut self, was_paused: bool, actions: &mut Vec<PlayerAction>) {
         if was_paused {
             self.status = PlaybackStatus::Paused;
             actions.push(PlayerAction::Pause { fade_ms: 0 });
@@ -241,7 +241,8 @@ impl PlayerState {
     }
 
     /// Counts the play and advances, or stops where the queue ends or the sleep timer's
-    /// end-of-track mode is armed, disarming it.
+    /// end-of-track mode is armed, disarming it. It stops in place because `player_pause` would
+    /// take the state lock this already runs under.
     pub fn build_end_of_stream_actions(&mut self) -> Vec<PlayerAction> {
         // A station drains only once its reconnect budget is spent, and wandering into the
         // library's queue then would be a silent change of source.

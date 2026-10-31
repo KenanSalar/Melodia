@@ -1,5 +1,5 @@
-//! Favorite reads and writes, and the one place a favorite becomes a love: both write entry points
-//! end in `sync_love`, so provider arming, batching and the best-effort policy are argued once.
+//! Favorite reads and writes, and the one place a favorite becomes a love: every write entry point
+//! ends in `sync_love`, so provider arming, batching and the best-effort policy are argued once.
 //! `backfill_loves` covers what was favorited before the love toggle was on.
 
 use std::sync::Arc;
@@ -42,6 +42,21 @@ impl FavoriteWrite {
 
     async fn set(&self, ids: &[i64], favorite: bool) -> Result<(), AppError> {
         queries::track::set_favorite(&self.db, ids, favorite).await?;
+        self.propagate(ids, favorite).await;
+        Ok(())
+    }
+
+    /// Answers the ids it un-hearted, an empty answer having written nothing anywhere.
+    async fn unfavorite(&self, ids: &[i64]) -> Result<Vec<i64>, AppError> {
+        let cleared = queries::track::unfavorite(&self.db, ids).await?;
+        if !cleared.is_empty() {
+            self.propagate(&cleared, false).await;
+        }
+        Ok(cleared)
+    }
+
+    /// What follows a write that landed: the playing copy, the subscribers, the provider mirror.
+    async fn propagate(&self, ids: &[i64], favorite: bool) {
         // After the write, so the line means it landed rather than was attempted.
         log::debug!("favorite: {} track(s) → {favorite}", ids.len());
         sync_current_track_if_in(&self.player_state, &self.sinks, ids, |t| {
@@ -49,7 +64,6 @@ impl FavoriteWrite {
         });
         self.library_changed.bump();
         self.sync_love(ids, favorite).await;
-        Ok(())
     }
 
     async fn toggle_current(&self) -> Result<Option<(i64, bool)>, AppError> {
@@ -102,6 +116,12 @@ impl FavoriteWrite {
 
 pub async fn set_favorite(state: &AppState, ids: Vec<i64>, favorite: bool) -> Result<(), AppError> {
     FavoriteWrite::from_state(state).set(&ids, favorite).await
+}
+
+/// Takes the heart off those of `ids` that carry one, answering exactly those for an undo to
+/// re-heart through [`set_favorite`].
+pub async fn unfavorite(state: &AppState, ids: Vec<i64>) -> Result<Vec<i64>, AppError> {
+    FavoriteWrite::from_state(state).unfavorite(&ids).await
 }
 
 /// Toggle the playing track's favorite, answering `(id, new_fav)` so callers can mirror it into

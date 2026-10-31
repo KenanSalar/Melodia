@@ -209,3 +209,53 @@ async fn a_folder_removal_leaves_an_orphan_it_did_not_release() -> Result<(), Ap
     assert!(unrelated.exists());
     Ok(())
 }
+
+// --- what an undo holds ---
+//
+// The holds are process-wide, keyed by basename, so each case names a file no other case in this
+// binary does.
+
+/// The path a hold is handed for `file`, as the store's column spells it.
+fn named(file: &Path) -> [String; 1] {
+    [file.to_string_lossy().into_owned()]
+}
+
+/// A deleted playlist's picked cover or station's logo has nothing naming it but the undo that
+/// can write its row back, and neither file can be rebuilt.
+#[tokio::test]
+async fn a_held_file_survives_a_pass_no_row_names_it_in() -> Result<(), AppError> {
+    let library = Library::new().await?;
+    let cover = aged(&library.paths.artwork_dir, "6ee1c06f6d6e0c33.jpg", PAST_EVERY_WINDOW)?;
+    let _hold = ArtworkHold::new(named(&cover));
+
+    run(&library.db, &library.paths).await?;
+
+    assert!(cover.exists());
+    Ok(())
+}
+
+/// One undo going doesn't free a file another hold still names.
+#[tokio::test]
+async fn a_file_two_holds_name_outlives_the_first_to_go() -> Result<(), AppError> {
+    let library = Library::new().await?;
+    let cover = aged(&library.paths.artwork_dir, "7ff2d17f7e7f1d44.jpg", PAST_EVERY_WINDOW)?;
+    let _still_held = ArtworkHold::new(named(&cover));
+    drop(ArtworkHold::new(named(&cover)));
+
+    run(&library.db, &library.paths).await?;
+
+    assert!(cover.exists());
+    Ok(())
+}
+
+#[tokio::test]
+async fn a_file_whose_last_hold_went_is_swept_like_any_orphan() -> Result<(), AppError> {
+    let library = Library::new().await?;
+    let cover = aged(&library.paths.artwork_dir, "8aa3e28a8f8a2e55.jpg", PAST_EVERY_WINDOW)?;
+    drop(ArtworkHold::new(named(&cover)));
+
+    run(&library.db, &library.paths).await?;
+
+    assert!(!cover.exists());
+    Ok(())
+}

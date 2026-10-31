@@ -3,7 +3,7 @@ import { CardFavoriteButton } from "../../components/grid/card-favorite-button.s
 import { EntityCard } from "../../components/grid/entity-card.slint";
 import { IconButton } from "../../components/icon-button.slint";
 
-// A station as all three Radio tabs draw it: an `EntityCard` with its own hover controls, the star
+// A station as all three Radio tabs draw it: an `EntityCard` with its own hover controls, the heart
 // outliving the hover. The tags line is a string rather than a chip strip, the card's height being
 // fixed inside a `ListView` row where a wrapped second line has nowhere to go.
 export component StationCard inherits Rectangle {
@@ -17,11 +17,11 @@ export component StationCard inherits Rectangle {
     in property <color> tile-color-2;
     in property <string> monogram;
     in property <bool> is-favorite;
-    // A station typed in by hand has no star: un-starring it would drop it from the only list
+    // A station typed in by hand has no heart: un-favoriting it would drop it from the only list
     // that shows it, leaving a row nothing can reach. Remove is its affordance instead.
-    in property <bool> starrable: true;
+    in property <bool> can-favorite: true;
     // False where the list is the favorites, the mark answering nothing there.
-    in property <bool> star-marks-kept: true;
+    in property <bool> favorite-marks-kept: true;
     in property <bool> editable;
     in property <bool> removable;
     in property <bool> homepage-known;
@@ -90,7 +90,7 @@ export component StationCard inherits Rectangle {
         context-requested(x, y) => { root.context-requested(x, y); }
         menu-open: root.menu-open;
 
-        // The four below ride the card's overlay fade; the star sits outside, below.
+        // The four below ride the card's overlay fade; the heart sits outside, below.
         show-overlay-actions: true;
         overlay-hovered: fav_btn.has-hover
             || play_btn.has-hover
@@ -138,7 +138,7 @@ export component StationCard inherits Rectangle {
 
         edit_btn := IconButton {
             visible: root.editable;
-            x: Theme.pad-sm + remove_btn.width + Theme.pad-xs;
+            x: root.removable ? Theme.pad-sm + remove_btn.width + Theme.pad-xs : Theme.pad-sm;
             y: card-body.tile-size - self.height - Theme.pad-sm;
             icon: "edit";
             icon-size: 18px;
@@ -149,12 +149,12 @@ export component StationCard inherits Rectangle {
     }
 
     // Browse and Recently Played both mix kept and unkept stations, a station played out of
-    // Browse being kept without a star, so the mark says something on both.
+    // Browse being kept without being a favorite, so the mark says something on both.
     fav_btn := CardFavoriteButton {
-        visible: root.starrable;
+        visible: root.can-favorite;
         card-width: root.card-width;
         is-favorite: root.is-favorite;
-        marks-kept: root.star-marks-kept;
+        marks-kept: root.favorite-marks-kept;
         card-hovered: card-body.card-hovered;
         clicked => { root.favorite-clicked(); }
     }

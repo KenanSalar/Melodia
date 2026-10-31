@@ -43,6 +43,9 @@ export component QueueRowItem inherits Rectangle {
     }
     property <bool> show-checkbox: root.hovered || root.selected;
     property <bool> selecting: Queue.selected-count > 0;
+    // The ✕ removes this row alone, so it hides while two or more rows are picked: beside them it
+    // reads as acting on the set, which the menu and Delete are for.
+    property <bool> shows-remove: root.hovered && Queue.selected-count < 2;
     // Modifiers as they stood on the press the pick is about to complete; see `touch.clicked`.
     property <bool> press-ctrl;
     property <bool> press-shift;
@@ -165,13 +168,13 @@ export component QueueRowItem inherits Rectangle {
                     HorizontalLayout {
                         alignment: end;
                         cross-axis-alignment: center;
-                        if !root.hovered: Text {
+                        if !root.shows-remove: Text {
                             text: root.row-data.display_duration;
                             color: Theme.text.transparentize(1.0 - root.fade);
                             font-size: Theme.font-size-sm;
                             horizontal-alignment: right;
                         }
-                        if root.hovered: IconButton {
+                        if root.shows-remove: IconButton {
                             diameter: 26px;
                             icon-size: 18px;
                             icon: "close";
@@ -198,7 +201,7 @@ export component QueueRowItem inherits Rectangle {
             selection-count: Queue.selected-count;
 
             play-single => { Queue.skip-to(root.row-index); }
-            toggle-favorite(ids, on) => { Queue.toggle-row-favorite(ids, on); }
+            add-favorites(ids) => { Queue.toggle-row-favorite(ids, true); }
             rate(ids, n) => { Queue.set-row-rating(ids, n); }
             select-all => { Queue.select-all(); }
             clear-selection => { Queue.clear-selection(); }

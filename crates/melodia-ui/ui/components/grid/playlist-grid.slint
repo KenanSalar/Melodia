@@ -16,12 +16,11 @@ export component PlaylistGrid inherits Rectangle {
 
     callback open-playlist(int /*playlist_id*/);
     callback request-blur-search();
-    // Raised by the card's hover trio and its menu alike, both landing on one handler.
-    callback delete-playlist(int /*playlist_id*/);
+    // Raised by the card's hover trio and its menu alike, the trash passing its one id.
+    callback delete-playlists([int] /*playlist_ids*/);
     callback edit-playlist-artwork(int /*playlist_id*/);
     callback rename-playlist(int /*playlist_id*/);
     // Menu-only, having no room on the card.
-    callback delete-playlists([int] /*playlist_ids*/);
     callback edit-playlist-rules(int /*playlist_id*/);
     // The repaint token: bumped as decodes land, so the `pure` cover lookup re-runs.
     in property <int> covers-generation: 0;
@@ -68,13 +67,7 @@ export component PlaylistGrid inherits Rectangle {
                         rename => { root.rename-playlist(playlist.id); }
                         edit-artwork => { root.edit-playlist-artwork(playlist.id); }
                         edit-rules => { root.edit-playlist-rules(playlist.id); }
-                        delete-cards(ids) => {
-                            if (ids.length > 1) {
-                                root.delete-playlists(ids);
-                            } else {
-                                root.delete-playlist(playlist.id);
-                            }
-                        }
+                        delete-cards(ids) => { root.delete-playlists(ids); }
 
                         card := EntityCard {
                             card-width: root.card-width;
@@ -113,6 +106,7 @@ export component PlaylistGrid inherits Rectangle {
                                 || name_btn.has-hover;
 
                             delete_btn := IconButton {
+                                visible: !cell.multi-selection;
                                 x: Theme.pad-sm;
                                 y: card.tile-size - self.height - Theme.pad-sm;
                                 icon: "delete";
@@ -120,7 +114,7 @@ export component PlaylistGrid inherits Rectangle {
                                 diameter: 30px;
                                 idle-bg: Theme.floating-chrome-bg;
                                 hover-fg: Theme.danger;
-                                clicked => { root.delete-playlist(playlist.id); }
+                                clicked => { root.delete-playlists([playlist.id]); }
                             }
 
                             artwork_btn := IconButton {

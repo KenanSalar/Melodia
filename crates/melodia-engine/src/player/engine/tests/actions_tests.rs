@@ -34,7 +34,6 @@ struct MockBackendInner {
     seek_calls: Vec<(String, u64)>,
     volume_calls: Vec<f64>,
     speed_calls: Vec<f64>,
-    preload_calls: Vec<Option<String>>,
     /// `(generation, volume)` per `play_stream`. No path: the stream was opened long before the
     /// action ran, and the backend finds it by generation alone.
     play_stream_calls: Vec<(u64, f64)>,
@@ -139,9 +138,6 @@ impl PlayerBackend for MockBackend {
     }
     fn set_speed(&self, speed: f64) {
         self.inner().speed_calls.push(speed);
-    }
-    fn preload_gapless(&self, file_path: Option<&str>, _baked_rg: TrackReplayGain) {
-        self.inner().preload_calls.push(file_path.map(std::borrow::ToOwned::to_owned));
     }
     fn play_stream(&self, generation: u64, volume: f64) -> Result<(), AppError> {
         let mut inner = self.inner();
@@ -463,25 +459,6 @@ async fn execute_set_volume_and_speed() -> Result<(), AppError> {
 }
 
 #[tokio::test]
-async fn execute_preload_gapless_with_and_without_path() -> Result<(), AppError> {
-    let fx = fixture()?;
-    let mock = MockBackend::new();
-
-    let actions = vec![
-        PlayerAction::PreloadGapless(Some("/music/next.mp3".to_owned())),
-        PlayerAction::PreloadGapless(None),
-    ];
-
-    crate::player::engine::actions::execute_actions(actions, &mock, &fx.player_state, &fx.sinks);
-
-    let inner = mock.inner();
-    assert_eq!(inner.preload_calls.len(), 2);
-    assert_eq!(inner.preload_calls[0], Some("/music/next.mp3".to_owned()));
-    assert_eq!(inner.preload_calls[1], None);
-    Ok(())
-}
-
-#[tokio::test]
 async fn execute_multiple_actions_in_order() -> Result<(), AppError> {
     let fx = fixture()?;
     let mock = MockBackend::new();
@@ -494,7 +471,7 @@ async fn execute_multiple_actions_in_order() -> Result<(), AppError> {
             start_position_ms: None,
             replaygain: TrackReplayGain::default(),
         },
-        PlayerAction::PreloadGapless(Some("/music/next.mp3".to_owned())),
+        PlayerAction::SetSpeed(1.5),
         PlayerAction::SetVolume(0.5),
     ];
 
@@ -502,7 +479,7 @@ async fn execute_multiple_actions_in_order() -> Result<(), AppError> {
 
     let inner = mock.inner();
     assert_eq!(inner.play_media_calls.len(), 1);
-    assert_eq!(inner.preload_calls.len(), 1);
+    assert_eq!(inner.speed_calls, vec![1.5]);
     assert_eq!(inner.volume_calls, vec![0.5]);
     Ok(())
 }

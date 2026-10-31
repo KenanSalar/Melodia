@@ -73,7 +73,8 @@ export component DialogOverlay inherits Rectangle {
             : 540px;
         // Confirmation kinds only, mapped by kind so a caller sets nothing extra.
         property <string> kind-icon:
-            DialogGlobal.kind == DialogKind.delete-playlist ? "delete" :
+            DialogGlobal.kind == DialogKind.delete-playlist
+                || DialogGlobal.kind == DialogKind.delete-playlists ? "delete" :
             DialogGlobal.kind == DialogKind.remove-folder ? "folder_off" :
             DialogGlobal.kind == DialogKind.remove-from-favorites
                 || DialogGlobal.kind == DialogKind.remove-from-recent ? "delete" :

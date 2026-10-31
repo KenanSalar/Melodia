@@ -1,4 +1,4 @@
-use std::cell::{Cell, RefCell};
+use std::cell::{Cell, OnceCell, RefCell};
 use std::collections::HashMap;
 use std::rc::Rc;
 
@@ -13,8 +13,9 @@ use super::*;
 fn make_ui() -> NotificationsUi {
     NotificationsUi {
         rows: Rc::new(VecModel::default()),
-        recipes: Rc::new(RefCell::new(HashMap::new())),
+        recipes: RefCell::new(HashMap::new()),
         next_id: Cell::new(0),
+        row_removed: OnceCell::new(),
     }
 }
 
@@ -31,9 +32,9 @@ fn make_params(kind: NotificationKind) -> NotificationParams {
 #[test]
 fn show_appends_a_row_and_returns_monotonic_id() {
     let ui = make_ui();
-    let id0 = ui.show(make_params(NotificationKind::None));
-    let id1 = ui.show(make_params(NotificationKind::None));
-    let id2 = ui.show(make_params(NotificationKind::None));
+    let id0 = ui.show(make_params(NotificationKind::None), STICKY);
+    let id1 = ui.show(make_params(NotificationKind::None), STICKY);
+    let id2 = ui.show(make_params(NotificationKind::None), STICKY);
     assert_eq!(id0, 0);
     assert_eq!(id1, 1);
     assert_eq!(id2, 2);
@@ -43,9 +44,9 @@ fn show_appends_a_row_and_returns_monotonic_id() {
 #[test]
 fn dismiss_removes_only_the_matching_row() {
     let ui = make_ui();
-    let id0 = ui.show(make_params(NotificationKind::None));
-    let id1 = ui.show(make_params(NotificationKind::None));
-    let id2 = ui.show(make_params(NotificationKind::None));
+    let id0 = ui.show(make_params(NotificationKind::None), STICKY);
+    let id1 = ui.show(make_params(NotificationKind::None), STICKY);
+    let id2 = ui.show(make_params(NotificationKind::None), STICKY);
 
     ui.dismiss(id1);
 
@@ -57,7 +58,7 @@ fn dismiss_removes_only_the_matching_row() {
 #[test]
 fn dismiss_unknown_id_is_noop() {
     let ui = make_ui();
-    ui.show(make_params(NotificationKind::None));
+    ui.show(make_params(NotificationKind::None), STICKY);
     ui.dismiss(999);
     assert_eq!(ui.rows.row_count(), 1);
 }
@@ -65,10 +66,10 @@ fn dismiss_unknown_id_is_noop() {
 #[test]
 fn dismiss_by_kind_removes_every_matching_row() {
     let ui = make_ui();
-    ui.show(make_params(NotificationKind::WatcherDisabled));
-    ui.show(make_params(NotificationKind::InstallUpdate));
-    ui.show(make_params(NotificationKind::WatcherDisabled));
-    ui.show(make_params(NotificationKind::UpdateFailed));
+    ui.show(make_params(NotificationKind::WatcherDisabled), STICKY);
+    ui.show(make_params(NotificationKind::InstallUpdate), STICKY);
+    ui.show(make_params(NotificationKind::WatcherDisabled), STICKY);
+    ui.show(make_params(NotificationKind::UpdateFailed), STICKY);
 
     ui.dismiss_by_kind(NotificationKind::WatcherDisabled);
 
@@ -79,8 +80,8 @@ fn dismiss_by_kind_removes_every_matching_row() {
 #[test]
 fn dismiss_by_kind_no_match_is_noop() {
     let ui = make_ui();
-    ui.show(make_params(NotificationKind::InstallUpdate));
-    ui.show(make_params(NotificationKind::UpdateFailed));
+    ui.show(make_params(NotificationKind::InstallUpdate), STICKY);
+    ui.show(make_params(NotificationKind::UpdateFailed), STICKY);
     ui.dismiss_by_kind(NotificationKind::WatcherDisabled);
     assert_eq!(ui.rows.row_count(), 2);
 }
@@ -91,7 +92,8 @@ fn max_visible_evicts_oldest_on_overflow() {
     // while the newest lands at the back.
     let ui = make_ui();
     let total = super::MAX_VISIBLE + 1;
-    let ids: Vec<i32> = (0..total).map(|_| ui.show(make_params(NotificationKind::None))).collect();
+    let ids: Vec<i32> =
+        (0..total).map(|_| ui.show(make_params(NotificationKind::None), STICKY)).collect();
 
     assert_eq!(ui.rows.row_count(), super::MAX_VISIBLE);
     let live_ids: Vec<i32> = ui.rows.iter().map(|r: NotificationRow| r.id).collect();
@@ -109,7 +111,7 @@ fn stub_recipe() -> Relabel {
 
 /// Push a row and register a recipe against it, the two halves `show_localized` pairs.
 fn show_with_recipe(ui: &NotificationsUi, kind: NotificationKind) -> i32 {
-    let id = ui.show(make_params(kind));
+    let id = ui.show(make_params(kind), STICKY);
     ui.recipes.borrow_mut().insert(id, stub_recipe());
     id
 }
@@ -177,7 +179,54 @@ fn a_whole_completion_toasts_success_and_a_partial_one_warns() {
 #[test]
 fn a_row_with_no_recipe_registers_none() {
     let ui = make_ui();
-    ui.show(make_params(NotificationKind::None));
+    ui.show(make_params(NotificationKind::None), STICKY);
 
     assert!(ui.recipes.borrow().is_empty());
+}
+
+/// Takes the row it is handed off the stack, one way or another.
+type Removal = fn(&NotificationsUi, i32);
+
+/// Every id the row-removed listener hears, in order.
+fn listening(ui: &NotificationsUi) -> Rc<RefCell<Vec<i32>>> {
+    let heard = Rc::new(RefCell::new(Vec::new()));
+    let sink = heard.clone();
+    ui.on_row_removed(move |id| sink.borrow_mut().push(id));
+    heard
+}
+
+/// A path that misses the listener leaves Ctrl+Z undoing a removal whose notice is gone.
+#[test]
+fn every_way_a_row_goes_tells_the_listener_once() {
+    let rows: [(&str, Removal); 3] = [
+        ("a dismiss", |ui, id| ui.dismiss(id)),
+        ("a dismiss by kind", |ui, _| ui.dismiss_by_kind(NotificationKind::Undo)),
+        ("the cap evicting it", |ui, _| {
+            for _ in 0..super::MAX_VISIBLE {
+                ui.show(make_params(NotificationKind::None), STICKY);
+            }
+        }),
+    ];
+    for (what, remove) in rows {
+        let ui = make_ui();
+        let heard = listening(&ui);
+        let id = ui.show(make_params(NotificationKind::Undo), STICKY);
+
+        remove(&ui, id);
+
+        assert_eq!(*heard.borrow(), [id], "{what}");
+    }
+}
+
+/// The card starts its clock over when `restarts` moves, which is how a merged removal earns the
+/// full wait again. The id stays, the undo slot holding its row by it.
+#[test]
+fn a_restart_moves_the_clock_and_keeps_the_row() {
+    let ui = make_ui();
+    let id = ui.show(make_params(NotificationKind::Undo), 6_000);
+
+    ui.restart(id);
+
+    let row = ui.rows.row_data(0).map(|row| (row.id, row.restarts, row.timeout_ms));
+    assert_eq!(row, Some((id, 1, 6_000)));
 }

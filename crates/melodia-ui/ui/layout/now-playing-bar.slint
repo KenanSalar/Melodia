@@ -170,7 +170,7 @@ export component NowPlayingBar inherits Rectangle {
                 genre-id: Player.track-genre-id;
                 view-context: "now-playing";
                 // The bar's own heart and stars, each also repainting every list showing it.
-                toggle-favorite(ids, on) => { Player.toggle-favorite(); }
+                add-favorites(ids) => { Player.toggle-favorite(); }
                 rate(ids, n) => { Player.set-current-rating(n); }
             }
         }

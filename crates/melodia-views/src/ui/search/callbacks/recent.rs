@@ -1,14 +1,42 @@
 //! The recent searches' callbacks.
 
+use std::rc::Rc;
+
+use async_compat::Compat;
 use slint::ComponentHandle;
 
 use crate::ui::search::fetch::push_recent_rows_to_slint;
+use crate::ui::undo::{Removal, UndoWindow};
 use melodia_app::library;
 use melodia_app::state::AppState;
-use melodia_core::error::describe;
+use melodia_core::error::{AppError, describe};
 use melodia_ui::{AppWindow, Search};
 
-pub(super) fn wire(ui: &AppWindow, state: &AppState) {
+/// What Clear all took, newest first.
+pub struct RecentClearUndo {
+    cleared: Vec<String>,
+}
+
+impl RecentClearUndo {
+    /// A second Clear all inside the window took only what was searched since the first, which
+    /// is newer, so it goes in front rather than replacing the older hold.
+    pub fn absorb(&mut self, newer: Self) {
+        let older = std::mem::replace(&mut self.cleared, newer.cleared);
+        self.cleared.extend(older);
+    }
+
+    pub async fn restore(
+        self,
+        state: &AppState,
+        weak: &slint::Weak<AppWindow>,
+    ) -> Result<(), AppError> {
+        let rows = library::search::restore_search_history(state, self.cleared).await?;
+        push_recent_rows_to_slint(weak, rows);
+        Ok(())
+    }
+}
+
+pub(super) fn wire(ui: &AppWindow, state: &AppState, undo: &Rc<UndoWindow>) {
     let g = ui.global::<Search>();
     let weak = ui.as_weak();
 
@@ -41,15 +69,28 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState) {
     {
         let s = state.clone();
         let weak = weak.clone();
+        let undo = undo.clone();
         g.on_recent_clear(move || {
             let s = s.clone();
             let weak = weak.clone();
-            s.runtime.clone().spawn(async move {
-                match library::search::clear_search_history(&s).await {
-                    Ok(rows) => push_recent_rows_to_slint(&weak, rows),
-                    Err(e) => log::warn!("search::clear_history: {}", describe(&e)),
+            let undo = undo.clone();
+            // On the UI thread, where the undo slot lives.
+            let spawned = slint::spawn_local(Compat::new(async move {
+                let cleared = match library::search::clear_search_history(&s).await {
+                    Ok(cleared) => cleared,
+                    Err(e) => {
+                        log::warn!("search::clear_history: {}", describe(&e));
+                        return;
+                    }
+                };
+                push_recent_rows_to_slint(&weak, Vec::new());
+                if !cleared.is_empty() {
+                    undo.offer(Removal::RecentSearches(RecentClearUndo { cleared }));
                 }
-            });
+            }));
+            if let Err(e) = spawned {
+                log::warn!("search::clear_history spawn_local: {}", describe(&e));
+            }
         });
     }
 }

@@ -1,4 +1,5 @@
 import { Favorites } from "../../globals/curated.slint";
+import { FavoriteActions } from "../../globals/favorite-actions.slint";
 import { Player } from "../../globals/player.slint";
 import { TrackListScrollbars } from "../../components/track-list-scrollbars.slint";
 import { TrackList } from "../../components/track-list/track-list.slint";
@@ -26,7 +27,8 @@ export component FavoritesSongsTab inherits Rectangle {
         play-row(id, idx) => { Favorites.play-row(id, idx); }
         play-next(ids) => { Favorites.play-next(ids); }
         add-to-queue(ids) => { Favorites.add-to-queue(ids); }
-        toggle-row-favorite(ids, on) => { Favorites.toggle-row-favorite(ids, on); }
+        // Every row here is a favorite, so its heart takes the row off the page.
+        toggle-row-favorite(ids, on) => { FavoriteActions.remove-tracks(ids); }
         set-row-rating(ids, n) => { Favorites.set-row-rating(ids, n); }
         select-row(idx, id, sh, ct) => { Favorites.select-row(idx, id, sh, ct); }
         select-all => { Favorites.select-all(); }

@@ -88,7 +88,7 @@ pub fn hydrate_ui_from_settings(
     apply_queue_panel(app, settings);
     apply_mini_backdrop(app, settings);
     app.global::<ArtistDetail>().set_albums_collapsed(vs.artist_albums_collapsed);
-    ui::settings::settings_page::seed_category(app, vs.settings_category);
+    ui::settings::settings_page::seed_category(app, &vs.settings_category_key);
 }
 
 /// `Nav.sidebar-expanded-w` clamps the width where it is drawn, so no Rust-side clamp is needed.

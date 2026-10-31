@@ -35,12 +35,14 @@ pub struct ViewStateData {
     pub last_detail_ids: BTreeMap<String, i64>,
     /// Artist Detail's Albums toggle, handing the scroller's space to the track list.
     pub artist_albums_collapsed: bool,
-    /// The Settings category and the four page tabs, each clamped against its own global's count.
+    /// The Settings category, by its key, so a category inserted mid-list renumbers nothing saved.
+    /// Unknown or empty opens on Library. An older file's ints, `settings_tab` and
+    /// `settings_category`, are left unread rather than folded, their numbers overlapping.
     ///
     /// **A persisted view flag is an int, a string or a map, never a bool**: this struct sits at
-    /// clippy's `struct_excessive_bools` cap. `settings_category` is a new key rather than a fold
-    /// of the old `settings_tab`, whose numbers overlap its own, so the old key is left unread.
-    pub settings_category: i32,
+    /// clippy's `struct_excessive_bools` cap.
+    pub settings_category_key: String,
+    /// The four page tabs, each clamped against its own global's count.
     pub favorites_tab: i32,
     pub recently_played_tab: i32,
     pub my_library_tab: i32,
@@ -59,7 +61,7 @@ impl Default for ViewStateData {
             last_nav_index: default_last_nav_index(),
             last_detail_ids: BTreeMap::new(),
             artist_albums_collapsed: false,
-            settings_category: 0,
+            settings_category_key: String::new(),
             favorites_tab: 0,
             recently_played_tab: 0,
             my_library_tab: 0,

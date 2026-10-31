@@ -5,20 +5,17 @@ direct calls and tokio channels. No WebView, and the only IPC is the single-inst
 
 ## Where things go
 
-Subsystem contracts live in rules that load only when Claude *reads* a file their `paths:` glob
-matches, so a grep hit or a clippy failure won't pull one in. This table is how you find them, and
-a rule missing where it was needed gets a wider glob, never a copy here.
+Rules load only when Claude *reads* a file their `paths:` glob matches, never on a grep or clippy
+hit, so this table finds them. A rule missed where needed gets a wider glob, never a copy here.
 
 | file | covers |
 |------|--------|
-| `.claude/rules/audio-stack.md` | playback state machine, DSP chain (EQ / ReplayGain / limiter), crossfade + decks, visualizer tap |
-| `.claude/rules/library-data.md` | scan ingest, the two change channels, track projections, ratings, tag write-through, M3U8, smart playlists |
-| `.claude/rules/ui-patterns.md` | shared components (pills, pickers, grids, toasts), cover prewarm, the two teardown paths, shortcuts, the three tabbed pages, the Settings page |
-| `.claude/rules/desktop-shell.md` | window chrome + winit, tray, media keys, always-on-top, force-exit shutdown |
-| `.claude/rules/updater.md` | install methods, manifest signing, the release matrix |
-| `.claude/rules/visualizer.md` | the visualizer's UI half: arming, the tick's gates, the strip and its pickers |
-| `.claude/rules/radio.md` | the directory facade and its off switch, the two station tables, the stream's prohibitions, the numbers both trees spell |
-| `.claude/rules/ci-packaging.md` | the PR gate, the skip matrix, coverage, action pinning, the five package formats and their licence pins |
+| `.claude/rules/library-data.md` | the artwork ledger and its undo hold, the audio-extension predicate, query shape and the folded search columns, smart-playlist membership |
+| `.claude/rules/ui-patterns.md` | the component catalogue, the UI contracts no one file holds, where to reach for grids, lists, filtering and covers, the three tabbed pages, the Settings page |
+| `.claude/rules/desktop-shell.md` | window chrome + winit, caption styles, restart-gated settings, the unfocused tint, tray, the volume conversion |
+| `.claude/rules/updater.md` | the polkit helper's four spellings, the three platform-key tables |
+| `.claude/rules/radio.md` | a new way onto nav 10, stream URLs in logs, the `id == 0` sentinel |
+| `.claude/rules/ci-packaging.md` | action pinning, the shared composites, adding a workspace member |
 | `.claude/rules/testing.md` | testing practice, not this tree's inventory: the ISTQB principles, how to pick cases, what a corpus walk owes, the Rust attribute and determinism rules, assertion discipline |
 | `.claude/rules/*.md` (rest) | per-crate best practices (tokio, sqlx, slint, symphonia, lofty, rayon, serde, blake3, rust-performance) plus `slint-pitfalls`, `unsafe-rust` and `code-style` |
 
@@ -29,8 +26,9 @@ a rule missing where it was needed gets a wider glob, never a copy here.
   is the failure mode, and a rule restating a doc comment holds the copy to delete.
 - **A code comment never cites a rule or this file.** Every comment, doc comment and `.slint` note
   states its own reason; the pointing runs the other way, a rule naming the code.
-- **Re-read `.claude/rules/code-style.md` before writing comments**, since after `/compact` only
-  this file comes back. Explain why, never what; be terse; never narrate or write a changelog.
+- **Re-read `.claude/rules/code-style.md` before writing comments, and audit each one a change adds
+  against its "Auditing a change" before reporting the work done**: only this file survives
+  `/compact`. Explain why, never what; be terse; never narrate or write a changelog.
 - **A shipped plan doc owes no ADR by itself**: what it built is argued at its anchors before it is
   deleted, and the deletion is the last check that no significant decision went unrecorded.
 
@@ -46,8 +44,7 @@ cargo llvm-cov --workspace --html          # coverage → target/llvm-cov/html/
 /usr/bin/time -v target/release/Melodia    # peak RSS (release only)
 ```
 
-The toolchain is pinned by `rust-toolchain.toml`, whose comments argue the pin and list what a bump
-moves. System packages are `README.md`'s prerequisites.
+`rust-toolchain.toml` argues its pin and what a bump moves; `README.md` lists the system packages.
 
 ## Prohibitions violable from anywhere
 
@@ -65,6 +62,8 @@ moves. System packages are `README.md`'s prerequisites.
   takes it from its caller. `melodia-platform` names `melodia-core` and nothing else.
 - **An engine or cover cache that raises a toast, counts a play or reports a missing file** goes
   through `melodia-core`'s `utils` bridges (`toast`, `play_counts`, `missing_artwork`).
+- **No Rust or `.slint` file under `crates/` runs past 800 lines** (`tests/` excepted): split by
+  cohesion where logic dominates, compress comments where prose does; a plan counts each grown file.
 
 ### Facades and primitives
 
@@ -90,8 +89,7 @@ moves. System packages are `README.md`'s prerequisites.
   the invariant in its message. A test reaches for `?`, `assert_eq!`, `matches!` or `let … else`.
 - **No `unsafe` outside platform FFI, and never for performance** (`unsafe_code = "deny"`;
   `.claude/rules/unsafe-rust.md` lists the sites).
-- **`#[expect]`, never `allow`**, for a suppression that is genuinely needed: `expect` fires once
-  it stops being needed. There is no hand-written `#[allow(dead_code)]`; keep it that way.
+- **`#[expect]`, never `allow`**, for a genuinely needed suppression: it fires once it goes stale.
 - **A `log::` call handed an error formats it with `error::describe`**, never a bare `{e}`,
   whatever the error's type (`logged_errors.rs`). Failure text the user reads takes it too.
 - **An `AppError` keeps its cause**: `x(msg, source)`, never `x_msg(format!("…{e}"))`; no error
@@ -122,6 +120,8 @@ moves. System packages are `README.md`'s prerequisites.
   Linux truncates it silently (`packaging.rs`).
 - **`--version` and `--logs` are literal-first branches in `main()`**, ahead of everything that can
   fail. `--version` is a contract older clients' updaters depend on (`cli_contract.rs`).
+- **`main()` ends in `std::process::exit`, so no destructor runs at quit**: a resource whose drop
+  matters closes explicitly ahead of it (`shutdown.rs`, `main_order_tests.rs`).
 
 ## Slint
 
@@ -172,11 +172,10 @@ Three rules share the UI globs: `slint.md` general, `slint-pitfalls.md` what bui
 - **A corpus walk lives in `crates/melodia/tests/`, a pin on one named file beside that file**, so
   `cargo test -p <crate>` stays a question about that crate.
 - **The suite assumes an LF checkout**, which `.gitattributes` guarantees.
-- **Read `.claude/rules/ci-packaging.md` before touching `.github/` or `packaging/`.**
+- **Read `.claude/rules/ci-packaging.md` before touching `.github/`.**
 - **A release is a pushed `v*.*.*` tag, never a merge.** Land the version bump as a PR, tag the
   merge commit, then QA the draft `release.yml` leaves and publish it by hand.
-- **Never write a closing keyword**: link the issue from the branch's Development sidebar, and
-  GitHub closes it when the PR merges into `main`.
+- **No closing keyword**: link the issue in the Development sidebar, which closes it on merge.
 
 ## Memory
 

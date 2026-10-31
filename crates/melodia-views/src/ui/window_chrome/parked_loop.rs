@@ -73,7 +73,8 @@ impl CustomApplicationHandler for LoopTicks {
     }
 }
 
-/// Runs the tick winit is parked out of, and arms the heartbeat once the loop is seen parked.
+/// Runs the tick winit is parked out of, and arms the heartbeat once the loop is seen parked. A
+/// new filter arm a Win32 drag can reach owes a call too.
 pub fn pump() {
     slint::platform::update_timers_and_animations();
 

@@ -195,7 +195,7 @@ pub fn apply(ui: &AppWindow, radio_ui: &RadioUi) {
     let g = ui.global::<Radio>();
     let (station_rows, has_more) = {
         let browse = radio_ui.browse.lock();
-        let starred = radio_ui.starred.lock();
+        let favorite_uuids = radio_ui.favorite_uuids.lock();
         let kept = radio_ui.kept_answers.lock();
         let station_rows: Vec<_> = browse
             .stations
@@ -204,7 +204,7 @@ pub fn apply(ui: &AppWindow, radio_ui: &RadioUi) {
             .map(|(place, station)| {
                 let answers = kept.get(&station.station_uuid);
                 let local = rows::LocalAnswers {
-                    is_favorite: starred.contains(&station.station_uuid),
+                    is_favorite: favorite_uuids.contains(&station.station_uuid),
                     logo: logo_for(radio_ui, answers, station),
                     format: format_for(answers),
                 };

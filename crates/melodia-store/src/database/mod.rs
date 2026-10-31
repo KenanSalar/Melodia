@@ -4,7 +4,9 @@ pub mod queries;
 
 use sqlx::AssertSqlSafe;
 use sqlx::migrate::Migrate;
-use sqlx::sqlite::{SqliteConnectOptions, SqliteJournalMode, SqlitePool, SqlitePoolOptions};
+use sqlx::sqlite::{
+    SqliteConnectOptions, SqliteConnection, SqliteJournalMode, SqlitePool, SqlitePoolOptions,
+};
 use std::str::FromStr;
 use std::time::Duration;
 
@@ -38,6 +40,19 @@ pub(crate) fn placeholders(n: usize) -> String {
             s.push_str(", ");
         }
         s.push('?');
+    }
+    s
+}
+
+/// `rows` comma-separated tuples of `width` `?`s each, for a CTE's `VALUES` list.
+pub(crate) fn values_placeholders(rows: usize, width: usize) -> String {
+    let row = format!("({})", placeholders(width));
+    let mut s = String::with_capacity(rows * (row.len() + 2));
+    for i in 0..rows {
+        if i > 0 {
+            s.push_str(", ");
+        }
+        s.push_str(&row);
     }
     s
 }
@@ -145,7 +160,21 @@ where
     if items.is_empty() {
         return Ok(Vec::new());
     }
+    let mut conn = pool.acquire().await?;
+    chunked_in_query_on(&mut conn, items, build_sql).await
+}
 
+/// [`chunked_in_query`] on a connection the caller holds, a transaction's included. Concrete, since
+/// over `sqlx::Acquire` rustc can't prove a spawned caller's future `Send`.
+pub(crate) async fn chunked_in_query_on<T, B>(
+    conn: &mut SqliteConnection,
+    items: &[B],
+    build_sql: impl Fn(&str) -> String,
+) -> Result<Vec<T>, AppError>
+where
+    T: for<'r> sqlx::FromRow<'r, sqlx::sqlite::SqliteRow> + Send + Unpin,
+    for<'q> B: sqlx::Encode<'q, sqlx::Sqlite> + sqlx::Type<sqlx::Sqlite> + Send + Sync,
+{
     let mut all_results: Vec<T> = Vec::new();
 
     for chunk in items.chunks(MAX_BINDS_PER_STATEMENT) {
@@ -156,7 +185,7 @@ where
             query = query.bind(item);
         }
 
-        let rows = query.persistent(false).fetch_all(pool).await?;
+        let rows = query.persistent(false).fetch_all(&mut *conn).await?;
         all_results.extend(rows);
     }
 

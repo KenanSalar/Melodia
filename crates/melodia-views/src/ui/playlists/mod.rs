@@ -45,6 +45,8 @@ pub(super) use detail::{
 };
 pub(super) use grid::{refresh_after_write, refresh_play_stats, shown_card};
 
+pub(crate) use callbacks::{PlaylistCutUndo, PlaylistDeleteUndo};
+
 /// The M3U8 import and export and the Add-to-Playlist wiring, outside [`install`] for the
 /// `Rc<NotificationsUi>` their toasts need, which exists only after the views.
 pub use callbacks::wire_files;
@@ -62,7 +64,7 @@ pub fn install(cx: ViewCtx<'_>) -> Arc<PlaylistsUi> {
         detail_artwork::blur_spec(cx.app),
         cx.app.global::<Drag>().as_weak(),
     ));
-    callbacks::wire(cx.app, cx.state, &playlists_ui);
+    callbacks::wire(cx, &playlists_ui);
     // From launch, so the row menus offer Add to Playlist before the tab is ever opened.
     grid::refresh_count(cx.state, &cx.app.as_weak());
     playlists_ui

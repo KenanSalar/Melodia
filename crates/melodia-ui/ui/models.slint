@@ -361,6 +361,7 @@ export enum NotificationKind {
     library-resyncing,
     audio-device-lost,
     artwork-restoring,
+    undo,
 }
 
 // `id` is a monotonic handle for `Notifications.dismiss`; an empty `action-label` draws no button.
@@ -371,6 +372,11 @@ export struct NotificationRow {
     message: string,
     action-label: string,
     kind: NotificationKind,
+    // The card runs the clock, so it can stand still under the pointer and while the window is in
+    // the background. `0` is a row only a close or Rust removes.
+    timeout-ms: int,
+    // A bump restarts that clock: a run of one removal keeps its card.
+    restarts: int,
 }
 
 // **`id` is `0` for a station only in the directory**, results never being persisted until the

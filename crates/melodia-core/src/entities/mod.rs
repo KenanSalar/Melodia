@@ -17,3 +17,4 @@ pub mod tags;
 pub mod track;
 pub mod track_list;
 pub mod track_search;
+pub mod undo;

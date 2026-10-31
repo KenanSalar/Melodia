@@ -36,7 +36,8 @@ runs:
         rustup toolchain install "${args[@]}"
 
     # The action appends `os.type()` and `os.arch()` after the key, so a
-    # Linux/Windows pair passing one key still gets two entries.
+    # Linux/Windows pair passing one key still gets two entries. It also hashes
+    # every `CARGO_*` variable, so changing one costs a cold run per platform.
     - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
       if: inputs.shared-key != ''
       with:

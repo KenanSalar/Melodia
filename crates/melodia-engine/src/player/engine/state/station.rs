@@ -11,13 +11,15 @@ use crate::player::engine::types::{PlaybackSource, PlaybackStatus, RadioNowPlayi
 
 impl PlayerState {
     /// Points the state at `station`, returning the generation
-    /// [`Self::build_station_connected_actions`] needs. The queue stays untouched, so a stop hands
-    /// the library back; the speed pin follows the `Stop` so it lands on emptied decks.
+    /// [`Self::build_station_connected_actions`] needs. The queue stays as it is, so a stop hands
+    /// the library back, less the gap of a track the station takes off the deck; the speed pin
+    /// follows the `Stop` so it lands on emptied decks.
     pub fn build_station_connecting_actions(
         &mut self,
         station: Arc<RadioNowPlaying>,
     ) -> (u64, Vec<PlayerAction>) {
         self.end_stream_session();
+        self.queue.close_gap();
         self.status = PlaybackStatus::Loading;
         self.source = Some(PlaybackSource::Station(station));
         self.duration_ms = 0;

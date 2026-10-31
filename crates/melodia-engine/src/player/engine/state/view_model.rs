@@ -82,7 +82,11 @@ pub struct QueueViewModel {
     /// The queue in play order, shared with the state until the order moves: an advance publishes
     /// the same allocation it published last.
     pub ids: Arc<[i64]>,
+    /// The row shown as playing, `-1` with none.
     pub queue_index: i32,
+    /// Where Up Next starts: the row after `queue_index`, or with the playing track gone from the
+    /// queue, the row that took its place.
+    pub upcoming_from: usize,
     pub shuffle_enabled: bool,
     pub repeat_mode: RepeatMode,
     pub has_next: bool,
@@ -99,13 +103,11 @@ impl PlayerState {
     }
 
     fn has_next(&self) -> bool {
-        self.source_allows(PlaybackSource::advances_queue) && self.queue.peek_next().is_some()
+        self.source_allows(PlaybackSource::advances_queue) && self.queue.has_next()
     }
 
     fn has_previous(&self) -> bool {
-        self.source_allows(PlaybackSource::advances_queue)
-            && !self.queue.is_empty()
-            && (self.queue.current_index.is_some_and(|ci| ci > 0) || self.queue.repeat_mode.wraps())
+        self.source_allows(PlaybackSource::advances_queue) && self.queue.has_previous()
     }
 
     /// Production publishes the light and queue halves, so the queue is rebuilt only when it moves.
@@ -124,7 +126,7 @@ impl PlayerState {
             sleep_at_track_end: self.pause_after_current_track,
             radio: self.station().cloned(),
             queue_ids: self.queue.play_ids(),
-            queue_index: current_index_to_i32(self.queue.current_index),
+            queue_index: current_index_to_i32(self.queue.playing_index()),
             shuffle_enabled: self.queue.shuffle_enabled,
             repeat_mode: self.queue.repeat_mode,
             has_next: self.has_next(),
@@ -156,7 +158,8 @@ impl PlayerState {
     pub fn to_queue_view_model(&self) -> QueueViewModel {
         QueueViewModel {
             ids: self.queue.play_ids(),
-            queue_index: current_index_to_i32(self.queue.current_index),
+            queue_index: current_index_to_i32(self.queue.playing_index()),
+            upcoming_from: self.queue.upcoming_from(),
             shuffle_enabled: self.queue.shuffle_enabled,
             repeat_mode: self.queue.repeat_mode,
             has_next: self.has_next(),

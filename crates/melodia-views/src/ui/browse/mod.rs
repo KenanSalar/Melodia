@@ -17,6 +17,7 @@ mod fetch;
 mod models;
 mod selection;
 
+use std::collections::HashSet;
 use std::path::PathBuf;
 use std::rc::Rc;
 use std::sync::Arc;
@@ -32,6 +33,7 @@ use melodia_app::services::view_state;
 use melodia_app::state::AppState;
 use melodia_artwork::media::image::cover_thumbs::CoverThumbs;
 use melodia_core::entities::browse::{BrowseFile, BrowseFolder};
+use melodia_core::entities::track::TrackListRow as RsTrackListRow;
 use melodia_core::error::describe;
 use melodia_ui::{
     AppWindow, Browse, BrowseCardGridRow as UiBrowseCardGridRow,
@@ -42,7 +44,7 @@ use melodia_ui::{
 pub const NAV_BROWSE: i32 = 1;
 
 pub(super) use cards::{BrowseViewMode, mode_from_index, mode_index, rebuild_cards};
-pub(super) use fetch::{apply_row_favorite, apply_row_rating, fetch_and_apply, resort_and_apply};
+pub(super) use fetch::{apply_rows_favorite, apply_rows_rating, fetch_and_apply, resort_and_apply};
 pub(super) use selection::{clear_selection, handle_select_row, select_all};
 
 /// Wires every `Browse.*` callback and seeds the persisted path and presentation mode, here
@@ -182,19 +184,20 @@ impl BrowseUi {
         self.last_files.lock().iter().filter_map(|f| f.in_library.then_some(f.row.id)).collect()
     }
 
-    /// Patches the cached row, so a toggle needs no re-fetch.
-    pub fn flip_favorite(&self, id: i64, fav: bool) {
-        let mut files = self.last_files.lock();
-        if let Some(f) = files.iter_mut().find(|f| f.row.id == id) {
-            f.row.is_favorite = fav;
-        }
+    /// Patches the cached rows, so a toggle needs no re-fetch.
+    pub fn flip_favorites(&self, ids: &HashSet<i64>, fav: bool) {
+        self.patch_cached_rows(ids, |row| row.is_favorite = fav);
     }
 
-    /// [`Self::flip_favorite`]'s star-rating twin.
-    pub fn flip_rating(&self, id: i64, rating: i32) {
+    /// [`Self::flip_favorites`]' star-rating twin.
+    pub fn flip_ratings(&self, ids: &HashSet<i64>, rating: i32) {
+        self.patch_cached_rows(ids, |row| row.rating = rating);
+    }
+
+    fn patch_cached_rows(&self, ids: &HashSet<i64>, edit: impl Fn(&mut RsTrackListRow)) {
         let mut files = self.last_files.lock();
-        if let Some(f) = files.iter_mut().find(|f| f.row.id == id) {
-            f.row.rating = rating;
+        for file in files.iter_mut().filter(|f| ids.contains(&f.row.id)) {
+            edit(&mut file.row);
         }
     }
 }

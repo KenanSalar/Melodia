@@ -3,13 +3,14 @@ use std::sync::atomic::{AtomicU8, Ordering};
 use std::sync::{MutexGuard, TryLockError};
 
 use super::event_sink::PlayerSinks;
-use super::queue::QueueState;
+use super::queue::{ClearedQueue, QueueCut, QueueEntry, QueueState};
 use super::queue_window::TrackWindow;
 use super::types::{PlaybackSource, PlaybackStatus, RadioNowPlaying};
 use melodia_core::entities::track::TrackSummary;
 
 mod action;
 mod persistence;
+mod replaced;
 mod station;
 mod summary_sync;
 mod transport;
@@ -17,13 +18,15 @@ mod view_model;
 
 pub use action::{AwaitedStart, PlayerAction};
 pub use persistence::{restore_queue, restore_station};
+pub use replaced::ReplacedQueue;
 pub use summary_sync::{WindowFill, seat_window_records, sync_current_track_if_in, window_wanted};
 pub use transport::{ReleaseDecision, play_track_inner, resume_from_stopped, stop_end_of_queue};
 pub use view_model::{PlayerViewModel, PlayerViewModelLight, PositionTick, QueueViewModel};
 
 /// Restart-from-beginning threshold for Previous command (ms).
 pub const RESTART_THRESHOLD_MS: u64 = 3000;
-/// Percent, and the true ceiling: amplitude tops out at unity, with no boost band above it.
+/// Percent, and the true ceiling: amplitude tops out at unity, with no boost band above it. The
+/// mixer sums unclamped, so raising it owes clip protection.
 pub const MAX_VOLUME: u32 = 100;
 pub const MIN_SPEED: f64 = 0.25;
 /// Capped at 2×: speed is plain resampling, so it shifts pitch with it.
@@ -60,7 +63,8 @@ pub struct PlayerState {
     pub playback_speed: f64,
     pub gapless_enabled: bool,
     /// The sleep timer's end-of-track mode: the monitor stops at the next end of stream instead
-    /// of advancing, disarming it. Session-only.
+    /// of advancing, disarming it. Session-only. Armed once the next track has staged, it stops at
+    /// that track's end instead, the gapless advance never reading it.
     pub pause_after_current_track: bool,
     /// Bumped by every transition that starts or ends a station session, so a connect finishing
     /// after the user moved on is refused rather than played late.
@@ -142,6 +146,32 @@ impl PlayerState {
     /// The track on the deck, for the two writers that mutate it in place.
     pub fn current_track_mut(&mut self) -> Option<&mut Arc<TrackSummary>> {
         self.source.as_mut().and_then(PlaybackSource::track_mut)
+    }
+
+    /// Takes the queue rows `entries` name. A seated track whose row goes plays on, the row that
+    /// took its place next.
+    pub fn cut_queue(&mut self, entries: &[QueueEntry]) -> Option<QueueCut> {
+        let cut = self.queue.cut(entries);
+        self.close_gap_unless_seated();
+        cut
+    }
+
+    pub fn restore_queue_cuts(&mut self, cuts: Vec<QueueCut>) {
+        self.queue.restore_cuts(cuts);
+        self.close_gap_unless_seated();
+    }
+
+    pub fn restore_cleared_queue(&mut self, cleared: Vec<ClearedQueue>) {
+        self.queue.restore_cleared(cleared);
+        self.close_gap_unless_seated();
+    }
+
+    /// With no track seated nothing plays on to leave a gap for, so a removal or a restore that
+    /// opened one closes it.
+    fn close_gap_unless_seated(&mut self) {
+        if self.current_track().is_none() {
+            self.queue.close_gap();
+        }
     }
 
     /// The record for queued track `id`, from the window or, where it is the one playing, the deck.

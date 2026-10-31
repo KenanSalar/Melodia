@@ -21,7 +21,7 @@ msgid "Browse"
 msgstr "Περιήγηση"
 
 #: ui/app-window.slint ui/layout/sidebar.slint ui/views/favorites-view.slint
-#: ui/views/radio-view.slint
+#: ui/views/radio-view.slint ui/views/settings/undo-section.slint
 msgid "Favorites"
 msgstr "Αγαπημένα"
 
@@ -67,6 +67,7 @@ msgstr "Κλείσιμο"
 
 #. Translators: `{}` is how many items are selected
 #: ui/components/context-menu.slint
+#: ui/components/grid/station-context-menu.slint
 msgid "Remove {} from Favorites"
 msgstr "Αφαίρεση {} από τα αγαπημένα"
 
@@ -80,6 +81,7 @@ msgid "Add to Favorites"
 msgstr "Προσθήκη στα αγαπημένα"
 
 #: ui/components/context-menu.slint ui/components/grid/card-context-menu.slint
+#: ui/components/grid/station-context-menu.slint
 msgid "Remove from Favorites"
 msgstr "Κατάργηση από τα αγαπημένα"
 
@@ -897,21 +899,12 @@ msgstr "Επεξεργασία…"
 
 #. Translators: `{}` is how many stations are selected
 #: ui/components/grid/station-context-menu.slint
-msgid "Remove {} from Recently Played…"
-msgstr "Αφαίρεση {} από τα πρόσφατα αναπαραγόμενα…"
+msgid "Remove {} from Recently Played"
+msgstr "Αφαίρεση {} από τα πρόσφατα αναπαραγόμενα"
 
 #: ui/components/grid/station-context-menu.slint
-msgid "Remove from Recently Played…"
-msgstr "Αφαίρεση από τα πρόσφατα αναπαραγόμενα…"
-
-#. Translators: `{}` is how many stations are selected
-#: ui/components/grid/station-context-menu.slint
-msgid "Remove {} from Favorites…"
-msgstr "Αφαίρεση {} από τα αγαπημένα…"
-
-#: ui/components/grid/station-context-menu.slint
-msgid "Remove from Favorites…"
-msgstr "Κατάργηση από τα αγαπημένα…"
+msgid "Remove from Recently Played"
+msgstr "Αφαίρεση από τα πρόσφατα αναπαραγόμενα"
 
 #: ui/components/mini-player/mini-captions.slint
 msgid "Full Player"
@@ -1113,6 +1106,7 @@ msgstr "Επανάληψη"
 #: ui/components/now-playing/queue-button.slint
 #: ui/views/queue-panel/queue-panel.slint
 #: ui/views/settings/overflow-menu-section.slint
+#: ui/views/settings/undo-section.slint
 msgid "Queue"
 msgstr "Ουρά"
 
@@ -1296,7 +1290,7 @@ msgstr "Αναζήτηση…"
 
 #: ui/components/settings/equalizer-controls.slint
 #: ui/views/settings/animations-section.slint
-#: ui/views/settings/output-section.slint
+#: ui/views/settings/output-section.slint ui/views/settings/undo-section.slint
 msgid "Equalizer"
 msgstr "Ισοσταθμιστής"
 
@@ -1616,6 +1610,10 @@ msgid "Delete playlist?"
 msgstr "Διαγραφή λίστας;"
 
 #: ui/globals/dialog.slint
+msgid "This playlist has too many tracks to undo, so deleting it can't be undone. The tracks themselves stay in your library."
+msgstr "Αυτή η λίστα έχει πάρα πολλά κομμάτια για αναίρεση, οπότε η διαγραφή της δεν αναιρείται. Τα ίδια τα κομμάτια παραμένουν στη βιβλιοθήκη σας."
+
+#: ui/globals/dialog.slint
 msgid "The playlist and its track order will be removed. The tracks themselves stay in your library."
 msgstr "Η λίστα και η σειρά των κομματιών της θα καταργηθούν. Τα ίδια τα κομμάτια παραμένουν στη βιβλιοθήκη σας."
 
@@ -1624,8 +1622,14 @@ msgid "Delete"
 msgstr "Διαγραφή"
 
 #: ui/globals/dialog.slint
-msgid "Delete {} playlists?"
-msgstr "Διαγραφή {} λιστών;"
+msgid "Delete {n} playlist?"
+msgid_plural "Delete {n} playlists?"
+msgstr[0] "Διαγραφή {n} λίστας;"
+msgstr[1] "Διαγραφή {n} λιστών;"
+
+#: ui/globals/dialog.slint
+msgid "These playlists have too many tracks to undo, so deleting them can't be undone. The tracks themselves stay in your library."
+msgstr "Αυτές οι λίστες έχουν πάρα πολλά κομμάτια για αναίρεση, οπότε η διαγραφή τους δεν αναιρείται. Τα ίδια τα κομμάτια παραμένουν στη βιβλιοθήκη σας."
 
 #: ui/globals/dialog.slint
 msgid "The playlists and their track order will be removed. The tracks themselves stay in your library."
@@ -1639,14 +1643,17 @@ msgstr "Αφαίρεση από τα πρόσφατα αναπαραγόμενα
 msgid "Remove from favorites?"
 msgstr "Αφαίρεση από τα αγαπημένα;"
 
+#. Translators: {} is the station's name.
 #: ui/globals/dialog.slint
 msgid "\"{}\" will be removed from Recently Played."
 msgstr "Ο σταθμός «{}» θα αφαιρεθεί από τα πρόσφατα αναπαραγόμενα."
 
+#. Translators: {} is the station's name.
 #: ui/globals/dialog.slint
 msgid "\"{}\" will be removed from your stations, along with its play history."
 msgstr "Ο σταθμός «{}» θα αφαιρεθεί μαζί με το ιστορικό αναπαραγωγής του."
 
+#. Translators: {} is the station's name.
 #: ui/globals/dialog.slint
 msgid "\"{}\" will be removed from your favorites."
 msgstr "Ο σταθμός «{}» θα αφαιρεθεί από τα αγαπημένα σας."
@@ -1662,6 +1669,14 @@ msgid "Remove {n} station from favorites?"
 msgid_plural "Remove {n} stations from favorites?"
 msgstr[0] "Αφαίρεση {n} σταθμού από τα αγαπημένα;"
 msgstr[1] "Αφαίρεση {n} σταθμών από τα αγαπημένα;"
+
+#: ui/globals/dialog.slint
+msgid "There are too many stations to undo, so removing them from Recently Played can't be undone."
+msgstr "Οι σταθμοί είναι πάρα πολλοί για αναίρεση, οπότε η αφαίρεσή τους από τα πρόσφατα αναπαραγόμενα δεν αναιρείται."
+
+#: ui/globals/dialog.slint
+msgid "There are too many stations to undo, so removing them can't be undone. Any you added by hand are removed from your stations, along with their play history."
+msgstr "Οι σταθμοί είναι πάρα πολλοί για αναίρεση, οπότε η αφαίρεσή τους δεν αναιρείται. Όσοι προστέθηκαν χειροκίνητα θα αφαιρεθούν από τους σταθμούς σας, μαζί με το ιστορικό αναπαραγωγής τους."
 
 #: ui/globals/dialog.slint
 msgid "The stations will be removed from Recently Played."
@@ -1790,6 +1805,90 @@ msgstr "Απωλεστικό"
 msgid "Converted"
 msgstr "Μετατρεπόμενο"
 
+#: ui/globals/undo-text.slint ui/views/settings/undo-section.slint
+msgid "Undo"
+msgstr "Αναίρεση"
+
+#: ui/globals/undo-text.slint
+msgid "Equalizer reset"
+msgstr "Ο ισοσταθμιστής επαναφέρθηκε"
+
+#: ui/globals/undo-text.slint
+msgid "Recent searches cleared"
+msgstr "Οι πρόσφατες αναζητήσεις καθαρίστηκαν"
+
+#. Translators: {} is the playlist's name.
+#: ui/globals/undo-text.slint
+msgid "{n} track removed from {}"
+msgid_plural "{n} tracks removed from {}"
+msgstr[0] "{n} κομμάτι αφαιρέθηκε από τη λίστα «{}»"
+msgstr[1] "{n} κομμάτια αφαιρέθηκαν από τη λίστα «{}»"
+
+#. Translators: {} is the playlist's name.
+#: ui/globals/undo-text.slint
+msgid "{} deleted"
+msgstr "Η λίστα «{}» διαγράφηκε"
+
+#: ui/globals/undo-text.slint
+msgid "{n} playlist deleted"
+msgid_plural "{n} playlists deleted"
+msgstr[0] "{n} λίστα διαγράφηκε"
+msgstr[1] "{n} λίστες διαγράφηκαν"
+
+#. Translators: {} is the station's name.
+#: ui/globals/undo-text.slint
+msgid "{} removed from Favorites"
+msgstr "Ο σταθμός «{}» αφαιρέθηκε από τα αγαπημένα"
+
+#: ui/globals/undo-text.slint
+msgid "{n} station removed from Favorites"
+msgid_plural "{n} stations removed from Favorites"
+msgstr[0] "{n} σταθμός αφαιρέθηκε από τα αγαπημένα"
+msgstr[1] "{n} σταθμοί αφαιρέθηκαν από τα αγαπημένα"
+
+#. Translators: {} is the station's name.
+#: ui/globals/undo-text.slint
+msgid "{} removed from Recently Played"
+msgstr "Ο σταθμός «{}» αφαιρέθηκε από τα πρόσφατα αναπαραγόμενα"
+
+#: ui/globals/undo-text.slint
+msgid "{n} station removed from Recently Played"
+msgid_plural "{n} stations removed from Recently Played"
+msgstr[0] "{n} σταθμός αφαιρέθηκε από τα πρόσφατα αναπαραγόμενα"
+msgstr[1] "{n} σταθμοί αφαιρέθηκαν από τα πρόσφατα αναπαραγόμενα"
+
+#: ui/globals/undo-text.slint
+msgid "{n} track removed from Favorites"
+msgid_plural "{n} tracks removed from Favorites"
+msgstr[0] "{n} κομμάτι αφαιρέθηκε από τα αγαπημένα"
+msgstr[1] "{n} κομμάτια αφαιρέθηκαν από τα αγαπημένα"
+
+#: ui/globals/undo-text.slint
+msgid "{n} track removed from the queue"
+msgid_plural "{n} tracks removed from the queue"
+msgstr[0] "{n} κομμάτι αφαιρέθηκε από την ουρά"
+msgstr[1] "{n} κομμάτια αφαιρέθηκαν από την ουρά"
+
+#: ui/globals/undo-text.slint
+msgid "Queue cleared"
+msgstr "Η ουρά εκκαθαρίστηκε"
+
+#: ui/globals/undo-text.slint
+msgid "Queue replaced"
+msgstr "Η ουρά αντικαταστάθηκε"
+
+#: ui/globals/undo-text.slint
+msgid "Too many to undo"
+msgstr "Πάρα πολλά για αναίρεση"
+
+#: ui/globals/undo-text.slint
+msgid "Couldn't undo"
+msgstr "Η αναίρεση απέτυχε"
+
+#: ui/globals/undo-text.slint ui/settings.slint
+msgid "See the log for details."
+msgstr "Δείτε το αρχείο καταγραφής για λεπτομέρειες."
+
 #. Translators: the action a click takes, expanding the sidebar
 #: ui/layout/sidebar.slint
 msgid "Expand"
@@ -1887,10 +1986,6 @@ msgstr "Αποθηκεύτηκε στο {}"
 #: ui/settings.slint
 msgid "Couldn't save the diagnostics report"
 msgstr "Δεν ήταν δυνατή η αποθήκευση της αναφοράς διαγνωστικών"
-
-#: ui/settings.slint
-msgid "See the log for details."
-msgstr "Δείτε το αρχείο καταγραφής για λεπτομέρειες."
 
 #: ui/settings.slint
 msgid "Melodia crashed last time"
@@ -2200,7 +2295,7 @@ msgstr "Καλλιτέχνες"
 msgid "Genres"
 msgstr "Είδη"
 
-#: ui/views/my-library-view.slint
+#: ui/views/my-library-view.slint ui/views/settings/undo-section.slint
 msgid "Playlists"
 msgstr "Λίστες Αναπαραγωγής"
 
@@ -2371,8 +2466,8 @@ msgid "Clear queue?"
 msgstr "Εκκαθάριση ουράς;"
 
 #: ui/views/queue-panel/queue-panel.slint
-msgid "Remove all tracks from the queue? Playback will stop."
-msgstr "Να καταργηθούν όλα τα κομμάτια από την ουρά; Η αναπαραγωγή θα σταματήσει."
+msgid "Remove all tracks from the queue? This can't be undone. The playing track plays to its end."
+msgstr "Να καταργηθούν όλα τα κομμάτια από την ουρά; Αυτό δεν αναιρείται. Το κομμάτι που παίζει θα συνεχίσει μέχρι το τέλος του."
 
 #: ui/views/queue-panel/queue-panel.slint
 msgid "Queue is empty"
@@ -2556,11 +2651,6 @@ msgstr "Αναπαραγωγή"
 msgid "Window"
 msgstr "Παράθυρο"
 
-#: ui/views/settings-view.slint ui/views/settings/about-section.slint
-#: ui/views/settings/pages/about-page.slint
-msgid "About"
-msgstr "Σχετικά"
-
 #: ui/views/settings-view.slint ui/views/settings/pages/integrations-page.slint
 msgid "Integrations"
 msgstr "Ενσωματώσεις"
@@ -2569,6 +2659,16 @@ msgstr "Ενσωματώσεις"
 #: ui/views/settings/update-section.slint
 msgid "Updates"
 msgstr "Ενημερώσεις"
+
+#: ui/views/settings-view.slint ui/views/settings/about-section.slint
+#: ui/views/settings/pages/about-page.slint
+msgid "About"
+msgstr "Σχετικά"
+
+#: ui/views/settings-view.slint
+#: ui/views/settings/pages/accessibility-page.slint
+msgid "Accessibility"
+msgstr "Προσβασιμότητα"
 
 #: ui/views/settings-view.slint
 msgid "Search settings…"
@@ -3189,6 +3289,7 @@ msgstr "Χαμήλωσε σταδιακά τη μουσική στην παύσ�
 
 #. Translators: `{}` is a duration in seconds, such as 2.5
 #: ui/views/settings/playback-section.slint
+#: ui/views/settings/undo-section.slint
 msgid "{} s"
 msgstr "{} δλ"
 
@@ -3299,6 +3400,62 @@ msgstr "Ενεργοποιήστε πρώτα το Last.fm ή το ListenBrainz 
 #: ui/views/settings/settings-router.slint
 msgid "No matching settings"
 msgstr "Καμία ρύθμιση δεν ταιριάζει"
+
+#: ui/views/settings/undo-section.slint
+msgid "Offer undo after a removal"
+msgstr "Προσφορά αναίρεσης μετά από αφαίρεση"
+
+#: ui/views/settings/undo-section.slint
+msgid "Show a notice with an Undo button after something is removed. Ctrl+Z works too while it is up."
+msgstr "Εμφάνιση ειδοποίησης με κουμπί «Αναίρεση» όταν αφαιρείται κάτι. Όσο εμφανίζεται, λειτουργεί και το Ctrl+Z."
+
+#: ui/views/settings/undo-section.slint
+msgid "Also for a single item"
+msgstr "Και για ένα μόνο στοιχείο"
+
+#: ui/views/settings/undo-section.slint
+msgid "Offer undo when only one track, playlist, station or favorite goes. Clear all, Reset and Clear queue always offer it."
+msgstr "Προσφορά αναίρεσης και όταν αφαιρείται μόνο ένα κομμάτι, μία λίστα αναπαραγωγής, ένας σταθμός ή ένα αγαπημένο. Τα «Καθαρισμός όλων», «Επαναφορά» και «Εκκαθάριση ουράς» την προσφέρουν πάντα."
+
+#: ui/views/settings/undo-section.slint
+msgid "Tracks removed from a playlist, and deleted playlists."
+msgstr "Κομμάτια που αφαιρέθηκαν από λίστα αναπαραγωγής και λίστες αναπαραγωγής που διαγράφηκαν."
+
+#: ui/views/settings/undo-section.slint
+msgid "Tracks removed from the queue, Clear queue, and a play that replaces a queue you built."
+msgstr "Κομμάτια που αφαιρέθηκαν από την ουρά, η «Εκκαθάριση ουράς» και μια αναπαραγωγή που αντικαθιστά μια ουρά που φτιάξατε."
+
+#: ui/views/settings/undo-section.slint
+msgid "Tracks removed from Favorites."
+msgstr "Κομμάτια που αφαιρέθηκαν από τα αγαπημένα."
+
+#: ui/views/settings/undo-section.slint
+msgid "Radio stations"
+msgstr "Ραδιοφωνικοί σταθμοί"
+
+#: ui/views/settings/undo-section.slint
+msgid "Stations removed from Favorites or Recently Played."
+msgstr "Σταθμοί που αφαιρέθηκαν από τα αγαπημένα ή τα πρόσφατα αναπαραγόμενα."
+
+#: ui/views/settings/undo-section.slint
+msgid "Resetting the equalizer."
+msgstr "Επαναφορά του ισοσταθμιστή."
+
+#: ui/views/settings/undo-section.slint
+msgid "Recent searches"
+msgstr "Πρόσφατες αναζητήσεις"
+
+#: ui/views/settings/undo-section.slint
+msgid "Clearing recent searches."
+msgstr "Καθαρισμός των πρόσφατων αναζητήσεων."
+
+#: ui/views/settings/undo-section.slint
+msgid "Keep the notice up"
+msgstr "Διάρκεια εμφάνισης ειδοποίησης"
+
+#: ui/views/settings/undo-section.slint
+msgid "How long the notice waits for a press. It also waits while the pointer is over it or Melodia is in the background."
+msgstr "Πόση ώρα περιμένει η ειδοποίηση ένα πάτημα. Περιμένει επίσης όσο ο δείκτης βρίσκεται από πάνω της ή το Melodia είναι στο παρασκήνιο."
 
 #: ui/views/settings/update-section.slint
 msgid "Software Updates"

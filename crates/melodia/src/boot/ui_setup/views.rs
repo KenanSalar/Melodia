@@ -1,5 +1,6 @@
 //! The per-view slices, their handles, and the Settings sections beside them.
 
+use std::rc::Rc;
 use std::sync::Arc;
 
 use melodia_app::services;
@@ -8,6 +9,8 @@ use melodia_artwork::media::image;
 use melodia_core::error::describe;
 use melodia_ui::{AppWindow, Nav};
 use melodia_views::ui;
+use melodia_views::ui::shell::notifications::NotificationsUi;
+use melodia_views::ui::undo::UndoWindow;
 use slint::ComponentHandle;
 
 /// The view handles [`super::install_ui`] goes on to wire.
@@ -68,6 +71,7 @@ fn install_grid_covers(app: &AppWindow) {
 pub fn install_views(
     app: &AppWindow,
     state: &AppState,
+    undo: &Rc<UndoWindow>,
     startup_view_state: Option<&services::view_state::ViewStateData>,
 ) -> UiHandles {
     // Before any `wire_*`: every section seeds its `section_active` shadow off these, and its gate
@@ -100,6 +104,7 @@ pub fn install_views(
         app,
         state,
         cover_thumbs: &cover_thumbs,
+        undo,
         view_state: startup_view_state,
     };
 
@@ -111,8 +116,8 @@ pub fn install_views(
     let artists_ui = ui::artists::install(cx, &albums_ui);
     let genres_ui = ui::genres::install(cx);
     let playlists_ui = ui::playlists::install(cx);
-    ui::favorites::install(cx, &artists_ui);
-    ui::recently_played::install(cx);
+    let favorites_ui = ui::favorites::install(cx, &artists_ui);
+    let recently_played_ui = ui::recently_played::install(cx);
     let radio_ui = ui::radio::install(cx);
     let search_ui = ui::search::install(cx, &albums_ui, &artists_ui);
 
@@ -136,18 +141,25 @@ pub fn install_views(
     // globals while still `-1`; each reopen appends its own entry once it lands.
     ui::nav_history::record_current(app);
 
-    // The Now-Playing heart and star rating fan into every per-row cache.
-    let row_flags = ui::callbacks::RowFlagHandles {
-        tracks: &tracks_ui,
-        browse: &browse_ui,
-        albums: &albums_ui,
-        artists: &artists_ui,
-        genres: &genres_ui,
-        playlists: &playlists_ui,
-        search: &search_ui,
-    };
-    ui::callbacks::wire_now_playing_favorite(app, state, row_flags);
-    ui::callbacks::wire_now_playing_rating(app, state, row_flags);
+    // The Now-Playing heart and star rating, and every removal from Favorites, fan into every
+    // per-row cache.
+    let mirrors = ui::callbacks::RowFlagMirrors::new(
+        app,
+        ui::callbacks::RowFlagHandles {
+            tracks: &tracks_ui,
+            browse: &browse_ui,
+            albums: &albums_ui,
+            artists: &artists_ui,
+            genres: &genres_ui,
+            playlists: &playlists_ui,
+            favorites: &favorites_ui,
+            recently_played: &recently_played_ui,
+            search: &search_ui,
+        },
+    );
+    ui::callbacks::wire_now_playing_favorite(app, state, &mirrors);
+    ui::callbacks::wire_now_playing_rating(app, state, &mirrors);
+    ui::callbacks::wire_favorite_removals(app, state, undo, &mirrors);
     // Deferred past `app.show()`: until the window is on a monitor its scale factor reads 1.0, and
     // a `HiDPI` display would get the 1× decode size.
     let (tune_rows, tune_radio) = (cover_thumbs.clone(), radio_ui.clone());
@@ -174,19 +186,21 @@ pub fn install_views(
     UiHandles { cover_thumbs, tracks_ui, albums_ui, artists_ui, genres_ui, playlists_ui, radio_ui }
 }
 
-/// Every Settings section, plus the notifications stack. The updater's task and callbacks wire
-/// later, beside the onboarding card that defers the task.
+/// Every Settings section. The updater's task and callbacks wire later, beside the onboarding card
+/// that defers the task.
 pub fn install_library_settings_and_friends(
     app: &AppWindow,
     state: &AppState,
-) -> Result<std::rc::Rc<ui::shell::notifications::NotificationsUi>, melodia_core::error::AppError> {
+    notifications: &Rc<NotificationsUi>,
+    undo: &Rc<UndoWindow>,
+) -> Result<(), melodia_core::error::AppError> {
     ui::settings::library_settings::install(app, state)
         .map_err(|e| melodia_core::error::AppError::io("library_settings install", e))?;
     ui::callbacks::wire_library_settings(app, state);
     ui::settings::playback_settings::install_playback_settings(app, state);
     ui::settings::signal_path::install(app, state);
     ui::settings::output_settings::install(app, state);
-    ui::equalizer::install_equalizer(app, state);
+    ui::equalizer::install_equalizer(app, state, undo);
     ui::replaygain::install_replaygain(app, state);
     ui::visualizer::install_visualizer(app, state);
     ui::sleep_timer::install_sleep_timer(app, state);
@@ -194,23 +208,13 @@ pub fn install_library_settings_and_friends(
     ui::settings::discord_settings::install_discord(app, state);
     ui::settings::radio_settings::install_radio(app, state);
     ui::settings::lyrics_settings::install(app, state);
-    let notifications = ui::shell::notifications::install(app);
-    ui::settings::file_watching::install(app, state, &notifications);
+    ui::settings::file_watching::install(app, state, notifications);
     ui::settings::rating_writeback::install(app, state);
     ui::settings::updater_settings::install(app, state);
+    ui::settings::undo_settings::install(app, state, undo);
     ui::settings::about::install(app, state);
-    ui::settings::diagnostics::install(app, state, &notifications);
+    ui::settings::diagnostics::install(app, state, notifications);
     ui::settings::settings_page::install(app, state);
     ui::track_columns::install(app);
-    // Toast rows carry strings Rust resolved once and outlive every navigation, so a language
-    // switch reaches them only through this. Not in the locale callback, which wires first.
-    {
-        let notifications = notifications.clone();
-        if let Err(e) = ui::locale_refresh::on_locale_changed(state, app.as_weak(), move |ui| {
-            notifications.refresh_for_locale(ui);
-        }) {
-            log::warn!("notifications locale refresher: {}", describe(&e));
-        }
-    }
-    Ok(notifications)
+    Ok(())
 }
