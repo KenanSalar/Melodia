@@ -17,6 +17,7 @@ mod file_drop;
 pub mod geometry;
 #[cfg(target_os = "windows")]
 pub mod parked_loop;
+pub mod pointer;
 mod resize_grab;
 mod resize_release;
 mod winit_filter;

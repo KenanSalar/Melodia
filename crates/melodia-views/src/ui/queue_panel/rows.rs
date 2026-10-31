@@ -10,6 +10,7 @@ use slint::ComponentHandle;
 
 use super::publish_picks;
 use crate::ui::paged_rows::queue_rows::QueueRows;
+use crate::ui::window_chrome::pointer;
 use melodia_app::state::AppState;
 use melodia_engine::player::engine::queue::{QueueEntry, current_index_to_i32};
 use melodia_engine::player::engine::state::lock_state;
@@ -56,6 +57,10 @@ pub(super) fn spawn_queue_rows_subscriber(
                 continue;
             }
             show_queue(&ui, &rows, read_queue(&state, &rows));
+            // Not in `show_queue`: the panel's show calls that from inside Slint's dispatch.
+            if ui.global::<Queue>().get_pointer_in() {
+                pointer::rehover(ui.window());
+            }
         }
         log::debug!("ui::queue_panel rows subscriber stopped");
     }))?;
