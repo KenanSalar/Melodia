@@ -71,6 +71,15 @@ impl RowText {
     pub fn plain(title: SharedString, message: SharedString) -> Self {
         Self { title, message, action_label: SharedString::default() }
     }
+
+    fn applied_to(self, row: &NotificationRow) -> NotificationRow {
+        NotificationRow {
+            title: self.title,
+            message: self.message,
+            action_label: self.action_label,
+            ..*row
+        }
+    }
 }
 
 /// How much of an action landed, which is what colours its completion toast.
@@ -104,6 +113,16 @@ pub struct NotificationsUi {
 }
 
 impl NotificationsUi {
+    fn new(exit: Duration) -> Self {
+        Self {
+            rows: Rc::new(VecModel::default()),
+            recipes: RefCell::new(HashMap::new()),
+            next_id: Cell::new(0),
+            exit,
+            row_retired: OnceCell::new(),
+        }
+    }
+
     /// **Private, which is the whole enforcement of the locale rule**: the public pushes are
     /// [`show_auto_dismiss`](Self::show_auto_dismiss), gone before anyone reaches the language
     /// picker, and [`show_localized`](Self::show_localized) and
@@ -184,15 +203,7 @@ impl NotificationsUi {
         let Some((pos, row)) = self.find_live(id) else { return };
         let text = relabel(ui);
         self.recipes.borrow_mut().insert(id, Box::new(relabel));
-        self.rows.set_row_data(
-            pos,
-            NotificationRow {
-                title: text.title,
-                message: text.message,
-                action_label: text.action_label,
-                ..row
-            },
-        );
+        self.rows.set_row_data(pos, text.applied_to(&row));
     }
 
     /// Starts a live row's clock over.
@@ -244,15 +255,7 @@ impl NotificationsUi {
                 .enumerate()
                 .filter_map(|(pos, row): (usize, NotificationRow)| {
                     let text = recipes.get(&row.id)?(ui);
-                    Some((
-                        pos,
-                        NotificationRow {
-                            title: text.title,
-                            message: text.message,
-                            action_label: text.action_label,
-                            ..row
-                        },
-                    ))
+                    Some((pos, text.applied_to(&row)))
                 })
                 .collect()
         };
@@ -314,16 +317,9 @@ fn remove_row(rows: &VecModel<NotificationRow>, id: i32) {
 
 /// Installs the row model and both callbacks, answering the handle toast raisers take.
 pub fn install(ui: &AppWindow) -> Rc<NotificationsUi> {
-    let rows: Rc<VecModel<NotificationRow>> = Rc::new(VecModel::default());
-    ui.global::<Notifications>().set_rows(ModelRc::from(rows.clone()));
-
-    let state = Rc::new(NotificationsUi {
-        rows,
-        recipes: RefCell::new(HashMap::new()),
-        next_id: Cell::new(0),
-        exit: token_duration(ui.global::<Theme>().get_dur_med()),
-        row_retired: OnceCell::new(),
-    });
+    let exit = token_duration(ui.global::<Theme>().get_dur_med());
+    let state = Rc::new(NotificationsUi::new(exit));
+    ui.global::<Notifications>().set_rows(ModelRc::from(state.rows.clone()));
 
     {
         let state = state.clone();

@@ -1,24 +1,14 @@
-use std::cell::{Cell, OnceCell, RefCell};
-use std::collections::HashMap;
+use std::cell::RefCell;
 use std::rc::Rc;
 use std::time::Duration;
 
-use slint::{Model, SharedString, VecModel};
+use slint::{Model, SharedString};
 
 use super::*;
 
-/// Build a `NotificationsUi` outside of an `AppWindow`. The Slint global
-/// wiring in `install()` is purely about pushing the same `VecModel` into
-/// the global's `rows` property — the model operations themselves are
-/// pure data and don't need a live event loop.
+/// With no event loop a retired row's removal never fires, so it stays, `leaving`: read [`live`].
 fn make_ui() -> NotificationsUi {
-    NotificationsUi {
-        rows: Rc::new(VecModel::default()),
-        recipes: RefCell::new(HashMap::new()),
-        next_id: Cell::new(0),
-        exit: Duration::ZERO,
-        row_retired: OnceCell::new(),
-    }
+    NotificationsUi::new(Duration::ZERO)
 }
 
 /// The rows whose cards are still up, read as the card reads them.

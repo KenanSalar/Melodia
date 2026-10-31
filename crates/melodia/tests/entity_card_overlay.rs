@@ -7,8 +7,7 @@
 //! that reads exactly like the one that was right.
 
 use melodia_testkit::{
-    MIN_SLINT_SOURCES, UI_DIR, at_own_depth, block_body, blocks_named, mounted_type,
-    outside_strings, stripped_sources,
+    MIN_SLINT_SOURCES, UI_DIR, block_body, blocks_named, own_mounts, stripped_sources,
 };
 
 /// What a host writes to open the slot, and how the walk below finds the hosts rather than naming
@@ -99,11 +98,7 @@ fn every_overlay_host_answers_for_its_own_hover() {
 /// Every element a host mounts straight into the slot, by its block's body: everything a mount
 /// holds lands in the slot.
 fn slotted_controls(mount: &str) -> Vec<&str> {
-    outside_strings(mount.as_bytes())
-        .filter(|&(at, byte)| byte == b'{' && at_own_depth(mount, at))
-        .filter(|&(at, _)| mounted_type(mount, at).is_some())
-        .filter_map(|(at, _)| block_body(mount, at))
-        .collect()
+    own_mounts(mount).filter_map(|(open, _)| block_body(mount, open)).collect()
 }
 
 /// The slot fades nothing itself, an `opacity` there holding a texture per card at rest, so each

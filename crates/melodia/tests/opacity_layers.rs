@@ -12,8 +12,8 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use melodia_testkit::{
-    MIN_SLINT_SOURCES, UI_DIR, block_body, head_words, mounted_type, open_braces, outside_strings,
-    stripped_sources,
+    MIN_SLINT_SOURCES, UI_DIR, at_own_depth, block_body, head_words, mounted_type, open_braces,
+    outside_strings, own_mounts, stripped_sources,
 };
 
 /// Items whose children are only those of the block mounting them. A type the tree doesn't declare
@@ -125,25 +125,10 @@ impl<'a> Declared<'a> {
 
 /// Whether `body` mounts an item at its own depth, the `@children` slot included.
 fn has_children(body: &str) -> bool {
-    let mut depth = 0usize;
-    for (at, byte) in outside_strings(body.as_bytes()) {
-        match byte {
-            b'{' => {
-                let mounts_an_item = matches!(
-                    head(body, at),
-                    Some(Head::Mount(kind)) if !NOT_ITEMS.contains(&kind)
-                );
-                if depth == 0 && mounts_an_item {
-                    return true;
-                }
-                depth += 1;
-            }
-            b'}' => depth = depth.saturating_sub(1),
-            b'@' if depth == 0 && body[at..].starts_with("@children") => return true,
-            _ => {}
-        }
-    }
-    false
+    own_mounts(body).any(|(_, kind)| !NOT_ITEMS.contains(&kind))
+        || outside_strings(body.as_bytes()).any(|(at, byte)| {
+            byte == b'@' && body[at..].starts_with("@children") && at_own_depth(body, at)
+        })
 }
 
 /// The offset of every `opacity` an element binds itself, by `:` or `<=>`.

@@ -1,7 +1,9 @@
 //! Readers for the shape of a `.slint` file: where a component is mounted, what a global
 //! declares, what a binding holds.
 
-use crate::lex::{block_body, normalize_ws, open_braces, strip_line_comments};
+use crate::lex::{
+    at_own_depth, block_body, normalize_ws, open_braces, outside_strings, strip_line_comments,
+};
 
 /// The body of every `component { … }` block in `src`, braces excluded.
 ///
@@ -56,6 +58,15 @@ pub fn mounted_type(src: &str, open: usize) -> Option<&str> {
         return None;
     }
     words.last().copied().filter(|word| word.starts_with(|c: char| c.is_ascii_uppercase()))
+}
+
+/// The `{` and [`mounted_type`] of every element a block's `body` mounts itself, its children's
+/// own mounts left out. Pair it with [`strip_line_comments`] for [`block_body`]'s reason.
+pub fn own_mounts(body: &str) -> impl Iterator<Item = (usize, &str)> {
+    outside_strings(body.as_bytes())
+        .filter(|&(_, byte)| byte == b'{')
+        .filter_map(|(open, _)| Some((open, mounted_type(body, open)?)))
+        .filter(|&(open, _)| at_own_depth(body, open))
 }
 
 /// Every mount of `component` in `tree`, by path, with every route from it up to a component
