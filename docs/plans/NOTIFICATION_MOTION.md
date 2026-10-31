@@ -96,7 +96,9 @@ Working doc. Delete when every phase has shipped and passed Kenan's hand test.
 10. **The count cue is a 4 px rise and settle of the body, not a scale or a flash.**
     `transform-scale` draws glyphs as paths (`mini-captions.slint:120`), and a brush flash would
     need the recoloring gate plus a second rounded layer over the fill. A 4 px rise stays inside
-    the 8 px gap, so the clip never cuts it.
+    the 8 px gap, so the clip never cuts it. It lifts over `lift-dur` on Material 3's emphasized
+    decelerate curve, so it lands with the new count, then settles over `Theme.dur-fast` on the
+    standard curve.
 
 ## Prior art
 
@@ -244,7 +246,9 @@ test-local `Removal` alias becomes `Retirement`. Undo's `offer` doc says "retire
 Status: committed as `feb01476` (2026-10-31). fmt, clippy, the full suite and the build were
 green. In the generated card, `user_init` reads `opacity`, `slot-h` and `rise`, the
 icon is a `Conditional` folded into the content layout, `settle`'s `running` binds to `lifted`,
-and the vertical layout info is still `min 0` with `slot-h` as preferred and max.
+and the vertical layout info is still `min 0` with `slot-h` as preferred and max. Kenan's hand
+test found the lift late behind its count, so it was retuned to rise over `lift-dur` and settle
+from there.
 
 1. **`neutral` variant:**
    - Append `NotificationVariant.neutral` in `models.slint`.
@@ -254,9 +258,10 @@ and the vertical layout info is still `min 0` with `slot-h` as preferred and max
    - No Rust code matches on the variant, so nothing else moves.
 2. **Count cue:**
    - A private `lifted` bool drives `rise: root.lifted ? root.bump-rise : 0px` (4px), with the
-     body at `y: root.gap - root.rise`, and
-     `animate rise { duration: Theme.dur-fast; easing: cubic-bezier(0.2, 0, 0, 1); }`.
-   - The existing `changed watched-restarts` sets `lifted`. A `settle` `Timer` on `Theme.dur-fast`
+     body at `y: root.gap - root.rise`. `animate rise` branches on `lifted`: `lift-dur` (100ms)
+     with `cubic-bezier(0.05, 0.7, 0.1, 1)` on the way up, `Theme.dur-fast` with
+     `cubic-bezier(0.2, 0, 0, 1)` on the way down.
+   - The existing `changed watched-restarts` sets `lifted`. A `settle` `Timer` on `lift-dur`
      runs while `lifted` holds and clears it, so its `running` stays a binding.
    - `init` also reads `root.rise`, and its comment says each layer eases from its mount value.
    - The undo merge is the only caller of `restart` (`undo/mod.rs:101`), so only the undo notice
@@ -364,7 +369,7 @@ now also clears the flag.
 - **The Slint pitfalls this plan steers around:**
   - No new `animate` reads a brush, so none owes `enabled: !Theme.recoloring`.
   - The card's only `changed` handler stays on `restarts`, never on a layout property.
-  - No `Timer` interval reaches a layout property (1 ms and `Theme.dur-fast`).
+  - No `Timer` interval reaches a layout property (1 ms and `lift-dur`).
   - Every bound animated property is read in `init`. `drag-x` has no binding.
 - **Unaffected:** no migration, no settings field, no `@tr` change, and no RSS check, since the
   change adds one bool per row.
@@ -372,5 +377,5 @@ now also clears the flag.
 
 ## Open questions
 
-- The exit curve, the cue height and the fling thresholds are first values for the hand test, not
-  settled numbers.
+- The exit curve, the cue's height and lift duration, and the fling thresholds are first values
+  for the hand test, not settled numbers.

@@ -55,11 +55,18 @@ export component NotificationCard inherits Rectangle {
     private property <bool> lifted: false;
     // Less than `gap`, so the lifted body stays inside the card, clipped or not.
     private property <length> bump-rise: 4px;
+    private property <duration> lift-dur: 100ms;
     private property <length> rise: root.lifted ? root.bump-rise : 0px;
-    animate rise { duration: Theme.dur-fast; easing: cubic-bezier(0.2, 0, 0, 1); }
+    // Up short and decelerating, so the lift lands with the count it marks rather than after it.
+    animate rise {
+        duration: root.lifted ? root.lift-dur : Theme.dur-fast;
+        easing: root.lifted
+            ? cubic-bezier(0.05, 0.7, 0.1, 1)
+            : cubic-bezier(0.2, 0, 0, 1);
+    }
 
     settle := Timer {
-        interval: Theme.dur-fast;
+        interval: root.lift-dur;
         running: root.lifted;
         triggered => {
             root.lifted = false;
