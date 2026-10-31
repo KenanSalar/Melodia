@@ -24,7 +24,7 @@ export component NotificationCard inherits Rectangle {
     enter := Timer {
         interval: 1ms;
         running: true;
-        triggered() => {
+        triggered => {
             self.running = false;
             root.shown = true;
         }
@@ -187,6 +187,8 @@ export component NotificationCard inherits Rectangle {
                     self.start-x = root.drag-x;
                     self.press-tick = animation-tick();
                     root.dragging = true;
+                    // Stops an ease-back mid-run: with `dragging` set, the write lands at once.
+                    root.drag-x = self.start-x;
                 }
                 if ((ev.kind == PointerEventKind.up || ev.kind == PointerEventKind.cancel)
                     && root.dragging) {

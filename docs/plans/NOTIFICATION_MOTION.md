@@ -296,8 +296,9 @@ now also clears the flag.
    - Measure in window coordinates, because the sentinel moves with the body.
    - Take the left button only, as `pressed` does. A Cancel carries no button and a Move carries
      `Other`.
-   - A Down on a card at rest (up, with its slot fully open) records the press and sets
-     `dragging`.
+   - A Down on a card at rest (up, with its slot fully open) records the press, sets
+     `dragging`, then writes `drag-x` back to `start-x`, so an ease-back still running stops
+     where it was pressed.
    - `moved` sets `drag-x` to `max(0px, start-x + travel)`.
    - On an Up past either threshold, while the card is still live, `flung` is set, `drag-x` goes
      to the card's width and `Notifications.dismiss` runs. Otherwise, and on a Cancel, `drag-x`
@@ -347,7 +348,9 @@ now also clears the flag.
      - `is_live` refuses a retired row.
    - Each pin is shown to fail by breaking its code deliberately.
 2. **Docs:** sweep `README.md` and `.claude/rules/` for wording this makes stale.
-   `ui-patterns.md`'s Notifications line is still true. Then delete this plan once Kenan's hand
+   `ui-patterns.md`'s Notifications line is still true, and gains the one coupling across trees:
+   a card's exit animations finish within `Theme.dur-med`, which `retire_at` waits before
+   dropping the row. Then delete this plan once Kenan's hand
    test passes, after the root `CLAUDE.md` check that what it built is argued at its anchors.
 
 ## Cross-cutting
