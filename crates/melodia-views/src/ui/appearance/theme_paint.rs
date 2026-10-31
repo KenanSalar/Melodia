@@ -19,6 +19,7 @@ use melodia_core::themes::{Palette, on_accent_hex};
 use melodia_ui::{AppWindow, Theme as ThemeGlobal};
 
 use super::rgb::{brush, color, color_to_rgb};
+use super::token_duration;
 
 /// Every colour the palette half of `Theme` holds.
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -93,9 +94,7 @@ pub(super) fn paint(ui: &AppWindow, target: Painted, source: Source) {
     if already_fading {
         return;
     }
-    let length = Duration::from_millis(
-        u64::try_from(ui.global::<ThemeGlobal>().get_dur_med()).unwrap_or_default(),
-    );
+    let length = token_duration(ui.global::<ThemeGlobal>().get_dur_med());
     let fade_from = SHOWN.with_borrow(|shown| {
         shown.as_ref().filter(|s| s.eases_into(&target, source)).map(|s| s.current)
     });

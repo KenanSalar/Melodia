@@ -1,6 +1,7 @@
 # Plan: Notification motion (cards that arrive, leave and make room)
 
-Status: **Not started** · Owner: Kenan · Created: 2026-10-31
+Status: **in progress** (Phase 0 done, Phase 1 awaiting Kenan's hand test) · Owner: Kenan ·
+Created: 2026-10-31
 
 > **Validated 2026-10-31** against `0b6d11b5` (`main`): direct reads of `notification-stack.slint`,
 > `globals/notifications.slint`, `models.slint`, `notifications.rs` and its tests, `undo/mod.rs`,
@@ -145,12 +146,21 @@ breaks is fixed in that phase. New tests and doc files wait for Phase 5's go.
 
 ### Phase 0: one `Theme` duration conversion (no behaviour change)
 
+Status: done (2026-10-31). `token_duration` is `pub(crate)`, all its callers being in the crate.
+fmt, clippy, the full suite and the build are green.
+
 1. Add `pub fn token_duration(ms: i64) -> Duration` to `ui/appearance/mod.rs`, which clamps a
    negative value to zero, as the three copies do.
 2. Replace the copies at `onboarding/callbacks/mod.rs:63`, `now_playing/mod.rs:366` and
    `appearance/theme_paint.rs:96` with it.
 
 ### Phase 1: cards rise in and the stack makes room
+
+Status: implemented (2026-10-31), awaiting the hand test below. fmt, clippy, the full suite and the
+build are green. The generated card's vertical layout info is `min 0`, with `slot-h` as both its
+preferred and max values and no body term folded in, and its clip has no radius. The stack drops
+its `spacing` line, since 0 is `VerticalLayout`'s default. The note on the top-anchored body sits
+above `body`, its anchor, rather than in the header.
 
 1. **Pure move:** `NotificationCard` moves verbatim into `notification-card.slint`, exported, and
    the stack imports it. No edits in this step.

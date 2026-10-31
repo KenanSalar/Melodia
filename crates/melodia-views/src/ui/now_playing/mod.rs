@@ -10,10 +10,10 @@ mod up_next;
 use std::cell::{Cell, RefCell};
 use std::rc::Rc;
 use std::sync::Arc;
-use std::time::Duration;
 
 use slint::{ComponentHandle, Image, ModelRc, TimerMode, VecModel};
 
+use crate::ui::appearance::token_duration;
 use crate::ui::now_playing_artwork::NowPlayingArtwork;
 use melodia_app::state::AppState;
 use melodia_artwork::media::image::cover_thumbs::CoverThumbs;
@@ -363,25 +363,21 @@ fn install_artwork_releaser(
         let (Some(ui), Some(np_state)) = (weak_ui.upgrade(), weak_np.upgrade()) else {
             return;
         };
-        let fade_ms = u64::try_from(ui.global::<Theme>().get_dur_med()).unwrap_or(0);
+        let fade = token_duration(ui.global::<Theme>().get_dur_med());
         let weak_ui = weak_ui.clone();
         let weak_np = weak_np.clone();
         let state = state.clone();
         let np_artwork = np_artwork.clone();
-        np_state.slot_release.start(
-            TimerMode::SingleShot,
-            Duration::from_millis(fade_ms),
-            move || {
-                let (Some(ui), Some(np_state)) = (weak_ui.upgrade(), weak_np.upgrade()) else {
-                    return;
-                };
-                if np_state.renders_artwork() {
-                    return;
-                }
-                clear_unshown_slots(&ui.global::<Player>());
-                release_artwork_off_thread(&state, &np_artwork);
-            },
-        );
+        np_state.slot_release.start(TimerMode::SingleShot, fade, move || {
+            let (Some(ui), Some(np_state)) = (weak_ui.upgrade(), weak_np.upgrade()) else {
+                return;
+            };
+            if np_state.renders_artwork() {
+                return;
+            }
+            clear_unshown_slots(&ui.global::<Player>());
+            release_artwork_off_thread(&state, &np_artwork);
+        });
     }));
 }
 

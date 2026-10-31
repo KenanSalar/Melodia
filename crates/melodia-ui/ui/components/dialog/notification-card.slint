@@ -1,0 +1,204 @@
+import { Theme } from "../../theme.slint";
+import { Notifications } from "../../globals/notifications.slint";
+import { NotificationRow, NotificationVariant } from "../../models.slint";
+import { MaterialIcon } from "../material-icon.slint";
+import { IconButton } from "../icon-button.slint";
+import { SectionButton } from "../settings/section-button.slint";
+import { TuckedFill } from "../tucked-fill.slint";
+
+// One card in the notification stack. No exit animation: a dismiss drops the row from the model.
+// The pointer is caught by the card's body alone, never the stack, so the gaps between cards don't
+// block the layers underneath.
+export component NotificationCard inherits Rectangle {
+    // Not `row`, which Slint reserves as the `for` variable.
+    in property <NotificationRow> data;
+    private property <bool> shown: false;
+
+    // Read at mount so each eases from its `shown: false` value, as in `ViewTransition`.
+    init => {
+        root.opacity;
+        root.slot-h;
+    }
+
+    enter := Timer {
+        interval: 1ms;
+        running: true;
+        triggered() => {
+            self.running = false;
+            root.shown = true;
+        }
+    }
+
+    // Here rather than in Rust so it can stand still while the card is read or the window is in
+    // the background; a resume runs the whole interval again.
+    clock := Timer {
+        interval: root.data.timeout-ms * 1ms;
+        running: root.data.timeout-ms > 0 && !sentinel.has-hover && Theme.window-focused;
+        triggered => {
+            Notifications.dismiss(root.data.id);
+        }
+    }
+
+    // Only a running clock: `restart()` re-arms a stopped timer, and `running` is re-read only
+    // when it changes, so a bump under the pointer would dismiss the card being read.
+    private property <int> watched-restarts: root.data.restarts;
+    changed watched-restarts => {
+        if (clock.running) {
+            clock.restart();
+        }
+    }
+
+    private property <{accent: brush, icon: string}> look:
+        root.data.variant == NotificationVariant.success ? { accent: Theme.green, icon: "check_circle" }
+        : root.data.variant == NotificationVariant.warning ? { accent: Theme.yellow, icon: "warning" }
+        : root.data.variant == NotificationVariant.error ? { accent: Theme.danger, icon: "error" }
+        : { accent: Theme.accent, icon: "info" };
+
+    // In the card rather than the column's spacing, so it opens and closes with the slot.
+    private property <length> gap: 8px;
+    private property <length> content-h: layout.preferred-height;
+    private property <length> full-h: root.gap + root.content-h;
+    private property <length> slot-h: root.shown ? root.full-h : 0px;
+    animate slot-h { duration: Theme.dur-med; easing: cubic-bezier(0.2, 0, 0, 1); }
+
+    min-height: 0px;
+    preferred-height: root.slot-h;
+    max-height: root.slot-h;
+    // Only while the slot is short, so at rest nothing the body paints past its edge is cut.
+    clip: root.slot-h < root.full-h;
+    opacity: root.shown ? 1.0 : 0.0;
+    animate opacity { duration: Theme.dur-med; easing: cubic-bezier(0.2, 0, 0, 1); }
+
+    private property <length> radius: Theme.radius-md;
+    private property <length> border-w: 1px;
+    // From the card's outer edge.
+    private property <length> bar-end: root.border-w + 4px;
+
+    // Hung from the card's top, so as the slot opens in the bottom-anchored column the body slides
+    // up out of the stack's edge rather than being uncovered in place.
+    body := Rectangle {
+        x: 0;
+        y: root.gap;
+        width: 100%;
+        height: root.content-h;
+
+        // Three elements so the bar sits between fill and border. A fill split off its border
+        // isn't tucked under the stroke, so `TuckedFill` insets it.
+        TuckedFill {
+            x: 0;
+            y: 0;
+            width: 100%;
+            height: 100%;
+            radius: root.radius;
+            stroke-width: root.border-w;
+            fill: Theme.surface0;
+        }
+
+        // Cut along the border's middle so its curve lies under solid border. A rectangle this
+        // narrow can't carry the card's radius: FemtoVG shrinks it to fit, off the card's curve.
+        Path {
+            property <float> r: root.radius / 1px;
+            property <float> inset: root.border-w / 2px;
+            property <float> arc: self.r - self.inset;
+            property <float> end: root.bar-end / 1px;
+            property <float> h: body.height / 1px;
+            // How far above the corner's centre the arc crosses `bar-end`.
+            property <float> reach: Math.sqrt(self.arc * self.arc - (self.r - self.end) * (self.r - self.end));
+
+            x: 0;
+            y: 0;
+            width: root.bar-end;
+            height: body.height;
+            viewbox-width: self.end;
+            viewbox-height: self.h;
+            fill: root.look.accent;
+            // Counter-clockwise and closed up the right edge, or its antialiasing comes out
+            // stepped; numbers unlocalized, a locale's decimal comma breaking the path.
+            commands: "M " + self.end.to-string-unlocalized()
+                + " " + (self.r - self.reach).to-string-unlocalized()
+                + " A " + self.arc.to-string-unlocalized() + " " + self.arc.to-string-unlocalized()
+                + " 0 0 0 " + self.inset.to-string-unlocalized() + " " + self.r.to-string-unlocalized()
+                + " V " + (self.h - self.r).to-string-unlocalized()
+                + " A " + self.arc.to-string-unlocalized() + " " + self.arc.to-string-unlocalized()
+                + " 0 0 0 " + self.end.to-string-unlocalized()
+                + " " + (self.h - self.r + self.reach).to-string-unlocalized()
+                + " Z";
+        }
+
+        // Read only for `has-hover`. An ancestor of the buttons, so the hover holds over Undo and ✕
+        // while their own areas take the press.
+        sentinel := TouchArea {
+            width: 100%;
+            height: 100%;
+            // A wheel tick nothing took would drop the hover until the pointer moved.
+            scroll-event(ev) => { return accept; }
+
+            layout := HorizontalLayout {
+                padding-left: root.bar-end + Theme.pad-md;
+                padding-right: Theme.pad-sm;
+                padding-top: Theme.pad-sm;
+                padding-bottom: Theme.pad-sm;
+                spacing: Theme.pad-sm;
+                // The glyph box outgrows the title's line box: top-aligned, it sits off centre.
+                cross-axis-alignment: center;
+
+                MaterialIcon {
+                    name: root.look.icon;
+                    icon-size: 20px;
+                    icon-color: root.look.accent;
+                }
+
+                VerticalLayout {
+                    horizontal-stretch: 1;
+                    spacing: 2px;
+                    Text {
+                        text: root.data.title;
+                        color: Theme.text;
+                        font-size: Theme.font-size-md;
+                        font-weight: 600;
+                        wrap: word-wrap;
+                        // A screen reader user has to hear a notice to know it can be undone.
+                        accessible-live-region: polite;
+                    }
+                    if root.data.message != "": Text {
+                        text: root.data.message;
+                        color: Theme.subtext0;
+                        font-size: Theme.font-size-sm;
+                        wrap: word-wrap;
+                    }
+                }
+
+                if root.data.action-label != "": SectionButton {
+                    label: root.data.action-label;
+                    icon: "";
+                    primary: true;
+                    clicked => {
+                        Notifications.action(root.data.id, root.data.kind);
+                    }
+                }
+
+                IconButton {
+                    icon: "close";
+                    icon-size: 16px;
+                    diameter: 24px;
+                    // A step up from the card's fill, so the hover reads.
+                    hover-bg: Theme.surface1;
+                    clicked => {
+                        Notifications.dismiss(root.data.id);
+                    }
+                }
+            }
+        }
+
+        // Last, so it strokes over the bar. `surface2`, `Theme.border` being `surface0` itself.
+        Rectangle {
+            x: 0;
+            y: 0;
+            width: 100%;
+            height: 100%;
+            border-radius: root.radius;
+            border-width: root.border-w;
+            border-color: Theme.surface2;
+        }
+    }
+}

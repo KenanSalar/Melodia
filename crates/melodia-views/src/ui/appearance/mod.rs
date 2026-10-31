@@ -15,6 +15,7 @@ mod window_settings;
 
 use std::rc::Rc;
 use std::sync::Arc;
+use std::time::Duration;
 
 use slint::{ComponentHandle, ModelRc, SharedString, VecModel};
 use tokio::sync::watch;
@@ -47,6 +48,11 @@ pub struct AppearanceHandles {
 /// The synchronous shadow of `settings.accent_color`, written by every appearance callback before
 /// it spawns the write and read by its siblings in place of the file.
 pub(super) type PersistedAccent = Arc<parking_lot::Mutex<String>>;
+
+/// A `Theme` duration token as a `Duration`, a negative one read as zero.
+pub(crate) fn token_duration(ms: i64) -> Duration {
+    Duration::from_millis(u64::try_from(ms).unwrap_or(0))
+}
 
 /// Read the OS appearance state once at startup, ahead of the first frame, so a System variant
 /// never paints the wrong brightness first. Linux: XDG portal + `kdeglobals`. Windows: the default
