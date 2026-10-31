@@ -1,9 +1,9 @@
 # Plan: Notification motion (cards that arrive, leave and make room)
 
-Status: **in progress** (Phase 0 done, Phase 1 committed as `1092cfed`, Phase 2 as `2c9261e3`
-and `e5536584`, Phase 3 as `feb01476` and `fbaaef9f`, Phase 4 as `6e3789dc` and `6c68fdeb`,
-with `6611d4b6` fading the card through its brushes, awaiting Kenan's hand test) · Owner: Kenan ·
-Created: 2026-10-31
+Status: **in progress** (Phases 0 to 4 done and hand-tested: Phase 1 as `1092cfed`, Phase 2 as
+`2c9261e3` and `e5536584`, Phase 3 as `feb01476` and `fbaaef9f`, Phase 4 as `6e3789dc` and
+`6c68fdeb`, with `6611d4b6` fading the card through its brushes. Phase 5's docs are done and its
+pins await Kenan's go) · Owner: Kenan · Created: 2026-10-31
 
 > **Validated 2026-10-31** against `0b6d11b5` (`main`): direct reads of `notification-stack.slint`,
 > `globals/notifications.slint`, `models.slint`, `notifications.rs` and its tests, `undo/mod.rs`,
@@ -161,11 +161,11 @@ fmt, clippy, the full suite and the build are green.
 
 ### Phase 1: cards rise in and the stack makes room
 
-Status: committed as `1092cfed` (2026-10-31). fmt, clippy, the full suite and the build were
-green. The generated card's vertical layout info is `min 0`, with `slot-h` as both its
-preferred and max values and no body term folded in, and its clip has no radius. The stack drops
-its `spacing` line, since 0 is `VerticalLayout`'s default. The note on the top-anchored body sits
-above `body`, its anchor, rather than in the header.
+Status: done (2026-10-31), committed as `1092cfed`. fmt, clippy, the full suite and the build were
+green, and Kenan's hand test passed. The generated card's vertical layout info is `min 0`, with
+`slot-h` as both its preferred and max values and no body term folded in, and its clip has no
+radius. The stack drops its `spacing` line, since 0 is `VerticalLayout`'s default. The note on the
+top-anchored body sits above `body`, its anchor, rather than in the header.
 
 1. **Pure move:** `NotificationCard` moves verbatim into `notification-card.slint`, exported, and
    the stack imports it. No edits in this step.
@@ -196,9 +196,9 @@ above `body`, its anchor, rather than in the header.
 
 ### Phase 2: every way out leaves the same way
 
-Status: committed as `2c9261e3`, with `e5536584` collecting `dismiss_by_kind`'s matches through
-`live_rows()` (2026-10-31). fmt, clippy, the full suite and the build were green. In the generated
-card, opacity follows `up`, and its animation's duration and
+Status: done (2026-10-31), committed as `2c9261e3`, with `e5536584` collecting `dismiss_by_kind`'s
+matches through `live_rows()`. fmt, clippy, the full suite and the build were green, and Kenan's
+hand test passed. In the generated card, opacity follows `up`, and its animation's duration and
 easing both branch on `leaving`. `live_rows()` is the one filter for live rows, which `find_live`,
 `is_live`, the cap and `dismiss_by_kind` all read. Beyond the renames, two test changes:
 `max_visible_evicts_oldest_on_overflow` collapses to one equality on the live ids, and the
@@ -246,12 +246,12 @@ test-local `Removal` alias becomes `Retirement`. Undo's `offer` doc says "retire
 
 ### Phase 3: the undo notice, with no glyph and a cue when its count moves
 
-Status: committed as `feb01476` (2026-10-31). fmt, clippy, the full suite and the build were
+Status: done (2026-10-31), committed as `feb01476`. fmt, clippy, the full suite and the build were
 green. In the generated card, `user_init` reads `opacity`, `slot-h` and `rise`, the
 icon is a `Conditional` folded into the content layout, `settle`'s `running` binds to `lifted`,
 and the vertical layout info is still `min 0` with `slot-h` as preferred and max. Kenan's hand
 test found the lift late behind its count, so `fbaaef9f` retuned it to rise over `lift-dur` and
-settle from there.
+settle from there, and the retuned lift passed.
 
 1. **`neutral` variant:**
    - Append `NotificationVariant.neutral` in `models.slint`.
@@ -277,8 +277,9 @@ settle from there.
 
 ### Phase 4: drag a card away
 
-Status: committed as `6e3789dc`, with `6c68fdeb` holding a press that lands mid-ease (2026-10-31),
-awaiting the hand test below. fmt, clippy, the full suite and the build are green. In the
+Status: done (2026-10-31), committed as `6e3789dc`, with `6c68fdeb` holding a press that lands
+mid-ease and `6611d4b6` fading the card through its brushes. fmt, clippy, the full suite and the
+build are green, and Kenan's hand test passed. In the
 generated card, every `drag-x` write is a `set_animated_value` whose `enabled` reads `!dragging`,
 and the vertical layout info is still `min 0` with `slot-h` as preferred and max. One existing pin
 moved:
@@ -357,11 +358,15 @@ now also clears the flag.
      - `remove_row` removes only the named row after positions have moved.
      - `is_live` refuses a retired row.
    - Each pin is shown to fail by breaking its code deliberately.
-2. **Docs:** sweep `README.md` and `.claude/rules/` for wording this makes stale.
-   `ui-patterns.md`'s Notifications line is still true, and gains the one coupling across trees:
-   a card's exit animations finish within `Theme.dur-med`, which `retire_at` waits before
-   dropping the row. Then delete this plan once Kenan's hand
-   test passes, after the root `CLAUDE.md` check that what it built is argued at its anchors.
+2. **Docs:** done (2026-10-31). `README.md` and `.claude/rules/` hold nothing this made stale,
+   `slint-pitfalls.md`'s pointer and `opacity` entries and the root `CLAUDE.md`'s `opacity` line
+   having landed with their commits. The coupling across trees stays at its two anchors, as the
+   onboarding overlay's does, rather than gaining a third copy in `ui-patterns.md`: the card's
+   header says Rust drops a leaving row `Theme.dur-med` later, and `NotificationsUi::exit` reads
+   that token. The branch's comment audit trimmed the card's header, its `fade` note (the
+   `opacity` walk holds that tree-wide) and its clip note.
+3. **Last:** once the pins land, delete this plan, after the root `CLAUDE.md` check that what it
+   built is argued at its anchors.
 
 ## Cross-cutting
 
@@ -380,5 +385,5 @@ now also clears the flag.
 
 ## Open questions
 
-- The exit curve, the cue's height and lift duration, and the fling thresholds are first values
-  for the hand test, not settled numbers.
+None. The hand test settled the exit curve, the cue's height and lift duration, and the fling
+thresholds at the values above.

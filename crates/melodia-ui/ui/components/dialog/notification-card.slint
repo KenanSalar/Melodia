@@ -6,9 +6,9 @@ import { IconButton } from "../icon-button.slint";
 import { SectionButton } from "../settings/section-button.slint";
 import { TuckedFill } from "../tucked-fill.slint";
 
-// One card in the notification stack, which a drag to the right also closes. A dismiss only marks
-// the row leaving; Rust drops it later. The pointer is caught by the card's body alone, never the
-// stack, so the gaps between cards don't block the layers underneath.
+// One card in the notification stack. A dismiss only marks the row leaving, and Rust drops it
+// `Theme.dur-med` later, so no exit here may run longer. The pointer is caught by the card's body
+// alone, never the stack, so the gaps between cards don't block the layers underneath.
 export component NotificationCard inherits Rectangle {
     // Not `row`, which Slint reserves as the `for` variable.
     in property <NotificationRow> data;
@@ -103,10 +103,9 @@ export component NotificationCard inherits Rectangle {
     min-height: 0px;
     preferred-height: root.slot-h;
     max-height: root.slot-h;
-    // Only while the slot is short, so at rest nothing the body paints past its edge is cut. A
-    // flung card leaves its slot behind, so nothing cuts it.
+    // Only while the slot is short, so at rest nothing the body paints past its edge is cut. Off
+    // for a flung body, whose top the closing slot would cut.
     clip: root.slot-h < root.full-h && !root.flung;
-    // In the brushes, as an `opacity` layer sized to the moving slot is re-allocated every frame.
     private property <float> fade: root.up ? 1.0 : 0.0;
     // Out faster than it came in, accelerating away.
     animate fade {
