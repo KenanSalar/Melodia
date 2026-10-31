@@ -10,7 +10,6 @@ use super::state::{
     AwaitedStart, PlayerAction, PlayerState, PlayerStateHandle, lock_state, stop_end_of_queue,
     with_state_emit,
 };
-use melodia_playback::player::playback::replaygain::TrackReplayGain;
 
 /// Runs `actions` after the state lock drops. A start that fails auto-skips, so a stale
 /// double-click inside the watcher's debounce doesn't dead-end playback; the track stays queued
@@ -70,9 +69,6 @@ fn run<B: PlayerBackend>(
             }
             PlayerAction::SetVolume(v) => engine.set_volume(v),
             PlayerAction::SetSpeed(s) => engine.set_speed(s),
-            PlayerAction::ClearGaplessPreload => {
-                engine.preload_gapless(None, TrackReplayGain::default());
-            }
             PlayerAction::PlayStream { generation, volume } => {
                 // Not `start_or_skip`: no file to pre-flight, and a station has no next.
                 if let Err(e) = engine.play_stream(generation, volume) {

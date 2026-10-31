@@ -11,9 +11,7 @@ use melodia_core::error::{AppResult, describe};
 use melodia_engine::player::engine::actions::emit_and_execute;
 use melodia_engine::player::engine::backend::PlaybackEngine;
 use melodia_engine::player::engine::event_sink::PlayerSinks;
-use melodia_engine::player::engine::state::{
-    PlayerAction, PlayerStateHandle, lock_state, stop_end_of_queue,
-};
+use melodia_engine::player::engine::state::{PlayerStateHandle, lock_state, stop_end_of_queue};
 use melodia_engine::player::engine::types::PlaybackSource;
 use melodia_store::database::{DbPool, queries};
 
@@ -85,10 +83,9 @@ async fn reconcile_once(
         if let Some(id) = s.queue.current_id() {
             return s.start_queued(id, false, 0);
         }
-        let mut acts = stop_end_of_queue(s);
+        let acts = stop_end_of_queue(s);
         // So the bar stops showing a track the queue no longer holds.
         s.source = None;
-        acts.push(PlayerAction::ClearGaplessPreload);
         acts
     });
     Ok(())

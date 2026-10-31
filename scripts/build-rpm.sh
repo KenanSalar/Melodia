@@ -73,12 +73,12 @@ cp "$REPO_ROOT/LICENSE" "$PKG_DIR/LICENSE"
 # recommends it for a bundled font even though the name-table metadata
 # would technically do. `%license` below globs this directory, so a new
 # licence file needs no edit here, and flattens the paths, so its
-# contents land beside LICENSE in
-# %{_licensedir}/melodia/ rather than in a `licenses/` subdirectory the
-# way the DEB and AppImage lay them out. That still reads as
-# licenses/ATTRIBUTION.txt describes it — "the full license text for
-# each sits beside this file" — which is the only placement claim it
-# makes, and the only one worth keeping true across five formats.
+# contents land beside LICENSE in %{_licensedir}/melodia/ rather than in
+# a `licenses/` subdirectory the way the DEB and AppImage lay them out.
+# That still reads as licenses/ATTRIBUTION.txt describes it — "the full
+# license text for each sits beside this file" — which is the only
+# placement claim it makes, and the only one worth keeping true across
+# five formats.
 cp -r "$REPO_ROOT/licenses" "$PKG_DIR/licenses"
 
 # Polkit helper + policy for branded auth prompts on in-app updater.

@@ -159,25 +159,6 @@ fn test_play_track_some_zero_filtered_to_none() {
 }
 
 #[test]
-fn test_play_track_with_resume_does_not_eager_preload() {
-    let mut state = PlayerState { gapless_enabled: true, ..Default::default() };
-
-    let track1 = make_summary(1, "Song 1", 180_000);
-    let track2 = make_summary(2, "Song 2", 180_000);
-    queue_up(&mut state, vec![track1.clone(), track2]);
-    state.queue.current_index = Some(0);
-
-    let actions = play_track_inner(&mut state, track1, Some(60_000));
-
-    assert_eq!(state.position_ms, 60_000);
-    // PlayMedia is issued; gapless preload is now staged late by the playback
-    // monitor (see PRELOAD_LEAD_MS in `handlers.rs`), so it must NOT come from
-    // play_track_inner — otherwise mid-track repeat-mode changes get clobbered.
-    assert!(actions.iter().any(|a| matches!(a, PlayerAction::PlayMedia { .. })));
-    assert!(!actions.iter().any(|a| matches!(a, PlayerAction::ClearGaplessPreload)));
-}
-
-#[test]
 fn test_stop_end_of_queue_helper() {
     let mut state = PlayerState {
         status: PlaybackStatus::Playing,
@@ -1052,7 +1033,6 @@ fn every_player_action_names_what_it_did() {
         ),
         (PlayerAction::SetVolume(0.5), &["volume", "0.50"]),
         (PlayerAction::SetSpeed(1.25), &["speed", "1.25"]),
-        (PlayerAction::ClearGaplessPreload, &["clear"]),
         (PlayerAction::UpdatePlayCount(7), &["play count", "7"]),
         (PlayerAction::UpdateSkipCount(8), &["skip count", "8"]),
     ];

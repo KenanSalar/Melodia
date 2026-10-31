@@ -451,7 +451,7 @@ impl Monitor {
             });
         } else if let Some(track) = late_preload {
             // Its own tags' gain, baked into its own source.
-            self.engine.preload_gapless(Some(&track.file_path), track.as_ref().into());
+            self.engine.preload_gapless(&track.file_path, track.as_ref().into());
             self.staged = Some(track);
         }
         Poll::Counted

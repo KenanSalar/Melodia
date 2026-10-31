@@ -564,7 +564,7 @@ async fn stopping_with_a_gapless_track_staged_clears_both_decks_at_once() -> std
     start(&engine, &fx.track_a);
     let _ = pull(&mut mix, WARMUP_FRAMES);
 
-    engine.preload_gapless(Some(&fx.track_b), TrackReplayGain::default());
+    engine.preload_gapless(&fx.track_b, TrackReplayGain::default());
     assert!(engine.is_gapless_preloaded(), "the next track must really be staged");
 
     let stopper = Arc::clone(&engine);
@@ -597,7 +597,7 @@ async fn pausing_with_a_gapless_track_staged_is_immediate() -> std::io::Result<(
     start(&engine, &fx.track_a);
     let _ = pull(&mut mix, WARMUP_FRAMES);
 
-    engine.preload_gapless(Some(&fx.track_b), TrackReplayGain::default());
+    engine.preload_gapless(&fx.track_b, TrackReplayGain::default());
     assert!(engine.is_gapless_preloaded(), "the next track must really be staged");
 
     engine.pause_with_fade(melodia_playback::player::playback::crossfade::PAUSE_FADE_MS);
@@ -631,7 +631,7 @@ async fn a_deferred_clear_takes_a_late_preload_with_it() -> std::io::Result<()> 
 
     // Nothing staged yet, so the fade is allowed and the clear really defers.
     engine.stop_with_fade(melodia_playback::player::playback::crossfade::PAUSE_FADE_MS);
-    engine.preload_gapless(Some(&fx.track_b), TrackReplayGain::default());
+    engine.preload_gapless(&fx.track_b, TrackReplayGain::default());
     assert!(
         engine.is_gapless_preloaded(),
         "a preload past the epoch bump must still be able to stage — that is the \
@@ -673,7 +673,7 @@ async fn a_preload_that_outlives_the_stop_it_raced_is_refused() -> std::io::Resu
     let stopper = Arc::clone(&engine);
     drive_until(&mut mix, move || stopper.stop());
 
-    engine.preload_gapless(Some(&fx.track_b), TrackReplayGain::default());
+    engine.preload_gapless(&fx.track_b, TrackReplayGain::default());
 
     assert!(
         !engine.is_gapless_preloaded(),
@@ -713,7 +713,7 @@ fn past_a_gapless_handover() -> std::io::Result<Handover> {
     let (engine, mut mix) = player()?;
     start(&engine, &first);
     let _ = pull(&mut mix, WARMUP_FRAMES);
-    engine.preload_gapless(Some(&next.to_string_lossy()), TrackReplayGain::default());
+    engine.preload_gapless(&next.to_string_lossy(), TrackReplayGain::default());
     assert!(engine.is_gapless_preloaded(), "the next track must really be staged");
 
     pull_lenient(&mut mix, frames_for_ms(1_100));
@@ -870,7 +870,7 @@ async fn a_staged_gapless_track_takes_over_through_an_output_reopen() -> std::io
         engine.set_resampler(resampler);
         start(&engine, &first.to_string_lossy());
         let _ = pull(&mut mix, WARMUP_FRAMES);
-        engine.preload_gapless(Some(&next.to_string_lossy()), TrackReplayGain::default());
+        engine.preload_gapless(&next.to_string_lossy(), TrackReplayGain::default());
         assert!(
             engine.is_gapless_preloaded(),
             "{resampler:?}: the next track must really be staged"

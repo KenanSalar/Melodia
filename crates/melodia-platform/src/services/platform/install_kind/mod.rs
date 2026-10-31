@@ -21,7 +21,7 @@ pub use system_install::is_system_install;
 /// answer gains `" (deleted)"` once an RPM/DEB upgrade replaces the binary mid-session, and this is
 /// what `desktop_integration` writes into `Exec=` and [`linux_pkg::detect`] looks up. A marked
 /// path makes `rpm -qf` miss, which compounds into a tarball offered to an RPM install and a wrong
-/// `install=` in crash reports.
+/// `install` line in crash reports.
 pub fn install_target() -> AppResult<PathBuf> {
     if cfg!(target_os = "linux")
         && let Ok(p) = std::env::var("APPIMAGE")

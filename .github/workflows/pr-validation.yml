@@ -122,10 +122,9 @@ jobs:
   # `codegen-units` and fewer test binaries were measured and don't move it.
   # `line-tables-only` is a build-time cap rather than a memory one: `cargo test`
   # links each test target and full debuginfo is most of that tail, while
-  # file:line survives for the backtraces this job
-  # exists to print — hence not the `0` deploy-coverage.yml sets. Both profiles,
-  # since `cargo test` builds dependencies under `dev` and test targets under
-  # `test`.
+  # file:line survives for the backtraces this job exists to print — hence not
+  # the `0` deploy-coverage.yml sets. Both profiles, since `cargo test` builds
+  # dependencies under `dev` and test targets under `test`.
   test:
     name: test
     runs-on: ubuntu-latest
