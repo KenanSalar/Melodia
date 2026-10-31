@@ -200,12 +200,14 @@ there, never in the `.slint`.
 
 ## Pointer and hover
 
-- **A grabbing item that unmounts mid-gesture hands its release to the ancestor as a fresh event**:
-  `handle_mouse_grab` finds the grabber gone and returns the event to `process_mouse_input`, so an
-  ancestor reading `PointerEventKind.up` sees a release for a press it never had. Hover-mounted
-  controls that rewrite their host are the shape. Act on `clicked`, gated on the item's own
+- **A grabbing item that unmounts mid-gesture hands its release to whatever is under the pointer as
+  a fresh event**: `handle_mouse_grab` finds the grabber gone and `process_mouse_input` hit-tests
+  the event again from the root, so any `TouchArea` there reading `PointerEventKind.up` sees a
+  release for a press it never had. Hover-mounted controls that rewrite their host are the shape,
+  and so is a notification card dropped mid-drag. Act on `clicked`, gated on the item's own
   `pressed` (`items/input_items.rs`); it carries no modifiers, so snapshot them on `Down`, and runs
-  before `pointer-event(Up)`.
+  before `pointer-event(Up)`. A drag that commits on release wherever it ends clears its own flag
+  there (`SliderPointer`).
 
 - **`has-hover` isn't continuous, so a translucent fill may not read it raw.** `input_items.rs`
   drops it on a wheel event the `TouchArea` doesn't take, and `send_exit_events` compares stack

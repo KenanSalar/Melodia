@@ -1,8 +1,7 @@
 # Plan: Notification motion (cards that arrive, leave and make room)
 
 Status: **in progress** (Phase 0 done, Phase 1 committed as `1092cfed`, Phase 2 as `2c9261e3`,
-Phase 3 awaiting Kenan's hand test) · Owner: Kenan ·
-Created: 2026-10-31
+Phase 3 as `feb01476`, Phase 4 awaiting Kenan's hand test) · Owner: Kenan · Created: 2026-10-31
 
 > **Validated 2026-10-31** against `0b6d11b5` (`main`): direct reads of `notification-stack.slint`,
 > `globals/notifications.slint`, `models.slint`, `notifications.rs` and its tests, `undo/mod.rs`,
@@ -241,8 +240,8 @@ test-local `Removal` alias becomes `Retirement`. Undo's `offer` doc says "retire
 
 ### Phase 3: the undo notice, with no glyph and a cue when its count moves
 
-Status: implemented (2026-10-31), awaiting the hand test below. fmt, clippy, the full suite and the
-build are green. In the generated card, `user_init` reads `opacity`, `slot-h` and `rise`, the
+Status: committed as `feb01476` (2026-10-31). fmt, clippy, the full suite and the build were
+green. In the generated card, `user_init` reads `opacity`, `slot-h` and `rise`, the
 icon is a `Conditional` folded into the content layout, `settle`'s `running` binds to `lifted`,
 and the vertical layout info is still `min 0` with `slot-h` as preferred and max.
 
@@ -269,45 +268,77 @@ and the vertical layout info is still `min 0` with `slot-h` as preferred and max
 
 ### Phase 4: drag a card away
 
-1. **State:** private `drag-x`, `dragging`, `flung`, `press-x` and `press-tick` properties, with
-   `fling-distance: 45px` and `fling-speed: 0.11` (px per ms) named with a one-line why. The body
-   gets `x: root.drag-x`.
-2. **Pointer, on `sentinel`:**
-   - Measure in window coordinates (`self.absolute-position.x + self.mouse-x`), because the
-     sentinel moves with the body.
-   - A left-button `down` records `press-x`, records `press-tick` from `animation-tick()`, and sets
-     `dragging`. Other buttons are filtered out, because a `TouchArea` grabs on any button.
-   - `moved` while `self.pressed` sets `drag-x` to `max(0px, now - press-x)`.
-   - On `up`: past either threshold, set `flung` and call `Notifications.dismiss`. Otherwise set
-     `drag-x` back to 0. On `cancel`, ease back.
+Status: implemented (2026-10-31), awaiting the hand test below. fmt, clippy, the full suite and the
+build are green. In the generated card, every `drag-x` write is a `set_animated_value` whose
+`enabled` reads `!dragging`, and the vertical layout info is still `min 0` with `slot-h` as
+preferred and max. One existing pin moved:
+`a_slider_commits_only_what_its_press_moved` matches the commit up to its call, since the branch
+now also clears the flag.
+
+1. **Receivers act only on their own press.** With the grabber
+   gone, `handle_mouse_grab` hands the event back and `process_mouse_input` hit-tests it again from
+   the root (`window.rs:1007`). So a card removed mid-drag sends its release to whatever lies under
+   the pointer, not to an ancestor, and a `TouchArea` there runs `pointer-event(Up)` for a press it
+   never took. Four acted on it:
+   - The pick boxes in `track-list-row.slint`, `entity-card.slint` and `queue-row.slint` pick on
+     `clicked`. The modifiers come off the press into the host's existing snapshot.
+   - `SliderPointer` clears `moved-since-press` once it commits, so a stray release over the seek
+     bar doesn't seek back to the last drag. The Down reset stays, because a slider disabled
+     mid-press never gets its release.
+   - `slint-pitfalls.md`'s entry now says "whatever is under the pointer" and names this card.
+2. **State:**
+   - On the root: private `drag-x` and `dragging`, with `fling-distance: 45px` and
+     `fling-speed: 0.11` (px per ms) named with a one-line why.
+   - On `sentinel`, as `EdgeResizeHandle` keeps its own: `press-abs-x`, `press-tick` and
+     `start-x`. `start-x` is the `drag-x` at the press, so a press during an ease-back doesn't
+     snap.
+3. **Pointer, on `sentinel`:**
+   - Measure in window coordinates, because the sentinel moves with the body.
+   - Take the left button only, as `pressed` does. A Cancel carries no button and a Move carries
+     `Other`.
+   - A Down on a card at rest (up, with its slot fully open) records the press and sets
+     `dragging`.
+   - `moved` sets `drag-x` to `max(0px, start-x + travel)`.
+   - On an Up past either threshold, while the card is still live, `flung` is set, `drag-x` goes
+     to the card's width and `Notifications.dismiss` runs. Otherwise, and on a Cancel, `drag-x`
+     eases back to 0. A card retired mid-hold is already sinking into its slot, so it eases back
+     too.
+   - `dragging` drops first, so that write eases.
+   - The speed divides by at least 1 ms, because a press and its release can share a tick.
    - Undo and ✕ keep their own presses, because a child takes the press first.
-3. **Motion:**
-   - `animate drag-x { enabled: !root.dragging; … }`, since a dragged property may not ease the
-     drag.
-   - A flung leaving card sets `drag-x` to the body's width, so it travels on rightward as it
-     fades, and `clip` gains `&& !root.flung`, so it isn't cut at the column's edge while its slot
-     collapses beneath it.
+4. **Motion:**
+   - `animate drag-x { enabled: !root.dragging; … }` runs on `dur-fast` with the enter curve,
+     since a dragged property may not ease the drag.
+   - A flung body hangs from the card's bottom instead of its top
+     (`y: slot-h - content-h - rise`), so it holds its height and leaves sideways only while the
+     slot closes under it. Hung from the top, it sank into the slot as it went (Kenan's hand
+     test). `clip` gains `&& !root.flung`, since the clip would cut the body's top as the slot's
+     top descends.
+   - The switch to the bottom anchor lands where the body already is only when the slot is fully
+     open. That is why a drag starts only at rest, and why a card retired mid-hold isn't flung.
    - The clock's `running` gains `&& !root.dragging`.
-   - `init` also reads `root.drag-x`.
-4. **Check before closing the phase:** a card retired mid-drag (by eviction) is removed while
-   pressed, and per the pitfalls file its release then reaches an ancestor as a fresh event.
-   Confirm that nothing above `NotificationStack` in `app-window.slint` reads `PointerEventKind.up`
-   over that corner.
+   - `init` doesn't read `drag-x`. Nothing binds it, and a write eases from the current value.
 
 **Hand test:**
 - A slow drag short of 45 px eases back when released, and one past it closes and travels off to
   the right.
 - A quick flick closes the card, and a leftward drag doesn't move it.
+- A flung card travels only right as it fades, holding its height while the cards above glide
+  down. A press on a card still rising in doesn't drag it.
 - A drag starting on Undo or ✕ behaves exactly as a click does today, and a right-button drag
   does nothing.
 - The clock never fires mid-drag.
+- With a selection showing, hold a card until a sixth notice evicts it, let its exit finish, then
+  release over a pick box or the seek bar. Nothing is picked and nothing seeks.
+- A pick box still picks on a click, and shift still ranges.
 
 ### Phase 5: tests and docs (each waits for Kenan's go)
 
 1. **New pins:**
-   - `mount_fade_tests.rs`: the card reads every animated layer at mount
-     (`root.opacity`, `root.slot-h`, `root.rise`, `root.drag-x`, in whatever order its `init`
-     settles on).
+   - `mount_fade_tests.rs`: the card reads every bound animated layer at mount
+     (`root.opacity`, `root.slot-h`, `root.rise`, in whatever order its `init` settles on).
+   - The three pick boxes pick on `clicked`, and `SliderPointer` clears its flag at the release,
+     so none of them acts on a release it didn't take.
    - `notifications_tests.rs`, covering all of the following:
      - A retired row is no longer live: dismissing it twice tells the listener once, and
        `relabel` and `restart` don't reach it.
@@ -329,7 +360,7 @@ and the vertical layout info is still `min 0` with `slot-h` as preferred and max
   - No new `animate` reads a brush, so none owes `enabled: !Theme.recoloring`.
   - The card's only `changed` handler stays on `restarts`, never on a layout property.
   - No `Timer` interval reaches a layout property (1 ms and `Theme.dur-fast`).
-  - Every animated property is read in `init`.
+  - Every bound animated property is read in `init`. `drag-x` has no binding.
 - **Unaffected:** no migration, no settings field, no `@tr` change, and no RSS check, since the
   change adds one bool per row.
 - **`frameless_tests.rs`** pins only the `NotificationStack {` mount, which stays.

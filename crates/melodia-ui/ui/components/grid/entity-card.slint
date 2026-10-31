@@ -270,9 +270,11 @@ export component EntityCard inherits Rectangle {
             // Above `touch`, so the gate is restated or a dimmed card keeps one live corner.
             enabled: root.enabled;
             mouse-cursor: pointer;
+            // `touch`'s shape: the pick on `clicked`, its shift off the press.
+            clicked => { root.pick(root.press-shift); }
             pointer-event(ev) => {
-                if (ev.kind == PointerEventKind.up && ev.button == PointerEventButton.left) {
-                    root.pick(ev.modifiers.shift);
+                if (ev.kind == PointerEventKind.down && ev.button == PointerEventButton.left) {
+                    root.press-shift = ev.modifiers.shift;
                 }
                 // `touch` never sees a release here, so the box raises the menu itself.
                 if (ContextClick.raises-menu(ev, self.mouse-x, self.mouse-y, self.width, self.height)) {

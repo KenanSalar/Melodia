@@ -38,7 +38,7 @@ fn a_slider_commits_only_what_its_press_moved() {
 
     assert_eq!(code.matches("root.committed(").count(), 1, "a second path commits the value");
     assert!(
-        handler.contains("&& root.moved-since-press) { root.committed(root.drag-value); }"),
+        handler.contains("&& root.moved-since-press) { root.committed(root.drag-value);"),
         "the release commits whether or not the press moved anything"
     );
 }

@@ -6,9 +6,9 @@ import { IconButton } from "../icon-button.slint";
 import { SectionButton } from "../settings/section-button.slint";
 import { TuckedFill } from "../tucked-fill.slint";
 
-// One card in the notification stack. A dismiss only marks the row leaving; Rust drops it later.
-// The pointer is caught by the card's body alone, never the stack, so the gaps between cards don't
-// block the layers underneath.
+// One card in the notification stack, which a drag to the right also closes. A dismiss only marks
+// the row leaving; Rust drops it later. The pointer is caught by the card's body alone, never the
+// stack, so the gaps between cards don't block the layers underneath.
 export component NotificationCard inherits Rectangle {
     // Not `row`, which Slint reserves as the `for` variable.
     in property <NotificationRow> data;
@@ -30,12 +30,12 @@ export component NotificationCard inherits Rectangle {
         }
     }
 
-    // Here rather than in Rust so it can stand still while the card is read or the window is in
-    // the background; a resume runs the whole interval again.
+    // Here rather than in Rust so it can stand still while the card is read or held, or the window
+    // is in the background; a resume runs the whole interval again.
     clock := Timer {
         interval: root.data.timeout-ms * 1ms;
-        running: root.data.timeout-ms > 0 && !root.data.leaving && !sentinel.has-hover
-            && Theme.window-focused;
+        running: root.data.timeout-ms > 0 && !root.data.leaving && !root.dragging
+            && !sentinel.has-hover && Theme.window-focused;
         triggered => {
             Notifications.dismiss(root.data.id);
         }
@@ -81,11 +81,24 @@ export component NotificationCard inherits Rectangle {
     private property <length> slot-h: root.up ? root.full-h : 0px;
     animate slot-h { duration: Theme.dur-med; easing: cubic-bezier(0.2, 0, 0, 1); }
 
+    private property <length> drag-x: 0px;
+    private property <bool> dragging: false;
+    animate drag-x {
+        duration: Theme.dur-fast;
+        easing: cubic-bezier(0.2, 0, 0, 1);
+        enabled: !root.dragging;
+    }
+    private property <length> fling-distance: 45px;
+    // In px per ms over the whole drag: a short, quick flick would fail on distance alone.
+    private property <float> fling-speed: 0.11;
+    private property <bool> flung: false;
+
     min-height: 0px;
     preferred-height: root.slot-h;
     max-height: root.slot-h;
-    // Only while the slot is short, so at rest nothing the body paints past its edge is cut.
-    clip: root.slot-h < root.full-h;
+    // Only while the slot is short, so at rest nothing the body paints past its edge is cut. A
+    // flung card leaves its slot behind, so nothing cuts it.
+    clip: root.slot-h < root.full-h && !root.flung;
     opacity: root.up ? 1.0 : 0.0;
     // Out faster than it came in, accelerating away.
     animate opacity {
@@ -101,10 +114,11 @@ export component NotificationCard inherits Rectangle {
     private property <length> bar-end: root.border-w + 4px;
 
     // Hung from the card's top, so as the slot opens in the bottom-anchored column the body slides
-    // up out of the stack's edge rather than being uncovered in place.
+    // up out of the stack's edge rather than being uncovered in place. A flung body hangs from the
+    // bottom instead, holding its height while the slot closes under it.
     body := Rectangle {
-        x: 0;
-        y: root.gap - root.rise;
+        x: root.drag-x;
+        y: root.flung ? root.slot-h - root.content-h - root.rise : root.gap - root.rise;
         width: 100%;
         height: root.content-h;
 
@@ -151,11 +165,55 @@ export component NotificationCard inherits Rectangle {
                 + " Z";
         }
 
-        // Read only for `has-hover`. An ancestor of the buttons, so the hover holds over Undo and ✕
-        // while their own areas take the press.
+        // Takes the drag and reports `has-hover`. An ancestor of the buttons, so the hover holds
+        // over Undo and ✕ while their own areas take the press.
         sentinel := TouchArea {
+            // Window-absolute, the sentinel moving with the body it drags.
+            property <length> press-abs-x;
+            // Where the body sat at the press, so a press landing mid-ease doesn't snap it.
+            property <length> start-x;
+            property <duration> press-tick;
+
             width: 100%;
             height: 100%;
+            pointer-event(ev) => {
+                // Left only, as `pressed` is. A cancel carries no button, a move `Other`.
+                if (ev.button != PointerEventButton.left && ev.kind != PointerEventKind.cancel) {
+                    return;
+                }
+                // At rest only, so a fling's switch to the bottom anchor lands where the body is.
+                if (ev.kind == PointerEventKind.down && root.up && root.slot-h >= root.full-h) {
+                    self.press-abs-x = self.absolute-position.x + self.pressed-x;
+                    self.start-x = root.drag-x;
+                    self.press-tick = animation-tick();
+                    root.dragging = true;
+                }
+                if ((ev.kind == PointerEventKind.up || ev.kind == PointerEventKind.cancel)
+                    && root.dragging) {
+                    // First, so the write below eases.
+                    root.dragging = false;
+                    // A press and its release can share a tick.
+                    let elapsed = max(1ms, animation-tick() - self.press-tick);
+                    let speed = (root.drag-x - self.start-x) / 1px / (elapsed / 1ms);
+                    // A card retired mid-hold is already sinking into its slot, so it eases back.
+                    let fling = ev.kind == PointerEventKind.up && root.up
+                        && (root.drag-x >= root.fling-distance || speed > root.fling-speed);
+                    if (fling) {
+                        root.flung = true;
+                        root.drag-x = root.width;
+                        Notifications.dismiss(root.data.id);
+                    } else {
+                        root.drag-x = 0px;
+                    }
+                }
+            }
+            moved => {
+                // Rightward only, toward the stack's own edge.
+                if (root.dragging) {
+                    let travel = self.absolute-position.x + self.mouse-x - self.press-abs-x;
+                    root.drag-x = max(0px, self.start-x + travel);
+                }
+            }
             // A wheel tick nothing took would drop the hover until the pointer moved.
             scroll-event(ev) => { return accept; }
 

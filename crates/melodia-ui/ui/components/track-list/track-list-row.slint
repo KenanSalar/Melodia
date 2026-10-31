@@ -185,10 +185,16 @@ export component TrackListRowItem inherits Rectangle {
 
                         cb-touch := TouchArea {
                             mouse-cursor: pointer;
-                            pointer-event(ev) => {
-                                if (ev.kind == PointerEventKind.up && ev.button == PointerEventButton.left && root.enabled) {
-                                    root.pick(ev.modifiers.shift);
+                            // `touch`'s shape: the pick on `clicked`, its shift off the press.
+                            clicked => {
+                                if (root.enabled) {
+                                    root.pick(root.press-shift);
                                     root.request-blur-search();
+                                }
+                            }
+                            pointer-event(ev) => {
+                                if (ev.kind == PointerEventKind.down && ev.button == PointerEventButton.left) {
+                                    root.press-shift = ev.modifiers.shift;
                                 }
                             }
                         }

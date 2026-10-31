@@ -58,6 +58,8 @@ export component SliderPointer inherits TouchArea {
         if ((ev.kind == PointerEventKind.up || ev.kind == PointerEventKind.cancel)
             && root.moved-since-press) {
             root.committed(root.drag-value);
+            // So a release handed on from an area that unmounted mid-press commits nothing.
+            root.moved-since-press = false;
         }
     }
     moved => {
