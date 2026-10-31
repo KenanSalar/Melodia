@@ -268,10 +268,10 @@ impl NotificationsUi {
     }
 
     pub fn dismiss_by_kind(&self, kind: NotificationKind) {
-        for i in 0..self.rows.row_count() {
-            if self.rows.row_data(i).is_some_and(|r| !r.leaving && r.kind == kind) {
-                self.retire_at(i);
-            }
+        let matching: Vec<usize> =
+            self.live_rows().filter(|(_, row)| row.kind == kind).map(|(pos, _)| pos).collect();
+        for pos in matching {
+            self.retire_at(pos);
         }
     }
 

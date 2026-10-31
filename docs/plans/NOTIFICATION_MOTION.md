@@ -1,7 +1,8 @@
 # Plan: Notification motion (cards that arrive, leave and make room)
 
 Status: **in progress** (Phase 0 done, Phase 1 committed as `1092cfed`, Phase 2 as `2c9261e3`,
-Phase 3 as `feb01476`, Phase 4 awaiting Kenan's hand test) · Owner: Kenan · Created: 2026-10-31
+Phase 3 as `feb01476`, Phase 4 as `6e3789dc` and `6c68fdeb`, awaiting Kenan's hand test) ·
+Owner: Kenan · Created: 2026-10-31
 
 > **Validated 2026-10-31** against `0b6d11b5` (`main`): direct reads of `notification-stack.slint`,
 > `globals/notifications.slint`, `models.slint`, `notifications.rs` and its tests, `undo/mod.rs`,
@@ -268,10 +269,11 @@ and the vertical layout info is still `min 0` with `slot-h` as preferred and max
 
 ### Phase 4: drag a card away
 
-Status: implemented (2026-10-31), awaiting the hand test below. fmt, clippy, the full suite and the
-build are green. In the generated card, every `drag-x` write is a `set_animated_value` whose
-`enabled` reads `!dragging`, and the vertical layout info is still `min 0` with `slot-h` as
-preferred and max. One existing pin moved:
+Status: committed as `6e3789dc`, with `6c68fdeb` holding a press that lands mid-ease (2026-10-31),
+awaiting the hand test below. fmt, clippy, the full suite and the build are green. In the
+generated card, every `drag-x` write is a `set_animated_value` whose `enabled` reads `!dragging`,
+and the vertical layout info is still `min 0` with `slot-h` as preferred and max. One existing pin
+moved:
 `a_slider_commits_only_what_its_press_moved` matches the commit up to its call, since the branch
 now also clears the flag.
 
