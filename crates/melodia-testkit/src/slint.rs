@@ -37,6 +37,27 @@ fn mount_braces(src: &str, component: &str) -> Vec<usize> {
     out
 }
 
+/// Words whose block declares something rather than mounting an element.
+const DECLARING_WORDS: [&str; 6] = ["component", "struct", "enum", "global", "function", "=>"];
+
+/// The words of the head of the block opening at `open`, read back to the previous statement or
+/// block edge: `["export", "component", "Foo", "inherits", "Rectangle"]`, `["id", ":=", "Foo"]`.
+pub fn head_words(src: &str, open: usize) -> Vec<&str> {
+    let start = src[..open].rfind([';', '{', '}', '[', ']']).map_or(0, |at| at + 1);
+    src[start..open].split_whitespace().collect()
+}
+
+/// The type the block opening at `open` mounts: `Foo` for `Foo {`, `id := Foo {`, `if cond: Foo {`
+/// and `for x in xs: Foo {`. `None` for a declaration, a callback, a state, an `animate` or a
+/// struct literal. Pair it with [`strip_line_comments`] for [`block_body`]'s reason.
+pub fn mounted_type(src: &str, open: usize) -> Option<&str> {
+    let words = head_words(src, open);
+    if words.iter().any(|word| DECLARING_WORDS.contains(word)) {
+        return None;
+    }
+    words.last().copied().filter(|word| word.starts_with(|c: char| c.is_ascii_uppercase()))
+}
+
 /// Every mount of `component` in `tree`, by path, with every route from it up to a component
 /// nothing mounts. A route is the heads of the blocks it passes through, outermost first
 /// (`export component Baz inherits Window`, `if cond: Foo`, `for row in rows: Bar`), whitespace

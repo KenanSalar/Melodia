@@ -334,14 +334,17 @@ there, never in the `.slint`.
 - **Nothing that draws text may be cut to its layout box, which is a line box, not the ink.**
   Vazirmatn is patched to a ~1.05 em line box (`1650/-500`, `USE_TYPO_METRICS`) while its outlines
   reach `yMax 2163` / `yMin -1160`, so a crop removes Arabic marks no Latin review sees:
-  - **`opacity` below 1 renders the subtree into a texture sized to child geometry.**
-    `Opacity::need_layer` (`i-slint-core/items.rs`) bails at 1.0 and on an element with no
-    children; else `item_children_bounding_rect` sizes it, a `Text`'s `bounding_rect` being its
-    line box. A fade crops while it runs, a dimmed state for as long as it lasts. Fold the alpha
-    into the brush (`with-alpha`), pass a `fade` float where there is none (`ArtworkImage`), or,
-    where the brushes feed the component's own `animate`s, leave the faded element childless
-    (`IconButton`). Verify by names in the enclosing struct's item fields, a sub-component having
-    no `ITEM_TREE`. `view-transition.slint` has no cure.
+  - **`opacity` below 1, `0` included, renders the subtree into a texture sized to child
+    geometry.** `Opacity::need_layer` (`i-slint-core/items.rs`) bails at 1.0 and on an element with
+    no children; else `item_children_bounding_rect` sizes it, a `Text`'s `bounding_rect` being its
+    line box. A fade crops while it runs, a dimmed state or a rest at `0` for as long as it lasts,
+    and bounds that move under it (a clip easing, a child sliding) allocate a new texture every
+    frame, femtovg's `create_layer_target` reusing one only at an equal size. Fold the alpha into
+    the brush (`transparentize`, which multiplies where `with-alpha` sets), pass a `fade` float
+    where there is none (`ArtworkImage`), or, where the brushes feed the component's own
+    `animate`s, leave the faded element childless (`IconButton`). Verify by names in the enclosing
+    struct's item fields, a sub-component having no `ITEM_TREE`. `view-transition.slint` has no
+    cure, one of the layers `opacity_layers.rs` keeps.
   - **A `Text`'s default `overflow: clip` pushes a scissor at its box**
     (`textlayout/sharedparley.rs` → `combine_clip`). `overflow: elide` pushes one only where the
     first line overflows the box's height (`first_line_exceeds_height`), so user text wants elide,

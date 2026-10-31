@@ -61,14 +61,14 @@ fn fill_body() -> String {
     brace_body(rest)
 }
 
-/// The captions row's inner layout, anchored on the fade it is declared under.
+/// The captions row's inner layout, anchored on the clip it is declared under.
 fn row_layout_body() -> String {
     let code = strip_line_comments(MINI_CAPTIONS);
-    let inside = code.split_once("opacity: root.row-fade;").map_or("", |(_, rest)| rest);
+    let inside = code.split_once("clip: root.open-t < 1;").map_or("", |(_, rest)| rest);
     let rest = inside.split_once("HorizontalLayout {").map_or("", |(_, rest)| rest);
     assert!(
         !rest.is_empty(),
-        "the captions row no longer mounts a layout under its fade — this pin is reading nothing"
+        "the captions row no longer mounts a layout under its clip — this pin is reading nothing"
     );
     brace_body(rest)
 }

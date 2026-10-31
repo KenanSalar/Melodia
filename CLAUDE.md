@@ -134,7 +134,7 @@ Three rules share the UI globs: `slint.md` general, `slint-pitfalls.md` what bui
 - **An `animate` that can read a palette brush carries `enabled: !Theme.recoloring`**, a Material
   You change writing a blend every frame (`palette_fade.rs`).
 - **`opacity` only on a childless element**: one with children is a texture below 1, 0 included,
-  so it fades through a `fade` float in its brushes.
+  so it fades through a `fade` float in its brushes (`opacity_layers.rs`).
 - **Polarity through `Theme.is-light`, ink through `Theme.ink-on`**, never a variant id.
 - **`globals/` has no barrel**: import the file you need. `app-window.slint`'s export block is the
   one full list, and an import that only feeds it is not dead.

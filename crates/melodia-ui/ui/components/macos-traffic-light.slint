@@ -15,6 +15,8 @@ export component MacOsTrafficLight inherits Rectangle {
 
     // The titlebar's height by default; a host with less room hands its own row's.
     in property <length> cell-height: 32px;
+    // Past the glyph's own ease, which a per-frame fade folded into it would stall.
+    in property <float> fade: 1.0;
 
     // Slint has no upward "child has-hover" channel, so each light publishes its own.
     out property <bool> hovered: touch.has-hover;
@@ -24,6 +26,9 @@ export component MacOsTrafficLight inherits Rectangle {
 
     // Derived: across the palettes no one token is legible on all three hues and the grey.
     property <brush> glyph-color: Theme.ink-on(root.fill);
+
+    property <float> glyph-t: root.cluster-hovered ? 1.0 : 0.0;
+    animate glyph-t { duration: Theme.dur-fast; easing: ease-in-out; }
 
     callback clicked();
 
@@ -43,7 +48,7 @@ export component MacOsTrafficLight inherits Rectangle {
         height: 14px;
         x: (parent.width - self.width) / 2;
         y: (parent.height - self.height) / 2;
-        background: root.fill;
+        background: root.fill.transparentize(1.0 - root.fade);
         border-radius: self.width / 2;
 
         MaterialIcon {
@@ -54,8 +59,7 @@ export component MacOsTrafficLight inherits Rectangle {
             icon-color: root.glyph-color;
             // `fade`, never `opacity`: this rests at `0.0`, so the layer and the ink crop would be
             // its whole life.
-            fade: root.cluster-hovered ? 1.0 : 0.0;
-            animate fade { duration: Theme.dur-fast; easing: ease-in-out; }
+            fade: root.glyph-t * root.fade;
         }
     }
 

@@ -6,7 +6,10 @@
 //! `card-height - …` and landed `card-height - tile-size` below where they read, with a source
 //! that reads exactly like the one that was right.
 
-use melodia_testkit::{MIN_SLINT_SOURCES, UI_DIR, blocks_named, stripped_sources};
+use melodia_testkit::{
+    MIN_SLINT_SOURCES, UI_DIR, at_own_depth, block_body, blocks_named, mounted_type,
+    outside_strings, stripped_sources,
+};
 
 /// What a host writes to open the slot, and how the walk below finds the hosts rather than naming
 /// them — a third one is covered the day it is written.
@@ -90,5 +93,44 @@ fn every_overlay_host_answers_for_its_own_hover() {
         silent.is_empty(),
         "{silent:?} put controls in the overlay slot without passing `overlay-hovered` — the \
          card's fill and cover zoom drop out while the pointer is on one of them"
+    );
+}
+
+/// Every element a host mounts straight into the slot, by its block's body: everything a mount
+/// holds lands in the slot.
+fn slotted_controls(mount: &str) -> Vec<&str> {
+    outside_strings(mount.as_bytes())
+        .filter(|&(at, byte)| byte == b'{' && at_own_depth(mount, at))
+        .filter(|&(at, _)| mounted_type(mount, at).is_some())
+        .filter_map(|(at, _)| block_body(mount, at))
+        .collect()
+}
+
+/// The slot fades nothing itself, an `opacity` there holding a texture per card at rest, so each
+/// control takes the card's `overlay-fade` as its own `fade`.
+#[test]
+fn every_overlay_control_fades_with_the_card() {
+    let mounts = overlay_mounts();
+    let empty = files_of(
+        mounts.iter().filter(|(_, body)| slotted_controls(body).is_empty()).cloned().collect(),
+    );
+    let unfaded = files_of(
+        mounts
+            .into_iter()
+            .filter(|(_, body)| {
+                slotted_controls(body).iter().any(|control| !control.contains("overlay-fade"))
+            })
+            .collect(),
+    );
+
+    assert!(
+        empty.is_empty(),
+        "{empty:?} open the overlay slot, yet the walk finds no control in it: the pin below reads \
+         nothing"
+    );
+    assert!(
+        unfaded.is_empty(),
+        "{unfaded:?} put a control in the overlay slot that doesn't take the card's \
+         `overlay-fade` as its `fade`, so it shows at full strength on an idle card"
     );
 }

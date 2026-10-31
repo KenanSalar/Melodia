@@ -83,19 +83,20 @@ export component HorizontalCardStrip inherits Rectangle {
 
                         // The tile's bottom right, at `EntityCard`'s inset.
                         if root.show-play-overlay: play-pill := Rectangle {
+                            property <float> fade: play-touch.has-hover || card-touch.has-hover ? 1.0 : 0.0;
+                            animate fade { duration: Theme.dur-fast; easing: ease-in-out; }
+
                             x: root.card-width - self.width - Theme.pad-md;
                             y: root.card-width - self.height - Theme.pad-md;
                             width: 36px;
                             height: 36px;
                             border-radius: 18px;
-                            background: Theme.accent;
-                            opacity: play-touch.has-hover || card-touch.has-hover ? 1.0 : 0.0;
-                            animate opacity { duration: Theme.dur-fast; easing: ease-in-out; }
+                            background: Theme.accent.transparentize(1.0 - self.fade);
 
                             // `MaterialIcon`'s collapsed em-box, spelled inline.
                             Text {
                                 text: "play_arrow";
-                                color: Theme.accent-text;
+                                color: Theme.accent-text.transparentize(1.0 - play-pill.fade);
                                 font-family: "Material Symbols Rounded";
                                 font-size: 22px;
                                 horizontal-alignment: center;

@@ -34,14 +34,13 @@ export component NowPlayingCover inherits Rectangle {
     }
 
     // Under the slots, faded out once a cover is there.
-    Rectangle {
-        opacity: Player.np-cover-has-image ? 0.0 : 1.0;
-        animate opacity { duration: Theme.dur-med; easing: ease-in-out; }
-        MaterialIcon {
-            name: "music_note";
-            icon-size: root.height * 0.4;
-            icon-color: Player.np-on-backdrop-muted.transparentize(0.5);
-        }
+    private property <float> placeholder-fade: Player.np-cover-has-image ? 0.0 : 1.0;
+    animate placeholder-fade { duration: Theme.dur-med; easing: ease-in-out; }
+    MaterialIcon {
+        name: "music_note";
+        icon-size: root.height * 0.4;
+        icon-color: Player.np-on-backdrop-muted.transparentize(0.5);
+        fade: root.placeholder-fade;
     }
 
     Image {

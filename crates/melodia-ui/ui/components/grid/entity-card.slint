@@ -82,6 +82,9 @@ export component EntityCard inherits Rectangle {
     out property <length> tile-size: root.card-width - 2 * Theme.pad-sm;
     // In the overlay slot's frame, for a control stacked under the box.
     out property <length> select-box-bottom: box.y + box.height - overlay.y;
+    // The `fade` each control in the overlay slot takes, the slot holding a host's children.
+    out property <float> overlay-fade: root.card-hovered ? 1.0 : 0.0;
+    animate overlay-fade { duration: Theme.dur-fast; easing: ease-in-out; }
 
     // Through the brushes, not `opacity`, which would hold a texture per dimmed card. The badges
     // skip it: Browse, the one host disabling cards, sets neither.
@@ -184,9 +187,8 @@ export component EntityCard inherits Rectangle {
         }
     }
 
-    // The host's hover controls over the artwork square, sharing one `opacity`: one per button
-    // would layer each, an `IconButton` root not being childless (`need_layer`). A control that
-    // stays up while the card is idle goes beside it instead. After `touch`, so a nested button
+    // The host's hover controls over the artwork square, each fading on `overlay-fade`. A control
+    // that stays up while the card is idle goes beside it instead. After `touch`, so a nested button
     // takes its own click.
     overlay := Rectangle {
         visible: root.show-overlay-actions;
@@ -194,9 +196,6 @@ export component EntityCard inherits Rectangle {
         y: Theme.pad-sm;
         width: root.tile-size;
         height: root.tile-size;
-
-        opacity: root.card-hovered ? 1.0 : 0.0;
-        animate opacity { duration: Theme.dur-fast; easing: ease-in-out; }
 
         @children
     }
