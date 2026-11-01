@@ -1,10 +1,11 @@
 //! One voice: the source playing, the one staged behind, and the transport state the mixer reads.
 //! [`Voice`] is the control side the rest of the tree sees; [`VoicePull`] is the mixer's, touched
-//! only from the audio callback, with a command channel and counters between them.
+//! only under the puller's lock, with a command channel and counters between them.
 //!
 //! `clear` blocks until the callback has serviced it, the contract `Decks::cut_to` rests on: a
-//! clear not yet landed would take the new source with it. It is the only op that blocks; a seek is
-//! a `replace` carrying a source already positioned.
+//! clear not yet landed would take the new source with it. It is the only op that blocks here; a
+//! seek is a `replace` carrying a source already positioned, which its caller lands, waiting
+//! through [`Voice::await_service`] while a callback runs.
 
 use std::collections::VecDeque;
 use std::sync::Arc;
@@ -419,8 +420,8 @@ impl VoicePull {
     /// releasing a waiter a step early; `LOCKSTEP_FRAMES` already bounds that skew.
     pub(super) fn service(&mut self) {
         let seen = self.shared.issued.load(Ordering::Acquire);
-        // Most steps carry no op, and the counter keeps the channel's fence off them. Only this
-        // thread writes `serviced`, so the load needs no ordering.
+        // Most steps carry no op, and the counter keeps the channel's fence off them. Only the
+        // puller's holder writes `serviced`, under its lock, so the load needs no ordering.
         if seen == self.shared.serviced.load(Ordering::Relaxed) {
             return;
         }

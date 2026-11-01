@@ -100,8 +100,8 @@ The guidance this follows, and the mechanisms that shaped the decisions:
   file feeder about 50 times a second, paused included.
 - **Two seconds of decoded audio ahead** rides out a read stall of 1.4 to 1.9 s at normal speed,
   where half a second covered 0.28 to 0.40 s: a NAS or Wi-Fi share pausing, not only a busy disk's
-  seek. fooyin and Strawberry buffer four seconds, rox half of one. Four would double the memory
-  again for stalls of two to four seconds, and a drive waking from sleep outlasts any of them.
+  seek. Four seconds would double the memory again for stalls of two to four seconds, and a drive
+  waking from sleep outlasts any of them.
 - **std's bounded channel** (`sync/mpmc/array.rs`, `waker.rs`) never locks when neither end blocks,
   which is why the command and retirement channels stay as they are.
 

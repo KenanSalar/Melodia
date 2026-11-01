@@ -241,9 +241,9 @@ fn wire_seek(ui: &AppWindow, state: &AppState) {
             ui.global::<Player>().set_seek_pending_ms(position_ms.max(0));
         }
         let pos = u64::try_from(position_ms.max(0)).unwrap_or(0);
-        library::playback::request_seek(&s.playback_ctx(), pos);
-        let s = s.clone();
-        spawn_logged_sync!(s, "seek", library::playback::player_seek(&s.playback_ctx()));
+        let ctx = s.playback_ctx();
+        library::playback::request_seek(&ctx, pos);
+        spawn_logged_sync!(s, "seek", library::playback::player_seek(&ctx));
     });
 }
 
