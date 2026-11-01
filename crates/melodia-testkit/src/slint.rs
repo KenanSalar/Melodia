@@ -242,3 +242,7 @@ pub fn sort_mount_arrays<'a>(src: &'a str, field_property: &str) -> Option<(&'a 
     };
     Some((array_after(head.rfind("labels:")?)?, array_after(head.rfind("fields:")?)?))
 }
+
+#[cfg(test)]
+#[path = "tests/slint_tests.rs"]
+mod tests;

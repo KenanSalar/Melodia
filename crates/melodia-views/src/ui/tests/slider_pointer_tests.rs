@@ -43,6 +43,20 @@ fn a_slider_commits_only_what_its_press_moved() {
     );
 }
 
+/// A release handed on from an area that unmounted mid-press reaches the slider with no press of
+/// its own, so a flag the last drag left set commits that drag's value again.
+#[test]
+fn a_slider_forgets_its_movement_once_it_commits() {
+    let code = code_tokens(POINTER);
+
+    let handler = pointer_event(&code);
+
+    assert!(
+        handler.contains("{ root.committed(root.drag-value); root.moved-since-press = false; }"),
+        "the commit leaves `moved-since-press` set, so a stray release seeks back to the last drag"
+    );
+}
+
 /// `pressed` is already true when the handler sees the press, so a flag left from the last press
 /// would turn `dragging` on and commit that press's movement for this one.
 #[test]

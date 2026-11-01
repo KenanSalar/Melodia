@@ -6,9 +6,16 @@ use slint::{Model, SharedString};
 
 use super::*;
 
-/// With no event loop a retired row's removal never fires, so it stays, `leaving`: read [`live`].
+/// A retired row's removal fires only when a test calls [`run_exits`], so until then it stays,
+/// `leaving`: read [`live`].
 fn make_ui() -> NotificationsUi {
     NotificationsUi::new(Duration::ZERO)
+}
+
+/// With no platform installed, Slint fires only zero-duration timers, which is every exit
+/// [`make_ui`]'s rows wait on.
+fn run_exits() {
+    slint::platform::update_timers_and_animations();
 }
 
 /// The rows whose cards are still up, read as the card reads them.
@@ -51,6 +58,54 @@ fn dismiss_retires_only_the_matching_row() {
     assert_eq!(ids, vec![id0, id2]);
 }
 
+/// The card fades and closes over its row, so the row has to outlive the retire.
+#[test]
+fn a_retired_row_stays_in_the_model_while_its_card_closes() {
+    let ui = make_ui();
+    let kept = ui.show(make_params(NotificationKind::None), STICKY);
+    let retired = ui.show(make_params(NotificationKind::None), STICKY);
+
+    ui.dismiss(retired);
+
+    let rows: Vec<(i32, bool)> = ui.rows.iter().map(|r| (r.id, r.leaving)).collect();
+    assert_eq!(rows, [(kept, false), (retired, true)]);
+}
+
+/// A row nothing drops is a closed card the stack holds for the rest of the session.
+#[test]
+fn a_retired_row_is_dropped_once_its_exit_has_run() {
+    let ui = make_ui();
+    let kept = ui.show(make_params(NotificationKind::None), STICKY);
+    let retired = ui.show(make_params(NotificationKind::None), STICKY);
+    ui.dismiss(retired);
+
+    run_exits();
+
+    let ids: Vec<i32> = ui.rows.iter().map(|r| r.id).collect();
+    assert_eq!(ids, [kept]);
+}
+
+/// An exit lands after the rows ahead of it may have gone, so one taken by the position it was
+/// retired at drops a live card instead. Retired out of order, so neither order the exits fire in
+/// hides that.
+#[test]
+fn each_retired_row_is_dropped_by_its_own_id() {
+    let ui = make_ui();
+    let first = ui.show(make_params(NotificationKind::None), STICKY);
+    let second = ui.show(make_params(NotificationKind::None), STICKY);
+    let third = ui.show(make_params(NotificationKind::None), STICKY);
+    let kept = ui.show(make_params(NotificationKind::None), STICKY);
+    let last_kept = ui.show(make_params(NotificationKind::None), STICKY);
+    ui.dismiss(second);
+    ui.dismiss(first);
+    ui.dismiss(third);
+
+    run_exits();
+
+    let ids: Vec<i32> = ui.rows.iter().map(|r| r.id).collect();
+    assert_eq!(ids, [kept, last_kept]);
+}
+
 #[test]
 fn dismiss_unknown_id_is_noop() {
     let ui = make_ui();
@@ -91,6 +146,21 @@ fn max_visible_evicts_oldest_on_overflow() {
 
     let live_ids: Vec<i32> = live(&ui).iter().map(|r| r.id).collect();
     assert_eq!(live_ids, &ids[1..]);
+}
+
+/// A leaving card is already on its way off the stack, so counting it evicts a live one early.
+#[test]
+fn a_leaving_row_leaves_room_under_the_cap() {
+    let ui = make_ui();
+    let ids: Vec<i32> = (0..super::MAX_VISIBLE)
+        .map(|_| ui.show(make_params(NotificationKind::None), STICKY))
+        .collect();
+    ui.dismiss(ids[0]);
+
+    let newest = ui.show(make_params(NotificationKind::None), STICKY);
+
+    let live_ids: Vec<i32> = live(&ui).iter().map(|r| r.id).collect();
+    assert_eq!(live_ids, [&ids[1..], &[newest]].concat());
 }
 
 /// A stub recipe. Never run — these pins are about the map's *lifetime*, and rendering
@@ -204,6 +274,26 @@ fn every_way_a_row_goes_tells_the_listener_once() {
         retire(&ui, id);
 
         assert_eq!(*heard.borrow(), [id], "{what}");
+    }
+}
+
+/// The listener hears a row once, and a leaving row still sits in the model for every way out to
+/// find, so each has to read it as gone.
+#[test]
+fn a_leaving_row_is_retired_only_once() {
+    let rows: [(&str, Retirement); 2] = [
+        ("a second dismiss", |ui, id| ui.dismiss(id)),
+        ("a dismiss by kind", |ui, _| ui.dismiss_by_kind(NotificationKind::Undo)),
+    ];
+    for (what, retire_again) in rows {
+        let ui = make_ui();
+        let heard = listening(&ui);
+        let id = ui.show(make_params(NotificationKind::Undo), STICKY);
+        ui.dismiss(id);
+
+        retire_again(&ui, id);
+
+        assert_eq!(*heard.borrow(), [id], "{what} retired a row that was already leaving");
     }
 }
 
