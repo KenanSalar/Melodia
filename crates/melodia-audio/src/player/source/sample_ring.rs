@@ -185,10 +185,13 @@ impl RingReader {
     /// Never blocks, the audio callback being its caller.
     pub fn pull(&mut self) -> Pulled {
         if self.frame_phase == 0 {
+            // Before the fill level: the feeder's last push lands ahead of its finish, so a short
+            // ring once finished stays short.
+            let finished = self.feed.is_finished();
             self.frame_starved = self.ring.len() < usize::from(self.channels.get());
             // A trailing partial frame goes with it: half a frame would flip this deck's channel
             // parity for whatever plays next.
-            if self.frame_starved && self.feed.is_finished() {
+            if self.frame_starved && finished {
                 return Pulled::Ended;
             }
         }
