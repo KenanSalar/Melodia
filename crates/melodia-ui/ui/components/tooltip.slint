@@ -39,9 +39,8 @@ export component Tooltip {
     width: 0;
     height: 0;
 
-    // Hidden once faded out, not just transparent: an element with children under any opacity short
-    // of 1.0 renders into a layer, so every idle tooltip would hold a texture.
-    private property <bool> drawn: root.text != "" && (root.shown || root.force-shown || pill.opacity > 0);
+    // Hidden once faded out, not just transparent, so an idle tooltip draws nothing.
+    private property <bool> drawn: root.text != "" && (root.shown || root.force-shown || root.fade > 0);
     // Gated on `drawn`, so an idle tooltip depends on nothing that scrolls.
     private property <bool> fits-window: !root.in-popup && root.drawn;
 
@@ -87,6 +86,9 @@ export component Tooltip {
         if (!root.hovered) { root.shown = false; }
     }
 
+    private property <float> fade: (root.shown || root.force-shown) ? 1.0 : 0.0;
+    animate fade { duration: 150ms; easing: ease-out; }
+
     pill := Rectangle {
         width: min(tip-text.preferred-width + 16px, root.max-pill-width);
         height: tip-text.preferred-height + 8px;
@@ -102,17 +104,15 @@ export component Tooltip {
             : root.along-y;
 
         // The `ActionPill` chrome, but opaque: a tooltip's whole job is to be read.
-        background: Theme.surface0;
-        border-color: Theme.surface2;
+        background: Theme.surface0.transparentize(1.0 - root.fade);
+        border-color: Theme.surface2.transparentize(1.0 - root.fade);
         border-width: 1px;
         border-radius: 6px;
-        opacity: (root.shown || root.force-shown) ? 1.0 : 0.0;
-        animate opacity { duration: 150ms; easing: ease-out; }
         visible: root.drawn;
 
         tip-text := Text {
             text: root.text;
-            color: Theme.text;
+            color: Theme.text.transparentize(1.0 - root.fade);
             font-size: 11px;
             horizontal-alignment: center;
             vertical-alignment: center;

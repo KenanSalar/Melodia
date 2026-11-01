@@ -114,6 +114,7 @@ export component PlaylistGrid inherits Rectangle {
                                 diameter: 30px;
                                 idle-bg: Theme.floating-chrome-bg;
                                 hover-fg: Theme.danger;
+                                fade: card.overlay-fade;
                                 clicked => { root.delete-playlists([playlist.id]); }
                             }
 
@@ -124,6 +125,7 @@ export component PlaylistGrid inherits Rectangle {
                                 icon-size: 18px;
                                 diameter: 30px;
                                 idle-bg: Theme.floating-chrome-bg;
+                                fade: card.overlay-fade;
                                 clicked => { root.edit-playlist-artwork(playlist.id); }
                             }
 
@@ -134,6 +136,7 @@ export component PlaylistGrid inherits Rectangle {
                                 icon-size: 18px;
                                 diameter: 30px;
                                 idle-bg: Theme.floating-chrome-bg;
+                                fade: card.overlay-fade;
                                 clicked => { root.rename-playlist(playlist.id); }
                             }
                         }

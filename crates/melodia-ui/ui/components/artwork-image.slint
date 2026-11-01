@@ -82,13 +82,13 @@ export component ArtworkImage inherits Rectangle {
         y: (parent.height - self.height) / 2;
         border-radius: root.tile-radius * self.width / root.tile-size;
         clip: true;
-        opacity: root.fade;
 
         Image {
             width: 100%;
             height: 100%;
             source: root.cover;
             image-fit: ImageFit.cover;
+            opacity: root.fade;
         }
     }
 

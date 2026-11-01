@@ -97,7 +97,6 @@ export component SearchView inherits Rectangle {
                     rows: Search.album-rows;
                     card-width: 160px;
                     card-height: 206px;
-                    show-play-overlay: false;
                     fallback-icon: "album";
                     request-cover(p) => {
                         return Search.request-album-strip-cover(p);
@@ -114,7 +113,6 @@ export component SearchView inherits Rectangle {
                     card-width: 160px;
                     card-height: 206px;
                     circular: true;
-                    show-play-overlay: false;
                     fallback-icon: "person";
                     request-cover(p) => {
                         return Search.request-artist-strip-cover(p);

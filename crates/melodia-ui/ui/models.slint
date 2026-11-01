@@ -344,8 +344,9 @@ export struct BreadcrumbRow {
     path: string,
 }
 
-// `info` first, being both the default and the card's fallback styling.
-export enum NotificationVariant { info, success, warning, error }
+// `info` first, being both the default and the card's fallback styling. `neutral` is the accent
+// bar with no glyph, for a notice that offers something rather than announces it.
+export enum NotificationVariant { info, success, warning, error, neutral }
 
 // Routes a row's action button through `ui::shell::notifications::run_action`'s exhaustive match,
 // and groups rows for `dismiss_by_kind`.
@@ -377,6 +378,8 @@ export struct NotificationRow {
     timeout-ms: int,
     // A bump restarts that clock: a run of one removal keeps its card.
     restarts: int,
+    // Retired, its card closing; Rust drops the row once it has (`retire_at`).
+    leaving: bool,
 }
 
 // **`id` is `0` for a station only in the directory**, results never being persisted until the

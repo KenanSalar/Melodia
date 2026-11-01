@@ -29,6 +29,7 @@ use super::file_drop::{self, DropTargets};
 use super::geometry;
 #[cfg(target_os = "windows")]
 use super::parked_loop;
+use super::pointer;
 use super::resize_release::ResizeWatch;
 
 /// How long after a focus loss to ask whether it was a minimize: the WM sets the state and drops
@@ -97,8 +98,6 @@ pub(super) fn install(app: &AppWindow, state: &AppState, targets: PressTargets) 
     let PressTargets { drag_region, resize } = targets;
     let weak = app.as_weak();
     let state = state.clone();
-    // A press carries no position, so the double press reads the last move's.
-    let mut cursor_pos = LogicalPosition::default();
     let mut double_press = DoublePress::default();
     let resize_watch = ResizeWatch::new(app.as_weak());
     app.window().on_winit_window_event(move |w, event| {
@@ -120,6 +119,7 @@ pub(super) fn install(app: &AppWindow, state: &AppState, targets: PressTargets) 
             && touch.phase == TouchPhase::Started
         {
             disarm_drag(&weak, Pointer::Touch);
+            pointer::leave();
         }
         match event {
             // Ahead of the drag arm: the miniplayer's drag region runs right up to the edge, and its
@@ -137,7 +137,9 @@ pub(super) fn install(app: &AppWindow, state: &AppState, targets: PressTargets) 
                 button: MouseButton::Left,
                 ..
             } if drag_region.get() != DragRegion::None => {
-                drag_press(w, &weak, &mut double_press, drag_region.get(), cursor_pos)
+                // A press carries no position, so the double press reads the last move's.
+                let at = pointer::resting().unwrap_or_default();
+                drag_press(w, &weak, &mut double_press, drag_region.get(), at)
             }
             WindowEvent::MouseInput {
                 state: ElementState::Pressed,
@@ -182,7 +184,11 @@ pub(super) fn install(app: &AppWindow, state: &AppState, targets: PressTargets) 
             }
             WindowEvent::CloseRequested => on_close_requested(&weak),
             WindowEvent::CursorMoved { position, .. } => {
-                cursor_pos = to_logical(w, *position);
+                pointer::rest_at(to_logical(w, *position));
+                EventResult::Propagate
+            }
+            WindowEvent::CursorLeft { .. } => {
+                pointer::leave();
                 EventResult::Propagate
             }
             WindowEvent::MouseWheel { delta, .. } => on_mouse_wheel(w, &weak, *delta),

@@ -11,6 +11,7 @@ export component MacOsTitleBarCluster inherits Rectangle {
     in property <bool> captions-left: Theme.titlebar-button-side == 1;
     in property <length> cell-height: 32px;
     in property <string> maximize-tooltip: WindowChrome.is-maximized ? @tr("Restore") : @tr("Maximize");
+    in property <float> fade: 1.0;
     callback maximize();
 
     property <bool> cluster-hovered:
@@ -40,6 +41,7 @@ export component MacOsTitleBarCluster inherits Rectangle {
             glyph-icon: "close";
             tooltip-text: @tr("Close");
             cluster-hovered: root.cluster-hovered;
+            fade: root.fade;
             clicked => { WindowChrome.close-window(); }
         }
 
@@ -51,6 +53,7 @@ export component MacOsTitleBarCluster inherits Rectangle {
             glyph-icon: "minimize";
             tooltip-text: @tr("Minimize");
             cluster-hovered: root.cluster-hovered;
+            fade: root.fade;
             clicked => { WindowChrome.minimize(); }
         }
 
@@ -63,6 +66,7 @@ export component MacOsTitleBarCluster inherits Rectangle {
             glyph-icon: "add";
             tooltip-text: root.maximize-tooltip;
             cluster-hovered: root.cluster-hovered;
+            fade: root.fade;
             clicked => { root.maximize(); }
         }
     }

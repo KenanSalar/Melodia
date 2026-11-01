@@ -200,12 +200,14 @@ there, never in the `.slint`.
 
 ## Pointer and hover
 
-- **A grabbing item that unmounts mid-gesture hands its release to the ancestor as a fresh event**:
-  `handle_mouse_grab` finds the grabber gone and returns the event to `process_mouse_input`, so an
-  ancestor reading `PointerEventKind.up` sees a release for a press it never had. Hover-mounted
-  controls that rewrite their host are the shape. Act on `clicked`, gated on the item's own
+- **A grabbing item that unmounts mid-gesture hands its release to whatever is under the pointer as
+  a fresh event**: `handle_mouse_grab` finds the grabber gone and `process_mouse_input` hit-tests
+  the event again from the root, so any `TouchArea` there reading `PointerEventKind.up` sees a
+  release for a press it never had. Hover-mounted controls that rewrite their host are the shape,
+  and so is a notification card dropped mid-drag. Act on `clicked`, gated on the item's own
   `pressed` (`items/input_items.rs`); it carries no modifiers, so snapshot them on `Down`, and runs
-  before `pointer-event(Up)`.
+  before `pointer-event(Up)` (`stray_release.rs`). A drag that commits on release wherever it ends
+  clears its own flag there (`SliderPointer`).
 
 - **`has-hover` isn't continuous, so a translucent fill may not read it raw.** `input_items.rs`
   drops it on a wheel event the `TouchArea` doesn't take, and `send_exit_events` compares stack
@@ -214,6 +216,10 @@ there, never in the `.slint`.
   `hover-held`), the raw flag kept since `changed` skips a first evaluation. **Where nothing takes
   the wheel, the flag stays down until the pointer moves**, so a control or sentinel that must keep
   its hover answers `accept` to every wheel event, an empty one included.
+
+- **A row rebuilt under a still pointer stays unhovered until the pointer moves**: Slint hit-tests
+  only on input, so a hover-mounted control takes a click to appear. Re-hover through
+  `window_chrome::pointer::rehover`, whose doc says where it may run (`queue_panel/rows.rs`).
 
 - **A `TouchArea` grabs on a press of any button; only `pressed` is left-only.** `mouse-x`/`y`
   follow a held right button, so a menu takes its anchor once (`show-at`), and a slider filters
@@ -328,14 +334,16 @@ there, never in the `.slint`.
 - **Nothing that draws text may be cut to its layout box, which is a line box, not the ink.**
   Vazirmatn is patched to a ~1.05 em line box (`1650/-500`, `USE_TYPO_METRICS`) while its outlines
   reach `yMax 2163` / `yMin -1160`, so a crop removes Arabic marks no Latin review sees:
-  - **`opacity` below 1 renders the subtree into a texture sized to child geometry.**
-    `Opacity::need_layer` (`i-slint-core/items.rs`) bails at 1.0 and on an element with no
-    children; else `item_children_bounding_rect` sizes it, a `Text`'s `bounding_rect` being its
-    line box. A fade crops while it runs, a dimmed state for as long as it lasts. Fold the alpha
-    into the brush (`with-alpha`), pass a `fade` float where there is none (`ArtworkImage`), or,
-    where the brushes feed the component's own `animate`s, leave the faded element childless
-    (`IconButton`). Verify by names in the enclosing struct's item fields, a sub-component having
-    no `ITEM_TREE`. `view-transition.slint` has no cure.
+  - **`opacity` below 1, `0` included, renders the subtree into a texture sized to child
+    geometry.** `Opacity::need_layer` (`i-slint-core/items.rs`) bails at 1.0 and on an element with
+    no children; else `item_children_bounding_rect` sizes it, a `Text`'s `bounding_rect` being its
+    line box. A fade crops while it runs, a dimmed state or a rest at `0` for as long as it lasts,
+    and one whose bounds move is re-allocated every frame (`opacity_layers.rs`). Fold the alpha
+    into the brush (`transparentize`, which multiplies where `with-alpha` sets), pass a `fade`
+    float where there is none (`ArtworkImage`), or, where the brushes feed the component's own
+    `animate`s, leave the faded element childless (`IconButton`). Verify by names in the enclosing
+    struct's item fields, a sub-component having no `ITEM_TREE`. `view-transition.slint` has no
+    cure, one of the layers `opacity_layers.rs` keeps.
   - **A `Text`'s default `overflow: clip` pushes a scissor at its box**
     (`textlayout/sharedparley.rs` → `combine_clip`). `overflow: elide` pushes one only where the
     first line overflows the box's height (`first_line_exceeds_height`), so user text wants elide,

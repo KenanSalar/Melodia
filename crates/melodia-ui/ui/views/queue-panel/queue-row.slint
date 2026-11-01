@@ -124,11 +124,13 @@ export component QueueRowItem inherits Rectangle {
                         }
                         cb-touch := TouchArea {
                             mouse-cursor: pointer;
+                            // `touch`'s shape: the pick on `clicked`, its modifiers off the press.
+                            clicked => { root.pick(root.press-ctrl, root.press-shift); }
                             pointer-event(ev) => {
-                                if (ev.kind == PointerEventKind.up
+                                if (ev.kind == PointerEventKind.down
                                     && ev.button == PointerEventButton.left) {
-                                    root.pick(
-                                        ev.modifiers.control, ev.modifiers.shift);
+                                    root.press-ctrl = ev.modifiers.control;
+                                    root.press-shift = ev.modifiers.shift;
                                 }
                             }
                         }

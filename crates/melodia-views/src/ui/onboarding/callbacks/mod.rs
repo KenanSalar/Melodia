@@ -1,8 +1,8 @@
 //! The card's wiring. One way out, shared by the X, the backdrop, Escape and Skip.
 
 use std::rc::Rc;
-use std::time::Duration;
 
+use crate::ui::appearance::token_duration;
 use crate::ui::settings::settings_page::{self, SettingsCategory};
 use melodia_app::library;
 use melodia_app::state::AppState;
@@ -60,8 +60,7 @@ fn wire_dismiss(ui: &AppWindow, state: &AppState, deferred: Rc<super::DeferredOn
 
         // Held until the fade has run, so the card isn't cut off mid-animation. Taken from the
         // token the overlay animates on rather than restated here.
-        let fade_ms = u64::try_from(ui.global::<Theme>().get_dur_fast()).unwrap_or(0);
-        let fade = Duration::from_millis(fade_ms);
+        let fade = token_duration(ui.global::<Theme>().get_dur_fast());
         let weak = ui.as_weak();
         let deferred = Rc::clone(&deferred);
         slint::Timer::single_shot(fade, move || {

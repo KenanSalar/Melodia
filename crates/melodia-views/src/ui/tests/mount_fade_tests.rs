@@ -1,5 +1,5 @@
 //! Source pins for the enter fades whose flip lands right after their mount: every page through
-//! `ViewTransition`, and the miniplayer backdrop's press.
+//! `ViewTransition`, each notification card, and the miniplayer backdrop's press.
 //!
 //! An animated binding's first evaluation lands on its value without easing, and Slint builds an
 //! `if` branch at input time, well before its first paint, so a 1 ms `Timer` can flip `shown`
@@ -18,6 +18,8 @@ const VIEW_TRANSITION: &str =
 const HERO_BLUR: &str =
     include_str!("../../../../melodia-ui/ui/components/hero-blur-backdrop.slint");
 const AURORA: &str = include_str!("../../../../melodia-ui/ui/components/aurora-backdrop.slint");
+const NOTIFICATION_CARD: &str =
+    include_str!("../../../../melodia-ui/ui/components/dialog/notification-card.slint");
 
 /// Every statement in every `init` block of `src`, in source order.
 fn init_reads(src: &str) -> Vec<String> {
@@ -35,25 +37,38 @@ fn init_reads(src: &str) -> Vec<String> {
         .collect()
 }
 
-/// How many `animate` blocks `src` declares, each one a layer some flip can ease.
-fn animated_layers(src: &str) -> usize {
+/// What each `animate` block in `src` eases, as spelled, one layer per block.
+fn animated_layers(src: &str) -> Vec<String> {
     strip_line_comments(src)
         .lines()
-        .filter(|line| line.trim_start().starts_with("animate "))
-        .count()
+        .filter_map(|line| line.trim_start().strip_prefix("animate "))
+        .map(|rest| rest.split_once('{').map_or(rest, |(layer, _)| layer).trim().to_owned())
+        .collect()
 }
 
-/// The reads are exactly `expected`, and `expected` covers every `animate` in the file, so a layer
-/// added later fails here until it is read too.
-fn assert_every_faded_layer_is_read_at_mount(file: &str, src: &str, expected: &[&str]) {
+/// The reads are exactly `expected`, and `expected` covers every `animate` in the file but the
+/// `unbound` ones, so a layer added later fails here until it is read too. An unbound layer eases
+/// only what is written to it, leaving `init` no binding to read.
+fn assert_every_faded_layer_is_read_at_mount(
+    file: &str,
+    src: &str,
+    expected: &[&str],
+    unbound: &[&str],
+) {
+    let layers = animated_layers(src);
+    let stale: Vec<&str> =
+        unbound.iter().copied().filter(|layer| !layers.iter().any(|l| l == layer)).collect();
+    let bound = layers.iter().filter(|layer| !unbound.contains(&layer.as_str())).count();
+
     assert_eq!(
         init_reads(src),
         expected,
         "{file}'s `init` no longer reads exactly its faded layers. One left unread is first \
          evaluated after the flip and lands at full strength instead of easing in"
     );
+    assert!(stale.is_empty(), "{file} no longer animates {stale:?}, which this pin exempts");
     assert_eq!(
-        animated_layers(src),
+        bound,
         expected.len(),
         "{file} animates a layer its `init` does not read, so that layer snaps where the rest fade"
     );
@@ -67,6 +82,7 @@ fn the_view_transition_reads_every_faded_property_at_mount() {
         "view-transition.slint",
         VIEW_TRANSITION,
         &["root.opacity", "root.x", "root.y"],
+        &[],
     );
 }
 
@@ -77,6 +93,7 @@ fn the_blur_stack_reads_every_faded_layer_at_mount() {
         "hero-blur-backdrop.slint",
         HERO_BLUR,
         &["root.background", "slot-a.opacity", "slot-b.opacity", "scrim-layer.background"],
+        &[],
     );
 }
 
@@ -87,5 +104,18 @@ fn the_aurora_reads_every_faded_layer_at_mount() {
         "aurora-backdrop.slint",
         AURORA,
         &["root.background", "root.background"],
+        &[],
+    );
+}
+
+/// Each card's `enter` Timer flips `shown` 1 ms after its row lands, opening the slot as the body
+/// fades in. The fade-in once never ran, `shown` being set in `init`.
+#[test]
+fn the_notification_card_reads_every_faded_layer_at_mount() {
+    assert_every_faded_layer_is_read_at_mount(
+        "notification-card.slint",
+        NOTIFICATION_CARD,
+        &["root.fade", "root.slot-h", "root.rise"],
+        &["drag-x"],
     );
 }

@@ -15,32 +15,35 @@ export component SectionButton inherits Rectangle {
     in property <bool>   destructive;
     // Softened only for a button standing in for a third-party badge.
     in property <length> corner-radius: root.height / 2;
+    // A host's fade, applied past `animate fill`: folded in, a per-frame fade would stall it.
+    in property <float> fade: 1.0;
 
     callback clicked();
 
     // Through each brush, `opacity` holding a texture for as long as it stays disabled.
-    private property <float> fade: root.button-enabled ? 1.0 : 0.5;
+    private property <float> dim: root.button-enabled ? 1.0 : 0.5;
     private property <brush> ink: (root.primary
             ? (root.destructive ? Theme.danger-text : Theme.accent-text)
             : Theme.text)
-        .transparentize(1.0 - root.fade);
-
-    height: 32px;
-    horizontal-stretch: 0;
-    border-radius: root.corner-radius;
-    background: (!root.button-enabled
+        .transparentize(1.0 - root.dim * root.fade);
+    private property <brush> fill: (!root.button-enabled
             ? Theme.card-control
             : (root.primary
                 ? (root.destructive
                     ? (touch.has-hover ? Theme.danger.brighter(10%) : Theme.danger)
                     : (touch.has-hover ? Theme.accent.brighter(10%) : Theme.accent))
                 : (touch.has-hover ? Theme.card-control-hover : Theme.card-control)))
-        .transparentize(1.0 - root.fade);
+        .transparentize(1.0 - root.dim);
+    animate fill { duration: Theme.dur-fast; easing: ease-in-out; enabled: !Theme.recoloring; }
+
+    height: 32px;
+    horizontal-stretch: 0;
+    border-radius: root.corner-radius;
+    background: root.fill.transparentize(1.0 - root.fade);
     border-color: root.primary || !root.button-enabled
         ? transparent
-        : Theme.card-control-hover;
+        : Theme.card-control-hover.transparentize(1.0 - root.fade);
     border-width: 1px;
-    animate background { duration: Theme.dur-fast; easing: ease-in-out; enabled: !Theme.recoloring; }
 
     HorizontalLayout {
         padding-left: Theme.pad-md;
@@ -64,7 +67,7 @@ export component SectionButton inherits Rectangle {
             width: 18px * root.leading-image.width / root.leading-image.height;
             image-fit: contain;
             // Free on a childless `Image`, which never gets a texture for it.
-            opacity: root.fade;
+            opacity: root.dim * root.fade;
         }
 
         Text {

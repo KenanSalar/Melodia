@@ -17,6 +17,7 @@ export component MiniCaptions inherits HorizontalLayout {
     in property <brush> ink;
     // The glyph a KDE caption punches out of its lit disc.
     in property <brush> ink-on-lit;
+    in property <float> fade: 1.0;
 
     // A constraint only to the macOS arm, whose `GridLayout` would otherwise top-align its lights.
     private property <length> cell-height: MiniPlayer.captions-height;
@@ -40,11 +41,13 @@ export component MiniCaptions inherits HorizontalLayout {
         captions-left: false;
         cell-height: root.cell-height;
         maximize-tooltip: @tr("Full Player");
+        fade: root.fade;
         maximize => { WindowChrome.restore-full-player(); }
     }
     if MiniPlayer.button-style != 1: MinimizeCaption {
         style: root.style;
         cell-height: root.cell-height;
+        fade: root.fade;
         idle-fg: root.ink;
         hover-fg: root.caption-hover-fg;
         hover-bg: root.caption-hover-bg;
@@ -54,6 +57,7 @@ export component MiniCaptions inherits HorizontalLayout {
         style: root.style;
         tooltip-text: @tr("Full Player");
         cell-height: root.cell-height;
+        fade: root.fade;
         idle-fg: root.ink;
         hover-fg: root.caption-hover-fg;
         hover-bg: root.caption-hover-bg;
@@ -63,6 +67,7 @@ export component MiniCaptions inherits HorizontalLayout {
     if MiniPlayer.button-style != 1: CloseCaption {
         style: root.style;
         cell-height: root.cell-height;
+        fade: root.fade;
         idle-fg: root.ink;
     }
 }
@@ -89,7 +94,7 @@ export component MiniCaptionsRow inherits Rectangle {
     min-height: root.open-height;
     max-height: root.open-height;
 
-    // Unmounted once faded: an `opacity` under 1 is a texture, 0 included.
+    // Unmounted once faded, so a closed row draws and catches nothing.
     if root.row-fade > 0: Rectangle {
         x: 0;
         y: 0;
@@ -97,7 +102,6 @@ export component MiniCaptionsRow inherits Rectangle {
         height: 100%;
         // Only while moving: open, a caption's tooltip hangs below the row.
         clip: root.open-t < 1;
-        opacity: root.row-fade;
 
         HorizontalLayout {
             x: 0;
@@ -123,6 +127,7 @@ export component MiniCaptionsRow inherits Rectangle {
                     * Theme.text-size-step;
                 active: Lyrics.enabled;
                 filled: Lyrics.enabled;
+                fade: root.row-fade;
                 tooltip-text: Lyrics.enabled
                     ? @tr("Show Up Next") : @tr("Show lyrics");
                 tooltip-side: TooltipSide.right;
@@ -139,6 +144,7 @@ export component MiniCaptionsRow inherits Rectangle {
                 transform-scale: root.button-scale;
                 ink: root.ink;
                 ink-on-lit: root.ink-on-lit;
+                fade: root.row-fade;
             }
         }
     }

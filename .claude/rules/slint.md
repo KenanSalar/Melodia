@@ -109,7 +109,7 @@ paths:
 - The Slint event loop runs on the **main thread**. Don't run the tokio runtime on the same thread;
   instead let it own its own worker threads, and use
   `slint::spawn_local(async_compat::Compat::new(...))` to bridge in.
-- For periodic UI updates driven by tokio (position ticks, toast timers), prefer
+- For periodic UI updates driven by tokio (position ticks), prefer
   `tokio::sync::watch` + a `spawn_local` consumer over `tokio::time::interval` running on the UI
   thread.
 

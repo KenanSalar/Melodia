@@ -109,6 +109,7 @@ export component StationCard inherits Rectangle {
             diameter: 30px;
             filled: true;
             idle-bg: Theme.floating-chrome-bg;
+            fade: card-body.overlay-fade;
             clicked => { root.play-clicked(); }
         }
 
@@ -120,6 +121,7 @@ export component StationCard inherits Rectangle {
             icon-size: 18px;
             diameter: 30px;
             idle-bg: Theme.floating-chrome-bg;
+            fade: card-body.overlay-fade;
             clicked => { root.homepage-clicked(); }
         }
 
@@ -133,6 +135,7 @@ export component StationCard inherits Rectangle {
             diameter: 30px;
             idle-bg: Theme.floating-chrome-bg;
             hover-fg: Theme.danger;
+            fade: card-body.overlay-fade;
             clicked => { root.remove-clicked(); }
         }
 
@@ -144,6 +147,7 @@ export component StationCard inherits Rectangle {
             icon-size: 18px;
             diameter: 30px;
             idle-bg: Theme.floating-chrome-bg;
+            fade: card-body.overlay-fade;
             clicked => { root.edit-clicked(); }
         }
     }

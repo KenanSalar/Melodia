@@ -26,8 +26,8 @@ The seven ISTQB principles, as they bear on writing a test:
 - **Test early.** A defect costs more the later it is found. Write the test with the code.
 - **Defects cluster.** A minority of modules holds the majority of defects. Put new effort
   where failures have already happened.
-- **Beware the pesticide paradox.** A suite that always passes has stopped finding
-  anything. Revise and extend it as the code moves.
+- **Tests wear out.** Run unchanged, a test finds less and less that is new. Revise and
+  extend the suite as the code moves; repetition still earns its keep as regression protection.
 - **Testing is context dependent.** Rigour follows risk: a path that destroys user data and
   one that misaligns a label do not earn the same coverage.
 - **Absence of defects is a fallacy.** Code that passes every test can still be the wrong
