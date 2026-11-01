@@ -240,9 +240,10 @@ fn wire_seek(ui: &AppWindow, state: &AppState) {
         if let Some(ui) = weak.upgrade() {
             ui.global::<Player>().set_seek_pending_ms(position_ms.max(0));
         }
-        let s = s.clone();
         let pos = u64::try_from(position_ms.max(0)).unwrap_or(0);
-        spawn_logged_sync!(s, "seek", library::playback::player_seek(&s.playback_ctx(), pos));
+        library::playback::request_seek(&s.playback_ctx(), pos);
+        let s = s.clone();
+        spawn_logged_sync!(s, "seek", library::playback::player_seek(&s.playback_ctx()));
     });
 }
 

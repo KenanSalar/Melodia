@@ -512,7 +512,8 @@ impl PlaybackEngine {
     /// the same voice because only `Decks::crossfade_to` moves `active`, under that `exec_lock`.
     ///
     /// Bumps no epoch: a seek replaces no deck contents, and cancelling a deferred pause would
-    /// leave the decks running at the ramp's zero gain while the UI reads Paused.
+    /// leave the decks running at the ramp's zero gain while the UI reads Paused. Returns once the
+    /// swap has landed ([`Self::land`]), which is also the window a burst coalesces in.
     pub fn seek(&self, file_path: &str, position_ms: u64, baked_rg: TrackReplayGain) {
         self.abort_crossfade();
 
@@ -551,6 +552,7 @@ impl PlaybackEngine {
         let decks = self.lock_decks();
         let deck = decks.active();
         deck.voice.replace(self.build_source(source, baked_rg, deck), position, handovers);
+        self.land(&deck.voice);
     }
 
     /// Sets both decks' speed, or a crossfade would drift. No re-anchoring seek: a deck counts

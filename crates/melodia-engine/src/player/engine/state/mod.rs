@@ -1,5 +1,5 @@
 use std::sync::Arc;
-use std::sync::atomic::{AtomicU8, Ordering};
+use std::sync::atomic::{AtomicU8, AtomicU64, Ordering};
 use std::sync::{MutexGuard, TryLockError};
 
 use super::event_sink::PlayerSinks;
@@ -102,7 +102,14 @@ pub struct PlayerStateHandle {
     /// Held by `emit_and_execute` across a mutation and its side effects, so mutation order is
     /// side-effect order across tasks. Never held across an `.await`.
     exec_lock: std::sync::Mutex<()>,
+    /// The newest seek not yet applied, [`NO_SEEK`] when none. Recorded where requests still arrive
+    /// in order and taken under `exec_lock`, so a burst lands on its last request whatever order
+    /// its tasks reach the transport in.
+    seek_target: AtomicU64,
 }
+
+/// No track runs anywhere near `u64::MAX` milliseconds, so no real seek is mistaken for none.
+const NO_SEEK: u64 = u64::MAX;
 
 impl Default for PlayerStateHandle {
     fn default() -> Self {
@@ -110,6 +117,7 @@ impl Default for PlayerStateHandle {
             mutex: std::sync::Mutex::new(PlayerState::default()),
             status_atomic: AtomicU8::new(PlaybackStatus::Stopped as u8),
             exec_lock: std::sync::Mutex::new(()),
+            seek_target: AtomicU64::new(NO_SEEK),
         }
     }
 }
@@ -134,6 +142,17 @@ impl PlayerStateHandle {
                 Some(poisoned.into_inner())
             }
         }
+    }
+
+    /// Supersedes any seek not yet applied.
+    pub fn request_seek(&self, position_ms: u64) {
+        self.seek_target.store(position_ms, Ordering::Relaxed);
+    }
+
+    /// Under [`Self::lock_exec`]; `None` once an earlier holder applied the newest.
+    pub fn take_seek(&self) -> Option<u64> {
+        let target = self.seek_target.swap(NO_SEEK, Ordering::Relaxed);
+        (target != NO_SEEK).then_some(target)
     }
 }
 

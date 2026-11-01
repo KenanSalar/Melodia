@@ -149,8 +149,9 @@ impl Voice {
         self.send_counted(Command::Append { loaded, frames });
     }
 
-    /// How a seek is spelled: `source` is already positioned, so nothing waits on it. A voice that
-    /// has handed over or run dry takes nothing ([`VoiceShared::handovers`]).
+    /// How a seek is spelled, `source` already positioned. Returns once sent, not taken
+    /// ([`Self::await_service`]). A voice that has handed over or run dry takes nothing
+    /// ([`VoiceShared::handovers`]).
     pub fn replace<S: AudioSource + 'static>(&self, source: S, position: Duration, handovers: u64) {
         let frames = frames_in(position, source.sample_rate());
         let loaded = Self::load(source);
@@ -309,7 +310,9 @@ impl Voice {
         true
     }
 
-    fn await_service(&self) {
+    /// Waits until the callback has taken every op sent so far, giving up after [`SERVICE_TIMEOUT`]
+    /// on a stream no longer pulled.
+    pub fn await_service(&self) {
         let ticket = self.shared.issued.load(Ordering::Acquire);
         let deadline = Instant::now() + SERVICE_TIMEOUT;
         while self.shared.serviced.load(Ordering::Acquire) < ticket {

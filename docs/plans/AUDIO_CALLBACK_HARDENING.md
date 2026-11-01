@@ -1,6 +1,6 @@
 # Plan: Audio callback hardening (decode ahead, and nothing freed on the audio thread)
 
-Status: **in progress** (Phases 1 to 3 built) · Owner: Kenan · Created: 2026-11-01 · Tracking: #155
+Status: **in progress** (Phases 1 to 3 built, hand test passed) · Owner: Kenan · Created: 2026-11-01 · Tracking: #155
 
 > **Validated 2026-11-01** against `8dd32dc3` (`main`): direct reads of `output/voice.rs`,
 > `output/mixer.rs`, `output/device.rs`, `output/alsa.rs`, `output/realtime.rs`,
@@ -98,9 +98,10 @@ The guidance this follows, and the mechanisms that shaped the decisions:
 - **A feeder that naps for a fraction of what it has buffered** wakes rarely while full, and still
   refills well before the ring drains. A fixed short poll, which suits a socket, would wake every
   file feeder about 50 times a second, paused included.
-- **About half a second of decoded audio ahead** covers a disk seek under load and a brief pause on
-  a network share. It cannot cover a drive spinning up from sleep, which takes seconds; no
-  reasonable buffer can.
+- **Two seconds of decoded audio ahead** rides out a read stall of 1.4 to 1.9 s at normal speed,
+  where half a second covered 0.28 to 0.40 s: a NAS or Wi-Fi share pausing, not only a busy disk's
+  seek. fooyin and Strawberry buffer four seconds, rox half of one. Four would double the memory
+  again for stalls of two to four seconds, and a drive waking from sleep outlasts any of them.
 - **std's bounded channel** (`sync/mpmc/array.rs`, `waker.rs`) never locks when neither end blocks,
   which is why the command and retirement channels stay as they are.
 
@@ -158,8 +159,9 @@ Status: built, gates green.
    `VoiceShared::sources`. `send_counted` claims a slot with `sources.try_update(…)` and refuses at
    the cap on the control thread, with the existing "transport op was lost" warning. A voice in
    normal use holds at most three (the current source, one staged, a seek's replacement), so the
-   cap is never met; matching the channel refuses no burst it would take. `staged` is preallocated
-   to `SOURCE_SLOTS`, so `push_back` can't reallocate on the callback.
+   cap is never met. It counts the playing source as well, so it refuses one op before the channel
+   would; what keeps a seek burst off it is each seek landing before the next (Phase 4's fix).
+   `staged` is preallocated to `SOURCE_SLOTS`, so `push_back` can't reallocate on the callback.
 2. **Drain before every send**: `Voice::send` calls `collect_spent()` first. The poll-tick drain
    stays for natural track ends. `send_counted` claims before that drain, so every source the queue
    can hold was counted at its last drain, and the queue never holds more than `SOURCE_SLOTS`.
@@ -185,8 +187,8 @@ Status: built, gates green.
    `total_duration` and `dsp_engaged`, fills the ring (decision 7), and spawns the feeder,
    `for sample in decoder { if !writer.push(sample) { return } }` then `finish()`, which owns the
    decoder so the file is closed off the callback. `release_claims` and the reader's `Drop` set the
-   abandon flag. `DEPTH` (500 ms) and `LOW_WATER` (100 ms, clamped to the depth) are documented by
-   role; the table below is what sizes `LOW_WATER`.
+   abandon flag. `DEPTH` (2 s, raised from 500 ms after the hand test) and `LOW_WATER` (100 ms,
+   clamped to the depth) are documented by role; the table below is what sizes `LOW_WATER`.
 3. **`AudioSource::is_ready`**, answered by `DecodeAhead` as `finished || buffered >= low_water` and
    forwarded by `EqSource` and `VisualizerTap`.
 4. **The hold in `VoicePull::render`:** a source that isn't ready is left for the step, and
@@ -213,25 +215,41 @@ one `LOCKSTEP_FRAMES` (64 device frames) step at `MAX_SPEED` (2.0).
 | 8 / 48 kHz | 32 ms | 2.7 ms | 34.7 ms |
 | 8 / 8 kHz (exclusive at the file's rate) | 32 ms | 16 ms | 48 ms |
 
-The feeder naps `DEPTH / 4` when full; at 2× that drains 250 ms of a 500 ms ring, leaving 250 ms,
-above `LOW_WATER`, so a healthy feeder never lets a deck hold.
+The feeder naps `DEPTH / 4` when full; at 2× that drains 1 s of a 2 s ring, leaving 1 s, above
+`LOW_WATER`, so a healthy feeder never lets a deck hold.
 
 ### Phase 4: hand test, then tests
 
-1. **Hand test** (Kenan, `cargo run -p melodia`, dev data folder), covering every phase:
-   - lyrics load for a track that has none cached, and a burst of track changes doesn't trip the
-     host's rate limit
-   - local playback, a gapless album seam (AAC and MP3), and a manual crossfade
-   - a burst of skips through a long queue, and repeated keyboard seeks: playback carries on, and
-     the log shows no lost transport op
-   - EQ, preamp and volume still respond instantly
-   - bit-perfect playback on an ALSA `hw:` device
-   - a radio station
-   - a track on a USB drive or network share, interrupted for a moment: only that deck goes quiet,
-     its position holds still, and the log shows the hold
-   - RSS before and after (see Cross-cutting)
+Status: hand test passed; tests wait for Kenan's go.
 
-   Everything below waits for Kenan's go after it.
+1. **Hand test**, run 2026-11-01 on the dev data folder (51,012 tracks) against the debug build,
+   with release builds of this branch and of `main` for the comparisons. Everything listed passed.
+   EQ and preamp were not driven, having no route but clicks; they sit above the ring in the chain,
+   as volume does.
+   - lyrics: five tracks were looked up and stored, one answered from its tag, and twelve track
+     changes 250 ms apart drew no refusal of their own; the one track LRCLIB refuses was refused
+     alone
+   - gapless seams, MP3 and AAC: no sample gained or lost, identical to `main` at matched gain
+   - a manual crossfade fades cleanly, and volume moves within 100 ms on both builds
+   - 25 skips back to back and an arrow-key run: no lost transport op
+   - bit-perfect: the PCM2902 claimed at the file's S16 and 44.1 kHz, with no fallback, read from
+     its `hw_params` rather than compared byte for byte
+   - a radio station plays, pauses and resumes
+   - a FUSE-mounted track frozen for 2.5 s mid-crossfade and for 3 s alone: only that deck went
+     quiet, its fade and position held, and `Deck 1 held` was logged once per stall
+   - RSS with the 2 s ring: anonymous memory within 1.0 MiB of `main`, idle and playing, CPU time
+     equal, and peak within 6.9 MiB, set by the startup library load before any ring exists
+
+   **Found and fixed in it.** Ten MPRIS `SetPosition` calls inside one device period lost ops on
+   `main` and here, and playback ended on an older target than the last. A seek was the one
+   transport op that sent without waiting for the callback, and each request ran as its own task,
+   reaching `exec_lock` in any order. Now `PlaybackEngine::seek` lands its swap before returning
+   (`PlaybackEngine::land`: on the callback, or on the spot where no stream pulls), and the newest
+   request wins through `PlayerStateHandle`'s seek slot, recorded before the spawn and taken under
+   `exec_lock`. A burst coalesces in the landing wait. Rerun: no lost op, every burst ending on its
+   last target, and single, paused and arrow-key seeks landing as before.
+
+   Everything below waits for Kenan's go.
 2. **Tests:** added where the landed change earns them. `prebuffer_tests.rs`'s ring-level cases
    moving to `sample_ring_tests.rs` goes with it.
 3. **Last:** delete this plan, after the root `CLAUDE.md` check that what it built is argued at its
@@ -247,7 +265,9 @@ above `LOW_WATER`, so a healthy feeder never lets a deck hold.
 - **Memory** (Phase 3 only; Phases 1 and 2 are neutral):
   - New, bounded, and freed when the source retires: one ring per live file source, meaning the
     current one plus one staged during a gapless preload or a crossfade. Decoded f32 at `DEPTH` is
-    176 KB at 44.1 kHz stereo, 384 KB at 96 kHz and 768 KB at 192 kHz.
+    706 KB at 44.1 kHz stereo, 1.5 MB at 96 kHz and 3.1 MB at 192 kHz.
+  - The fill before a start or a seek grows with `DEPTH`: 1.2 to 3.6 ms at 2 s in a release build
+    with a warm page cache, across MP3, AAC, FLAC 16/44.1 and 24/96, Opus and Vorbis.
   - One thread per live file source longer than `DEPTH`. Its stack is virtual, and only touched
     pages count.
   - Moved, not added: decoder buffers and per-packet allocations go from the audio thread's glibc
@@ -257,11 +277,11 @@ above `LOW_WATER`, so a healthy feeder never lets a deck hold.
 - **Unaffected:** no migration, no settings field, no `@tr` string, and no change to radio's
   behaviour.
 - **Lock order:** the drain before a send takes only the voice's own `spent` lock, a leaf, under the
-  `exec_lock → PlayerState → decks → output` order the control thread already holds.
+  `exec_lock → PlayerState → decks → output` order the control thread already holds. A seek's
+  landing takes the output's lock under the decks and lets it go before waiting.
 
-## Open questions
+## Settled after the hand test
 
-- Whether `DEPTH` at 500 ms is right comes from the hand test on a slow drive. It is the one knob,
-  and memory is the cost of raising it.
-- Whether a hold is worth showing the user, as the buffering indicator does for a station, or only
-  logging. This plan logs, and the hand test decides.
+- **`DEPTH` is 2 s**, up from 500 ms (the prior-art bullet above argues it). Kenan's call.
+- **A hold is only logged** (`HoldWatch`), with no indicator of the kind a station's buffering
+  shows. Kenan's call.

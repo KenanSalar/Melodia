@@ -198,7 +198,8 @@ async fn each_transport_door_reaches_the_builder_it_names() -> Result<(), AppErr
     player_next(&fx.ctx)?;
     assert_eq!(lock_state(&fx.ctx.player_state).current_track().map(|t| t.id), ids.get(1).copied());
 
-    player_seek(&fx.ctx, 45_000)?;
+    request_seek(&fx.ctx, 45_000);
+    player_seek(&fx.ctx)?;
     assert_eq!(lock_state(&fx.ctx.player_state).position_ms, 45_000);
 
     player_set_playback_speed(&fx.ctx, 1.5)?;

@@ -67,9 +67,7 @@ impl MixerPull {
             if self.held > 0 {
                 // Serviced but not rendered: a clear issued behind a reopen still has to land, and
                 // no source may advance through audio nobody hears.
-                for voice in &mut self.voices {
-                    voice.service();
-                }
+                self.service();
                 self.held = self.held.saturating_sub(step.len() / width);
                 continue;
             }
@@ -86,6 +84,13 @@ impl MixerPull {
                     written = voice.render(step) > 0;
                 }
             }
+        }
+    }
+
+    /// Takes every voice's pending ops without playing anything.
+    pub fn service(&mut self) {
+        for voice in &mut self.voices {
+            voice.service();
         }
     }
 

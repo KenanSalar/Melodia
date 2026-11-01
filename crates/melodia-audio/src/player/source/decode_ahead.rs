@@ -16,7 +16,7 @@ use super::sample_ring::{self, FeedState, Pulled, RingReader, RingWriter};
 
 /// How much decoded audio a file keeps ahead of its deck: the longest read it rides out before the
 /// deck holds, and the memory each playing or staged file costs.
-pub const DEPTH: Duration = Duration::from_millis(500);
+pub const DEPTH: Duration = Duration::from_secs(2);
 
 /// The least a ring holds before its deck pulls it. Covers one mixer step at the top speed plus
 /// the resampler's lookahead at the lowest rates a file and a device meet at, so a step started

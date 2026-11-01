@@ -18,6 +18,7 @@ use melodia_audio::player::source::file_decode::FileDecoder;
 use melodia_core::error::{AppError, describe};
 use melodia_playback::player::playback::decks::Decks;
 use melodia_playback::player::playback::output::device::{ExternalVolume, Lead};
+use melodia_playback::player::playback::output::voice::Voice;
 use melodia_playback::player::playback::output::{
     self, AudioOutput, ExclusiveRequest, ExclusiveTuning, Negotiated, OutputMode, OutputRequest,
     OutputStatus, RateFallback,
@@ -123,6 +124,22 @@ impl PlaybackEngine {
         if let Some(mut output) = closed {
             output.park();
         }
+    }
+
+    /// Lands `voice`'s last op before the transport moves on, so ops sent faster than the callback
+    /// runs can't stack past its channel: on the callback where a stream pulls, here where none
+    /// does. With no output at all, whatever owns the puller services it.
+    pub(super) fn land(&self, voice: &Voice) {
+        {
+            let device = self.output.device.lock();
+            let Some(output) = device.as_ref() else { return };
+            if !output.has_stream() {
+                output.service_voices();
+                return;
+            }
+        }
+        // Past the output's lock: every reader of it would otherwise wait out the device period.
+        voice.await_service();
     }
 
     /// Sets the user's volume, as an amplitude, on the device's own control where a claim carries

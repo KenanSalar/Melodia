@@ -12,9 +12,12 @@ pub struct SlintEventSink {
 
 impl EventSink for SlintEventSink {
     fn handle(&self, ev: PlayerEvent) {
+        let ctx = self.state.playback_ctx();
+        if let PlayerEvent::SeekTo(ms) = ev {
+            library::playback::request_seek(&ctx, ms);
+        }
         let s = self.state.clone();
         self.state.runtime.spawn(async move {
-            let ctx = s.playback_ctx();
             let r = match ev {
                 PlayerEvent::Play => library::playback::player_play(&ctx),
                 PlayerEvent::Pause => library::playback::player_pause(&ctx),
@@ -22,7 +25,7 @@ impl EventSink for SlintEventSink {
                 PlayerEvent::Next => library::playback::player_next(&ctx),
                 PlayerEvent::Previous => library::playback::player_previous(&ctx),
                 PlayerEvent::Stop => library::playback::player_stop(&ctx),
-                PlayerEvent::SeekTo(ms) => library::playback::player_seek(&ctx, ms),
+                PlayerEvent::SeekTo(_) => library::playback::player_seek(&ctx),
                 PlayerEvent::SetVolume(v) => {
                     library::playback::player_set_volume_committed(&ctx, v).await
                 }

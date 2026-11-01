@@ -262,8 +262,17 @@ pub fn player_stop_station(ctx: &PlaybackContext) -> Result<(), AppError> {
     Ok(())
 }
 
-pub fn player_seek(ctx: &PlaybackContext, position_ms: u64) -> Result<(), AppError> {
-    ctx.emit_and_execute(|s| s.build_seek_actions(position_ms));
+/// Makes `position_ms` the seek [`player_seek`] lands. Called before spawning that, while requests
+/// are still in arrival order.
+pub fn request_seek(ctx: &PlaybackContext, position_ms: u64) {
+    ctx.player_state.request_seek(position_ms);
+}
+
+/// Lands the newest requested seek, or nothing where an earlier task already has.
+pub fn player_seek(ctx: &PlaybackContext) -> Result<(), AppError> {
+    ctx.emit_and_execute(|s| {
+        ctx.player_state.take_seek().map_or_else(Vec::new, |ms| s.build_seek_actions(ms))
+    });
     Ok(())
 }
 
