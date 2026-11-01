@@ -1,7 +1,8 @@
 use std::sync::Arc;
 
 use crate::player::source::audio::{AudioSource, SourceFormat};
-use crate::player::source::prebuffer::{PrebufferSource, RingWriter, StreamShared};
+use crate::player::source::prebuffer::{PrebufferSource, StreamShared};
+use crate::player::source::sample_ring::RingWriter;
 use crate::player::source::tests::helpers::shape;
 
 const RATE: u32 = 48_000;

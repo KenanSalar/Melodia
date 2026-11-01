@@ -374,6 +374,10 @@ impl<S: AudioSource> AudioSource for VisualizerTap<S> {
         Ok(())
     }
 
+    fn is_ready(&self) -> bool {
+        self.input.is_ready()
+    }
+
     /// So a source freed off the callback stops being mixed the moment it stops playing.
     fn release_claims(&mut self) {
         self.run.release();

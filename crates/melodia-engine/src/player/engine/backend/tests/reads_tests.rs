@@ -6,6 +6,7 @@
 
 use std::num::NonZero;
 use std::path::Path;
+use std::time::Duration;
 
 use melodia_audio::player::source::audio::{Sample, Shape};
 use melodia_core::error::AppError;
@@ -29,6 +30,10 @@ const PLAYED_MS: u32 = 200;
 /// Where the seek lands, inside the fixture and clear of [`PLAYED_MS`].
 const SEEK_MS: u64 = 700;
 
+/// Deeper than the one-second fixture, so it decodes whole before it mounts: a pull past its end
+/// would otherwise outrun the feeder and hold rather than run the deck dry.
+const DECODE_AHEAD: Duration = Duration::from_secs(2);
+
 /// An engine over a mixer the test pulls by hand.
 fn engine() -> Result<(PlaybackEngine, MixerPull), AppError> {
     let device = Shape {
@@ -36,7 +41,7 @@ fn engine() -> Result<(PlaybackEngine, MixerPull), AppError> {
         rate: NonZero::new(RATE).unwrap_or(NonZero::<u32>::MIN),
     };
     let (mixer, pull) = mixer::pair(DECK_COUNT, device);
-    Ok((PlaybackEngine::new(&mixer, tokio::runtime::Handle::current())?, pull))
+    Ok((PlaybackEngine::new(&mixer, tokio::runtime::Handle::current(), DECODE_AHEAD)?, pull))
 }
 
 /// One second of silence.

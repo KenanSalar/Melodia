@@ -13,6 +13,7 @@ use std::sync::Arc;
 use super::*;
 use crate::player::engine::state::PlayerViewModelLight;
 use melodia_audio::player::source::audio::{Sample, Shape};
+use melodia_audio::player::source::decode_ahead;
 use melodia_core::entities::track::TrackSummary;
 use melodia_core::error::AppError;
 use melodia_playback::player::playback::crossfade::CrossfadeSettings;
@@ -447,7 +448,8 @@ async fn a_release_never_writes_back_the_position_a_seek_moved_off() -> Result<(
         rate: NonZero::new(44_100).unwrap_or(NonZero::<u32>::MIN),
     };
     let (mixer, mut pull) = mixer::pair(DECK_COUNT, device);
-    let engine = PlaybackEngine::new(&mixer, tokio::runtime::Handle::current())?;
+    let engine =
+        PlaybackEngine::new(&mixer, tokio::runtime::Handle::current(), decode_ahead::DEPTH)?;
     engine.play_media(&fixture, 1.0, 1.0, None, TrackReplayGain::default())?;
     let mut block: Vec<Sample> = vec![0.0; 4_096];
     pull.fill(&mut block);

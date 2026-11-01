@@ -1,6 +1,6 @@
 # Plan: Audio callback hardening (decode ahead, and nothing freed on the audio thread)
 
-Status: **in progress** (Phases 1 and 2 built) · Owner: Kenan · Created: 2026-11-01 · Tracking: #155
+Status: **in progress** (Phases 1 to 3 built) · Owner: Kenan · Created: 2026-11-01 · Tracking: #155
 
 > **Validated 2026-11-01** against `8dd32dc3` (`main`): direct reads of `output/voice.rs`,
 > `output/mixer.rs`, `output/device.rs`, `output/alsa.rs`, `output/realtime.rs`,
@@ -75,6 +75,15 @@ until audio flows again.
 6. **The retirement queue becomes impossible to fill, rather than larger.** A larger queue makes an
    overflow rarer and no shorter. A cap on the sources a voice holds, plus draining before every
    send, bounds what can be in the queue, and that bound sizes it.
+7. **The ring is filled before it mounts.** `DecodeAhead::start` decodes on the caller's thread,
+   already off the deck lock for the open and seek, until the ring is full or the file ends, and
+   only then hands the decoder to a feeder (none when the file ended first). A mount or a seek
+   never starts on a hold, so a logged hold is always a stall.
+8. **The depth is a parameter of the engine.** `with_output` passes `decode_ahead::DEPTH`; a suite
+   pulling faster than real time passes one deeper than its fixtures, which with (7) decode whole
+   before they mount. Repeating a held step instead loses nothing only when every deck held:
+   mid-crossfade the deck that played moves its ramp and the held one doesn't, which breaks
+   `crossfade.rs`'s summed-amplitude check within a few steps.
 
 ## Prior art
 
@@ -99,35 +108,35 @@ The guidance this follows, and the mechanisms that shaped the decisions:
 
 | File | Owns after the change |
 |---|---|
-| `crates/melodia-audio/src/player/source/sample_ring.rs` **(new)** | The SPSC ring: `SampleRing`, `RingWriter` (given its park interval and the abandon and finish flags) and `RingReader` with the whole-frame starvation gate |
+| `crates/melodia-audio/src/player/source/sample_ring.rs` **(new)** | The SPSC ring: `FeedState` (finish and abandon), `ring()`, `RingWriter` (given its depth and park interval) and `RingReader` with the whole-frame gate (`pull() -> Pulled`) |
 | `crates/melodia-audio/src/player/source/prebuffer.rs` | Radio policy only: `StreamShared` (titles, the buffering flag) and `PrebufferSource` over a `RingReader` |
-| `crates/melodia-audio/src/player/source/decode_ahead.rs` **(new)** | `DecodeAhead`: spawns the `"decode-ahead"` feeder that owns a `FileDecoder`, and reads its ring as an `AudioSource` |
-| `crates/melodia-audio/src/player/source/audio.rs` | `AudioSource` gains one provided method: whether a pull now finds audio already decoded (`true` by default) |
-| `crates/melodia-playback/src/player/playback/{equalizer,visualizer}.rs` | Forward that method, as they already forward `total_duration` and `release_claims` |
-| `crates/melodia-playback/src/player/playback/output/voice.rs` | The source cap, drain before send, the hold, and the `holds` counter |
-| `crates/melodia-engine/src/player/engine/backend/mod.rs` | One helper wrapping a `FileDecoder` in `DecodeAhead` before `build_source`, used at all three mount sites |
-| `crates/melodia-engine/src/player/engine/handlers.rs` | The poll tick reads `holds` and logs once per episode |
+| `crates/melodia-audio/src/player/source/decode_ahead.rs` **(new)** | `DecodeAhead`: fills the ring, spawns the `"decode-ahead"` feeder that owns the rest of the `FileDecoder`, and reads its ring as an `AudioSource` |
+| `crates/melodia-audio/src/player/source/audio.rs` | `AudioSource::is_ready`, provided (`true`): whether the deck should pull now |
+| `crates/melodia-playback/src/player/playback/{equalizer,visualizer}.rs` | Forward it, as they forward `release_claims` |
+| `crates/melodia-playback/src/player/playback/output/voice.rs` | The source cap, drain before send, the hold, and `held_steps` |
+| `crates/melodia-playback/src/player/playback/decks.rs` | `held_steps` per deck, by slot |
+| `crates/melodia-engine/src/player/engine/backend/mod.rs` | `new` takes the depth; `DecodeAhead::start` at the three mount sites |
+| `crates/melodia-engine/src/player/engine/handlers.rs` | `HoldWatch`: the poll tick logs a stall once per episode |
 | `crates/melodia-net/src/services/net/pacer.rs` | A `std::sync::Mutex`; `stop_for` turns synchronous |
 
-- **Duplication collapsed.** The ring, the whole-frame gate and the abandon and finish protocol live
-  in `prebuffer.rs` today. Lifting them into `sample_ring.rs` gives radio and files one copy, and is
-  its own no-behaviour-change step at the start of Phase 3.
-- **One wrapping site.** `FileDecoder` reaches a deck at `start_track` (through `play_media`), the
-  seek at `backend/mod.rs:522-536`, and the gapless stage at `:589`. All three go through one helper,
-  so no mount can skip the ring.
-- **Sizes.** `voice.rs` is at 563 lines and gains about 30. `prebuffer.rs` shrinks.
-  `backend/mod.rs` is at 625 and gains about 15. Everything stays well under 800.
+- **Duplication collapsed.** The ring, the whole-frame gate and the abandon and finish protocol
+  lived in `prebuffer.rs`. `sample_ring.rs` gives radio and files one copy.
+- **Three mount sites, one wrapper.** A `FileDecoder` reaches a deck through `start_track` (for
+  `play_media` and `begin_crossfade`), `seek` and `preload_gapless`, and each passes it through
+  `DecodeAhead::start` before `build_source`.
+- **Sizes.** `voice.rs` 589, `backend/mod.rs` 645, `handlers.rs` 579, `prebuffer.rs` 238. All under
+  800.
 - **Thread name.** `"decode-ahead"` is 12 bytes, under Linux's 15. It is written as a literal after
   `.name(`, which `packaging.rs`'s walk reads.
 
 ## Phases
 
 Each phase ends at the static gates and a build. An existing test that a phase breaks is fixed in
-that phase. Kenan hand-tests the whole change once, at the start of Phase 4, and its new tests and
-doc files wait for his go after that.
+that phase, and so is a doc it makes stale. Kenan hand-tests the whole change once, at the start of
+Phase 4, and its new tests wait for his go after that.
 
-Four commits: Phases 1 and 2 together, both small and neither audible; Phase 3's pure move alone,
-behaviour-neutral; the rest of Phase 3, whose hold and ring only work together; then Phase 4.
+Three commits: Phases 1 and 2 together, both small and neither audible; Phase 3, its ring move
+included; then Phase 4.
 
 ### Phase 1: the pacer on a sync mutex
 
@@ -164,44 +173,50 @@ Status: built, gates green.
 
 ### Phase 3: decode ahead of the callback
 
-Status: not started.
+Status: built, gates green.
 
-1. **Pure move:** `SampleRing`, `RingWriter` and the frame gate move from `prebuffer.rs` into
-   `sample_ring.rs`, with `PrebufferSource` rebuilt on `RingReader`. Radio behaves as before, and
-   `prebuffer_tests.rs` moves with what it pins.
-2. **`RingWriter` takes its park interval.** Radio keeps `FEED_PARK` (20 ms). Files park for a
-   quarter of their ring.
-3. **`decode_ahead.rs`:**
-   - `DecodeAhead::spawn(decoder: FileDecoder) -> Result<Self, AppError>` sizes the ring from the
-     decoder's shape, starts the feeder, and copies `shape`, `format`, `total_duration` and
-     `dsp_engaged`.
-   - The feeder loop is `for sample in decoder { if !writer.push(sample) { return } }`, then
-     `finish()`. The thread owns the decoder, so the file is closed and the decoder freed off the
-     callback.
-   - `release_claims` and `Drop` set the abandon flag, the same protocol radio uses.
-   - Constants, each documented by its role rather than its value: `AHEAD_MS` (500) for ring depth,
-     and `LOW_WATER_MS` for the least a deck must hold before it is pulled. `LOW_WATER_MS` has to
-     exceed one `LOCKSTEP_FRAMES` step's pull at the top speed plus the sinc kernel's lookahead.
-4. **The readiness method** on `AudioSource`. `DecodeAhead` answers
-   `finished || ring.len() >= low_water`, and `EqSource` and `VisualizerTap` forward it.
-5. **The hold in `VoicePull::render`** (`voice.rs:362`): when the current source isn't ready, it
-   stops for this step and writes nothing. `VoiceShared::holds` takes one relaxed add per held step.
-   This also covers the few milliseconds after a mount or a seek before the first fill lands. A
-   staged gapless source is built seconds before its seam, so its ring is full by the handover.
-6. **The engine:** one helper wraps the `FileDecoder` and then calls `build_source`, at the three
-   mount sites. `play_media` already opens and seeks off the deck lock, so the spawn happens there.
-   `plays_without_reopen` reads shape and format from `DecodeAhead`.
-7. **The poll tick** reads `holds` and logs once per episode, naming the deck and never the path.
-8. **Corpus walks that drive the engine faster than real time** (`bit_perfect.rs`, `crossfade.rs`,
-   `stream_rate.rs`, `transport_holds.rs`) can outrun a feeder, and a held step would break
-   `bit_perfect.rs`'s whole-PCM search. Their harness pulls one `LOCKSTEP_FRAMES` step at a time
-   and repeats a step whose pull moved `holds`. A held step consumed nothing, so dropping its output
-   loses nothing. Fixtures shorter than `AHEAD_MS` can instead wait, within their existing
-   `START_BUDGET`, for the feeder to finish.
-9. `source/mod.rs`'s doc: the ring keeps every blocking read off the callback, socket and disk
-   alike.
+1. **The ring move:** `SampleRing`, the frame gate and the finish and abandon flags (`FeedState`,
+   separate because a station's exists before its ring) move from `prebuffer.rs` into
+   `sample_ring.rs`. `ring()` takes the depth and the park interval: radio passes `PREBUFFER_MS` and
+   `FEED_PARK`, files `DEPTH` and a quarter of it. `StreamShared` delegates `finish`,
+   `is_finished` and `is_abandoned`, so no radio caller changed, and `prebuffer_tests.rs` passes
+   untouched but for one import.
+2. **`decode_ahead.rs`:** `DecodeAhead::start(decoder, depth)` copies `shape`, `format`,
+   `total_duration` and `dsp_engaged`, fills the ring (decision 7), and spawns the feeder,
+   `for sample in decoder { if !writer.push(sample) { return } }` then `finish()`, which owns the
+   decoder so the file is closed off the callback. `release_claims` and the reader's `Drop` set the
+   abandon flag. `DEPTH` (500 ms) and `LOW_WATER` (100 ms, clamped to the depth) are documented by
+   role; the table below is what sizes `LOW_WATER`.
+3. **`AudioSource::is_ready`**, answered by `DecodeAhead` as `finished || buffered >= low_water` and
+   forwarded by `EqSource` and `VisualizerTap`.
+4. **The hold in `VoicePull::render`:** a source that isn't ready is left for the step, and
+   `VoiceShared::held_steps` takes one relaxed add.
+5. **The engine:** `new` takes the depth (decision 8). `start_track` starts the `DecodeAhead` ahead
+   of `bump_epoch` and returns its error, so a failure touches no deck; `seek` and
+   `preload_gapless` wrap after their open. `build_source` stays generic.
+6. **The poll tick:** `HoldWatch` reads `PlaybackEngine::held_steps` after `collect_spent` and logs
+   `Deck {slot} held: …` once per episode, never the path.
+7. **Suites that pull faster than real time:** `crossfade.rs` (6 s fixtures) and `reads_tests.rs`
+   (pulls past its 1 s fixture) pass a depth deeper than their fixtures. `bit_perfect.rs` (under
+   200 ms) and `handlers_tests.rs` (pulls 46 ms) fit `DEPTH` as they are. `stream_rate.rs` plays a
+   station and `transport_holds.rs` is a Slint walk, so neither mounts a file.
+8. Comments that named the callback as where a file decodes (`decode.rs`, `source/mod.rs`, `Loaded`)
+   now say where it does. No doc file named it.
 
-### Phase 4: hand test, then tests and docs
+`LOW_WATER` covers one fill's worst pull: `resample::REACH` (256 source frames) of lookahead plus
+one `LOCKSTEP_FRAMES` (64 device frames) step at `MAX_SPEED` (2.0).
+
+| source / device | lookahead | step at 2× | needed |
+|---|---|---|---|
+| 44.1 / 44.1 kHz | 5.8 ms | 2.9 ms | 8.7 ms |
+| 384 / 44.1 kHz | 0.7 ms | 2.9 ms | 3.6 ms |
+| 8 / 48 kHz | 32 ms | 2.7 ms | 34.7 ms |
+| 8 / 8 kHz (exclusive at the file's rate) | 32 ms | 16 ms | 48 ms |
+
+The feeder naps `DEPTH / 4` when full; at 2× that drains 250 ms of a 500 ms ring, leaving 250 ms,
+above `LOW_WATER`, so a healthy feeder never lets a deck hold.
+
+### Phase 4: hand test, then tests
 
 1. **Hand test** (Kenan, `cargo run -p melodia`, dev data folder), covering every phase:
    - lyrics load for a track that has none cached, and a burst of track changes doesn't trip the
@@ -217,17 +232,9 @@ Status: not started.
    - RSS before and after (see Cross-cutting)
 
    Everything below waits for Kenan's go after it.
-2. **New pins:**
-   - The retirement queue never fills under a burst of clears and replaces.
-   - A voice at `SOURCE_SLOTS` refuses the next counted send, and its count stays at the cap. The
-     pull services between sends, so the cap is held with the channel empty: unserviced, the full
-     channel refuses at the same count, and the pin couldn't fail with the cap removed.
-   - A held deck leaves its clock, converter and fade ramp still, and the other deck plays on.
-   - `DecodeAhead` reports its end only once the feeder has finished and the ring has drained.
-   - The feeder stops once the source is dropped.
-   - Each pin is shown to fail by breaking its code on purpose.
-3. **Docs:** the `.claude/rules/` and `README.md` entries this makes stale, if any.
-4. **Last:** delete this plan, after the root `CLAUDE.md` check that what it built is argued at its
+2. **Tests:** added where the landed change earns them. `prebuffer_tests.rs`'s ring-level cases
+   moving to `sample_ring_tests.rs` goes with it.
+3. **Last:** delete this plan, after the root `CLAUDE.md` check that what it built is argued at its
    anchors.
 
 ## Cross-cutting
@@ -239,9 +246,10 @@ Status: not started.
   `rustfmt --edition 2024`.
 - **Memory** (Phase 3 only; Phases 1 and 2 are neutral):
   - New, bounded, and freed when the source retires: one ring per live file source, meaning the
-    current one plus one staged during a gapless preload or a crossfade. Decoded f32 at `AHEAD_MS`
-    is 176 KB at 44.1 kHz stereo, 384 KB at 96 kHz and 768 KB at 192 kHz.
-  - One thread per live file source. Its stack is virtual, and only touched pages count.
+    current one plus one staged during a gapless preload or a crossfade. Decoded f32 at `DEPTH` is
+    176 KB at 44.1 kHz stereo, 384 KB at 96 kHz and 768 KB at 192 kHz.
+  - One thread per live file source longer than `DEPTH`. Its stack is virtual, and only touched
+    pages count.
   - Moved, not added: decoder buffers and per-packet allocations go from the audio thread's glibc
     arena to the feeder's, under the cap `prepare_process` sets.
   - Kenan measures idle and playing RSS before and after, with `/usr/bin/time -v` and
@@ -253,7 +261,7 @@ Status: not started.
 
 ## Open questions
 
-- Whether `AHEAD_MS` at 500 is right comes from the hand test on a slow drive. It is the one knob,
+- Whether `DEPTH` at 500 ms is right comes from the hand test on a slow drive. It is the one knob,
   and memory is the cost of raising it.
 - Whether a hold is worth showing the user, as the buffering indicator does for a station, or only
   logging. This plan logs, and the hand test decides.

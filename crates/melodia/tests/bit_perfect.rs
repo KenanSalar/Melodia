@@ -10,6 +10,7 @@ use std::path::Path;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
+use melodia_audio::player::source::decode_ahead;
 use melodia_engine::player::engine::backend::PlaybackEngine;
 use melodia_playback::player::playback::decks::DECK_COUNT;
 use melodia_playback::player::playback::output::encode::{BlockEncoder, DeviceFormat};
@@ -85,9 +86,10 @@ fn write_wav(path: &Path, rate: u32, bits: u8, data: &[u8]) -> std::io::Result<(
 /// another thread and every block pulled while waiting is kept: the track begins inside them.
 fn play_through(path: &Path, case: &Case, eq_on: bool) -> std::io::Result<Vec<u8>> {
     let (mixer, mut pull) = mixer::pair(DECK_COUNT, common::shape(CHANNELS, case.rate));
-    let engine = PlaybackEngine::new(&mixer, tokio::runtime::Handle::current())
-        .map(Arc::new)
-        .map_err(std::io::Error::other)?;
+    let engine =
+        PlaybackEngine::new(&mixer, tokio::runtime::Handle::current(), decode_ahead::DEPTH)
+            .map(Arc::new)
+            .map_err(std::io::Error::other)?;
     if eq_on {
         engine.set_eq_enabled(true);
         engine.set_eq_band(3, 6.0);

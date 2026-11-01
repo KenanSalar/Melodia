@@ -275,7 +275,7 @@ impl Cursor {
             return None;
         }
         if self.next >= self.samples.len() {
-            // A failed read and a clean end are one here: on the audio callback nothing may log,
+            // A failed read and a clean end are one here: an iterator has no error to hand back,
             // and ending is the only move the caller has.
             let Ok(Some(packet)) = fill(format, decoder, track, &mut self.samples) else {
                 self.ended = true;
@@ -317,7 +317,7 @@ fn fill(
         match decoder.decode(&packet) {
             Ok(decoded) => {
                 // Borrowed, not cloned: `Channels` has a boxed variant, so a clone would be an
-                // allocation per packet on the audio callback, where a local file decodes.
+                // allocation per packet.
                 let spec = decoded.spec();
                 decoded.copy_to_vec_interleaved(samples);
                 if !samples.is_empty() {

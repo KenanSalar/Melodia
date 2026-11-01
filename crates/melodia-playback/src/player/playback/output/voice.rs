@@ -49,8 +49,8 @@ const COMMAND_SLOTS: usize = 8;
 const SOURCE_SLOTS: usize = COMMAND_SLOTS;
 
 /// A source and its converter, built on the control thread because [`Converter::new`] allocates.
-/// Freed off the audio thread through [`VoicePull::retire`], a decoder's read buffer being too big
-/// for glibc's per-thread cache; only its claims ([`AudioSource::release_claims`]) are given up on
+/// Freed off the audio thread through [`VoicePull::retire`], a source's ring being too big for
+/// glibc's per-thread cache; only its claims ([`AudioSource::release_claims`]) are given up on
 /// the callback, so the visualizer stops mixing a dead deck at once.
 struct Loaded {
     source: Box<dyn AudioSource>,
@@ -115,6 +115,9 @@ struct VoiceShared {
     /// under neither `exec_lock` nor `deck_epoch`, where every other mount is sent under the
     /// `exec_lock` the seek holds, so the channel already orders it. Written by the callback alone.
     handovers: AtomicU64,
+    /// Steps the callback held this voice for, its source having too little decoded
+    /// ([`AudioSource::is_ready`]). Written by the callback alone; the monitor logs a stall from it.
+    held_steps: AtomicU64,
 }
 
 pub struct Voice {
@@ -157,6 +160,10 @@ impl Voice {
     /// Read against the same observation of the deck the seek is decided on.
     pub fn handovers(&self) -> u64 {
         self.shared.handovers.load(Ordering::Acquire)
+    }
+
+    pub fn held_steps(&self) -> u64 {
+        self.shared.held_steps.load(Ordering::Relaxed)
     }
 
     fn load<S: AudioSource + 'static>(source: S) -> Loaded {
@@ -370,6 +377,12 @@ impl VoicePull {
             let Some(loaded) = self.current.as_mut() else {
                 break;
             };
+            // Held rather than pulled dry: a source not pulled leaves its converter, its ramp and
+            // the clock where they were, and what isn't written stays silent.
+            if !loaded.source.is_ready() {
+                self.shared.held_steps.fetch_add(1, Ordering::Relaxed);
+                break;
+            }
             let Filled { samples, source_frames } =
                 loaded.converter.fill(&mut block[written..], &mut *loaded.source, conversion);
             written += samples;
@@ -556,6 +569,7 @@ pub fn pair(device: Shape) -> (Voice, VoicePull) {
         issued: AtomicU64::new(0),
         serviced: AtomicU64::new(0),
         handovers: AtomicU64::new(0),
+        held_steps: AtomicU64::new(0),
     });
 
     let voice = Voice { shared: shared.clone(), commands: command_tx, spent: Mutex::new(spent_rx) };

@@ -2,6 +2,7 @@
 //! by platform.
 
 use melodia_audio::player::source::audio::SampleRate;
+use melodia_audio::player::source::decode_ahead;
 use melodia_playback::player::playback::output::OutputRequest;
 
 use super::OutputChoice;
@@ -45,7 +46,8 @@ async fn a_shared_stream_on_windows_never_asks_for_the_files_rate()
         rate: NonZero::new(96_000).unwrap_or(NonZero::<u32>::MIN),
     };
     let (mixer, _pull) = mixer::pair(DECK_COUNT, hi_res);
-    let engine = PlaybackEngine::new(&mixer, tokio::runtime::Handle::current())?;
+    let engine =
+        PlaybackEngine::new(&mixer, tokio::runtime::Handle::current(), decode_ahead::DEPTH)?;
     engine.set_follow_rate(true);
 
     let request = engine.wanted_request(hi_res, SourceFormat::F32);
@@ -88,7 +90,8 @@ async fn a_shared_stream_on_linux_asks_for_the_files_rate_only_while_following_i
         rate: NonZero::new(96_000).unwrap_or(NonZero::<u32>::MIN),
     };
     let (mixer, _pull) = mixer::pair(DECK_COUNT, hi_res);
-    let engine = PlaybackEngine::new(&mixer, tokio::runtime::Handle::current())?;
+    let engine =
+        PlaybackEngine::new(&mixer, tokio::runtime::Handle::current(), decode_ahead::DEPTH)?;
     for (following, rate) in [(true, SampleRate::new(96_000)), (false, None)] {
         engine.set_follow_rate(following);
 
