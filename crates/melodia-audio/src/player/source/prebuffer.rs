@@ -16,7 +16,7 @@ use super::sample_ring::{self, FeedState, Pulled, RingReader, RingWriter, Sample
 /// The decode and scheduling cushion, deliberately not the network one, which sits upstream in
 /// compressed bytes (`stream_source::DOWNLOAD_BUFFER_BYTES`). Widening it trades resident memory
 /// for a tolerance the layer above already has.
-pub const PREBUFFER_MS: u64 = 1_500;
+const PREBUFFER: Duration = Duration::from_millis(1_500);
 
 /// A healthy stream's ring is full, so this is the feed thread's wake-up rate: short enough that a
 /// drained ring refills without a gap, long enough not to spin.
@@ -162,8 +162,8 @@ impl PrebufferSource {
         shape: Shape,
         format: SourceFormat,
     ) -> (Self, RingWriter) {
-        let depth = Duration::from_millis(PREBUFFER_MS);
-        let (writer, reader) = sample_ring::ring(shape, depth, FEED_PARK, Arc::clone(&shared.feed));
+        let (writer, reader) =
+            sample_ring::ring(shape, PREBUFFER, FEED_PARK, Arc::clone(&shared.feed));
         // One source per cell, so the first ring, which titles were queued against, is kept.
         let _ = shared.ring.set(reader.ring());
         let source = Self { reader, shared, shape, format, starved: false };

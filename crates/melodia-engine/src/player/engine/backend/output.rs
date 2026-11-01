@@ -133,8 +133,7 @@ impl PlaybackEngine {
         {
             let device = self.output.device.lock();
             let Some(output) = device.as_ref() else { return };
-            if !output.has_stream() {
-                output.service_voices();
+            if output.try_service_voices() {
                 return;
             }
         }

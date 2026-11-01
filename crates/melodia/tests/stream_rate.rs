@@ -32,8 +32,8 @@ const SECOND_RATE: u32 = 48_000;
 /// crossing is a rounding error against it, short enough for hundreds of readings per second.
 const HALF_PERIOD: usize = 48;
 
-/// How much of each station to feed. Comfortably inside the ring, which holds `PREBUFFER_MS` of
-/// audio, so the whole station goes in up front and nothing is measured against a starved ring.
+/// How much of each station to feed. Comfortably inside the ring's `prebuffer::PREBUFFER`, so the
+/// whole station goes in up front and nothing is measured against a starved ring.
 const STATION_SECONDS: u32 = 1;
 
 /// Output samples pulled before a measurement is taken, covering the mixer's own pipeline latency

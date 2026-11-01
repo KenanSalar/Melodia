@@ -453,17 +453,14 @@ impl AudioOutput {
         self.status.parked()
     }
 
-    /// Whether a stream's callback takes the voices' ops, parked and a failed reopen being the two
-    /// ways to have none.
-    pub fn has_stream(&self) -> bool {
-        self.stream.is_some()
-    }
-
-    /// Takes the voices' pending ops here, for a sender with no callback to wait on. Only while
-    /// [`Self::has_stream`] is false: a stream's callback holds the puller then, and a fill it
-    /// can't take is a dropout.
-    pub fn service_voices(&self) {
+    /// Takes the voices' pending ops here while no stream does, parked or after a failed reopen.
+    /// `false` with a stream: its callback holds the puller, and a fill it can't take is a dropout.
+    pub fn try_service_voices(&self) -> bool {
+        if self.stream.is_some() {
+            return false;
+        }
         self.feed.pull.lock().service();
+        true
     }
 
     /// For a reader that can't wait out a reopen.
