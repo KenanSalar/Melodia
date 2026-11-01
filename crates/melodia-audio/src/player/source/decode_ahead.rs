@@ -150,3 +150,7 @@ impl AudioSource for DecodeAhead {
         self.reader.abandon();
     }
 }
+
+#[cfg(test)]
+#[path = "tests/decode_ahead_tests.rs"]
+mod tests;

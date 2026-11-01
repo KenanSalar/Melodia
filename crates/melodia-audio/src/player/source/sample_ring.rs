@@ -230,3 +230,7 @@ impl Drop for RingReader {
         self.feed.abandon();
     }
 }
+
+#[cfg(test)]
+#[path = "tests/sample_ring_tests.rs"]
+mod tests;

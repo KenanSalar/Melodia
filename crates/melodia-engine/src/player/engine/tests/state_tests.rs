@@ -2447,6 +2447,34 @@ fn a_retag_of_a_track_that_has_played_a_while_reaches_now_playing() {
     );
 }
 
+// --- The pending seek ---
+
+/// A burst's tasks reach the transport in any order, so whichever goes first lands the last
+/// request rather than its own.
+#[test]
+fn the_newest_seek_request_is_the_one_taken() {
+    let handle = PlayerStateHandle::default();
+    handle.request_seek(10_000);
+    handle.request_seek(20_000);
+
+    let taken = handle.take_seek();
+
+    assert_eq!(taken, Some(20_000));
+}
+
+/// The rest of a burst's tasks find nothing to land. One that took the same target again, behind
+/// a skip, would seek the next track to it.
+#[test]
+fn a_seek_request_is_taken_once() {
+    let handle = PlayerStateHandle::default();
+    handle.request_seek(10_000);
+    let first = handle.take_seek();
+
+    let second = handle.take_seek();
+
+    assert_eq!((first, second), (Some(10_000), None));
+}
+
 // --- The Speed flyout's copy of the band ---
 
 use melodia_testkit::{array_body, binding_value, block_after, strip_line_comments};

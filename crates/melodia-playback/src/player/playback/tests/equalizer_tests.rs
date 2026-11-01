@@ -1,6 +1,7 @@
 //! Tests for the graphic-equalizer DSP core.
 
 use std::sync::Arc;
+use std::sync::atomic::AtomicBool;
 use std::time::Duration;
 
 use super::{
@@ -187,6 +188,22 @@ fn seek_resets_filter_state() {
 
     assert_eq!(after_seek.len(), input.len());
     assert_eq!(bits(&after_seek), bits(&fresh), "seek must reset filter delay lines");
+}
+
+/// The deck asks the outermost wrapper whether to hold, so an EQ answering for itself would have a
+/// stalled file pulled dry and its starvation silence played as music.
+#[test]
+fn the_eq_is_ready_only_when_its_input_is() {
+    let ready = Arc::new(AtomicBool::new(false));
+    let eq = EqSource::new(
+        TestSource::new(ramp(8), 1, 44_100).gated(ready),
+        EqShared::new(true, &[0.0; NUM_BANDS]),
+        ReplayGainShared::new(),
+        TrackReplayGain::default(),
+        FadeShared::idle(),
+    );
+
+    assert!(!eq.is_ready());
 }
 
 #[test]
