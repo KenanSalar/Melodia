@@ -219,6 +219,9 @@ Status: not started.
    Everything below waits for Kenan's go after it.
 2. **New pins:**
    - The retirement queue never fills under a burst of clears and replaces.
+   - A voice at `SOURCE_SLOTS` refuses the next counted send, and its count stays at the cap. The
+     pull services between sends, so the cap is held with the channel empty: unserviced, the full
+     channel refuses at the same count, and the pin couldn't fail with the cap removed.
    - A held deck leaves its clock, converter and fade ramp still, and the other deck plays on.
    - `DecodeAhead` reports its end only once the feeder has finished and the ring has drained.
    - The feeder stops once the source is dropped.

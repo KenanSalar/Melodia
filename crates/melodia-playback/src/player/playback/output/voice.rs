@@ -44,8 +44,8 @@ const SERVICE_POLL: Duration = Duration::from_millis(1);
 const COMMAND_SLOTS: usize = 8;
 
 /// The most sources a voice counts ([`VoiceShared::sources`]), sizing [`VoicePull::staged`] and the
-/// spent queue so neither grows on the callback. Use holds three at most (the playing source, one
-/// staged, a seek's replacement), and matching the channel refuses no burst it would take.
+/// spent queue so neither grows on the callback. Normal use holds at most three (the playing source,
+/// one staged, a seek's replacement), so meeting the cap means the callback stopped servicing.
 const SOURCE_SLOTS: usize = COMMAND_SLOTS;
 
 /// A source and its converter, built on the control thread because [`Converter::new`] allocates.
@@ -165,7 +165,8 @@ impl Voice {
 
     /// Counts the source before the callback can see it, refusing at [`SOURCE_SLOTS`]; `Append`
     /// pays it back when its source finishes, `Replace` when the swap drops one. Counted ahead of
-    /// `send`'s drain, so the spent queue only holds sources counted at its last drain.
+    /// `send`'s drain and paid back only after [`VoicePull::retire`], so the spent queue holds
+    /// only sources counted at its last drain.
     fn send_counted(&self, command: Command) {
         let claim = |held: usize| (held < SOURCE_SLOTS).then_some(held + 1);
         if self.shared.sources.try_update(Ordering::SeqCst, Ordering::SeqCst, claim).is_err() {
@@ -189,8 +190,8 @@ impl Voice {
         self.shared.anchor.store(0, Ordering::Relaxed);
     }
 
-    /// Cheap and idempotent. Every send runs it first; a caller's frees what ends with no send
-    /// behind it.
+    /// Cheap and idempotent. Every send runs it first; a call from outside is for a source that
+    /// ends with no send behind it.
     pub fn collect_spent(&self) {
         let spent = self.spent.lock();
         while spent.try_recv().is_ok() {}
@@ -316,9 +317,8 @@ impl Voice {
     }
 }
 
-/// A full channel or a voice at [`SOURCE_SLOTS`] means the callback stopped draining. The op is
-/// dropped rather than blocked on while holding the transport: a lost `Append` reads as
-/// end-of-stream and advances regardless, and `tasks::audio_health` is what tells the user.
+/// A refused op is dropped rather than blocked on while holding the transport: a lost `Append` reads
+/// as end-of-stream and advances regardless, and `tasks::audio_health` is what tells the user.
 fn warn_lost_op() {
     log::warn!("audio callback is not draining its control channel; a transport op was lost");
 }
