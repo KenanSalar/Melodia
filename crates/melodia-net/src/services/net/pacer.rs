@@ -4,9 +4,8 @@
 //! Owned rather than a `static`, so a suite can build a fresh one, and the decision stays a pure
 //! function.
 
+use std::sync::{Mutex, MutexGuard, PoisonError};
 use std::time::{Duration, Instant};
-
-use tokio::sync::Mutex;
 
 #[must_use]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -52,7 +51,7 @@ impl RequestPacer {
     pub async fn acquire(&self) -> Turn {
         loop {
             let wait = {
-                let mut state = self.state.lock().await;
+                let mut state = self.lock();
                 match verdict(&state, self.floor, Instant::now()) {
                     Verdict::Stopped(left) => return Turn::Stopped(left),
                     Verdict::Send => {
@@ -68,12 +67,17 @@ impl RequestPacer {
 
     /// Sends nothing to this host for `wait`. Extends an open stop and never shortens one, the
     /// longer of two refusals in flight being the one still true.
-    pub async fn stop_for(&self, wait: Duration) {
-        let mut state = self.state.lock().await;
+    pub fn stop_for(&self, wait: Duration) {
+        let mut state = self.lock();
         let until = Instant::now() + wait;
         if state.closed_until.is_none_or(|open| until > open) {
             state.closed_until = Some(until);
         }
+    }
+
+    /// Recovers from poison: any pair of instants is a state the verdict can read.
+    fn lock(&self) -> MutexGuard<'_, Inner> {
+        self.state.lock().unwrap_or_else(PoisonError::into_inner)
     }
 }
 

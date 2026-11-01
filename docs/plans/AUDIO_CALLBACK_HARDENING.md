@@ -1,6 +1,6 @@
 # Plan: Audio callback hardening (decode ahead, and nothing freed on the audio thread)
 
-Status: **planned** (no phase started) · Owner: Kenan · Created: 2026-11-01 · Tracking: #155
+Status: **in progress** (Phases 1 and 2 built) · Owner: Kenan · Created: 2026-11-01 · Tracking: #155
 
 > **Validated 2026-11-01** against `8dd32dc3` (`main`): direct reads of `output/voice.rs`,
 > `output/mixer.rs`, `output/device.rs`, `output/alsa.rs`, `output/realtime.rs`,
@@ -122,12 +122,16 @@ The guidance this follows, and the mechanisms that shaped the decisions:
 
 ## Phases
 
-Each phase ends at the static gates and a build, and Kenan runs it. An existing test that a phase
-breaks is fixed in that phase. New tests and doc files wait for Phase 4's go.
+Each phase ends at the static gates and a build. An existing test that a phase breaks is fixed in
+that phase. Kenan hand-tests the whole change once, at the start of Phase 4, and its new tests and
+doc files wait for his go after that.
+
+Four commits: Phases 1 and 2 together, both small and neither audible; Phase 3's pure move alone,
+behaviour-neutral; the rest of Phase 3, whose hold and ring only work together; then Phase 4.
 
 ### Phase 1: the pacer on a sync mutex
 
-Status: not started.
+Status: built, gates green.
 
 1. `pacer.rs`: switch to `std::sync::Mutex`, since `melodia-net` doesn't carry `parking_lot`.
    Lock with `.lock().unwrap_or_else(PoisonError::into_inner)`, the tree's existing form
@@ -137,29 +141,26 @@ Status: not started.
 2. `lyrics_directory/lrclib.rs:322` drops its `.await`, and so do the calls in
    `tests/pacer_tests.rs`.
 
-**Hand test:** lyrics still load for a track that has none cached, and a burst of track changes
-doesn't trip the host's rate limit.
-
 ### Phase 2: the retirement queue can't fill
 
-Status: not started.
+Status: built, gates green.
 
-1. **`SOURCE_SLOTS`**: the most sources one voice holds, counted by `VoiceShared::sources`.
-   `send_counted` claims a slot with `sources.try_update(…)` and refuses at the cap on the control
-   thread, with the existing "transport op was lost" warning. A voice in normal use holds the
-   current source plus at most one staged, so the cap is never met. `staged` is preallocated to
-   `SOURCE_SLOTS`, so `push_back` can't reallocate on the callback.
+1. **`SOURCE_SLOTS`** (`= COMMAND_SLOTS`): the most sources one voice holds, counted by
+   `VoiceShared::sources`. `send_counted` claims a slot with `sources.try_update(…)` and refuses at
+   the cap on the control thread, with the existing "transport op was lost" warning. A voice in
+   normal use holds at most three (the current source, one staged, a seek's replacement), so the
+   cap is never met; matching the channel refuses no burst it would take. `staged` is preallocated
+   to `SOURCE_SLOTS`, so `push_back` can't reallocate on the callback.
 2. **Drain before every send**: `Voice::send` calls `collect_spent()` first. The poll-tick drain
-   stays for natural track ends. Each source in the queue was alive at the last drain or was the one
-   sent straight after it, so the queue never holds more than `SOURCE_SLOTS + 1`.
-3. **`SPENT_SLOTS = SOURCE_SLOTS + 1`**, with a `const` assertion beside it. `VoicePull::retire`
-   keeps its `try_send`, with a `debug_assert!` on `TrySendError::Full` pinning the invariant in
-   tests. `Disconnected`, which is teardown, still drops.
-4. Docs that move with it: `SPENT_SLOTS`, `COMMAND_SLOTS`, `Loaded`, `collect_spent`, and the
-   `spent` field, whose "the one collector never contends it" stops being true.
-
-**Hand test:** skip quickly through a long queue, and seek repeatedly by keyboard. Playback carries
-on, and the log shows no lost transport op.
+   stays for natural track ends. `send_counted` claims before that drain, so every source the queue
+   can hold was counted at its last drain, and the queue never holds more than `SOURCE_SLOTS`.
+3. **The spent queue is sized by `SOURCE_SLOTS` itself**, `SPENT_SLOTS` folding into it now that
+   the bound needs no slack. `VoicePull::retire` keeps its `try_send`, with a `debug_assert!` on
+   `TrySendError::Full` pinning the invariant in tests. `Disconnected`, which is teardown, still
+   drops.
+4. Docs that moved with it: `COMMAND_SLOTS`, `collect_spent`, `retire`, and the `spent` field,
+   whose "the one collector never contends it" stopped being true. The lost-op warning and its
+   reason moved to one `warn_lost_op`, shared by the cap and the full channel.
 
 ### Phase 3: decode ahead of the callback
 
@@ -200,26 +201,30 @@ Status: not started.
 9. `source/mod.rs`'s doc: the ring keeps every blocking read off the callback, socket and disk
    alike.
 
-**Hand test** (`cargo run -p melodia`, dev data folder):
-- local playback, a gapless album seam (AAC and MP3), and a manual crossfade
-- seeks, and a burst of skips
-- EQ, preamp and volume still respond instantly
-- bit-perfect playback on an ALSA `hw:` device
-- a radio station
-- a track on a USB drive or network share, interrupted for a moment: only that deck goes quiet, its
-  position holds still, and the log shows the hold
-- RSS before and after (see Cross-cutting)
+### Phase 4: hand test, then tests and docs
 
-### Phase 4: tests and docs (each waits for Kenan's go)
+1. **Hand test** (Kenan, `cargo run -p melodia`, dev data folder), covering every phase:
+   - lyrics load for a track that has none cached, and a burst of track changes doesn't trip the
+     host's rate limit
+   - local playback, a gapless album seam (AAC and MP3), and a manual crossfade
+   - a burst of skips through a long queue, and repeated keyboard seeks: playback carries on, and
+     the log shows no lost transport op
+   - EQ, preamp and volume still respond instantly
+   - bit-perfect playback on an ALSA `hw:` device
+   - a radio station
+   - a track on a USB drive or network share, interrupted for a moment: only that deck goes quiet,
+     its position holds still, and the log shows the hold
+   - RSS before and after (see Cross-cutting)
 
-1. **New pins:**
+   Everything below waits for Kenan's go after it.
+2. **New pins:**
    - The retirement queue never fills under a burst of clears and replaces.
    - A held deck leaves its clock, converter and fade ramp still, and the other deck plays on.
    - `DecodeAhead` reports its end only once the feeder has finished and the ring has drained.
    - The feeder stops once the source is dropped.
    - Each pin is shown to fail by breaking its code on purpose.
-2. **Docs:** the `.claude/rules/` and `README.md` entries this makes stale, if any.
-3. **Last:** delete this plan, after the root `CLAUDE.md` check that what it built is argued at its
+3. **Docs:** the `.claude/rules/` and `README.md` entries this makes stale, if any.
+4. **Last:** delete this plan, after the root `CLAUDE.md` check that what it built is argued at its
    anchors.
 
 ## Cross-cutting
