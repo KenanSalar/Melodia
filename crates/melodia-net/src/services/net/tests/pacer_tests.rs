@@ -93,7 +93,7 @@ async fn an_open_stop_is_reported_rather_than_waited_out() {
     // A refusal comes back to the caller instead of parking it for the length of the stop, which
     // is what lets a lookup say so rather than hanging the panel on it.
     let pacer = RequestPacer::new(FLOOR);
-    pacer.stop_for(STOP).await;
+    pacer.stop_for(STOP);
 
     let nearly_all_of_it = STOP.saturating_sub(STEP);
     let turn = pacer.acquire().await;
@@ -108,8 +108,8 @@ async fn a_second_stop_extends_an_open_one_and_never_shortens_it() {
     // Two refusals in flight describe the same window, and the longer of them is the one that was
     // still true. Taking the later arrival would send us back into a window the host had closed.
     let pacer = RequestPacer::new(FLOOR);
-    pacer.stop_for(STOP).await;
-    pacer.stop_for(STEP).await;
+    pacer.stop_for(STOP);
+    pacer.stop_for(STEP);
 
     let nearly_all_of_it = STOP.saturating_sub(STEP);
     let turn = pacer.acquire().await;

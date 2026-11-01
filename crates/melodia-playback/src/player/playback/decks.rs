@@ -97,6 +97,12 @@ impl Decks {
         &self.decks[1 - self.active]
     }
 
+    /// Each deck's [`Voice::held_steps`], by slot rather than role, so a crossfade moving the
+    /// active deck doesn't move a reading.
+    pub fn held_steps(&self) -> [u64; DECK_COUNT] {
+        self.decks.each_ref().map(|deck| deck.voice.held_steps())
+    }
+
     /// Clear both decks and disarm both ramps.
     pub fn clear_all(&self) {
         for deck in &self.decks {

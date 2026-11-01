@@ -135,6 +135,12 @@ pub trait AudioSource: Iterator<Item = Sample> + Send {
     /// decoder raised.
     fn try_seek(&mut self, pos: Duration) -> Result<(), SeekError>;
 
+    /// Whether the deck should pull this source now. One decoding ahead says no while it holds too
+    /// little, and the deck holds for the step rather than pull it dry. A wrapper forwards.
+    fn is_ready(&self) -> bool {
+        true
+    }
+
     /// Gives up whatever the app reads *liveness* from, ahead of the drop. A spent source is freed
     /// away from the audio callback and outlives its last sample, and the visualizer mixes every
     /// claimed ring, so a claim held until collection leaves a finished track's tail in the window.

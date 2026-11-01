@@ -1,5 +1,7 @@
 //! Tests for the visualizer's sample rings and its tap source.
 
+use std::sync::Arc;
+use std::sync::atomic::AtomicBool;
 use std::time::Duration;
 
 use super::{RING_CAP, VisualizerShared, VisualizerTap};
@@ -383,4 +385,14 @@ fn seeking_realigns_the_downmix_to_the_frame_grid() {
     let mut ring = vec![0.0; 2];
     viz.snapshot(&mut ring);
     assert_eq!(bits(&ring), bits(&[0.75, 0.5]));
+}
+
+/// The tap is the outermost wrapper a deck plays, so its answer is the one the hold reads.
+#[test]
+fn the_tap_is_ready_only_when_its_input_is() {
+    let viz = VisualizerShared::new(true);
+    let ready = Arc::new(AtomicBool::new(false));
+    let tap = VisualizerTap::new(TestSource::new(vec![0.0; 4], 1, 44_100).gated(ready), &viz, 0);
+
+    assert!(!tap.is_ready());
 }

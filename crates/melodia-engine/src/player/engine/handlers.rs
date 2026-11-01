@@ -19,6 +19,7 @@ use super::types::{PersistedPlayback, PlaybackSource, PlaybackStatus};
 use melodia_audio::player::source::prebuffer::StreamShared;
 use melodia_core::entities::track::TrackSummary;
 use melodia_playback::player::playback::crossfade;
+use melodia_playback::player::playback::decks::DECK_COUNT;
 
 /// How often the monitor wakes: tight enough that gapless preload triggers and
 /// end-of-stream detection stay responsive, loose enough not to spin.
@@ -93,6 +94,29 @@ impl PauseWatch {
         }
         self.0 = 0;
         true
+    }
+}
+
+/// Logs a deck's stall once, as it starts, rather than on every poll it lasts.
+#[derive(Default)]
+struct HoldWatch([DeckHolds; DECK_COUNT]);
+
+/// A deck's held steps at the last poll, and whether they had moved by then.
+#[derive(Default, Clone, Copy)]
+struct DeckHolds {
+    seen: u64,
+    holding: bool,
+}
+
+impl HoldWatch {
+    fn observe(&mut self, held_steps: [u64; DECK_COUNT]) {
+        for (slot, (deck, now)) in self.0.iter_mut().zip(held_steps).enumerate() {
+            let holding = now != deck.seen;
+            if holding && !deck.holding {
+                log::warn!("Deck {slot} held: its file is reading slower than it plays");
+            }
+            *deck = DeckHolds { seen: now, holding };
+        }
     }
 }
 
@@ -326,6 +350,7 @@ struct Monitor {
     save_tick_counter: u64,
     publish: SecondGate,
     pause_watch: PauseWatch,
+    hold_watch: HoldWatch,
     /// The record of the track last staged behind the current one, which the deck plays once it
     /// hands over. Only the monitor stages, and a deck holds one stage at a time.
     staged: Option<Arc<TrackSummary>>,
@@ -346,6 +371,7 @@ impl Monitor {
             save_tick_counter: 0,
             publish: SecondGate::default(),
             pause_watch: PauseWatch::default(),
+            hold_watch: HoldWatch::default(),
             staged: None,
             last_title_generation: 0,
         }
@@ -361,6 +387,7 @@ impl Monitor {
         // Ahead of the not-playing short circuit below, because a stop is what retires the
         // most sources at once and it lands on exactly the ticks that circuit skips.
         self.engine.collect_spent();
+        self.hold_watch.observe(self.engine.held_steps());
 
         let status = self.player_state.status_atomic.load(std::sync::atomic::Ordering::Relaxed);
         let paused = status == PlaybackStatus::Paused as u8;

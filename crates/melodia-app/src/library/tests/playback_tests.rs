@@ -198,7 +198,8 @@ async fn each_transport_door_reaches_the_builder_it_names() -> Result<(), AppErr
     player_next(&fx.ctx)?;
     assert_eq!(lock_state(&fx.ctx.player_state).current_track().map(|t| t.id), ids.get(1).copied());
 
-    player_seek(&fx.ctx, 45_000)?;
+    request_seek(&fx.ctx, 45_000);
+    player_seek(&fx.ctx)?;
     assert_eq!(lock_state(&fx.ctx.player_state).position_ms, 45_000);
 
     player_set_playback_speed(&fx.ctx, 1.5)?;
@@ -219,6 +220,23 @@ async fn each_transport_door_reaches_the_builder_it_names() -> Result<(), AppErr
         state.current_track().is_some(),
         "a user stop keeps the track so play can start it over"
     );
+    Ok(())
+}
+
+/// Each request of a burst spawns its own seek, all of them recorded before any runs. The first to
+/// run lands the last request, and the rest, finding nothing pending, must leave it where it is.
+#[tokio::test]
+async fn a_burst_of_seeks_lands_on_its_last_target() -> Result<(), AppError> {
+    let (fx, _ids) = playing(1).await?;
+    request_seek(&fx.ctx, 10_000);
+    request_seek(&fx.ctx, 20_000);
+    request_seek(&fx.ctx, 30_000);
+
+    player_seek(&fx.ctx)?;
+    player_seek(&fx.ctx)?;
+    player_seek(&fx.ctx)?;
+
+    assert_eq!(lock_state(&fx.ctx.player_state).position_ms, 30_000);
     Ok(())
 }
 

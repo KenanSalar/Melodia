@@ -21,6 +21,7 @@ use tokio::sync::watch;
 use super::PlaybackContext;
 use crate::services::settings::{SettingsData, write_settings};
 use melodia_audio::player::source::audio::{Sample, Shape};
+use melodia_audio::player::source::decode_ahead;
 use melodia_core::config::Paths;
 use melodia_core::error::AppError;
 use melodia_engine::player::engine::backend::PlaybackEngine;
@@ -103,7 +104,8 @@ impl TestPlayback {
             rate: NonZero::new(TEST_RATE).unwrap_or(NonZero::<u32>::MIN),
         };
         let (mixer, mut pull) = mixer::pair(DECK_COUNT, device);
-        let engine = PlaybackEngine::new(&mixer, tokio::runtime::Handle::current())?;
+        let engine =
+            PlaybackEngine::new(&mixer, tokio::runtime::Handle::current(), decode_ahead::DEPTH)?;
 
         let stop = Arc::new(AtomicBool::new(false));
         let ending = Arc::clone(&stop);

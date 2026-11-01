@@ -36,6 +36,13 @@ const AMPLITUDE: f32 = 0.5;
 /// which is what `SKEW` below is derived from. Also the shipped default.
 const FADE_MS: u64 = 2_000;
 
+/// The longest a fixture runs.
+const FIXTURE_SECONDS: u32 = 6;
+
+/// Deeper than any fixture, so each decodes whole before it mounts: this puller outruns a feeder
+/// topping up a shallow ring, and a deck held mid-overlap breaks the summed-amplitude check.
+const DECODE_AHEAD: Duration = Duration::from_secs(FIXTURE_SECONDS as u64 + 1);
+
 /// Frames discarded before asserting on steady-state amplitude.
 ///
 /// A deck starts contributing on the first pull after its source is appended, so this is not
@@ -244,8 +251,8 @@ fn fixture() -> std::io::Result<Fixture> {
     let tmp = tempfile::tempdir()?;
     let a: PathBuf = tmp.path().join("a.wav");
     let b: PathBuf = tmp.path().join("b.wav");
-    write_dc_wav(&a, 6, AMPLITUDE, AMPLITUDE)?;
-    write_dc_wav(&b, 6, AMPLITUDE, AMPLITUDE)?;
+    write_dc_wav(&a, FIXTURE_SECONDS, AMPLITUDE, AMPLITUDE)?;
+    write_dc_wav(&b, FIXTURE_SECONDS, AMPLITUDE, AMPLITUDE)?;
     Ok(Fixture {
         _tmp: tmp,
         track_a: a.to_string_lossy().into_owned(),
@@ -259,7 +266,7 @@ fn fixture() -> std::io::Result<Fixture> {
 /// the two it took and the puller keeps the voices behind them.
 fn player() -> std::io::Result<(Arc<PlaybackEngine>, MixerPull)> {
     let (mixer, pull) = mixer::pair(DECK_COUNT, shape(CHANNELS, RATE));
-    let player = PlaybackEngine::new(&mixer, tokio::runtime::Handle::current())
+    let player = PlaybackEngine::new(&mixer, tokio::runtime::Handle::current(), DECODE_AHEAD)
         .map_err(std::io::Error::other)?;
     Ok((Arc::new(player), pull))
 }
@@ -393,7 +400,7 @@ fn assert_seeking_keeps_the_image(eq_on: bool) -> std::io::Result<()> {
 
     let tmp = tempfile::tempdir()?;
     let wav = tmp.path().join("stereo.wav");
-    write_dc_wav(&wav, 6, LEFT, RIGHT)?;
+    write_dc_wav(&wav, FIXTURE_SECONDS, LEFT, RIGHT)?;
     let path = wav.to_string_lossy().into_owned();
 
     let (engine, mut mix) = player()?;
@@ -707,7 +714,7 @@ fn past_a_gapless_handover() -> std::io::Result<Handover> {
     let first = tmp.path().join("first.wav");
     let next = tmp.path().join("next.wav");
     write_dc_wav(&first, 1, AMPLITUDE, AMPLITUDE)?;
-    write_dc_wav(&next, 6, SUCCESSOR_LEVEL, SUCCESSOR_LEVEL)?;
+    write_dc_wav(&next, FIXTURE_SECONDS, SUCCESSOR_LEVEL, SUCCESSOR_LEVEL)?;
     let first = first.to_string_lossy().into_owned();
 
     let (engine, mut mix) = player()?;
@@ -863,7 +870,7 @@ async fn a_staged_gapless_track_takes_over_through_an_output_reopen() -> std::io
     let first = tmp.path().join("first.wav");
     let next = tmp.path().join("next.wav");
     write_dc_wav(&first, 1, AMPLITUDE, AMPLITUDE)?;
-    write_dc_wav(&next, 6, NEXT_LEVEL, NEXT_LEVEL)?;
+    write_dc_wav(&next, FIXTURE_SECONDS, NEXT_LEVEL, NEXT_LEVEL)?;
 
     for resampler in [Resampler::Linear, Resampler::BandLimited] {
         let (engine, mut mix) = player()?;

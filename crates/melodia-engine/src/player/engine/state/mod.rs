@@ -102,6 +102,10 @@ pub struct PlayerStateHandle {
     /// Held by `emit_and_execute` across a mutation and its side effects, so mutation order is
     /// side-effect order across tasks. Never held across an `.await`.
     exec_lock: std::sync::Mutex<()>,
+    /// The newest seek not yet applied. Recorded where requests still arrive in order and taken
+    /// under `exec_lock`, so a burst lands on its last request whatever order its tasks reach the
+    /// transport in.
+    seek_target: parking_lot::Mutex<Option<u64>>,
 }
 
 impl Default for PlayerStateHandle {
@@ -110,6 +114,7 @@ impl Default for PlayerStateHandle {
             mutex: std::sync::Mutex::new(PlayerState::default()),
             status_atomic: AtomicU8::new(PlaybackStatus::Stopped as u8),
             exec_lock: std::sync::Mutex::new(()),
+            seek_target: parking_lot::Mutex::new(None),
         }
     }
 }
@@ -134,6 +139,16 @@ impl PlayerStateHandle {
                 Some(poisoned.into_inner())
             }
         }
+    }
+
+    /// Supersedes any seek not yet applied.
+    pub fn request_seek(&self, position_ms: u64) {
+        *self.seek_target.lock() = Some(position_ms);
+    }
+
+    /// Under [`Self::lock_exec`]; `None` once an earlier holder applied the newest.
+    pub fn take_seek(&self) -> Option<u64> {
+        self.seek_target.lock().take()
     }
 }
 

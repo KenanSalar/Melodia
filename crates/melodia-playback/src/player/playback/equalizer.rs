@@ -648,6 +648,10 @@ impl<S: AudioSource> AudioSource for EqSource<S> {
         Ok(())
     }
 
+    fn is_ready(&self) -> bool {
+        self.input.is_ready()
+    }
+
     fn release_claims(&mut self) {
         self.input.release_claims();
     }

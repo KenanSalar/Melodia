@@ -319,7 +319,7 @@ async fn send(
         reqwest::StatusCode::TOO_MANY_REQUESTS | reqwest::StatusCode::SERVICE_UNAVAILABLE
     ) {
         let retry_after = retry_after(response.headers());
-        pacer.stop_for(retry_after.unwrap_or(DEFAULT_BACKOFF)).await;
+        pacer.stop_for(retry_after.unwrap_or(DEFAULT_BACKOFF));
         return Err(LookupError::RateLimited { retry_after });
     }
     if !status.is_success() {

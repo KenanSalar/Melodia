@@ -453,6 +453,16 @@ impl AudioOutput {
         self.status.parked()
     }
 
+    /// Takes the voices' pending ops here while no stream does, parked or after a failed reopen.
+    /// `false` with a stream: its callback holds the puller, and a fill it can't take is a dropout.
+    pub fn try_service_voices(&self) -> bool {
+        if self.stream.is_some() {
+            return false;
+        }
+        self.feed.pull.lock().service();
+        true
+    }
+
     /// For a reader that can't wait out a reopen.
     pub fn status(&self) -> Arc<OutputStatus> {
         Arc::clone(&self.status)

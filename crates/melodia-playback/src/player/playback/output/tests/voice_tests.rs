@@ -7,7 +7,7 @@ use std::thread::{self, JoinHandle};
 use std::time::Duration;
 
 use super::super::convert::Resampler;
-use super::{PlayingSource, Voice, VoicePull, pair};
+use super::{PlayingSource, SOURCE_SLOTS, Voice, VoicePull, pair};
 use crate::player::playback::tests::helpers::{TestSource, bits, fill_sine, shape};
 use melodia_audio::player::source::audio::{Shape, SourceFormat};
 
@@ -204,6 +204,59 @@ fn a_paused_voice_neither_advances_its_clock_nor_contributes() {
 
     assert_eq!(voice.position(), before, "a paused voice's clock moved");
     assert!(out.iter().all(|s| *s == 0.0), "a paused voice put samples in the block");
+}
+
+/// Silence pulled as music through a stall would move the clock, and lyrics, the scrobble and the
+/// resume point with it, past audio nobody heard.
+#[test]
+fn a_held_source_neither_advances_its_clock_nor_writes() {
+    let ready = Arc::new(AtomicBool::new(true));
+    let (voice, mut pull) = pair(mono(RATE));
+    voice.append(seconds_of(1, RATE).gated(Arc::clone(&ready)));
+    pump(&mut pull, 441);
+    let before = voice.position();
+
+    ready.store(false, Ordering::Relaxed);
+    let out = pump(&mut pull, 441);
+
+    assert_eq!(voice.position(), before, "a held voice's clock moved");
+    assert!(out.is_empty(), "a held voice wrote {} samples", out.len());
+}
+
+/// A hold costs time, not audio: a source left unpulled, rather than drained or handed over as if
+/// it had run dry, carries on from where the stall caught it.
+#[test]
+fn a_held_source_resumes_on_the_sample_it_stopped_at() {
+    let ready = Arc::new(AtomicBool::new(true));
+    let (voice, mut pull) = pair(mono(RATE));
+    let numbered = vec![0.125, 0.25, 0.375, 0.5, 0.625, 0.75, 0.875, 1.0];
+    voice.append(TestSource::new(numbered, 1, RATE).gated(Arc::clone(&ready)));
+    pump(&mut pull, 4);
+    ready.store(false, Ordering::Relaxed);
+    pump(&mut pull, 4);
+    ready.store(true, Ordering::Relaxed);
+
+    let resumed = pump(&mut pull, 4);
+
+    assert_eq!(bits(&resumed), bits(&[0.625, 0.75, 0.875, 1.0]));
+}
+
+/// The count is the monitor's only sight of a stall, so a ready source must leave it alone.
+#[test]
+fn each_step_a_source_is_held_is_counted() {
+    let ready = Arc::new(AtomicBool::new(true));
+    let (voice, mut pull) = pair(mono(RATE));
+    voice.append(seconds_of(1, RATE).gated(Arc::clone(&ready)));
+    pump(&mut pull, 64);
+    pump(&mut pull, 64);
+    let while_ready = voice.held_steps();
+    ready.store(false, Ordering::Relaxed);
+
+    pump(&mut pull, 64);
+    pump(&mut pull, 64);
+    pump(&mut pull, 64);
+
+    assert_eq!((while_ready, voice.held_steps()), (0, 3), "(two steps ready, three held)");
 }
 
 #[test]
@@ -471,6 +524,39 @@ fn a_voice_is_unsettled_from_a_send_until_the_callback_takes_it() {
     pump(&mut pull, 64);
 
     assert_eq!((fresh, sent, voice.is_settled()), (true, false, true), "(fresh, sent, taken)");
+}
+
+/// With every op already taken, the channel has room, so only the cap stands between one more
+/// source and a staged queue reallocating on the callback.
+#[test]
+fn a_voice_holding_its_most_sources_refuses_the_next() {
+    let (voice, mut pull) = pair(mono(RATE));
+    for _ in 0..SOURCE_SLOTS {
+        voice.append(seconds_of(1, RATE));
+    }
+    pump(&mut pull, 64);
+
+    voice.append(seconds_of(1, RATE));
+    pump(&mut pull, 64);
+
+    assert_eq!(voice.len(), SOURCE_SLOTS);
+}
+
+/// Each seek retires the source it displaces, and only the next send collects it. One more seek
+/// than the spent queue holds is where a send that skipped its drain trips `retire`'s assertion,
+/// which in a release build is the callback freeing a source.
+#[test]
+fn a_run_of_seeks_never_leaves_the_callback_a_source_to_free() {
+    let (voice, mut pull) = pair(mono(RATE));
+    voice.append(seconds_of(1, RATE));
+    pump(&mut pull, 64);
+
+    for _ in 0..=SOURCE_SLOTS {
+        voice.replace(seconds_of(1, RATE), Duration::ZERO, voice.handovers());
+        pump(&mut pull, 64);
+    }
+
+    assert_eq!(voice.len(), 1, "a seek left more than its own source on the voice");
 }
 
 /// The converter is built against the source's own shape, so a second source at a different rate

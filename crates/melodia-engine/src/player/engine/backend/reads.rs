@@ -3,6 +3,7 @@
 
 use std::time::Duration;
 
+use melodia_playback::player::playback::decks::DECK_COUNT;
 use melodia_playback::player::playback::output::voice::Voice;
 
 use super::PlaybackEngine;
@@ -52,6 +53,10 @@ impl PlaybackEngine {
     /// A pause long enough to give the device back leaves the deck holding no source to resume.
     pub fn holds_source(&self) -> bool {
         !self.lock_decks().active().voice.is_empty()
+    }
+
+    pub fn held_steps(&self) -> [u64; DECK_COUNT] {
+        self.lock_decks().held_steps()
     }
 }
 

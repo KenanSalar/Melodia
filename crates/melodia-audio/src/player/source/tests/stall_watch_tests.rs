@@ -14,7 +14,8 @@ use tokio_util::sync::CancellationToken;
 
 use super::{STALL_TIMEOUT, StallWatch};
 use crate::player::source::audio::SourceFormat;
-use crate::player::source::prebuffer::{PrebufferSource, RingWriter, StreamShared};
+use crate::player::source::prebuffer::{PrebufferSource, StreamShared};
+use crate::player::source::sample_ring::RingWriter;
 use crate::player::source::stream_source::ABANDON_POLL;
 use crate::player::source::tests::helpers::shape;
 

@@ -50,6 +50,7 @@ use std::path::Path;
 use std::sync::Weak;
 
 use melodia_audio::player::source::audio::Shape;
+use melodia_audio::player::source::decode_ahead;
 use melodia_audio::player::source::stream_source::{PreparedStream, prepared_stream_for_test};
 use melodia_playback::player::playback::decks::DECK_COUNT;
 use melodia_playback::player::playback::output::mixer;
@@ -74,7 +75,7 @@ fn test_shape() -> Shape {
 /// An engine over a mixer with no device under it, which is all three doors need.
 fn engine_without_a_card() -> Result<PlaybackEngine, AppError> {
     let (mixer, _pull) = mixer::pair(DECK_COUNT, test_shape());
-    PlaybackEngine::new(&mixer, tokio::runtime::Handle::current())
+    PlaybackEngine::new(&mixer, tokio::runtime::Handle::current(), decode_ahead::DEPTH)
 }
 
 fn staged_stream() -> (PreparedStream, Weak<StreamShared>) {

@@ -30,7 +30,8 @@ use melodia_core::error::describe;
 
 use super::audio::{Shape, SourceFormat};
 use super::hls;
-use super::prebuffer::{PrebufferSource, RingWriter, StreamShared};
+use super::prebuffer::{PrebufferSource, StreamShared};
+use super::sample_ring::RingWriter;
 use super::stall_watch::StallWatch;
 use super::stream_decode::{LiveSource, StreamDecoder};
 

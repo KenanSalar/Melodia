@@ -1,17 +1,18 @@
 //! One voice: the source playing, the one staged behind, and the transport state the mixer reads.
 //! [`Voice`] is the control side the rest of the tree sees; [`VoicePull`] is the mixer's, touched
-//! only from the audio callback, with a command channel and counters between them.
+//! only under the puller's lock, with a command channel and counters between them.
 //!
 //! `clear` blocks until the callback has serviced it, the contract `Decks::cut_to` rests on: a
-//! clear not yet landed would take the new source with it. It is the only op that blocks; a seek is
-//! a `replace` carrying a source already positioned.
+//! clear not yet landed would take the new source with it. It is the only op that blocks here; a
+//! seek is a `replace` carrying a source already positioned, which its caller lands, waiting
+//! through [`Voice::await_service`] while a callback runs.
 
 use std::collections::VecDeque;
 use std::sync::Arc;
 use std::sync::atomic::{
     AtomicBool, AtomicU8, AtomicU16, AtomicU32, AtomicU64, AtomicUsize, Ordering,
 };
-use std::sync::mpsc::{Receiver, SyncSender, TryRecvError, sync_channel};
+use std::sync::mpsc::{Receiver, SyncSender, TryRecvError, TrySendError, sync_channel};
 use std::time::{Duration, Instant};
 
 use parking_lot::Mutex;
@@ -41,17 +42,16 @@ const SERVICE_TIMEOUT: Duration = Duration::from_millis(500);
 const SERVICE_POLL: Duration = Duration::from_millis(1);
 
 /// Bounded so the queue is allocated once; reaching it means the callback has stopped draining.
-/// [`VoicePull::staged`] is sized against it too, a `clear` too full to send leaving appends to
-/// land behind sources that should have gone, and an allocation being what that thread must not do.
 const COMMAND_SLOTS: usize = 8;
 
-/// A clear retires two sources per voice; the rest is slack for a collector that hasn't run. Full
-/// falls back to freeing on the callback, a worse tick rather than a broken one.
-const SPENT_SLOTS: usize = 8;
+/// The most sources a voice counts ([`VoiceShared::sources`]), sizing [`VoicePull::staged`] and the
+/// spent queue so neither grows on the callback. Normal use holds at most three (the playing source,
+/// one staged, a seek's replacement), so meeting the cap means the callback stopped servicing.
+const SOURCE_SLOTS: usize = COMMAND_SLOTS;
 
 /// A source and its converter, built on the control thread because [`Converter::new`] allocates.
-/// Freed off the audio thread through [`VoicePull::retire`], a decoder's read buffer being too big
-/// for glibc's per-thread cache; only its claims ([`AudioSource::release_claims`]) are given up on
+/// Freed off the audio thread through [`VoicePull::retire`], a source's ring being too big for
+/// glibc's per-thread cache; only its claims ([`AudioSource::release_claims`]) are given up on
 /// the callback, so the visualizer stops mixing a dead deck at once.
 struct Loaded {
     source: Box<dyn AudioSource>,
@@ -116,12 +116,15 @@ struct VoiceShared {
     /// under neither `exec_lock` nor `deck_epoch`, where every other mount is sent under the
     /// `exec_lock` the seek holds, so the channel already orders it. Written by the callback alone.
     handovers: AtomicU64,
+    /// Steps the callback held this voice for, its source having too little decoded
+    /// ([`AudioSource::is_ready`]). Written by the callback alone; the monitor logs a stall from it.
+    held_steps: AtomicU64,
 }
 
 pub struct Voice {
     shared: Arc<VoiceShared>,
     commands: SyncSender<Command>,
-    /// Behind a lock only because a `Receiver` isn't `Sync`; the one collector never contends it.
+    /// Behind a lock only because a `Receiver` isn't `Sync`.
     spent: Mutex<Receiver<Loaded>>,
 }
 
@@ -147,8 +150,9 @@ impl Voice {
         self.send_counted(Command::Append { loaded, frames });
     }
 
-    /// How a seek is spelled: `source` is already positioned, so nothing waits on it. A voice that
-    /// has handed over or run dry takes nothing ([`VoiceShared::handovers`]).
+    /// How a seek is spelled, `source` already positioned. Returns once sent, not taken
+    /// ([`Self::await_service`]). A voice that has handed over or run dry takes nothing
+    /// ([`VoiceShared::handovers`]).
     pub fn replace<S: AudioSource + 'static>(&self, source: S, position: Duration, handovers: u64) {
         let frames = frames_in(position, source.sample_rate());
         let loaded = Self::load(source);
@@ -160,14 +164,24 @@ impl Voice {
         self.shared.handovers.load(Ordering::Acquire)
     }
 
+    pub fn held_steps(&self) -> u64 {
+        self.shared.held_steps.load(Ordering::Relaxed)
+    }
+
     fn load<S: AudioSource + 'static>(source: S) -> Loaded {
         Loaded { converter: Converter::new(source.shape()), source: Box::new(source) }
     }
 
-    /// Counts the source before the callback can see it; `Append` pays it back when its source
-    /// finishes, `Replace` when the swap drops one.
+    /// Counts the source before the callback can see it, refusing at [`SOURCE_SLOTS`]; `Append`
+    /// pays it back when its source finishes, `Replace` when the swap drops one. Counted ahead of
+    /// `send`'s drain and paid back only after [`VoicePull::retire`], so the spent queue holds
+    /// only sources counted at its last drain.
     fn send_counted(&self, command: Command) {
-        self.shared.sources.fetch_add(1, Ordering::SeqCst);
+        let claim = |held: usize| (held < SOURCE_SLOTS).then_some(held + 1);
+        if self.shared.sources.try_update(Ordering::SeqCst, Ordering::SeqCst, claim).is_err() {
+            warn_lost_op();
+            return;
+        }
         if !self.send(command) {
             self.shared.sources.fetch_sub(1, Ordering::SeqCst);
         }
@@ -185,8 +199,8 @@ impl Voice {
         self.shared.anchor.store(0, Ordering::Relaxed);
     }
 
-    /// Cheap and idempotent; skipping it holds a few spent sources, and a full queue sends the
-    /// callback back to freeing its own.
+    /// Cheap and idempotent. Every send runs it first; a call from outside is for a source that
+    /// ends with no send behind it.
     pub fn collect_spent(&self) {
         let spent = self.spent.lock();
         while spent.try_recv().is_ok() {}
@@ -285,23 +299,21 @@ impl Voice {
         })
     }
 
-    /// The ticket is bumped after the send, so one the callback sees has its command on the
-    /// channel.
+    /// Drains the spent queue first, which is what bounds it ([`Self::send_counted`]). The ticket
+    /// is bumped after the send, so one the callback sees has its command on the channel.
     fn send(&self, command: Command) -> bool {
-        // Full means the callback stopped draining. Dropped rather than blocked on while holding
-        // the transport: a lost `Append` reads as end-of-stream and advances regardless, and
-        // `tasks::audio_health` is what tells the user.
+        self.collect_spent();
         if self.commands.try_send(command).is_err() {
-            log::warn!(
-                "audio callback is not draining its control channel; a transport op was lost"
-            );
+            warn_lost_op();
             return false;
         }
         self.shared.issued.fetch_add(1, Ordering::Release);
         true
     }
 
-    fn await_service(&self) {
+    /// Waits until the callback has taken every op sent so far, giving up after [`SERVICE_TIMEOUT`]
+    /// on a stream no longer pulled.
+    pub fn await_service(&self) {
         let ticket = self.shared.issued.load(Ordering::Acquire);
         let deadline = Instant::now() + SERVICE_TIMEOUT;
         while self.shared.serviced.load(Ordering::Acquire) < ticket {
@@ -314,6 +326,12 @@ impl Voice {
             std::thread::sleep(SERVICE_POLL);
         }
     }
+}
+
+/// A refused op is dropped rather than blocked on while holding the transport: a lost `Append` reads
+/// as end-of-stream and advances regardless, and `tasks::audio_health` is what tells the user.
+fn warn_lost_op() {
+    log::warn!("audio callback is not draining its control channel; a transport op was lost");
 }
 
 /// The audio side of one voice. Pulled only from the callback.
@@ -363,6 +381,12 @@ impl VoicePull {
             let Some(loaded) = self.current.as_mut() else {
                 break;
             };
+            // Held rather than pulled dry: a source not pulled leaves its converter, its ramp and
+            // the clock where they were, and what isn't written stays silent.
+            if !loaded.source.is_ready() {
+                self.shared.held_steps.fetch_add(1, Ordering::Relaxed);
+                break;
+            }
             let Filled { samples, source_frames } =
                 loaded.converter.fill(&mut block[written..], &mut *loaded.source, conversion);
             written += samples;
@@ -396,8 +420,8 @@ impl VoicePull {
     /// releasing a waiter a step early; `LOCKSTEP_FRAMES` already bounds that skew.
     pub(super) fn service(&mut self) {
         let seen = self.shared.issued.load(Ordering::Acquire);
-        // Most steps carry no op, and the counter keeps the channel's fence off them. Only this
-        // thread writes `serviced`, so the load needs no ordering.
+        // Most steps carry no op, and the counter keeps the channel's fence off them. Only the
+        // puller's holder writes `serviced`, under its lock, so the load needs no ordering.
         if seen == self.shared.serviced.load(Ordering::Relaxed) {
             return;
         }
@@ -514,17 +538,22 @@ impl VoicePull {
         self.shared.anchor.store(0, Ordering::Relaxed);
     }
 
-    /// Gives up the claims here and hands the free back; a full queue frees it here instead.
+    /// Gives up the claims here and hands the free back. The queue has room by construction
+    /// ([`Voice::send_counted`]); only teardown, the collector gone, frees here.
     fn retire(&mut self, mut spent: Loaded) {
         spent.source.release_claims();
-        drop(self.spent.try_send(spent));
+        let handed_back = self.spent.try_send(spent);
+        debug_assert!(
+            !matches!(handed_back, Err(TrySendError::Full(_))),
+            "the spent queue holds only sources counted at its last drain, so it never fills"
+        );
     }
 }
 
 /// Build one voice's two halves.
 pub fn pair(device: Shape) -> (Voice, VoicePull) {
     let (command_tx, command_rx) = sync_channel(COMMAND_SLOTS);
-    let (spent_tx, spent_rx) = sync_channel(SPENT_SLOTS);
+    let (spent_tx, spent_rx) = sync_channel(SOURCE_SLOTS);
 
     let shared = Arc::new(VoiceShared {
         paused: AtomicBool::new(false),
@@ -544,6 +573,7 @@ pub fn pair(device: Shape) -> (Voice, VoicePull) {
         issued: AtomicU64::new(0),
         serviced: AtomicU64::new(0),
         handovers: AtomicU64::new(0),
+        held_steps: AtomicU64::new(0),
     });
 
     let voice = Voice { shared: shared.clone(), commands: command_tx, spent: Mutex::new(spent_rx) };
@@ -551,7 +581,7 @@ pub fn pair(device: Shape) -> (Voice, VoicePull) {
         shared,
         commands: command_rx,
         current: None,
-        staged: VecDeque::with_capacity(COMMAND_SLOTS),
+        staged: VecDeque::with_capacity(SOURCE_SLOTS),
         spent: spent_tx,
         device,
     };

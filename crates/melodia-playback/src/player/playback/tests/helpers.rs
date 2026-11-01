@@ -17,6 +17,8 @@
 //! counter rather than the output of a filter.
 
 use std::num::NonZero;
+use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 
 use melodia_audio::player::source::audio::{
@@ -78,11 +80,25 @@ pub(crate) struct TestSource {
     sample_rate: u32,
     format: SourceFormat,
     dsp_engaged: bool,
+    ready: Option<Arc<AtomicBool>>,
 }
 
 impl TestSource {
     pub(crate) fn new(data: Vec<f32>, channels: u16, sample_rate: u32) -> Self {
-        Self { data, pos: 0, channels, sample_rate, format: SourceFormat::F32, dsp_engaged: false }
+        Self {
+            data,
+            pos: 0,
+            channels,
+            sample_rate,
+            format: SourceFormat::F32,
+            dsp_engaged: false,
+            ready: None,
+        }
+    }
+
+    /// Report ready only while `ready` holds, as a file the drive has fallen behind on does.
+    pub(crate) fn gated(self, ready: Arc<AtomicBool>) -> Self {
+        Self { ready: Some(ready), ..self }
     }
 
     /// Report `format` as what the decoder produced.
@@ -126,5 +142,8 @@ impl AudioSource for TestSource {
     fn try_seek(&mut self, _pos: Duration) -> Result<(), SeekError> {
         self.pos = 0;
         Ok(())
+    }
+    fn is_ready(&self) -> bool {
+        self.ready.as_ref().is_none_or(|ready| ready.load(Ordering::Relaxed))
     }
 }
