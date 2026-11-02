@@ -479,6 +479,9 @@ Hand test:
      - The returned file's directory appears in Settings ▸ Library Folders as a folder of its own, with rescan and remove.
      - Removing the library folder around it leaves that row and its tracks in the library.
      - A rescan of the enclosing folder absorbs the row again.
+   - **A brought-back file can take an existing row back.** Where its bytes match a row whose own file is gone, the import re-points that row, history included, rather than returning the file as a new track. Bring Back counts it as returned all the same, by what is still kept out after the import. It needs a row no scan has purged:
+     - A keeper deleted with watching off, whose launch only finishes interrupted imports. With watching on, the launch's full scan purges the row first.
+     - A keeper on a drive that isn't connected, whose walk finds nothing and so purges nothing. Its history moves onto the spare, and the keeper comes back with its drive as a new track.
 2. Tests are added where the landed change earns them, on Kenan's go.
 
 ## Cross-cutting

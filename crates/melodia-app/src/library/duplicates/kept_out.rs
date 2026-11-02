@@ -1,6 +1,6 @@
 //! The files Remove kept out of the library, and Bring Back, which returns one through the import a
-//! drop takes: the import lifts the exclusion inside its own transaction, so a file comes back as
-//! a new track with no rescan.
+//! drop takes: the import lifts the exclusion inside its own transaction, so a file comes back
+//! with no rescan.
 
 use melodia_core::entities::duplicates::KeptOutFile;
 use melodia_core::error::AppError;
@@ -76,8 +76,9 @@ async fn bring_back_page(state: &AppState, ids: &[i64]) -> Result<BroughtBack, A
     if paths.is_empty() {
         return Ok(BroughtBack::default());
     }
-    let imported =
-        import_files(&state.db, &state.paths.artwork_dir, &state.cover_cache, &paths).await?;
-    let returned = usize::try_from(imported.imported_count).unwrap_or(usize::MAX).min(paths.len());
-    Ok(BroughtBack { returned, not_returned: paths.len() - returned })
+    import_files(&state.db, &state.paths.artwork_dir, &state.cover_cache, &paths).await?;
+    // Read back rather than taken from the insert count: a file whose bytes match a row whose own
+    // file is gone takes that row back and inserts nothing.
+    let still_out = files(&state.db, ids).await?.len().min(paths.len());
+    Ok(BroughtBack { returned: paths.len() - still_out, not_returned: still_out })
 }

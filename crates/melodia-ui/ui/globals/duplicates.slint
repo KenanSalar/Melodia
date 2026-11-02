@@ -64,7 +64,7 @@ export global KeptOutUi {
     in-out property <bool> busy;
     in property <bool> failed;
     out property <bool> listing: !root.busy && !root.failed && root.rows.length > 0;
-    // One Bring Back at a time: two imports of one file would both insert it, failing the second.
+    // One Bring Back at a time, or a file both runs asked for is toasted as brought back twice.
     in property <bool> bringing-back;
 
     callback load();
