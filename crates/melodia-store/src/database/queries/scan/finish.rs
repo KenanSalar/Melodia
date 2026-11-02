@@ -29,8 +29,11 @@ pub async fn commit_scan(
         stats::disable_stats_triggers(&mut tx).await?;
     }
     if !orphans.is_empty() {
-        log::info!("Removing {} orphaned tracks from folder {}", orphans.len(), folder.path);
-        delete_tracks_by_paths_batch(&mut tx, orphans).await?;
+        // A row this scan re-pointed as moved has left its orphaned path, so only the delete counts.
+        let removed = delete_tracks_by_paths_batch(&mut tx, orphans).await?;
+        if removed > 0 {
+            log::info!("Removed {removed} orphaned tracks from folder {}", folder.path);
+        }
     }
 
     // A rescan that changed nothing skips the sweeps, which would only rewrite the same values.

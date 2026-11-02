@@ -1,6 +1,6 @@
 # Plan: Duplicate tracks (find the copies, clear out the spares)
 
-Status: **in progress** (Phase 0 built, awaiting its hand check) · Owner: Kenan · Created: 2026-11-02 · Issue #158, branch `feat/duplicate-tracks`
+Status: **in progress** (Phase 0 done, Phase 1 next) · Owner: Kenan · Created: 2026-11-02 · Issue #158, branch `feat/duplicate-tracks`
 
 > **Validated 2026-11-02** against `b4c5ecff`, and re-validated the same day against `41c1f2e1`. The sources were:
 > - three read-only code traces: the store and per-track data; the removal, scan, watcher and queue paths; the UI surfaces;
@@ -298,7 +298,7 @@ Size headroom, measured: `app-window.slint` 749 lines (gains two export names), 
 
 ### Phase 0: Trash folders are never indexed
 
-Status: built (2026-11-02), awaiting Kenan's hand check.
+Status: built and hand-checked (2026-11-02). The home-trash item ran on a scratch home through `XDG_DATA_HOME`, because the real home folder has more directories than inotify's per-user watch limit.
 
 1. `utils::trash_dir`:
    - `is_trash_dir(&Path)` takes a folder. It matches `.Trash`, `.Trash-` followed by a uid, `.Trashes`, and `$RECYCLE.BIN` compared without case, by name. It matches the home trash, `dirs::data_dir()/Trash` made canonical, by path, because a plain `Trash` is a name any album folder could carry. The walk sees one folder at a time, so the home trash has to be in this predicate.
