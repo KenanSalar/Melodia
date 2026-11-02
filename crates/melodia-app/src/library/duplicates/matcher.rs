@@ -78,7 +78,7 @@ pub(super) fn group(copies: Vec<DuplicateCopy>) -> Vec<DuplicateGroup> {
             copies.push(copy);
         }
         if copies.len() > 1 {
-            let group = build_group(copies, !words.artist.is_empty());
+            let group = build_group(copies, &words);
             groups.push((words, group));
         }
     }
@@ -89,13 +89,9 @@ pub(super) fn group(copies: Vec<DuplicateCopy>) -> Vec<DuplicateGroup> {
     groups.into_iter().map(|(_, group)| group).collect()
 }
 
-fn build_group(mut copies: Vec<DuplicateCopy>, has_artist: bool) -> DuplicateGroup {
+fn build_group(mut copies: Vec<DuplicateCopy>, words: &SongWords) -> DuplicateGroup {
     copies.sort_by(keeper_first);
-    DuplicateGroup {
-        kind: kind_of(&copies, has_artist),
-        dismissed: shared_dismissal(&copies),
-        copies,
-    }
+    DuplicateGroup { kind: kind_of(&copies, words), dismissed: shared_dismissal(&copies), copies }
 }
 
 /// The better encode first, then the copy in the library longest, then the lowest id so the order
@@ -108,11 +104,11 @@ fn keeper_first(a: &DuplicateCopy, b: &DuplicateCopy) -> Ordering {
         .then(a.id.cmp(&b.id))
 }
 
-fn kind_of(copies: &[DuplicateCopy], has_artist: bool) -> MatchKind {
+fn kind_of(copies: &[DuplicateCopy], words: &SongWords) -> MatchKind {
     if is_identical(copies) {
         return MatchKind::Identical;
     }
-    review_reason(copies, has_artist).map_or(MatchKind::SameRelease, MatchKind::Review)
+    review_reason(copies, words).map_or(MatchKind::SameRelease, MatchKind::Review)
 }
 
 /// One hash on every copy. A row the hash backfill hasn't reached yet matches nothing here.
@@ -124,8 +120,8 @@ fn is_identical(copies: &[DuplicateCopy]) -> bool {
 }
 
 /// The first doubt that holds, in [`ReviewReason`]'s precedence.
-fn review_reason(copies: &[DuplicateCopy], has_artist: bool) -> Option<ReviewReason> {
-    if !has_artist {
+fn review_reason(copies: &[DuplicateCopy], words: &SongWords) -> Option<ReviewReason> {
+    if words.artist.is_empty() {
         return Some(ReviewReason::NoArtist);
     }
     if differ(copies, |copy| copy.musicbrainz_track_id.as_deref()) {

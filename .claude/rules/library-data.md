@@ -6,6 +6,7 @@ paths:
   - crates/melodia-core/src/utils/audio_ext.rs
   - crates/melodia-core/src/utils/fold.rs
   - crates/melodia-core/src/utils/trash_dir.rs
+  - crates/melodia-net/src/services/net/lyrics_directory/recording.rs
   - crates/melodia-platform/src/services/platform/single_instance.rs
   - crates/melodia-views/src/ui/playlists/**/*.rs
   - crates/melodia-ui/ui/views/my-library/playlist-detail.slint

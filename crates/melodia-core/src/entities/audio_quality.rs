@@ -16,8 +16,8 @@ pub struct AudioFormat {
 }
 
 impl AudioFormat {
-    /// Whether the encode is lossless. An MP4 is only as ALAC, which lofty reports a bit depth for
-    /// and AAC never has.
+    /// Whether the encode is lossless. An MP4 is lossless only as ALAC or FLAC, the codecs lofty
+    /// reports a bit depth for; AAC never has one.
     pub fn is_lossless(&self) -> bool {
         match self.codec.as_deref() {
             Some("Mp4") => self.bit_depth.is_some(),
