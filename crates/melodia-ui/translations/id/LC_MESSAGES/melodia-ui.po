@@ -235,6 +235,17 @@ msgstr[0] "{n} salinan"
 msgid "Added {}"
 msgstr "Ditambahkan {}"
 
+#: ui/components/dialog/duplicate-row.slint
+#: ui/components/now-playing/overflow-menu.slint
+msgid "More"
+msgstr "Lainnya"
+
+#. Translators: {n} counts songs found more than once, each with its copies.
+#: ui/components/dialog/duplicates-body.slint
+msgid "{n} group"
+msgid_plural "{n} groups"
+msgstr[0] "{n} grup"
+
 #: ui/components/dialog/duplicates-body.slint
 msgid "Suggested Picks"
 msgstr "Pilihan yang disarankan"
@@ -1167,10 +1178,6 @@ msgstr "Coba lagi dari menu Lirik"
 #: ui/components/onboarding/onboarding-overlay.slint
 msgid "Done"
 msgstr "Selesai"
-
-#: ui/components/now-playing/overflow-menu.slint
-msgid "More"
-msgstr "Lainnya"
 
 #: ui/components/now-playing/overflow-menu.slint
 #: ui/views/settings/output-section.slint

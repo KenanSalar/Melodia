@@ -238,6 +238,18 @@ msgstr[1] "{n} kopieën"
 msgid "Added {}"
 msgstr "Toegevoegd op {}"
 
+#: ui/components/dialog/duplicate-row.slint
+#: ui/components/now-playing/overflow-menu.slint
+msgid "More"
+msgstr "Meer"
+
+#. Translators: {n} counts songs found more than once, each with its copies.
+#: ui/components/dialog/duplicates-body.slint
+msgid "{n} group"
+msgid_plural "{n} groups"
+msgstr[0] "{n} groep"
+msgstr[1] "{n} groepen"
+
 #: ui/components/dialog/duplicates-body.slint
 msgid "Suggested Picks"
 msgstr "Voorgestelde selectie"
@@ -1171,10 +1183,6 @@ msgstr "Probeer het opnieuw via het menu Songtekst"
 #: ui/components/onboarding/onboarding-overlay.slint
 msgid "Done"
 msgstr "Klaar"
-
-#: ui/components/now-playing/overflow-menu.slint
-msgid "More"
-msgstr "Meer"
 
 #: ui/components/now-playing/overflow-menu.slint
 #: ui/views/settings/output-section.slint

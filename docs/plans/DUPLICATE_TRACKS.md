@@ -191,6 +191,9 @@ Right-clicking a group's header offers **Not Duplicates**, for copies you keep o
       - `destructive` flips with the step.
       - The label switch (`:248-253`) and the enabled gate (`:259-278`) each gain an arm.
     - **The list.** A `ListView` over `PagedRows<DuplicateRow>` (`paged_rows/mod.rs:184`), because this list can hold the library: a library added twice. The keyset is each group's header id (negative, from the group's index) followed by its copies' track ids. A removal pick is the model's own `selected`. Header and copy rows have fixed heights, so a placeholder never jumps.
+      - The list sits in a recessed `base` well with its scrollbar inside, as the other list dialogs' does. Each group is a `surface0` card, which its rows draw in slices: a header rounds the card's top, and the last copy rounds its bottom. A row knows where it sits from its neighbours' `is_header`, which a placeholder already carries.
+      - A copy shows its file name and format chip (tinted when lossless), its album and year with what it carries, and its folder with when it was added.
+      - Every row has a visible ⋮ button that opens the same menu a right-click does.
     - **Group facts and picks.** They live in a compact `DuplicateSet` that keeps no copy's text: a folder is an index interned while the set is built, and a file hash a class within its group.
       - A pick toggles there, and the set hands its picks to `PagedRows::select`.
       - `PagedRows` stamps `selected` on every row it hands out, placeholders included (`paged_rows/mod.rs:527`), so a row scrolled away and back keeps its pick.
@@ -272,15 +275,15 @@ Right-clicking a group's header offers **Not Duplicates**, for copies you keep o
 | `crates/melodia-app/src/library/duplicates/matcher.rs` (new, P1) | Pure grouping: key runs, collision split, duration clusters, kind, the keeper order, the dismissed flag. |
 | `crates/melodia-ui/ui/globals/duplicates.slint` (new, P2) | `DuplicatesUi`: rows, busy, counts, callbacks; `step` (P3); `KeptOutUi` (P4). |
 | `crates/melodia-ui/ui/models.slint` | `DuplicateMatch` and `DuplicateRow` (P2), `KeptOutRow` (P4). |
-| `crates/melodia-ui/ui/components/dialog/duplicates-body.slint` (new, P2) | Both steps' bodies and the list's toolbar (Suggested picks, Clear picks, Show Dismissed). |
-| `crates/melodia-ui/ui/components/dialog/duplicate-row.slint` (new, P2) | The header row with its Dismissed chip, and the copy row. |
+| `crates/melodia-ui/ui/components/dialog/duplicates-body.slint` (new, P2) | Both steps' bodies, the list's toolbar (group count, Suggested picks, Clear picks, Show Dismissed), the well with its scrollbar, and the busy, empty and failed states. |
+| `crates/melodia-ui/ui/components/dialog/duplicate-row.slint` (new, P2) | The header row and the copy row, each a slice of its group's card, and the ⋮ button that opens the row menu. |
 | `crates/melodia-ui/ui/components/dialog/duplicates-menus.slint` (new, P2) | `DuplicateRowMenu`, one per row, its entries following the row's kind; `KeptOutMenu` (P4). Both are built from `context-menu.slint`'s parts. |
 | `crates/melodia-ui/ui/components/dialog/kept-out-body.slint` (new, P4) | The kept-out list, its row with Bring Back, Bring All Back and Copy All Paths. |
 | `crates/melodia-ui/ui/components/dialog/dialog.slint`, `globals/dialog.slint` | Both kinds: width, `body-scrolls`, mount, Back on Confirm, primary label and gate, the stay-open list, `destructive` by step, `accepted` arms (P2 to P4). |
 | `crates/melodia-ui/ui/views/settings/duplicates-section.slint` (new, P2) | The Find row and the finder's one opener, and the kept-out row (P4). Mounted in `pages/library-page.slint` and its `has-matches`. |
 | `crates/melodia-views/src/ui/duplicates/mod.rs` (new, P2) | `install`, the find behind its ticket, the row fetch, Not Duplicates' round trip, the close teardown. |
 | `crates/melodia-views/src/ui/duplicates/picks.rs` (new, P2) | `DuplicateSet`: the compact groups with their folders and file hashes as indices, the pick rule, suggested picks with the identical extras, Keep This Copy, Keep Copies in This Folder, cleared picks, dismissals, the keyset with dismissed groups shown or hidden, picked count and bytes. |
-| `crates/melodia-views/src/ui/duplicates/rows.rs` (new, P2) | `DuplicateRow`'s placeholder, the rows built from what the fetch read, the header's lead copy, the format label and subtitle. |
+| `crates/melodia-views/src/ui/duplicates/rows.rs` (new, P2) | `DuplicateRow`'s placeholder, the rows built from what the fetch read, the header's lead copy, the format label, the release line and the folder. |
 | `crates/melodia-views/src/ui/duplicates/apply.rs` (new, P3) | Picks into `GroupRemoval`s, the call, the result line. |
 | `crates/melodia-views/src/ui/duplicates/kept_out.rs` (new, P4) | `KeptOutRow`'s paged rows, Open Containing Folder, Bring Back, Bring All Back, Copy All Paths, the Settings row's count. |
 | `crates/melodia-views/src/ui/util.rs` | `format_codec`, `format_bitrate`, `format_bit_depth` and `format_size` beside `format_sample_rate`, lifted from the inline closures in `now_playing/metadata.rs` and `callbacks/tags/open.rs` and from `callbacks/tags/fold.rs`'s `fmt_size` (P2, no behaviour change). |
@@ -374,6 +377,9 @@ Hand test, on the dev library:
 - A Review group holding an identical pair beside an other-release copy (two copies of one album file next to a compilation copy, made by hand): one of the pair is picked, and the compilation copy is not.
 - A remaster tagged like its original but with another year lists as Review, unpicked.
 - Scroll a picked row out of view and back: it keeps its pick.
+- Each group reads as one card, in a dark theme and a light one. A fast scroll lands each placeholder with its corners already right.
+- The scrollbar sits inside the well, as Add to Playlist's does.
+- The ⋮ button and a right-click open the same menu.
 - RSS (`MELODIA_RSS_SAMPLE=1`) with the dialog open, then closed.
 
 ### Phase 3: Remove from library

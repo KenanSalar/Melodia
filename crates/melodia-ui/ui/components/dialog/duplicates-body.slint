@@ -2,10 +2,13 @@ import { ListView } from "std-widgets.slint";
 import { Theme } from "../../theme.slint";
 import { DuplicatesUi } from "../../globals/duplicates.slint";
 import { FilledChip } from "../filled-chip.slint";
+import { GridEmptyState } from "../grid/grid-empty-state.slint";
+import { MaterialIcon } from "../material-icon.slint";
 import { OverlayScrollbar } from "../overlay-scrollbar.slint";
 import { DuplicateRowItem } from "duplicate-row.slint";
 
 component ToolbarChip inherits FilledChip {
+    in property <string> icon;
     in property <string> label;
 
     height: 30px;
@@ -14,8 +17,18 @@ component ToolbarChip inherits FilledChip {
     hover-fill: Theme.card-control-hover;
 
     HorizontalLayout {
-        padding-left: Theme.pad-md;
+        padding-left: Theme.pad-sm;
         padding-right: Theme.pad-md;
+        spacing: Theme.pad-xs;
+
+        VerticalLayout {
+            alignment: center;
+            MaterialIcon {
+                name: root.icon;
+                icon-size: 16px;
+                icon-color: root.ink;
+            }
+        }
         Text {
             text: root.label;
             color: root.ink;
@@ -25,29 +38,41 @@ component ToolbarChip inherits FilledChip {
     }
 }
 
-// The duplicate finder: its picks toolbar over the groups, or a line saying why there are none.
-// The list is the card's scroller, the kind being one of `body-scrolls`.
+// The duplicate finder: its picks toolbar over the groups, or a state saying why there are none.
+// The list is the card's scroller, the kind being one of `body-scrolls`, and keeps its bar inside
+// its well, as the other list dialogs' lists do.
 export component DuplicatesBody inherits VerticalLayout {
     spacing: Theme.pad-md;
 
     property <bool> settled: !DuplicatesUi.busy && !DuplicatesUi.failed;
     property <bool> listing: root.settled && DuplicatesUi.group-count > 0;
-    // Room for the bar beside the rows rather than over a copy's carried facts.
-    property <length> bar-gutter: Theme.scrollbar-slot + 4px;
+    property <length> bar-inset: Theme.pad-xs;
+    // The cards stop short of the bar rather than running under a copy's carried facts.
+    property <length> bar-gutter: Theme.scrollbar-slot + 2 * root.bar-inset;
 
     if root.settled && (DuplicatesUi.group-count > 0 || DuplicatesUi.dismissed-count > 0): HorizontalLayout {
         spacing: Theme.pad-sm;
 
+        if root.listing: Text {
+            // Translators: {n} counts songs found more than once, each with its copies.
+            text: @tr("{n} group" | "{n} groups" % DuplicatesUi.group-count);
+            color: Theme.subtext0;
+            font-size: Theme.font-size-sm;
+            vertical-alignment: center;
+        }
+        Rectangle { horizontal-stretch: 1; }
         if root.listing: ToolbarChip {
+            icon: "auto_awesome";
             label: @tr("Suggested Picks");
             clicked => { DuplicatesUi.suggest(); }
         }
         if root.listing: ToolbarChip {
+            icon: "clear_all";
             label: @tr("Clear Picks");
             clicked => { DuplicatesUi.clear-picks(); }
         }
-        Rectangle { horizontal-stretch: 1; }
         if DuplicatesUi.dismissed-count > 0: ToolbarChip {
+            icon: "visibility";
             // Translators: {} is how many groups were marked Not Duplicates.
             label: @tr("Show Dismissed ({})", DuplicatesUi.dismissed-count);
             selected: DuplicatesUi.show-dismissed;
@@ -55,56 +80,55 @@ export component DuplicatesBody inherits VerticalLayout {
         }
     }
 
-    if !root.listing: VerticalLayout {
-        min-height: 160px;
+    if !root.listing: GridEmptyState {
+        min-height: 200px;
+        preferred-height: 240px;
         vertical-stretch: 1;
-        alignment: center;
-        spacing: Theme.pad-sm;
-
-        Text {
-            text: DuplicatesUi.busy ? @tr("Looking for duplicates…")
-                : DuplicatesUi.failed ? @tr("Couldn't search the library.")
-                : @tr("No duplicates found");
-            color: Theme.text;
-            font-size: Theme.font-size-md;
-            horizontal-alignment: center;
-            wrap: word-wrap;
-        }
-        if root.settled: Text {
-            text: DuplicatesUi.dismissed-count > 0
+        // Its fill is the well's, square unless rounded here.
+        border-radius: Theme.radius-lg;
+        icon: DuplicatesUi.busy ? "search" : DuplicatesUi.failed ? "error" : "check_circle";
+        title: DuplicatesUi.busy ? @tr("Looking for duplicates…")
+            : DuplicatesUi.failed ? @tr("Couldn't search the library.")
+            : @tr("No duplicates found");
+        body: !root.settled ? ""
+            : DuplicatesUi.dismissed-count > 0
                 ? @tr("Every group left is one you marked Not Duplicates.")
                 : @tr("No song is in the library more than once.");
-            color: Theme.subtext0;
-            font-size: Theme.font-size-sm;
-            horizontal-alignment: center;
-            wrap: word-wrap;
-        }
     }
 
+    // No `clip`: a rounded one is a texture layer, and the cards' insets keep every row clear of
+    // the corners.
     if root.listing: Rectangle {
         min-height: 160px;
         preferred-height: 520px;
         vertical-stretch: 1;
+        background: Theme.base;
+        border-radius: Theme.radius-lg;
 
         list := ListView {
             x: 0px;
             y: 0px;
-            width: parent.width - root.bar-gutter;
+            width: parent.width;
             height: parent.height;
             vertical-scrollbar-policy: always-off;
             horizontal-scrollbar-policy: always-off;
             mouse-drag-pan-enabled: false;
 
-            for row in DuplicatesUi.rows: DuplicateRowItem {
+            for row[idx] in DuplicatesUi.rows: DuplicateRowItem {
                 row-data: row;
+                first-copy: idx > 0 && DuplicatesUi.rows[idx - 1].is_header;
+                last-copy: idx == DuplicatesUi.rows.length - 1 || DuplicatesUi.rows[idx + 1].is_header;
+                list-end: idx == DuplicatesUi.rows.length - 1;
+                inset-left: Theme.pad-md;
+                inset-right: root.bar-gutter;
             }
         }
 
         OverlayScrollbar {
-            x: parent.width - self.width;
-            y: 0px;
+            x: parent.width - self.width - root.bar-inset;
+            y: root.bar-inset;
             width: Theme.scrollbar-slot;
-            height: parent.height;
+            height: parent.height - 2 * root.bar-inset;
             visible-size: list.visible-height;
             content-size: list.content-height;
             offset: -list.content-y;

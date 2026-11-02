@@ -241,6 +241,19 @@ msgstr[2] "{n} копій"
 msgid "Added {}"
 msgstr "Додано {}"
 
+#: ui/components/dialog/duplicate-row.slint
+#: ui/components/now-playing/overflow-menu.slint
+msgid "More"
+msgstr "Більше"
+
+#. Translators: {n} counts songs found more than once, each with its copies.
+#: ui/components/dialog/duplicates-body.slint
+msgid "{n} group"
+msgid_plural "{n} groups"
+msgstr[0] "{n} група"
+msgstr[1] "{n} групи"
+msgstr[2] "{n} груп"
+
 #: ui/components/dialog/duplicates-body.slint
 msgid "Suggested Picks"
 msgstr "Запропонований вибір"
@@ -1175,10 +1188,6 @@ msgstr "Спробуйте ще раз з меню «Текст пісні»"
 #: ui/components/onboarding/onboarding-overlay.slint
 msgid "Done"
 msgstr "Готово"
-
-#: ui/components/now-playing/overflow-menu.slint
-msgid "More"
-msgstr "Більше"
 
 #: ui/components/now-playing/overflow-menu.slint
 #: ui/views/settings/output-section.slint

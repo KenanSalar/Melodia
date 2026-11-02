@@ -239,6 +239,18 @@ msgstr[1] "{n} αντίγραφα"
 msgid "Added {}"
 msgstr "Προστέθηκε στις {}"
 
+#: ui/components/dialog/duplicate-row.slint
+#: ui/components/now-playing/overflow-menu.slint
+msgid "More"
+msgstr "Περισσότερα"
+
+#. Translators: {n} counts songs found more than once, each with its copies.
+#: ui/components/dialog/duplicates-body.slint
+msgid "{n} group"
+msgid_plural "{n} groups"
+msgstr[0] "{n} ομάδα"
+msgstr[1] "{n} ομάδες"
+
 #: ui/components/dialog/duplicates-body.slint
 msgid "Suggested Picks"
 msgstr "Προτεινόμενη επιλογή"
@@ -1172,10 +1184,6 @@ msgstr "Δοκιμάστε ξανά από το μενού Στίχοι"
 #: ui/components/onboarding/onboarding-overlay.slint
 msgid "Done"
 msgstr "Τέλος"
-
-#: ui/components/now-playing/overflow-menu.slint
-msgid "More"
-msgstr "Περισσότερα"
 
 #: ui/components/now-playing/overflow-menu.slint
 #: ui/views/settings/output-section.slint

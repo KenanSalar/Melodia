@@ -235,6 +235,17 @@ msgstr[0] "{n} bản sao"
 msgid "Added {}"
 msgstr "Đã thêm {}"
 
+#: ui/components/dialog/duplicate-row.slint
+#: ui/components/now-playing/overflow-menu.slint
+msgid "More"
+msgstr "Khác"
+
+#. Translators: {n} counts songs found more than once, each with its copies.
+#: ui/components/dialog/duplicates-body.slint
+msgid "{n} group"
+msgid_plural "{n} groups"
+msgstr[0] "{n} nhóm"
+
 #: ui/components/dialog/duplicates-body.slint
 msgid "Suggested Picks"
 msgstr "Lựa chọn gợi ý"
@@ -1167,10 +1178,6 @@ msgstr "Thử lại từ menu Lời bài hát"
 #: ui/components/onboarding/onboarding-overlay.slint
 msgid "Done"
 msgstr "Xong"
-
-#: ui/components/now-playing/overflow-menu.slint
-msgid "More"
-msgstr "Khác"
 
 #: ui/components/now-playing/overflow-menu.slint
 #: ui/views/settings/output-section.slint

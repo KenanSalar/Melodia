@@ -82,7 +82,9 @@ fn copy_row(copy: &DuplicateCopy, dismissed: bool) -> DuplicateRow {
             .as_ref()
             .into(),
         format: format_label(&copy.format).into(),
-        subtitle: subtitle(copy, path).into(),
+        lossless: copy.format.is_lossless(),
+        release: release(copy).into(),
+        folder: path.parent().map(|folder| folder.display().to_string()).unwrap_or_default().into(),
         added: added_date(&copy.date_added).into(),
         plays: clamp_i64_to_i32(copy.play_count),
         rating: copy.rating,
@@ -115,12 +117,11 @@ fn format_label(format: &AudioFormat) -> String {
     std::iter::once(codec).chain(detail).flatten().collect::<Vec<_>>().join(" · ")
 }
 
-/// The album, year and folder: what tells one release of a song from another, a remaster tagged
-/// like its original differing only in the year.
-fn subtitle(copy: &DuplicateCopy, path: &Path) -> String {
+/// The album and year: what tells one release of a song from another, a remaster tagged like its
+/// original differing only in the year.
+fn release(copy: &DuplicateCopy) -> String {
     let year = copy.year.filter(|year| *year > 0).map(|year| year.to_string());
-    let folder = path.parent().map(|folder| folder.display().to_string());
-    [copy.album.clone(), year, folder]
+    [copy.album.clone(), year]
         .into_iter()
         .flatten()
         .filter(|part| !part.is_empty())

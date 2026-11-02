@@ -95,7 +95,8 @@ Paths are under `crates/melodia-ui/ui/components/` unless stated.
 - **A list that can hold the library is `ui::paged_rows::PagedRows`, never a `VecModel` copy.** The
   library-sized Songs tabs and the four details are `track_rows::TrackRows`, loading through
   `PagedTrackList`. A grouped list is still one keyset, each header a negative id its fetch reads
-  through a lead row (`ui::duplicates`).
+  through a lead row (`ui::duplicates`). A group draws as a card, its rows painting the slices and
+  rounding the corners from their neighbours' `is_header` (`duplicate-row.slint`).
 - **A drag lifting a pick lifts every pick** (`picked-run()`), and every tier moves through
   `melodia_core::utils::block_move`.
 - **Shared wiring.** The four details go through `callbacks::track_detail`, the four grid tabs

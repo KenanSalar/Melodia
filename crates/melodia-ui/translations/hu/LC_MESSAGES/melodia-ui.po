@@ -240,6 +240,18 @@ msgstr[1] "{n} példány"
 msgid "Added {}"
 msgstr "Hozzáadva: {}"
 
+#: ui/components/dialog/duplicate-row.slint
+#: ui/components/now-playing/overflow-menu.slint
+msgid "More"
+msgstr "Továbbiak"
+
+#. Translators: {n} counts songs found more than once, each with its copies.
+#: ui/components/dialog/duplicates-body.slint
+msgid "{n} group"
+msgid_plural "{n} groups"
+msgstr[0] "{n} csoport"
+msgstr[1] "{n} csoport"
+
 #: ui/components/dialog/duplicates-body.slint
 msgid "Suggested Picks"
 msgstr "Javasolt kijelölés"
@@ -1173,10 +1185,6 @@ msgstr "Próbáld újra a Dalszöveg menüből"
 #: ui/components/onboarding/onboarding-overlay.slint
 msgid "Done"
 msgstr "Kész"
-
-#: ui/components/now-playing/overflow-menu.slint
-msgid "More"
-msgstr "Továbbiak"
 
 #: ui/components/now-playing/overflow-menu.slint
 #: ui/views/settings/output-section.slint

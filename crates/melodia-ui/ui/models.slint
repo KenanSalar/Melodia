@@ -195,10 +195,12 @@ export struct DuplicateRow {
     artist: string,
     match_kind: DuplicateMatch,
     copy_count: int,
-    // Copy only. `subtitle` is the album, year and folder, what tells one release from another.
+    // Copy only. `release` is the album and year, what tells one release from another.
     file_name: string,
     format: string,
-    subtitle: string,
+    lossless: bool,
+    release: string,
+    folder: string,
     added: string,
     plays: int,
     rating: int,   // 0–5, 0 = unrated

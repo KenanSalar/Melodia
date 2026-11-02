@@ -241,6 +241,19 @@ msgstr[1] "{n} kopya"
 msgid "Added {}"
 msgstr "Eklenme: {}"
 
+#: ui/components/dialog/duplicate-row.slint
+#: ui/components/now-playing/overflow-menu.slint
+msgid "More"
+msgstr "Diğer Seçenekler"
+
+# Turkish doesn't pluralize a noun after a numeral, so both forms are the same.
+#. Translators: {n} counts songs found more than once, each with its copies.
+#: ui/components/dialog/duplicates-body.slint
+msgid "{n} group"
+msgid_plural "{n} groups"
+msgstr[0] "{n} grup"
+msgstr[1] "{n} grup"
+
 #: ui/components/dialog/duplicates-body.slint
 msgid "Suggested Picks"
 msgstr "Önerilen seçim"
@@ -1174,10 +1187,6 @@ msgstr "Şarkı Sözleri menüsünden tekrar deneyin"
 #: ui/components/onboarding/onboarding-overlay.slint
 msgid "Done"
 msgstr "Tamam"
-
-#: ui/components/now-playing/overflow-menu.slint
-msgid "More"
-msgstr "Diğer Seçenekler"
 
 #: ui/components/now-playing/overflow-menu.slint
 #: ui/views/settings/output-section.slint
