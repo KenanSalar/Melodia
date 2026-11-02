@@ -310,41 +310,6 @@ async fn get_track_ids_by_hashes() -> Result<(), AppError> {
     Ok(())
 }
 
-// --- Duplicate detection tests ---
-
-#[tokio::test]
-async fn get_duplicate_tracks_returns_groups() -> Result<(), AppError> {
-    let db = DbPool::test_pool().await?;
-    queries::folder::insert_folder(&db, "/music", true).await?;
-
-    // Insert two tracks with the same hash (simulating duplicate files)
-    let id1 = insert_test_track(&db, "/music/copy1.mp3", "Song", "Art", "Alb", "Rock").await?;
-    let id2 = insert_test_track(&db, "/music/copy2.mp3", "Song", "Art", "Alb", "Rock").await?;
-
-    // Set both to the same hash
-    let shared_hash = "d".repeat(64);
-    sqlx::query("UPDATE tracks SET file_hash = ? WHERE id IN (?, ?)")
-        .bind(&shared_hash)
-        .bind(id1)
-        .bind(id2)
-        .execute(db.write())
-        .await?;
-
-    let groups = queries::track::get_duplicate_tracks(&db).await?;
-    assert_eq!(groups.len(), 1);
-    assert_eq!(groups[0].len(), 2);
-    Ok(())
-}
-
-#[tokio::test]
-async fn get_duplicate_tracks_empty_when_no_dupes() -> Result<(), AppError> {
-    let db = seed_db().await?;
-    // Each track from seed_db has a unique hash (default from make_test_metadata)
-    let groups = queries::track::get_duplicate_tracks(&db).await?;
-    assert!(groups.is_empty());
-    Ok(())
-}
-
 // --- Batch hash update tests ---
 
 #[tokio::test]

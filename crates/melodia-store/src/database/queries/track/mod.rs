@@ -3,6 +3,7 @@
 
 pub(crate) mod columns;
 mod credits;
+mod duplicates;
 mod entity_ids;
 #[cfg(test)]
 mod full_rows;
@@ -16,6 +17,7 @@ mod search_text;
 mod write;
 
 pub use credits::*;
+pub use duplicates::*;
 pub use entity_ids::*;
 #[cfg(test)]
 pub use full_rows::*;

@@ -9,7 +9,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use melodia_core::entities::artist::ArtistCredit;
-use melodia_core::utils::fold::fold;
+use melodia_core::utils::fold::{fold, squeeze};
 
 /// Words that make a title a *different performance*, where "Remastered 2011" or "Explicit" is
 /// the same one dressed differently. Duration catches most of these, but not a remix as long as
@@ -189,20 +189,6 @@ fn strip_brackets(text: &str) -> String {
         }
     }
     out
-}
-
-/// Letters and digits, single-spaced, so punctuation can't make two spellings of a title unequal.
-/// An apostrophe is dropped rather than spaced: spaced, `don't` could never equal `dont`.
-fn squeeze(text: &str) -> String {
-    let mut out = String::with_capacity(text.len());
-    for ch in text.chars() {
-        if ch.is_alphanumeric() {
-            out.push(ch);
-        } else if !matches!(ch, '\'' | '\u{2019}' | '`' | '\u{02bc}') && !out.ends_with(' ') {
-            out.push(' ');
-        }
-    }
-    out.trim().to_owned()
 }
 
 #[cfg(test)]

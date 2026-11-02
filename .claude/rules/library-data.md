@@ -4,6 +4,7 @@ paths:
   - crates/melodia-store/src/database/**/*.rs
   - crates/melodia-store/src/media/ingest/**/*.rs
   - crates/melodia-core/src/utils/audio_ext.rs
+  - crates/melodia-core/src/utils/fold.rs
   - crates/melodia-core/src/utils/trash_dir.rs
   - crates/melodia-platform/src/services/platform/single_instance.rs
   - crates/melodia-views/src/ui/playlists/**/*.rs
@@ -44,6 +45,14 @@ paths:
   copy each of `albums`, `artists`, `genres` and `playlists` keeps for its grid's filter.
 - **`UNICODE_LOWER` is query-side and never schema** (`database::collation`): the place to break it
   is a migration, far from that module.
+
+## Matching
+
+- **A comparison that ignores punctuation goes through `utils::fold`**: `fold_words`, or `squeeze`
+  on text already folded, never a character filter of its own. The duplicate finder and the lyrics
+  matcher share it, so a spelling rule lands on both.
+- **What makes two rows one song lives in `library::duplicates::matcher`**: anything that groups
+  copies asks `library::duplicates::find`, never a match of its own.
 
 ## Smart playlists
 

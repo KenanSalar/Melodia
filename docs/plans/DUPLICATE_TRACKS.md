@@ -1,6 +1,6 @@
 # Plan: Duplicate tracks (find the copies, clear out the spares)
 
-Status: **in progress** (Phase 0 done, Phase 1 next) · Owner: Kenan · Created: 2026-11-02 · Issue #158, branch `feat/duplicate-tracks`
+Status: **in progress** (Phases 0 and 1 done, Phase 2 next) · Owner: Kenan · Created: 2026-11-02 · Issue #158, branch `feat/duplicate-tracks`
 
 > **Validated 2026-11-02** against `b4c5ecff`, and re-validated the same day against `41c1f2e1`. The sources were:
 > - three read-only code traces: the store and per-track data; the removal, scan, watcher and queue paths; the UI surfaces;
@@ -49,7 +49,7 @@ Right-clicking a group's header offers **Not Duplicates**, for copies you keep o
 | A byte-for-byte copy is easy to spot. | `file_hash` is a BLAKE3 hash of the whole file (`ingest/metadata.rs:18-28`), set on every row. But a retag or a rating write-back rewrites the file and its hash (`library/tags.rs:328`, `scan/retag.rs:41`). | An identical hash proves an identical file, but most copies differ by then. The hash is one tier, not the matcher. |
 | Match on artist, title and length; how close is close enough? | Dev library (below): same-song re-encodes land 0.42 to 0.44 s apart. Six different songs carrying identical tags span 229.7 to 286.1 s. | **1.5 s tolerance, measured from the shortest copy in the cluster**, so near-misses can't chain. Tags alone would have merged those six. |
 | A live version, a remaster or a radio edit can share a title and come close on length. | A radio edit falls outside the window. A live take sits on another album, at another position or under another recording MBID. A remaster with no MBIDs can carry its original's album, disc and track tags. `tracks.year` holds the tag's year where there is one (`initial_schema.sql:83`). | A year that differs where both copies carry one makes the group Review (`OtherRelease`), so a remaster is never picked for you. |
-| Case, accents and punctuation. | `fold::push_folded` handles case and accents, not punctuation (`utils/fold.rs:15-33`). | A new `fold_words` beside it also collapses punctuation. |
+| Case, accents and punctuation. | `fold::push_folded` handles case and accents, not punctuation (`utils/fold.rs:15-33`). | A new `fold_words` beside it also collapses punctuation, through the lyrics matcher's `squeeze`, moved into `fold.rs`. |
 | Best quality first. | `codec` holds lofty's container name (`metadata.rs:347`), and `Mp4` is either AAC or ALAC. The dev library has FLACs down to 216 kbps. | Bitrate alone ranks a 216 kbps FLAC below a 320 kbps MP3. Lossless is decided first, from codec plus bit depth. |
 | Tracks that share one file, like a cue sheet's. | No CUE support at all: one row per file, `file_path` is UNIQUE (`initial_schema.sql:72`), and `.cue` isn't an audio extension. | Nothing to exclude today. A copy here is a row, which is a file. |
 | Listening history moves with the copy. | No history table. History is `play_count`, `skip_count` and `last_played` (`initial_schema.sql:108-113`). Queued scrobbles hold metadata, not ids (`scrobble/queue.rs:18-23`). Nothing imports a count: a new row starts at 0, and the POPM counter is written back as 0 (`rating_tags.rs:78`). | The merge covers those three columns, summing can't count a play twice, and the scrobble queue needs nothing. |
@@ -75,8 +75,8 @@ Right-clicking a group's header offers **Not Duplicates**, for copies you keep o
 ## Decisions settled here
 
 1. **Matching is a sort over hashed keys, in two passes, done only when the dialog opens.**
-   - **Pass 1.** Read `(id, title, artist, duration_ms)` in id-keyset pages, as `backfill_folded` pages (`database/mod.rs:101-147`). Fold each artist and title through `fold_words` and keep `(key hash, duration, id)`, 24 bytes a track. Sort, and keep every run of two or more as candidates.
-   - **Pass 2.** Read the candidates' facts by id (`chunked_in_query`), each with its dismissal set (decision 13). Split each run on the real folded strings, so a hash collision can't make a group. Cluster by duration: a copy joins while it is within `DURATION_TOLERANCE_MS` (1,500) of the cluster's shortest copy. Rows with a zero duration never match.
+   - **Pass 1.** Stream `(id, title, artist)` for every row with a non-zero duration, a row at a time, as `visit_folder_tracks` does (`scan/lookups.rs`). Fold each artist and title through `fold_words` and keep `(key hash, id)`, 16 bytes a track. Sort, and keep every run of two or more as candidates.
+   - **Pass 2.** Read the candidates' facts by id (`chunked_in_query`), each with its dismissal set (decision 13). Split each run on the real folded strings, so a hash collision can't make a group. Cluster by duration: a copy joins while it is within `DURATION_TOLERANCE_MS` (1,500) of the cluster's shortest copy.
    - Hashing over sorting is the shape that stays flat at any library size, where a `HashMap<key, Vec<row>>` pays per-key vectors.
 2. **Every group has a kind, and the kind decides what's picked for you.**
 
@@ -87,7 +87,8 @@ Right-clicking a group's header offers **Not Duplicates**, for copies you keep o
    | **Review**, with its reason | `OtherRelease` (albums, years or release MBIDs differ; a remaster tagged like its original differs only in year), `OtherPosition` (one album, different disc or track numbers, as when a deluxe edition holds a title twice), `OtherRecording` (`musicbrainz_track_id` holds the recording MBID, `metadata.rs:268-270`, and two differ), `NoArtist` (the title may be a file stem, `metadata.rs:203,220`). | Only identical extras (below). |
 
    - **Identical extras inside a Review group.** Two byte-identical files beside a compilation copy make one Review group. The group stays whole, so the compilation copy is still shown beside them. Within each set of copies sharing one `file_hash`, all but one is picked, the one kept chosen by the keeper order (decision 3). Every other copy is left alone. Removing a byte-identical file loses nothing, and the other release is never touched, which is the issue's rule.
-   - Groups sort by kind, then by folded artist and title.
+   - A group with several doubts is labelled by the first that holds, in the order `NoArtist`, `OtherRecording`, `OtherRelease`, `OtherPosition`: the strongest doubt that the copies are one song.
+   - Groups sort by kind (a Review group by its reason), then by folded artist and title.
    - A dismissed group (decision 13) is left out of the list unless Show Dismissed is on, and nothing in it is picked for you.
 3. **Keeper suggestion.**
    - `AudioQuality` orders lossless first. Lossless means the codec is Flac, Wav, Aiff, Ape or WavPack, or the codec is Mp4 with a bit depth.
@@ -208,7 +209,7 @@ Right-clicking a group's header offers **Not Duplicates**, for copies you keep o
     - The apply leaves the undo slot alone. An undo held from before can name a spare, but a playlist restore already leaves out a track that's gone (`queries/playlist_restore.rs:21-24`), and a restored queue cut is pruned on the next `library_changed`.
 12. **Cost.**
     - Closed, both dialogs cost nothing.
-    - A find holds about 24 B a track while it sorts (about 1.2 MB at 51k), plus the candidates' facts until they are grouped.
+    - A find holds 16 B a track while it sorts (about 0.8 MB at 51k), plus the candidates' facts until they are grouped.
     - An open finder holds `DuplicateSet` at a few dozen bytes a copy, its interned folder list, and `PagedRows`' row cache.
     - An open kept-out list holds 8 B an entry plus the same row cache.
     - A dismissal is 16 B a copy on disk, read only for a find's candidates.
@@ -257,15 +258,15 @@ Right-clicking a group's header offers **Not Duplicates**, for copies you keep o
 |---|---|
 | `crates/melodia-core/src/utils/trash_dir.rs` (new, P0) | `is_trash_dir`, which takes a folder: a volume trash by name, or the home trash at `dirs::data_dir()/Trash` by path. `in_trash_dir` asks it of every folder above a path. |
 | `crates/melodia-store/src/media/ingest/scanner.rs`, `ingest/watcher.rs` | The walk skips a trash folder; the watcher's `is_library_file` rejects a path inside one (P0). |
-| `crates/melodia-core/src/utils/fold.rs` | `fold_words`, beside `push_folded`: folded, each run of non-alphanumerics one space, trimmed. If nothing is left, the folded string. |
-| `crates/melodia-core/src/entities/audio_quality.rs` (new, P1) | `AudioQuality`: the lossless rule and the keeper order. |
-| `crates/melodia-core/src/entities/duplicates.rs` (new, P1) | `MatchKind`, `ReviewReason`, `DuplicateGroup`, `DuplicateCopy`, `GroupRemoval`; `KeptOutFile` (P4). |
-| `crates/melodia-store/src/database/queries/track/duplicates.rs` (new, P1) | The keyset-paged pass-1 read and the pass-2 facts by id, each with its dismissal set. |
+| `crates/melodia-core/src/utils/fold.rs` | `squeeze`, moved from the lyrics matcher (`lyrics_directory/recording.rs` imports it): letters and digits single-spaced, an apostrophe dropped. `fold_words`, beside `push_folded`: `squeeze` over the fold, or the fold where nothing is left (P1). |
+| `crates/melodia-core/src/entities/audio_quality.rs` (new, P1) | `AudioFormat`, the four columns an encode is judged by, and `AudioQuality`: the lossless rule and the quality order. |
+| `crates/melodia-core/src/entities/duplicates.rs` (new, P1) | `MatchKind`, `ReviewReason`, `DismissalSet`, `DuplicateGroup`, `DuplicateCopy`; `GroupRemoval` (P3); `KeptOutFile` (P4). |
+| `crates/melodia-store/src/database/queries/track/duplicates.rs` (new, P1) | The streamed pass-1 read and the pass-2 facts by id, each with its dismissal set. |
 | `migrations/20261102000000_duplicate_dismissals.sql` (new, P1) | The dismissal table. |
 | `crates/melodia-store/src/database/queries/duplicate_dismissals.rs` (new, P1) | Dismiss a group as a new set, and restore a set. |
 | `crates/melodia-store/src/database/queries/track/full_rows.rs` | Loses `get_duplicate_tracks` and its two tests (`track_tests.rs:316,340`) (P1). |
 | `crates/melodia-app/src/library/duplicates/mod.rs` (new, P1) | The library API: `find`, `dismiss` and `restore`; `apply` (P3); the kept-out count, ids, rows, `bring_back` and `bring_all_back` (P4). |
-| `crates/melodia-app/src/library/duplicates/matcher.rs` (new, P1) | Pure grouping: key runs, collision split, duration clusters, kind, keeper, the dismissed flag. |
+| `crates/melodia-app/src/library/duplicates/matcher.rs` (new, P1) | Pure grouping: key runs, collision split, duration clusters, kind, the keeper order, the dismissed flag. |
 | `crates/melodia-ui/ui/globals/duplicates.slint` (new, P2) | `DuplicatesUi`: rows, step, busy, counts, callbacks; `KeptOutUi` (P4). |
 | `crates/melodia-ui/ui/models.slint` | `DuplicateRow` (P2), `KeptOutRow` (P4). |
 | `crates/melodia-ui/ui/components/dialog/duplicates-body.slint` (new, P2) | Both steps' bodies and the list's toolbar (Suggested picks, Clear picks, Show Dismissed). |
@@ -318,6 +319,8 @@ Hand test, in a library folder:
 - With the home folder added as a library folder and watching on, trashing a track from the file manager drops it, instead of re-pointing it into `~/.local/share/Trash`.
 
 ### Phase 1: Find (no UI)
+
+Status: built (2026-11-02). The gate passed: clippy and the existing suite. No caller yet, so no run.
 
 1. `fold_words` in `utils/fold.rs`.
 2. `AudioQuality` and the duplicates entities in `melodia-core`.

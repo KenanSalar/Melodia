@@ -220,7 +220,7 @@ where
     Ok(in_id_order(rows, ids, id_of))
 }
 
-/// Ids per [`set_where_id_in`] statement, the value it sets taking one bind of the budget.
+/// Ids per statement that binds one value ahead of its id list, as [`set_where_id_in`]'s does.
 pub(crate) const IDS_PER_SET: usize = MAX_BINDS_PER_STATEMENT - 1;
 
 /// One chunk of an `UPDATE … SET col = ? WHERE id IN (…)`, `value` bound first. `update_set` is
