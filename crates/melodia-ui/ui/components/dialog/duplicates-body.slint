@@ -78,18 +78,16 @@ export component DuplicatesBody inherits VerticalLayout {
     spacing: Theme.pad-md;
 
     property <bool> reviewing: !DuplicatesUi.confirming;
-    property <bool> settled: !DuplicatesUi.busy && !DuplicatesUi.failed;
-    property <bool> listing: root.settled && DuplicatesUi.group-count > 0;
     property <length> bar-inset: Theme.pad-xs;
     // The cards stop short of the bar rather than running under a copy's carried facts.
     property <length> bar-gutter: Theme.scrollbar-slot + 2 * root.bar-inset;
 
     if DuplicatesUi.confirming: ConfirmSummary { }
 
-    if root.reviewing && root.settled && (DuplicatesUi.group-count > 0 || DuplicatesUi.dismissed-count > 0): HorizontalLayout {
+    if root.reviewing && DuplicatesUi.settled && (DuplicatesUi.group-count > 0 || DuplicatesUi.dismissed-count > 0): HorizontalLayout {
         spacing: Theme.pad-sm;
 
-        if root.listing: Text {
+        if DuplicatesUi.listing: Text {
             // Translators: {n} counts songs found more than once, each with its copies.
             text: @tr("{n} group" | "{n} groups" % DuplicatesUi.group-count);
             color: Theme.subtext0;
@@ -97,12 +95,12 @@ export component DuplicatesBody inherits VerticalLayout {
             vertical-alignment: center;
         }
         Rectangle { horizontal-stretch: 1; }
-        if root.listing: ToolbarChip {
+        if DuplicatesUi.listing: ToolbarChip {
             icon: "auto_awesome";
             label: @tr("Suggested Picks");
             clicked => { DuplicatesUi.suggest(); }
         }
-        if root.listing: ToolbarChip {
+        if DuplicatesUi.listing: ToolbarChip {
             icon: "clear_all";
             label: @tr("Clear Picks");
             clicked => { DuplicatesUi.clear-picks(); }
@@ -116,7 +114,7 @@ export component DuplicatesBody inherits VerticalLayout {
         }
     }
 
-    if root.reviewing && !root.listing: GridEmptyState {
+    if root.reviewing && !DuplicatesUi.listing: GridEmptyState {
         min-height: 200px;
         preferred-height: 240px;
         vertical-stretch: 1;
@@ -126,7 +124,7 @@ export component DuplicatesBody inherits VerticalLayout {
         title: DuplicatesUi.busy ? @tr("Looking for duplicates…")
             : DuplicatesUi.failed ? @tr("Couldn't search the library.")
             : @tr("No duplicates found");
-        body: !root.settled ? ""
+        body: !DuplicatesUi.settled ? ""
             : DuplicatesUi.dismissed-count > 0
                 ? @tr("Every group left is one you marked Not Duplicates.")
                 : @tr("No song is in the library more than once.");
@@ -134,7 +132,7 @@ export component DuplicatesBody inherits VerticalLayout {
 
     // No `clip`: a rounded one is a texture layer, and the cards' insets keep every row clear of
     // the corners.
-    if root.reviewing && root.listing: Rectangle {
+    if root.reviewing && DuplicatesUi.listing: Rectangle {
         min-height: 160px;
         preferred-height: 520px;
         vertical-stretch: 1;

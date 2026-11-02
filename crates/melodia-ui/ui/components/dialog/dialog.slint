@@ -99,8 +99,34 @@ export component DialogOverlay inherits Rectangle {
             || DialogGlobal.kind == DialogKind.smart-playlist-editor
             || DialogGlobal.kind == DialogKind.duplicates;
         height: card.body-scrolls
-            ? min(layout.preferred-height, max(240px, parent.height - 96px))
+            // Floored so a step growing out of a shorter one keeps its footer on the card.
+            ? min(max(card.eased-height, layout.min-height), max(240px, parent.height - 96px))
             : layout.preferred-height;
+        property <length> eased-height: layout.preferred-height;
+        // A transition rather than `animate`, which would chase a window resize: its curve ends a
+        // fixed time after the step changed, so a later resize snaps. `in` only, finding being the
+        // default, so the card opens at rest and a close's teardown leaves nothing easing.
+        states [
+            finder-confirm when card.duplicates-confirming: {
+                eased-height: layout.preferred-height;
+                in {
+                    animate eased-height { duration: Theme.dur-med; easing: cubic-bezier(0.2, 0, 0, 1); }
+                }
+            }
+            finder-list when DialogGlobal.kind == DialogKind.duplicates && DuplicatesUi.listing: {
+                eased-height: layout.preferred-height;
+                in {
+                    animate eased-height { duration: Theme.dur-med; easing: cubic-bezier(0.2, 0, 0, 1); }
+                }
+            }
+            // Nothing listed, or the find failed.
+            finder-settled when DialogGlobal.kind == DialogKind.duplicates && !DuplicatesUi.busy: {
+                eased-height: layout.preferred-height;
+                in {
+                    animate eased-height { duration: Theme.dur-med; easing: cubic-bezier(0.2, 0, 0, 1); }
+                }
+            }
+        ]
         // The finder's second step, whose footer reads Back and Remove.
         property <bool> duplicates-confirming:
             DialogGlobal.kind == DialogKind.duplicates && DuplicatesUi.confirming;

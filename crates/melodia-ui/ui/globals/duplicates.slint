@@ -10,6 +10,9 @@ export global DuplicatesUi {
     in property <bool> failed;
     // Listed groups, so the dismissed ones only while they show.
     in property <int> group-count;
+    // What Review shows, read by its body and by the card's step states.
+    out property <bool> settled: !root.busy && !root.failed;
+    out property <bool> listing: root.settled && root.group-count > 0;
     in property <int> dismissed-count;
     in property <bool> show-dismissed;
     in property <int> picked-count;
