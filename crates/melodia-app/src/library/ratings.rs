@@ -32,6 +32,18 @@ pub async fn set_rating(state: &AppState, ids: Vec<i64>, rating: i32) -> Result<
     Ok(())
 }
 
+/// Ratings the duplicate merge moved onto keepers that had none: Now Playing shows one, and each
+/// file takes it where tag writes are on. The merge's own bump covers the lists.
+pub(crate) fn merged_onto(state: &AppState, rated: &[(i64, i32)]) {
+    let playing = lock_state(&state.player_state).current_track().map(|track| track.id);
+    if let Some(&(id, rating)) = rated.iter().find(|&&(id, _)| Some(id) == playing) {
+        sync_current_track_rating(state, &[id], rating);
+    }
+    for &(id, rating) in rated {
+        rating_writeback::enqueue(&[id], rating);
+    }
+}
+
 /// Mirrors the rating onto `current_track` when it is one of `ids`, so Now Playing reflects a rating
 /// set from a list row.
 fn sync_current_track_rating(state: &AppState, ids: &[i64], rating: i32) {

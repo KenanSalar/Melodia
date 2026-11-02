@@ -21,6 +21,11 @@ async fn seed(db: &DbPool) -> Result<i64, AppError> {
     insert_test_track(db, "/music/a.mp3", "A", "Artist", "Album", "Rock").await
 }
 
+/// The events alone, with nothing ever asking for a flush.
+fn inbox(events: mpsc::UnboundedReceiver<PlayCountEvent>) -> Inbox {
+    Inbox { events, flushes: PlayCountFlush::channel().1 }
+}
+
 async fn counts(db: &DbPool, id: i64) -> Result<(i64, i64, Option<String>), AppError> {
     let row: (i64, i64, Option<String>) =
         sqlx::query_as("SELECT play_count, skip_count, last_played FROM tracks WHERE id = ?")
@@ -173,7 +178,7 @@ async fn the_shutdown_drain_writes_what_never_reached_the_map() -> Result<(), Ap
 
     let shutdown = CancellationToken::new();
     shutdown.cancel();
-    run(rx, shutdown, db.clone(), stats).await;
+    run(inbox(rx), shutdown, db.clone(), stats).await;
 
     let (plays, skips, _) = counts(&db, id).await?;
     assert_eq!((plays, skips), (2, 1), "a burst still in the channel at exit is history too");
@@ -191,7 +196,7 @@ async fn a_dropped_sender_flushes_before_the_loop_returns() -> Result<(), AppErr
 
     assert!(tx.send(PlayCountEvent::Play(id)).is_ok());
     drop(tx);
-    run(rx, CancellationToken::new(), db.clone(), stats).await;
+    run(inbox(rx), CancellationToken::new(), db.clone(), stats).await;
 
     assert_eq!(counts(&db, id).await?.0, 1);
     Ok(())
@@ -215,7 +220,7 @@ async fn the_loop_writes_on_its_own_tick_without_waiting_for_shutdown() -> Resul
 
     let mut bumped = stats.subscribe();
     let shutdown = CancellationToken::new();
-    let looping = tokio::spawn(run(rx, shutdown.clone(), db.clone(), stats));
+    let looping = tokio::spawn(run(inbox(rx), shutdown.clone(), db.clone(), stats));
 
     assert!(tx.send(PlayCountEvent::Play(id)).is_ok());
 

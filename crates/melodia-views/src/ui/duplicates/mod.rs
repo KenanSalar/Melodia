@@ -1,10 +1,11 @@
-//! The duplicate finder's dialog: a find as it opens, the removal picks over its groups, and Not
-//! Duplicates.
+//! The duplicate finder's dialog: a find as it opens, the removal picks over its groups, Not
+//! Duplicates, and the Remove behind its Confirm step.
 //!
-//! Every answer lands under the ticket it was sent with, which the next find and the dialog's
-//! close both move. The dialog is already up while it fills, so `DialogClaim`, which guards a
-//! raise still to come, can't tell whether this one is still wanted.
+//! Every answer but Remove's lands under the ticket it was sent with, which the next find and the
+//! dialog's close both move. The dialog is already up while it fills, so `DialogClaim`, which
+//! guards a raise still to come, can't tell whether this one is still wanted.
 
+mod apply;
 mod picks;
 mod rows;
 
@@ -16,6 +17,7 @@ use std::rc::{Rc, Weak};
 use slint::{ComponentHandle, ModelRc};
 
 use crate::ui::paged_rows::{Keyset, PagedRows, ReadStamp, RowRequest, spawn_fetch};
+use crate::ui::shell::notifications::NotificationsUi;
 use crate::ui::util::{format_size, len_as_i32};
 use melodia_app::library;
 use melodia_app::state::AppState;
@@ -24,8 +26,8 @@ use melodia_ui::{AppWindow, Dialog, DialogKind, DuplicateRow, DuplicatesUi};
 use picks::DuplicateSet;
 
 /// Installs the finder's model and wires `DuplicatesUi`. UI thread.
-pub fn install(ui: &AppWindow, state: &AppState) {
-    let finder = Finder::new(ui, state);
+pub fn install(ui: &AppWindow, state: &AppState, notifications: &Rc<NotificationsUi>) {
+    let finder = Finder::new(ui, state, notifications);
     let dup = ui.global::<DuplicatesUi>();
     dup.set_rows(ModelRc::from(finder.rows.clone()));
 
@@ -50,12 +52,15 @@ pub fn install(ui: &AppWindow, state: &AppState) {
     dup.on_dismiss_group(move |id| f.dismiss(i64::from(id)));
     let f = finder.clone();
     dup.on_restore_group(move |id| f.restore(i64::from(id)));
+    let f = finder.clone();
+    dup.on_remove(move || f.remove());
     dup.on_released(move || finder.release());
 }
 
 struct Finder {
     ui: slint::Weak<AppWindow>,
     state: AppState,
+    notifications: Rc<NotificationsUi>,
     set: RefCell<DuplicateSet>,
     rows: Rc<PagedRows<DuplicateRow>>,
     ticket: Cell<u64>,
@@ -63,10 +68,11 @@ struct Finder {
 }
 
 impl Finder {
-    fn new(ui: &AppWindow, state: &AppState) -> Rc<Self> {
+    fn new(ui: &AppWindow, state: &AppState, notifications: &Rc<NotificationsUi>) -> Rc<Self> {
         Rc::new_cyclic(|this| Self {
             ui: ui.as_weak(),
             state: state.clone(),
+            notifications: Rc::clone(notifications),
             set: RefCell::default(),
             rows: PagedRows::new(fetcher(this.clone())),
             ticket: Cell::new(0),

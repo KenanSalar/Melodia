@@ -52,11 +52,13 @@ pub async fn delete_folder(db: &DbPool, id: i64) -> Result<(), AppError> {
     Ok(())
 }
 
-/// Hands the tracks of the folders in `ids` to `parent_id`, then deletes those folders.
+/// Hands the tracks and kept-out files of the folders in `ids` to `parent_id`, then deletes those
+/// folders.
 ///
-/// The tracks move before the rows go, so the cascade has nothing left to take: what a parent
-/// supersedes keeps its ratings, play counts, favourites and playlist entries. Neither the search
-/// index nor the stats triggers watch `folder_id`, so the move rewrites nothing else.
+/// Both move before the rows go, so the cascade has nothing left to take: what a parent
+/// supersedes keeps its ratings, play counts, favourites and playlist entries, and a kept-out file
+/// stays out. Neither the search index nor the stats triggers watch `folder_id`, so the move
+/// rewrites nothing else.
 pub async fn absorb_folders(db: &DbPool, parent_id: i64, ids: &[i64]) -> Result<(), AppError> {
     if ids.is_empty() {
         return Ok(());
@@ -65,12 +67,15 @@ pub async fn absorb_folders(db: &DbPool, parent_id: i64, ids: &[i64]) -> Result<
     // One bind of each budget goes to the parent's id.
     for chunk in ids.chunks(crate::database::MAX_BINDS_PER_STATEMENT - 1) {
         let placeholders = crate::database::placeholders(chunk.len());
-        let sql = format!("UPDATE tracks SET folder_id = ? WHERE folder_id IN ({placeholders})");
-        let mut repoint = sqlx::query(AssertSqlSafe(sql)).persistent(false).bind(parent_id);
-        for id in chunk {
-            repoint = repoint.bind(id);
+        for table in ["tracks", "excluded_files"] {
+            let sql =
+                format!("UPDATE {table} SET folder_id = ? WHERE folder_id IN ({placeholders})");
+            let mut repoint = sqlx::query(AssertSqlSafe(sql)).persistent(false).bind(parent_id);
+            for id in chunk {
+                repoint = repoint.bind(id);
+            }
+            repoint.execute(&mut *tx).await?;
         }
-        repoint.execute(&mut *tx).await?;
 
         let sql = format!("DELETE FROM folders WHERE id IN ({placeholders})");
         let mut delete = sqlx::query(AssertSqlSafe(sql)).persistent(false);

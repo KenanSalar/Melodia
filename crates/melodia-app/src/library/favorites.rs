@@ -114,6 +114,17 @@ impl FavoriteWrite {
     }
 }
 
+/// Hearts the duplicate merge moved onto `keepers`, which reach Now Playing and the loves as any
+/// favorite write's do. The merge's own bump covers the lists.
+pub(crate) async fn merged_onto(state: &AppState, keepers: &[i64]) {
+    if keepers.is_empty() {
+        return;
+    }
+    let write = FavoriteWrite::from_state(state);
+    sync_current_track_if_in(&write.player_state, &write.sinks, keepers, |t| t.is_favorite = true);
+    write.sync_love(keepers, true).await;
+}
+
 pub async fn set_favorite(state: &AppState, ids: Vec<i64>, favorite: bool) -> Result<(), AppError> {
     FavoriteWrite::from_state(state).set(&ids, favorite).await
 }

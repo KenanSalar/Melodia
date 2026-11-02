@@ -5,7 +5,7 @@ use super::listed_as_spelled;
 use crate::database::DbPool;
 use crate::database::queries;
 use crate::database::queries::fixtures::{insert_test_track, make_test_metadata};
-use crate::database::queries::ingest::{FolderResolution, ingest_scanned_files};
+use crate::database::queries::ingest::{IngestSource, ingest_scanned_files};
 use crate::media::ingest::scan_pool::ScanPool;
 use melodia_core::entities::artist::ArtistCredit;
 use melodia_core::entities::genre::GenreList;
@@ -33,9 +33,8 @@ async fn ingest_empty_list_returns_zero() -> Result<(), AppError> {
     let result = ingest_scanned_files(
         &mut tx,
         &[],
-        &FolderResolution::Fixed(1),
+        &IngestSource::FolderScan(1),
         "2024-01-01T00:00:00Z",
-        false,
         &ScanPool::default(),
     )
     .await?;
@@ -55,9 +54,8 @@ async fn ingest_single_file_fixed_folder() -> Result<(), AppError> {
     let result = ingest_scanned_files(
         &mut tx,
         &files,
-        &FolderResolution::Fixed(1),
+        &IngestSource::FolderScan(1),
         "2024-01-01T00:00:00Z",
-        false,
         &ScanPool::default(),
     )
     .await?;
@@ -92,9 +90,8 @@ async fn ingest_deduplicates_artists() -> Result<(), AppError> {
     let result = ingest_scanned_files(
         &mut tx,
         &[f1, f2, f3],
-        &FolderResolution::Fixed(1),
+        &IngestSource::FolderScan(1),
         "2024-01-01T00:00:00Z",
-        false,
         &ScanPool::default(),
     )
     .await?;
@@ -126,9 +123,8 @@ async fn ingest_deduplicates_albums() -> Result<(), AppError> {
     ingest_scanned_files(
         &mut tx,
         &[f1, f2],
-        &FolderResolution::Fixed(1),
+        &IngestSource::FolderScan(1),
         "2024-01-01T00:00:00Z",
-        false,
         &ScanPool::default(),
     )
     .await?;
@@ -155,9 +151,8 @@ async fn ingest_deduplicates_genres() -> Result<(), AppError> {
     ingest_scanned_files(
         &mut tx,
         &[f1, f2],
-        &FolderResolution::Fixed(1),
+        &IngestSource::FolderScan(1),
         "2024-01-01T00:00:00Z",
-        false,
         &ScanPool::default(),
     )
     .await?;
@@ -182,9 +177,8 @@ async fn ingest_skips_existing_track() -> Result<(), AppError> {
     let result = ingest_scanned_files(
         &mut tx,
         &files,
-        &FolderResolution::Fixed(1),
+        &IngestSource::FolderScan(1),
         "2024-01-01T00:00:00Z",
-        false,
         &ScanPool::default(),
     )
     .await?;
@@ -196,7 +190,7 @@ async fn ingest_skips_existing_track() -> Result<(), AppError> {
 }
 
 #[tokio::test]
-async fn ingest_updates_artwork_on_existing_when_flag_set() -> Result<(), AppError> {
+async fn a_folder_scan_backfills_artwork_on_a_current_row() -> Result<(), AppError> {
     let db = DbPool::test_pool().await?;
     queries::folder::insert_folder(&db, "/music", true).await?;
     insert_test_track(&db, "/music/song.mp3", "Song", "Art", "Alb", "Pop").await?;
@@ -208,9 +202,8 @@ async fn ingest_updates_artwork_on_existing_when_flag_set() -> Result<(), AppErr
     let result = ingest_scanned_files(
         &mut tx,
         &[file],
-        &FolderResolution::Fixed(1),
+        &IngestSource::FolderScan(1),
         "2024-01-01T00:00:00Z",
-        true, // update artwork on existing
         &ScanPool::default(),
     )
     .await?;
@@ -232,7 +225,7 @@ async fn ingest_updates_artwork_on_existing_when_flag_set() -> Result<(), AppErr
 }
 
 #[tokio::test]
-async fn ingest_does_not_update_artwork_when_flag_false() -> Result<(), AppError> {
+async fn an_import_leaves_a_current_rows_artwork_alone() -> Result<(), AppError> {
     let db = DbPool::test_pool().await?;
     queries::folder::insert_folder(&db, "/music", true).await?;
     insert_test_track(&db, "/music/song.mp3", "Song", "Art", "Alb", "Pop").await?;
@@ -244,9 +237,8 @@ async fn ingest_does_not_update_artwork_when_flag_false() -> Result<(), AppError
     ingest_scanned_files(
         &mut tx,
         &[file],
-        &FolderResolution::Fixed(1),
+        &IngestSource::Import,
         "2024-01-01T00:00:00Z",
-        false, // don't update artwork
         &ScanPool::default(),
     )
     .await?;
@@ -270,9 +262,8 @@ async fn ingest_from_parent_dir_creates_folder() -> Result<(), AppError> {
     let result = ingest_scanned_files(
         &mut tx,
         &files,
-        &FolderResolution::FromParentDir,
+        &IngestSource::Import,
         "2024-01-01T00:00:00Z",
-        false,
         &ScanPool::default(),
     )
     .await?;
@@ -299,9 +290,8 @@ async fn ingest_from_parent_dir_caches_folder() -> Result<(), AppError> {
     ingest_scanned_files(
         &mut tx,
         &files,
-        &FolderResolution::FromParentDir,
+        &IngestSource::Import,
         "2024-01-01T00:00:00Z",
-        false,
         &ScanPool::default(),
     )
     .await?;
@@ -326,9 +316,8 @@ async fn ingest_empty_artist_gets_unknown_id() -> Result<(), AppError> {
     ingest_scanned_files(
         &mut tx,
         &[file],
-        &FolderResolution::Fixed(1),
+        &IngestSource::FolderScan(1),
         "2024-01-01T00:00:00Z",
-        false,
         &ScanPool::default(),
     )
     .await?;
@@ -355,9 +344,8 @@ async fn ingest_empty_album_gets_none() -> Result<(), AppError> {
     ingest_scanned_files(
         &mut tx,
         &[file],
-        &FolderResolution::Fixed(1),
+        &IngestSource::FolderScan(1),
         "2024-01-01T00:00:00Z",
-        false,
         &ScanPool::default(),
     )
     .await?;
@@ -387,9 +375,8 @@ async fn ingest_mixed_new_and_existing() -> Result<(), AppError> {
     let result = ingest_scanned_files(
         &mut tx,
         &files,
-        &FolderResolution::Fixed(1),
+        &IngestSource::FolderScan(1),
         "2024-01-01T00:00:00Z",
-        false,
         &ScanPool::default(),
     )
     .await?;
@@ -416,9 +403,8 @@ async fn ingest_same_album_different_artists() -> Result<(), AppError> {
     ingest_scanned_files(
         &mut tx,
         &[f1, f2],
-        &FolderResolution::Fixed(1),
+        &IngestSource::FolderScan(1),
         "2024-01-01T00:00:00Z",
-        false,
         &ScanPool::default(),
     )
     .await?;
@@ -456,9 +442,8 @@ async fn ingest_detects_moved_file() -> Result<(), AppError> {
     let result = ingest_scanned_files(
         &mut tx,
         &files,
-        &FolderResolution::Fixed(1),
+        &IngestSource::FolderScan(1),
         "2024-01-01T00:00:00Z",
-        false,
         &ScanPool::default(),
     )
     .await?;
@@ -507,9 +492,8 @@ async fn ingest_batched_inserts_preserve_input_order_across_chunks() -> Result<(
     let result = ingest_scanned_files(
         &mut tx,
         &files,
-        &FolderResolution::Fixed(1),
+        &IngestSource::FolderScan(1),
         "2024-01-01T00:00:00Z",
-        false,
         &ScanPool::default(),
     )
     .await?;
@@ -565,9 +549,8 @@ async fn ingest_duplicate_hash_repoints_once_inserts_second() -> Result<(), AppE
     let result = ingest_scanned_files(
         &mut tx,
         &files,
-        &FolderResolution::Fixed(1),
+        &IngestSource::FolderScan(1),
         "2024-01-01T00:00:00Z",
-        false,
         &ScanPool::default(),
     )
     .await?;
@@ -609,9 +592,8 @@ async fn ingest_does_not_move_when_hash_differs() -> Result<(), AppError> {
     let result = ingest_scanned_files(
         &mut tx,
         &files,
-        &FolderResolution::Fixed(1),
+        &IngestSource::FolderScan(1),
         "2024-01-01T00:00:00Z",
-        false,
         &ScanPool::default(),
     )
     .await?;
@@ -648,9 +630,8 @@ async fn ingest_moved_file_preserves_playback_state() -> Result<(), AppError> {
     ingest_scanned_files(
         &mut tx,
         &files,
-        &FolderResolution::Fixed(1),
+        &IngestSource::FolderScan(1),
         "2024-01-01T00:00:00Z",
-        false,
         &ScanPool::default(),
     )
     .await?;
@@ -680,9 +661,8 @@ async fn ingest_skips_unchanged_file() -> Result<(), AppError> {
     let result = ingest_scanned_files(
         &mut tx,
         &files,
-        &FolderResolution::Fixed(1),
+        &IngestSource::FolderScan(1),
         "2024-01-01T00:00:00Z",
-        false,
         &ScanPool::default(),
     )
     .await?;
@@ -707,9 +687,8 @@ async fn ingest_updates_metadata_when_file_changed() -> Result<(), AppError> {
     let result = ingest_scanned_files(
         &mut tx,
         &[file],
-        &FolderResolution::Fixed(1),
+        &IngestSource::FolderScan(1),
         "2024-01-01T00:00:00Z",
-        false,
         &ScanPool::default(),
     )
     .await?;
@@ -739,9 +718,8 @@ async fn ingest_stores_file_hash() -> Result<(), AppError> {
     ingest_scanned_files(
         &mut tx,
         &files,
-        &FolderResolution::Fixed(1),
+        &IngestSource::FolderScan(1),
         "2024-01-01T00:00:00Z",
-        false,
         &ScanPool::default(),
     )
     .await?;
@@ -845,9 +823,8 @@ async fn a_hard_link_beside_its_row_is_a_duplicate_rather_than_a_move() -> Resul
     let result = ingest_scanned_files(
         &mut tx,
         &files,
-        &FolderResolution::Fixed(1),
+        &IngestSource::FolderScan(1),
         "2024-01-01T00:00:00Z",
-        false,
         &ScanPool::default(),
     )
     .await?;
@@ -876,9 +853,8 @@ async fn a_case_only_rename_keeps_the_tracks_rating() -> Result<(), AppError> {
     ingest_scanned_files(
         &mut tx,
         &files,
-        &FolderResolution::Fixed(1),
+        &IngestSource::FolderScan(1),
         "2024-01-01T00:00:00Z",
-        false,
         &ScanPool::default(),
     )
     .await?;

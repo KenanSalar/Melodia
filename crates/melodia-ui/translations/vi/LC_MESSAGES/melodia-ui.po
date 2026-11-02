@@ -158,6 +158,10 @@ msgid "{n} track"
 msgid_plural "{n} tracks"
 msgstr[0] "{n} bản nhạc"
 
+#: ui/components/dialog/dialog.slint
+msgid "Remove waits until the library scan finishes."
+msgstr "Xóa sẽ chờ đến khi quét thư viện xong."
+
 #. Translators: {} is the picked copies' total size, as 1.2 GB.
 #: ui/components/dialog/dialog.slint
 msgid "{n} copy picked · {}"
@@ -186,6 +190,11 @@ msgid "Add a description…"
 msgstr "Thêm mô tả…"
 
 #: ui/components/dialog/dialog.slint
+#: ui/components/onboarding/onboarding-overlay.slint ui/views/browse-view.slint
+msgid "Back"
+msgstr "Quay lại"
+
+#: ui/components/dialog/dialog.slint
 msgid "Finish"
 msgstr "Hoàn tất"
 
@@ -196,6 +205,16 @@ msgstr "Mở Last.fm"
 #: ui/components/dialog/dialog.slint ui/views/settings/scrobbling-section.slint
 msgid "Connect"
 msgstr "Kết nối"
+
+#: ui/components/dialog/dialog.slint
+msgid "Continue"
+msgstr "Tiếp tục"
+
+#: ui/components/dialog/dialog.slint ui/components/dialog/tag-editor-body.slint
+#: ui/components/settings/folder-row.slint ui/globals/dialog.slint
+#: ui/views/settings/library-section.slint
+msgid "Remove"
+msgstr "Xóa"
 
 #: ui/components/dialog/duplicate-row.slint
 msgid "Identical files"
@@ -230,6 +249,11 @@ msgid "{n} copy"
 msgid_plural "{n} copies"
 msgstr[0] "{n} bản sao"
 
+#. Translators: on the copy of a duplicate song that is playing now.
+#: ui/components/dialog/duplicate-row.slint
+msgid "Playing"
+msgstr "Đang phát"
+
 #. Translators: {} is the day the copy joined the library, as 2026-11-02.
 #: ui/components/dialog/duplicate-row.slint
 msgid "Added {}"
@@ -239,6 +263,21 @@ msgstr "Đã thêm {}"
 #: ui/components/now-playing/overflow-menu.slint
 msgid "More"
 msgstr "Khác"
+
+#: ui/components/dialog/duplicates-body.slint
+msgid "{n} copy will leave the library."
+msgid_plural "{n} copies will leave the library."
+msgstr[0] "{n} bản sao sẽ rời khỏi thư viện."
+
+#: ui/components/dialog/duplicates-body.slint
+msgid "Its file stays where it is, and later scans leave it out."
+msgid_plural "Their files stay where they are, and later scans leave them out."
+msgstr[0] "Tệp vẫn ở nguyên chỗ cũ, và các lần quét sau sẽ bỏ qua."
+
+#: ui/components/dialog/duplicates-body.slint
+msgid "Its plays, rating, heart and playlist places move to the copy you keep."
+msgid_plural "Their plays, ratings, hearts and playlist places move to the copies you keep."
+msgstr[0] "Lượt phát, đánh giá, trái tim và vị trí trong danh sách phát được chuyển sang bản sao được giữ lại."
 
 #. Translators: {n} counts songs found more than once, each with its copies.
 #: ui/components/dialog/duplicates-body.slint
@@ -687,12 +726,6 @@ msgstr "Người remix"
 #: ui/components/dialog/tag-editor-body.slint
 msgid "Replace…"
 msgstr "Thay thế…"
-
-#: ui/components/dialog/tag-editor-body.slint
-#: ui/components/settings/folder-row.slint ui/globals/dialog.slint
-#: ui/views/settings/library-section.slint
-msgid "Remove"
-msgstr "Xóa"
 
 #: ui/components/dialog/tag-editor-body.slint ui/settings.slint
 msgid "Details"
@@ -1369,10 +1402,6 @@ msgstr "Chào mừng đến với Melodia"
 msgid "Skip"
 msgstr "Bỏ qua"
 
-#: ui/components/onboarding/onboarding-overlay.slint ui/views/browse-view.slint
-msgid "Back"
-msgstr "Quay lại"
-
 #: ui/components/onboarding/onboarding-overlay.slint ui/globals/player.slint
 msgid "Next"
 msgstr "Tiếp theo"
@@ -1805,6 +1834,24 @@ msgstr "Chọn danh sách phát để xuất."
 #: ui/views/radio/tab-pills.slint
 msgid "Export"
 msgstr "Xuất"
+
+#: ui/globals/duplicates.slint
+msgid "{n} copy removed from the library"
+msgid_plural "{n} copies removed from the library"
+msgstr[0] "Đã xóa {n} bản sao khỏi thư viện"
+
+#: ui/globals/duplicates.slint
+msgid "{n} copy skipped, as it was playing or had already gone."
+msgid_plural "{n} copies skipped, as they were playing or had already gone."
+msgstr[0] "Đã bỏ qua {n} bản sao vì đang phát hoặc đã không còn."
+
+#: ui/globals/duplicates.slint
+msgid "Couldn't remove the copies"
+msgstr "Không thể xóa các bản sao"
+
+#: ui/globals/duplicates.slint
+msgid "Nothing left the library. See the log for details."
+msgstr "Không có gì rời khỏi thư viện. Xem nhật ký để biết chi tiết."
 
 #: ui/globals/hero-chips.slint ui/views/my-library-view.slint
 msgid "{n} artist"
@@ -2945,10 +2992,6 @@ msgstr "Bản nhạc trùng lặp"
 #: ui/views/settings/duplicates-section.slint
 msgid "Songs the library seems to hold more than once. Pick the copies you don't need."
 msgstr "Những bài hát dường như có nhiều bản trong thư viện. Hãy chọn những bản sao bạn không cần."
-
-#: ui/views/settings/duplicates-section.slint
-msgid "Continue"
-msgstr "Tiếp tục"
 
 #. Translators: an equalizer preset, such as Rock or Jazz
 #: ui/views/settings/equalizer-section.slint

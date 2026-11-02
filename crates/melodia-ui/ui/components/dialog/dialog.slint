@@ -2,6 +2,7 @@ import { Theme } from "../../theme.slint";
 import { SmartEditor, TagEditor, ScrobbleUi, RadioForm } from "../../globals/dialog-forms.slint";
 import { Dialog as DialogGlobal, DialogKind } from "../../globals/dialog.slint";
 import { DuplicatesUi } from "../../globals/duplicates.slint";
+import { LibrarySettings } from "../../globals/library-settings.slint";
 import { SectionButton } from "../settings/section-button.slint";
 import { PlaylistMosaicPicker } from "playlist-mosaic-picker.slint";
 import { PlaylistPicker } from "playlist-picker.slint";
@@ -100,10 +101,16 @@ export component DialogOverlay inherits Rectangle {
         height: card.body-scrolls
             ? min(layout.preferred-height, max(240px, parent.height - 96px))
             : layout.preferred-height;
+        // The finder's second step, whose footer reads Back and Remove.
+        property <bool> duplicates-confirming:
+            DialogGlobal.kind == DialogKind.duplicates && DuplicatesUi.confirming;
         // A fact about the form rather than an action on it, stated opposite the buttons.
         property <string> footer-note:
             DialogGlobal.kind == DialogKind.smart-playlist-editor && SmartEditor.match-count >= 0
                 ? @tr("{n} track" | "{n} tracks" % SmartEditor.match-count)
+            // A scan can retag or add a copy the list shows, so Remove waits it out.
+            : card.duplicates-confirming && LibrarySettings.scanning
+                ? @tr("Remove waits until the library scan finishes.")
             : DialogGlobal.kind == DialogKind.duplicates && DuplicatesUi.picked-count > 0
                 // Translators: {} is the picked copies' total size, as 1.2 GB.
                 ? @tr("{n} copy picked · {}" | "{n} copies picked · {}" % DuplicatesUi.picked-count,
@@ -244,13 +251,18 @@ export component DialogOverlay inherits Rectangle {
                 // `if` rather than `visible`, so an info-only dialog keeps its primary button
                 // flush right.
                 if DialogGlobal.cancel-label != "": SectionButton {
-                    label: DialogGlobal.cancel-label;
+                    label: card.duplicates-confirming ? @tr("Back") : DialogGlobal.cancel-label;
                     icon: "";
                     primary: false;
-                    button-enabled: DialogGlobal.open;
+                    button-enabled: DialogGlobal.open
+                        && !(card.duplicates-confirming && DuplicatesUi.removing);
                     clicked => {
-                        DialogGlobal.cancelled();
-                        DialogGlobal.open = false;
+                        if (card.duplicates-confirming) {
+                            DuplicatesUi.confirming = false;
+                        } else {
+                            DialogGlobal.cancelled();
+                            DialogGlobal.open = false;
+                        }
                     }
                 }
 
@@ -260,10 +272,12 @@ export component DialogOverlay inherits Rectangle {
                         ? (ScrobbleUi.lastfm-step == 0 ? @tr("Open Last.fm") : @tr("Finish"))
                         : DialogGlobal.kind == DialogKind.scrobble-listenbrainz-login
                         ? @tr("Connect")
+                        : DialogGlobal.kind == DialogKind.duplicates
+                        ? (DuplicatesUi.confirming ? @tr("Remove") : @tr("Continue"))
                         : DialogGlobal.confirm-label;
                     icon: "";
                     primary: true;
-                    destructive: DialogGlobal.destructive;
+                    destructive: DialogGlobal.destructive || card.duplicates-confirming;
                     // The dispatcher gates each commit on the same condition; disabled, the
                     // button shows the requirement instead of no-opping.
                     button-enabled: DialogGlobal.open
@@ -287,15 +301,18 @@ export component DialogOverlay inherits Rectangle {
                         && ((DialogGlobal.kind != DialogKind.add-station
                                 && DialogGlobal.kind != DialogKind.edit-station)
                             || (RadioForm.url != "" && !RadioForm.busy))
-                        // The finder has no step after its list.
-                        && DialogGlobal.kind != DialogKind.duplicates;
+                        && (DialogGlobal.kind != DialogKind.duplicates
+                            || (DuplicatesUi.confirming
+                                ? !LibrarySettings.scanning && !DuplicatesUi.removing
+                                : DuplicatesUi.picked-count > 0));
                     clicked => {
                         DialogGlobal.accepted();
                         // A kind making a request stays open across it and Rust closes it.
                         if (DialogGlobal.kind != DialogKind.scrobble-lastfm-login
                                 && DialogGlobal.kind != DialogKind.scrobble-listenbrainz-login
                                 && DialogGlobal.kind != DialogKind.add-station
-                                && DialogGlobal.kind != DialogKind.edit-station) {
+                                && DialogGlobal.kind != DialogKind.edit-station
+                                && DialogGlobal.kind != DialogKind.duplicates) {
                             DialogGlobal.open = false;
                         }
                     }

@@ -2,7 +2,7 @@
 
 use std::path::PathBuf;
 
-use super::commit_scan;
+use super::{Unwalked, commit_scan};
 use crate::database::DbPool;
 use crate::database::queries;
 use crate::database::queries::fixtures::{
@@ -37,7 +37,12 @@ async fn purge_in_bulk(db: &DbPool) -> Result<(), AppError> {
     let folder = queries::folder::get_folder_by_id(db, 1).await?;
     let orphans: Vec<String> =
         (0..BULK_ORPHANS).map(|index| format!("/music/{index:04}.mp3")).collect();
-    commit_scan(db, &folder, &orphans, &Ingested::for_delta(BULK_ORPHANS)).await
+    let unwalked = Unwalked { tracks: orphans, ..Unwalked::default() };
+    commit_scan(db, &folder, &unwalked, &Ingested::for_delta(BULK_ORPHANS)).await
+}
+
+fn orphaned(path: &str) -> Unwalked {
+    Unwalked { tracks: vec![path.to_owned()], ..Unwalked::default() }
 }
 
 /// The orphans are found before the import and handed over, so a row the watcher adds while the
@@ -47,7 +52,7 @@ async fn a_scan_commit_deletes_exactly_the_orphans_it_is_handed() -> Result<(), 
     let db = setup_seeded_db().await?;
     let folder = queries::folder::get_folder_by_id(&db, 1).await?;
 
-    commit_scan(&db, &folder, &["/music/track2.mp3".to_owned()], &Ingested::for_delta(1)).await?;
+    commit_scan(&db, &folder, &orphaned("/music/track2.mp3"), &Ingested::for_delta(1)).await?;
 
     assert_eq!(library_paths(&db).await?, ["/music/track1.mp3", "/music/track3.mp3"]);
     Ok(())
@@ -76,7 +81,7 @@ async fn an_orphan_whose_row_a_chunk_repointed_deletes_nothing() -> Result<(), A
     .await?;
     ingested.add(&chunk);
 
-    commit_scan(&db, &folder, &[old_path.to_owned()], &ingested).await?;
+    commit_scan(&db, &folder, &orphaned(old_path), &ingested).await?;
 
     let track = queries::track::get_track_by_id(&db, id).await?;
     assert_eq!((track.file_path.as_str(), track.rating), (new_path, 5), "(path, rating)");
@@ -117,7 +122,7 @@ async fn an_orphan_only_purge_prunes_the_album_it_emptied() -> Result<(), AppErr
     let db = setup_seeded_db().await?;
     let folder = queries::folder::get_folder_by_id(&db, 1).await?;
 
-    commit_scan(&db, &folder, &["/music/track2.mp3".to_owned()], &Ingested::for_delta(1)).await?;
+    commit_scan(&db, &folder, &orphaned("/music/track2.mp3"), &Ingested::for_delta(1)).await?;
 
     let albums: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM albums WHERE name = 'Album Two'")
         .fetch_one(db.read())

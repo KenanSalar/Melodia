@@ -160,6 +160,10 @@ msgstr[0] "{n} трек"
 msgstr[1] "{n} треки"
 msgstr[2] "{n} треків"
 
+#: ui/components/dialog/dialog.slint
+msgid "Remove waits until the library scan finishes."
+msgstr "Вилучення зачекає, доки завершиться сканування медіатеки."
+
 #. Translators: {} is the picked copies' total size, as 1.2 GB.
 #: ui/components/dialog/dialog.slint
 msgid "{n} copy picked · {}"
@@ -190,6 +194,11 @@ msgid "Add a description…"
 msgstr "Додайте опис…"
 
 #: ui/components/dialog/dialog.slint
+#: ui/components/onboarding/onboarding-overlay.slint ui/views/browse-view.slint
+msgid "Back"
+msgstr "Назад"
+
+#: ui/components/dialog/dialog.slint
 msgid "Finish"
 msgstr "Готово"
 
@@ -200,6 +209,16 @@ msgstr "Відкрити Last.fm"
 #: ui/components/dialog/dialog.slint ui/views/settings/scrobbling-section.slint
 msgid "Connect"
 msgstr "Підключити"
+
+#: ui/components/dialog/dialog.slint
+msgid "Continue"
+msgstr "Продовжити"
+
+#: ui/components/dialog/dialog.slint ui/components/dialog/tag-editor-body.slint
+#: ui/components/settings/folder-row.slint ui/globals/dialog.slint
+#: ui/views/settings/library-section.slint
+msgid "Remove"
+msgstr "Вилучити"
 
 #: ui/components/dialog/duplicate-row.slint
 msgid "Identical files"
@@ -236,6 +255,11 @@ msgstr[0] "{n} копія"
 msgstr[1] "{n} копії"
 msgstr[2] "{n} копій"
 
+#. Translators: on the copy of a duplicate song that is playing now.
+#: ui/components/dialog/duplicate-row.slint
+msgid "Playing"
+msgstr "Грає"
+
 #. Translators: {} is the day the copy joined the library, as 2026-11-02.
 #: ui/components/dialog/duplicate-row.slint
 msgid "Added {}"
@@ -245,6 +269,27 @@ msgstr "Додано {}"
 #: ui/components/now-playing/overflow-menu.slint
 msgid "More"
 msgstr "Більше"
+
+#: ui/components/dialog/duplicates-body.slint
+msgid "{n} copy will leave the library."
+msgid_plural "{n} copies will leave the library."
+msgstr[0] "{n} копія залишить медіатеку."
+msgstr[1] "{n} копії залишать медіатеку."
+msgstr[2] "{n} копій залишать медіатеку."
+
+#: ui/components/dialog/duplicates-body.slint
+msgid "Its file stays where it is, and later scans leave it out."
+msgid_plural "Their files stay where they are, and later scans leave them out."
+msgstr[0] "Її файл залишиться на місці, а наступні сканування його пропустять."
+msgstr[1] "Їхні файли залишаться на місці, а наступні сканування їх пропустять."
+msgstr[2] "Їхні файли залишаться на місці, а наступні сканування їх пропустять."
+
+#: ui/components/dialog/duplicates-body.slint
+msgid "Its plays, rating, heart and playlist places move to the copy you keep."
+msgid_plural "Their plays, ratings, hearts and playlist places move to the copies you keep."
+msgstr[0] "Її прослуховування, оцінка, позначка «Обране» та місця в плейлистах перейдуть до залишеної копії."
+msgstr[1] "Їхні прослуховування, оцінки, позначки «Обране» та місця в плейлистах перейдуть до залишених копій."
+msgstr[2] "Їхні прослуховування, оцінки, позначки «Обране» та місця в плейлистах перейдуть до залишених копій."
 
 #. Translators: {n} counts songs found more than once, each with its copies.
 #: ui/components/dialog/duplicates-body.slint
@@ -695,12 +740,6 @@ msgstr "Автор реміксу"
 #: ui/components/dialog/tag-editor-body.slint
 msgid "Replace…"
 msgstr "Замінити…"
-
-#: ui/components/dialog/tag-editor-body.slint
-#: ui/components/settings/folder-row.slint ui/globals/dialog.slint
-#: ui/views/settings/library-section.slint
-msgid "Remove"
-msgstr "Вилучити"
 
 #: ui/components/dialog/tag-editor-body.slint ui/settings.slint
 msgid "Details"
@@ -1381,10 +1420,6 @@ msgstr "Ласкаво просимо до Melodia"
 msgid "Skip"
 msgstr "Пропустити"
 
-#: ui/components/onboarding/onboarding-overlay.slint ui/views/browse-view.slint
-msgid "Back"
-msgstr "Назад"
-
 #: ui/components/onboarding/onboarding-overlay.slint ui/globals/player.slint
 msgid "Next"
 msgstr "Далі"
@@ -1831,6 +1866,28 @@ msgstr "Виберіть плейлисти для експорту."
 #: ui/views/radio/tab-pills.slint
 msgid "Export"
 msgstr "Експорт"
+
+#: ui/globals/duplicates.slint
+msgid "{n} copy removed from the library"
+msgid_plural "{n} copies removed from the library"
+msgstr[0] "Вилучено {n} копію з медіатеки"
+msgstr[1] "Вилучено {n} копії з медіатеки"
+msgstr[2] "Вилучено {n} копій з медіатеки"
+
+#: ui/globals/duplicates.slint
+msgid "{n} copy skipped, as it was playing or had already gone."
+msgid_plural "{n} copies skipped, as they were playing or had already gone."
+msgstr[0] "Пропущено {n} копію: вона грала або вже зникла."
+msgstr[1] "Пропущено {n} копії: вони грали або вже зникли."
+msgstr[2] "Пропущено {n} копій: вони грали або вже зникли."
+
+#: ui/globals/duplicates.slint
+msgid "Couldn't remove the copies"
+msgstr "Не вдалося вилучити копії"
+
+#: ui/globals/duplicates.slint
+msgid "Nothing left the library. See the log for details."
+msgstr "З медіатеки нічого не вилучено. Подробиці в журналі."
 
 #: ui/globals/hero-chips.slint ui/views/my-library-view.slint
 msgid "{n} artist"
@@ -3027,10 +3084,6 @@ msgstr "Повторювані треки"
 #: ui/views/settings/duplicates-section.slint
 msgid "Songs the library seems to hold more than once. Pick the copies you don't need."
 msgstr "Пісні, які, схоже, є в медіатеці кілька разів. Виберіть непотрібні копії."
-
-#: ui/views/settings/duplicates-section.slint
-msgid "Continue"
-msgstr "Продовжити"
 
 #. Translators: an equalizer preset, such as Rock or Jazz
 #: ui/views/settings/equalizer-section.slint

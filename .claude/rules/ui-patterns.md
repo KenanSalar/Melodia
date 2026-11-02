@@ -73,6 +73,11 @@ Paths are under `crates/melodia-ui/ui/components/` unless stated.
 - **A raise that crosses an `await` owes a `DialogClaim`, and a deferred raise is an opener too**,
   single caller or not: inline chrome bumps nothing. `dialog_openers.rs` walks only the kinds it
   lists, so a new dialog is on its own.
+- **A dialog with two steps is one kind whose step its own global holds**, the Dialog unable to
+  open a second over itself. The footer in `components/dialog/dialog.slint` reads the step for its
+  labels and gate, `accepted` advances it, the kind stays open after accept, and the step is reset
+  before the next open (`ScrobbleUi.lastfm-step` by its opener, `DuplicatesUi.confirming` by
+  `closed-teardown`).
 - **A popup host with flyouts closes through one `dismiss()` function**, every path it can reach
   calling it: a function rather than a callback, since a Rust handler would replace its body.
 - **Notifications** route through `ui::shell::notifications::run_action` by kind, and Undo through

@@ -74,3 +74,10 @@ pub struct DuplicateGroup {
     /// Set while every copy carries one set, so a copy joining since shows the group again.
     pub dismissed: Option<DismissalSet>,
 }
+
+/// Copies leaving the library, and the one that stays and takes their history.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct GroupRemoval {
+    pub keeper: i64,
+    pub spares: Vec<i64>,
+}

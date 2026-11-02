@@ -1,9 +1,13 @@
-//! The duplicate finder, and the Not Duplicates list that hides a group the user keeps on purpose.
+//! The duplicate finder, the Not Duplicates list that hides a group the user keeps on purpose, and
+//! the Remove that takes the spares out.
 //!
 //! A find reads the library in two passes so it never holds a row per track: a hashed key for
 //! every track, then the full facts of only the candidates whose keys collide.
 
+mod apply;
 mod matcher;
+
+pub use apply::{RemovalCounts, apply};
 
 use melodia_core::entities::duplicates::{DismissalSet, DuplicateCopy, DuplicateGroup};
 use melodia_core::error::AppError;

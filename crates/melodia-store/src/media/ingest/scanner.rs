@@ -1,3 +1,4 @@
+use std::ops::Range;
 use std::path::{Path, PathBuf};
 
 use rayon::prelude::*;
@@ -164,18 +165,15 @@ impl WalkIndex {
     /// none. A row under a path the walk couldn't read is spared: its file is as likely there as
     /// gone, and purging it takes the track's rating and play count with it.
     pub fn add_row(&mut self, path: String, row: ExistingTrackSummary) {
-        let start =
-            self.files.partition_point(|file| file.to_string_lossy().as_ref() < path.as_str());
-        let matching = self.files[start..]
-            .partition_point(|file| file.to_string_lossy().as_ref() == path.as_str());
-        if matching == 0 {
-            if !self.unreadable.iter().any(|dir| Path::new(&path).starts_with(dir)) {
+        let found = self.files_at(&path);
+        if found.is_empty() {
+            if !self.under_unreadable(&path) {
                 self.orphans.push(path);
             }
             return;
         }
         // More than one only for paths that aren't valid UTF-8 and read back alike.
-        if let Some((last, others)) = self.rows[start..start + matching].split_last_mut() {
+        if let Some((last, others)) = self.rows[found].split_last_mut() {
             for slot in others {
                 *slot = Some(row.clone());
             }
@@ -200,6 +198,27 @@ impl WalkIndex {
     /// The rows the walk didn't find.
     pub fn into_orphans(self) -> Vec<String> {
         self.orphans
+    }
+
+    /// The kept-out paths among `paths` the walk didn't find, sparing those under a path it
+    /// couldn't read as [`Self::add_row`] spares a row.
+    pub fn unwalked(&self, paths: impl IntoIterator<Item = String>) -> Vec<String> {
+        paths
+            .into_iter()
+            .filter(|path| self.files_at(path).is_empty() && !self.under_unreadable(path))
+            .collect()
+    }
+
+    /// The indices of the walked files spelled `path`.
+    fn files_at(&self, path: &str) -> Range<usize> {
+        let start = self.files.partition_point(|file| file.to_string_lossy().as_ref() < path);
+        let matching =
+            self.files[start..].partition_point(|file| file.to_string_lossy().as_ref() == path);
+        start..start + matching
+    }
+
+    fn under_unreadable(&self, path: &str) -> bool {
+        self.unreadable.iter().any(|dir| Path::new(path).starts_with(dir))
     }
 }
 

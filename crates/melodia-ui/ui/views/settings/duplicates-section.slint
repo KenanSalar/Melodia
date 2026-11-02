@@ -43,7 +43,6 @@ export component DuplicatesSection inherits Rectangle {
                     clicked => {
                         Dialog.title = @tr("Duplicate Tracks");
                         Dialog.message = @tr("Songs the library seems to hold more than once. Pick the copies you don't need.");
-                        Dialog.confirm-label = @tr("Continue");
                         Dialog.cancel-label = @tr("Cancel");
                         Dialog.destructive = false;
                         Dialog.kind = DialogKind.duplicates;

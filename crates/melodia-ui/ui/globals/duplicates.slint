@@ -1,7 +1,8 @@
 import { DuplicateRow } from "../models.slint";
 
-// The duplicate finder's state, owned by `ui::duplicates`. `Dialog` imports this for its teardown
-// and never the reverse. Every pick rule is Rust's, the rows only reporting where a click landed.
+// The duplicate finder's state, owned by `ui::duplicates`. `Dialog` imports this for its accept and
+// its teardown, and never the reverse. Every pick rule is Rust's, the rows only reporting where a
+// click landed.
 export global DuplicatesUi {
     in property <[DuplicateRow]> rows;
     // Raised by the opener, which writes it in Slint so Rust touches nothing inside the click.
@@ -14,6 +15,10 @@ export global DuplicatesUi {
     in property <int> picked-count;
     // Built in Rust and untranslated, as the Edit Tags size is.
     in property <string> picked-size;
+    // The Confirm step, Slint's alone: the footer reads it for Back, the primary label, its gate
+    // and `destructive`, and the teardown resets it.
+    in-out property <bool> confirming;
+    in property <bool> removing;
 
     callback find();
     callback toggle(int /*copy id*/);
@@ -24,6 +29,25 @@ export global DuplicatesUi {
     callback set-show-dismissed(bool);
     callback dismiss-group(int /*header id*/);
     callback restore-group(int /*header id*/);
+    callback remove();
+    // `@tr` literals for the result toast Rust raises, Slint exposing no Rust-callable `tr`.
+    pure callback removed-title(int /*removed*/) -> string;
+    removed-title(removed) => {
+        return @tr("{n} copy removed from the library" | "{n} copies removed from the library" % removed);
+    }
+    pure callback removed-message(int /*skipped*/) -> string;
+    removed-message(skipped) => {
+        return skipped == 0 ? ""
+            : @tr("{n} copy skipped, as it was playing or had already gone." | "{n} copies skipped, as they were playing or had already gone." % skipped);
+    }
+    pure callback remove-failed-title() -> string;
+    remove-failed-title() => {
+        return @tr("Couldn't remove the copies");
+    }
+    pure callback remove-failed-message() -> string;
+    remove-failed-message() => {
+        return @tr("Nothing left the library. See the log for details.");
+    }
     // From every kind's teardown: a dialog raised as the finder fades out skips the finder's.
     callback released();
 }

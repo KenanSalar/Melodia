@@ -1,5 +1,6 @@
 import { Theme } from "../../theme.slint";
 import { DuplicatesUi } from "../../globals/duplicates.slint";
+import { Player } from "../../globals/player.slint";
 import { DuplicateMatch, DuplicateRow } from "../../models.slint";
 import { Checkbox } from "../checkbox.slint";
 import { ContextClick } from "../context-menu.slint";
@@ -197,6 +198,14 @@ component CopyRow inherits Rectangle {
                     font-size: Theme.font-size-row;
                     vertical-alignment: center;
                     overflow: elide;
+                }
+                // Remove holds the playing copy back, so the list says which it is.
+                if Player.vm.has_track && Player.vm.track.id == root.row-data.id: MetaChip {
+                    icon: "play_arrow";
+                    // Translators: on the copy of a duplicate song that is playing now.
+                    text: @tr("Playing");
+                    fill: Theme.card-control;
+                    label-color: Theme.text;
                 }
                 // Lossless first in the keeper order, so it is the format worth spotting.
                 if root.row-data.format != "": MetaChip {

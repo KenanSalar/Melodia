@@ -160,6 +160,10 @@ msgid_plural "{n} tracks"
 msgstr[0] "{n} κομμάτι"
 msgstr[1] "{n} κομμάτια"
 
+#: ui/components/dialog/dialog.slint
+msgid "Remove waits until the library scan finishes."
+msgstr "Η κατάργηση περιμένει να ολοκληρωθεί η σάρωση της βιβλιοθήκης."
+
 #. Translators: {} is the picked copies' total size, as 1.2 GB.
 #: ui/components/dialog/dialog.slint
 msgid "{n} copy picked · {}"
@@ -189,6 +193,11 @@ msgid "Add a description…"
 msgstr "Προσθήκη περιγραφής…"
 
 #: ui/components/dialog/dialog.slint
+#: ui/components/onboarding/onboarding-overlay.slint ui/views/browse-view.slint
+msgid "Back"
+msgstr "Πίσω"
+
+#: ui/components/dialog/dialog.slint
 msgid "Finish"
 msgstr "Ολοκλήρωση"
 
@@ -199,6 +208,16 @@ msgstr "Άνοιγμα Last.fm"
 #: ui/components/dialog/dialog.slint ui/views/settings/scrobbling-section.slint
 msgid "Connect"
 msgstr "Σύνδεση"
+
+#: ui/components/dialog/dialog.slint
+msgid "Continue"
+msgstr "Συνέχεια"
+
+#: ui/components/dialog/dialog.slint ui/components/dialog/tag-editor-body.slint
+#: ui/components/settings/folder-row.slint ui/globals/dialog.slint
+#: ui/views/settings/library-section.slint
+msgid "Remove"
+msgstr "Κατάργηση"
 
 #: ui/components/dialog/duplicate-row.slint
 msgid "Identical files"
@@ -234,6 +253,11 @@ msgid_plural "{n} copies"
 msgstr[0] "{n} αντίγραφο"
 msgstr[1] "{n} αντίγραφα"
 
+#. Translators: on the copy of a duplicate song that is playing now.
+#: ui/components/dialog/duplicate-row.slint
+msgid "Playing"
+msgstr "Αναπαράγεται"
+
 #. Translators: {} is the day the copy joined the library, as 2026-11-02.
 #: ui/components/dialog/duplicate-row.slint
 msgid "Added {}"
@@ -243,6 +267,24 @@ msgstr "Προστέθηκε στις {}"
 #: ui/components/now-playing/overflow-menu.slint
 msgid "More"
 msgstr "Περισσότερα"
+
+#: ui/components/dialog/duplicates-body.slint
+msgid "{n} copy will leave the library."
+msgid_plural "{n} copies will leave the library."
+msgstr[0] "{n} αντίγραφο θα αφαιρεθεί από τη βιβλιοθήκη."
+msgstr[1] "{n} αντίγραφα θα αφαιρεθούν από τη βιβλιοθήκη."
+
+#: ui/components/dialog/duplicates-body.slint
+msgid "Its file stays where it is, and later scans leave it out."
+msgid_plural "Their files stay where they are, and later scans leave them out."
+msgstr[0] "Το αρχείο του μένει εκεί που είναι και οι επόμενες σαρώσεις το παραλείπουν."
+msgstr[1] "Τα αρχεία τους μένουν εκεί που είναι και οι επόμενες σαρώσεις τα παραλείπουν."
+
+#: ui/components/dialog/duplicates-body.slint
+msgid "Its plays, rating, heart and playlist places move to the copy you keep."
+msgid_plural "Their plays, ratings, hearts and playlist places move to the copies you keep."
+msgstr[0] "Οι αναπαραγωγές, η βαθμολογία, η καρδιά και οι θέσεις του σε λίστες αναπαραγωγής περνούν στο αντίγραφο που κρατάτε."
+msgstr[1] "Οι αναπαραγωγές, οι βαθμολογίες, οι καρδιές και οι θέσεις τους σε λίστες αναπαραγωγής περνούν στα αντίγραφα που κρατάτε."
 
 #. Translators: {n} counts songs found more than once, each with its copies.
 #: ui/components/dialog/duplicates-body.slint
@@ -692,12 +734,6 @@ msgstr "Remixer"
 #: ui/components/dialog/tag-editor-body.slint
 msgid "Replace…"
 msgstr "Αντικατάσταση…"
-
-#: ui/components/dialog/tag-editor-body.slint
-#: ui/components/settings/folder-row.slint ui/globals/dialog.slint
-#: ui/views/settings/library-section.slint
-msgid "Remove"
-msgstr "Κατάργηση"
 
 #: ui/components/dialog/tag-editor-body.slint ui/settings.slint
 msgid "Details"
@@ -1376,10 +1412,6 @@ msgstr "Καλώς ορίσατε στο Melodia"
 msgid "Skip"
 msgstr "Παράλειψη"
 
-#: ui/components/onboarding/onboarding-overlay.slint ui/views/browse-view.slint
-msgid "Back"
-msgstr "Πίσω"
-
 #: ui/components/onboarding/onboarding-overlay.slint ui/globals/player.slint
 msgid "Next"
 msgstr "Επόμενο"
@@ -1820,6 +1852,26 @@ msgstr "Επιλέξτε λίστες για εξαγωγή."
 #: ui/views/radio/tab-pills.slint
 msgid "Export"
 msgstr "Εξαγωγή"
+
+#: ui/globals/duplicates.slint
+msgid "{n} copy removed from the library"
+msgid_plural "{n} copies removed from the library"
+msgstr[0] "{n} αντίγραφο αφαιρέθηκε από τη βιβλιοθήκη"
+msgstr[1] "{n} αντίγραφα αφαιρέθηκαν από τη βιβλιοθήκη"
+
+#: ui/globals/duplicates.slint
+msgid "{n} copy skipped, as it was playing or had already gone."
+msgid_plural "{n} copies skipped, as they were playing or had already gone."
+msgstr[0] "{n} αντίγραφο παραλείφθηκε, επειδή αναπαραγόταν ή είχε ήδη φύγει."
+msgstr[1] "{n} αντίγραφα παραλείφθηκαν, επειδή αναπαράγονταν ή είχαν ήδη φύγει."
+
+#: ui/globals/duplicates.slint
+msgid "Couldn't remove the copies"
+msgstr "Δεν ήταν δυνατή η κατάργηση των αντιγράφων"
+
+#: ui/globals/duplicates.slint
+msgid "Nothing left the library. See the log for details."
+msgstr "Τίποτα δεν αφαιρέθηκε από τη βιβλιοθήκη. Δείτε το αρχείο καταγραφής για λεπτομέρειες."
 
 #: ui/globals/hero-chips.slint ui/views/my-library-view.slint
 msgid "{n} artist"
@@ -2990,10 +3042,6 @@ msgstr "Διπλότυπα κομμάτια"
 #: ui/views/settings/duplicates-section.slint
 msgid "Songs the library seems to hold more than once. Pick the copies you don't need."
 msgstr "Τραγούδια που φαίνεται να υπάρχουν πάνω από μία φορά στη βιβλιοθήκη. Επιλέξτε τα αντίγραφα που δεν χρειάζεστε."
-
-#: ui/views/settings/duplicates-section.slint
-msgid "Continue"
-msgstr "Συνέχεια"
 
 #. Translators: an equalizer preset, such as Rock or Jazz
 #: ui/views/settings/equalizer-section.slint

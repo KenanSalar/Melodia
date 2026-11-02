@@ -8,7 +8,6 @@
 //! reconcile task's own tests drive it against real bytes, because a delete and a create only meet
 //! at that level.
 
-use std::collections::HashMap;
 use std::path::Path;
 
 use tempfile::TempDir;
@@ -76,7 +75,9 @@ async fn track_count(db: &DbPool) -> Result<i64, AppError> {
 /// A batch whose one move candidate is the row `id`, last seen at `vanished`.
 fn batch_with_candidate(hash: &str, id: i64, vanished: &Path) -> Batch {
     let candidate = (id, vanished.to_string_lossy().into_owned());
-    Batch { moved: HashMap::from([(hash.to_owned(), candidate)]), ..Batch::default() }
+    let mut moved = MoveCandidates::default();
+    moved.tracks.insert(hash.to_owned(), candidate);
+    Batch { moved, ..Batch::default() }
 }
 
 #[tokio::test]
@@ -186,7 +187,7 @@ async fn a_created_file_matching_a_vanished_row_repoints_it_once() -> Result<(),
 
     assert!(repointed);
     assert!(inserted);
-    assert!(batch.moved.is_empty(), "a consumed candidate must not re-point a second file");
+    assert!(batch.moved.tracks.is_empty(), "a consumed candidate must not re-point a second file");
     assert_eq!(track_id_at(&db, &moved).await?, Some(id), "the move keeps the original row");
     assert_eq!(track_count(&db).await?, 2, "the twin is a new file, not the same one again");
     Ok(())
@@ -211,7 +212,7 @@ async fn a_move_out_of_the_watched_tree_leaves_the_candidate_alone() -> Result<(
     let refused = handle_created(&mut tx, &outside, &meta, &mut batch).await?;
     assert!(!refused);
     assert!(
-        batch.moved.contains_key(&meta.file_hash),
+        batch.moved.tracks.contains_key(&meta.file_hash),
         "refusing a path outside the library must not spend the row's one chance to be found"
     );
 

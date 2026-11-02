@@ -161,6 +161,10 @@ msgid_plural "{n} tracks"
 msgstr[0] "{n} parça"
 msgstr[1] "{n} parça"
 
+#: ui/components/dialog/dialog.slint
+msgid "Remove waits until the library scan finishes."
+msgstr "Kaldırma, kitaplık taraması bitene kadar bekler."
+
 #. Translators: {} is the picked copies' total size, as 1.2 GB.
 #: ui/components/dialog/dialog.slint
 msgid "{n} copy picked · {}"
@@ -190,6 +194,11 @@ msgid "Add a description…"
 msgstr "Açıklama ekle…"
 
 #: ui/components/dialog/dialog.slint
+#: ui/components/onboarding/onboarding-overlay.slint ui/views/browse-view.slint
+msgid "Back"
+msgstr "Geri"
+
+#: ui/components/dialog/dialog.slint
 msgid "Finish"
 msgstr "Bitir"
 
@@ -200,6 +209,16 @@ msgstr "Last.fm'i aç"
 #: ui/components/dialog/dialog.slint ui/views/settings/scrobbling-section.slint
 msgid "Connect"
 msgstr "Bağlan"
+
+#: ui/components/dialog/dialog.slint
+msgid "Continue"
+msgstr "Devam"
+
+#: ui/components/dialog/dialog.slint ui/components/dialog/tag-editor-body.slint
+#: ui/components/settings/folder-row.slint ui/globals/dialog.slint
+#: ui/views/settings/library-section.slint
+msgid "Remove"
+msgstr "Kaldır"
 
 #: ui/components/dialog/duplicate-row.slint
 msgid "Identical files"
@@ -236,6 +255,11 @@ msgid_plural "{n} copies"
 msgstr[0] "{n} kopya"
 msgstr[1] "{n} kopya"
 
+#. Translators: on the copy of a duplicate song that is playing now.
+#: ui/components/dialog/duplicate-row.slint
+msgid "Playing"
+msgstr "Çalıyor"
+
 #. Translators: {} is the day the copy joined the library, as 2026-11-02.
 #: ui/components/dialog/duplicate-row.slint
 msgid "Added {}"
@@ -245,6 +269,24 @@ msgstr "Eklenme: {}"
 #: ui/components/now-playing/overflow-menu.slint
 msgid "More"
 msgstr "Diğer Seçenekler"
+
+#: ui/components/dialog/duplicates-body.slint
+msgid "{n} copy will leave the library."
+msgid_plural "{n} copies will leave the library."
+msgstr[0] "{n} kopya kitaplıktan çıkacak."
+msgstr[1] "{n} kopya kitaplıktan çıkacak."
+
+#: ui/components/dialog/duplicates-body.slint
+msgid "Its file stays where it is, and later scans leave it out."
+msgid_plural "Their files stay where they are, and later scans leave them out."
+msgstr[0] "Dosyası olduğu yerde kalır ve sonraki taramalar onu atlar."
+msgstr[1] "Dosyaları olduğu yerde kalır ve sonraki taramalar onları atlar."
+
+#: ui/components/dialog/duplicates-body.slint
+msgid "Its plays, rating, heart and playlist places move to the copy you keep."
+msgid_plural "Their plays, ratings, hearts and playlist places move to the copies you keep."
+msgstr[0] "Çalınma sayısı, derecelendirmesi, kalbi ve çalma listelerindeki yerleri tuttuğunuz kopyaya geçer."
+msgstr[1] "Çalınma sayıları, derecelendirmeleri, kalpleri ve çalma listelerindeki yerleri tuttuğunuz kopyalara geçer."
 
 # Turkish doesn't pluralize a noun after a numeral, so both forms are the same.
 #. Translators: {n} counts songs found more than once, each with its copies.
@@ -695,12 +737,6 @@ msgstr "Remiksçi"
 #: ui/components/dialog/tag-editor-body.slint
 msgid "Replace…"
 msgstr "Değiştir…"
-
-#: ui/components/dialog/tag-editor-body.slint
-#: ui/components/settings/folder-row.slint ui/globals/dialog.slint
-#: ui/views/settings/library-section.slint
-msgid "Remove"
-msgstr "Kaldır"
 
 #: ui/components/dialog/tag-editor-body.slint ui/settings.slint
 msgid "Details"
@@ -1380,10 +1416,6 @@ msgstr "Melodia'ya hoş geldiniz"
 msgid "Skip"
 msgstr "Atla"
 
-#: ui/components/onboarding/onboarding-overlay.slint ui/views/browse-view.slint
-msgid "Back"
-msgstr "Geri"
-
 #: ui/components/onboarding/onboarding-overlay.slint ui/globals/player.slint
 msgid "Next"
 msgstr "Sonraki"
@@ -1827,6 +1859,26 @@ msgstr "Dışa aktarılacak çalma listelerini seçin."
 #: ui/views/radio/tab-pills.slint
 msgid "Export"
 msgstr "Dışa aktar"
+
+#: ui/globals/duplicates.slint
+msgid "{n} copy removed from the library"
+msgid_plural "{n} copies removed from the library"
+msgstr[0] "{n} kopya kitaplıktan kaldırıldı"
+msgstr[1] "{n} kopya kitaplıktan kaldırıldı"
+
+#: ui/globals/duplicates.slint
+msgid "{n} copy skipped, as it was playing or had already gone."
+msgid_plural "{n} copies skipped, as they were playing or had already gone."
+msgstr[0] "{n} kopya atlandı, çünkü çalıyordu ya da zaten yoktu."
+msgstr[1] "{n} kopya atlandı, çünkü çalıyordu ya da zaten yoktu."
+
+#: ui/globals/duplicates.slint
+msgid "Couldn't remove the copies"
+msgstr "Kopyalar kaldırılamadı"
+
+#: ui/globals/duplicates.slint
+msgid "Nothing left the library. See the log for details."
+msgstr "Kitaplıktan hiçbir şey çıkmadı. Ayrıntılar için günlüğe bakın."
 
 # Turkish doesn't pluralize a noun after a numeral, so both forms are the same.
 #: ui/globals/hero-chips.slint ui/views/my-library-view.slint
@@ -2999,10 +3051,6 @@ msgstr "Yinelenen Parçalar"
 #: ui/views/settings/duplicates-section.slint
 msgid "Songs the library seems to hold more than once. Pick the copies you don't need."
 msgstr "Kitaplıkta birden fazla kez bulunuyor gibi görünen şarkılar. Gerekmeyen kopyaları seçin."
-
-#: ui/views/settings/duplicates-section.slint
-msgid "Continue"
-msgstr "Devam"
 
 #. Translators: an equalizer preset, such as Rock or Jazz
 #: ui/views/settings/equalizer-section.slint

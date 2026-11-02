@@ -1,6 +1,6 @@
 # Plan: Duplicate tracks (find the copies, clear out the spares)
 
-Status: **in progress** (Phases 0 to 2 done, Phase 3 next) · Owner: Kenan · Created: 2026-11-02 · Issue #158, branch `feat/duplicate-tracks`
+Status: **in progress** (Phases 0 to 3 done, Phase 4 next) · Owner: Kenan · Created: 2026-11-02 · Issue #158, branch `feat/duplicate-tracks`
 
 > **Validated 2026-11-02** against `b4c5ecff`, and re-validated the same day against `41c1f2e1`. The sources were:
 > - three read-only code traces: the store and per-track data; the removal, scan, watcher and queue paths; the UI surfaces;
@@ -103,8 +103,10 @@ Right-clicking a group's header offers **Not Duplicates**, for copies you keep o
      - Groups with no copy there are left alone.
      - A library copied into a second folder makes one group per track, so choosing the folder once beats choosing in every group.
    - **A dismissed group takes no pick.** Not Duplicates says its copies aren't duplicates, so a removal pick there would contradict it. A click on one of its copies does nothing, Keep This Copy is hidden on them, and Keep Copies in This Folder passes the group by. Count as Duplicates gives the group its suggested picks again.
-   - Apply takes a `GroupRemoval { keeper, spares }` per group, so "a keeper" is in the type, not only in the UI.
-   - The playing copy is held back at apply and stays listed with a Playing chip. A play it finishes counts against its own id, which is gone once the delete commits.
+   - Apply takes a `GroupRemoval { keeper, spares }` per keeper, so "a keeper" is in the type, not only in the UI.
+     - A spare's history goes to the kept copy sharing its file hash where there is one, else to its group's best kept copy.
+     - So an identical extra in a Review group merges into its twin, never into the other release beside it.
+   - The playing copy is held back at apply, and the list marks it with a Playing chip. A play it finishes counts against its own id, which is gone once the delete commits.
 5. **What moves to the keeper, in the delete's own transaction.**
 
    | Field | Rule |
@@ -121,11 +123,13 @@ Right-clicking a group's header offers **Not Duplicates**, for copies you keep o
    - A playing keeper's merged heart or rating reaches Now Playing through `sync_current_track_if_in`, as `ratings.rs:38` does.
    - Smart playlists are derived at read time, so they follow on their own.
    - The tail matches `apply_watch_batch`'s (`watch_batch.rs:150-153`): `roll_up_covers` and `prune_orphans`.
+   - A spare's extracted cover is released at once, as `remove_folder` releases a folder's: `referenced_filenames` is read before the delete and handed to `retire_released` after it.
    - Pending play counts flush first. The flusher holds counts by id for 2 s (`play_count_flusher.rs:19,39-40`), and a count for a deleted id hits no row (`write.rs:45-76`).
      - The core bridge is send-only, and `PlayCountEvent` is `Copy` (`play_counts.rs:8-12`).
      - So the request rides the app's own channel instead: the apply and the flusher both live in `melodia-app`, the sender sits in `AppState`, and a oneshot answers once the write commits.
 6. **The queue.**
-   - Before the delete commits, every queued spare becomes its keeper's id in place, through `emit_and_execute`. `queue_prune` then never sees a missing id, and playback never jumps.
+   - Before the delete commits, every queued spare becomes its keeper's id in place (`QueueState::replace_ids`). `queue_prune` then never sees a missing id, and playback never jumps.
+   - The remap and the playing hold-back share one `with_state_emit`, so nothing can start a spare between them. With the playing copy held, no `PlayerAction` results, so `emit_and_execute` has nothing to execute (`queue_remove` is the precedent).
    - The queue already holds an id more than once (`window_ids` dedups for that reason, `queue/mod.rs:202-217`), so a keeper that is already queued is fine.
    - **Accepted:** a spare already staged as the next track loses its gapless join.
      - The deck holds the spare's own file (`handlers.rs:481`).
@@ -134,7 +138,10 @@ Right-clicking a group's header offers **Not Duplicates**, for copies you keep o
    - One write transaction does the merge, writes an `excluded_files` row per spare and deletes the spares. Then `library_changed` is bumped.
    - No file is touched, so the watcher sees nothing, and the removal is all or nothing.
    - **Checked again in the transaction.** The library can move while the dialog is open. The transaction skips a group whose keeper is gone and any spare already gone, and the result line counts what it skipped.
-   - **Not during a scan.** Remove is disabled while a scan runs (`ScanControl`'s progress watch, `state/scan.rs:67`), and the footer says why.
+   - **Not during a scan.** Remove is disabled while a scan runs (`LibrarySettings.scanning`, off `ScanControl`'s progress watch), and the footer says why.
+     - No check inside `apply` backs the gate, and none is needed: every check that decides whether a file is kept out runs inside its inserting transaction.
+     - A chunk committing after Remove finds no row and the exclusion, so the file is skipped. One committing before it updates a row the merge then deletes.
+     - A scan's cleanup only forgets exclusions from the set it loaded, so one written since survives.
    - Deleting a spare from disk is left to the file manager. The kept-out list (decision 9) says where each one is.
 8. **`excluded_files`** (new migration):
    - **Columns.**
@@ -151,13 +158,16 @@ Right-clicking a group's header offers **Not Duplicates**, for copies you keep o
    - **Checked by the full scan.**
      - The first check is in `discover`'s filter (`scan/mod.rs:312`), from a set loaded once per folder by path prefix under its root. The prefix matters because a spare that came in by a drop sits under the disabled folder row an import makes for its parent (`ingest.rs:464-489`, `folder.rs:88-104`), not under the scanned folder's `folder_id`.
      - That filter only saves the parse. The check that decides runs again inside `ingest`'s write transaction, because a walk that ran before Remove committed still lists the spare.
-     - A new path whose hash matches an exclusion whose own path is gone from disk is a moved spare. `resolve_move_candidates` takes exclusions beside rows, the exclusion is re-pointed and the file is skipped.
+     - `IngestSource` (`FolderScan`, `Import`) says which ingest consults exclusions, replacing `FolderResolution` and the artwork-backfill bool those two callers always paired.
+     - A new path whose hash matches an exclusion whose own path is gone from disk is a moved spare. `resolve_move_candidates` takes exclusions beside rows (`scan::moves::MoveCandidates`, shared with the watcher), the exclusion is re-pointed and the file is skipped.
+     - A row claims the bytes first, so a moved keeper beside its kept-out twin always gets its own row back.
    - **Checked by the watcher.** It checks before extraction in `process_batch` (`file_event_processor/reconcile.rs:87-94`), then again inside `apply_watch_batch`'s transaction, for the same race:
      - `Created` and `Modified` events on an excluded path are dropped, which also covers the modify fallback's insert (`watch_batch.rs:299`).
      - `Renamed` from an excluded path re-points the exclusion, as a track row is re-pointed (`:269-281`). A rename to outside every folder lifts it.
      - `Renamed` onto an excluded path, a tagger's save through a temp file, is checked as a `Created` and dropped.
      - A created file whose hash matches an exclusion whose path is gone re-points it, through `moved_candidates`.
-     - `Removed` lifts the exclusion only when the path is gone at processing time and no file created in the batch took it over. Today `Removed` is never existence-checked (`reconcile.rs:40`), and a save that deletes and recreates its file can land in two batches.
+     - `Removed` lifts the exclusion only when the path is gone at processing time and no file created in the batch took it over. `WatchedChange::Removed` carries `gone`, read when the batch is paired, because a save that deletes and recreates its file can land in two batches.
+     - A track renamed onto a kept-out path lifts that exclusion, the file there being the row's now. A kept-out file renamed onto a track's path lifts its own, the row keeping its history.
    - **Lifted by an explicit import.** File drop and open-with lift the exclusion on every path they're handed, because the user asked for that file. A dropped folder isn't walked (`import.rs:34-40`), so only named files lift.
    - **Cleanup.**
      - A folder's full scan forgets the exclusions under it whose file the walk didn't find.
@@ -184,8 +194,9 @@ Right-clicking a group's header offers **Not Duplicates**, for copies you keep o
 10. **The surface is the shared Dialog: one new kind for the finder, two steps.**
     - `DialogKind.duplicates` takes the widest card, 760 px (`dialog.slint:63-73`). It joins `body-scrolls` (`:93-95`) and owns its scroller. `kept-out-files` does the same.
     - **Review step.** The list. Primary is **Continue**, enabled with one pick or more. The footer note shows the picked count and size (`:100-103`).
-    - **Confirm step.** A plain summary: how many copies leave the library, that their files stay where they are and later scans skip them, that their history moves to the copies kept, and that they can be found under Files kept out of the library. Primary is **Remove**, destructive. Cancel reads **Back** and returns to Review. Escape and a backdrop click close the dialog, as for every kind.
-    - **What the footer owes the two steps.**
+    - **Confirm step.** A plain summary: how many copies leave the library, that their files stay where they are and later scans skip them, that their history moves to the copies kept, and (from Phase 4, with the row it names) that they can be found under Files kept out of the library. Primary is **Remove**, destructive. Cancel reads **Back** and returns to Review, remounting the list at its top with the picks intact. Escape and a backdrop click close the dialog, as for every kind.
+    - **The result.** Remove closes the dialog and a toast says how many copies left and how many were skipped, playing or already gone. A close mid-remove still gets the toast.
+    - **What the footer owes the two steps.** The step is `DuplicatesUi.confirming`, Slint's alone, which Rust never reads.
       - Cancel closes unconditionally today (`dialog.slint:236-244`), so Back is a new branch there.
       - The kind joins those that stay open after accept (`:280-287`), so Remove can run and Rust closes the dialog.
       - `destructive` flips with the step.
@@ -263,7 +274,7 @@ Right-clicking a group's header offers **Not Duplicates**, for copies you keep o
 | File | Owns |
 |---|---|
 | `crates/melodia-core/src/utils/trash_dir.rs` (new, P0) | `is_trash_dir`, which takes a folder: a volume trash by name, or the home trash at `dirs::data_dir()/Trash` by path. `in_trash_dir` asks it of every folder above a path. |
-| `crates/melodia-store/src/media/ingest/scanner.rs`, `ingest/watcher.rs` | The walk skips a trash folder; the watcher's `is_library_file` rejects a path inside one (P0). |
+| `crates/melodia-store/src/media/ingest/scanner.rs`, `ingest/watcher.rs` | The walk skips a trash folder; the watcher's `is_library_file` rejects a path inside one (P0). `WalkIndex::unwalked`, the kept-out paths a complete walk didn't find (P3). |
 | `crates/melodia-core/src/utils/fold.rs` | `squeeze`, moved from the lyrics matcher (`lyrics_directory/recording.rs` imports it): letters and digits single-spaced, an apostrophe dropped. `fold_words`, beside `push_folded`: `squeeze` over the fold, or the fold where nothing is left (P1). |
 | `crates/melodia-core/src/entities/audio_quality.rs` (new, P1) | `AudioFormat`, the four columns an encode is judged by, and `AudioQuality`: the lossless rule and the quality order. |
 | `crates/melodia-core/src/entities/duplicates.rs` (new, P1) | `MatchKind`, `ReviewReason`, `DismissalSet`, `DuplicateGroup`, `DuplicateCopy`; `GroupRemoval` (P3); `KeptOutFile` (P4). |
@@ -273,7 +284,7 @@ Right-clicking a group's header offers **Not Duplicates**, for copies you keep o
 | `crates/melodia-store/src/database/queries/track/full_rows.rs` | Loses `get_duplicate_tracks` and its two tests (`track_tests.rs:316,340`) (P1). |
 | `crates/melodia-app/src/library/duplicates/mod.rs` (new, P1) | The library API: `find`, `dismiss` and `restore`; `copies`, the rows' facts by id (P2); `apply` (P3); the kept-out count, ids, rows, `bring_back` and `bring_all_back` (P4). |
 | `crates/melodia-app/src/library/duplicates/matcher.rs` (new, P1) | Pure grouping: key runs, collision split, duration clusters, kind, the keeper order, the dismissed flag. |
-| `crates/melodia-ui/ui/globals/duplicates.slint` (new, P2) | `DuplicatesUi`: rows, busy, counts, callbacks; `step` (P3); `KeptOutUi` (P4). |
+| `crates/melodia-ui/ui/globals/duplicates.slint` (new, P2) | `DuplicatesUi`: rows, busy, counts, callbacks; `confirming`, `removing`, `remove` and the toast's trampolines (P3); `KeptOutUi` (P4). |
 | `crates/melodia-ui/ui/models.slint` | `DuplicateMatch` and `DuplicateRow` (P2), `KeptOutRow` (P4). |
 | `crates/melodia-ui/ui/components/dialog/duplicates-body.slint` (new, P2) | Both steps' bodies, the list's toolbar (group count, Suggested picks, Clear picks, Show Dismissed), the well with its scrollbar, and the busy, empty and failed states. |
 | `crates/melodia-ui/ui/components/dialog/duplicate-row.slint` (new, P2) | The header row and the copy row, each a slice of its group's card, and the ⋮ button that opens the row menu. |
@@ -289,17 +300,19 @@ Right-clicking a group's header offers **Not Duplicates**, for copies you keep o
 | `crates/melodia-views/src/ui/util.rs` | `format_codec`, `format_bitrate`, `format_bit_depth` and `format_size` beside `format_sample_rate`, lifted from the inline closures in `now_playing/metadata.rs` and `callbacks/tags/open.rs` and from `callbacks/tags/fold.rs`'s `fmt_size` (P2, no behaviour change). |
 | `migrations/20261102000001_excluded_files.sql` (new, P3) | The table and its folder and hash indexes. |
 | `crates/melodia-store/src/database/queries/excluded_files.rs` (new, P3) | Exclude (`pub(crate)`, the merge's), excluded among paths, under a path prefix, move candidates by hash, re-point, lift, forget unseen, count; ids in path order, rows by id, every path in path order (P4). |
-| `crates/melodia-store/src/database/queries/ingest.rs` (550), `queries/scan/watch_batch.rs` (316) | The exclusion check inside the inserting transaction, exclusions among the move candidates, a rename's re-point and lift (P3). |
-| `crates/melodia-store/src/database/queries/folder.rs` (121) | `absorb_folders` re-points exclusions with the tracks (P3). |
-| `crates/melodia-store/src/database/queries/playlist.rs` (639) | `renumber_playlist_positions_tx` becomes `pub(crate)` for the merge (P3). |
-| `crates/melodia-app/src/library/favorites.rs` | The entry point the merge's keepers take to `sync_love` (P3). |
+| `crates/melodia-store/src/database/queries/ingest.rs`, `queries/scan/watch_batch.rs` | `IngestSource`; the exclusion check inside the inserting transaction, exclusions among the move candidates, a rename's re-point and lift, `Removed`'s `gone` (P3). |
+| `crates/melodia-store/src/database/queries/scan/moves.rs` (new, P3) | `MoveCandidates`: the rows and kept-out files a new path's bytes may have moved from, shared by the ingest and the watcher. |
+| `crates/melodia-store/src/database/queries/scan/finish.rs` | `Unwalked`: the rows a complete walk purges and the exclusions it forgets (P3). |
+| `crates/melodia-store/src/database/queries/folder.rs` | `absorb_folders` re-points exclusions with the tracks (P3). |
+| `crates/melodia-store/src/database/queries/playlist.rs` | `renumber_playlist_positions_tx` becomes `pub(crate)` for the merge (P3). |
+| `crates/melodia-app/src/library/favorites.rs`, `library/ratings.rs` | `merged_onto`: a keeper's merged heart reaches Now Playing and `sync_love`, a merged rating Now Playing and the write-back (P3). |
 | `crates/melodia-store/src/database/queries/track/duplicate_merge.rs` (new, P3) | `remove_duplicates`: merge, playlist places, exclusions, delete, renumber, tail. One transaction. |
-| `crates/melodia-engine/src/player/engine/queue/removal.rs` (321) | `replace_ids`: spare to keeper in place, then an `order_changed` bump (P3). |
-| `crates/melodia-app/src/library/duplicates/apply.rs` (new, P3) | Scan guard, playing hold-back, flush, queue remap, store call, bump, covers, rating write-back, love sync, the Now Playing mirror. |
-| `crates/melodia-app/src/library/scan/mod.rs`, `tasks/file_event_processor/reconcile.rs`, `library/import.rs` | The checks before parsing, the `Removed` lift, the import's lift and the scan-time cleanup (P3). |
-| `crates/melodia-app/src/tasks/play_count_flusher.rs`, `crates/melodia-app/src/state/mod.rs` | A flush request on the app's own channel, its sender in `AppState`, answered once the write commits (P3). |
+| `crates/melodia-engine/src/player/engine/queue/removal.rs` | `replace_ids`: spare to keeper in place, then an `order_changed` bump (P3). |
+| `crates/melodia-app/src/library/duplicates/apply.rs` (new, P3) | Flush, playing hold-back and queue remap, store call, bumps, covers, the heart and rating carried onto the keepers. |
+| `crates/melodia-app/src/library/scan/mod.rs`, `tasks/file_event_processor/reconcile.rs` | The checks before parsing and the scan-time cleanup; the watcher's `gone` (P3). The import's lift is `commit_import`'s, inside its transaction. |
+| `crates/melodia-app/src/tasks/play_count_flusher.rs`, `crates/melodia-app/src/state/mod.rs` | `PlayCountFlush`, a flush request on the app's own channel, its sender in `AppState` and its receiver in `StartupChannels`, answered once the write commits (P3). |
 
-Size headroom, measured after Phase 2: `app-window.slint` 750 lines (gains one export name in P4), `globals/dialog.slint` 422, `components/dialog/dialog.slint` 306, `models.slint` 497, `queue/removal.rs` 321, `playlist.rs` 639, `ingest.rs` 550. None crosses 800.
+Size headroom, measured after Phase 3: `app-window.slint` 750 lines (gains one export name in P4), `globals/dialog.slint` 429, `components/dialog/dialog.slint` 323, `models.slint` 499, `queue/removal.rs` 337, `playlist.rs` 639, `ingest.rs` 587, `watch_batch.rs` 383. None crosses 800.
 
 ## Phases
 
@@ -384,6 +397,12 @@ Hand test, on the dev library:
 
 ### Phase 3: Remove from library
 
+Status: built and hand-checked (2026-11-02). The gate passed: fmt, clippy and the suite, the tests the change broke fixed in place, and all 15 catalogs complete.
+
+The hand test ran in two parts:
+- **Unattended, on the dev data folder.** It was restored afterwards, and ran with rating write-back off so no file under `~/Music` could be retagged. The fixtures went in `_p3test/` and `_p3moved/` under the test library, removed afterwards.
+- **By Kenan.** He checked the two cases the unattended run couldn't stage: Remove disabled with its footer note during a scan (a no-change scan of the dev library ends in under a second, too soon to reach Confirm), and the Confirm step, Playing chip and toast in a light theme. Where the build moved off the decisions above, they say so: a removal per keeper, the remap's `with_state_emit`, no scan check inside `apply`, `IngestSource`, the covers released at once.
+
 1. The migration and `queries::excluded_files`.
 2. The checks before parsing in the scan and the watcher, and the check that decides inside `ingest`'s and `apply_watch_batch`'s transactions.
 3. Exclusions that follow the file: a rename's re-point and lift, exclusions among both move-candidate reads, `absorb_folders`' re-point, and `Removed`'s existence-checked lift.
@@ -425,8 +444,9 @@ Hand test, the kept-out file staying out (watching on unless noted):
    - Copy Path, through `CopyActions.copy-text`;
    - Bring Back.
 4. The kept-out row in the Duplicates card, shown when the count is above zero, its count following `library_changed`.
-5. Translations.
-6. Docs: `README.md` names where the removed copies can be found.
+5. The Confirm step's summary gains its pointer to Files kept out of the library, now that the row exists.
+6. Translations.
+7. Docs: `README.md` names where the removed copies can be found.
 
 Hand test:
 - Right-clicking a row opens its own folder, and Copy Path copies its path.
@@ -439,7 +459,11 @@ Hand test:
 
 ### Phase 5: Tests
 
-Tests are added where the landed change earns them, on Kenan's go.
+1. **Settle what Phase 3's hand test found**, each one Kenan's to answer before any test pins the behaviour:
+   - **A kept-out file retagged, then moved while Melodia is closed, comes back.** The exclusion keeps the hash the file had when it was removed. Nothing re-hashes a kept-out file: the watcher and the scan both skip its parse. So a later move reads as a new file. A rename with watching on is unaffected, since it follows the path. This could be an accepted trade beside decision 8's, or the watcher could re-hash a kept-out file on `Modified`.
+   - **The Playing chip marks the current track whether or not it plays.** A paused or just-loaded track carries it too. That matches what `apply` holds back, `current_track()`, but the label may want to say so.
+   - **A file dropped in from inside a library folder is parsed again by every full scan.** The import files it under a disabled folder row for its own directory (`ingest.rs`' `resolve_folder_id`). `visit_folder_tracks` then never pairs it with the walk, and the ingest finds its row current only after the parse. This was there before this plan, but Phase 4's Bring Back imports every returned file this way.
+2. Tests are added where the landed change earns them, on Kenan's go.
 
 ## Cross-cutting
 
@@ -452,7 +476,7 @@ Tests are added where the landed change earns them, on Kenan's go.
 
 ## Open questions
 
-None open. Settled 2026-11-02:
+Three, from Phase 3's hand test, held for Phase 5's first step. Settled 2026-11-02:
 - An identical pair in a Review group stays in its group, and one of the pair is picked (decision 2).
 - Keep This Copy is in the copy menu (decisions 4 and 10).
 - Copy Path is in both menus, and Copy All Paths is in the kept-out list (decisions 9 and 10).

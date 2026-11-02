@@ -30,6 +30,10 @@ paths:
   the root a walk starts from.
 - **Nothing inside a write transaction `stat`s a file**: a second `stat` can pair a new mtime with
   the previous scan's size, which then reads as current (`queries::scan::watch_batch`).
+- **A new ingest path consults `excluded_files` inside its inserting transaction, and a rename or
+  move carries an exclusion as it carries a row** (`queries::excluded_files`, `scan::moves`), or a
+  removed duplicate comes back. A check before the parse only saves the parse; an import lifts the
+  exclusion on what the user named.
 
 ## Query shape
 
@@ -54,6 +58,9 @@ paths:
   matcher share it, so a spelling rule lands on both.
 - **What makes two rows one song lives in `library::duplicates::matcher`**: anything that groups
   copies asks `library::duplicates::find`, never a match of its own.
+- **A per-track column the user builds up joins `remove_duplicates`' merge**
+  (`queries::track::duplicate_merge`'s `History`), or removing a copy throws it away. Every other
+  column is the file's, which a rescan rewrites.
 
 ## Smart playlists
 

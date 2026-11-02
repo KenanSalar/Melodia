@@ -38,19 +38,55 @@ component ToolbarChip inherits FilledChip {
     }
 }
 
-// The duplicate finder: its picks toolbar over the groups, or a state saying why there are none.
-// The list is the card's scroller, the kind being one of `body-scrolls`, and keeps its bar inside
-// its well, as the other list dialogs' lists do.
+component SummaryLine inherits Text {
+    color: Theme.subtext0;
+    font-size: Theme.font-size-md;
+    wrap: word-wrap;
+}
+
+// The Confirm step: what Remove does to the picked copies, said before it does it. Behind an `if`
+// its wrapped lines report one line each, so the well's floor holds them.
+component ConfirmSummary inherits Rectangle {
+    min-height: 180px;
+    vertical-stretch: 1;
+    background: Theme.base;
+    border-radius: Theme.radius-lg;
+
+    VerticalLayout {
+        alignment: start;
+        padding: Theme.pad-lg;
+        spacing: Theme.pad-sm;
+
+        SummaryLine {
+            text: @tr("{n} copy will leave the library." | "{n} copies will leave the library." % DuplicatesUi.picked-count);
+            color: Theme.text;
+            font-weight: 600;
+        }
+        SummaryLine {
+            text: @tr("Its file stays where it is, and later scans leave it out." | "Their files stay where they are, and later scans leave them out." % DuplicatesUi.picked-count);
+        }
+        SummaryLine {
+            text: @tr("Its plays, rating, heart and playlist places move to the copy you keep." | "Their plays, ratings, hearts and playlist places move to the copies you keep." % DuplicatesUi.picked-count);
+        }
+    }
+}
+
+// The duplicate finder: its picks toolbar over the groups, or a state saying why there are none,
+// and on Confirm the summary in their place. The list is the card's scroller, the kind being one
+// of `body-scrolls`, and keeps its bar inside its well, as the other list dialogs' lists do.
 export component DuplicatesBody inherits VerticalLayout {
     spacing: Theme.pad-md;
 
+    property <bool> reviewing: !DuplicatesUi.confirming;
     property <bool> settled: !DuplicatesUi.busy && !DuplicatesUi.failed;
     property <bool> listing: root.settled && DuplicatesUi.group-count > 0;
     property <length> bar-inset: Theme.pad-xs;
     // The cards stop short of the bar rather than running under a copy's carried facts.
     property <length> bar-gutter: Theme.scrollbar-slot + 2 * root.bar-inset;
 
-    if root.settled && (DuplicatesUi.group-count > 0 || DuplicatesUi.dismissed-count > 0): HorizontalLayout {
+    if DuplicatesUi.confirming: ConfirmSummary { }
+
+    if root.reviewing && root.settled && (DuplicatesUi.group-count > 0 || DuplicatesUi.dismissed-count > 0): HorizontalLayout {
         spacing: Theme.pad-sm;
 
         if root.listing: Text {
@@ -80,7 +116,7 @@ export component DuplicatesBody inherits VerticalLayout {
         }
     }
 
-    if !root.listing: GridEmptyState {
+    if root.reviewing && !root.listing: GridEmptyState {
         min-height: 200px;
         preferred-height: 240px;
         vertical-stretch: 1;
@@ -98,7 +134,7 @@ export component DuplicatesBody inherits VerticalLayout {
 
     // No `clip`: a rounded one is a texture layer, and the cards' insets keep every row clear of
     // the corners.
-    if root.listing: Rectangle {
+    if root.reviewing && root.listing: Rectangle {
         min-height: 160px;
         preferred-height: 520px;
         vertical-stretch: 1;

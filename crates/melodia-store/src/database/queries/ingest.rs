@@ -8,18 +8,29 @@ use sqlx::AssertSqlSafe;
 
 use crate::database::queries;
 use crate::database::queries::artist::UNKNOWN_ARTIST_ID;
-use crate::database::queries::scan::NameCache;
+use crate::database::queries::scan::{MoveCandidates, NameCache};
 use crate::database::{DbPool, MAX_BINDS_PER_STATEMENT, values_placeholders};
 use crate::media::ingest::scan_pool::ScanPool;
 use melodia_core::entities::scan::{ExtractedMetadata, ScannedFile};
 use melodia_core::error::AppError;
 
-/// How to resolve the `folder_id` for each track during ingest.
-pub(crate) enum FolderResolution {
-    /// All tracks belong to the same folder (library scan).
-    Fixed(i64),
-    /// Resolve folder from each file's parent directory, with caching (file import).
-    FromParentDir,
+/// Who is ingesting, which decides where each file is filed and what a kept-out file means to it.
+pub(crate) enum IngestSource {
+    /// A library folder's scan, every file filed under it. A kept-out file stays out, and a
+    /// current row missing artwork takes the file's.
+    FolderScan(i64),
+    /// Files the user named, each filed under its parent directory's folder and taken as named.
+    Import,
+}
+
+impl IngestSource {
+    fn keeps_out_excluded(&self) -> bool {
+        matches!(self, Self::FolderScan(_))
+    }
+
+    fn backfills_artwork(&self) -> bool {
+        matches!(self, Self::FolderScan(_))
+    }
 }
 
 /// Result of ingesting scanned files into the database.
@@ -90,9 +101,8 @@ pub async fn commit_scan_chunk(
     let result = ingest_scanned_files(
         &mut tx,
         scanned_files,
-        &FolderResolution::Fixed(folder_id),
+        &IngestSource::FolderScan(folder_id),
         scan_timestamp,
-        true,
         pool,
     )
     .await?;
@@ -105,6 +115,7 @@ pub async fn commit_scan_chunk(
 
 /// Files dropped onto a playlist or the queue, each filed under the library folder its parent
 /// directory belongs to, in one transaction with the album covers and stats brought up to date.
+/// A kept-out file among them comes back, the user having named it.
 pub async fn commit_import(
     db: &DbPool,
     scanned_files: &[ScannedFile],
@@ -112,16 +123,13 @@ pub async fn commit_import(
     pool: &ScanPool,
 ) -> Result<IngestResult, AppError> {
     let mut tx = db.write().begin().await?;
+    let paths: Vec<Cow<'_, str>> = scanned_files.iter().map(|f| f.path.to_string_lossy()).collect();
+    let paths: Vec<&str> = paths.iter().map(AsRef::as_ref).collect();
+    queries::excluded_files::lift_on(&mut tx, &paths).await?;
     queries::stats::disable_stats_triggers(&mut tx).await?;
-    let result = ingest_scanned_files(
-        &mut tx,
-        scanned_files,
-        &FolderResolution::FromParentDir,
-        scan_timestamp,
-        false,
-        pool,
-    )
-    .await?;
+    let result =
+        ingest_scanned_files(&mut tx, scanned_files, &IngestSource::Import, scan_timestamp, pool)
+            .await?;
     queries::scan::update_album_artwork_from_tracks(&mut tx).await?;
     queries::stats::recalculate_all_stats(&mut tx).await?;
     queries::stats::enable_stats_triggers(&mut tx).await?;
@@ -165,19 +173,19 @@ impl ResolveCaches {
 /// Ingests scanned files within `tx`.
 ///
 /// A new path whose hash matches a row whose file is gone re-points that row rather than
-/// inserting, and an existing path whose size and mtime haven't moved is skipped. With
-/// `update_artwork_on_existing`, a skipped row missing artwork takes the file's, which the library
-/// scan wants and an import doesn't.
+/// inserting, and an existing path whose size and mtime haven't moved is skipped. A folder scan
+/// passes a kept-out file by, and re-points the exclusion of one that moved, but only once no row
+/// claims the bytes: a moved keeper beside its kept-out twin must get its own row back.
 pub(crate) async fn ingest_scanned_files(
     tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
     scanned_files: &[ScannedFile],
-    folder_resolution: &FolderResolution,
+    source: &IngestSource,
     scan_timestamp: &str,
-    update_artwork_on_existing: bool,
     pool: &ScanPool,
 ) -> Result<IngestResult, AppError> {
     let mut caches = ResolveCaches::with_capacity_for(scanned_files.len());
     let existing_tracks = load_existing(tx, scanned_files).await?;
+    let kept_out = kept_out(tx, source, scanned_files).await?;
     let mut moved_from = resolve_move_candidates(tx, scanned_files, &existing_tracks, pool).await?;
     let mut inserts = InsertBuffer::new(scanned_files.len(), scan_timestamp);
     let mut moved_count: u32 = 0;
@@ -191,14 +199,16 @@ pub(crate) async fn ingest_scanned_files(
 
         if let Some(existing) = existing_tracks.get(file_path_str) {
             if existing.is_current(meta) {
-                if update_artwork_on_existing && let Some(ref art_path) = meta.artwork_path {
+                if source.backfills_artwork()
+                    && let Some(ref art_path) = meta.artwork_path
+                {
                     artwork_backfill
                         .entry(art_path.clone())
                         .or_default()
                         .push(file_path_str.to_owned());
                 }
             } else if let Some(ids) =
-                resolve_ids(tx, meta, folder_resolution, file, file_path_str, &mut caches).await?
+                resolve_ids(tx, meta, source, file, file_path_str, &mut caches).await?
             {
                 queries::scan::update_track_metadata(
                     tx,
@@ -213,12 +223,17 @@ pub(crate) async fn ingest_scanned_files(
             continue;
         }
 
+        if kept_out.contains(file_path_str) {
+            continue;
+        }
+
         // Consumed once re-pointed, so a second same-hash file inserts rather than stealing the
         // row; a failed folder resolution leaves it for a later one.
-        if let Some((existing_id, old_path)) = moved_from.get(meta.file_hash.as_str()).cloned() {
+        if let Some((existing_id, old_path)) =
+            moved_from.tracks.get(meta.file_hash.as_str()).cloned()
+        {
             let Some(folder_id) =
-                resolve_folder_id(tx, folder_resolution, file, file_path_str, &mut caches.folder)
-                    .await?
+                resolve_folder_id(tx, source, file, file_path_str, &mut caches.folder).await?
             else {
                 continue;
             };
@@ -233,14 +248,23 @@ pub(crate) async fn ingest_scanned_files(
                 meta.date_modified.as_deref(),
             )
             .await?;
-            moved_from.remove(meta.file_hash.as_str());
+            moved_from.tracks.remove(meta.file_hash.as_str());
             log::info!("Detected moved file: {old_path} -> {file_path_str}");
             moved_count += 1;
             continue;
         }
 
-        let Some(ids) =
-            resolve_ids(tx, meta, folder_resolution, file, file_path_str, &mut caches).await?
+        if source.keeps_out_excluded()
+            && let Some((exclusion_id, old_path)) = moved_from.take_exclusion(&meta.file_hash)
+            && let Some(folder_id) =
+                resolve_folder_id(tx, source, file, file_path_str, &mut caches.folder).await?
+        {
+            queries::excluded_files::repoint_on(tx, exclusion_id, file_path_str, folder_id).await?;
+            log::info!("Kept-out file moved: {old_path} -> {file_path_str}");
+            continue;
+        }
+
+        let Some(ids) = resolve_ids(tx, meta, source, file, file_path_str, &mut caches).await?
         else {
             continue;
         };
@@ -294,8 +318,22 @@ async fn load_existing(
     Ok(existing_tracks)
 }
 
-/// The existing rows a new path may have moved from, by hash: those whose own path is gone from
-/// disk, a row whose path is still there being a duplicate the new file inserts beside.
+/// The scanned paths a folder scan keeps out, asked inside the transaction that would insert them.
+async fn kept_out(
+    tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
+    source: &IngestSource,
+    scanned_files: &[ScannedFile],
+) -> Result<HashSet<String>, AppError> {
+    if !source.keeps_out_excluded() {
+        return Ok(HashSet::new());
+    }
+    let paths: Vec<Cow<'_, str>> = scanned_files.iter().map(|f| f.path.to_string_lossy()).collect();
+    let paths: Vec<&str> = paths.iter().map(AsRef::as_ref).collect();
+    queries::excluded_files::among_on(tx, &paths).await
+}
+
+/// The rows and kept-out files a new path may have moved from, by hash: those whose own path is
+/// gone from disk, one whose path is still there being a duplicate the new file sits beside.
 ///
 /// The stat runs with the writer transaction open: moving it ahead would change how a concurrent
 /// delete races it.
@@ -304,17 +342,16 @@ async fn resolve_move_candidates(
     scanned_files: &[ScannedFile],
     existing_tracks: &HashMap<String, ExistingTrackInfo>,
     pool: &ScanPool,
-) -> Result<HashMap<String, (i64, String)>, AppError> {
+) -> Result<MoveCandidates, AppError> {
     let new_path_hashes: Vec<&str> = scanned_files
         .iter()
         .filter(|f| !existing_tracks.contains_key(f.path.to_string_lossy().as_ref()))
         .map(|f| f.metadata.file_hash.as_str())
         .collect();
-    let mut by_hash = queries::track::lowest_id_by_hash_on(tx, &new_path_hashes).await?;
-    let old_paths: Vec<String> = by_hash.values().map(|(_, p)| p.clone()).collect();
-    let still_present = batch_still_on_disk(old_paths, pool).await;
-    by_hash.retain(|_, (_, old_path)| !still_present.contains(old_path));
-    Ok(by_hash)
+    let mut candidates = MoveCandidates::read_on(tx, &new_path_hashes).await?;
+    let still_present = batch_still_on_disk(candidates.old_paths(), pool).await;
+    candidates.retain_gone(&still_present);
+    Ok(candidates)
 }
 
 fn file_name_of(file: &ScannedFile) -> String {
@@ -463,14 +500,14 @@ async fn flush_artwork_backfill(
 /// The file's `folder_id`, or `None` for a file with no parent directory, which is skipped.
 async fn resolve_folder_id(
     tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
-    folder_resolution: &FolderResolution,
+    source: &IngestSource,
     file: &ScannedFile,
     file_path_str: &str,
     folder_cache: &mut HashMap<String, i64>,
 ) -> Result<Option<i64>, AppError> {
-    match folder_resolution {
-        FolderResolution::Fixed(id) => Ok(Some(*id)),
-        FolderResolution::FromParentDir => {
+    match source {
+        IngestSource::FolderScan(id) => Ok(Some(*id)),
+        IngestSource::Import => {
             let parent_dir =
                 file.path.parent().map(|p| p.to_string_lossy().into_owned()).unwrap_or_default();
             if parent_dir.is_empty() {
@@ -492,13 +529,13 @@ async fn resolve_folder_id(
 async fn resolve_ids(
     tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
     meta: &ExtractedMetadata,
-    folder_resolution: &FolderResolution,
+    source: &IngestSource,
     file: &ScannedFile,
     file_path_str: &str,
     caches: &mut ResolveCaches,
 ) -> Result<Option<queries::ResolvedIds>, AppError> {
     let Some(folder_id) =
-        resolve_folder_id(tx, folder_resolution, file, file_path_str, &mut caches.folder).await?
+        resolve_folder_id(tx, source, file, file_path_str, &mut caches.folder).await?
     else {
         return Ok(None);
     };

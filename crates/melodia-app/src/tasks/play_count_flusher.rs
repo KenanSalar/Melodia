@@ -4,10 +4,11 @@
 use std::collections::HashMap;
 use std::time::Duration;
 
-use tokio::sync::mpsc::UnboundedReceiver;
+use tokio::sync::mpsc::{self, UnboundedReceiver, UnboundedSender};
+use tokio::sync::oneshot;
 use tokio_util::sync::CancellationToken;
 
-use crate::state::Signal;
+use crate::state::{AppState, Signal};
 use crate::tasks::TaskSpawner;
 use melodia_core::error::describe;
 use melodia_core::utils::now_rfc3339;
@@ -18,22 +19,50 @@ use melodia_store::database::{DbPool, queries};
 /// skips.
 const FLUSH_INTERVAL: Duration = Duration::from_secs(2);
 
+/// Asks the flusher to write what it holds now, for a write that has to see every count first, as
+/// the duplicate merge does before it deletes the ids those counts name.
+#[derive(Clone)]
+pub struct PlayCountFlush(UnboundedSender<oneshot::Sender<()>>);
+
+/// The flusher's end of [`PlayCountFlush`].
+pub struct FlushRequests(UnboundedReceiver<oneshot::Sender<()>>);
+
+impl PlayCountFlush {
+    pub fn channel() -> (Self, FlushRequests) {
+        let (tx, rx) = mpsc::unbounded_channel();
+        (Self(tx), FlushRequests(rx))
+    }
+
+    /// Returns once the held counts have been written, or at once where no flusher runs.
+    pub async fn flush(&self) {
+        let (reply, written) = oneshot::channel();
+        if self.0.send(reply).is_err() {
+            return;
+        }
+        // A reply dropped unanswered is a flusher that stopped, which flushed on its way out.
+        let _ = written.await;
+    }
+}
+
+/// What the flusher listens to: the events it counts, and the asks to write them now.
+struct Inbox {
+    events: UnboundedReceiver<PlayCountEvent>,
+    flushes: FlushRequests,
+}
+
 /// Idempotent. A play-count flush bumps `stats_changed` rather than `library_changed`, a ranking
 /// moving rather than the library's structure; a skip-count flush bumps nothing, no surface
 /// ranking by skips.
-pub fn spawn(spawner: &TaskSpawner, db: DbPool, stats_changed: Signal) {
-    let Some(rx) = play_counts::install() else {
+pub fn spawn(spawner: &TaskSpawner, state: &AppState, flushes: FlushRequests) {
+    let Some(events) = play_counts::install() else {
         return;
     };
-    spawner.spawn_cancellable(move |shutdown| run(rx, shutdown, db, stats_changed));
+    let inbox = Inbox { events, flushes };
+    let (db, stats_changed) = (state.db.clone(), state.stats_changed.clone());
+    spawner.spawn_cancellable(move |shutdown| run(inbox, shutdown, db, stats_changed));
 }
 
-async fn run(
-    mut rx: UnboundedReceiver<PlayCountEvent>,
-    shutdown: CancellationToken,
-    db: DbPool,
-    stats_changed: Signal,
-) {
+async fn run(mut inbox: Inbox, shutdown: CancellationToken, db: DbPool, stats_changed: Signal) {
     let mut interval = tokio::time::interval(FLUSH_INTERVAL);
     interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
     let mut play_counts: HashMap<i64, u32> = HashMap::new();
@@ -43,14 +72,22 @@ async fn run(
         tokio::select! {
             biased;
             () = shutdown.cancelled() => {
-                while let Ok(ev) = rx.try_recv() {
+                while let Ok(ev) = inbox.events.try_recv() {
                     record(&mut play_counts, &mut skip_counts, ev);
                 }
                 flush(&db, &mut play_counts, &mut skip_counts, &stats_changed).await;
                 log::info!("Play-count flusher stopped");
                 return;
             }
-            ev = rx.recv() => if let Some(ev) = ev { record(&mut play_counts, &mut skip_counts, ev) } else {
+            Some(reply) = inbox.flushes.0.recv() => {
+                while let Ok(ev) = inbox.events.try_recv() {
+                    record(&mut play_counts, &mut skip_counts, ev);
+                }
+                flush(&db, &mut play_counts, &mut skip_counts, &stats_changed).await;
+                // An asker that stopped waiting has nothing to be told.
+                let _ = reply.send(());
+            }
+            ev = inbox.events.recv() => if let Some(ev) = ev { record(&mut play_counts, &mut skip_counts, ev) } else {
                 flush(&db, &mut play_counts, &mut skip_counts, &stats_changed).await;
                 return;
             },

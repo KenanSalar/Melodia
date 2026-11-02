@@ -158,6 +158,10 @@ msgid "{n} track"
 msgid_plural "{n} tracks"
 msgstr[0] "{n} lagu"
 
+#: ui/components/dialog/dialog.slint
+msgid "Remove waits until the library scan finishes."
+msgstr "Hapus menunggu hingga pemindaian pustaka selesai."
+
 #. Translators: {} is the picked copies' total size, as 1.2 GB.
 #: ui/components/dialog/dialog.slint
 msgid "{n} copy picked · {}"
@@ -186,6 +190,11 @@ msgid "Add a description…"
 msgstr "Tambahkan deskripsi…"
 
 #: ui/components/dialog/dialog.slint
+#: ui/components/onboarding/onboarding-overlay.slint ui/views/browse-view.slint
+msgid "Back"
+msgstr "Kembali"
+
+#: ui/components/dialog/dialog.slint
 msgid "Finish"
 msgstr "Selesai"
 
@@ -196,6 +205,16 @@ msgstr "Buka Last.fm"
 #: ui/components/dialog/dialog.slint ui/views/settings/scrobbling-section.slint
 msgid "Connect"
 msgstr "Hubungkan"
+
+#: ui/components/dialog/dialog.slint
+msgid "Continue"
+msgstr "Lanjutkan"
+
+#: ui/components/dialog/dialog.slint ui/components/dialog/tag-editor-body.slint
+#: ui/components/settings/folder-row.slint ui/globals/dialog.slint
+#: ui/views/settings/library-section.slint
+msgid "Remove"
+msgstr "Hapus"
 
 #: ui/components/dialog/duplicate-row.slint
 msgid "Identical files"
@@ -230,6 +249,11 @@ msgid "{n} copy"
 msgid_plural "{n} copies"
 msgstr[0] "{n} salinan"
 
+#. Translators: on the copy of a duplicate song that is playing now.
+#: ui/components/dialog/duplicate-row.slint
+msgid "Playing"
+msgstr "Sedang diputar"
+
 #. Translators: {} is the day the copy joined the library, as 2026-11-02.
 #: ui/components/dialog/duplicate-row.slint
 msgid "Added {}"
@@ -239,6 +263,21 @@ msgstr "Ditambahkan {}"
 #: ui/components/now-playing/overflow-menu.slint
 msgid "More"
 msgstr "Lainnya"
+
+#: ui/components/dialog/duplicates-body.slint
+msgid "{n} copy will leave the library."
+msgid_plural "{n} copies will leave the library."
+msgstr[0] "{n} salinan akan keluar dari pustaka."
+
+#: ui/components/dialog/duplicates-body.slint
+msgid "Its file stays where it is, and later scans leave it out."
+msgid_plural "Their files stay where they are, and later scans leave them out."
+msgstr[0] "Berkasnya tetap di tempatnya, dan pemindaian berikutnya akan melewatinya."
+
+#: ui/components/dialog/duplicates-body.slint
+msgid "Its plays, rating, heart and playlist places move to the copy you keep."
+msgid_plural "Their plays, ratings, hearts and playlist places move to the copies you keep."
+msgstr[0] "Jumlah putar, rating, tanda hati, dan posisinya di playlist pindah ke salinan yang disimpan."
 
 #. Translators: {n} counts songs found more than once, each with its copies.
 #: ui/components/dialog/duplicates-body.slint
@@ -687,12 +726,6 @@ msgstr "Remixer"
 #: ui/components/dialog/tag-editor-body.slint
 msgid "Replace…"
 msgstr "Ganti…"
-
-#: ui/components/dialog/tag-editor-body.slint
-#: ui/components/settings/folder-row.slint ui/globals/dialog.slint
-#: ui/views/settings/library-section.slint
-msgid "Remove"
-msgstr "Hapus"
 
 #: ui/components/dialog/tag-editor-body.slint ui/settings.slint
 msgid "Details"
@@ -1369,10 +1402,6 @@ msgstr "Selamat datang di Melodia"
 msgid "Skip"
 msgstr "Lewati"
 
-#: ui/components/onboarding/onboarding-overlay.slint ui/views/browse-view.slint
-msgid "Back"
-msgstr "Kembali"
-
 #: ui/components/onboarding/onboarding-overlay.slint ui/globals/player.slint
 msgid "Next"
 msgstr "Berikutnya"
@@ -1805,6 +1834,24 @@ msgstr "Pilih playlist yang akan diekspor."
 #: ui/views/radio/tab-pills.slint
 msgid "Export"
 msgstr "Ekspor"
+
+#: ui/globals/duplicates.slint
+msgid "{n} copy removed from the library"
+msgid_plural "{n} copies removed from the library"
+msgstr[0] "{n} salinan dihapus dari pustaka"
+
+#: ui/globals/duplicates.slint
+msgid "{n} copy skipped, as it was playing or had already gone."
+msgid_plural "{n} copies skipped, as they were playing or had already gone."
+msgstr[0] "{n} salinan dilewati karena sedang diputar atau sudah tidak ada."
+
+#: ui/globals/duplicates.slint
+msgid "Couldn't remove the copies"
+msgstr "Tidak dapat menghapus salinan"
+
+#: ui/globals/duplicates.slint
+msgid "Nothing left the library. See the log for details."
+msgstr "Tidak ada yang keluar dari pustaka. Lihat log untuk detailnya."
 
 #: ui/globals/hero-chips.slint ui/views/my-library-view.slint
 msgid "{n} artist"
@@ -2945,10 +2992,6 @@ msgstr "Lagu Duplikat"
 #: ui/views/settings/duplicates-section.slint
 msgid "Songs the library seems to hold more than once. Pick the copies you don't need."
 msgstr "Lagu yang tampaknya ada lebih dari sekali di pustaka. Pilih salinan yang tidak diperlukan."
-
-#: ui/views/settings/duplicates-section.slint
-msgid "Continue"
-msgstr "Lanjutkan"
 
 #. Translators: an equalizer preset, such as Rock or Jazz
 #: ui/views/settings/equalizer-section.slint

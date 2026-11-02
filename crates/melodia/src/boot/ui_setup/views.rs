@@ -197,7 +197,7 @@ pub fn install_library_settings_and_friends(
     ui::settings::library_settings::install(app, state)
         .map_err(|e| melodia_core::error::AppError::io("library_settings install", e))?;
     ui::callbacks::wire_library_settings(app, state);
-    ui::duplicates::install(app, state);
+    ui::duplicates::install(app, state, notifications);
     ui::settings::playback_settings::install_playback_settings(app, state);
     ui::settings::signal_path::install(app, state);
     ui::settings::output_settings::install(app, state);

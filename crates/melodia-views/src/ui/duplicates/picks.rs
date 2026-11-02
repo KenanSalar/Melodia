@@ -11,7 +11,7 @@ use std::path::Path;
 use std::sync::Arc;
 
 use crate::ui::util::clamp_i64_to_i32;
-use melodia_core::entities::duplicates::{DismissalSet, DuplicateGroup, MatchKind};
+use melodia_core::entities::duplicates::{DismissalSet, DuplicateGroup, GroupRemoval, MatchKind};
 
 /// What a header row states about its group.
 pub(super) struct HeaderFacts {
@@ -228,6 +228,32 @@ impl DuplicateSet {
     pub(super) fn copy_dismissed(&self, copy_id: i64) -> bool {
         self.position(copy_id)
             .is_some_and(|at| self.groups[self.copies[at].group].dismissed.is_some())
+    }
+
+    /// The picks as removals, one per keeper. A spare's history goes to the kept copy sharing its
+    /// file where there is one, else to its group's best kept copy, so an identical extra in a
+    /// Review group merges into its twin rather than into another release.
+    pub(super) fn removals(&self) -> Vec<GroupRemoval> {
+        let mut removals: Vec<GroupRemoval> = Vec::new();
+        for group in &self.groups {
+            let copies = &self.copies[group.copies.clone()];
+            let kept: Vec<&CopyEntry> = copies.iter().filter(|copy| !copy.picked).collect();
+            let Some(&best) = kept.first() else {
+                continue;
+            };
+            let group_start = removals.len();
+            for spare in copies.iter().filter(|copy| copy.picked) {
+                let twin = kept
+                    .iter()
+                    .find(|kept| kept.hash_class.is_some() && kept.hash_class == spare.hash_class);
+                let keeper = twin.map_or(best.id, |twin| twin.id);
+                match removals[group_start..].iter_mut().find(|removal| removal.keeper == keeper) {
+                    Some(removal) => removal.spares.push(spare.id),
+                    None => removals.push(GroupRemoval { keeper, spares: vec![spare.id] }),
+                }
+            }
+        }
+        removals
     }
 
     fn suggest(&mut self, group: usize) {
