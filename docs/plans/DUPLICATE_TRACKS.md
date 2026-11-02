@@ -58,7 +58,7 @@ Right-clicking a group's header offers **Not Duplicates**, for copies you keep o
 | A copy that's playing or queued. | The queue persists ids. A missing id is pruned, and if it was playing, playback jumps to the next track (`queue_prune.rs:47-92`). | Queued spares become the keeper's id in place. The playing copy is held back. |
 
 **Not in the issue, found on the way:**
-- **Trash folders get scanned.** The scan walks hidden directories (`scanner.rs:47-77`). A library folder that is a mount root holds that mount's `.Trash-$uid`, a drive-root folder on Windows holds `$RECYCLE.BIN`, and a home folder added whole holds the home trash, a plain `Trash` under `~/.local/share`. Anything a file manager trashes there comes back as a track. It doesn't depend on the duplicates feature, so Phase 0 fixes it on this branch, ahead of the rest.
+- **Trash folders get scanned.** The scan walks hidden directories (`scanner.rs:48-79`). A library folder that is a mount root holds that mount's `.Trash-$uid`, a drive-root folder on Windows holds `$RECYCLE.BIN`, and a home folder added whole holds the home trash, a plain `Trash` under `~/.local/share`. Anything a file manager trashes there comes back as a track. It doesn't depend on the duplicates feature, so Phase 0 fixes it on this branch, ahead of the rest.
 - **Ratings in tags win.** A rescan takes a non-zero rating from the file's tag over the database's (`mutations.rs:328`), which shapes the rating merge below.
 
 ## Measured on the dev library (scratch copy, 2026-11-02)
@@ -159,7 +159,7 @@ Right-clicking a group's header offers **Not Duplicates**, for copies you keep o
    - **Lifted by an explicit import.** File drop and open-with lift the exclusion on every path they're handed, because the user asked for that file. A dropped folder isn't walked (`import.rs:34-40`), so only named files lift.
    - **Cleanup.**
      - A folder's full scan forgets the exclusions under it whose file the walk didn't find.
-       - It does that only where `commit_scan` purges orphans (`melodia-store/…/queries/scan/finish.rs:31-34`): on a completed scan, past the `walked == 0` return (`library/scan/mod.rs:166-169`), sparing the walk's unreadable subtrees (`scanner.rs:165`).
+       - It does that only where `commit_scan` purges orphans (`melodia-store/…/queries/scan/finish.rs:31-34`): on a completed scan, past the `walked == 0` return (`library/scan/mod.rs:166-169`), sparing the walk's unreadable subtrees (`scanner.rs:172`).
        - Anywhere else, an unmounted drive or a share that is only partly reachable would wipe its exclusions.
      - Removing a folder cascades.
      - Absorbing nested folders re-points their exclusions along with their tracks (`absorb_folders`, `folder.rs:60-84`), or the folders' delete would cascade them away.
@@ -303,8 +303,8 @@ Status: built (2026-11-02), awaiting Kenan's hand check.
 1. `utils::trash_dir`:
    - `is_trash_dir(&Path)` takes a folder. It matches `.Trash`, `.Trash-` followed by a uid, `.Trashes`, and `$RECYCLE.BIN` compared without case, by name. It matches the home trash, `dirs::data_dir()/Trash` made canonical, by path, because a plain `Trash` is a name any album folder could carry. The walk sees one folder at a time, so the home trash has to be in this predicate.
    - `in_trash_dir(&Path)` asks it of every folder above a path.
-2. **The walk.** `collect_media_files` (`scanner.rs:47-77`) gives `WalkDir` a `filter_entry` that skips a trash folder below the root, so nothing under it is read.
-3. **The watcher.** `classify_event` (`watcher.rs:187-238`) asks a new `is_library_file` in every arm: an audio file outside every trash folder. The rename arm's existing branches then do the rest, with no new arm:
+2. **The walk.** `collect_media_files` (`scanner.rs:48-79`) gives `WalkDir` a `filter_entry` that skips a trash folder below the root, so nothing under it is read.
+3. **The watcher.** `classify_event` (`watcher.rs:188-239`) asks a new `is_library_file` in every arm: an audio file outside every trash folder. The rename arm's existing branches then do the rest, with no new arm:
    - a rename into a trash folder becomes a `Removed`;
    - a rename out of one becomes a `Created`;
    - events inside one are dropped.

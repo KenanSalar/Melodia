@@ -23,8 +23,9 @@ paths:
   file nothing can rebuild holds it in an `ArtworkHold` taken before the delete commits.
 - **`utils::audio_ext::is_audio_extension` is the one audio-extension predicate**; never re-roll a
   lowercase-and-contains at a new call site.
-- **`utils::trash_dir` is the one trash-folder predicate**: a new path into the library asks it,
-  never a trash name of its own.
+- **`utils::trash_dir` is the one trash-folder predicate**: a walk or watch that finds files by
+  itself asks it, never a trash name of its own. A file the user names is taken as named, as is
+  the root a walk starts from.
 - **Nothing inside a write transaction `stat`s a file**: a second `stat` can pair a new mtime with
   the previous scan's size, which then reads as current (`queries::scan::watch_batch`).
 

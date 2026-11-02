@@ -1,5 +1,5 @@
-//! The folders file managers trash into, which the library never indexes. Only those: music kept
-//! under any other dot-folder is still walked.
+//! The folders file managers trash into, which a library walk prunes and the watcher ignores.
+//! Only those: music kept under any other dot-folder is still walked.
 
 use std::path::Path;
 
