@@ -8,7 +8,7 @@ use crate::state::AppState;
 use crate::tasks::{self, TaskSpawner};
 use melodia_core::entities::duplicates::GroupRemoval;
 use melodia_core::error::AppError;
-use melodia_engine::player::engine::state::with_state_emit;
+use melodia_engine::player::engine::actions::emit_and_execute;
 use melodia_store::database::queries;
 
 /// What a Remove did, for its result line.
@@ -25,10 +25,10 @@ pub async fn apply(
     state: &AppState,
     mut removals: Vec<GroupRemoval>,
 ) -> Result<RemovalCounts, AppError> {
-    // A count still held for a spare would land on no row once the delete commits.
-    state.play_count_flush.flush().await;
     let referenced_before = queries::artwork::referenced_filenames(&state.db).await?;
     let held = hold_back_playing_and_requeue(state, &mut removals);
+    // After the hold-back no spare can start, so each count one earned lands before its row goes.
+    state.play_count_flush.flush().await;
 
     let removed = queries::track::remove_duplicates(&state.db, &removals).await?;
     if removed.removed > 0 {
@@ -51,10 +51,13 @@ pub async fn apply(
 ///
 /// A play the playing copy finishes counts against its own id, which the delete would take. A
 /// remapped queue never meets a missing id, so playback never jumps the way a prune makes it.
+///
+/// Under the exec lock, which an advance holds until it has sent the count for the track it left,
+/// so a spare that just stopped playing has its count in the flusher's channel before this runs.
 fn hold_back_playing_and_requeue(state: &AppState, removals: &mut [GroupRemoval]) -> usize {
-    with_state_emit(&state.player_state, &state.sinks, |s| {
+    let mut held = 0;
+    emit_and_execute(&*state.engine, &state.player_state, &state.sinks, |s| {
         let playing = s.current_track().map(|track| track.id);
-        let mut held = 0;
         let mut keeper_of = HashMap::new();
         for removal in removals.iter_mut() {
             let picked = removal.spares.len();
@@ -63,6 +66,7 @@ fn hold_back_playing_and_requeue(state: &AppState, removals: &mut [GroupRemoval]
             keeper_of.extend(removal.spares.iter().map(|&spare| (spare, removal.keeper)));
         }
         s.queue.replace_ids(&keeper_of);
-        held
-    })
+        Vec::new()
+    });
+    held
 }

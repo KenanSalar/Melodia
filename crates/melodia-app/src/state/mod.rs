@@ -295,9 +295,6 @@ fn open_output(
     Ok(output)
 }
 
-/// Seed the engine's lock-free DSP cells from persisted settings before playback starts, so the
-/// first track is already processed. Values first and each `enabled` last, the enable's generation
-/// bump publishing a fully seeded state to the audio thread.
 /// The player state the saved volume, mute, gapless and speed start from, handed to the engine too.
 fn seeded_player_state(
     engine: &PlaybackEngine,
@@ -321,6 +318,9 @@ fn seeded_player_state(
     player_state
 }
 
+/// Seed the engine's lock-free DSP cells from persisted settings before playback starts, so the
+/// first track is already processed. Values first and each `enabled` last, the enable's generation
+/// bump publishing a fully seeded state to the audio thread.
 fn hydrate_audio_dsp(engine: &PlaybackEngine, settings: &settings::SettingsData) {
     engine.set_eq_gains(&settings.equalizer.eq_band_gains);
     engine.set_eq_preamp(settings.equalizer.eq_preamp);

@@ -124,12 +124,12 @@ Right-clicking a group's header offers **Not Duplicates**, for copies you keep o
    - Smart playlists are derived at read time, so they follow on their own.
    - The tail matches `apply_watch_batch`'s (`watch_batch.rs:150-153`): `roll_up_covers` and `prune_orphans`.
    - A spare's extracted cover is released at once, as `remove_folder` releases a folder's: `referenced_filenames` is read before the delete and handed to `retire_released` after it.
-   - Pending play counts flush first. The flusher holds counts by id for 2 s (`play_count_flusher.rs:19,39-40`), and a count for a deleted id hits no row (`write.rs:45-76`).
+   - Pending play counts flush once the hold-back is done, no spare able to start after it. The flusher holds counts by id for 2 s (`play_count_flusher.rs:19,39-40`), and a count for a deleted id hits no row (`write.rs:45-76`).
      - The core bridge is send-only, and `PlayCountEvent` is `Copy` (`play_counts.rs:8-12`).
      - So the request rides the app's own channel instead: the apply and the flusher both live in `melodia-app`, the sender sits in `AppState`, and a oneshot answers once the write commits.
 6. **The queue.**
    - Before the delete commits, every queued spare becomes its keeper's id in place (`QueueState::replace_ids`). `queue_prune` then never sees a missing id, and playback never jumps.
-   - The remap and the playing hold-back share one `with_state_emit`, so nothing can start a spare between them. With the playing copy held, no `PlayerAction` results, so `emit_and_execute` has nothing to execute (`queue_remove` is the precedent).
+   - The remap and the playing hold-back share one `emit_and_execute`, so nothing can start a spare between them. It runs no action, the playing copy being held; it is there for the exec lock, which an advance holds until it has sent the count for the track it left, so every count a spare earned is in the flusher's channel before the flush.
    - The queue already holds an id more than once (`window_ids` dedups for that reason, `queue/mod.rs:202-217`), so a keeper that is already queued is fine.
    - **Accepted:** a spare already staged as the next track loses its gapless join.
      - The deck holds the spare's own file (`handlers.rs:481`).
@@ -308,7 +308,7 @@ Right-clicking a group's header offers **Not Duplicates**, for copies you keep o
 | `crates/melodia-app/src/library/favorites.rs`, `library/ratings.rs` | `merged_onto`: a keeper's merged heart reaches Now Playing and `sync_love`, a merged rating Now Playing and the write-back (P3). |
 | `crates/melodia-store/src/database/queries/track/duplicate_merge.rs` (new, P3) | `remove_duplicates`: merge, playlist places, exclusions, delete, renumber, tail. One transaction. |
 | `crates/melodia-engine/src/player/engine/queue/removal.rs` | `replace_ids`: spare to keeper in place, then an `order_changed` bump (P3). |
-| `crates/melodia-app/src/library/duplicates/apply.rs` (new, P3) | Flush, playing hold-back and queue remap, store call, bumps, covers, the heart and rating carried onto the keepers. |
+| `crates/melodia-app/src/library/duplicates/apply.rs` (new, P3) | Playing hold-back and queue remap under the exec lock, flush, store call, bumps, covers, the heart and rating carried onto the keepers. |
 | `crates/melodia-app/src/library/scan/mod.rs`, `tasks/file_event_processor/reconcile.rs` | The checks before parsing and the scan-time cleanup; the watcher's `gone` (P3). The import's lift is `commit_import`'s, inside its transaction. |
 | `crates/melodia-app/src/tasks/play_count_flusher.rs`, `crates/melodia-app/src/state/mod.rs` | `PlayCountFlush`, a flush request on the app's own channel, its sender in `AppState` and its receiver in `StartupChannels`, answered once the write commits (P3). |
 
@@ -397,11 +397,11 @@ Hand test, on the dev library:
 
 ### Phase 3: Remove from library
 
-Status: built and hand-checked (2026-11-02). The gate passed: fmt, clippy and the suite, the tests the change broke fixed in place, and all 15 catalogs complete.
+Status: built and hand-checked (2026-11-02). The gate passed: fmt, clippy and the suite, the tests the change broke fixed in place, and all 15 catalogs complete. Where the build moved off the decisions above, they say so: a removal per keeper, no scan check inside `apply`, `IngestSource`, the covers released at once.
 
 The hand test ran in two parts:
 - **Unattended, on the dev data folder.** It was restored afterwards, and ran with rating write-back off so no file under `~/Music` could be retagged. The fixtures went in `_p3test/` and `_p3moved/` under the test library, removed afterwards.
-- **By Kenan.** He checked the two cases the unattended run couldn't stage: Remove disabled with its footer note during a scan (a no-change scan of the dev library ends in under a second, too soon to reach Confirm), and the Confirm step, Playing chip and toast in a light theme. Where the build moved off the decisions above, they say so: a removal per keeper, the remap's `with_state_emit`, no scan check inside `apply`, `IngestSource`, the covers released at once.
+- **By Kenan.** He checked the two cases the unattended run couldn't stage: Remove disabled with its footer note during a scan (a no-change scan of the dev library ends in under a second, too soon to reach Confirm), and the Confirm step, Playing chip and toast in a light theme.
 
 1. The migration and `queries::excluded_files`.
 2. The checks before parsing in the scan and the watcher, and the check that decides inside `ingest`'s and `apply_watch_batch`'s transactions.

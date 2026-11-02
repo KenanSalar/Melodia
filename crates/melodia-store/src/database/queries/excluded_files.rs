@@ -51,9 +51,6 @@ pub(crate) async fn among_on(
     conn: &mut SqliteConnection,
     paths: &[&str],
 ) -> Result<HashSet<String>, AppError> {
-    if paths.is_empty() {
-        return Ok(HashSet::new());
-    }
     let rows: Vec<(String,)> = chunked_in_query_on(conn, paths, select_among).await?;
     Ok(rows.into_iter().map(|(path,)| path).collect())
 }
@@ -83,10 +80,6 @@ pub(crate) async fn by_hash_on(
     conn: &mut SqliteConnection,
     hashes: &[&str],
 ) -> Result<HashMap<String, Vec<(i64, String)>>, AppError> {
-    let mut by_hash: HashMap<String, Vec<(i64, String)>> = HashMap::new();
-    if hashes.is_empty() {
-        return Ok(by_hash);
-    }
     let unique: Vec<&str> = hashes.iter().copied().collect::<HashSet<_>>().into_iter().collect();
     let rows: Vec<(String, i64, String)> = chunked_in_query_on(conn, &unique, |placeholders| {
         format!(
@@ -95,6 +88,7 @@ pub(crate) async fn by_hash_on(
         )
     })
     .await?;
+    let mut by_hash: HashMap<String, Vec<(i64, String)>> = HashMap::new();
     for (hash, id, path) in rows {
         by_hash.entry(hash).or_default().push((id, path));
     }
