@@ -30,7 +30,7 @@ pub fn compute_file_hash(path: &Path) -> Result<String, AppError> {
 /// Formats `meta`'s mtime as the RFC 3339 string `date_modified` stores, or `None` where it is
 /// unavailable or out of range.
 ///
-/// The one spelling of that format, since `scanner::track_is_current` compares against the stored
+/// The one spelling of that format, since `scanner::file_is_current` compares against the stored
 /// string byte for byte. Takes the `Metadata` so a caller that already `stat`ed doesn't again.
 pub fn date_modified_from_metadata(meta: &std::fs::Metadata) -> Option<String> {
     meta.modified()

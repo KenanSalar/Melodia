@@ -256,10 +256,10 @@ msgstr[0] "{n} копия"
 msgstr[1] "{n} копии"
 msgstr[2] "{n} копий"
 
-#. Translators: on the copy of a duplicate song that is playing now.
+#. Translators: on the copy that is the current track, playing or paused.
 #: ui/components/dialog/duplicate-row.slint
-msgid "Playing"
-msgstr "Играет"
+msgid "Now Playing"
+msgstr "Сейчас играет"
 
 #. Translators: {} is the day the copy joined the library, as 2026-11-02.
 #: ui/components/dialog/duplicate-row.slint

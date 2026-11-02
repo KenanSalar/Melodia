@@ -4,19 +4,26 @@
 //! exclusion ahead of its insert, and every other ingest path asks here inside its own write
 //! transaction, so a walk read before an exclusion committed still can't bring its file back.
 
+use std::borrow::Cow;
 use std::collections::{HashMap, HashSet};
+use std::path::Path;
 
 use sqlx::sqlite::SqliteConnection;
 use sqlx::{AssertSqlSafe, QueryBuilder, Sqlite, Transaction};
 
-use crate::database::{DbPool, MAX_BINDS_PER_STATEMENT, chunked_in_query, chunked_in_query_on};
+use crate::database::{
+    DbPool, MAX_BINDS_PER_STATEMENT, chunked_in_query, chunked_in_query_on, values_placeholders,
+};
 use melodia_core::entities::duplicates::KeptOutFile;
+use melodia_core::entities::scan::{ExtractedMetadata, FileStamp};
 use melodia_core::error::AppError;
 
 /// A spare's file as the merge keeps it out.
 pub(crate) struct NewExclusion<'a> {
     pub(crate) path: &'a str,
     pub(crate) file_hash: Option<&'a str>,
+    pub(crate) file_size: Option<i64>,
+    pub(crate) date_modified: Option<&'a str>,
     pub(crate) folder_id: i64,
 }
 
@@ -24,19 +31,52 @@ pub(crate) async fn exclude_on(
     tx: &mut Transaction<'_, Sqlite>,
     files: &[NewExclusion<'_>],
 ) -> Result<(), AppError> {
-    const COLS_PER_ROW: usize = 4;
+    const COLS_PER_ROW: usize = 6;
     let excluded_at = melodia_core::utils::now_rfc3339();
     for chunk in files.chunks(MAX_BINDS_PER_STATEMENT / COLS_PER_ROW) {
         let mut builder = QueryBuilder::<Sqlite>::new(
-            "INSERT INTO excluded_files (path, file_hash, folder_id, excluded_at) ",
+            "INSERT INTO excluded_files \
+             (path, file_hash, file_size, date_modified, folder_id, excluded_at) ",
         );
         builder.push_values(chunk, |mut row, file| {
             row.push_bind(file.path)
                 .push_bind(file.file_hash)
+                .push_bind(file.file_size)
+                .push_bind(file.date_modified)
                 .push_bind(file.folder_id)
                 .push_bind(excluded_at.as_str());
         });
         builder.build().persistent(false).execute(&mut **tx).await?;
+    }
+    Ok(())
+}
+
+/// Gives the kept-out files at `files` the hash and stamp they were just read with, so each is
+/// followed by its bytes as they now are.
+pub(crate) async fn restamp_on(
+    tx: &mut Transaction<'_, Sqlite>,
+    files: &[(&Path, &ExtractedMetadata)],
+) -> Result<(), AppError> {
+    const COLS_PER_ROW: usize = 4;
+    for chunk in files.chunks(MAX_BINDS_PER_STATEMENT / COLS_PER_ROW) {
+        let rows = values_placeholders(chunk.len(), COLS_PER_ROW);
+        let sql = format!(
+            "WITH v(path, file_hash, file_size, date_modified) AS (VALUES {rows}) \
+             UPDATE excluded_files SET file_hash = v.file_hash, file_size = v.file_size, \
+                    date_modified = v.date_modified \
+             FROM v WHERE excluded_files.path = v.path"
+        );
+        let paths: Vec<Cow<'_, str>> =
+            chunk.iter().map(|(path, _)| path.to_string_lossy()).collect();
+        let mut query = sqlx::query(AssertSqlSafe(sql)).persistent(false);
+        for (path, (_, meta)) in paths.iter().zip(chunk) {
+            query = query
+                .bind(path.as_ref())
+                .bind(meta.file_hash.as_str())
+                .bind(meta.file_size)
+                .bind(meta.date_modified.as_deref());
+        }
+        query.execute(&mut **tx).await?;
     }
     Ok(())
 }
@@ -91,19 +131,19 @@ fn select_among(placeholders: &str) -> String {
     format!("SELECT path FROM excluded_files WHERE path IN ({placeholders})")
 }
 
-/// Every kept-out path under `root`, by prefix rather than by folder row: a file dropped in from
-/// a library folder sits under the disabled row its import made for the file's own directory.
-/// The separator is bound as `find_folder_for_path` binds it, for the same reason.
-pub async fn under(db: &DbPool, root: &str) -> Result<HashSet<String>, AppError> {
-    let paths = sqlx::query_scalar::<_, String>(
-        "SELECT path FROM excluded_files \
-         WHERE SUBSTR(path, 1, LENGTH(?1) + 1) IN (?1 || '/', ?1 || ?2)",
+/// The kept-out files filed under `folder_id`, each with its stamp.
+pub async fn in_folder(db: &DbPool, folder_id: i64) -> Result<Vec<(String, FileStamp)>, AppError> {
+    let rows = sqlx::query_as::<_, (String, Option<i64>, Option<String>)>(
+        "SELECT path, file_size, date_modified FROM excluded_files WHERE folder_id = ?",
     )
-    .bind(root)
-    .bind(std::path::MAIN_SEPARATOR_STR)
+    .bind(folder_id)
     .fetch_all(db.read())
     .await?;
-    Ok(paths.into_iter().collect())
+    let files = rows
+        .into_iter()
+        .map(|(path, file_size, date_modified)| (path, FileStamp { file_size, date_modified }))
+        .collect();
+    Ok(files)
 }
 
 /// `file_hash → [(id, path)]` of the kept-out files carrying each of `hashes`, the ones a new path

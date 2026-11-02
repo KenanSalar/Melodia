@@ -6,7 +6,7 @@ use tempfile::TempDir;
 use super::*;
 use melodia_artwork::media::image::artwork::CoverCache;
 use melodia_core::entities::artist::ArtistCredit;
-use melodia_core::entities::scan::ExistingTrackSummary;
+use melodia_core::entities::scan::FileStamp;
 use melodia_core::error::AppError;
 use melodia_core::utils::audio_ext::AUDIO_EXTENSIONS;
 
@@ -282,14 +282,14 @@ fn a_cancelled_parse_reads_nothing() -> Result<(), AppError> {
     Ok(())
 }
 
-// ── track_is_current and the walk index (incremental-scan filter) ──
+// ── file_is_current and the walk index (incremental-scan filter) ──
 
 /// The row a scan would hold for `path` as it stands on disk.
-fn row_for(path: &Path) -> Result<ExistingTrackSummary, AppError> {
+fn row_for(path: &Path) -> Result<FileStamp, AppError> {
     let meta = std::fs::metadata(path)?;
     let size = i64::try_from(meta.len()).unwrap_or(i64::MAX);
     let mtime = crate::media::ingest::metadata::date_modified_from_metadata(&meta);
-    Ok(ExistingTrackSummary { file_size: Some(size), date_modified: mtime })
+    Ok(FileStamp { file_size: Some(size), date_modified: mtime })
 }
 
 /// A row's path as the store spells it, which is what the index compares against.
@@ -297,8 +297,8 @@ fn stored(path: &Path) -> String {
     path.to_string_lossy().into_owned()
 }
 
-fn any_row() -> ExistingTrackSummary {
-    ExistingTrackSummary { file_size: None, date_modified: None }
+fn any_row() -> FileStamp {
+    FileStamp { file_size: None, date_modified: None }
 }
 
 #[test]
@@ -312,35 +312,35 @@ fn a_file_with_no_row_is_read() -> Result<(), AppError> {
 }
 
 #[test]
-fn track_is_current_true_when_size_and_mtime_match() -> Result<(), AppError> {
+fn file_is_current_true_when_size_and_mtime_match() -> Result<(), AppError> {
     let tmp = TempDir::new()?;
     let f = tmp.path().join("a.wav");
     create_minimal_wav(&f)?;
-    assert!(track_is_current(&f, &row_for(&f)?));
+    assert!(file_is_current(&f, &row_for(&f)?));
     Ok(())
 }
 
 #[test]
-fn track_is_current_false_when_size_differs() -> Result<(), AppError> {
+fn file_is_current_false_when_size_differs() -> Result<(), AppError> {
     let tmp = TempDir::new()?;
     let f = tmp.path().join("a.wav");
     create_minimal_wav(&f)?;
     let mut row = row_for(&f)?;
     // Simulate a content edit: stored size no longer matches the file.
     row.file_size = row.file_size.map(|s| s + 1);
-    assert!(!track_is_current(&f, &row));
+    assert!(!file_is_current(&f, &row));
     Ok(())
 }
 
 #[test]
-fn track_is_current_false_when_mtime_differs() -> Result<(), AppError> {
+fn file_is_current_false_when_mtime_differs() -> Result<(), AppError> {
     let tmp = TempDir::new()?;
     let f = tmp.path().join("a.wav");
     create_minimal_wav(&f)?;
     let mut row = row_for(&f)?;
     // Stored mtime no longer matches — e.g. tags were rewritten in place.
     row.date_modified = Some("1999-01-01T00:00:00Z".to_owned());
-    assert!(!track_is_current(&f, &row));
+    assert!(!file_is_current(&f, &row));
     Ok(())
 }
 

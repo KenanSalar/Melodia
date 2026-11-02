@@ -11,7 +11,7 @@ use super::write_tag_edit;
 use melodia_artwork::media::image::artwork;
 use melodia_core::entities::artist::ArtistCredit;
 use melodia_core::entities::genre::GenreList;
-use melodia_core::entities::scan::ExistingTrackSummary;
+use melodia_core::entities::scan::FileStamp;
 use melodia_core::entities::tags::{ArtworkEdit, FieldEdit, TagEdit};
 use melodia_core::error::AppError;
 use melodia_core::utils::self_writes::SelfWrites;
@@ -19,7 +19,7 @@ use melodia_store::database::DbPool;
 use melodia_store::database::queries;
 use melodia_store::database::queries::fixtures::{insert_test_track, set_test_artwork};
 use melodia_store::media::ingest::metadata::{compute_file_hash, date_modified_from_metadata};
-use melodia_store::media::ingest::scanner::track_is_current;
+use melodia_store::media::ingest::scanner::file_is_current;
 use melodia_testkit::ASSETS_DIR;
 
 fn assets_dir() -> PathBuf {
@@ -362,7 +362,7 @@ async fn replace_artwork_lands_on_every_track_and_the_shared_album() -> Result<(
 
 /// The module doc's warning, executed. A tag write rewrites the file, so the row owes a fresh
 /// hash, size and mtime *together*. Refresh the mtime and leave the hash behind and
-/// `track_is_current` reads the row as current forever, so no later scan repairs it: the stale
+/// `file_is_current` reads the row as current forever, so no later scan repairs it: the stale
 /// hash is then what a cross-device move would be matched on, and the match that carries a
 /// rating and a play count across a delete fails.
 #[tokio::test]
@@ -403,8 +403,8 @@ async fn a_tag_edit_leaves_the_row_describing_the_file_it_wrote() -> Result<(), 
 
     // And so the incremental filter agrees the row is current, which is exactly what makes any
     // one of the three being stale permanent rather than self-correcting.
-    let row = ExistingTrackSummary { file_size: Some(size), date_modified: Some(mtime) };
-    assert!(track_is_current(&path, &row), "the next scan must have nothing left to do");
+    let row = FileStamp { file_size: Some(size), date_modified: Some(mtime) };
+    assert!(file_is_current(&path, &row), "the next scan must have nothing left to do");
     Ok(())
 }
 

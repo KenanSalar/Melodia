@@ -11,7 +11,7 @@ use crate::database::queries::artist::UNKNOWN_ARTIST_ID;
 use crate::database::queries::scan::{MoveCandidates, NameCache};
 use crate::database::{DbPool, MAX_BINDS_PER_STATEMENT, values_placeholders};
 use crate::media::ingest::scan_pool::ScanPool;
-use melodia_core::entities::scan::{ExtractedMetadata, ScannedFile};
+use melodia_core::entities::scan::{ExtractedMetadata, FileStamp, ScannedFile};
 use melodia_core::error::AppError;
 
 /// Who is ingesting, which decides where each file is filed and what a kept-out file means to it.
@@ -19,7 +19,8 @@ pub(crate) enum IngestSource {
     /// A library folder's scan, every file filed under it. A kept-out file stays out, and a
     /// current row missing artwork takes the file's.
     FolderScan(i64),
-    /// Files the user named, each filed under its parent directory's folder and taken as named.
+    /// Files the user named, each taken as named and filed under the library folder holding it,
+    /// else under a folder of its own directory's.
     Import,
 }
 
@@ -113,9 +114,9 @@ pub async fn commit_scan_chunk(
     Ok(result)
 }
 
-/// Files dropped onto a playlist or the queue, each filed under the library folder its parent
-/// directory belongs to, in one transaction with the album covers and stats brought up to date.
-/// A kept-out file among them comes back, the user having named it.
+/// Files dropped onto a playlist or the queue, filed as [`IngestSource::Import`] says, in one
+/// transaction with the album covers and stats brought up to date. A kept-out file among them comes
+/// back, the user having named it.
 pub async fn commit_import(
     db: &DbPool,
     scanned_files: &[ScannedFile],
@@ -135,21 +136,6 @@ pub async fn commit_import(
     queries::stats::enable_stats_triggers(&mut tx).await?;
     tx.commit().await?;
     Ok(result)
-}
-
-/// Stored file info for incremental scan comparison.
-struct ExistingTrackInfo {
-    file_size: Option<i64>,
-    date_modified: Option<String>,
-}
-
-impl ExistingTrackInfo {
-    /// Whether the stored row still describes the file, so its metadata write can be skipped.
-    fn is_current(&self, meta: &ExtractedMetadata) -> bool {
-        self.file_size == Some(meta.file_size)
-            && self.date_modified.is_some()
-            && self.date_modified.as_deref() == meta.date_modified.as_deref()
-    }
 }
 
 /// The caches [`resolve_ids`] reuses within one ingest transaction. Artist and genre are in
@@ -174,8 +160,9 @@ impl ResolveCaches {
 ///
 /// A new path whose hash matches a row whose file is gone re-points that row rather than
 /// inserting, and an existing path whose size and mtime haven't moved is skipped. A folder scan
-/// passes a kept-out file by, and re-points the exclusion of one that moved, but only once no row
-/// claims the bytes: a moved keeper beside its kept-out twin must get its own row back.
+/// passes a kept-out file by, restamping it with what it read, and re-points the exclusion of one
+/// that moved, but only once no row claims the bytes: a moved keeper beside its kept-out twin must
+/// get its own row back.
 pub(crate) async fn ingest_scanned_files(
     tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
     scanned_files: &[ScannedFile],
@@ -191,14 +178,15 @@ pub(crate) async fn ingest_scanned_files(
     let mut moved_count: u32 = 0;
     let mut updated_count: u32 = 0;
     let mut artwork_backfill: HashMap<String, Vec<String>> = HashMap::new();
+    let mut kept_out_read: Vec<(&Path, &ExtractedMetadata)> = Vec::new();
 
     for file in scanned_files {
         let file_path_cow = file.path.to_string_lossy();
         let file_path_str: &str = file_path_cow.as_ref();
         let meta = &file.metadata;
 
-        if let Some(existing) = existing_tracks.get(file_path_str) {
-            if existing.is_current(meta) {
+        if let Some(stamp) = existing_tracks.get(file_path_str) {
+            if stamp.matches(meta.file_size, meta.date_modified.as_deref()) {
                 if source.backfills_artwork()
                     && let Some(ref art_path) = meta.artwork_path
                 {
@@ -224,6 +212,7 @@ pub(crate) async fn ingest_scanned_files(
         }
 
         if kept_out.contains(file_path_str) {
+            kept_out_read.push((&file.path, meta));
             continue;
         }
 
@@ -279,6 +268,7 @@ pub(crate) async fn ingest_scanned_files(
 
     inserts.flush(tx, &mut caches.names).await?;
     flush_artwork_backfill(tx, artwork_backfill).await?;
+    queries::excluded_files::restamp_on(tx, &kept_out_read).await?;
 
     let inserted_track_ids = inserts.inserted_ids;
     Ok(IngestResult {
@@ -296,7 +286,7 @@ pub(crate) async fn ingest_scanned_files(
 async fn load_existing(
     tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
     scanned_files: &[ScannedFile],
-) -> Result<HashMap<String, ExistingTrackInfo>, AppError> {
+) -> Result<HashMap<String, FileStamp>, AppError> {
     let mut existing_tracks = HashMap::with_capacity(scanned_files.len());
     for chunk in scanned_files.chunks(MAX_BINDS_PER_STATEMENT) {
         let placeholders = crate::database::placeholders(chunk.len());
@@ -310,9 +300,8 @@ async fn load_existing(
             query = query.bind(cow.as_ref());
         }
         let rows = query.persistent(false).fetch_all(&mut **tx).await?;
-        for (path, size, mtime) in rows {
-            existing_tracks
-                .insert(path, ExistingTrackInfo { file_size: size, date_modified: mtime });
+        for (path, file_size, date_modified) in rows {
+            existing_tracks.insert(path, FileStamp { file_size, date_modified });
         }
     }
     Ok(existing_tracks)
@@ -340,7 +329,7 @@ async fn kept_out(
 async fn resolve_move_candidates(
     tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
     scanned_files: &[ScannedFile],
-    existing_tracks: &HashMap<String, ExistingTrackInfo>,
+    existing_tracks: &HashMap<String, FileStamp>,
     pool: &ScanPool,
 ) -> Result<MoveCandidates, AppError> {
     let new_path_hashes: Vec<&str> = scanned_files
@@ -515,12 +504,16 @@ async fn resolve_folder_id(
                 return Ok(None);
             }
             if let Some(&id) = folder_cache.get(&parent_dir) {
-                Ok(Some(id))
-            } else {
-                let id = queries::folder::upsert_folder(tx, &parent_dir).await?;
-                folder_cache.insert(parent_dir, id);
-                Ok(Some(id))
+                return Ok(Some(id));
             }
+            // A file inside a library folder is that folder's, so its scans pair the file with its
+            // row and removing the folder takes the track along.
+            let id = match queries::scan::find_library_folder_for_path(tx, file_path_str).await? {
+                Some(id) => id,
+                None => queries::folder::upsert_folder(tx, &parent_dir).await?,
+            };
+            folder_cache.insert(parent_dir, id);
+            Ok(Some(id))
         }
     }
 }

@@ -15,20 +15,16 @@ use melodia_store::media::ingest::metadata::{extract_date_modified, extract_or_f
 use melodia_store::media::ingest::scan_pool::ScanPool;
 use melodia_store::media::ingest::watcher::FileEvent;
 
-/// The paths whose tags the batch needs, each once. A kept-out file needs none: the batch passes it
-/// by, or carries its exclusion along a rename.
-fn paths_to_extract(events: &[FileEvent], kept_out: &HashSet<String>) -> Vec<PathBuf> {
-    let is_kept_out = |path: &Path| kept_out.contains(path.to_string_lossy().as_ref());
+/// The paths whose tags the batch needs, each once. A kept-out file written to is read too, for its
+/// exclusion to take the new hash; one renamed away needs no read, its exclusion following the name.
+fn paths_to_extract(events: &[FileEvent], kept_out_renamed: &HashSet<String>) -> Vec<PathBuf> {
+    let is_kept_out = |path: &Path| kept_out_renamed.contains(path.to_string_lossy().as_ref());
     let mut seen = HashSet::with_capacity(events.len());
     let mut paths: Vec<PathBuf> = Vec::with_capacity(events.len());
     for event in events {
         let wanted = match event {
-            FileEvent::Created(path) | FileEvent::Modified(path) => {
-                Some(path).filter(|path| !is_kept_out(path))
-            }
-            FileEvent::Renamed { from, to } => {
-                Some(to).filter(|to| !is_kept_out(from) && !is_kept_out(to))
-            }
+            FileEvent::Created(path) | FileEvent::Modified(path) => Some(path),
+            FileEvent::Renamed { from, to } => (!is_kept_out(from)).then_some(to),
             FileEvent::Removed(_) => None,
             // Caller short-circuits on RescanNeeded before reaching here.
             FileEvent::RescanNeeded => unreachable!(),
@@ -43,17 +39,15 @@ fn paths_to_extract(events: &[FileEvent], kept_out: &HashSet<String>) -> Vec<Pat
     paths
 }
 
-/// The batch's paths that are kept out of the library, so their parse can be skipped. A failed
-/// read only costs that saving: the write transaction asks again before it inserts anything.
-async fn kept_out_among(db: &DbPool, events: &[FileEvent]) -> HashSet<String> {
+/// The kept-out paths the batch renames away, so the parse of their new names can be skipped. A
+/// failed read only costs that saving: the write transaction asks again before it inserts anything.
+async fn kept_out_renamed(db: &DbPool, events: &[FileEvent]) -> HashSet<String> {
     let paths: Vec<String> = events
         .iter()
-        .flat_map(|event| match event {
-            FileEvent::Created(path) | FileEvent::Modified(path) => vec![path],
-            FileEvent::Renamed { from, to } => vec![from, to],
-            FileEvent::Removed(_) | FileEvent::RescanNeeded => Vec::new(),
+        .filter_map(|event| match event {
+            FileEvent::Renamed { from, .. } => Some(from.to_string_lossy().into_owned()),
+            _ => None,
         })
-        .map(|path| path.to_string_lossy().into_owned())
         .collect();
     let paths: Vec<&str> = paths.iter().map(String::as_str).collect();
     queries::excluded_files::among(db, &paths).await.unwrap_or_else(|e| {
@@ -117,8 +111,8 @@ pub(super) async fn process_batch(
     cover_cache: &CoverCache,
     events: Vec<FileEvent>,
 ) -> AppResult<()> {
-    let kept_out = kept_out_among(db, &events).await;
-    let to_extract = paths_to_extract(&events, &kept_out);
+    let kept_out_renamed = kept_out_renamed(db, &events).await;
+    let to_extract = paths_to_extract(&events, &kept_out_renamed);
     let metadata = extract_metadata_batch(paths, cover_cache, to_extract).await;
     queries::scan::apply_watch_batch(db, watched_changes(events, metadata)).await
 }

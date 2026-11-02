@@ -253,10 +253,10 @@ msgid_plural "{n} copies"
 msgstr[0] "{n} copie"
 msgstr[1] "{n} copies"
 
-#. Translators: on the copy of a duplicate song that is playing now.
+#. Translators: on the copy that is the current track, playing or paused.
 #: ui/components/dialog/duplicate-row.slint
-msgid "Playing"
-msgstr "En lecture"
+msgid "Now Playing"
+msgstr "Lecture en cours"
 
 #. Translators: {} is the day the copy joined the library, as 2026-11-02.
 #: ui/components/dialog/duplicate-row.slint

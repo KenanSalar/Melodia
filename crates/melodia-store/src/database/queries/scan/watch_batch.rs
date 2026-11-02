@@ -35,7 +35,7 @@ pub enum WatchedChange {
         /// The mtime a re-pointed row stores, `meta`'s wherever there is one.
         /// `update_track_location` writes the mtime but not the size or hash, so a fresher `stat`
         /// would sit beside the previous scan's size, and a size-preserving tag edit would read as
-        /// current to `scanner::track_is_current` from then on. An older mtime only fails toward a
+        /// current to `scanner::file_is_current` from then on. An older mtime only fails toward a
         /// re-parse.
         date_modified: Option<String>,
     },
@@ -198,7 +198,7 @@ fn file_name_owned(path: &Path) -> String {
 }
 
 /// Whether a row was written, by an insert or a re-point. A kept-out file writes none: it is
-/// passed by, or its exclusion follows it where it moved.
+/// restamped, or its exclusion follows it where it moved.
 async fn handle_created(
     tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
     path: &Path,
@@ -211,7 +211,8 @@ async fn handle_created(
         return Ok(false);
     }
     if !excluded_files::among_on(tx, &[path_str.as_str()]).await?.is_empty() {
-        log::debug!("Kept out of the library, skipping: {}", path.display());
+        excluded_files::restamp_on(tx, &[(path, meta)]).await?;
+        log::debug!("Kept out of the library, restamped: {}", path.display());
         return Ok(false);
     }
 

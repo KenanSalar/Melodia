@@ -18,7 +18,6 @@ mod run;
 pub use reconcile::{finish_interrupted_imports, reconcile_watched_folders};
 pub use repair::restore_missing_artwork;
 
-use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
@@ -301,24 +300,22 @@ async fn discover(
     };
 
     // `scan_one` purges nothing after an empty walk, so its rows would be read only to be dropped.
-    let mut kept_out = HashSet::new();
+    let mut kept_out = Vec::new();
     if !index.is_empty() {
-        queries::scan::visit_folder_tracks(db, folder_id, |path, row| index.add_row(path, row))
+        queries::scan::visit_folder_tracks(db, folder_id, |path, stamp| index.add_row(path, stamp))
             .await?;
-        kept_out = queries::excluded_files::under(db, &scope.root.to_string_lossy()).await?;
+        for (path, stamp) in queries::excluded_files::in_folder(db, folder_id).await? {
+            index.add_kept_out(&path, stamp);
+            kept_out.push(path);
+        }
     }
 
     tokio::task::spawn_blocking(move || {
         // Reads only what this folder owns, but the walk stays whole: the purge checks the
         // folder's rows against it, and some can sit inside a nested folder's directory. A
-        // kept-out file isn't parsed, though the ingest asks again before it inserts.
-        let to_scan = pool.install(|| {
-            index.changed(|path| {
-                !run.is_cancelled()
-                    && scope.owns(path)
-                    && !kept_out.contains(path.to_string_lossy().as_ref())
-            })
-        });
+        // kept-out file is read only once it has changed, for the ingest to restamp it.
+        let to_scan =
+            pool.install(|| index.changed(|path| !run.is_cancelled() && scope.owns(path)));
         if run.is_cancelled() {
             return None;
         }

@@ -1,6 +1,6 @@
 # Plan: Duplicate tracks (find the copies, clear out the spares)
 
-Status: **in progress** (Phases 0 to 4 done, Phase 5 next) · Owner: Kenan · Created: 2026-11-02 · Issue #158, branch `feat/duplicate-tracks`
+Status: **in progress** (Phases 0 to 5 done, Phase 6 next) · Owner: Kenan · Created: 2026-11-02 · Issue #158, branch `feat/duplicate-tracks`
 
 > **Validated 2026-11-02** against `b4c5ecff`, and re-validated the same day against `41c1f2e1`. The sources were:
 > - three read-only code traces: the store and per-track data; the removal, scan, watcher and queue paths; the UI surfaces;
@@ -106,7 +106,7 @@ Right-clicking a group's header offers **Not Duplicates**, for copies you keep o
    - Apply takes a `GroupRemoval { keeper, spares }` per keeper, so "a keeper" is in the type, not only in the UI.
      - A spare's history goes to the kept copy sharing its file hash where there is one, else to its group's best kept copy.
      - So an identical extra in a Review group merges into its twin, never into the other release beside it.
-   - The playing copy is held back at apply, and the list marks it with a Playing chip. A play it finishes counts against its own id, which is gone once the delete commits.
+   - The playing copy is held back at apply, paused or not, and the list marks it with a Now Playing chip. A play it finishes counts against its own id, which is gone once the delete commits.
 5. **What moves to the keeper, in the delete's own transaction.**
 
    | Field | Rule |
@@ -148,23 +148,26 @@ Right-clicking a group's header offers **Not Duplicates**, for copies you keep o
      - `id INTEGER PRIMARY KEY`, the kept-out list's keyset.
      - `path TEXT NOT NULL UNIQUE`, spelled exactly as `tracks.file_path`.
      - `file_hash TEXT`, the spare's, `NULL` where it had none.
+     - `file_size INTEGER` and `date_modified TEXT`, the spare's stamp, which a scan compares as it compares a row's. Both are `NULL` where the spare had no hash, so the next scan reads the file and fills one in.
      - `folder_id … REFERENCES folders (id) ON DELETE CASCADE`, the spare's.
      - `excluded_at`.
      - Indexed on `folder_id` and `file_hash`.
-   - **It lives as the row it replaced did.** A track row follows its file through a rename and, by `file_hash`, through a move. An exclusion keyed by path alone would let any of these bring the spare back, so it follows the file the same two ways:
+   - **It lives as the row it replaced did.** A track row follows its file through a rename and, by `file_hash`, through a move, and a re-parse rewrites that hash when the file changes. An exclusion keyed by path alone would let any of these bring the spare back, so it follows the file the same ways:
      - a rename;
      - a tagger that names files from their tags;
-     - a folder reorganised with Melodia open or closed.
+     - a folder reorganised with Melodia open or closed;
+     - a file rewritten in place, by a tagger or a ReplayGain scanner, whose new hash the exclusion takes when the file is read again.
    - **Checked by the full scan.**
-     - The first check is in `discover`'s filter (`scan/mod.rs:312`), from a set loaded once per folder by path prefix under its root. The prefix matters because a spare that came in by a drop sits under the disabled folder row an import makes for its parent (`ingest.rs:464-489`, `folder.rs:88-104`), not under the scanned folder's `folder_id`.
+     - The first check is in `discover`, from the folder's own exclusions with their stamps, paired with the walk as its rows are (`WalkIndex::add_kept_out`). An unchanged kept-out file isn't read. One whose size or mtime moved is read, and the ingest restamps its exclusion inside its transaction (`excluded_files::restamp_on`).
+     - The exclusions are keyed by `folder_id`, as the rows are, since an import files a file inside a library folder under that folder (decision 9).
      - That filter only saves the parse. The check that decides runs again inside `ingest`'s write transaction, because a walk that ran before Remove committed still lists the spare.
      - `IngestSource` (`FolderScan`, `Import`) says which ingest consults exclusions, replacing `FolderResolution` and the artwork-backfill bool those two callers always paired.
      - A new path whose hash matches an exclusion whose own path is gone from disk is a moved spare. `resolve_move_candidates` takes exclusions beside rows (`scan::moves::MoveCandidates`, shared with the watcher), the exclusion is re-pointed and the file is skipped.
      - A row claims the bytes first, so a moved keeper beside its kept-out twin always gets its own row back.
    - **Checked by the watcher.** It checks before extraction in `process_batch` (`file_event_processor/reconcile.rs:87-94`), then again inside `apply_watch_batch`'s transaction, for the same race:
-     - `Created` and `Modified` events on an excluded path are dropped, which also covers the modify fallback's insert (`watch_batch.rs:299`).
-     - `Renamed` from an excluded path re-points the exclusion, as a track row is re-pointed (`:269-281`). A rename to outside every folder lifts it.
-     - `Renamed` onto an excluded path, a tagger's save through a temp file, is checked as a `Created` and dropped.
+     - `Created` and `Modified` events on an excluded path insert nothing, which also covers the modify fallback's insert (`watch_batch.rs:299`). The file is read, and its exclusion restamped.
+     - `Renamed` from an excluded path re-points the exclusion, as a track row is re-pointed (`:269-281`), and needs no read. A rename to outside every folder lifts it.
+     - `Renamed` onto an excluded path, a tagger's save through a temp file, is checked as a `Created` and restamped.
      - A created file whose hash matches an exclusion whose path is gone re-points it, through `moved_candidates`.
      - `Removed` lifts the exclusion only when the path is gone at processing time and no file created in the batch took it over. `WatchedChange::Removed` carries `gone`, read when the batch is paired, because a save that deletes and recreates its file can land in two batches.
      - A track renamed onto a kept-out path lifts that exclusion, the file there being the row's now. A kept-out file renamed onto a track's path lifts its own, the row keeping its history.
@@ -176,7 +179,7 @@ Right-clicking a group's header offers **Not Duplicates**, for copies you keep o
      - Removing a folder cascades.
      - Absorbing nested folders re-points their exclusions along with their tracks (`absorb_folders`, `folder.rs:60-84`), or the folders' delete would cascade them away.
    - **Accepted trades.**
-     - A spare moved and changed in one go, with a new path and a new hash, comes back.
+     - A spare changed and moved in one go while nothing watches it, with a new path and a new hash, comes back, as a track row in that case returns as a new track.
      - No scan visits a disabled import row, so an exclusion under one is never swept. It leaves through Bring Back.
 9. **The kept-out list.**
    - A "Files kept out of the library" row in the Duplicates card, shown when the count is above zero, opens `DialogKind.kept-out-files`.
@@ -186,11 +189,12 @@ Right-clicking a group's header offers **Not Duplicates**, for copies you keep o
      - **Open Containing Folder**, through a `KeptOutUi` callback to `library::tracks::reveal_folder` (`library/tracks.rs:41`) on the file's parent folder. A removed copy has no track id, so it can't take the track menu's call.
      - **Copy Path**, through `CopyActions.copy-text(path)`. The row holds its path, as Browse's folder card does (`card-context-menu.slint:250`).
      - **Bring Back**.
-   - **Bring All Back** imports every kept-out path through Bring Back's import, a page at a time, and never rescans. `scan_one` doesn't check `is_enabled`, and a spare that came in by a drop sits under a disabled folder row, so a rescan of that row would import its whole directory.
+   - **Bring All Back** imports every kept-out path through Bring Back's import, a page at a time, and never rescans. `scan_one` doesn't check `is_enabled`, and a spare dropped in from outside every library folder sits under a disabled folder row, so a rescan of that row would import its whole directory.
    - **Copy All Paths** puts every kept-out path on the clipboard, one per line, in path order, for deleting the files from a terminal or a script, or for keeping a record.
      - The paths come from one `excluded_files` read and land through `ui::clipboard::write`, which shows the Copied toast and never logs the text.
      - A library added twice puts about 50k lines on the clipboard, which is fine for an action taken on purpose.
-   - A returned file comes back as a new track. Its old history stays with the keeper.
+   - A returned file comes back as a new track, its old history staying with the keeper. Where its bytes match a row whose own file is gone, it takes that row back, history included, as any moved file does.
+   - The import files a returned file, like any file dropped in from a library folder, under the library folder holding it (`find_library_folder_for_path`). Only a file outside every library folder gets a disabled folder row for its directory.
 10. **The surface is the shared Dialog: one new kind for the finder, two steps.**
     - `DialogKind.duplicates` takes the widest card, 760 px (`dialog.slint:63-73`). It joins `body-scrolls` (`:93-95`) and owns its scroller. `kept-out-files` does the same.
     - **Review step.** The list. Primary is **Continue**, enabled with one pick or more. The footer note shows the picked count and size (`:100-103`).
@@ -274,7 +278,8 @@ Right-clicking a group's header offers **Not Duplicates**, for copies you keep o
 | File | Owns |
 |---|---|
 | `crates/melodia-core/src/utils/trash_dir.rs` (new, P0) | `is_trash_dir`, which takes a folder: a volume trash by name, or the home trash at `dirs::data_dir()/Trash` by path. `in_trash_dir` asks it of every folder above a path. |
-| `crates/melodia-store/src/media/ingest/scanner.rs`, `ingest/watcher.rs` | The walk skips a trash folder; the watcher's `is_library_file` rejects a path inside one (P0). `WalkIndex::unwalked`, the kept-out paths a complete walk didn't find (P3). |
+| `crates/melodia-store/src/media/ingest/scanner.rs`, `ingest/watcher.rs` | The walk skips a trash folder; the watcher's `is_library_file` rejects a path inside one (P0). `WalkIndex::unwalked`, the kept-out paths a complete walk didn't find (P3). `WalkIndex::add_kept_out`, and `file_is_current` over `FileStamp::matches` (P5). |
+| `crates/melodia-core/src/entities/scan.rs` | `FileStamp`, a track's or a kept-out file's size and mtime, and `matches`, the one home of the rule that says a file is unchanged; it replaces `ExistingTrackSummary` and the ingest's `ExistingTrackInfo` (P5). |
 | `crates/melodia-core/src/utils/fold.rs` | `squeeze`, moved from the lyrics matcher (`lyrics_directory/recording.rs` imports it): letters and digits single-spaced, an apostrophe dropped. `fold_words`, beside `push_folded`: `squeeze` over the fold, or the fold where nothing is left (P1). |
 | `crates/melodia-core/src/entities/audio_quality.rs` (new, P1) | `AudioFormat`, the four columns an encode is judged by, and `AudioQuality`: the lossless rule and the quality order. |
 | `crates/melodia-core/src/entities/duplicates.rs` (new, P1) | `MatchKind`, `ReviewReason`, `DismissalSet`, `DuplicateGroup`, `DuplicateCopy`; `GroupRemoval` (P3); `KeptOutFile` (P4). |
@@ -304,9 +309,10 @@ Right-clicking a group's header offers **Not Duplicates**, for copies you keep o
 | `crates/melodia-views/src/ui/duplicates/landing.rs` (new, P4) | `DialogTicket` and `spawn_landing`, which the finder, Remove and the kept-out list share. |
 | `crates/melodia-views/src/ui/callbacks/clipboard.rs` | `spawn_copy` reaches `ui::` for Copy All Paths (P4). |
 | `crates/melodia-views/src/ui/util.rs` | `format_codec`, `format_bitrate`, `format_bit_depth` and `format_size` beside `format_sample_rate`, lifted from the inline closures in `now_playing/metadata.rs` and `callbacks/tags/open.rs` and from `callbacks/tags/fold.rs`'s `fmt_size` (P2, no behaviour change). |
-| `migrations/20261102000001_excluded_files.sql` (new, P3) | The table and its folder and hash indexes. |
-| `crates/melodia-store/src/database/queries/excluded_files.rs` (new, P3) | Exclude (`pub(crate)`, the merge's), excluded among paths, under a path prefix, move candidates by hash, re-point, lift, forget unseen, count; ids in path order, rows by id, every path in path order (P4). |
-| `crates/melodia-store/src/database/queries/ingest.rs`, `queries/scan/watch_batch.rs` | `IngestSource`; the exclusion check inside the inserting transaction, exclusions among the move candidates, a rename's re-point and lift, `Removed`'s `gone` (P3). |
+| `migrations/20261102000001_excluded_files.sql` (new, P3) | The table and its folder and hash indexes; the stamp columns (P5). |
+| `crates/melodia-store/src/database/queries/excluded_files.rs` (new, P3) | Exclude (`pub(crate)`, the merge's), excluded among paths, move candidates by hash, re-point, lift, forget unseen, count; ids in path order, rows by id, every path in path order (P4); a folder's exclusions with their stamps, and the restamp (P5). |
+| `crates/melodia-store/src/database/queries/ingest.rs`, `queries/scan/watch_batch.rs` | `IngestSource`; the exclusion check inside the inserting transaction, exclusions among the move candidates, a rename's re-point and lift, `Removed`'s `gone` (P3). The restamp of a kept-out file read again, and an import filed under the library folder holding it (P5). |
+| `crates/melodia-store/src/database/queries/scan/lookups.rs` | `find_library_folder_for_path`, `find_folder_for_path` among library folders alone (P5). |
 | `crates/melodia-store/src/database/queries/scan/moves.rs` (new, P3) | `MoveCandidates`: the rows and kept-out files a new path's bytes may have moved from, shared by the ingest and the watcher. |
 | `crates/melodia-store/src/database/queries/scan/finish.rs` | `Unwalked`: the rows a complete walk purges and the exclusions it forgets (P3). |
 | `crates/melodia-store/src/database/queries/folder.rs` | `absorb_folders` re-points exclusions with the tracks (P3). |
@@ -315,10 +321,10 @@ Right-clicking a group's header offers **Not Duplicates**, for copies you keep o
 | `crates/melodia-store/src/database/queries/track/duplicate_merge.rs` (new, P3) | `remove_duplicates`: merge, playlist places, exclusions, delete, renumber, tail. One transaction. |
 | `crates/melodia-engine/src/player/engine/queue/removal.rs` | `replace_ids`: spare to keeper in place, then an `order_changed` bump (P3). |
 | `crates/melodia-app/src/library/duplicates/apply.rs` (new, P3) | Playing hold-back and queue remap under the exec lock, flush, store call, bumps, covers, the heart and rating carried onto the keepers. |
-| `crates/melodia-app/src/library/scan/mod.rs`, `tasks/file_event_processor/reconcile.rs` | The checks before parsing and the scan-time cleanup; the watcher's `gone` (P3). The import's lift is `commit_import`'s, inside its transaction. |
+| `crates/melodia-app/src/library/scan/mod.rs`, `tasks/file_event_processor/reconcile.rs` | The checks before parsing and the scan-time cleanup; the watcher's `gone` (P3). The import's lift is `commit_import`'s, inside its transaction. A kept-out file read again once it has changed, by both (P5). |
 | `crates/melodia-app/src/tasks/play_count_flusher.rs`, `crates/melodia-app/src/state/mod.rs` | `PlayCountFlush`, a flush request on the app's own channel, its sender in `AppState` and its receiver in `StartupChannels`, answered once the write commits (P3). |
 
-Size headroom, measured after Phase 4: `app-window.slint` 750 lines, `globals/dialog.slint` 431, `components/dialog/dialog.slint` 354, `models.slint` 508, `queue/removal.rs` 337, `playlist.rs` 639, `ingest.rs` 587, `watch_batch.rs` 383. None crosses 800.
+Size headroom, measured after Phase 5: `app-window.slint` 750 lines, `globals/dialog.slint` 431, `components/dialog/dialog.slint` 354, `models.slint` 508, `queue/removal.rs` 337, `playlist.rs` 639, `ingest.rs` 580, `watch_batch.rs` 384. None crosses 800.
 
 ## Phases
 
@@ -470,19 +476,27 @@ Hand test:
 - Bring All Back returns them all at once, and a spare that came in by a drop brings back that file alone, not its folder.
 - Removing a library folder takes its entries with it.
 
-### Phase 5: Tests
+### Phase 5: What the hand tests found
 
-1. **Settle what Phase 3's hand test found**, each one Kenan's to answer before any test pins the behaviour:
-   - **A kept-out file retagged, then moved while Melodia is closed, comes back.** The exclusion keeps the hash the file had when it was removed. Nothing re-hashes a kept-out file: the watcher and the scan both skip its parse. So a later move reads as a new file. A rename with watching on is unaffected, since it follows the path. This could be an accepted trade beside decision 8's, or the watcher could re-hash a kept-out file on `Modified`.
-   - **The Playing chip marks the current track whether or not it plays.** A paused or just-loaded track carries it too. That matches what `apply` holds back, `current_track()`, but the label may want to say so.
-   - **A file dropped in from inside a library folder is parsed again by every full scan.** The import files it under a disabled folder row for its own directory (`ingest.rs`' `resolve_folder_id`). `visit_folder_tracks` then never pairs it with the walk, and the ingest finds its row current only after the parse. This was there before this plan, but Phase 4's Bring Back imports every returned file this way. Phase 4's hand test showed what the user sees:
-     - The returned file's directory appears in Settings ▸ Library Folders as a folder of its own, with rescan and remove.
-     - Removing the library folder around it leaves that row and its tracks in the library.
-     - A rescan of the enclosing folder absorbs the row again.
-   - **A brought-back file can take an existing row back.** Where its bytes match a row whose own file is gone, the import re-points that row, history included, rather than returning the file as a new track. Bring Back counts it as returned all the same, by what is still kept out after the import. It needs a row no scan has purged:
-     - A keeper deleted with watching off, whose launch only finishes interrupted imports. With watching on, the launch's full scan purges the row first.
-     - A keeper on a drive that isn't connected, whose walk finds nothing and so purges nothing. Its history moves onto the spare, and the keeper comes back with its drive as a new track.
-2. Tests are added where the landed change earns them, on Kenan's go.
+Status: built and hand-checked (2026-11-02). The gate passed: fmt, clippy and the suite, and all 15 catalogs complete. The hand test ran unattended on the dev data folder, restored afterwards, with rating write-back off and its fixtures under the test library's `_p5test/` and `_p5moved/`, removed afterwards. The enclosing folder's removal wasn't run, since it holds the whole test library: the brought-back track's `folder_id` is that folder's, whose delete cascades. The dev data folder's database had applied the exclusion migration before it gained its stamp columns, so its `_sqlx_migrations` row and the empty table were dropped, after a backup, for the edited migration to apply.
+
+1. **A kept-out file rewritten, then moved while Melodia isn't watching, came back.** The exclusion kept the hash the file had when it was removed, while a track row's hash is rewritten on every re-parse. Decision 8 now stamps an exclusion and restamps it when the scan or the watcher reads the file again.
+   - One stamp type serves rows and exclusions: `FileStamp`, replacing `ExistingTrackSummary` and the ingest's `ExistingTrackInfo`, with `matches` the one copy of the rule.
+   - A kept-out file read again goes through the ordinary parse rather than a hash-only pass, so the scan and the watcher need no second pipeline. A cover that parse stores for it, when the store lacks one, is referenced by nothing, and the artwork sweep retires it.
+2. **The Playing chip marked a paused track's copy.** The hold-back is right, since `current_track()` includes a paused or loaded track, so only the label changed: it reads Now Playing, the app's own name for the player's track.
+3. **A file dropped in from inside a library folder got a disabled folder row of its own**, and so did every file Bring Back returned. Its directory showed in Settings ▸ Library Folders, and removing the enclosing folder left it behind, until that folder's next completed scan absorbed the row. The import now files it under the library folder holding it (decision 9). Rows made before this are absorbed by that scan as they always were, their exclusions with them.
+
+Hand test, on the dev data folder:
+- Remove a spare. With watching on, retag it in a tagger. Close Melodia, move the file into another library subfolder, and launch: it stays out, listed at its new path.
+- The same, retagging with Melodia closed, launching once, closing, then moving and launching: it stays out.
+- A no-change rescan's log counts the kept-out files as skipped.
+- Pause a track and open Find: its copy shows Now Playing, and Remove holds it back.
+- Bring Back a file inside a library folder: no row joins Settings ▸ Library Folders, and removing the enclosing folder takes the track with it.
+- Drop a file from outside every library folder: its folder row appears, as before.
+
+### Phase 6: Tests
+
+1. Tests are added where the landed change earns them, on Kenan's go.
 
 ## Cross-cutting
 
@@ -495,7 +509,7 @@ Hand test:
 
 ## Open questions
 
-Three, from Phase 3's hand test, held for Phase 5's first step. Settled 2026-11-02:
+None. Settled 2026-11-02:
 - An identical pair in a Review group stays in its group, and one of the pair is picked (decision 2).
 - Keep This Copy is in the copy menu (decisions 4 and 10).
 - Copy Path is in both menus, and Copy All Paths is in the kept-out list (decisions 9 and 10).

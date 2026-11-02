@@ -199,11 +199,11 @@ component CopyRow inherits Rectangle {
                     vertical-alignment: center;
                     overflow: elide;
                 }
-                // Remove holds the playing copy back, so the list says which it is.
+                // Remove holds back the player's track, paused too, so the list says which it is.
                 if Player.vm.has_track && Player.vm.track.id == root.row-data.id: MetaChip {
                     icon: "play_arrow";
-                    // Translators: on the copy of a duplicate song that is playing now.
-                    text: @tr("Playing");
+                    // Translators: on the copy that is the current track, playing or paused.
+                    text: @tr("Now Playing");
                     fill: Theme.card-control;
                     label-color: Theme.text;
                 }

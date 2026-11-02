@@ -3,7 +3,7 @@
 //!
 //! Do **not** shortcut this into a hand-built `UPDATE` from the form values: a tag write rewrites
 //! the file's bytes, and a fresh `date_modified` beside a stale `file_hash` is the one state
-//! `scanner::track_is_current` reads as current forever. The re-extract keeps hash, size and mtime
+//! `scanner::file_is_current` reads as current forever. The re-extract keeps hash, size and mtime
 //! honest together.
 
 use std::collections::HashMap;

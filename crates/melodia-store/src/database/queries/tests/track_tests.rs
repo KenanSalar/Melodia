@@ -1222,7 +1222,7 @@ async fn still_dated(db: &DbPool) -> Result<i64, AppError> {
 }
 
 /// The column means "the mtime the stored row was parsed from", so NULL is honestly unknown —
-/// `track_is_current` compares it to the file's own and a missing value cannot match one.
+/// `file_is_current` compares it to the file's own and a missing value cannot match one.
 #[tokio::test]
 async fn the_stale_pass_blanks_every_mtime_and_answers_with_what_it_moved() -> Result<(), AppError>
 {

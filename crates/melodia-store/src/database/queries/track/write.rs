@@ -136,7 +136,7 @@ pub(crate) async fn set_track_artwork(
 }
 
 /// Blanks every `date_modified`, answering how many rows moved. NULL honestly means unknown: it
-/// matches no file's mtime in `track_is_current`, and the scan refills it from the `stat` that
+/// matches no file's mtime in `file_is_current`, and the scan refills it from the `stat` that
 /// proved the file exists.
 pub async fn mark_every_track_stale(db: &DbPool) -> Result<u64, AppError> {
     let result =

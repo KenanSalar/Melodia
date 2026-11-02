@@ -34,6 +34,8 @@ struct CopyFacts {
     id: i64,
     file_path: String,
     file_hash: Option<String>,
+    file_size: Option<i64>,
+    date_modified: Option<String>,
     folder_id: i64,
     play_count: i64,
     skip_count: i64,
@@ -103,8 +105,8 @@ async fn read_facts(
         .collect();
     let rows: Vec<CopyFacts> = chunked_in_query_on(tx, &ids, |placeholders| {
         format!(
-            "SELECT id, file_path, file_hash, folder_id, play_count, skip_count, last_played, \
-                    rating, is_favorite, date_added \
+            "SELECT id, file_path, file_hash, file_size, date_modified, folder_id, play_count, \
+                    skip_count, last_played, rating, is_favorite, date_added \
              FROM tracks WHERE id IN ({placeholders})"
         )
     })
@@ -183,9 +185,13 @@ fn merged(keeper: &CopyFacts, spares: &[&CopyFacts]) -> History {
 
 impl CopyFacts {
     fn exclusion(&self) -> NewExclusion<'_> {
+        // Unstamped without a hash, so the next scan reads the file and fills one in.
+        let stamped = self.file_hash.is_some();
         NewExclusion {
             path: &self.file_path,
             file_hash: self.file_hash.as_deref(),
+            file_size: self.file_size.filter(|_| stamped),
+            date_modified: self.date_modified.as_deref().filter(|_| stamped),
             folder_id: self.folder_id,
         }
     }
