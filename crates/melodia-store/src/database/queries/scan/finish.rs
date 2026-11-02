@@ -28,16 +28,11 @@ pub async fn commit_scan(
     if bulk_orphan_purge {
         stats::disable_stats_triggers(&mut tx).await?;
     }
-    if !orphans.is_empty() {
-        // A row this scan re-pointed as moved has left its orphaned path, so only the delete counts.
-        let removed = delete_tracks_by_paths_batch(&mut tx, orphans).await?;
-        if removed > 0 {
-            log::info!("Removed {removed} orphaned tracks from folder {}", folder.path);
-        }
-    }
+    // A row this scan re-pointed as moved has left its orphaned path, so only the delete counts.
+    let removed = delete_tracks_by_paths_batch(&mut tx, orphans).await?;
 
     // A rescan that changed nothing skips the sweeps, which would only rewrite the same values.
-    let any_changes = ingested.any() || !orphans.is_empty();
+    let any_changes = ingested.any() || removed > 0;
 
     if any_changes {
         roll_up_covers(&mut tx).await?;
@@ -54,6 +49,9 @@ pub async fn commit_scan(
     }
     tx.commit().await?;
 
+    if removed > 0 {
+        log::info!("Removed {removed} orphaned tracks from folder {}", folder.path);
+    }
     if ingested.moved > 0 {
         log::info!("Detected {} moved/renamed files", ingested.moved);
     }
