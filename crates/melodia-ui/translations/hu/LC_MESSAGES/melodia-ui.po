@@ -62,6 +62,7 @@ msgstr "Előző méret"
 #: ui/components/caption-buttons.slint
 #: ui/components/macos-titlebar-cluster.slint
 #: ui/components/onboarding/onboarding-overlay.slint
+#: ui/views/settings/duplicates-section.slint
 msgid "Close"
 msgstr "Bezárás"
 
@@ -265,6 +266,7 @@ msgid "Added {}"
 msgstr "Hozzáadva: {}"
 
 #: ui/components/dialog/duplicate-row.slint
+#: ui/components/dialog/kept-out-body.slint
 #: ui/components/now-playing/overflow-menu.slint
 msgid "More"
 msgstr "Továbbiak"
@@ -286,6 +288,13 @@ msgid "Its plays, rating, heart and playlist places move to the copy you keep."
 msgid_plural "Their plays, ratings, hearts and playlist places move to the copies you keep."
 msgstr[0] "A lejátszásai, értékelése, szíve és lejátszásilista-helyei átkerülnek a megtartott példányra."
 msgstr[1] "A lejátszásaik, értékeléseik, szíveik és lejátszásilista-helyeik átkerülnek a megtartott példányokra."
+
+#. Translators: use the Settings row's own "Files kept out of the library".
+#: ui/components/dialog/duplicates-body.slint
+msgid "You can find it, or bring it back, under Files kept out of the library in Settings."
+msgid_plural "You can find them, or bring them back, under Files kept out of the library in Settings."
+msgstr[0] "A Beállításokban, „A könyvtárból kizárt fájlok” alatt megtalálod, és vissza is állíthatod."
+msgstr[1] "A Beállításokban, „A könyvtárból kizárt fájlok” alatt megtalálod őket, és vissza is állíthatod őket."
 
 #. Translators: {n} counts songs found more than once, each with its copies.
 #: ui/components/dialog/duplicates-body.slint
@@ -354,6 +363,11 @@ msgstr "Tartalmazó mappa megnyitása"
 msgid "Copy Path"
 msgstr "Elérési út másolása"
 
+#: ui/components/dialog/duplicates-menus.slint
+#: ui/components/dialog/kept-out-body.slint
+msgid "Bring Back"
+msgstr "Visszaállítás"
+
 #: ui/components/dialog/export-playlist-picker.slint
 msgid "No playlists to export"
 msgstr "Nincs exportálható lejátszási lista"
@@ -361,6 +375,46 @@ msgstr "Nincs exportálható lejátszási lista"
 #: ui/components/dialog/export-playlist-picker.slint
 msgid "Several playlists are saved as one .zip file, which you can import directly without extracting it."
 msgstr "Több lejátszási lista egyetlen .zip fájlba kerül, amelyet kicsomagolás nélkül, közvetlenül importálhatsz."
+
+#. Translators: {} is the day the copy left the library, as 2026-11-02.
+#: ui/components/dialog/kept-out-body.slint
+msgid "Removed {}"
+msgstr "Eltávolítva: {}"
+
+#: ui/components/dialog/kept-out-body.slint
+msgid "{n} file"
+msgid_plural "{n} files"
+msgstr[0] "{n} fájl"
+msgstr[1] "{n} fájl"
+
+#: ui/components/dialog/kept-out-body.slint
+msgid "Copy All Paths"
+msgstr "Összes elérési út másolása"
+
+#: ui/components/dialog/kept-out-body.slint
+msgid "Bring All Back"
+msgstr "Összes visszaállítása"
+
+#: ui/components/dialog/kept-out-body.slint
+msgid "Bringing back…"
+msgstr "Visszaállítás…"
+
+#: ui/components/dialog/kept-out-body.slint ui/views/radio/browse-tab.slint
+#: ui/views/radio/facet-chip.slint
+msgid "Loading…"
+msgstr "Betöltés…"
+
+#: ui/components/dialog/kept-out-body.slint
+msgid "Couldn't read the list."
+msgstr "Nem sikerült beolvasni a listát."
+
+#: ui/components/dialog/kept-out-body.slint
+msgid "Nothing is kept out"
+msgstr "Nincs kizárt fájl"
+
+#: ui/components/dialog/kept-out-body.slint
+msgid "Every removed copy is back in the library."
+msgstr "Minden eltávolított példány visszakerült a könyvtárba."
 
 #: ui/components/dialog/playlist-mosaic-picker.slint
 msgid "No artwork"
@@ -1873,6 +1927,28 @@ msgstr "Nem sikerült eltávolítani a példányokat"
 msgid "Nothing left the library. See the log for details."
 msgstr "Semmi sem került ki a könyvtárból. A részleteket a naplóban találod."
 
+#: ui/globals/duplicates.slint
+msgid "{n} file brought back to the library"
+msgid_plural "{n} files brought back to the library"
+msgstr[0] "{n} fájl visszakerült a könyvtárba"
+msgstr[1] "{n} fájl visszakerült a könyvtárba"
+
+#: ui/globals/duplicates.slint
+msgid "{n} file wasn't found or couldn't be read, so it stays on the list."
+msgid_plural "{n} files weren't found or couldn't be read, so they stay on the list."
+msgstr[0] "{n} fájl nem található vagy nem olvasható, ezért a listán marad."
+msgstr[1] "{n} fájl nem található vagy nem olvasható, ezért a listán marad."
+
+#: ui/globals/duplicates.slint
+msgid "Couldn't bring the file back"
+msgid_plural "Couldn't bring the files back"
+msgstr[0] "Nem sikerült visszaállítani a fájlt"
+msgstr[1] "Nem sikerült visszaállítani a fájlokat"
+
+#: ui/globals/duplicates.slint ui/globals/undo-text.slint ui/settings.slint
+msgid "See the log for details."
+msgstr "A részleteket a naplóban találod."
+
 #: ui/globals/hero-chips.slint ui/views/my-library-view.slint
 msgid "{n} artist"
 msgid_plural "{n} artists"
@@ -2042,10 +2118,6 @@ msgstr "Túl sok a visszavonáshoz"
 #: ui/globals/undo-text.slint
 msgid "Couldn't undo"
 msgstr "Nem sikerült visszavonni"
-
-#: ui/globals/undo-text.slint ui/settings.slint
-msgid "See the log for details."
-msgstr "A részleteket a naplóban találod."
 
 #. Translators: the action a click takes, expanding the sidebar
 #: ui/layout/sidebar.slint
@@ -2693,10 +2765,6 @@ msgstr "Próbálj másik nevet, vagy törölj egy szűrőt."
 msgid "Load more stations"
 msgstr "További állomások betöltése"
 
-#: ui/views/radio/browse-tab.slint ui/views/radio/facet-chip.slint
-msgid "Loading…"
-msgstr "Betöltés…"
-
 #: ui/views/radio/facet-chip.slint
 msgid "Filter…"
 msgstr "Szűrés…"
@@ -3030,6 +3098,16 @@ msgid "Find songs the library holds more than once, and pick the copies you don'
 msgstr "Keresd meg a könyvtárban többször szereplő dalokat, és jelöld ki a felesleges példányokat."
 
 #: ui/views/settings/duplicates-section.slint
+msgid "Files kept out of the library"
+msgstr "A könyvtárból kizárt fájlok"
+
+#: ui/views/settings/duplicates-section.slint
+msgid "{n} removed copy. Its file is still on disk, and scans leave it out."
+msgid_plural "{n} removed copies. Their files are still on disk, and scans leave them out."
+msgstr[0] "{n} eltávolított példány. A fájlja még a lemezen van, és az átvizsgálások kihagyják."
+msgstr[1] "{n} eltávolított példány. A fájljaik még a lemezen vannak, és az átvizsgálások kihagyják őket."
+
+#: ui/views/settings/duplicates-section.slint
 msgid "Find…"
 msgstr "Keresés…"
 
@@ -3040,6 +3118,18 @@ msgstr "Ismétlődő számok"
 #: ui/views/settings/duplicates-section.slint
 msgid "Songs the library seems to hold more than once. Pick the copies you don't need."
 msgstr "Dalok, amelyek többször is szerepelni látszanak a könyvtárban. Jelöld ki a felesleges példányokat."
+
+#: ui/views/settings/duplicates-section.slint
+msgid "Show…"
+msgstr "Megjelenítés…"
+
+#: ui/views/settings/duplicates-section.slint
+msgid "Files Kept Out of the Library"
+msgstr "A könyvtárból kizárt fájlok"
+
+#: ui/views/settings/duplicates-section.slint
+msgid "Copies you removed as duplicates. Their files stay where they are, and scans leave them out until you bring them back."
+msgstr "Az ismétlődésként eltávolított példányok. A fájljaik ott maradnak, ahol vannak, és az átvizsgálások kihagyják őket, amíg vissza nem állítod őket."
 
 #. Translators: an equalizer preset, such as Rock or Jazz
 #: ui/views/settings/equalizer-section.slint

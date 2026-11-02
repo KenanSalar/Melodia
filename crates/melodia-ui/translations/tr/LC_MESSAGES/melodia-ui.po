@@ -62,6 +62,7 @@ msgstr "Geri Yükle"
 #: ui/components/caption-buttons.slint
 #: ui/components/macos-titlebar-cluster.slint
 #: ui/components/onboarding/onboarding-overlay.slint
+#: ui/views/settings/duplicates-section.slint
 msgid "Close"
 msgstr "Kapat"
 
@@ -266,6 +267,7 @@ msgid "Added {}"
 msgstr "Eklenme: {}"
 
 #: ui/components/dialog/duplicate-row.slint
+#: ui/components/dialog/kept-out-body.slint
 #: ui/components/now-playing/overflow-menu.slint
 msgid "More"
 msgstr "Diğer Seçenekler"
@@ -287,6 +289,13 @@ msgid "Its plays, rating, heart and playlist places move to the copy you keep."
 msgid_plural "Their plays, ratings, hearts and playlist places move to the copies you keep."
 msgstr[0] "Çalınma sayısı, derecelendirmesi, kalbi ve çalma listelerindeki yerleri tuttuğunuz kopyaya geçer."
 msgstr[1] "Çalınma sayıları, derecelendirmeleri, kalpleri ve çalma listelerindeki yerleri tuttuğunuz kopyalara geçer."
+
+#. Translators: use the Settings row's own "Files kept out of the library".
+#: ui/components/dialog/duplicates-body.slint
+msgid "You can find it, or bring it back, under Files kept out of the library in Settings."
+msgid_plural "You can find them, or bring them back, under Files kept out of the library in Settings."
+msgstr[0] "Onu Ayarlar'daki Kitaplık dışında tutulan dosyalar bölümünde bulabilir veya geri getirebilirsiniz."
+msgstr[1] "Onları Ayarlar'daki Kitaplık dışında tutulan dosyalar bölümünde bulabilir veya geri getirebilirsiniz."
 
 # Turkish doesn't pluralize a noun after a numeral, so both forms are the same.
 #. Translators: {n} counts songs found more than once, each with its copies.
@@ -356,6 +365,11 @@ msgstr "Bulunduğu Klasörü Aç"
 msgid "Copy Path"
 msgstr "Yolu Kopyala"
 
+#: ui/components/dialog/duplicates-menus.slint
+#: ui/components/dialog/kept-out-body.slint
+msgid "Bring Back"
+msgstr "Geri Getir"
+
 #: ui/components/dialog/export-playlist-picker.slint
 msgid "No playlists to export"
 msgstr "Dışa aktarılacak çalma listesi yok"
@@ -363,6 +377,46 @@ msgstr "Dışa aktarılacak çalma listesi yok"
 #: ui/components/dialog/export-playlist-picker.slint
 msgid "Several playlists are saved as one .zip file, which you can import directly without extracting it."
 msgstr "Birden fazla çalma listesi tek bir .zip dosyası olarak kaydedilir; bu dosyayı arşivden çıkarmadan doğrudan içe aktarabilirsiniz."
+
+#. Translators: {} is the day the copy left the library, as 2026-11-02.
+#: ui/components/dialog/kept-out-body.slint
+msgid "Removed {}"
+msgstr "Kaldırılma: {}"
+
+#: ui/components/dialog/kept-out-body.slint
+msgid "{n} file"
+msgid_plural "{n} files"
+msgstr[0] "{n} dosya"
+msgstr[1] "{n} dosya"
+
+#: ui/components/dialog/kept-out-body.slint
+msgid "Copy All Paths"
+msgstr "Tüm Yolları Kopyala"
+
+#: ui/components/dialog/kept-out-body.slint
+msgid "Bring All Back"
+msgstr "Tümünü Geri Getir"
+
+#: ui/components/dialog/kept-out-body.slint
+msgid "Bringing back…"
+msgstr "Geri getiriliyor…"
+
+#: ui/components/dialog/kept-out-body.slint ui/views/radio/browse-tab.slint
+#: ui/views/radio/facet-chip.slint
+msgid "Loading…"
+msgstr "Yükleniyor…"
+
+#: ui/components/dialog/kept-out-body.slint
+msgid "Couldn't read the list."
+msgstr "Liste okunamadı."
+
+#: ui/components/dialog/kept-out-body.slint
+msgid "Nothing is kept out"
+msgstr "Dışarıda tutulan dosya yok"
+
+#: ui/components/dialog/kept-out-body.slint
+msgid "Every removed copy is back in the library."
+msgstr "Kaldırılan tüm kopyalar kitaplığa geri döndü."
 
 #: ui/components/dialog/playlist-mosaic-picker.slint
 msgid "No artwork"
@@ -1880,6 +1934,28 @@ msgstr "Kopyalar kaldırılamadı"
 msgid "Nothing left the library. See the log for details."
 msgstr "Kitaplıktan hiçbir şey çıkmadı. Ayrıntılar için günlüğe bakın."
 
+#: ui/globals/duplicates.slint
+msgid "{n} file brought back to the library"
+msgid_plural "{n} files brought back to the library"
+msgstr[0] "{n} dosya kitaplığa geri getirildi"
+msgstr[1] "{n} dosya kitaplığa geri getirildi"
+
+#: ui/globals/duplicates.slint
+msgid "{n} file wasn't found or couldn't be read, so it stays on the list."
+msgid_plural "{n} files weren't found or couldn't be read, so they stay on the list."
+msgstr[0] "{n} dosya bulunamadı veya okunamadı, bu yüzden listede kalıyor."
+msgstr[1] "{n} dosya bulunamadı veya okunamadı, bu yüzden listede kalıyor."
+
+#: ui/globals/duplicates.slint
+msgid "Couldn't bring the file back"
+msgid_plural "Couldn't bring the files back"
+msgstr[0] "Dosya geri getirilemedi"
+msgstr[1] "Dosyalar geri getirilemedi"
+
+#: ui/globals/duplicates.slint ui/globals/undo-text.slint ui/settings.slint
+msgid "See the log for details."
+msgstr "Ayrıntılar için günlüğe bakın."
+
 # Turkish doesn't pluralize a noun after a numeral, so both forms are the same.
 #: ui/globals/hero-chips.slint ui/views/my-library-view.slint
 msgid "{n} artist"
@@ -2051,10 +2127,6 @@ msgstr "Geri alınamayacak kadar çok"
 #: ui/globals/undo-text.slint
 msgid "Couldn't undo"
 msgstr "Geri alınamadı"
-
-#: ui/globals/undo-text.slint ui/settings.slint
-msgid "See the log for details."
-msgstr "Ayrıntılar için günlüğe bakın."
 
 #. Translators: the action a click takes, expanding the sidebar
 #: ui/layout/sidebar.slint
@@ -2704,10 +2776,6 @@ msgstr "Farklı bir ad dene ya da bir filtreyi kaldır."
 msgid "Load more stations"
 msgstr "Daha fazla istasyon yükle"
 
-#: ui/views/radio/browse-tab.slint ui/views/radio/facet-chip.slint
-msgid "Loading…"
-msgstr "Yükleniyor…"
-
 #: ui/views/radio/facet-chip.slint
 msgid "Filter…"
 msgstr "Filtrele…"
@@ -3041,6 +3109,16 @@ msgid "Find songs the library holds more than once, and pick the copies you don'
 msgstr "Kitaplıkta birden fazla kez bulunan şarkıları bulun ve gerekmeyen kopyaları seçin."
 
 #: ui/views/settings/duplicates-section.slint
+msgid "Files kept out of the library"
+msgstr "Kitaplık dışında tutulan dosyalar"
+
+#: ui/views/settings/duplicates-section.slint
+msgid "{n} removed copy. Its file is still on disk, and scans leave it out."
+msgid_plural "{n} removed copies. Their files are still on disk, and scans leave them out."
+msgstr[0] "{n} kaldırılan kopya. Dosyası hâlâ diskte ve taramalar onu atlar."
+msgstr[1] "{n} kaldırılan kopya. Dosyaları hâlâ diskte ve taramalar onları atlar."
+
+#: ui/views/settings/duplicates-section.slint
 msgid "Find…"
 msgstr "Bul…"
 
@@ -3051,6 +3129,18 @@ msgstr "Yinelenen Parçalar"
 #: ui/views/settings/duplicates-section.slint
 msgid "Songs the library seems to hold more than once. Pick the copies you don't need."
 msgstr "Kitaplıkta birden fazla kez bulunuyor gibi görünen şarkılar. Gerekmeyen kopyaları seçin."
+
+#: ui/views/settings/duplicates-section.slint
+msgid "Show…"
+msgstr "Göster…"
+
+#: ui/views/settings/duplicates-section.slint
+msgid "Files Kept Out of the Library"
+msgstr "Kitaplık Dışında Tutulan Dosyalar"
+
+#: ui/views/settings/duplicates-section.slint
+msgid "Copies you removed as duplicates. Their files stay where they are, and scans leave them out until you bring them back."
+msgstr "Yinelenen olarak kaldırdığınız kopyalar. Dosyaları oldukları yerde kalır ve siz geri getirene kadar taramalar onları atlar."
 
 #. Translators: an equalizer preset, such as Rock or Jazz
 #: ui/views/settings/equalizer-section.slint

@@ -1,10 +1,11 @@
-//! The duplicate finder, the Not Duplicates list that hides a group the user keeps on purpose, and
-//! the Remove that takes the spares out.
+//! The duplicate finder, the Not Duplicates list that hides a group the user keeps on purpose, the
+//! Remove that takes the spares out, and in `kept_out` the files it left behind.
 //!
 //! A find reads the library in two passes so it never holds a row per track: a hashed key for
 //! every track, then the full facts of only the candidates whose keys collide.
 
 mod apply;
+pub mod kept_out;
 mod matcher;
 
 pub use apply::{RemovalCounts, apply};

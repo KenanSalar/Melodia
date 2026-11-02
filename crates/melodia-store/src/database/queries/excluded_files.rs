@@ -10,6 +10,7 @@ use sqlx::sqlite::SqliteConnection;
 use sqlx::{AssertSqlSafe, QueryBuilder, Sqlite, Transaction};
 
 use crate::database::{DbPool, MAX_BINDS_PER_STATEMENT, chunked_in_query, chunked_in_query_on};
+use melodia_core::entities::duplicates::KeptOutFile;
 use melodia_core::error::AppError;
 
 /// A spare's file as the merge keeps it out.
@@ -38,6 +39,37 @@ pub(crate) async fn exclude_on(
         builder.build().persistent(false).execute(&mut **tx).await?;
     }
     Ok(())
+}
+
+pub async fn count(db: &DbPool) -> Result<i64, AppError> {
+    let count = sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM excluded_files")
+        .fetch_one(db.read())
+        .await?;
+    Ok(count)
+}
+
+/// Every kept-out file's id, in path order: the kept-out list's keyset.
+pub async fn ids(db: &DbPool) -> Result<Vec<i64>, AppError> {
+    let ids = sqlx::query_scalar::<_, i64>("SELECT id FROM excluded_files ORDER BY path")
+        .fetch_all(db.read())
+        .await?;
+    Ok(ids)
+}
+
+/// The kept-out files behind `ids`, in no particular order. An id lifted since has no row.
+pub async fn files(db: &DbPool, ids: &[i64]) -> Result<Vec<KeptOutFile>, AppError> {
+    chunked_in_query(db.read(), ids, |placeholders| {
+        format!("SELECT id, path, excluded_at FROM excluded_files WHERE id IN ({placeholders})")
+    })
+    .await
+}
+
+/// Every kept-out path, in path order.
+pub async fn paths(db: &DbPool) -> Result<Vec<String>, AppError> {
+    let paths = sqlx::query_scalar::<_, String>("SELECT path FROM excluded_files ORDER BY path")
+        .fetch_all(db.read())
+        .await?;
+    Ok(paths)
 }
 
 /// The kept-out paths among `paths`, off the read pool.

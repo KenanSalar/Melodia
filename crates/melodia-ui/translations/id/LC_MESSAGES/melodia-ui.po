@@ -62,6 +62,7 @@ msgstr "Pulihkan"
 #: ui/components/caption-buttons.slint
 #: ui/components/macos-titlebar-cluster.slint
 #: ui/components/onboarding/onboarding-overlay.slint
+#: ui/views/settings/duplicates-section.slint
 msgid "Close"
 msgstr "Tutup"
 
@@ -260,6 +261,7 @@ msgid "Added {}"
 msgstr "Ditambahkan {}"
 
 #: ui/components/dialog/duplicate-row.slint
+#: ui/components/dialog/kept-out-body.slint
 #: ui/components/now-playing/overflow-menu.slint
 msgid "More"
 msgstr "Lainnya"
@@ -278,6 +280,12 @@ msgstr[0] "Berkasnya tetap di tempatnya, dan pemindaian berikutnya akan melewati
 msgid "Its plays, rating, heart and playlist places move to the copy you keep."
 msgid_plural "Their plays, ratings, hearts and playlist places move to the copies you keep."
 msgstr[0] "Jumlah putar, rating, tanda hati, dan posisinya di playlist pindah ke salinan yang disimpan."
+
+#. Translators: use the Settings row's own "Files kept out of the library".
+#: ui/components/dialog/duplicates-body.slint
+msgid "You can find it, or bring it back, under Files kept out of the library in Settings."
+msgid_plural "You can find them, or bring them back, under Files kept out of the library in Settings."
+msgstr[0] "Salinan ini dapat ditemukan atau dikembalikan di Berkas di luar pustaka, di Pengaturan."
 
 #. Translators: {n} counts songs found more than once, each with its copies.
 #: ui/components/dialog/duplicates-body.slint
@@ -345,6 +353,11 @@ msgstr "Buka Folder Induk"
 msgid "Copy Path"
 msgstr "Salin Jalur"
 
+#: ui/components/dialog/duplicates-menus.slint
+#: ui/components/dialog/kept-out-body.slint
+msgid "Bring Back"
+msgstr "Kembalikan"
+
 #: ui/components/dialog/export-playlist-picker.slint
 msgid "No playlists to export"
 msgstr "Tidak ada playlist untuk diekspor"
@@ -352,6 +365,45 @@ msgstr "Tidak ada playlist untuk diekspor"
 #: ui/components/dialog/export-playlist-picker.slint
 msgid "Several playlists are saved as one .zip file, which you can import directly without extracting it."
 msgstr "Beberapa playlist disimpan sebagai satu berkas .zip yang dapat Anda impor langsung tanpa mengekstraknya."
+
+#. Translators: {} is the day the copy left the library, as 2026-11-02.
+#: ui/components/dialog/kept-out-body.slint
+msgid "Removed {}"
+msgstr "Dihapus {}"
+
+#: ui/components/dialog/kept-out-body.slint
+msgid "{n} file"
+msgid_plural "{n} files"
+msgstr[0] "{n} berkas"
+
+#: ui/components/dialog/kept-out-body.slint
+msgid "Copy All Paths"
+msgstr "Salin Semua Jalur"
+
+#: ui/components/dialog/kept-out-body.slint
+msgid "Bring All Back"
+msgstr "Kembalikan Semua"
+
+#: ui/components/dialog/kept-out-body.slint
+msgid "Bringing back…"
+msgstr "Mengembalikan…"
+
+#: ui/components/dialog/kept-out-body.slint ui/views/radio/browse-tab.slint
+#: ui/views/radio/facet-chip.slint
+msgid "Loading…"
+msgstr "Memuat…"
+
+#: ui/components/dialog/kept-out-body.slint
+msgid "Couldn't read the list."
+msgstr "Tidak dapat membaca daftar."
+
+#: ui/components/dialog/kept-out-body.slint
+msgid "Nothing is kept out"
+msgstr "Tidak ada yang dikecualikan"
+
+#: ui/components/dialog/kept-out-body.slint
+msgid "Every removed copy is back in the library."
+msgstr "Semua salinan yang dihapus sudah kembali ke pustaka."
 
 #: ui/components/dialog/playlist-mosaic-picker.slint
 msgid "No artwork"
@@ -1853,6 +1905,25 @@ msgstr "Tidak dapat menghapus salinan"
 msgid "Nothing left the library. See the log for details."
 msgstr "Tidak ada yang keluar dari pustaka. Lihat log untuk detailnya."
 
+#: ui/globals/duplicates.slint
+msgid "{n} file brought back to the library"
+msgid_plural "{n} files brought back to the library"
+msgstr[0] "{n} berkas dikembalikan ke pustaka"
+
+#: ui/globals/duplicates.slint
+msgid "{n} file wasn't found or couldn't be read, so it stays on the list."
+msgid_plural "{n} files weren't found or couldn't be read, so they stay on the list."
+msgstr[0] "{n} berkas tidak ditemukan atau tidak dapat dibaca, jadi tetap ada di daftar."
+
+#: ui/globals/duplicates.slint
+msgid "Couldn't bring the file back"
+msgid_plural "Couldn't bring the files back"
+msgstr[0] "Tidak dapat mengembalikan berkas"
+
+#: ui/globals/duplicates.slint ui/globals/undo-text.slint ui/settings.slint
+msgid "See the log for details."
+msgstr "Lihat log untuk detailnya."
+
 #: ui/globals/hero-chips.slint ui/views/my-library-view.slint
 msgid "{n} artist"
 msgid_plural "{n} artists"
@@ -2014,10 +2085,6 @@ msgstr "Terlalu banyak untuk diurungkan"
 #: ui/globals/undo-text.slint
 msgid "Couldn't undo"
 msgstr "Tidak dapat mengurungkan"
-
-#: ui/globals/undo-text.slint ui/settings.slint
-msgid "See the log for details."
-msgstr "Lihat log untuk detailnya."
 
 #. Translators: the action a click takes, expanding the sidebar
 #: ui/layout/sidebar.slint
@@ -2645,10 +2712,6 @@ msgstr "Coba nama lain, atau hapus filter."
 msgid "Load more stations"
 msgstr "Muat stasiun lainnya"
 
-#: ui/views/radio/browse-tab.slint ui/views/radio/facet-chip.slint
-msgid "Loading…"
-msgstr "Memuat…"
-
 #: ui/views/radio/facet-chip.slint
 msgid "Filter…"
 msgstr "Saring…"
@@ -2982,6 +3045,15 @@ msgid "Find songs the library holds more than once, and pick the copies you don'
 msgstr "Temukan lagu yang ada lebih dari sekali di pustaka, lalu pilih salinan yang tidak diperlukan."
 
 #: ui/views/settings/duplicates-section.slint
+msgid "Files kept out of the library"
+msgstr "Berkas di luar pustaka"
+
+#: ui/views/settings/duplicates-section.slint
+msgid "{n} removed copy. Its file is still on disk, and scans leave it out."
+msgid_plural "{n} removed copies. Their files are still on disk, and scans leave them out."
+msgstr[0] "{n} salinan dihapus. Berkasnya masih ada di disk, dan pemindaian melewatinya."
+
+#: ui/views/settings/duplicates-section.slint
 msgid "Find…"
 msgstr "Cari…"
 
@@ -2992,6 +3064,18 @@ msgstr "Lagu Duplikat"
 #: ui/views/settings/duplicates-section.slint
 msgid "Songs the library seems to hold more than once. Pick the copies you don't need."
 msgstr "Lagu yang tampaknya ada lebih dari sekali di pustaka. Pilih salinan yang tidak diperlukan."
+
+#: ui/views/settings/duplicates-section.slint
+msgid "Show…"
+msgstr "Tampilkan…"
+
+#: ui/views/settings/duplicates-section.slint
+msgid "Files Kept Out of the Library"
+msgstr "Berkas di Luar Pustaka"
+
+#: ui/views/settings/duplicates-section.slint
+msgid "Copies you removed as duplicates. Their files stay where they are, and scans leave them out until you bring them back."
+msgstr "Salinan yang dihapus sebagai duplikat. Berkasnya tetap di tempatnya, dan pemindaian melewatinya sampai dikembalikan."
 
 #. Translators: an equalizer preset, such as Rock or Jazz
 #: ui/views/settings/equalizer-section.slint

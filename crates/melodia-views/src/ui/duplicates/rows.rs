@@ -4,6 +4,8 @@
 use std::collections::HashMap;
 use std::path::Path;
 
+use slint::SharedString;
+
 use super::picks::{DuplicateSet, HeaderFacts};
 use crate::ui::paged_rows::PagedRow;
 use crate::ui::util::{
@@ -71,21 +73,16 @@ fn header_row(id: i64, facts: &HeaderFacts, lead: &DuplicateCopy) -> DuplicateRo
 }
 
 fn copy_row(copy: &DuplicateCopy, dismissed: bool) -> DuplicateRow {
-    let path = Path::new(&copy.file_path);
+    let (file_name, folder) = file_and_folder(&copy.file_path);
     DuplicateRow {
         id: clamp_i64_to_i32(copy.id),
         dismissed,
-        file_name: path
-            .file_name()
-            .map(|name| name.to_string_lossy())
-            .unwrap_or_default()
-            .as_ref()
-            .into(),
+        file_name,
         format: format_label(&copy.format).into(),
         lossless: copy.format.is_lossless(),
         release: release(copy).into(),
-        folder: path.parent().map(|folder| folder.display().to_string()).unwrap_or_default().into(),
-        added: added_date(&copy.date_added).into(),
+        folder,
+        added: day_of(&copy.date_added).into(),
         plays: clamp_i64_to_i32(copy.play_count),
         rating: copy.rating,
         favorite: copy.is_favorite,
@@ -129,7 +126,15 @@ fn release(copy: &DuplicateCopy) -> String {
         .join(" · ")
 }
 
-/// The day a copy came in, all it takes to tell an old copy from a recent one.
-fn added_date(date_added: &str) -> &str {
-    date_added.split(['T', ' ']).next().unwrap_or_default()
+/// A file's name and the folder holding it, as a row shows them.
+pub(super) fn file_and_folder(path: &str) -> (SharedString, SharedString) {
+    let path = Path::new(path);
+    let file_name = path.file_name().map(|name| name.to_string_lossy()).unwrap_or_default();
+    let folder = path.parent().map(|folder| folder.display().to_string()).unwrap_or_default();
+    (file_name.as_ref().into(), folder.into())
+}
+
+/// The day of an RFC 3339 stamp, all it takes to tell an old copy from a recent one.
+pub(super) fn day_of(stamp: &str) -> &str {
+    stamp.split(['T', ' ']).next().unwrap_or_default()
 }

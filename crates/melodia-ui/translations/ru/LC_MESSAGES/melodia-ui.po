@@ -62,6 +62,7 @@ msgstr "Восстановить"
 #: ui/components/caption-buttons.slint
 #: ui/components/macos-titlebar-cluster.slint
 #: ui/components/onboarding/onboarding-overlay.slint
+#: ui/views/settings/duplicates-section.slint
 msgid "Close"
 msgstr "Закрыть"
 
@@ -266,6 +267,7 @@ msgid "Added {}"
 msgstr "Добавлено {}"
 
 #: ui/components/dialog/duplicate-row.slint
+#: ui/components/dialog/kept-out-body.slint
 #: ui/components/now-playing/overflow-menu.slint
 msgid "More"
 msgstr "Ещё"
@@ -290,6 +292,14 @@ msgid_plural "Their plays, ratings, hearts and playlist places move to the copie
 msgstr[0] "Её прослушивания, оценка, отметка «Избранное» и места в плейлистах перейдут к оставленной копии."
 msgstr[1] "Их прослушивания, оценки, отметки «Избранное» и места в плейлистах перейдут к оставленным копиям."
 msgstr[2] "Их прослушивания, оценки, отметки «Избранное» и места в плейлистах перейдут к оставленным копиям."
+
+#. Translators: use the Settings row's own "Files kept out of the library".
+#: ui/components/dialog/duplicates-body.slint
+msgid "You can find it, or bring it back, under Files kept out of the library in Settings."
+msgid_plural "You can find them, or bring them back, under Files kept out of the library in Settings."
+msgstr[0] "Её можно найти или вернуть в разделе «Файлы вне медиатеки» в настройках."
+msgstr[1] "Их можно найти или вернуть в разделе «Файлы вне медиатеки» в настройках."
+msgstr[2] "Их можно найти или вернуть в разделе «Файлы вне медиатеки» в настройках."
 
 #. Translators: {n} counts songs found more than once, each with its copies.
 #: ui/components/dialog/duplicates-body.slint
@@ -359,6 +369,11 @@ msgstr "Открыть папку с файлом"
 msgid "Copy Path"
 msgstr "Копировать путь"
 
+#: ui/components/dialog/duplicates-menus.slint
+#: ui/components/dialog/kept-out-body.slint
+msgid "Bring Back"
+msgstr "Вернуть"
+
 #: ui/components/dialog/export-playlist-picker.slint
 msgid "No playlists to export"
 msgstr "Нет плейлистов для экспорта"
@@ -366,6 +381,47 @@ msgstr "Нет плейлистов для экспорта"
 #: ui/components/dialog/export-playlist-picker.slint
 msgid "Several playlists are saved as one .zip file, which you can import directly without extracting it."
 msgstr "Несколько плейлистов сохраняются в один файл .zip, который можно импортировать сразу, не распаковывая."
+
+#. Translators: {} is the day the copy left the library, as 2026-11-02.
+#: ui/components/dialog/kept-out-body.slint
+msgid "Removed {}"
+msgstr "Удалено {}"
+
+#: ui/components/dialog/kept-out-body.slint
+msgid "{n} file"
+msgid_plural "{n} files"
+msgstr[0] "{n} файл"
+msgstr[1] "{n} файла"
+msgstr[2] "{n} файлов"
+
+#: ui/components/dialog/kept-out-body.slint
+msgid "Copy All Paths"
+msgstr "Копировать все пути"
+
+#: ui/components/dialog/kept-out-body.slint
+msgid "Bring All Back"
+msgstr "Вернуть все"
+
+#: ui/components/dialog/kept-out-body.slint
+msgid "Bringing back…"
+msgstr "Возвращение…"
+
+#: ui/components/dialog/kept-out-body.slint ui/views/radio/browse-tab.slint
+#: ui/views/radio/facet-chip.slint
+msgid "Loading…"
+msgstr "Загрузка…"
+
+#: ui/components/dialog/kept-out-body.slint
+msgid "Couldn't read the list."
+msgstr "Не удалось прочитать список."
+
+#: ui/components/dialog/kept-out-body.slint
+msgid "Nothing is kept out"
+msgstr "Исключённых файлов нет"
+
+#: ui/components/dialog/kept-out-body.slint
+msgid "Every removed copy is back in the library."
+msgstr "Все удалённые копии снова в медиатеке."
 
 #: ui/components/dialog/playlist-mosaic-picker.slint
 msgid "No artwork"
@@ -1889,6 +1945,31 @@ msgstr "Не удалось удалить копии"
 msgid "Nothing left the library. See the log for details."
 msgstr "Из медиатеки ничего не удалено. Подробности в журнале."
 
+#: ui/globals/duplicates.slint
+msgid "{n} file brought back to the library"
+msgid_plural "{n} files brought back to the library"
+msgstr[0] "{n} файл возвращён в медиатеку"
+msgstr[1] "{n} файла возвращены в медиатеку"
+msgstr[2] "{n} файлов возвращено в медиатеку"
+
+#: ui/globals/duplicates.slint
+msgid "{n} file wasn't found or couldn't be read, so it stays on the list."
+msgid_plural "{n} files weren't found or couldn't be read, so they stay on the list."
+msgstr[0] "{n} файл не найден или не читается, поэтому остаётся в списке."
+msgstr[1] "{n} файла не найдены или не читаются, поэтому остаются в списке."
+msgstr[2] "{n} файлов не найдены или не читаются, поэтому остаются в списке."
+
+#: ui/globals/duplicates.slint
+msgid "Couldn't bring the file back"
+msgid_plural "Couldn't bring the files back"
+msgstr[0] "Не удалось вернуть файл"
+msgstr[1] "Не удалось вернуть файлы"
+msgstr[2] "Не удалось вернуть файлы"
+
+#: ui/globals/duplicates.slint ui/globals/undo-text.slint ui/settings.slint
+msgid "See the log for details."
+msgstr "Подробности в журнале."
+
 #: ui/globals/hero-chips.slint ui/views/my-library-view.slint
 msgid "{n} artist"
 msgid_plural "{n} artists"
@@ -2066,10 +2147,6 @@ msgstr "Слишком много для отмены"
 #: ui/globals/undo-text.slint
 msgid "Couldn't undo"
 msgstr "Не удалось отменить"
-
-#: ui/globals/undo-text.slint ui/settings.slint
-msgid "See the log for details."
-msgstr "Подробности в журнале."
 
 #. Translators: the action a click takes, expanding the sidebar
 #: ui/layout/sidebar.slint
@@ -2737,10 +2814,6 @@ msgstr "Попробуйте другое название или сбросьт
 msgid "Load more stations"
 msgstr "Загрузить ещё станции"
 
-#: ui/views/radio/browse-tab.slint ui/views/radio/facet-chip.slint
-msgid "Loading…"
-msgstr "Загрузка…"
-
 #: ui/views/radio/facet-chip.slint
 msgid "Filter…"
 msgstr "Фильтр…"
@@ -3074,6 +3147,17 @@ msgid "Find songs the library holds more than once, and pick the copies you don'
 msgstr "Найдите песни, которые есть в медиатеке несколько раз, и выберите ненужные копии."
 
 #: ui/views/settings/duplicates-section.slint
+msgid "Files kept out of the library"
+msgstr "Файлы вне медиатеки"
+
+#: ui/views/settings/duplicates-section.slint
+msgid "{n} removed copy. Its file is still on disk, and scans leave it out."
+msgid_plural "{n} removed copies. Their files are still on disk, and scans leave them out."
+msgstr[0] "{n} удалённая копия. Её файл по-прежнему на диске, а сканирования его пропускают."
+msgstr[1] "{n} удалённые копии. Их файлы по-прежнему на диске, а сканирования их пропускают."
+msgstr[2] "{n} удалённых копий. Их файлы по-прежнему на диске, а сканирования их пропускают."
+
+#: ui/views/settings/duplicates-section.slint
 msgid "Find…"
 msgstr "Найти…"
 
@@ -3084,6 +3168,18 @@ msgstr "Повторяющиеся треки"
 #: ui/views/settings/duplicates-section.slint
 msgid "Songs the library seems to hold more than once. Pick the copies you don't need."
 msgstr "Песни, которые, похоже, есть в медиатеке несколько раз. Выберите ненужные копии."
+
+#: ui/views/settings/duplicates-section.slint
+msgid "Show…"
+msgstr "Показать…"
+
+#: ui/views/settings/duplicates-section.slint
+msgid "Files Kept Out of the Library"
+msgstr "Файлы вне медиатеки"
+
+#: ui/views/settings/duplicates-section.slint
+msgid "Copies you removed as duplicates. Their files stay where they are, and scans leave them out until you bring them back."
+msgstr "Копии, которые вы удалили как дубликаты. Их файлы остаются на месте, а сканирования пропускают их, пока вы их не вернёте."
 
 #. Translators: an equalizer preset, such as Rock or Jazz
 #: ui/views/settings/equalizer-section.slint

@@ -208,6 +208,15 @@ export struct DuplicateRow {
     playlists: int,
 }
 
+// A file Remove kept out of the library. `id` is the exclusion's, as it has no track.
+export struct KeptOutRow {
+    id: int,
+    file_name: string,
+    folder: string,
+    path: string,
+    removed: string,
+}
+
 // `join-index` points into Rust's `TagEditor.join-phrases`, so a mistyped separator can't reach
 // the file from here. The last row's is ignored.
 export struct ArtistCreditRow {

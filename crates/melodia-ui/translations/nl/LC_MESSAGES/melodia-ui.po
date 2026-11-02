@@ -62,6 +62,7 @@ msgstr "Herstellen"
 #: ui/components/caption-buttons.slint
 #: ui/components/macos-titlebar-cluster.slint
 #: ui/components/onboarding/onboarding-overlay.slint
+#: ui/views/settings/duplicates-section.slint
 msgid "Close"
 msgstr "Sluiten"
 
@@ -263,6 +264,7 @@ msgid "Added {}"
 msgstr "Toegevoegd op {}"
 
 #: ui/components/dialog/duplicate-row.slint
+#: ui/components/dialog/kept-out-body.slint
 #: ui/components/now-playing/overflow-menu.slint
 msgid "More"
 msgstr "Meer"
@@ -284,6 +286,13 @@ msgid "Its plays, rating, heart and playlist places move to the copy you keep."
 msgid_plural "Their plays, ratings, hearts and playlist places move to the copies you keep."
 msgstr[0] "Het aantal keer afgespeeld, de waardering, het hartje en de plaatsen in afspeellijsten gaan over naar de kopie die je houdt."
 msgstr[1] "Hun aantal keer afgespeeld, waarderingen, hartjes en plaatsen in afspeellijsten gaan over naar de kopieën die je houdt."
+
+#. Translators: use the Settings row's own "Files kept out of the library".
+#: ui/components/dialog/duplicates-body.slint
+msgid "You can find it, or bring it back, under Files kept out of the library in Settings."
+msgid_plural "You can find them, or bring them back, under Files kept out of the library in Settings."
+msgstr[0] "Je kunt hem terugvinden of terugzetten via Bestanden buiten de bibliotheek in Instellingen."
+msgstr[1] "Je kunt ze terugvinden of terugzetten via Bestanden buiten de bibliotheek in Instellingen."
 
 #. Translators: {n} counts songs found more than once, each with its copies.
 #: ui/components/dialog/duplicates-body.slint
@@ -352,6 +361,11 @@ msgstr "Bovenliggende map openen"
 msgid "Copy Path"
 msgstr "Pad kopiëren"
 
+#: ui/components/dialog/duplicates-menus.slint
+#: ui/components/dialog/kept-out-body.slint
+msgid "Bring Back"
+msgstr "Terugzetten"
+
 #: ui/components/dialog/export-playlist-picker.slint
 msgid "No playlists to export"
 msgstr "Geen afspeellijsten om te exporteren"
@@ -359,6 +373,46 @@ msgstr "Geen afspeellijsten om te exporteren"
 #: ui/components/dialog/export-playlist-picker.slint
 msgid "Several playlists are saved as one .zip file, which you can import directly without extracting it."
 msgstr "Meerdere afspeellijsten worden opgeslagen als één .zip-bestand, dat je direct kunt importeren zonder het uit te pakken."
+
+#. Translators: {} is the day the copy left the library, as 2026-11-02.
+#: ui/components/dialog/kept-out-body.slint
+msgid "Removed {}"
+msgstr "Verwijderd op {}"
+
+#: ui/components/dialog/kept-out-body.slint
+msgid "{n} file"
+msgid_plural "{n} files"
+msgstr[0] "{n} bestand"
+msgstr[1] "{n} bestanden"
+
+#: ui/components/dialog/kept-out-body.slint
+msgid "Copy All Paths"
+msgstr "Alle paden kopiëren"
+
+#: ui/components/dialog/kept-out-body.slint
+msgid "Bring All Back"
+msgstr "Alles terugzetten"
+
+#: ui/components/dialog/kept-out-body.slint
+msgid "Bringing back…"
+msgstr "Bezig met terugzetten…"
+
+#: ui/components/dialog/kept-out-body.slint ui/views/radio/browse-tab.slint
+#: ui/views/radio/facet-chip.slint
+msgid "Loading…"
+msgstr "Laden…"
+
+#: ui/components/dialog/kept-out-body.slint
+msgid "Couldn't read the list."
+msgstr "Kan de lijst niet lezen."
+
+#: ui/components/dialog/kept-out-body.slint
+msgid "Nothing is kept out"
+msgstr "Niets buitengesloten"
+
+#: ui/components/dialog/kept-out-body.slint
+msgid "Every removed copy is back in the library."
+msgstr "Elke verwijderde kopie staat weer in de bibliotheek."
 
 #: ui/components/dialog/playlist-mosaic-picker.slint
 msgid "No artwork"
@@ -1871,6 +1925,28 @@ msgstr "Kan de kopieën niet verwijderen"
 msgid "Nothing left the library. See the log for details."
 msgstr "Er is niets uit de bibliotheek gegaan. Zie het logboek voor details."
 
+#: ui/globals/duplicates.slint
+msgid "{n} file brought back to the library"
+msgid_plural "{n} files brought back to the library"
+msgstr[0] "{n} bestand teruggezet in de bibliotheek"
+msgstr[1] "{n} bestanden teruggezet in de bibliotheek"
+
+#: ui/globals/duplicates.slint
+msgid "{n} file wasn't found or couldn't be read, so it stays on the list."
+msgid_plural "{n} files weren't found or couldn't be read, so they stay on the list."
+msgstr[0] "{n} bestand is niet gevonden of kon niet worden gelezen, en blijft dus op de lijst."
+msgstr[1] "{n} bestanden zijn niet gevonden of konden niet worden gelezen, en blijven dus op de lijst."
+
+#: ui/globals/duplicates.slint
+msgid "Couldn't bring the file back"
+msgid_plural "Couldn't bring the files back"
+msgstr[0] "Kan het bestand niet terugzetten"
+msgstr[1] "Kan de bestanden niet terugzetten"
+
+#: ui/globals/duplicates.slint ui/globals/undo-text.slint ui/settings.slint
+msgid "See the log for details."
+msgstr "Zie het logboek voor details."
+
 #: ui/globals/hero-chips.slint ui/views/my-library-view.slint
 msgid "{n} artist"
 msgid_plural "{n} artists"
@@ -2040,10 +2116,6 @@ msgstr "Te veel om ongedaan te maken"
 #: ui/globals/undo-text.slint
 msgid "Couldn't undo"
 msgstr "Ongedaan maken mislukt"
-
-#: ui/globals/undo-text.slint ui/settings.slint
-msgid "See the log for details."
-msgstr "Zie het logboek voor details."
 
 #. Translators: the action a click takes, expanding the sidebar
 #: ui/layout/sidebar.slint
@@ -2691,10 +2763,6 @@ msgstr "Probeer een andere naam, of wis een filter."
 msgid "Load more stations"
 msgstr "Meer zenders laden"
 
-#: ui/views/radio/browse-tab.slint ui/views/radio/facet-chip.slint
-msgid "Loading…"
-msgstr "Laden…"
-
 #: ui/views/radio/facet-chip.slint
 msgid "Filter…"
 msgstr "Filteren…"
@@ -3028,6 +3096,16 @@ msgid "Find songs the library holds more than once, and pick the copies you don'
 msgstr "Vind nummers die meer dan eens in de bibliotheek staan en kies de kopieën die je niet nodig hebt."
 
 #: ui/views/settings/duplicates-section.slint
+msgid "Files kept out of the library"
+msgstr "Bestanden buiten de bibliotheek"
+
+#: ui/views/settings/duplicates-section.slint
+msgid "{n} removed copy. Its file is still on disk, and scans leave it out."
+msgid_plural "{n} removed copies. Their files are still on disk, and scans leave them out."
+msgstr[0] "{n} verwijderde kopie. Het bestand staat nog op de schijf, en scans slaan het over."
+msgstr[1] "{n} verwijderde kopieën. Hun bestanden staan nog op de schijf, en scans slaan ze over."
+
+#: ui/views/settings/duplicates-section.slint
 msgid "Find…"
 msgstr "Zoeken…"
 
@@ -3038,6 +3116,18 @@ msgstr "Dubbele nummers"
 #: ui/views/settings/duplicates-section.slint
 msgid "Songs the library seems to hold more than once. Pick the copies you don't need."
 msgstr "Nummers die meer dan eens in de bibliotheek lijken te staan. Kies de kopieën die je niet nodig hebt."
+
+#: ui/views/settings/duplicates-section.slint
+msgid "Show…"
+msgstr "Tonen…"
+
+#: ui/views/settings/duplicates-section.slint
+msgid "Files Kept Out of the Library"
+msgstr "Bestanden buiten de bibliotheek"
+
+#: ui/views/settings/duplicates-section.slint
+msgid "Copies you removed as duplicates. Their files stay where they are, and scans leave them out until you bring them back."
+msgstr "Kopieën die je als duplicaat hebt verwijderd. Hun bestanden blijven waar ze zijn, en scans slaan ze over tot je ze terugzet."
 
 #. Translators: an equalizer preset, such as Rock or Jazz
 #: ui/views/settings/equalizer-section.slint

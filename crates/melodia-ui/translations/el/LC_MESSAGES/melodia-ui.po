@@ -62,6 +62,7 @@ msgstr "Επαναφορά"
 #: ui/components/caption-buttons.slint
 #: ui/components/macos-titlebar-cluster.slint
 #: ui/components/onboarding/onboarding-overlay.slint
+#: ui/views/settings/duplicates-section.slint
 msgid "Close"
 msgstr "Κλείσιμο"
 
@@ -264,6 +265,7 @@ msgid "Added {}"
 msgstr "Προστέθηκε στις {}"
 
 #: ui/components/dialog/duplicate-row.slint
+#: ui/components/dialog/kept-out-body.slint
 #: ui/components/now-playing/overflow-menu.slint
 msgid "More"
 msgstr "Περισσότερα"
@@ -285,6 +287,13 @@ msgid "Its plays, rating, heart and playlist places move to the copy you keep."
 msgid_plural "Their plays, ratings, hearts and playlist places move to the copies you keep."
 msgstr[0] "Οι αναπαραγωγές, η βαθμολογία, η καρδιά και οι θέσεις του σε λίστες αναπαραγωγής περνούν στο αντίγραφο που κρατάτε."
 msgstr[1] "Οι αναπαραγωγές, οι βαθμολογίες, οι καρδιές και οι θέσεις τους σε λίστες αναπαραγωγής περνούν στα αντίγραφα που κρατάτε."
+
+#. Translators: use the Settings row's own "Files kept out of the library".
+#: ui/components/dialog/duplicates-body.slint
+msgid "You can find it, or bring it back, under Files kept out of the library in Settings."
+msgid_plural "You can find them, or bring them back, under Files kept out of the library in Settings."
+msgstr[0] "Μπορείτε να το βρείτε, ή να το επαναφέρετε, στα «Αρχεία εκτός βιβλιοθήκης» στις Ρυθμίσεις."
+msgstr[1] "Μπορείτε να τα βρείτε, ή να τα επαναφέρετε, στα «Αρχεία εκτός βιβλιοθήκης» στις Ρυθμίσεις."
 
 #. Translators: {n} counts songs found more than once, each with its copies.
 #: ui/components/dialog/duplicates-body.slint
@@ -353,6 +362,11 @@ msgstr "Άνοιγμα γονικού φακέλου"
 msgid "Copy Path"
 msgstr "Αντιγραφή διαδρομής"
 
+#: ui/components/dialog/duplicates-menus.slint
+#: ui/components/dialog/kept-out-body.slint
+msgid "Bring Back"
+msgstr "Επαναφορά"
+
 #: ui/components/dialog/export-playlist-picker.slint
 msgid "No playlists to export"
 msgstr "Δεν υπάρχουν λίστες για εξαγωγή"
@@ -360,6 +374,46 @@ msgstr "Δεν υπάρχουν λίστες για εξαγωγή"
 #: ui/components/dialog/export-playlist-picker.slint
 msgid "Several playlists are saved as one .zip file, which you can import directly without extracting it."
 msgstr "Πολλές λίστες αποθηκεύονται ως ένα αρχείο .zip, το οποίο μπορείτε να εισαγάγετε απευθείας χωρίς αποσυμπίεση."
+
+#. Translators: {} is the day the copy left the library, as 2026-11-02.
+#: ui/components/dialog/kept-out-body.slint
+msgid "Removed {}"
+msgstr "Αφαιρέθηκε στις {}"
+
+#: ui/components/dialog/kept-out-body.slint
+msgid "{n} file"
+msgid_plural "{n} files"
+msgstr[0] "{n} αρχείο"
+msgstr[1] "{n} αρχεία"
+
+#: ui/components/dialog/kept-out-body.slint
+msgid "Copy All Paths"
+msgstr "Αντιγραφή όλων των διαδρομών"
+
+#: ui/components/dialog/kept-out-body.slint
+msgid "Bring All Back"
+msgstr "Επαναφορά όλων"
+
+#: ui/components/dialog/kept-out-body.slint
+msgid "Bringing back…"
+msgstr "Επαναφορά…"
+
+#: ui/components/dialog/kept-out-body.slint ui/views/radio/browse-tab.slint
+#: ui/views/radio/facet-chip.slint
+msgid "Loading…"
+msgstr "Φόρτωση…"
+
+#: ui/components/dialog/kept-out-body.slint
+msgid "Couldn't read the list."
+msgstr "Δεν ήταν δυνατή η ανάγνωση της λίστας."
+
+#: ui/components/dialog/kept-out-body.slint
+msgid "Nothing is kept out"
+msgstr "Δεν εξαιρείται τίποτα"
+
+#: ui/components/dialog/kept-out-body.slint
+msgid "Every removed copy is back in the library."
+msgstr "Όλα τα αντίγραφα που αφαιρέθηκαν είναι ξανά στη βιβλιοθήκη."
 
 #: ui/components/dialog/playlist-mosaic-picker.slint
 msgid "No artwork"
@@ -1873,6 +1927,28 @@ msgstr "Δεν ήταν δυνατή η κατάργηση των αντιγρά
 msgid "Nothing left the library. See the log for details."
 msgstr "Τίποτα δεν αφαιρέθηκε από τη βιβλιοθήκη. Δείτε το αρχείο καταγραφής για λεπτομέρειες."
 
+#: ui/globals/duplicates.slint
+msgid "{n} file brought back to the library"
+msgid_plural "{n} files brought back to the library"
+msgstr[0] "{n} αρχείο επανήλθε στη βιβλιοθήκη"
+msgstr[1] "{n} αρχεία επανήλθαν στη βιβλιοθήκη"
+
+#: ui/globals/duplicates.slint
+msgid "{n} file wasn't found or couldn't be read, so it stays on the list."
+msgid_plural "{n} files weren't found or couldn't be read, so they stay on the list."
+msgstr[0] "{n} αρχείο δεν βρέθηκε ή δεν ήταν δυνατή η ανάγνωσή του, οπότε μένει στη λίστα."
+msgstr[1] "{n} αρχεία δεν βρέθηκαν ή δεν ήταν δυνατή η ανάγνωσή τους, οπότε μένουν στη λίστα."
+
+#: ui/globals/duplicates.slint
+msgid "Couldn't bring the file back"
+msgid_plural "Couldn't bring the files back"
+msgstr[0] "Δεν ήταν δυνατή η επαναφορά του αρχείου"
+msgstr[1] "Δεν ήταν δυνατή η επαναφορά των αρχείων"
+
+#: ui/globals/duplicates.slint ui/globals/undo-text.slint ui/settings.slint
+msgid "See the log for details."
+msgstr "Δείτε το αρχείο καταγραφής για λεπτομέρειες."
+
 #: ui/globals/hero-chips.slint ui/views/my-library-view.slint
 msgid "{n} artist"
 msgid_plural "{n} artists"
@@ -2042,10 +2118,6 @@ msgstr "Πάρα πολλά για αναίρεση"
 #: ui/globals/undo-text.slint
 msgid "Couldn't undo"
 msgstr "Η αναίρεση απέτυχε"
-
-#: ui/globals/undo-text.slint ui/settings.slint
-msgid "See the log for details."
-msgstr "Δείτε το αρχείο καταγραφής για λεπτομέρειες."
 
 #. Translators: the action a click takes, expanding the sidebar
 #: ui/layout/sidebar.slint
@@ -2693,10 +2765,6 @@ msgstr "Δοκιμάστε άλλο όνομα ή καθαρίστε ένα φί
 msgid "Load more stations"
 msgstr "Φόρτωση περισσότερων σταθμών"
 
-#: ui/views/radio/browse-tab.slint ui/views/radio/facet-chip.slint
-msgid "Loading…"
-msgstr "Φόρτωση…"
-
 #: ui/views/radio/facet-chip.slint
 msgid "Filter…"
 msgstr "Φιλτράρισμα…"
@@ -3032,6 +3100,16 @@ msgid "Find songs the library holds more than once, and pick the copies you don'
 msgstr "Βρείτε τραγούδια που υπάρχουν πάνω από μία φορά στη βιβλιοθήκη και επιλέξτε τα αντίγραφα που δεν χρειάζεστε."
 
 #: ui/views/settings/duplicates-section.slint
+msgid "Files kept out of the library"
+msgstr "Αρχεία εκτός βιβλιοθήκης"
+
+#: ui/views/settings/duplicates-section.slint
+msgid "{n} removed copy. Its file is still on disk, and scans leave it out."
+msgid_plural "{n} removed copies. Their files are still on disk, and scans leave them out."
+msgstr[0] "{n} αντίγραφο αφαιρέθηκε. Το αρχείο του είναι ακόμα στον δίσκο και οι σαρώσεις το παραλείπουν."
+msgstr[1] "{n} αντίγραφα αφαιρέθηκαν. Τα αρχεία τους είναι ακόμα στον δίσκο και οι σαρώσεις τα παραλείπουν."
+
+#: ui/views/settings/duplicates-section.slint
 msgid "Find…"
 msgstr "Εύρεση…"
 
@@ -3042,6 +3120,18 @@ msgstr "Διπλότυπα κομμάτια"
 #: ui/views/settings/duplicates-section.slint
 msgid "Songs the library seems to hold more than once. Pick the copies you don't need."
 msgstr "Τραγούδια που φαίνεται να υπάρχουν πάνω από μία φορά στη βιβλιοθήκη. Επιλέξτε τα αντίγραφα που δεν χρειάζεστε."
+
+#: ui/views/settings/duplicates-section.slint
+msgid "Show…"
+msgstr "Εμφάνιση…"
+
+#: ui/views/settings/duplicates-section.slint
+msgid "Files Kept Out of the Library"
+msgstr "Αρχεία εκτός βιβλιοθήκης"
+
+#: ui/views/settings/duplicates-section.slint
+msgid "Copies you removed as duplicates. Their files stay where they are, and scans leave them out until you bring them back."
+msgstr "Αντίγραφα που αφαιρέσατε ως διπλότυπα. Τα αρχεία τους μένουν εκεί που είναι και οι σαρώσεις τα παραλείπουν μέχρι να τα επαναφέρετε."
 
 #. Translators: an equalizer preset, such as Rock or Jazz
 #: ui/views/settings/equalizer-section.slint

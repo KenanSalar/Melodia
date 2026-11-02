@@ -15,6 +15,7 @@ import { ScrobbleLastfmBody } from "scrobble-lastfm-body.slint";
 import { ScrobbleListenbrainzBody } from "scrobble-listenbrainz-body.slint";
 import { AddStationBody } from "add-station-body.slint";
 import { DuplicatesBody } from "duplicates-body.slint";
+import { KeptOutBody } from "kept-out-body.slint";
 import { LabeledInput } from "../labeled-input.slint";
 import { MaterialIcon } from "../material-icon.slint";
 
@@ -69,6 +70,7 @@ export component DialogOverlay inherits Rectangle {
             : DialogGlobal.kind == DialogKind.edit-playlist-artwork ? 520px
             : DialogGlobal.kind == DialogKind.smart-playlist-editor ? 760px
             : DialogGlobal.kind == DialogKind.duplicates ? 760px
+            : DialogGlobal.kind == DialogKind.kept-out-files ? 760px
             : DialogGlobal.kind == DialogKind.edit-tags ? 720px
             : DialogGlobal.kind == DialogKind.scrobble-lastfm-login ? 460px
             : DialogGlobal.kind == DialogKind.scrobble-listenbrainz-login ? 460px
@@ -97,7 +99,8 @@ export component DialogOverlay inherits Rectangle {
         property <bool> body-scrolls:
             DialogGlobal.kind == DialogKind.add-station || DialogGlobal.kind == DialogKind.edit-station
             || DialogGlobal.kind == DialogKind.smart-playlist-editor
-            || DialogGlobal.kind == DialogKind.duplicates;
+            || DialogGlobal.kind == DialogKind.duplicates
+            || DialogGlobal.kind == DialogKind.kept-out-files;
         height: card.body-scrolls
             // Floored so a step growing out of a shorter one keeps its footer on the card.
             ? min(max(card.eased-height, layout.min-height), max(240px, parent.height - 96px))
@@ -259,6 +262,8 @@ export component DialogOverlay inherits Rectangle {
                 || DialogGlobal.kind == DialogKind.edit-station: AddStationBody { }
 
             if DialogGlobal.kind == DialogKind.duplicates: DuplicatesBody { }
+
+            if DialogGlobal.kind == DialogKind.kept-out-files: KeptOutBody { }
 
             HorizontalLayout {
                 spacing: Theme.pad-sm;

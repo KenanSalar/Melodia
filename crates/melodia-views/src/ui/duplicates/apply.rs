@@ -4,7 +4,8 @@ use std::rc::Rc;
 
 use slint::ComponentHandle;
 
-use super::{Finder, shows_finder};
+use super::Finder;
+use super::landing::spawn_landing;
 use crate::ui::shell::notifications::{Completion, RowText};
 use crate::ui::util::len_as_i32;
 use melodia_app::library;
@@ -27,53 +28,47 @@ impl Finder {
         if removals.is_empty() {
             return;
         }
-        dup.set_removing(true);
 
         let ticket = self.ticket.get();
         let state = self.state.clone();
-        let answer = self
-            .state
-            .runtime
-            .spawn(async move { library::duplicates::apply(&state, removals).await });
+        let work = async move { library::duplicates::apply(&state, removals).await };
         let finder = Rc::downgrade(self);
-        let spawned = slint::spawn_local(async_compat::Compat::new(async move {
-            let counts = match answer.await {
-                Ok(Ok(counts)) => Some(counts),
-                Ok(Err(e)) => {
-                    log::warn!("duplicates: remove failed: {}", describe(&e));
-                    None
+        let spawned =
+            spawn_landing(&self.state.runtime, "duplicates remove", work, move |removed| {
+                let Some(finder) = finder.upgrade() else {
+                    return;
+                };
+                let Some(ui) = finder.ui.upgrade() else {
+                    return;
+                };
+                ui.global::<DuplicatesUi>().set_removing(false);
+                let counts = match removed {
+                    Some(Ok(counts)) => counts,
+                    Some(Err(e)) => {
+                        log::warn!("duplicates: remove failed: {}", describe(&e));
+                        finder.show_remove_failed(&ui);
+                        return;
+                    }
+                    None => {
+                        finder.show_remove_failed(&ui);
+                        return;
+                    }
+                };
+                if finder.ticket.holds(ticket, &ui) {
+                    ui.global::<Dialog>().set_open(false);
                 }
-                Err(e) => {
-                    log::warn!("duplicates: remove task failed: {}", describe(&e));
-                    None
-                }
-            };
-            let Some(finder) = finder.upgrade() else {
-                return;
-            };
-            let Some(ui) = finder.ui.upgrade() else {
-                return;
-            };
-            ui.global::<DuplicatesUi>().set_removing(false);
-            let Some(counts) = counts else {
-                finder.notifications.show_failure(&ui, |ui| {
-                    let dup = ui.global::<DuplicatesUi>();
-                    RowText::plain(
-                        dup.invoke_remove_failed_title(),
-                        dup.invoke_remove_failed_message(),
-                    )
-                });
-                return;
-            };
-            if finder.ticket.get() == ticket && shows_finder(&ui) {
-                ui.global::<Dialog>().set_open(false);
-            }
-            finder.show_removed(&ui, counts);
-        }));
-        if let Err(e) = spawned {
-            dup.set_removing(false);
-            log::warn!("duplicates: remove not spawned: {}", describe(&e));
+                finder.show_removed(&ui, counts);
+            });
+        if spawned {
+            dup.set_removing(true);
         }
+    }
+
+    fn show_remove_failed(&self, ui: &AppWindow) {
+        self.notifications.show_failure(ui, |ui| {
+            let dup = ui.global::<DuplicatesUi>();
+            RowText::plain(dup.invoke_remove_failed_title(), dup.invoke_remove_failed_message())
+        });
     }
 
     fn show_removed(&self, ui: &AppWindow, counts: RemovalCounts) {

@@ -1,6 +1,6 @@
 # Plan: Duplicate tracks (find the copies, clear out the spares)
 
-Status: **in progress** (Phases 0 to 3 done, Phase 4 next) · Owner: Kenan · Created: 2026-11-02 · Issue #158, branch `feat/duplicate-tracks`
+Status: **in progress** (Phases 0 to 4 done, Phase 5 next) · Owner: Kenan · Created: 2026-11-02 · Issue #158, branch `feat/duplicate-tracks`
 
 > **Validated 2026-11-02** against `b4c5ecff`, and re-validated the same day against `41c1f2e1`. The sources were:
 > - three read-only code traces: the store and per-track data; the removal, scan, watcher and queue paths; the UI surfaces;
@@ -194,7 +194,7 @@ Right-clicking a group's header offers **Not Duplicates**, for copies you keep o
 10. **The surface is the shared Dialog: one new kind for the finder, two steps.**
     - `DialogKind.duplicates` takes the widest card, 760 px (`dialog.slint:63-73`). It joins `body-scrolls` (`:93-95`) and owns its scroller. `kept-out-files` does the same.
     - **Review step.** The list. Primary is **Continue**, enabled with one pick or more. The footer note shows the picked count and size (`:100-103`).
-    - **Confirm step.** A plain summary: how many copies leave the library, that their files stay where they are and later scans skip them, that their history moves to the copies kept, and (from Phase 4, with the row it names) that they can be found under Files kept out of the library. Primary is **Remove**, destructive. Cancel reads **Back** and returns to Review, remounting the list at its top with the picks intact. Escape and a backdrop click close the dialog, as for every kind.
+    - **Confirm step.** A plain summary: how many copies leave the library, that their files stay where they are and later scans skip them, that their history moves to the copies kept, and that they can be found, and brought back, under Files kept out of the library. Primary is **Remove**, destructive. Cancel reads **Back** and returns to Review, remounting the list at its top with the picks intact. Escape and a backdrop click close the dialog, as for every kind.
     - **The result.** Remove closes the dialog and a toast says how many copies left and how many were skipped, playing or already gone. A close mid-remove still gets the toast.
     - **What the footer owes the two steps.** The step is `DuplicatesUi.confirming`, Slint's alone, which Rust never reads.
       - Cancel closes unconditionally today (`dialog.slint:236-244`), so Back is a new branch there.
@@ -282,7 +282,9 @@ Right-clicking a group's header offers **Not Duplicates**, for copies you keep o
 | `migrations/20261102000000_duplicate_dismissals.sql` (new, P1) | The dismissal table. |
 | `crates/melodia-store/src/database/queries/duplicate_dismissals.rs` (new, P1) | Dismiss a group as a new set, and restore a set. |
 | `crates/melodia-store/src/database/queries/track/full_rows.rs` | Loses `get_duplicate_tracks` and its two tests (`track_tests.rs:316,340`) (P1). |
-| `crates/melodia-app/src/library/duplicates/mod.rs` (new, P1) | The library API: `find`, `dismiss` and `restore`; `copies`, the rows' facts by id (P2); `apply` (P3); the kept-out count, ids, rows, `bring_back` and `bring_all_back` (P4). |
+| `crates/melodia-app/src/library/duplicates/mod.rs` (new, P1) | The library API: `find`, `dismiss` and `restore`; `copies`, the rows' facts by id (P2); `apply` (P3). |
+| `crates/melodia-app/src/library/duplicates/kept_out.rs` (new, P4) | The kept-out count, ids, rows and paths; `bring_back` and `bring_all_back`, a page of imports at a time, and `BroughtBack`. |
+| `crates/melodia-app/src/library/import.rs` | `import_files` becomes `pub(crate)` for Bring Back, which needs no summaries (P4). |
 | `crates/melodia-app/src/library/duplicates/matcher.rs` (new, P1) | Pure grouping: key runs, collision split, duration clusters, kind, the keeper order, the dismissed flag. |
 | `crates/melodia-ui/ui/globals/duplicates.slint` (new, P2) | `DuplicatesUi`: rows, busy, counts, callbacks, and `settled` and `listing`, which the body and the card's step states read; `confirming`, `removing`, `remove` and the toast's trampolines (P3); `KeptOutUi` (P4). |
 | `crates/melodia-ui/ui/models.slint` | `DuplicateMatch` and `DuplicateRow` (P2), `KeptOutRow` (P4). |
@@ -290,6 +292,8 @@ Right-clicking a group's header offers **Not Duplicates**, for copies you keep o
 | `crates/melodia-ui/ui/components/dialog/duplicate-row.slint` (new, P2) | The header row and the copy row, each a slice of its group's card, and the ⋮ button that opens the row menu. |
 | `crates/melodia-ui/ui/components/dialog/duplicates-menus.slint` (new, P2) | `DuplicateRowMenu`, one per row, its entries following the row's kind; `KeptOutMenu` (P4). Both are built from `context-menu.slint`'s parts. |
 | `crates/melodia-ui/ui/components/dialog/kept-out-body.slint` (new, P4) | The kept-out list, its row with Bring Back, Bring All Back and Copy All Paths. |
+| `crates/melodia-ui/ui/components/dialog/toolbar-chip.slint` (new, P4) | `ToolbarChip`, lifted out of `duplicates-body.slint` so both bodies mount one copy. |
+| `crates/melodia-ui/ui/components/filled-chip.slint` | `has-hover`, so the kept-out row stays lit under its Bring Back chip (P4). |
 | `crates/melodia-ui/ui/components/dialog/dialog.slint`, `globals/dialog.slint` | Both kinds: width, `body-scrolls`, mount, Back on Confirm, primary label and gate, the stay-open list, `destructive` by step, `accepted` arms (P2 to P4). The card's height eased between the finder's steps. |
 | `crates/melodia-ui/ui/views/settings/duplicates-section.slint` (new, P2) | The Find row and the finder's one opener, and the kept-out row (P4). Mounted in `pages/library-page.slint` and its `has-matches`. |
 | `crates/melodia-views/src/ui/duplicates/mod.rs` (new, P2) | `install`, the find behind its ticket, the row fetch, Not Duplicates' round trip, the close teardown. |
@@ -297,6 +301,8 @@ Right-clicking a group's header offers **Not Duplicates**, for copies you keep o
 | `crates/melodia-views/src/ui/duplicates/rows.rs` (new, P2) | `DuplicateRow`'s placeholder, the rows built from what the fetch read, the header's lead copy, the format label, the release line and the folder. |
 | `crates/melodia-views/src/ui/duplicates/apply.rs` (new, P3) | Picks into `GroupRemoval`s, the call, the result line. |
 | `crates/melodia-views/src/ui/duplicates/kept_out.rs` (new, P4) | `KeptOutRow`'s paged rows, Open Containing Folder, Bring Back, Bring All Back, Copy All Paths, the Settings row's count. |
+| `crates/melodia-views/src/ui/duplicates/landing.rs` (new, P4) | `DialogTicket` and `spawn_landing`, which the finder, Remove and the kept-out list share. |
+| `crates/melodia-views/src/ui/callbacks/clipboard.rs` | `spawn_copy` reaches `ui::` for Copy All Paths (P4). |
 | `crates/melodia-views/src/ui/util.rs` | `format_codec`, `format_bitrate`, `format_bit_depth` and `format_size` beside `format_sample_rate`, lifted from the inline closures in `now_playing/metadata.rs` and `callbacks/tags/open.rs` and from `callbacks/tags/fold.rs`'s `fmt_size` (P2, no behaviour change). |
 | `migrations/20261102000001_excluded_files.sql` (new, P3) | The table and its folder and hash indexes. |
 | `crates/melodia-store/src/database/queries/excluded_files.rs` (new, P3) | Exclude (`pub(crate)`, the merge's), excluded among paths, under a path prefix, move candidates by hash, re-point, lift, forget unseen, count; ids in path order, rows by id, every path in path order (P4). |
@@ -312,7 +318,7 @@ Right-clicking a group's header offers **Not Duplicates**, for copies you keep o
 | `crates/melodia-app/src/library/scan/mod.rs`, `tasks/file_event_processor/reconcile.rs` | The checks before parsing and the scan-time cleanup; the watcher's `gone` (P3). The import's lift is `commit_import`'s, inside its transaction. |
 | `crates/melodia-app/src/tasks/play_count_flusher.rs`, `crates/melodia-app/src/state/mod.rs` | `PlayCountFlush`, a flush request on the app's own channel, its sender in `AppState` and its receiver in `StartupChannels`, answered once the write commits (P3). |
 
-Size headroom, measured after Phase 3: `app-window.slint` 750 lines (gains one export name in P4), `globals/dialog.slint` 429, `components/dialog/dialog.slint` 323, `models.slint` 499, `queue/removal.rs` 337, `playlist.rs` 639, `ingest.rs` 587, `watch_batch.rs` 383. None crosses 800.
+Size headroom, measured after Phase 4: `app-window.slint` 750 lines, `globals/dialog.slint` 431, `components/dialog/dialog.slint` 354, `models.slint` 508, `queue/removal.rs` 337, `playlist.rs` 639, `ingest.rs` 587, `watch_batch.rs` 383. None crosses 800.
 
 ## Phases
 
@@ -437,6 +443,13 @@ Hand test, the kept-out file staying out (watching on unless noted):
 
 ### Phase 4: The kept-out list
 
+Status: built and hand-checked (2026-11-02). The hand test ran unattended on the dev data folder, restored afterwards, with fixtures under a scratch library folder and a SQLite write lock held to keep "Bringing back…" on screen. The gate passed:
+- fmt, clippy and the suite, `context_click.rs` now listing `KeptOutMenu`;
+- `check-icons.py`, with no new glyph;
+- all 15 catalogs complete.
+
+The finder's ticket and its landing moved into `ui/duplicates/landing.rs`, shared with Remove and the kept-out list, with no change in behaviour.
+
 1. `excluded_files`' ids in path order, rows by id and every path in path order, plus the library API over them.
 2. `KeptOutUi`, `KeptOutRow` and `DialogKind.kept-out-files`: the paged list, the row's Bring Back, Bring All Back by import a page at a time, and Copy All Paths through `ui::clipboard::write`.
 3. `KeptOutMenu` on its rows:
@@ -462,7 +475,10 @@ Hand test:
 1. **Settle what Phase 3's hand test found**, each one Kenan's to answer before any test pins the behaviour:
    - **A kept-out file retagged, then moved while Melodia is closed, comes back.** The exclusion keeps the hash the file had when it was removed. Nothing re-hashes a kept-out file: the watcher and the scan both skip its parse. So a later move reads as a new file. A rename with watching on is unaffected, since it follows the path. This could be an accepted trade beside decision 8's, or the watcher could re-hash a kept-out file on `Modified`.
    - **The Playing chip marks the current track whether or not it plays.** A paused or just-loaded track carries it too. That matches what `apply` holds back, `current_track()`, but the label may want to say so.
-   - **A file dropped in from inside a library folder is parsed again by every full scan.** The import files it under a disabled folder row for its own directory (`ingest.rs`' `resolve_folder_id`). `visit_folder_tracks` then never pairs it with the walk, and the ingest finds its row current only after the parse. This was there before this plan, but Phase 4's Bring Back imports every returned file this way.
+   - **A file dropped in from inside a library folder is parsed again by every full scan.** The import files it under a disabled folder row for its own directory (`ingest.rs`' `resolve_folder_id`). `visit_folder_tracks` then never pairs it with the walk, and the ingest finds its row current only after the parse. This was there before this plan, but Phase 4's Bring Back imports every returned file this way. Phase 4's hand test showed what the user sees:
+     - The returned file's directory appears in Settings ▸ Library Folders as a folder of its own, with rescan and remove.
+     - Removing the library folder around it leaves that row and its tracks in the library.
+     - A rescan of the enclosing folder absorbs the row again.
 2. Tests are added where the landed change earns them, on Kenan's go.
 
 ## Cross-cutting

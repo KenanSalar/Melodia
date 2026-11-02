@@ -28,9 +28,11 @@ Paths are under `crates/melodia-ui/ui/components/` unless stated.
   `FilledChip` is the clickable pill, `QualityChip` the bar's verdict over `GradeDot`.
 - **Inputs.** `FieldFrame` under `LabeledInput`, `ControlledInput` and `MultilineInput`;
   `RemoveRowButton` closes an editor's row; `dialog/selectable-picker.slint` is the toolkit both
-  picker dialogs wire up, and `dialog/duplicates-body.slint` the one body whose list can hold the
-  library, its `ListView` the card's scroller. `HoldTouchArea` for a press whose hold differs from
-  its click, `SliderPointer` under every slider, `EdgeResizeHandle` for a resizable edge.
+  picker dialogs wire up, and `dialog/duplicates-body.slint` and `dialog/kept-out-body.slint` the
+  bodies whose lists can hold the library, each `ListView` the card's scroller, with
+  `dialog/toolbar-chip.slint` for an action over the list. `HoldTouchArea` for a press whose hold
+  differs from its click, `SliderPointer` under every slider, `EdgeResizeHandle` for a resizable
+  edge.
 - **Grids.** `EntityCard` inside `grid/card-cell.slint`'s `CardCell`, in a chunked `ListView` sized
   by `GridGeometry` and `GridColumnsSync`. `HorizontalCardStrip` only for a capped carousel,
   `EntityCardGrid` otherwise. `CardFavoriteButton` is a card's heart, `grid/play-count-badge.slint`

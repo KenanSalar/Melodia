@@ -1,11 +1,11 @@
 //! The duplicate finder's dialog: a find as it opens, the removal picks over its groups, Not
-//! Duplicates, and the Remove behind its Confirm step.
+//! Duplicates, and the Remove behind its Confirm step. `kept_out` is the list of what Remove left.
 //!
-//! Every answer but Remove's lands under the ticket it was sent with, which the next find and the
-//! dialog's close both move. The dialog is already up while it fills, so `DialogClaim`, which
-//! guards a raise still to come, can't tell whether this one is still wanted.
+//! Every answer but Remove's lands under the ticket it was sent with (`landing`).
 
 mod apply;
+mod kept_out;
+mod landing;
 mod picks;
 mod rows;
 
@@ -19,14 +19,16 @@ use slint::{ComponentHandle, ModelRc};
 use crate::ui::paged_rows::{Keyset, PagedRows, ReadStamp, RowRequest, spawn_fetch};
 use crate::ui::shell::notifications::NotificationsUi;
 use crate::ui::util::{format_size, len_as_i32};
+use landing::{DialogTicket, spawn_landing};
 use melodia_app::library;
 use melodia_app::state::AppState;
 use melodia_core::error::{AppResult, describe};
-use melodia_ui::{AppWindow, Dialog, DialogKind, DuplicateRow, DuplicatesUi};
+use melodia_ui::{AppWindow, DialogKind, DuplicateRow, DuplicatesUi};
 use picks::DuplicateSet;
 
-/// Installs the finder's model and wires `DuplicatesUi`. UI thread.
+/// Installs the finder's and the kept-out list's models and wires their globals. UI thread.
 pub fn install(ui: &AppWindow, state: &AppState, notifications: &Rc<NotificationsUi>) {
+    kept_out::install(ui, state, notifications);
     let finder = Finder::new(ui, state, notifications);
     let dup = ui.global::<DuplicatesUi>();
     dup.set_rows(ModelRc::from(finder.rows.clone()));
@@ -63,7 +65,7 @@ struct Finder {
     notifications: Rc<NotificationsUi>,
     set: RefCell<DuplicateSet>,
     rows: Rc<PagedRows<DuplicateRow>>,
-    ticket: Cell<u64>,
+    ticket: DialogTicket,
     show_dismissed: Cell<bool>,
 }
 
@@ -75,7 +77,7 @@ impl Finder {
             notifications: Rc::clone(notifications),
             set: RefCell::default(),
             rows: PagedRows::new(fetcher(this.clone())),
-            ticket: Cell::new(0),
+            ticket: DialogTicket::new(DialogKind::Duplicates),
             show_dismissed: Cell::new(false),
         })
     }
@@ -145,7 +147,7 @@ impl Finder {
     }
 
     fn forget(&self) {
-        self.ticket.set(self.ticket.get().wrapping_add(1));
+        self.ticket.retire();
         self.show_dismissed.set(false);
         *self.set.borrow_mut() = DuplicateSet::default();
         self.rows.clear();
@@ -195,22 +197,17 @@ impl Finder {
     }
 
     /// Runs `work` on the runtime and hands its answer to `land` on the UI thread, while the
-    /// ticket it was sent under is current and the dialog still shows the finder.
+    /// ticket it was sent under holds.
     fn after<T: Send + 'static>(
         self: &Rc<Self>,
         work: impl Future<Output = AppResult<T>> + Send + 'static,
         land: impl FnOnce(&AppWindow, &Self, AppResult<T>) + 'static,
     ) {
         let ticket = self.ticket.get();
-        let answer = self.state.runtime.spawn(work);
         let finder = Rc::downgrade(self);
-        let spawned = slint::spawn_local(async_compat::Compat::new(async move {
-            let answer = match answer.await {
-                Ok(answer) => answer,
-                Err(e) => {
-                    log::warn!("duplicates: task failed: {}", describe(&e));
-                    return;
-                }
+        spawn_landing(&self.state.runtime, "duplicates", work, move |answer| {
+            let Some(answer) = answer else {
+                return;
             };
             let Some(finder) = finder.upgrade() else {
                 return;
@@ -218,19 +215,11 @@ impl Finder {
             let Some(ui) = finder.ui.upgrade() else {
                 return;
             };
-            if finder.ticket.get() == ticket && shows_finder(&ui) {
+            if finder.ticket.holds(ticket, &ui) {
                 land(&ui, &finder, answer);
             }
-        }));
-        if let Err(e) = spawned {
-            log::warn!("duplicates: not spawned: {}", describe(&e));
-        }
+        });
     }
-}
-
-fn shows_finder(ui: &AppWindow) -> bool {
-    let dialog = ui.global::<Dialog>();
-    dialog.get_open() && dialog.get_kind() == DialogKind::Duplicates
 }
 
 /// Reads the rows on screen by id, a header through its best copy. A fetch landing after the

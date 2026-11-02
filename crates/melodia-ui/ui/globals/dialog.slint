@@ -1,6 +1,6 @@
 import { PlaylistPickRow, PlaylistExportPickRow, RadioStationRow } from "../models.slint";
 import { SmartEditor, TagEditor, ScrobbleUi, RadioForm } from "dialog-forms.slint";
-import { DuplicatesUi } from "duplicates.slint";
+import { DuplicatesUi, KeptOutUi } from "duplicates.slint";
 import { Radio } from "radio.slint";
 import { LibrarySettings } from "library-settings.slint";
 import { Playlists, PlaylistDetail } from "playlists.slint";
@@ -35,6 +35,7 @@ export enum DialogKind {
     equalizer,
     replaygain,
     duplicates,
+    kept-out-files,
 }
 
 // Why a removal asks first where an undo would otherwise follow, each with its own message.
@@ -209,6 +210,7 @@ export global Dialog {
         RadioForm.reset();
         DuplicatesUi.confirming = false;
         DuplicatesUi.released();
+        KeptOutUi.released();
         root.export-pick-rows = [];
         root.export-select-all = false;
         root.export-selected-count = 0;

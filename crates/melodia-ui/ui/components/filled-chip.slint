@@ -14,6 +14,8 @@ export component FilledChip inherits Rectangle {
     in property <brush> idle-fill: Theme.surface1;
     in property <brush> hover-fill: Theme.surface2;
     out property <brush> ink: root.selected ? Theme.accent-text : Theme.text;
+    // Over the chip, its touch area takes the hover from a host lit by its own.
+    out property <bool> has-hover: touch.has-hover;
 
     callback clicked();
 

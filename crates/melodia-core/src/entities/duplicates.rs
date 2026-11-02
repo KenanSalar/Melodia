@@ -81,3 +81,11 @@ pub struct GroupRemoval {
     pub keeper: i64,
     pub spares: Vec<i64>,
 }
+
+/// A removed copy's file, which scans leave out until it is brought back.
+#[derive(Clone, Debug, FromRow)]
+pub struct KeptOutFile {
+    pub id: i64,
+    pub path: String,
+    pub excluded_at: String,
+}

@@ -62,6 +62,7 @@ msgstr "Khôi phục xuống"
 #: ui/components/caption-buttons.slint
 #: ui/components/macos-titlebar-cluster.slint
 #: ui/components/onboarding/onboarding-overlay.slint
+#: ui/views/settings/duplicates-section.slint
 msgid "Close"
 msgstr "Đóng"
 
@@ -260,6 +261,7 @@ msgid "Added {}"
 msgstr "Đã thêm {}"
 
 #: ui/components/dialog/duplicate-row.slint
+#: ui/components/dialog/kept-out-body.slint
 #: ui/components/now-playing/overflow-menu.slint
 msgid "More"
 msgstr "Khác"
@@ -278,6 +280,12 @@ msgstr[0] "Tệp vẫn ở nguyên chỗ cũ, và các lần quét sau sẽ bỏ
 msgid "Its plays, rating, heart and playlist places move to the copy you keep."
 msgid_plural "Their plays, ratings, hearts and playlist places move to the copies you keep."
 msgstr[0] "Lượt phát, đánh giá, trái tim và vị trí trong danh sách phát được chuyển sang bản sao được giữ lại."
+
+#. Translators: use the Settings row's own "Files kept out of the library".
+#: ui/components/dialog/duplicates-body.slint
+msgid "You can find it, or bring it back, under Files kept out of the library in Settings."
+msgid_plural "You can find them, or bring them back, under Files kept out of the library in Settings."
+msgstr[0] "Bạn có thể tìm hoặc đưa chúng trở lại trong mục Tệp nằm ngoài thư viện, ở phần Cài đặt."
 
 #. Translators: {n} counts songs found more than once, each with its copies.
 #: ui/components/dialog/duplicates-body.slint
@@ -345,6 +353,11 @@ msgstr "Mở thư mục chứa tệp"
 msgid "Copy Path"
 msgstr "Sao chép đường dẫn"
 
+#: ui/components/dialog/duplicates-menus.slint
+#: ui/components/dialog/kept-out-body.slint
+msgid "Bring Back"
+msgstr "Đưa trở lại"
+
 #: ui/components/dialog/export-playlist-picker.slint
 msgid "No playlists to export"
 msgstr "Không có danh sách phát nào để xuất"
@@ -352,6 +365,45 @@ msgstr "Không có danh sách phát nào để xuất"
 #: ui/components/dialog/export-playlist-picker.slint
 msgid "Several playlists are saved as one .zip file, which you can import directly without extracting it."
 msgstr "Nhiều danh sách phát được lưu thành một tệp .zip, bạn có thể nhập trực tiếp mà không cần giải nén."
+
+#. Translators: {} is the day the copy left the library, as 2026-11-02.
+#: ui/components/dialog/kept-out-body.slint
+msgid "Removed {}"
+msgstr "Đã xóa {}"
+
+#: ui/components/dialog/kept-out-body.slint
+msgid "{n} file"
+msgid_plural "{n} files"
+msgstr[0] "{n} tệp"
+
+#: ui/components/dialog/kept-out-body.slint
+msgid "Copy All Paths"
+msgstr "Sao chép tất cả đường dẫn"
+
+#: ui/components/dialog/kept-out-body.slint
+msgid "Bring All Back"
+msgstr "Đưa tất cả trở lại"
+
+#: ui/components/dialog/kept-out-body.slint
+msgid "Bringing back…"
+msgstr "Đang đưa trở lại…"
+
+#: ui/components/dialog/kept-out-body.slint ui/views/radio/browse-tab.slint
+#: ui/views/radio/facet-chip.slint
+msgid "Loading…"
+msgstr "Đang tải…"
+
+#: ui/components/dialog/kept-out-body.slint
+msgid "Couldn't read the list."
+msgstr "Không thể đọc danh sách."
+
+#: ui/components/dialog/kept-out-body.slint
+msgid "Nothing is kept out"
+msgstr "Không có tệp nào bị loại ra"
+
+#: ui/components/dialog/kept-out-body.slint
+msgid "Every removed copy is back in the library."
+msgstr "Mọi bản sao đã xóa đều đã trở lại thư viện."
 
 #: ui/components/dialog/playlist-mosaic-picker.slint
 msgid "No artwork"
@@ -1853,6 +1905,25 @@ msgstr "Không thể xóa các bản sao"
 msgid "Nothing left the library. See the log for details."
 msgstr "Không có gì rời khỏi thư viện. Xem nhật ký để biết chi tiết."
 
+#: ui/globals/duplicates.slint
+msgid "{n} file brought back to the library"
+msgid_plural "{n} files brought back to the library"
+msgstr[0] "Đã đưa {n} tệp trở lại thư viện"
+
+#: ui/globals/duplicates.slint
+msgid "{n} file wasn't found or couldn't be read, so it stays on the list."
+msgid_plural "{n} files weren't found or couldn't be read, so they stay on the list."
+msgstr[0] "{n} tệp không tìm thấy hoặc không đọc được, nên vẫn ở trong danh sách."
+
+#: ui/globals/duplicates.slint
+msgid "Couldn't bring the file back"
+msgid_plural "Couldn't bring the files back"
+msgstr[0] "Không thể đưa tệp trở lại"
+
+#: ui/globals/duplicates.slint ui/globals/undo-text.slint ui/settings.slint
+msgid "See the log for details."
+msgstr "Xem nhật ký để biết chi tiết."
+
 #: ui/globals/hero-chips.slint ui/views/my-library-view.slint
 msgid "{n} artist"
 msgid_plural "{n} artists"
@@ -2014,10 +2085,6 @@ msgstr "Quá nhiều để hoàn tác"
 #: ui/globals/undo-text.slint
 msgid "Couldn't undo"
 msgstr "Không thể hoàn tác"
-
-#: ui/globals/undo-text.slint ui/settings.slint
-msgid "See the log for details."
-msgstr "Xem nhật ký để biết chi tiết."
 
 #. Translators: the action a click takes, expanding the sidebar
 #: ui/layout/sidebar.slint
@@ -2645,10 +2712,6 @@ msgstr "Hãy thử tên khác, hoặc bỏ một bộ lọc."
 msgid "Load more stations"
 msgstr "Tải thêm đài"
 
-#: ui/views/radio/browse-tab.slint ui/views/radio/facet-chip.slint
-msgid "Loading…"
-msgstr "Đang tải…"
-
 #: ui/views/radio/facet-chip.slint
 msgid "Filter…"
 msgstr "Lọc…"
@@ -2982,6 +3045,15 @@ msgid "Find songs the library holds more than once, and pick the copies you don'
 msgstr "Tìm các bài hát có nhiều bản trong thư viện và chọn những bản sao bạn không cần."
 
 #: ui/views/settings/duplicates-section.slint
+msgid "Files kept out of the library"
+msgstr "Tệp nằm ngoài thư viện"
+
+#: ui/views/settings/duplicates-section.slint
+msgid "{n} removed copy. Its file is still on disk, and scans leave it out."
+msgid_plural "{n} removed copies. Their files are still on disk, and scans leave them out."
+msgstr[0] "{n} bản sao đã xóa. Tệp vẫn còn trên ổ đĩa, và các lần quét sẽ bỏ qua."
+
+#: ui/views/settings/duplicates-section.slint
 msgid "Find…"
 msgstr "Tìm…"
 
@@ -2992,6 +3064,18 @@ msgstr "Bản nhạc trùng lặp"
 #: ui/views/settings/duplicates-section.slint
 msgid "Songs the library seems to hold more than once. Pick the copies you don't need."
 msgstr "Những bài hát dường như có nhiều bản trong thư viện. Hãy chọn những bản sao bạn không cần."
+
+#: ui/views/settings/duplicates-section.slint
+msgid "Show…"
+msgstr "Hiển thị…"
+
+#: ui/views/settings/duplicates-section.slint
+msgid "Files Kept Out of the Library"
+msgstr "Tệp nằm ngoài thư viện"
+
+#: ui/views/settings/duplicates-section.slint
+msgid "Copies you removed as duplicates. Their files stay where they are, and scans leave them out until you bring them back."
+msgstr "Các bản sao bạn đã xóa vì trùng lặp. Tệp vẫn ở nguyên chỗ cũ, và các lần quét sẽ bỏ qua cho đến khi bạn đưa chúng trở lại."
 
 #. Translators: an equalizer preset, such as Rock or Jazz
 #: ui/views/settings/equalizer-section.slint
