@@ -1,11 +1,12 @@
 use std::path::{Path, PathBuf};
 
 use rayon::prelude::*;
-use walkdir::WalkDir;
+use walkdir::{DirEntry, WalkDir};
 
 use crate::media::ingest::metadata::extract_or_filename_row;
 use melodia_core::entities::scan::{ExistingTrackSummary, ScannedFile};
 use melodia_core::utils::audio_ext::is_audio_extension;
+use melodia_core::utils::trash_dir::is_trash_dir;
 
 /// What a library walk and parse report while they run, and how they learn to stop.
 ///
@@ -44,7 +45,8 @@ pub fn collect_media_files(dir: &Path, observer: &dyn ScanObserver) -> Option<Me
     let mut files = Vec::with_capacity(256);
     let mut unreadable = Vec::new();
 
-    for entry in WalkDir::new(dir).follow_links(false) {
+    let walk = WalkDir::new(dir).follow_links(false).into_iter();
+    for entry in walk.filter_entry(|entry| !is_trash_below_root(entry)) {
         if observer.is_cancelled() {
             return None;
         }
@@ -77,6 +79,11 @@ pub fn collect_media_files(dir: &Path, observer: &dyn ScanObserver) -> Option<Me
     }
 
     Some(MediaWalk { files, unreadable })
+}
+
+/// A root is walked whatever its name, as the user added it on purpose.
+fn is_trash_below_root(entry: &DirEntry) -> bool {
+    entry.depth() > 0 && entry.file_type().is_dir() && is_trash_dir(entry.path())
 }
 
 /// Parses `files` on the current rayon pool. Once `observer` cancels, the files not yet started

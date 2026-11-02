@@ -1,6 +1,6 @@
 # Plan: Duplicate tracks (find the copies, clear out the spares)
 
-Status: **proposed** · Owner: Kenan · Created: 2026-11-02 · Issue #158, branch `feat/duplicate-tracks`
+Status: **in progress** (Phase 0 built, awaiting its hand check) · Owner: Kenan · Created: 2026-11-02 · Issue #158, branch `feat/duplicate-tracks`
 
 > **Validated 2026-11-02** against `b4c5ecff`, and re-validated the same day against `41c1f2e1`. The sources were:
 > - three read-only code traces: the store and per-track data; the removal, scan, watcher and queue paths; the UI surfaces;
@@ -255,8 +255,8 @@ Right-clicking a group's header offers **Not Duplicates**, for copies you keep o
 
 | File | Owns |
 |---|---|
-| `crates/melodia-core/src/utils/trash_dir.rs` (new, P0) | `is_trash_dir`, which names a volume trash folder; `in_trash_dir`, which finds one in a path, or the home trash at `dirs::data_dir()/Trash`. |
-| `crates/melodia-store/src/media/ingest/scanner.rs`, `ingest/watcher.rs` | The walk skips a trash folder; the watcher's audio predicate rejects a path inside one (P0). |
+| `crates/melodia-core/src/utils/trash_dir.rs` (new, P0) | `is_trash_dir`, which takes a folder: a volume trash by name, or the home trash at `dirs::data_dir()/Trash` by path. `in_trash_dir` asks it of every folder above a path. |
+| `crates/melodia-store/src/media/ingest/scanner.rs`, `ingest/watcher.rs` | The walk skips a trash folder; the watcher's `is_library_file` rejects a path inside one (P0). |
 | `crates/melodia-core/src/utils/fold.rs` | `fold_words`, beside `push_folded`: folded, each run of non-alphanumerics one space, trimmed. If nothing is left, the folded string. |
 | `crates/melodia-core/src/entities/audio_quality.rs` (new, P1) | `AudioQuality`: the lossless rule and the keeper order. |
 | `crates/melodia-core/src/entities/duplicates.rs` (new, P1) | `MatchKind`, `ReviewReason`, `DuplicateGroup`, `DuplicateCopy`, `GroupRemoval`; `KeptOutFile` (P4). |
@@ -298,11 +298,13 @@ Size headroom, measured: `app-window.slint` 749 lines (gains two export names), 
 
 ### Phase 0: Trash folders are never indexed
 
+Status: built (2026-11-02), awaiting Kenan's hand check.
+
 1. `utils::trash_dir`:
-   - `is_trash_dir(&OsStr)` matches `.Trash`, `.Trash-` followed by a uid, `.Trashes`, and `$RECYCLE.BIN` compared without case.
-   - `in_trash_dir(&Path)` checks every component of a path. It also checks for the home trash, `dirs::data_dir()/Trash`, by path, because a plain `Trash` is a name any album folder could carry.
+   - `is_trash_dir(&Path)` takes a folder. It matches `.Trash`, `.Trash-` followed by a uid, `.Trashes`, and `$RECYCLE.BIN` compared without case, by name. It matches the home trash, `dirs::data_dir()/Trash` made canonical, by path, because a plain `Trash` is a name any album folder could carry. The walk sees one folder at a time, so the home trash has to be in this predicate.
+   - `in_trash_dir(&Path)` asks it of every folder above a path.
 2. **The walk.** `collect_media_files` (`scanner.rs:47-77`) gives `WalkDir` a `filter_entry` that skips a trash folder below the root, so nothing under it is read.
-3. **The watcher.** `classify_event` (`watcher.rs:187-238`) reads `is_audio_file` in every arm, so that predicate also rejects a path inside a trash folder. The rename arm's existing branches then do the rest, with no new arm:
+3. **The watcher.** `classify_event` (`watcher.rs:187-238`) asks a new `is_library_file` in every arm: an audio file outside every trash folder. The rename arm's existing branches then do the rest, with no new arm:
    - a rename into a trash folder becomes a `Removed`;
    - a rename out of one becomes a `Created`;
    - events inside one are dropped.

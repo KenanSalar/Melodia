@@ -4,6 +4,7 @@ paths:
   - crates/melodia-store/src/database/**/*.rs
   - crates/melodia-store/src/media/ingest/**/*.rs
   - crates/melodia-core/src/utils/audio_ext.rs
+  - crates/melodia-core/src/utils/trash_dir.rs
   - crates/melodia-platform/src/services/platform/single_instance.rs
   - crates/melodia-views/src/ui/playlists/**/*.rs
   - crates/melodia-ui/ui/views/my-library/playlist-detail.slint
@@ -22,6 +23,8 @@ paths:
   file nothing can rebuild holds it in an `ArtworkHold` taken before the delete commits.
 - **`utils::audio_ext::is_audio_extension` is the one audio-extension predicate**; never re-roll a
   lowercase-and-contains at a new call site.
+- **`utils::trash_dir` is the one trash-folder predicate**: a new path into the library asks it,
+  never a trash name of its own.
 - **Nothing inside a write transaction `stat`s a file**: a second `stat` can pair a new mtime with
   the previous scan's size, which then reads as current (`queries::scan::watch_batch`).
 

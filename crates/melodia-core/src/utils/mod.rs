@@ -12,6 +12,7 @@ pub mod reinsert;
 pub mod self_writes;
 pub mod text;
 pub mod toast;
+pub mod trash_dir;
 
 use std::io;
 use std::path::{Path, PathBuf};
