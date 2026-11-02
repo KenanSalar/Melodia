@@ -86,9 +86,11 @@ impl Finder {
                     set.suggest_all();
                     *finder.set.borrow_mut() = set;
                     finder.publish();
+                    dup.set_failed(false);
                 }
                 Err(e) => {
                     log::warn!("duplicates: find failed: {}", describe(&e));
+                    finder.write_counts(&dup);
                     dup.set_failed(true);
                 }
             }
@@ -140,8 +142,8 @@ impl Finder {
         self.ticket.set(self.ticket.get().wrapping_add(1));
         self.show_dismissed.set(false);
         *self.set.borrow_mut() = DuplicateSet::default();
-        self.rows.select(&HashSet::new());
         self.rows.clear();
+        self.rows.select(&HashSet::new());
     }
 
     fn repick(&self, edit: impl FnOnce(&mut DuplicateSet)) {

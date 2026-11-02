@@ -24,6 +24,6 @@ export global DuplicatesUi {
     callback set-show-dismissed(bool);
     callback dismiss-group(int /*header id*/);
     callback restore-group(int /*header id*/);
-    // From every dialog's teardown, so a find a quick reopen cut short is still let go.
+    // From every kind's teardown: a dialog raised as the finder fades out skips the finder's.
     callback released();
 }
