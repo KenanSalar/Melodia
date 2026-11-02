@@ -160,6 +160,13 @@ msgid_plural "{n} tracks"
 msgstr[0] "{n} κομμάτι"
 msgstr[1] "{n} κομμάτια"
 
+#. Translators: {} is the picked copies' total size, as 1.2 GB.
+#: ui/components/dialog/dialog.slint
+msgid "{n} copy picked · {}"
+msgid_plural "{n} copies picked · {}"
+msgstr[0] "{n} αντίγραφο επιλεγμένο · {}"
+msgstr[1] "{n} αντίγραφα επιλεγμένα · {}"
+
 #: ui/components/dialog/dialog.slint
 #: ui/components/dialog/smart-playlist-editor-body.slint
 #: ui/components/grid/station-context-menu.slint ui/views/favorites-view.slint
@@ -192,6 +199,105 @@ msgstr "Άνοιγμα Last.fm"
 #: ui/components/dialog/dialog.slint ui/views/settings/scrobbling-section.slint
 msgid "Connect"
 msgstr "Σύνδεση"
+
+#: ui/components/dialog/duplicate-row.slint
+msgid "Identical files"
+msgstr "Πανομοιότυπα αρχεία"
+
+#: ui/components/dialog/duplicate-row.slint
+msgid "Same release"
+msgstr "Ίδια κυκλοφορία"
+
+#: ui/components/dialog/duplicate-row.slint
+msgid "Review: no artist tag"
+msgstr "Έλεγχος: χωρίς ετικέτα καλλιτέχνη"
+
+#: ui/components/dialog/duplicate-row.slint
+msgid "Review: different recordings"
+msgstr "Έλεγχος: διαφορετικές ηχογραφήσεις"
+
+#: ui/components/dialog/duplicate-row.slint
+msgid "Review: different releases"
+msgstr "Έλεγχος: διαφορετικές κυκλοφορίες"
+
+#: ui/components/dialog/duplicate-row.slint
+msgid "Review: different track numbers"
+msgstr "Έλεγχος: διαφορετικοί αριθμοί κομματιών"
+
+#: ui/components/dialog/duplicate-row.slint
+msgid "Dismissed"
+msgstr "Απορρίφθηκε"
+
+#: ui/components/dialog/duplicate-row.slint
+msgid "{n} copy"
+msgid_plural "{n} copies"
+msgstr[0] "{n} αντίγραφο"
+msgstr[1] "{n} αντίγραφα"
+
+#. Translators: {} is the day the copy joined the library, as 2026-11-02.
+#: ui/components/dialog/duplicate-row.slint
+msgid "Added {}"
+msgstr "Προστέθηκε στις {}"
+
+#: ui/components/dialog/duplicates-body.slint
+msgid "Suggested Picks"
+msgstr "Προτεινόμενη επιλογή"
+
+#: ui/components/dialog/duplicates-body.slint
+msgid "Clear Picks"
+msgstr "Εκκαθάριση επιλογής"
+
+#. Translators: {} is how many groups were marked Not Duplicates.
+#: ui/components/dialog/duplicates-body.slint
+msgid "Show Dismissed ({})"
+msgstr "Εμφάνιση απορριφθέντων ({})"
+
+#: ui/components/dialog/duplicates-body.slint
+msgid "Looking for duplicates…"
+msgstr "Αναζήτηση διπλοτύπων…"
+
+#: ui/components/dialog/duplicates-body.slint
+msgid "Couldn't search the library."
+msgstr "Δεν ήταν δυνατή η αναζήτηση στη βιβλιοθήκη."
+
+#: ui/components/dialog/duplicates-body.slint
+msgid "No duplicates found"
+msgstr "Δεν βρέθηκαν διπλότυπα"
+
+#: ui/components/dialog/duplicates-body.slint
+msgid "Every group left is one you marked Not Duplicates."
+msgstr "Όλες οι υπόλοιπες ομάδες έχουν σημειωθεί ως «Όχι διπλότυπα»."
+
+#: ui/components/dialog/duplicates-body.slint
+msgid "No song is in the library more than once."
+msgstr "Κανένα τραγούδι δεν υπάρχει πάνω από μία φορά στη βιβλιοθήκη."
+
+#: ui/components/dialog/duplicates-menus.slint
+msgid "Not Duplicates"
+msgstr "Όχι διπλότυπα"
+
+#: ui/components/dialog/duplicates-menus.slint
+msgid "Count as Duplicates"
+msgstr "Να θεωρούνται διπλότυπα"
+
+#: ui/components/dialog/duplicates-menus.slint
+msgid "Keep This Copy"
+msgstr "Διατήρηση αυτού του αντιγράφου"
+
+#: ui/components/dialog/duplicates-menus.slint
+msgid "Keep Copies in This Folder"
+msgstr "Διατήρηση αντιγράφων αυτού του φακέλου"
+
+#: ui/components/dialog/duplicates-menus.slint
+#: ui/components/grid/card-context-menu.slint
+#: ui/components/track-list/track-context-menu.slint
+msgid "Open Containing Folder"
+msgstr "Άνοιγμα γονικού φακέλου"
+
+#: ui/components/dialog/duplicates-menus.slint
+#: ui/components/grid/card-context-menu.slint
+msgid "Copy Path"
+msgstr "Αντιγραφή διαδρομής"
 
 #: ui/components/dialog/export-playlist-picker.slint
 msgid "No playlists to export"
@@ -836,10 +942,6 @@ msgstr "Αντιγραφή"
 msgid "Copy Name"
 msgstr "Αντιγραφή ονόματος"
 
-#: ui/components/grid/card-context-menu.slint
-msgid "Copy Path"
-msgstr "Αντιγραφή διαδρομής"
-
 #: ui/components/grid/card-context-menu.slint ui/settings.slint
 #: ui/views/settings/diagnostics-section.slint
 msgid "Open Folder"
@@ -848,11 +950,6 @@ msgstr "Άνοιγμα φακέλου"
 #: ui/components/grid/card-context-menu.slint
 msgid "Show in File Manager"
 msgstr "Εμφάνιση στη διαχείριση αρχείων"
-
-#: ui/components/grid/card-context-menu.slint
-#: ui/components/track-list/track-context-menu.slint
-msgid "Open Containing Folder"
-msgstr "Άνοιγμα γονικού φακέλου"
 
 #: ui/components/grid/card-context-menu.slint
 #: ui/components/track-list/track-context-menu.slint
@@ -1403,6 +1500,7 @@ msgstr "{} / {} αρχεία"
 #: ui/components/settings/scan-progress.slint ui/globals/dialog-forms.slint
 #: ui/globals/dialog.slint ui/views/queue-panel/queue-panel.slint
 #: ui/views/radio/tab-pills.slint ui/views/settings/appearance-section.slint
+#: ui/views/settings/duplicates-section.slint
 #: ui/views/settings/library-section.slint
 #: ui/views/settings/output-section.slint
 #: ui/views/settings/scrobbling-section.slint
@@ -2860,6 +2958,34 @@ msgstr "Συνδεδεμένο με το Discord"
 #: ui/views/settings/discord-section.slint
 msgid "Discord not running"
 msgstr "Το Discord δεν εκτελείται"
+
+#: ui/views/settings/duplicates-section.slint
+msgid "Duplicates"
+msgstr "Διπλότυπα"
+
+#: ui/views/settings/duplicates-section.slint
+msgid "Duplicate tracks"
+msgstr "Διπλότυπα κομμάτια"
+
+#: ui/views/settings/duplicates-section.slint
+msgid "Find songs the library holds more than once, and pick the copies you don't need."
+msgstr "Βρείτε τραγούδια που υπάρχουν πάνω από μία φορά στη βιβλιοθήκη και επιλέξτε τα αντίγραφα που δεν χρειάζεστε."
+
+#: ui/views/settings/duplicates-section.slint
+msgid "Find…"
+msgstr "Εύρεση…"
+
+#: ui/views/settings/duplicates-section.slint
+msgid "Duplicate Tracks"
+msgstr "Διπλότυπα κομμάτια"
+
+#: ui/views/settings/duplicates-section.slint
+msgid "Songs the library seems to hold more than once. Pick the copies you don't need."
+msgstr "Τραγούδια που φαίνεται να υπάρχουν πάνω από μία φορά στη βιβλιοθήκη. Επιλέξτε τα αντίγραφα που δεν χρειάζεστε."
+
+#: ui/views/settings/duplicates-section.slint
+msgid "Continue"
+msgstr "Συνέχεια"
 
 #. Translators: an equalizer preset, such as Rock or Jazz
 #: ui/views/settings/equalizer-section.slint

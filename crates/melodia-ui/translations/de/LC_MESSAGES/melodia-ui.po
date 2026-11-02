@@ -159,6 +159,13 @@ msgid_plural "{n} tracks"
 msgstr[0] "{n} Lied"
 msgstr[1] "{n} Lieder"
 
+#. Translators: {} is the picked copies' total size, as 1.2 GB.
+#: ui/components/dialog/dialog.slint
+msgid "{n} copy picked · {}"
+msgid_plural "{n} copies picked · {}"
+msgstr[0] "{n} Kopie ausgewählt · {}"
+msgstr[1] "{n} Kopien ausgewählt · {}"
+
 #: ui/components/dialog/dialog.slint
 #: ui/components/dialog/smart-playlist-editor-body.slint
 #: ui/components/grid/station-context-menu.slint ui/views/favorites-view.slint
@@ -191,6 +198,105 @@ msgstr "Last.fm öffnen"
 #: ui/components/dialog/dialog.slint ui/views/settings/scrobbling-section.slint
 msgid "Connect"
 msgstr "Verbinden"
+
+#: ui/components/dialog/duplicate-row.slint
+msgid "Identical files"
+msgstr "Identische Dateien"
+
+#: ui/components/dialog/duplicate-row.slint
+msgid "Same release"
+msgstr "Gleiche Veröffentlichung"
+
+#: ui/components/dialog/duplicate-row.slint
+msgid "Review: no artist tag"
+msgstr "Prüfen: kein Künstler-Tag"
+
+#: ui/components/dialog/duplicate-row.slint
+msgid "Review: different recordings"
+msgstr "Prüfen: verschiedene Aufnahmen"
+
+#: ui/components/dialog/duplicate-row.slint
+msgid "Review: different releases"
+msgstr "Prüfen: verschiedene Veröffentlichungen"
+
+#: ui/components/dialog/duplicate-row.slint
+msgid "Review: different track numbers"
+msgstr "Prüfen: verschiedene Titelnummern"
+
+#: ui/components/dialog/duplicate-row.slint
+msgid "Dismissed"
+msgstr "Ausgeblendet"
+
+#: ui/components/dialog/duplicate-row.slint
+msgid "{n} copy"
+msgid_plural "{n} copies"
+msgstr[0] "{n} Kopie"
+msgstr[1] "{n} Kopien"
+
+#. Translators: {} is the day the copy joined the library, as 2026-11-02.
+#: ui/components/dialog/duplicate-row.slint
+msgid "Added {}"
+msgstr "Hinzugefügt am {}"
+
+#: ui/components/dialog/duplicates-body.slint
+msgid "Suggested Picks"
+msgstr "Vorgeschlagene Auswahl"
+
+#: ui/components/dialog/duplicates-body.slint
+msgid "Clear Picks"
+msgstr "Auswahl aufheben"
+
+#. Translators: {} is how many groups were marked Not Duplicates.
+#: ui/components/dialog/duplicates-body.slint
+msgid "Show Dismissed ({})"
+msgstr "Ausgeblendete anzeigen ({})"
+
+#: ui/components/dialog/duplicates-body.slint
+msgid "Looking for duplicates…"
+msgstr "Duplikate werden gesucht…"
+
+#: ui/components/dialog/duplicates-body.slint
+msgid "Couldn't search the library."
+msgstr "Die Bibliothek konnte nicht durchsucht werden."
+
+#: ui/components/dialog/duplicates-body.slint
+msgid "No duplicates found"
+msgstr "Keine Duplikate gefunden"
+
+#: ui/components/dialog/duplicates-body.slint
+msgid "Every group left is one you marked Not Duplicates."
+msgstr "Alle übrigen Gruppen hast du als „Keine Duplikate“ markiert."
+
+#: ui/components/dialog/duplicates-body.slint
+msgid "No song is in the library more than once."
+msgstr "Kein Lied ist mehrfach in der Bibliothek."
+
+#: ui/components/dialog/duplicates-menus.slint
+msgid "Not Duplicates"
+msgstr "Keine Duplikate"
+
+#: ui/components/dialog/duplicates-menus.slint
+msgid "Count as Duplicates"
+msgstr "Als Duplikate zählen"
+
+#: ui/components/dialog/duplicates-menus.slint
+msgid "Keep This Copy"
+msgstr "Diese Kopie behalten"
+
+#: ui/components/dialog/duplicates-menus.slint
+msgid "Keep Copies in This Folder"
+msgstr "Kopien in diesem Ordner behalten"
+
+#: ui/components/dialog/duplicates-menus.slint
+#: ui/components/grid/card-context-menu.slint
+#: ui/components/track-list/track-context-menu.slint
+msgid "Open Containing Folder"
+msgstr "Übergeordneten Ordner öffnen"
+
+#: ui/components/dialog/duplicates-menus.slint
+#: ui/components/grid/card-context-menu.slint
+msgid "Copy Path"
+msgstr "Pfad kopieren"
 
 #: ui/components/dialog/export-playlist-picker.slint
 msgid "No playlists to export"
@@ -835,10 +941,6 @@ msgstr "Kopieren"
 msgid "Copy Name"
 msgstr "Name kopieren"
 
-#: ui/components/grid/card-context-menu.slint
-msgid "Copy Path"
-msgstr "Pfad kopieren"
-
 #: ui/components/grid/card-context-menu.slint ui/settings.slint
 #: ui/views/settings/diagnostics-section.slint
 msgid "Open Folder"
@@ -847,11 +949,6 @@ msgstr "Ordner öffnen"
 #: ui/components/grid/card-context-menu.slint
 msgid "Show in File Manager"
 msgstr "Im Dateimanager anzeigen"
-
-#: ui/components/grid/card-context-menu.slint
-#: ui/components/track-list/track-context-menu.slint
-msgid "Open Containing Folder"
-msgstr "Übergeordneten Ordner öffnen"
 
 #: ui/components/grid/card-context-menu.slint
 #: ui/components/track-list/track-context-menu.slint
@@ -1402,6 +1499,7 @@ msgstr "{} / {} Dateien"
 #: ui/components/settings/scan-progress.slint ui/globals/dialog-forms.slint
 #: ui/globals/dialog.slint ui/views/queue-panel/queue-panel.slint
 #: ui/views/radio/tab-pills.slint ui/views/settings/appearance-section.slint
+#: ui/views/settings/duplicates-section.slint
 #: ui/views/settings/library-section.slint
 #: ui/views/settings/output-section.slint
 #: ui/views/settings/scrobbling-section.slint
@@ -2857,6 +2955,34 @@ msgstr "Mit Discord verbunden"
 #: ui/views/settings/discord-section.slint
 msgid "Discord not running"
 msgstr "Discord läuft nicht"
+
+#: ui/views/settings/duplicates-section.slint
+msgid "Duplicates"
+msgstr "Duplikate"
+
+#: ui/views/settings/duplicates-section.slint
+msgid "Duplicate tracks"
+msgstr "Doppelte Lieder"
+
+#: ui/views/settings/duplicates-section.slint
+msgid "Find songs the library holds more than once, and pick the copies you don't need."
+msgstr "Finde Lieder, die mehrfach in der Bibliothek sind, und wähle die Kopien aus, die du nicht brauchst."
+
+#: ui/views/settings/duplicates-section.slint
+msgid "Find…"
+msgstr "Suchen…"
+
+#: ui/views/settings/duplicates-section.slint
+msgid "Duplicate Tracks"
+msgstr "Doppelte Lieder"
+
+#: ui/views/settings/duplicates-section.slint
+msgid "Songs the library seems to hold more than once. Pick the copies you don't need."
+msgstr "Lieder, die mehrfach in der Bibliothek zu sein scheinen. Wähle die Kopien aus, die du nicht brauchst."
+
+#: ui/views/settings/duplicates-section.slint
+msgid "Continue"
+msgstr "Weiter"
 
 #. Translators: an equalizer preset, such as Rock or Jazz
 #: ui/views/settings/equalizer-section.slint

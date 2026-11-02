@@ -5,7 +5,7 @@
 
 mod matcher;
 
-use melodia_core::entities::duplicates::{DismissalSet, DuplicateGroup};
+use melodia_core::entities::duplicates::{DismissalSet, DuplicateCopy, DuplicateGroup};
 use melodia_core::error::AppError;
 use melodia_store::database::{DbPool, queries};
 
@@ -16,6 +16,11 @@ pub async fn find(db: &DbPool) -> Result<Vec<DuplicateGroup>, AppError> {
     let candidates = matcher::candidate_ids(keys);
     let copies = queries::track::duplicate_copies(db, &candidates).await?;
     Ok(matcher::group(copies))
+}
+
+/// The copies behind `ids` as they read now, for the finder's rows on screen.
+pub async fn copies(db: &DbPool, ids: &[i64]) -> Result<Vec<DuplicateCopy>, AppError> {
+    queries::track::duplicate_copies(db, ids).await
 }
 
 /// Not Duplicates on one group's copies, returning the set [`restore`] takes back.

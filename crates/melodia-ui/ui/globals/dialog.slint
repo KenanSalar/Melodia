@@ -1,5 +1,6 @@
 import { PlaylistPickRow, PlaylistExportPickRow, RadioStationRow } from "../models.slint";
 import { SmartEditor, TagEditor, ScrobbleUi, RadioForm } from "dialog-forms.slint";
+import { DuplicatesUi } from "duplicates.slint";
 import { Radio } from "radio.slint";
 import { LibrarySettings } from "library-settings.slint";
 import { Playlists, PlaylistDetail } from "playlists.slint";
@@ -33,6 +34,7 @@ export enum DialogKind {
     scrobble-lastfm-login,
     equalizer,
     replaygain,
+    duplicates,
 }
 
 // Why a removal asks first where an undo would otherwise follow, each with its own message.
@@ -199,6 +201,7 @@ export global Dialog {
         root.add-selected-count = 0;
         root.pick-total-tracks = 0;
         RadioForm.reset();
+        DuplicatesUi.released();
         root.export-pick-rows = [];
         root.export-select-all = false;
         root.export-selected-count = 0;

@@ -58,6 +58,11 @@ pub struct DuplicateCopy {
     #[sqlx(flatten)]
     pub format: AudioFormat,
     pub dismissal: Option<DismissalSet>,
+    pub play_count: i64,
+    pub rating: i32,
+    pub is_favorite: bool,
+    /// Manual playlists only, a smart one holding no rows of its own.
+    pub playlist_count: i64,
 }
 
 /// Tracks that look like one song.

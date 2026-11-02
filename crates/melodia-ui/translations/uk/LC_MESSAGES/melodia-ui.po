@@ -160,6 +160,14 @@ msgstr[0] "{n} трек"
 msgstr[1] "{n} треки"
 msgstr[2] "{n} треків"
 
+#. Translators: {} is the picked copies' total size, as 1.2 GB.
+#: ui/components/dialog/dialog.slint
+msgid "{n} copy picked · {}"
+msgid_plural "{n} copies picked · {}"
+msgstr[0] "Вибрано {n} копію · {}"
+msgstr[1] "Вибрано {n} копії · {}"
+msgstr[2] "Вибрано {n} копій · {}"
+
 #: ui/components/dialog/dialog.slint
 #: ui/components/dialog/smart-playlist-editor-body.slint
 #: ui/components/grid/station-context-menu.slint ui/views/favorites-view.slint
@@ -192,6 +200,106 @@ msgstr "Відкрити Last.fm"
 #: ui/components/dialog/dialog.slint ui/views/settings/scrobbling-section.slint
 msgid "Connect"
 msgstr "Підключити"
+
+#: ui/components/dialog/duplicate-row.slint
+msgid "Identical files"
+msgstr "Однакові файли"
+
+#: ui/components/dialog/duplicate-row.slint
+msgid "Same release"
+msgstr "Той самий реліз"
+
+#: ui/components/dialog/duplicate-row.slint
+msgid "Review: no artist tag"
+msgstr "Перевірте: немає тегу виконавця"
+
+#: ui/components/dialog/duplicate-row.slint
+msgid "Review: different recordings"
+msgstr "Перевірте: різні записи"
+
+#: ui/components/dialog/duplicate-row.slint
+msgid "Review: different releases"
+msgstr "Перевірте: різні релізи"
+
+#: ui/components/dialog/duplicate-row.slint
+msgid "Review: different track numbers"
+msgstr "Перевірте: різні номери треків"
+
+#: ui/components/dialog/duplicate-row.slint
+msgid "Dismissed"
+msgstr "Приховано"
+
+#: ui/components/dialog/duplicate-row.slint
+msgid "{n} copy"
+msgid_plural "{n} copies"
+msgstr[0] "{n} копія"
+msgstr[1] "{n} копії"
+msgstr[2] "{n} копій"
+
+#. Translators: {} is the day the copy joined the library, as 2026-11-02.
+#: ui/components/dialog/duplicate-row.slint
+msgid "Added {}"
+msgstr "Додано {}"
+
+#: ui/components/dialog/duplicates-body.slint
+msgid "Suggested Picks"
+msgstr "Запропонований вибір"
+
+#: ui/components/dialog/duplicates-body.slint
+msgid "Clear Picks"
+msgstr "Скинути вибір"
+
+#. Translators: {} is how many groups were marked Not Duplicates.
+#: ui/components/dialog/duplicates-body.slint
+msgid "Show Dismissed ({})"
+msgstr "Показати приховані ({})"
+
+#: ui/components/dialog/duplicates-body.slint
+msgid "Looking for duplicates…"
+msgstr "Пошук дублікатів…"
+
+#: ui/components/dialog/duplicates-body.slint
+msgid "Couldn't search the library."
+msgstr "Не вдалося виконати пошук у медіатеці."
+
+#: ui/components/dialog/duplicates-body.slint
+msgid "No duplicates found"
+msgstr "Дублікатів не знайдено"
+
+#: ui/components/dialog/duplicates-body.slint
+msgid "Every group left is one you marked Not Duplicates."
+msgstr "Усі інші групи позначені як «Не дублікати»."
+
+#: ui/components/dialog/duplicates-body.slint
+msgid "No song is in the library more than once."
+msgstr "Жодна пісня не трапляється в медіатеці більше одного разу."
+
+#: ui/components/dialog/duplicates-menus.slint
+msgid "Not Duplicates"
+msgstr "Не дублікати"
+
+#: ui/components/dialog/duplicates-menus.slint
+msgid "Count as Duplicates"
+msgstr "Вважати дублікатами"
+
+#: ui/components/dialog/duplicates-menus.slint
+msgid "Keep This Copy"
+msgstr "Залишити цю копію"
+
+#: ui/components/dialog/duplicates-menus.slint
+msgid "Keep Copies in This Folder"
+msgstr "Залишити копії з цієї теки"
+
+#: ui/components/dialog/duplicates-menus.slint
+#: ui/components/grid/card-context-menu.slint
+#: ui/components/track-list/track-context-menu.slint
+msgid "Open Containing Folder"
+msgstr "Відкрити теку з файлом"
+
+#: ui/components/dialog/duplicates-menus.slint
+#: ui/components/grid/card-context-menu.slint
+msgid "Copy Path"
+msgstr "Копіювати шлях"
 
 #: ui/components/dialog/export-playlist-picker.slint
 msgid "No playlists to export"
@@ -837,10 +945,6 @@ msgstr "Копіювати"
 msgid "Copy Name"
 msgstr "Копіювати назву"
 
-#: ui/components/grid/card-context-menu.slint
-msgid "Copy Path"
-msgstr "Копіювати шлях"
-
 #: ui/components/grid/card-context-menu.slint ui/settings.slint
 #: ui/views/settings/diagnostics-section.slint
 msgid "Open Folder"
@@ -849,11 +953,6 @@ msgstr "Відкрити теку"
 #: ui/components/grid/card-context-menu.slint
 msgid "Show in File Manager"
 msgstr "Показати у файловому менеджері"
-
-#: ui/components/grid/card-context-menu.slint
-#: ui/components/track-list/track-context-menu.slint
-msgid "Open Containing Folder"
-msgstr "Відкрити теку з файлом"
 
 #: ui/components/grid/card-context-menu.slint
 #: ui/components/track-list/track-context-menu.slint
@@ -1406,6 +1505,7 @@ msgstr "Файлів: {} / {}"
 #: ui/components/settings/scan-progress.slint ui/globals/dialog-forms.slint
 #: ui/globals/dialog.slint ui/views/queue-panel/queue-panel.slint
 #: ui/views/radio/tab-pills.slint ui/views/settings/appearance-section.slint
+#: ui/views/settings/duplicates-section.slint
 #: ui/views/settings/library-section.slint
 #: ui/views/settings/output-section.slint
 #: ui/views/settings/scrobbling-section.slint
@@ -2894,6 +2994,34 @@ msgstr "Підключено до Discord"
 #: ui/views/settings/discord-section.slint
 msgid "Discord not running"
 msgstr "Discord не запущено"
+
+#: ui/views/settings/duplicates-section.slint
+msgid "Duplicates"
+msgstr "Дублікати"
+
+#: ui/views/settings/duplicates-section.slint
+msgid "Duplicate tracks"
+msgstr "Повторювані треки"
+
+#: ui/views/settings/duplicates-section.slint
+msgid "Find songs the library holds more than once, and pick the copies you don't need."
+msgstr "Знайдіть пісні, які є в медіатеці кілька разів, і виберіть непотрібні копії."
+
+#: ui/views/settings/duplicates-section.slint
+msgid "Find…"
+msgstr "Знайти…"
+
+#: ui/views/settings/duplicates-section.slint
+msgid "Duplicate Tracks"
+msgstr "Повторювані треки"
+
+#: ui/views/settings/duplicates-section.slint
+msgid "Songs the library seems to hold more than once. Pick the copies you don't need."
+msgstr "Пісні, які, схоже, є в медіатеці кілька разів. Виберіть непотрібні копії."
+
+#: ui/views/settings/duplicates-section.slint
+msgid "Continue"
+msgstr "Продовжити"
 
 #. Translators: an equalizer preset, such as Rock or Jazz
 #: ui/views/settings/equalizer-section.slint

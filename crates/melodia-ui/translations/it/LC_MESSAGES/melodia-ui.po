@@ -159,6 +159,13 @@ msgid_plural "{n} tracks"
 msgstr[0] "{n} brano"
 msgstr[1] "{n} brani"
 
+#. Translators: {} is the picked copies' total size, as 1.2 GB.
+#: ui/components/dialog/dialog.slint
+msgid "{n} copy picked · {}"
+msgid_plural "{n} copies picked · {}"
+msgstr[0] "{n} copia selezionata · {}"
+msgstr[1] "{n} copie selezionate · {}"
+
 #: ui/components/dialog/dialog.slint
 #: ui/components/dialog/smart-playlist-editor-body.slint
 #: ui/components/grid/station-context-menu.slint ui/views/favorites-view.slint
@@ -191,6 +198,105 @@ msgstr "Apri Last.fm"
 #: ui/components/dialog/dialog.slint ui/views/settings/scrobbling-section.slint
 msgid "Connect"
 msgstr "Connetti"
+
+#: ui/components/dialog/duplicate-row.slint
+msgid "Identical files"
+msgstr "File identici"
+
+#: ui/components/dialog/duplicate-row.slint
+msgid "Same release"
+msgstr "Stessa pubblicazione"
+
+#: ui/components/dialog/duplicate-row.slint
+msgid "Review: no artist tag"
+msgstr "Da verificare: nessun tag artista"
+
+#: ui/components/dialog/duplicate-row.slint
+msgid "Review: different recordings"
+msgstr "Da verificare: registrazioni diverse"
+
+#: ui/components/dialog/duplicate-row.slint
+msgid "Review: different releases"
+msgstr "Da verificare: pubblicazioni diverse"
+
+#: ui/components/dialog/duplicate-row.slint
+msgid "Review: different track numbers"
+msgstr "Da verificare: numeri di traccia diversi"
+
+#: ui/components/dialog/duplicate-row.slint
+msgid "Dismissed"
+msgstr "Ignorato"
+
+#: ui/components/dialog/duplicate-row.slint
+msgid "{n} copy"
+msgid_plural "{n} copies"
+msgstr[0] "{n} copia"
+msgstr[1] "{n} copie"
+
+#. Translators: {} is the day the copy joined the library, as 2026-11-02.
+#: ui/components/dialog/duplicate-row.slint
+msgid "Added {}"
+msgstr "Aggiunta il {}"
+
+#: ui/components/dialog/duplicates-body.slint
+msgid "Suggested Picks"
+msgstr "Selezione suggerita"
+
+#: ui/components/dialog/duplicates-body.slint
+msgid "Clear Picks"
+msgstr "Cancella selezione"
+
+#. Translators: {} is how many groups were marked Not Duplicates.
+#: ui/components/dialog/duplicates-body.slint
+msgid "Show Dismissed ({})"
+msgstr "Mostra ignorati ({})"
+
+#: ui/components/dialog/duplicates-body.slint
+msgid "Looking for duplicates…"
+msgstr "Ricerca dei duplicati…"
+
+#: ui/components/dialog/duplicates-body.slint
+msgid "Couldn't search the library."
+msgstr "Impossibile cercare nella libreria."
+
+#: ui/components/dialog/duplicates-body.slint
+msgid "No duplicates found"
+msgstr "Nessun duplicato trovato"
+
+#: ui/components/dialog/duplicates-body.slint
+msgid "Every group left is one you marked Not Duplicates."
+msgstr "Hai segnato tutti i gruppi rimasti come «Non duplicati»."
+
+#: ui/components/dialog/duplicates-body.slint
+msgid "No song is in the library more than once."
+msgstr "Nessun brano è presente più di una volta nella libreria."
+
+#: ui/components/dialog/duplicates-menus.slint
+msgid "Not Duplicates"
+msgstr "Non duplicati"
+
+#: ui/components/dialog/duplicates-menus.slint
+msgid "Count as Duplicates"
+msgstr "Considera duplicati"
+
+#: ui/components/dialog/duplicates-menus.slint
+msgid "Keep This Copy"
+msgstr "Mantieni questa copia"
+
+#: ui/components/dialog/duplicates-menus.slint
+msgid "Keep Copies in This Folder"
+msgstr "Mantieni le copie in questa cartella"
+
+#: ui/components/dialog/duplicates-menus.slint
+#: ui/components/grid/card-context-menu.slint
+#: ui/components/track-list/track-context-menu.slint
+msgid "Open Containing Folder"
+msgstr "Apri cartella di origine"
+
+#: ui/components/dialog/duplicates-menus.slint
+#: ui/components/grid/card-context-menu.slint
+msgid "Copy Path"
+msgstr "Copia percorso"
 
 #: ui/components/dialog/export-playlist-picker.slint
 msgid "No playlists to export"
@@ -835,10 +941,6 @@ msgstr "Copia"
 msgid "Copy Name"
 msgstr "Copia nome"
 
-#: ui/components/grid/card-context-menu.slint
-msgid "Copy Path"
-msgstr "Copia percorso"
-
 #: ui/components/grid/card-context-menu.slint ui/settings.slint
 #: ui/views/settings/diagnostics-section.slint
 msgid "Open Folder"
@@ -847,11 +949,6 @@ msgstr "Apri cartella"
 #: ui/components/grid/card-context-menu.slint
 msgid "Show in File Manager"
 msgstr "Mostra nel gestore file"
-
-#: ui/components/grid/card-context-menu.slint
-#: ui/components/track-list/track-context-menu.slint
-msgid "Open Containing Folder"
-msgstr "Apri cartella di origine"
 
 #: ui/components/grid/card-context-menu.slint
 #: ui/components/track-list/track-context-menu.slint
@@ -1402,6 +1499,7 @@ msgstr "{} / {} file"
 #: ui/components/settings/scan-progress.slint ui/globals/dialog-forms.slint
 #: ui/globals/dialog.slint ui/views/queue-panel/queue-panel.slint
 #: ui/views/radio/tab-pills.slint ui/views/settings/appearance-section.slint
+#: ui/views/settings/duplicates-section.slint
 #: ui/views/settings/library-section.slint
 #: ui/views/settings/output-section.slint
 #: ui/views/settings/scrobbling-section.slint
@@ -2856,6 +2954,34 @@ msgstr "Connesso a Discord"
 #: ui/views/settings/discord-section.slint
 msgid "Discord not running"
 msgstr "Discord non è in esecuzione"
+
+#: ui/views/settings/duplicates-section.slint
+msgid "Duplicates"
+msgstr "Duplicati"
+
+#: ui/views/settings/duplicates-section.slint
+msgid "Duplicate tracks"
+msgstr "Brani duplicati"
+
+#: ui/views/settings/duplicates-section.slint
+msgid "Find songs the library holds more than once, and pick the copies you don't need."
+msgstr "Trova i brani presenti più volte nella libreria e seleziona le copie che non ti servono."
+
+#: ui/views/settings/duplicates-section.slint
+msgid "Find…"
+msgstr "Trova…"
+
+#: ui/views/settings/duplicates-section.slint
+msgid "Duplicate Tracks"
+msgstr "Brani duplicati"
+
+#: ui/views/settings/duplicates-section.slint
+msgid "Songs the library seems to hold more than once. Pick the copies you don't need."
+msgstr "Brani che sembrano presenti più volte nella libreria. Seleziona le copie che non ti servono."
+
+#: ui/views/settings/duplicates-section.slint
+msgid "Continue"
+msgstr "Continua"
 
 #. Translators: an equalizer preset, such as Rock or Jazz
 #: ui/views/settings/equalizer-section.slint

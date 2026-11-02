@@ -1,6 +1,7 @@
 import { LibrarySection } from "../library-section.slint";
 import { FileWatchingSection } from "../file-watching-section.slint";
 import { RatingsSection } from "../ratings-section.slint";
+import { DuplicatesSection } from "../duplicates-section.slint";
 
 // The shape every category page takes: its cards in one column, each mounted once and named, so
 // `has-matches` can OR their verdicts and the router can tell a page that filtered itself away.
@@ -9,11 +10,13 @@ export component LibraryPage inherits Rectangle {
     horizontal-stretch: 1;
     vertical-stretch: 0;
 
-    out property <bool> has-matches: lib.has-matches || fw.has-matches || ratings.has-matches;
+    out property <bool> has-matches:
+        lib.has-matches || fw.has-matches || ratings.has-matches || dup.has-matches;
 
     VerticalLayout {
         lib := LibrarySection { category-name: @tr("Library"); }
         fw := FileWatchingSection { category-name: @tr("Library"); }
         ratings := RatingsSection { category-name: @tr("Library"); }
+        dup := DuplicatesSection { category-name: @tr("Library"); }
     }
 }

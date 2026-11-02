@@ -170,6 +170,42 @@ export struct PlaylistExportPickRow {
     selected: bool,
 }
 
+// How sure a duplicate group's match is, the surest first. A type rather than a label, so the
+// header's words are Slint literals `@tr` can reach.
+export enum DuplicateMatch {
+    identical,
+    same-release,
+    no-artist,
+    other-recording,
+    other-release,
+    other-position,
+}
+
+// One row of the duplicate finder: a group's header, its `id` negative, or one of its copies, its
+// `id` the track's. The model stamps `selected`, a removal pick. Display strings are `""` where a
+// copy has none.
+export struct DuplicateRow {
+    id: int,
+    is_header: bool,
+    // The group's, on its header and every copy, which a dismissed group leaves unpickable.
+    dismissed: bool,
+    selected: bool,
+    // Header only.
+    title: string,
+    artist: string,
+    match_kind: DuplicateMatch,
+    copy_count: int,
+    // Copy only. `subtitle` is the album, year and folder, what tells one release from another.
+    file_name: string,
+    format: string,
+    subtitle: string,
+    added: string,
+    plays: int,
+    rating: int,   // 0–5, 0 = unrated
+    favorite: bool,
+    playlists: int,
+}
+
 // `join-index` points into Rust's `TagEditor.join-phrases`, so a mistyped separator can't reach
 // the file from here. The last row's is ignored.
 export struct ArtistCreditRow {

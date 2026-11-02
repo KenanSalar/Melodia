@@ -258,6 +258,12 @@ there, never in the `.slint`.
   `map_to_window` stops at popups (`StopAtPopups`) and no binding reaches `map_to_native_window`.
   Hence `Tooltip.in-popup`.
 
+- **An entry that closes its popup before it acts reads its host as defaults.** An entry inside an
+  `if` or `for` reaches the host's properties through the popup, `parent.upgrade()` per level
+  ending in `unwrap_or_default()`, and `close()` drops the popup, so the read answers `0` or `""`
+  and nothing warns. Act, then close (`TrackContextMenu`'s `dismiss()`). Tell: `fn_dismiss ()`
+  ahead of a `parent . upgrade ()` read in the entry's `clicked` handler.
+
 ## Lifecycle: `changed`, `init`, `Timer`
 
 - **`changed` doesn't fire when the first layout settles straight on the final value.** Pair the

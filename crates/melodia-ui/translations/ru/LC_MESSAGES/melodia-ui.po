@@ -160,6 +160,14 @@ msgstr[0] "{n} трек"
 msgstr[1] "{n} трека"
 msgstr[2] "{n} треков"
 
+#. Translators: {} is the picked copies' total size, as 1.2 GB.
+#: ui/components/dialog/dialog.slint
+msgid "{n} copy picked · {}"
+msgid_plural "{n} copies picked · {}"
+msgstr[0] "Выбрана {n} копия · {}"
+msgstr[1] "Выбрано {n} копии · {}"
+msgstr[2] "Выбрано {n} копий · {}"
+
 #: ui/components/dialog/dialog.slint
 #: ui/components/dialog/smart-playlist-editor-body.slint
 #: ui/components/grid/station-context-menu.slint ui/views/favorites-view.slint
@@ -192,6 +200,106 @@ msgstr "Открыть Last.fm"
 #: ui/components/dialog/dialog.slint ui/views/settings/scrobbling-section.slint
 msgid "Connect"
 msgstr "Подключить"
+
+#: ui/components/dialog/duplicate-row.slint
+msgid "Identical files"
+msgstr "Одинаковые файлы"
+
+#: ui/components/dialog/duplicate-row.slint
+msgid "Same release"
+msgstr "Тот же релиз"
+
+#: ui/components/dialog/duplicate-row.slint
+msgid "Review: no artist tag"
+msgstr "Проверьте: нет тега исполнителя"
+
+#: ui/components/dialog/duplicate-row.slint
+msgid "Review: different recordings"
+msgstr "Проверьте: разные записи"
+
+#: ui/components/dialog/duplicate-row.slint
+msgid "Review: different releases"
+msgstr "Проверьте: разные релизы"
+
+#: ui/components/dialog/duplicate-row.slint
+msgid "Review: different track numbers"
+msgstr "Проверьте: разные номера треков"
+
+#: ui/components/dialog/duplicate-row.slint
+msgid "Dismissed"
+msgstr "Скрыто"
+
+#: ui/components/dialog/duplicate-row.slint
+msgid "{n} copy"
+msgid_plural "{n} copies"
+msgstr[0] "{n} копия"
+msgstr[1] "{n} копии"
+msgstr[2] "{n} копий"
+
+#. Translators: {} is the day the copy joined the library, as 2026-11-02.
+#: ui/components/dialog/duplicate-row.slint
+msgid "Added {}"
+msgstr "Добавлено {}"
+
+#: ui/components/dialog/duplicates-body.slint
+msgid "Suggested Picks"
+msgstr "Предложенный выбор"
+
+#: ui/components/dialog/duplicates-body.slint
+msgid "Clear Picks"
+msgstr "Сбросить выбор"
+
+#. Translators: {} is how many groups were marked Not Duplicates.
+#: ui/components/dialog/duplicates-body.slint
+msgid "Show Dismissed ({})"
+msgstr "Показать скрытые ({})"
+
+#: ui/components/dialog/duplicates-body.slint
+msgid "Looking for duplicates…"
+msgstr "Поиск дубликатов…"
+
+#: ui/components/dialog/duplicates-body.slint
+msgid "Couldn't search the library."
+msgstr "Не удалось выполнить поиск в медиатеке."
+
+#: ui/components/dialog/duplicates-body.slint
+msgid "No duplicates found"
+msgstr "Дубликаты не найдены"
+
+#: ui/components/dialog/duplicates-body.slint
+msgid "Every group left is one you marked Not Duplicates."
+msgstr "Все оставшиеся группы отмечены как «Не дубликаты»."
+
+#: ui/components/dialog/duplicates-body.slint
+msgid "No song is in the library more than once."
+msgstr "Ни одна песня не встречается в медиатеке больше одного раза."
+
+#: ui/components/dialog/duplicates-menus.slint
+msgid "Not Duplicates"
+msgstr "Не дубликаты"
+
+#: ui/components/dialog/duplicates-menus.slint
+msgid "Count as Duplicates"
+msgstr "Считать дубликатами"
+
+#: ui/components/dialog/duplicates-menus.slint
+msgid "Keep This Copy"
+msgstr "Оставить эту копию"
+
+#: ui/components/dialog/duplicates-menus.slint
+msgid "Keep Copies in This Folder"
+msgstr "Оставить копии из этой папки"
+
+#: ui/components/dialog/duplicates-menus.slint
+#: ui/components/grid/card-context-menu.slint
+#: ui/components/track-list/track-context-menu.slint
+msgid "Open Containing Folder"
+msgstr "Открыть папку с файлом"
+
+#: ui/components/dialog/duplicates-menus.slint
+#: ui/components/grid/card-context-menu.slint
+msgid "Copy Path"
+msgstr "Копировать путь"
 
 #: ui/components/dialog/export-playlist-picker.slint
 msgid "No playlists to export"
@@ -837,10 +945,6 @@ msgstr "Копировать"
 msgid "Copy Name"
 msgstr "Копировать название"
 
-#: ui/components/grid/card-context-menu.slint
-msgid "Copy Path"
-msgstr "Копировать путь"
-
 #: ui/components/grid/card-context-menu.slint ui/settings.slint
 #: ui/views/settings/diagnostics-section.slint
 msgid "Open Folder"
@@ -849,11 +953,6 @@ msgstr "Открыть папку"
 #: ui/components/grid/card-context-menu.slint
 msgid "Show in File Manager"
 msgstr "Показать в файловом менеджере"
-
-#: ui/components/grid/card-context-menu.slint
-#: ui/components/track-list/track-context-menu.slint
-msgid "Open Containing Folder"
-msgstr "Открыть папку с файлом"
 
 #: ui/components/grid/card-context-menu.slint
 #: ui/components/track-list/track-context-menu.slint
@@ -1406,6 +1505,7 @@ msgstr "Файлов: {} / {}"
 #: ui/components/settings/scan-progress.slint ui/globals/dialog-forms.slint
 #: ui/globals/dialog.slint ui/views/queue-panel/queue-panel.slint
 #: ui/views/radio/tab-pills.slint ui/views/settings/appearance-section.slint
+#: ui/views/settings/duplicates-section.slint
 #: ui/views/settings/library-section.slint
 #: ui/views/settings/output-section.slint
 #: ui/views/settings/scrobbling-section.slint
@@ -2894,6 +2994,34 @@ msgstr "Подключено к Discord"
 #: ui/views/settings/discord-section.slint
 msgid "Discord not running"
 msgstr "Discord не запущен"
+
+#: ui/views/settings/duplicates-section.slint
+msgid "Duplicates"
+msgstr "Дубликаты"
+
+#: ui/views/settings/duplicates-section.slint
+msgid "Duplicate tracks"
+msgstr "Повторяющиеся треки"
+
+#: ui/views/settings/duplicates-section.slint
+msgid "Find songs the library holds more than once, and pick the copies you don't need."
+msgstr "Найдите песни, которые есть в медиатеке несколько раз, и выберите ненужные копии."
+
+#: ui/views/settings/duplicates-section.slint
+msgid "Find…"
+msgstr "Найти…"
+
+#: ui/views/settings/duplicates-section.slint
+msgid "Duplicate Tracks"
+msgstr "Повторяющиеся треки"
+
+#: ui/views/settings/duplicates-section.slint
+msgid "Songs the library seems to hold more than once. Pick the copies you don't need."
+msgstr "Песни, которые, похоже, есть в медиатеке несколько раз. Выберите ненужные копии."
+
+#: ui/views/settings/duplicates-section.slint
+msgid "Continue"
+msgstr "Продолжить"
 
 #. Translators: an equalizer preset, such as Rock or Jazz
 #: ui/views/settings/equalizer-section.slint

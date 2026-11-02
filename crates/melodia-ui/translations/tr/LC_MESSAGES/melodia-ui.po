@@ -161,6 +161,13 @@ msgid_plural "{n} tracks"
 msgstr[0] "{n} parça"
 msgstr[1] "{n} parça"
 
+#. Translators: {} is the picked copies' total size, as 1.2 GB.
+#: ui/components/dialog/dialog.slint
+msgid "{n} copy picked · {}"
+msgid_plural "{n} copies picked · {}"
+msgstr[0] "{n} kopya seçildi · {}"
+msgstr[1] "{n} kopya seçildi · {}"
+
 #: ui/components/dialog/dialog.slint
 #: ui/components/dialog/smart-playlist-editor-body.slint
 #: ui/components/grid/station-context-menu.slint ui/views/favorites-view.slint
@@ -193,6 +200,106 @@ msgstr "Last.fm'i aç"
 #: ui/components/dialog/dialog.slint ui/views/settings/scrobbling-section.slint
 msgid "Connect"
 msgstr "Bağlan"
+
+#: ui/components/dialog/duplicate-row.slint
+msgid "Identical files"
+msgstr "Aynı dosyalar"
+
+#: ui/components/dialog/duplicate-row.slint
+msgid "Same release"
+msgstr "Aynı yayın"
+
+#: ui/components/dialog/duplicate-row.slint
+msgid "Review: no artist tag"
+msgstr "İnceleyin: sanatçı etiketi yok"
+
+#: ui/components/dialog/duplicate-row.slint
+msgid "Review: different recordings"
+msgstr "İnceleyin: farklı kayıtlar"
+
+#: ui/components/dialog/duplicate-row.slint
+msgid "Review: different releases"
+msgstr "İnceleyin: farklı yayınlar"
+
+#: ui/components/dialog/duplicate-row.slint
+msgid "Review: different track numbers"
+msgstr "İnceleyin: farklı parça numaraları"
+
+#: ui/components/dialog/duplicate-row.slint
+msgid "Dismissed"
+msgstr "Yok sayıldı"
+
+# Turkish doesn't pluralize a noun after a numeral, so both forms are the same.
+#: ui/components/dialog/duplicate-row.slint
+msgid "{n} copy"
+msgid_plural "{n} copies"
+msgstr[0] "{n} kopya"
+msgstr[1] "{n} kopya"
+
+#. Translators: {} is the day the copy joined the library, as 2026-11-02.
+#: ui/components/dialog/duplicate-row.slint
+msgid "Added {}"
+msgstr "Eklenme: {}"
+
+#: ui/components/dialog/duplicates-body.slint
+msgid "Suggested Picks"
+msgstr "Önerilen seçim"
+
+#: ui/components/dialog/duplicates-body.slint
+msgid "Clear Picks"
+msgstr "Seçimi temizle"
+
+#. Translators: {} is how many groups were marked Not Duplicates.
+#: ui/components/dialog/duplicates-body.slint
+msgid "Show Dismissed ({})"
+msgstr "Yok sayılanları göster ({})"
+
+#: ui/components/dialog/duplicates-body.slint
+msgid "Looking for duplicates…"
+msgstr "Kopyalar aranıyor…"
+
+#: ui/components/dialog/duplicates-body.slint
+msgid "Couldn't search the library."
+msgstr "Kitaplıkta arama yapılamadı."
+
+#: ui/components/dialog/duplicates-body.slint
+msgid "No duplicates found"
+msgstr "Kopya bulunamadı"
+
+#: ui/components/dialog/duplicates-body.slint
+msgid "Every group left is one you marked Not Duplicates."
+msgstr "Kalan tüm grupları “Kopya değil” olarak işaretlediniz."
+
+#: ui/components/dialog/duplicates-body.slint
+msgid "No song is in the library more than once."
+msgstr "Kitaplıkta birden fazla kez bulunan şarkı yok."
+
+#: ui/components/dialog/duplicates-menus.slint
+msgid "Not Duplicates"
+msgstr "Kopya değil"
+
+#: ui/components/dialog/duplicates-menus.slint
+msgid "Count as Duplicates"
+msgstr "Kopya olarak say"
+
+#: ui/components/dialog/duplicates-menus.slint
+msgid "Keep This Copy"
+msgstr "Bu kopyayı tut"
+
+#: ui/components/dialog/duplicates-menus.slint
+msgid "Keep Copies in This Folder"
+msgstr "Bu klasördeki kopyaları tut"
+
+#: ui/components/dialog/duplicates-menus.slint
+#: ui/components/grid/card-context-menu.slint
+#: ui/components/track-list/track-context-menu.slint
+msgid "Open Containing Folder"
+msgstr "Bulunduğu Klasörü Aç"
+
+#: ui/components/dialog/duplicates-menus.slint
+#: ui/components/grid/card-context-menu.slint
+msgid "Copy Path"
+msgstr "Yolu Kopyala"
 
 #: ui/components/dialog/export-playlist-picker.slint
 msgid "No playlists to export"
@@ -837,10 +944,6 @@ msgstr "Kopyala"
 msgid "Copy Name"
 msgstr "Adı Kopyala"
 
-#: ui/components/grid/card-context-menu.slint
-msgid "Copy Path"
-msgstr "Yolu Kopyala"
-
 #: ui/components/grid/card-context-menu.slint ui/settings.slint
 #: ui/views/settings/diagnostics-section.slint
 msgid "Open Folder"
@@ -849,11 +952,6 @@ msgstr "Klasörü Aç"
 #: ui/components/grid/card-context-menu.slint
 msgid "Show in File Manager"
 msgstr "Dosya yöneticisinde göster"
-
-#: ui/components/grid/card-context-menu.slint
-#: ui/components/track-list/track-context-menu.slint
-msgid "Open Containing Folder"
-msgstr "Bulunduğu Klasörü Aç"
 
 #: ui/components/grid/card-context-menu.slint
 #: ui/components/track-list/track-context-menu.slint
@@ -1406,6 +1504,7 @@ msgstr "{} / {} dosya"
 #: ui/components/settings/scan-progress.slint ui/globals/dialog-forms.slint
 #: ui/globals/dialog.slint ui/views/queue-panel/queue-panel.slint
 #: ui/views/radio/tab-pills.slint ui/views/settings/appearance-section.slint
+#: ui/views/settings/duplicates-section.slint
 #: ui/views/settings/library-section.slint
 #: ui/views/settings/output-section.slint
 #: ui/views/settings/scrobbling-section.slint
@@ -2867,6 +2966,34 @@ msgstr "Discord'a bağlandı"
 #: ui/views/settings/discord-section.slint
 msgid "Discord not running"
 msgstr "Discord çalışmıyor"
+
+#: ui/views/settings/duplicates-section.slint
+msgid "Duplicates"
+msgstr "Kopyalar"
+
+#: ui/views/settings/duplicates-section.slint
+msgid "Duplicate tracks"
+msgstr "Yinelenen parçalar"
+
+#: ui/views/settings/duplicates-section.slint
+msgid "Find songs the library holds more than once, and pick the copies you don't need."
+msgstr "Kitaplıkta birden fazla kez bulunan şarkıları bulun ve gerekmeyen kopyaları seçin."
+
+#: ui/views/settings/duplicates-section.slint
+msgid "Find…"
+msgstr "Bul…"
+
+#: ui/views/settings/duplicates-section.slint
+msgid "Duplicate Tracks"
+msgstr "Yinelenen Parçalar"
+
+#: ui/views/settings/duplicates-section.slint
+msgid "Songs the library seems to hold more than once. Pick the copies you don't need."
+msgstr "Kitaplıkta birden fazla kez bulunuyor gibi görünen şarkılar. Gerekmeyen kopyaları seçin."
+
+#: ui/views/settings/duplicates-section.slint
+msgid "Continue"
+msgstr "Devam"
 
 #. Translators: an equalizer preset, such as Rock or Jazz
 #: ui/views/settings/equalizer-section.slint

@@ -1,0 +1,213 @@
+import { Theme } from "../../theme.slint";
+import { DuplicatesUi } from "../../globals/duplicates.slint";
+import { DuplicateMatch, DuplicateRow } from "../../models.slint";
+import { Checkbox } from "../checkbox.slint";
+import { ContextClick } from "../context-menu.slint";
+import { MaterialIcon } from "../material-icon.slint";
+import { MetaChip } from "../meta-chip.slint";
+import { DuplicateRowMenu } from "duplicates-menus.slint";
+
+// One thing a copy carries, as an icon and a figure.
+component CarriedFact inherits HorizontalLayout {
+    in property <string> icon;
+    in property <string> label;
+    in property <brush> icon-color: Theme.subtext0;
+
+    spacing: 2px;
+
+    VerticalLayout {
+        alignment: center;
+        MaterialIcon {
+            name: root.icon;
+            icon-size: 14px;
+            icon-color: root.icon-color;
+        }
+    }
+    if root.label != "": Text {
+        text: root.label;
+        color: Theme.subtext0;
+        font-size: Theme.font-size-sm;
+        vertical-alignment: center;
+    }
+}
+
+// A chip centred in its row through the main axis, which keeps the row on the plain box solve.
+component RowChip inherits VerticalLayout {
+    in property <string> text;
+    in property <brush> fill;
+    in property <brush> label-color;
+
+    alignment: center;
+
+    MetaChip {
+        text: root.text;
+        fill: root.fill;
+        label-color: root.label-color;
+    }
+}
+
+// One row of the finder's list, a group's header or one of its copies: both kinds share one
+// `ListView`, so a library-sized find scrolls as one list. Each kind has a fixed height, so a
+// placeholder landing as its row moves nothing below it.
+export component DuplicateRowItem inherits Rectangle {
+    in property <DuplicateRow> row-data;
+
+    property <bool> hovered: touch.has-hover || menu.is-open;
+    // A placeholder's group facts are defaults, so they wait for the row a fetch lands.
+    property <bool> loaded: root.row-data.title != "";
+    property <bool> sure-match: root.row-data.match_kind == DuplicateMatch.identical
+        || root.row-data.match_kind == DuplicateMatch.same-release;
+    property <string> match-label:
+        root.row-data.match_kind == DuplicateMatch.identical ? @tr("Identical files")
+        : root.row-data.match_kind == DuplicateMatch.same-release ? @tr("Same release")
+        : root.row-data.match_kind == DuplicateMatch.no-artist ? @tr("Review: no artist tag")
+        : root.row-data.match_kind == DuplicateMatch.other-recording ? @tr("Review: different recordings")
+        : root.row-data.match_kind == DuplicateMatch.other-release ? @tr("Review: different releases")
+        : @tr("Review: different track numbers");
+
+    height: root.row-data.is_header ? 44px : 56px;
+
+    if root.row-data.is_header: HorizontalLayout {
+        padding-left: Theme.pad-sm;
+        padding-right: Theme.pad-md;
+        padding-top: Theme.pad-sm;
+        spacing: Theme.pad-sm;
+
+        Text {
+            horizontal-stretch: 1;
+            text: root.row-data.artist == ""
+                ? root.row-data.title
+                : root.row-data.title + " · " + root.row-data.artist;
+            color: Theme.text;
+            font-size: Theme.font-size-md;
+            font-weight: 600;
+            vertical-alignment: center;
+            overflow: elide;
+        }
+        if root.loaded: RowChip {
+            text: root.match-label;
+            fill: root.sure-match ? Theme.accent.with-alpha(0.18) : Theme.surface1;
+            label-color: root.sure-match ? Theme.accent : Theme.text;
+        }
+        if root.loaded && root.row-data.dismissed: RowChip {
+            text: @tr("Dismissed");
+            fill: Theme.surface1;
+            label-color: Theme.subtext0;
+        }
+        if root.loaded: Text {
+            text: @tr("{n} copy" | "{n} copies" % root.row-data.copy_count);
+            color: Theme.subtext0;
+            font-size: Theme.font-size-sm;
+            vertical-alignment: center;
+        }
+    }
+
+    if !root.row-data.is_header: Rectangle {
+        border-radius: Theme.radius-md;
+        background: root.row-data.selected
+            ? Theme.accent.with-alpha(0.16)
+            : (root.hovered && !root.row-data.dismissed ? Theme.surface1 : transparent);
+        animate background { duration: Theme.dur-fast; easing: ease-in-out; enabled: !Theme.recoloring; }
+
+        HorizontalLayout {
+            padding-left: Theme.pad-md;
+            padding-right: Theme.pad-md;
+            spacing: Theme.pad-md;
+
+            VerticalLayout {
+                alignment: center;
+                Rectangle {
+                    width: 16px;
+                    height: 16px;
+                    if !root.row-data.dismissed: Checkbox {
+                        checked: root.row-data.selected;
+                        // The default border is the hover fill's own colour, so the box would
+                        // vanish under the pointer.
+                        unchecked-border: Theme.subtext0;
+                    }
+                }
+            }
+
+            VerticalLayout {
+                horizontal-stretch: 1;
+                alignment: center;
+                spacing: 2px;
+
+                HorizontalLayout {
+                    spacing: Theme.pad-sm;
+                    Text {
+                        horizontal-stretch: 1;
+                        text: root.row-data.file_name;
+                        color: Theme.text;
+                        font-size: Theme.font-size-row;
+                        overflow: elide;
+                    }
+                    Text {
+                        text: root.row-data.format;
+                        color: Theme.subtext0;
+                        font-size: Theme.font-size-sm;
+                        vertical-alignment: center;
+                    }
+                }
+                HorizontalLayout {
+                    spacing: Theme.pad-sm;
+                    Text {
+                        horizontal-stretch: 1;
+                        text: root.row-data.subtitle;
+                        color: Theme.subtext0;
+                        font-size: Theme.font-size-sm;
+                        overflow: elide;
+                    }
+                    if root.row-data.added != "": Text {
+                        // Translators: {} is the day the copy joined the library, as 2026-11-02.
+                        text: @tr("Added {}", root.row-data.added);
+                        color: Theme.subtext0;
+                        font-size: Theme.font-size-sm;
+                    }
+                }
+            }
+
+            HorizontalLayout {
+                spacing: Theme.pad-sm;
+                if root.row-data.plays > 0: CarriedFact {
+                    icon: "play_arrow";
+                    label: root.row-data.plays;
+                }
+                if root.row-data.rating > 0: CarriedFact {
+                    icon: "star";
+                    label: root.row-data.rating;
+                }
+                if root.row-data.favorite: CarriedFact {
+                    icon: "favorite";
+                    icon-color: Theme.red;
+                }
+                if root.row-data.playlists > 0: CarriedFact {
+                    icon: "queue_music";
+                    label: root.row-data.playlists;
+                }
+            }
+        }
+    }
+
+    menu := DuplicateRowMenu {
+        row-id: root.row-data.id;
+        is-header: root.row-data.is_header;
+        dismissed: root.row-data.dismissed;
+    }
+
+    // Last, so it takes every press: nothing in a row is a control of its own, and the pick
+    // rules are Rust's.
+    touch := TouchArea {
+        mouse-cursor: root.row-data.is_header || root.row-data.dismissed ? default : pointer;
+        clicked => {
+            if (!root.row-data.is_header) {
+                DuplicatesUi.toggle(root.row-data.id);
+            }
+        }
+        pointer-event(ev) => {
+            if (ContextClick.raises-menu(ev, self.mouse-x, self.mouse-y, self.width, self.height)) {
+                menu.show-at(self.mouse-x, self.mouse-y);
+            }
+        }
+    }
+}

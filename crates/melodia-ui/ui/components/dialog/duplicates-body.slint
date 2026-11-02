@@ -1,0 +1,115 @@
+import { ListView } from "std-widgets.slint";
+import { Theme } from "../../theme.slint";
+import { DuplicatesUi } from "../../globals/duplicates.slint";
+import { FilledChip } from "../filled-chip.slint";
+import { OverlayScrollbar } from "../overlay-scrollbar.slint";
+import { DuplicateRowItem } from "duplicate-row.slint";
+
+component ToolbarChip inherits FilledChip {
+    in property <string> label;
+
+    height: 30px;
+    horizontal-stretch: 0;
+    idle-fill: Theme.card-control;
+    hover-fill: Theme.card-control-hover;
+
+    HorizontalLayout {
+        padding-left: Theme.pad-md;
+        padding-right: Theme.pad-md;
+        Text {
+            text: root.label;
+            color: root.ink;
+            font-size: Theme.font-size-sm;
+            vertical-alignment: center;
+        }
+    }
+}
+
+// The duplicate finder: its picks toolbar over the groups, or a line saying why there are none.
+// The list is the card's scroller, the kind being one of `body-scrolls`.
+export component DuplicatesBody inherits VerticalLayout {
+    spacing: Theme.pad-md;
+
+    property <bool> settled: !DuplicatesUi.busy && !DuplicatesUi.failed;
+    property <bool> listing: root.settled && DuplicatesUi.group-count > 0;
+    // Room for the bar beside the rows rather than over a copy's carried facts.
+    property <length> bar-gutter: Theme.scrollbar-slot + 4px;
+
+    if root.settled && (DuplicatesUi.group-count > 0 || DuplicatesUi.dismissed-count > 0): HorizontalLayout {
+        spacing: Theme.pad-sm;
+
+        if root.listing: ToolbarChip {
+            label: @tr("Suggested Picks");
+            clicked => { DuplicatesUi.suggest(); }
+        }
+        if root.listing: ToolbarChip {
+            label: @tr("Clear Picks");
+            clicked => { DuplicatesUi.clear-picks(); }
+        }
+        Rectangle { horizontal-stretch: 1; }
+        if DuplicatesUi.dismissed-count > 0: ToolbarChip {
+            // Translators: {} is how many groups were marked Not Duplicates.
+            label: @tr("Show Dismissed ({})", DuplicatesUi.dismissed-count);
+            selected: DuplicatesUi.show-dismissed;
+            clicked => { DuplicatesUi.set-show-dismissed(!DuplicatesUi.show-dismissed); }
+        }
+    }
+
+    if !root.listing: VerticalLayout {
+        min-height: 160px;
+        vertical-stretch: 1;
+        alignment: center;
+        spacing: Theme.pad-sm;
+
+        Text {
+            text: DuplicatesUi.busy ? @tr("Looking for duplicates…")
+                : DuplicatesUi.failed ? @tr("Couldn't search the library.")
+                : @tr("No duplicates found");
+            color: Theme.text;
+            font-size: Theme.font-size-md;
+            horizontal-alignment: center;
+            wrap: word-wrap;
+        }
+        if root.settled: Text {
+            text: DuplicatesUi.dismissed-count > 0
+                ? @tr("Every group left is one you marked Not Duplicates.")
+                : @tr("No song is in the library more than once.");
+            color: Theme.subtext0;
+            font-size: Theme.font-size-sm;
+            horizontal-alignment: center;
+            wrap: word-wrap;
+        }
+    }
+
+    if root.listing: Rectangle {
+        min-height: 160px;
+        preferred-height: 520px;
+        vertical-stretch: 1;
+
+        list := ListView {
+            x: 0px;
+            y: 0px;
+            width: parent.width - root.bar-gutter;
+            height: parent.height;
+            vertical-scrollbar-policy: always-off;
+            horizontal-scrollbar-policy: always-off;
+            mouse-drag-pan-enabled: false;
+
+            for row in DuplicatesUi.rows: DuplicateRowItem {
+                row-data: row;
+            }
+        }
+
+        OverlayScrollbar {
+            x: parent.width - self.width;
+            y: 0px;
+            width: Theme.scrollbar-slot;
+            height: parent.height;
+            visible-size: list.visible-height;
+            content-size: list.content-height;
+            offset: -list.content-y;
+            track-color: Theme.scrollbar-track-on-card;
+            scroll-to(o) => { list.content-y = -o; }
+        }
+    }
+}

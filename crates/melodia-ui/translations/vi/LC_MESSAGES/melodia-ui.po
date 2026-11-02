@@ -158,6 +158,12 @@ msgid "{n} track"
 msgid_plural "{n} tracks"
 msgstr[0] "{n} bản nhạc"
 
+#. Translators: {} is the picked copies' total size, as 1.2 GB.
+#: ui/components/dialog/dialog.slint
+msgid "{n} copy picked · {}"
+msgid_plural "{n} copies picked · {}"
+msgstr[0] "Đã chọn {n} bản sao · {}"
+
 #: ui/components/dialog/dialog.slint
 #: ui/components/dialog/smart-playlist-editor-body.slint
 #: ui/components/grid/station-context-menu.slint ui/views/favorites-view.slint
@@ -190,6 +196,104 @@ msgstr "Mở Last.fm"
 #: ui/components/dialog/dialog.slint ui/views/settings/scrobbling-section.slint
 msgid "Connect"
 msgstr "Kết nối"
+
+#: ui/components/dialog/duplicate-row.slint
+msgid "Identical files"
+msgstr "Tệp giống hệt nhau"
+
+#: ui/components/dialog/duplicate-row.slint
+msgid "Same release"
+msgstr "Cùng bản phát hành"
+
+#: ui/components/dialog/duplicate-row.slint
+msgid "Review: no artist tag"
+msgstr "Xem lại: không có thẻ nghệ sĩ"
+
+#: ui/components/dialog/duplicate-row.slint
+msgid "Review: different recordings"
+msgstr "Xem lại: bản thu khác nhau"
+
+#: ui/components/dialog/duplicate-row.slint
+msgid "Review: different releases"
+msgstr "Xem lại: bản phát hành khác nhau"
+
+#: ui/components/dialog/duplicate-row.slint
+msgid "Review: different track numbers"
+msgstr "Xem lại: số bản nhạc khác nhau"
+
+#: ui/components/dialog/duplicate-row.slint
+msgid "Dismissed"
+msgstr "Đã bỏ qua"
+
+#: ui/components/dialog/duplicate-row.slint
+msgid "{n} copy"
+msgid_plural "{n} copies"
+msgstr[0] "{n} bản sao"
+
+#. Translators: {} is the day the copy joined the library, as 2026-11-02.
+#: ui/components/dialog/duplicate-row.slint
+msgid "Added {}"
+msgstr "Đã thêm {}"
+
+#: ui/components/dialog/duplicates-body.slint
+msgid "Suggested Picks"
+msgstr "Lựa chọn gợi ý"
+
+#: ui/components/dialog/duplicates-body.slint
+msgid "Clear Picks"
+msgstr "Bỏ chọn"
+
+#. Translators: {} is how many groups were marked Not Duplicates.
+#: ui/components/dialog/duplicates-body.slint
+msgid "Show Dismissed ({})"
+msgstr "Hiện mục đã bỏ qua ({})"
+
+#: ui/components/dialog/duplicates-body.slint
+msgid "Looking for duplicates…"
+msgstr "Đang tìm bản trùng lặp…"
+
+#: ui/components/dialog/duplicates-body.slint
+msgid "Couldn't search the library."
+msgstr "Không thể tìm trong thư viện."
+
+#: ui/components/dialog/duplicates-body.slint
+msgid "No duplicates found"
+msgstr "Không tìm thấy bản trùng lặp"
+
+#: ui/components/dialog/duplicates-body.slint
+msgid "Every group left is one you marked Not Duplicates."
+msgstr "Mọi nhóm còn lại đều đã được đánh dấu Không trùng lặp."
+
+#: ui/components/dialog/duplicates-body.slint
+msgid "No song is in the library more than once."
+msgstr "Không có bài hát nào xuất hiện nhiều lần trong thư viện."
+
+#: ui/components/dialog/duplicates-menus.slint
+msgid "Not Duplicates"
+msgstr "Không trùng lặp"
+
+#: ui/components/dialog/duplicates-menus.slint
+msgid "Count as Duplicates"
+msgstr "Coi là trùng lặp"
+
+#: ui/components/dialog/duplicates-menus.slint
+msgid "Keep This Copy"
+msgstr "Giữ bản sao này"
+
+#: ui/components/dialog/duplicates-menus.slint
+msgid "Keep Copies in This Folder"
+msgstr "Giữ các bản sao trong thư mục này"
+
+#: ui/components/dialog/duplicates-menus.slint
+#: ui/components/grid/card-context-menu.slint
+#: ui/components/track-list/track-context-menu.slint
+msgid "Open Containing Folder"
+msgstr "Mở thư mục chứa tệp"
+
+#: ui/components/dialog/duplicates-menus.slint
+#: ui/components/grid/card-context-menu.slint
+msgid "Copy Path"
+msgstr "Sao chép đường dẫn"
 
 #: ui/components/dialog/export-playlist-picker.slint
 msgid "No playlists to export"
@@ -833,10 +937,6 @@ msgstr "Sao chép"
 msgid "Copy Name"
 msgstr "Sao chép tên"
 
-#: ui/components/grid/card-context-menu.slint
-msgid "Copy Path"
-msgstr "Sao chép đường dẫn"
-
 #: ui/components/grid/card-context-menu.slint ui/settings.slint
 #: ui/views/settings/diagnostics-section.slint
 msgid "Open Folder"
@@ -845,11 +945,6 @@ msgstr "Mở thư mục"
 #: ui/components/grid/card-context-menu.slint
 msgid "Show in File Manager"
 msgstr "Hiện trong trình quản lý tệp"
-
-#: ui/components/grid/card-context-menu.slint
-#: ui/components/track-list/track-context-menu.slint
-msgid "Open Containing Folder"
-msgstr "Mở thư mục chứa tệp"
 
 #: ui/components/grid/card-context-menu.slint
 #: ui/components/track-list/track-context-menu.slint
@@ -1398,6 +1493,7 @@ msgstr "{} / {} tệp"
 #: ui/components/settings/scan-progress.slint ui/globals/dialog-forms.slint
 #: ui/globals/dialog.slint ui/views/queue-panel/queue-panel.slint
 #: ui/views/radio/tab-pills.slint ui/views/settings/appearance-section.slint
+#: ui/views/settings/duplicates-section.slint
 #: ui/views/settings/library-section.slint
 #: ui/views/settings/output-section.slint
 #: ui/views/settings/scrobbling-section.slint
@@ -2818,6 +2914,34 @@ msgstr "Đã kết nối với Discord"
 #: ui/views/settings/discord-section.slint
 msgid "Discord not running"
 msgstr "Discord chưa chạy"
+
+#: ui/views/settings/duplicates-section.slint
+msgid "Duplicates"
+msgstr "Bản trùng lặp"
+
+#: ui/views/settings/duplicates-section.slint
+msgid "Duplicate tracks"
+msgstr "Bản nhạc trùng lặp"
+
+#: ui/views/settings/duplicates-section.slint
+msgid "Find songs the library holds more than once, and pick the copies you don't need."
+msgstr "Tìm các bài hát có nhiều bản trong thư viện và chọn những bản sao bạn không cần."
+
+#: ui/views/settings/duplicates-section.slint
+msgid "Find…"
+msgstr "Tìm…"
+
+#: ui/views/settings/duplicates-section.slint
+msgid "Duplicate Tracks"
+msgstr "Bản nhạc trùng lặp"
+
+#: ui/views/settings/duplicates-section.slint
+msgid "Songs the library seems to hold more than once. Pick the copies you don't need."
+msgstr "Những bài hát dường như có nhiều bản trong thư viện. Hãy chọn những bản sao bạn không cần."
+
+#: ui/views/settings/duplicates-section.slint
+msgid "Continue"
+msgstr "Tiếp tục"
 
 #. Translators: an equalizer preset, such as Rock or Jazz
 #: ui/views/settings/equalizer-section.slint

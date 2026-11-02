@@ -28,7 +28,8 @@ Paths are under `crates/melodia-ui/ui/components/` unless stated.
   `FilledChip` is the clickable pill, `QualityChip` the bar's verdict over `GradeDot`.
 - **Inputs.** `FieldFrame` under `LabeledInput`, `ControlledInput` and `MultilineInput`;
   `RemoveRowButton` closes an editor's row; `dialog/selectable-picker.slint` is the toolkit both
-  picker dialogs wire up. `HoldTouchArea` for a press whose hold differs from its click,
+  picker dialogs wire up, and `dialog/duplicates-body.slint` the one body whose list can hold the
+  library, its `ListView` the card's scroller. `HoldTouchArea` for a press whose hold differs from its click,
   `SliderPointer` under every slider, `EdgeResizeHandle` for a resizable edge.
 - **Grids.** `EntityCard` inside `grid/card-cell.slint`'s `CardCell`, in a chunked `ListView` sized
   by `GridGeometry` and `GridColumnsSync`. `HorizontalCardStrip` only for a capped carousel,
@@ -93,7 +94,8 @@ Paths are under `crates/melodia-ui/ui/components/` unless stated.
   chunks them through `ui::grid_rows::chunk_built_rows` into `model_diff::replace_rows`.
 - **A list that can hold the library is `ui::paged_rows::PagedRows`, never a `VecModel` copy.** The
   library-sized Songs tabs and the four details are `track_rows::TrackRows`, loading through
-  `PagedTrackList`.
+  `PagedTrackList`. A grouped list is still one keyset, each header a negative id its fetch reads
+  through a lead row (`ui::duplicates`).
 - **A drag lifting a pick lifts every pick** (`picked-run()`), and every tier moves through
   `melodia_core::utils::block_move`.
 - **Shared wiring.** The four details go through `callbacks::track_detail`, the four grid tabs

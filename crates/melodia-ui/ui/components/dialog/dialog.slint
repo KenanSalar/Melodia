@@ -1,6 +1,7 @@
 import { Theme } from "../../theme.slint";
 import { SmartEditor, TagEditor, ScrobbleUi, RadioForm } from "../../globals/dialog-forms.slint";
 import { Dialog as DialogGlobal, DialogKind } from "../../globals/dialog.slint";
+import { DuplicatesUi } from "../../globals/duplicates.slint";
 import { SectionButton } from "../settings/section-button.slint";
 import { PlaylistMosaicPicker } from "playlist-mosaic-picker.slint";
 import { PlaylistPicker } from "playlist-picker.slint";
@@ -12,6 +13,7 @@ import { TagEditorBody } from "tag-editor-body.slint";
 import { ScrobbleLastfmBody } from "scrobble-lastfm-body.slint";
 import { ScrobbleListenbrainzBody } from "scrobble-listenbrainz-body.slint";
 import { AddStationBody } from "add-station-body.slint";
+import { DuplicatesBody } from "duplicates-body.slint";
 import { LabeledInput } from "../labeled-input.slint";
 import { MaterialIcon } from "../material-icon.slint";
 
@@ -65,6 +67,7 @@ export component DialogOverlay inherits Rectangle {
             : DialogGlobal.kind == DialogKind.replaygain ? 480px
             : DialogGlobal.kind == DialogKind.edit-playlist-artwork ? 520px
             : DialogGlobal.kind == DialogKind.smart-playlist-editor ? 760px
+            : DialogGlobal.kind == DialogKind.duplicates ? 760px
             : DialogGlobal.kind == DialogKind.edit-tags ? 720px
             : DialogGlobal.kind == DialogKind.scrobble-lastfm-login ? 460px
             : DialogGlobal.kind == DialogKind.scrobble-listenbrainz-login ? 460px
@@ -92,7 +95,8 @@ export component DialogOverlay inherits Rectangle {
         // buttons included, onto the backdrop. A kind joining this list owes a scroller.
         property <bool> body-scrolls:
             DialogGlobal.kind == DialogKind.add-station || DialogGlobal.kind == DialogKind.edit-station
-            || DialogGlobal.kind == DialogKind.smart-playlist-editor;
+            || DialogGlobal.kind == DialogKind.smart-playlist-editor
+            || DialogGlobal.kind == DialogKind.duplicates;
         height: card.body-scrolls
             ? min(layout.preferred-height, max(240px, parent.height - 96px))
             : layout.preferred-height;
@@ -100,6 +104,10 @@ export component DialogOverlay inherits Rectangle {
         property <string> footer-note:
             DialogGlobal.kind == DialogKind.smart-playlist-editor && SmartEditor.match-count >= 0
                 ? @tr("{n} track" | "{n} tracks" % SmartEditor.match-count)
+            : DialogGlobal.kind == DialogKind.duplicates && DuplicatesUi.picked-count > 0
+                // Translators: {} is the picked copies' total size, as 1.2 GB.
+                ? @tr("{n} copy picked · {}" | "{n} copies picked · {}" % DuplicatesUi.picked-count,
+                      DuplicatesUi.picked-size)
                 : "";
         background: Theme.surface0;
         // `surface2`, never `Theme.border`, which is `surface0` itself and so invisible here.
@@ -217,6 +225,8 @@ export component DialogOverlay inherits Rectangle {
             if DialogGlobal.kind == DialogKind.add-station
                 || DialogGlobal.kind == DialogKind.edit-station: AddStationBody { }
 
+            if DialogGlobal.kind == DialogKind.duplicates: DuplicatesBody { }
+
             HorizontalLayout {
                 spacing: Theme.pad-sm;
                 padding-top: Theme.pad-sm;
@@ -276,7 +286,9 @@ export component DialogOverlay inherits Rectangle {
                         // A station's name is optional and fills itself in.
                         && ((DialogGlobal.kind != DialogKind.add-station
                                 && DialogGlobal.kind != DialogKind.edit-station)
-                            || (RadioForm.url != "" && !RadioForm.busy));
+                            || (RadioForm.url != "" && !RadioForm.busy))
+                        // The finder has no step after its list.
+                        && DialogGlobal.kind != DialogKind.duplicates;
                     clicked => {
                         DialogGlobal.accepted();
                         // A kind making a request stays open across it and Rust closes it.

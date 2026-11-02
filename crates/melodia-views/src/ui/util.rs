@@ -92,11 +92,43 @@ pub fn count_as_i32(n: u32) -> i32 {
     i32::try_from(n).unwrap_or(i32::MAX)
 }
 
-/// Hz → "44.1 kHz" / "48 kHz". One copy for the Now Playing chips and the Edit Tags Summary, so
-/// the two can't come to round differently.
+/// lofty's container name as every surface prints it: `Mpeg` → "MPEG".
+pub fn format_codec(codec: &str) -> String {
+    codec.to_uppercase()
+}
+
+/// kbps → "320 kbps".
+pub fn format_bitrate(kbps: i32) -> String {
+    format!("{kbps} kbps")
+}
+
+/// Bits per sample → "24-bit".
+pub fn format_bit_depth(bits: i32) -> String {
+    format!("{bits}-bit")
+}
+
+/// Hz → "44.1 kHz" / "48 kHz".
 pub fn format_sample_rate(hz: i32) -> String {
     let khz = f64::from(hz) / 1000.0;
     if khz.fract().abs() < f64::EPSILON { format!("{khz:.0} kHz") } else { format!("{khz:.1} kHz") }
+}
+
+/// Bytes → "512 B" / "2 KB" / "5.0 MB", in integer math, so no `i64 as f64` trips the pedantic
+/// `cast_precision_loss`.
+pub fn format_size(bytes: i64) -> String {
+    const KIB: i64 = 1024;
+    const MIB: i64 = 1024 * KIB;
+    const GIB: i64 = 1024 * MIB;
+    let b = bytes.max(0);
+    if b < KIB {
+        format!("{b} B")
+    } else if b < MIB {
+        format!("{} KB", b / KIB)
+    } else if b < GIB {
+        format!("{}.{} MB", b / MIB, (b % MIB) * 10 / MIB)
+    } else {
+        format!("{}.{} GB", b / GIB, (b % GIB) * 10 / GIB)
+    }
 }
 
 /// Channel count → "Mono" / "Stereo" / "N channels", untranslated: built in Rust, where `@tr`

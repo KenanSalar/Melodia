@@ -32,14 +32,18 @@ pub async fn visit_duplicate_keys(
     Ok(())
 }
 
-/// The candidates' facts, each with its Not Duplicates set, in no particular order.
+/// The candidates' facts, each with its Not Duplicates set, in no particular order. The dialog's
+/// rows read it too, by the ids on screen.
 pub async fn duplicate_copies(db: &DbPool, ids: &[i64]) -> Result<Vec<DuplicateCopy>, AppError> {
     chunked_in_query(db.read(), ids, |placeholders| {
         format!(
             "SELECT t.id, t.file_path, t.file_hash, t.file_size, t.title, t.artist, t.album, \
                     t.disc_number, t.track_number, t.year, t.musicbrainz_track_id, \
                     t.musicbrainz_release_id, t.duration_ms, t.date_added, \
-                    t.codec, t.bitrate, t.sample_rate, t.bit_depth, d.set_id AS dismissal \
+                    t.codec, t.bitrate, t.sample_rate, t.bit_depth, d.set_id AS dismissal, \
+                    t.play_count, t.rating, t.is_favorite, \
+                    (SELECT COUNT(*) FROM playlist_items p WHERE p.track_id = t.id) \
+                        AS playlist_count \
              FROM tracks t LEFT JOIN duplicate_dismissals d ON d.track_id = t.id \
              WHERE t.id IN ({placeholders})"
         )

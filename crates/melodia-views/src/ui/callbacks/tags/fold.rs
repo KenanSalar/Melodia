@@ -73,24 +73,6 @@ pub(super) fn fmt_bpm(v: Option<f64>) -> String {
     }
 }
 
-/// Human byte size (integer math only — avoids the `cast_precision_loss` an
-/// `i64 as f64` would trip under the pedantic gate).
-pub(super) fn fmt_size(bytes: i64) -> String {
-    const KIB: i64 = 1024;
-    const MIB: i64 = 1024 * KIB;
-    const GIB: i64 = 1024 * MIB;
-    let b = bytes.max(0);
-    if b < KIB {
-        format!("{b} B")
-    } else if b < MIB {
-        format!("{} KB", b / KIB)
-    } else if b < GIB {
-        format!("{}.{} MB", b / MIB, (b % MIB) * 10 / MIB)
-    } else {
-        format!("{}.{} GB", b / GIB, (b % GIB) * 10 / GIB)
-    }
-}
-
 #[cfg(test)]
 #[path = "tests/fold_tests.rs"]
 mod tests;

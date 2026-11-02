@@ -1,6 +1,6 @@
 # Plan: Duplicate tracks (find the copies, clear out the spares)
 
-Status: **in progress** (Phases 0 and 1 done, Phase 2 next) · Owner: Kenan · Created: 2026-11-02 · Issue #158, branch `feat/duplicate-tracks`
+Status: **in progress** (Phases 0 to 2 done, Phase 3 next) · Owner: Kenan · Created: 2026-11-02 · Issue #158, branch `feat/duplicate-tracks`
 
 > **Validated 2026-11-02** against `b4c5ecff`, and re-validated the same day against `41c1f2e1`. The sources were:
 > - three read-only code traces: the store and per-track data; the removal, scan, watcher and queue paths; the UI surfaces;
@@ -23,7 +23,7 @@ Working doc. Delete it when its last phase (Tests) lands.
 
 **Why.** Nothing groups copies. The one duplicate query, `queries::track::get_duplicate_tracks` (`full_rows.rs:83-113`), only matches byte-identical files, and only two tests call it.
 
-**Outcome.** Settings ▸ Library ▸ Duplicates ▸ **Find…** opens a dialog listing groups of tracks that look like the same song. Each copy shows its format and quality, its folder, when it was added, and what it carries (plays, stars, heart, playlists). Each group is labelled with how sure the match is.
+**Outcome.** Settings ▸ Library ▸ Duplicates ▸ **Find…** opens a dialog listing groups of tracks that look like the same song. Each copy shows its format and quality, its album and year, its folder, when it was added, and what it carries (plays, stars, heart, playlists). The album and year are what a Review group's copies differ by: a remaster tagged like its original differs only in the year. Each group is labelled with how sure the match is.
 
 The suggested picks keep the best copy. Every pick can be changed, a group can never have every copy picked, and the same song on different releases is never picked for you. Right-clicking a copy offers four entries, and the dialog stays open with your picks:
 - **Keep This Copy** makes it the one that stays, in one step.
@@ -102,6 +102,7 @@ Right-clicking a group's header offers **Not Duplicates**, for copies you keep o
      - Where a group has more than one copy there, the best by the keeper order stays.
      - Groups with no copy there are left alone.
      - A library copied into a second folder makes one group per track, so choosing the folder once beats choosing in every group.
+   - **A dismissed group takes no pick.** Not Duplicates says its copies aren't duplicates, so a removal pick there would contradict it. A click on one of its copies does nothing, Keep This Copy is hidden on them, and Keep Copies in This Folder passes the group by. Count as Duplicates gives the group its suggested picks again.
    - Apply takes a `GroupRemoval { keeper, spares }` per group, so "a keeper" is in the type, not only in the UI.
    - The playing copy is held back at apply and stays listed with a Playing chip. A play it finishes counts against its own id, which is gone once the delete commits.
 5. **What moves to the keeper, in the delete's own transaction.**
@@ -190,27 +191,29 @@ Right-clicking a group's header offers **Not Duplicates**, for copies you keep o
       - `destructive` flips with the step.
       - The label switch (`:248-253`) and the enabled gate (`:259-278`) each gain an arm.
     - **The list.** A `ListView` over `PagedRows<DuplicateRow>` (`paged_rows/mod.rs:184`), because this list can hold the library: a library added twice. The keyset is each group's header id (negative, from the group's index) followed by its copies' track ids. A removal pick is the model's own `selected`. Header and copy rows have fixed heights, so a placeholder never jumps.
-    - **Group facts and picks.** They live in a compact `DuplicateSet`, with each copy's folder as an index into an interned folder list from pass 2.
-      - A pick toggles there and patches the row (`PagedRows::patch`, `:284`).
-      - `patch` edits only cached rows, so the row fetch reads `selected` from `DuplicateSet`, and a row scrolled away and back keeps its pick.
-    - **The copy menu.** A right-click on a copy row raises a small menu built from the shared parts (`ContextMenuPopup`, `MenuItem`, `context-menu.slint`).
-      - It is mounted once in the body, not per row, because the `ListView` recycles rows.
+    - **Group facts and picks.** They live in a compact `DuplicateSet` that keeps no copy's text: a folder is an index interned while the set is built, and a file hash a class within its group.
+      - A pick toggles there, and the set hands its picks to `PagedRows::select`.
+      - `PagedRows` stamps `selected` on every row it hands out, placeholders included (`paged_rows/mod.rs:527`), so a row scrolled away and back keeps its pick.
+      - The rows re-read what they show by id through `library::duplicates::copies`, on the pass-2 query. `DuplicateCopy` carries what a copy holds for them: plays, rating, heart and playlist count.
+    - **The menu.** A right-click on a row raises a small menu built from the shared parts (`ContextMenuPopup`, `MenuItem`, `context-menu.slint`).
+      - One `DuplicateRowMenu` is mounted in every row, as every list menu is (`TrackContextMenu`), and its entries follow the row's kind. An open popup takes every press, so no scroll can recycle its row while it is open.
       - It opens on the right button's release through `ContextClick.raises-menu`, so a left click keeps meaning pick or unpick.
       - **Keep This Copy** and **Keep Copies in This Folder** apply decision 4's rules through `DuplicatesUi` callbacks, the second as a walk over `DuplicateSet` with no query. They are the menu's two new strings.
       - **Open Containing Folder** calls the existing `Nav.reveal-in-folder(track_id)`, as the track menu does (`track-context-menu.slint:248-255`), ending in `library::tracks::reveal_in_file_manager` (`library/tracks.rs:23`). It reuses the track menu's `@tr("Open Containing Folder")` and `folder_open` icon, so no new string or Rust is needed.
       - **Copy Path** calls the existing `CopyActions.copy-tracks("path", [track_id])`, which resolves the path through `library::clipboard` (`TrackField::Path`, `library/clipboard.rs:186`) and lands through `ui::clipboard::write`. Its label is the already-translated `@tr("Copy Path")`.
       - **Not the track menu.** Its other entries would cut into the open dialog: Edit Tags can move a copy between groups, a heart or rating changes what the merge carries, Play fights the playing copy's hold-back, and a queue or playlist edit changes what the removal remaps.
-    - **The group menu.** A right-click on a header row raises its own small menu, mounted once beside the copy menu and built from the same parts.
-      - It holds **Not Duplicates** (decision 13), which reads **Count as Duplicates** on a dismissed group.
+    - **On a header row** the menu holds **Not Duplicates** (decision 13), which reads **Count as Duplicates** on a dismissed group.
       - The toolbar's **Show Dismissed** toggle, with its count, lists dismissed groups, each with a Dismissed chip.
-    - **Opening.** The open raises the dialog at once in a finding state and fills it behind a `DialogClaim` (`callbacks/mod.rs:79-103`).
+    - **Opening.** The Settings row raises the dialog at once in a finding state, its one opener inline there, and Rust fills it behind a find ticket of its own.
+      - `DialogClaim` can't serve: it guards a raise still to come, its `holds` requiring the dialog closed (`callbacks/mod.rs:87-102`), and this one is already up.
+      - The next find and the close both move the ticket, so an answer or a row fetch sent before either lands nowhere.
     - Two steps on one kind is the Last.fm login's pattern (`dialog.slint:249-250`). One kind is needed because the Dialog can't open a second Dialog on top of itself.
 11. **No undo.** An undo would have to un-sum counts and un-move playlist places on a keeper that may have moved on since. A removed copy comes back through the kept-out list instead, as a new track. `ui-patterns.md` keeps a confirmation wherever undo can't cover the removal, and the issue asks for exactly that step.
     - The apply leaves the undo slot alone. An undo held from before can name a spare, but a playlist restore already leaves out a track that's gone (`queries/playlist_restore.rs:21-24`), and a restored queue cut is pruned on the next `library_changed`.
 12. **Cost.**
     - Closed, both dialogs cost nothing.
     - A find holds 16 B a track while it sorts (about 0.8 MB at 51k), plus the candidates' facts until they are grouped.
-    - An open finder holds `DuplicateSet` at a few dozen bytes a copy, its interned folder list, and `PagedRows`' row cache.
+    - An open finder holds `DuplicateSet` at a few dozen bytes a copy, with no copy's text, and `PagedRows`' row cache.
     - An open kept-out list holds 8 B an entry plus the same row cache.
     - A dismissal is 16 B a copy on disk, read only for a find's candidates.
 13. **Not Duplicates.** Matching on tags groups copies the user keeps on purpose, and without a memory each find lists them again.
@@ -261,26 +264,26 @@ Right-clicking a group's header offers **Not Duplicates**, for copies you keep o
 | `crates/melodia-core/src/utils/fold.rs` | `squeeze`, moved from the lyrics matcher (`lyrics_directory/recording.rs` imports it): letters and digits single-spaced, an apostrophe dropped. `fold_words`, beside `push_folded`: `squeeze` over the fold, or the fold where nothing is left (P1). |
 | `crates/melodia-core/src/entities/audio_quality.rs` (new, P1) | `AudioFormat`, the four columns an encode is judged by, and `AudioQuality`: the lossless rule and the quality order. |
 | `crates/melodia-core/src/entities/duplicates.rs` (new, P1) | `MatchKind`, `ReviewReason`, `DismissalSet`, `DuplicateGroup`, `DuplicateCopy`; `GroupRemoval` (P3); `KeptOutFile` (P4). |
-| `crates/melodia-store/src/database/queries/track/duplicates.rs` (new, P1) | The streamed pass-1 read and the pass-2 facts by id, each with its dismissal set. |
+| `crates/melodia-store/src/database/queries/track/duplicates.rs` (new, P1) | The streamed pass-1 read and the pass-2 facts by id, each with its dismissal set, which the dialog's rows read too (P2). |
 | `migrations/20261102000000_duplicate_dismissals.sql` (new, P1) | The dismissal table. |
 | `crates/melodia-store/src/database/queries/duplicate_dismissals.rs` (new, P1) | Dismiss a group as a new set, and restore a set. |
 | `crates/melodia-store/src/database/queries/track/full_rows.rs` | Loses `get_duplicate_tracks` and its two tests (`track_tests.rs:316,340`) (P1). |
-| `crates/melodia-app/src/library/duplicates/mod.rs` (new, P1) | The library API: `find`, `dismiss` and `restore`; `apply` (P3); the kept-out count, ids, rows, `bring_back` and `bring_all_back` (P4). |
+| `crates/melodia-app/src/library/duplicates/mod.rs` (new, P1) | The library API: `find`, `dismiss` and `restore`; `copies`, the rows' facts by id (P2); `apply` (P3); the kept-out count, ids, rows, `bring_back` and `bring_all_back` (P4). |
 | `crates/melodia-app/src/library/duplicates/matcher.rs` (new, P1) | Pure grouping: key runs, collision split, duration clusters, kind, the keeper order, the dismissed flag. |
-| `crates/melodia-ui/ui/globals/duplicates.slint` (new, P2) | `DuplicatesUi`: rows, step, busy, counts, callbacks; `KeptOutUi` (P4). |
-| `crates/melodia-ui/ui/models.slint` | `DuplicateRow` (P2), `KeptOutRow` (P4). |
+| `crates/melodia-ui/ui/globals/duplicates.slint` (new, P2) | `DuplicatesUi`: rows, busy, counts, callbacks; `step` (P3); `KeptOutUi` (P4). |
+| `crates/melodia-ui/ui/models.slint` | `DuplicateMatch` and `DuplicateRow` (P2), `KeptOutRow` (P4). |
 | `crates/melodia-ui/ui/components/dialog/duplicates-body.slint` (new, P2) | Both steps' bodies and the list's toolbar (Suggested picks, Clear picks, Show Dismissed). |
 | `crates/melodia-ui/ui/components/dialog/duplicate-row.slint` (new, P2) | The header row with its Dismissed chip, and the copy row. |
-| `crates/melodia-ui/ui/components/dialog/duplicates-menus.slint` (new, P2) | `DuplicateCopyMenu`, `DuplicateGroupMenu`; `KeptOutMenu` (P4). All are built from `context-menu.slint`'s parts. |
+| `crates/melodia-ui/ui/components/dialog/duplicates-menus.slint` (new, P2) | `DuplicateRowMenu`, one per row, its entries following the row's kind; `KeptOutMenu` (P4). Both are built from `context-menu.slint`'s parts. |
 | `crates/melodia-ui/ui/components/dialog/kept-out-body.slint` (new, P4) | The kept-out list, its row with Bring Back, Bring All Back and Copy All Paths. |
 | `crates/melodia-ui/ui/components/dialog/dialog.slint`, `globals/dialog.slint` | Both kinds: width, `body-scrolls`, mount, Back on Confirm, primary label and gate, the stay-open list, `destructive` by step, `accepted` arms (P2 to P4). |
-| `crates/melodia-ui/ui/views/settings/duplicates-section.slint` (new, P2) | The Find row, and the kept-out row (P4). Mounted in `pages/library-page.slint` and its `has-matches`. |
-| `crates/melodia-views/src/ui/duplicates/mod.rs` (new, P2) | `install`, the open behind its claim, the close teardown. |
-| `crates/melodia-views/src/ui/duplicates/picks.rs` (new, P2) | `DuplicateSet`: the compact groups and their folder index, the pick rule, suggested picks with the identical extras, Keep This Copy, Keep Copies in This Folder, cleared picks, dismissed groups shown or hidden, picked count and bytes. |
-| `crates/melodia-views/src/ui/duplicates/rows.rs` (new, P2) | `DuplicateRow`'s placeholder and fetch, the header's lead-copy lookup, the format label. |
+| `crates/melodia-ui/ui/views/settings/duplicates-section.slint` (new, P2) | The Find row and the finder's one opener, and the kept-out row (P4). Mounted in `pages/library-page.slint` and its `has-matches`. |
+| `crates/melodia-views/src/ui/duplicates/mod.rs` (new, P2) | `install`, the find behind its ticket, the row fetch, Not Duplicates' round trip, the close teardown. |
+| `crates/melodia-views/src/ui/duplicates/picks.rs` (new, P2) | `DuplicateSet`: the compact groups with their folders and file hashes as indices, the pick rule, suggested picks with the identical extras, Keep This Copy, Keep Copies in This Folder, cleared picks, dismissals, the keyset with dismissed groups shown or hidden, picked count and bytes. |
+| `crates/melodia-views/src/ui/duplicates/rows.rs` (new, P2) | `DuplicateRow`'s placeholder, the rows built from what the fetch read, the header's lead copy, the format label and subtitle. |
 | `crates/melodia-views/src/ui/duplicates/apply.rs` (new, P3) | Picks into `GroupRemoval`s, the call, the result line. |
 | `crates/melodia-views/src/ui/duplicates/kept_out.rs` (new, P4) | `KeptOutRow`'s paged rows, Open Containing Folder, Bring Back, Bring All Back, Copy All Paths, the Settings row's count. |
-| `crates/melodia-views/src/ui/util.rs` | `format_bitrate` and `format_bit_depth` beside `format_sample_rate` (`:97`), named from the inline closures at `now_playing/metadata.rs:14,16` and `callbacks/tags/open.rs:497,502` (P2, no behaviour change). |
+| `crates/melodia-views/src/ui/util.rs` | `format_codec`, `format_bitrate`, `format_bit_depth` and `format_size` beside `format_sample_rate`, lifted from the inline closures in `now_playing/metadata.rs` and `callbacks/tags/open.rs` and from `callbacks/tags/fold.rs`'s `fmt_size` (P2, no behaviour change). |
 | `migrations/20261102000001_excluded_files.sql` (new, P3) | The table and its folder and hash indexes. |
 | `crates/melodia-store/src/database/queries/excluded_files.rs` (new, P3) | Exclude (`pub(crate)`, the merge's), excluded among paths, under a path prefix, move candidates by hash, re-point, lift, forget unseen, count; ids in path order, rows by id, every path in path order (P4). |
 | `crates/melodia-store/src/database/queries/ingest.rs` (550), `queries/scan/watch_batch.rs` (316) | The exclusion check inside the inserting transaction, exclusions among the move candidates, a rename's re-point and lift (P3). |
@@ -293,7 +296,7 @@ Right-clicking a group's header offers **Not Duplicates**, for copies you keep o
 | `crates/melodia-app/src/library/scan/mod.rs`, `tasks/file_event_processor/reconcile.rs`, `library/import.rs` | The checks before parsing, the `Removed` lift, the import's lift and the scan-time cleanup (P3). |
 | `crates/melodia-app/src/tasks/play_count_flusher.rs`, `crates/melodia-app/src/state/mod.rs` | A flush request on the app's own channel, its sender in `AppState`, answered once the write commits (P3). |
 
-Size headroom, measured: `app-window.slint` 749 lines (gains two export names), `globals/dialog.slint` 419, `components/dialog/dialog.slint` 294, `models.slint` 461, `queue/removal.rs` 321, `playlist.rs` 639, `ingest.rs` 550. None crosses 800.
+Size headroom, measured after Phase 2: `app-window.slint` 750 lines (gains one export name in P4), `globals/dialog.slint` 422, `components/dialog/dialog.slint` 306, `models.slint` 497, `queue/removal.rs` 321, `playlist.rs` 639, `ingest.rs` 550. None crosses 800.
 
 ## Phases
 
@@ -334,17 +337,24 @@ Gate: clippy and tests. Nothing calls `find` until Phase 2, so there's no run.
 
 ### Phase 2: The review dialog (nothing removed)
 
-1. Lift `format_bitrate` and `format_bit_depth` into `ui/util.rs`. No behaviour change.
-2. `DuplicatesUi`, `DuplicateRow` and the duplicates kind on the Dialog, with the Review step only. Continue stays disabled until Phase 3.
+Status: built and hand-checked (2026-11-02). The gate passed:
+- fmt, clippy and the suite, `context_click.rs` now listing the new menu;
+- `check-icons.py`;
+- all 15 catalogs complete.
+
+The hand test ran on the dev library, with its hand-made groups under the test library's `_duplicates-handtest/`. It passed once each row menu entry acted before closing its popup: an entry reads the row's id through the popup, so a read after the close answered 0. With the dialog open and then closed, the heap came back to where it started; the rest of the rise was file-backed pages and the GPU driver's pool.
+
+1. Lift `format_codec`, `format_bitrate`, `format_bit_depth` and `format_size` into `ui/util.rs`. No behaviour change.
+2. `DuplicatesUi`, `DuplicateMatch`, `DuplicateRow` and the duplicates kind on the Dialog, with the Review step only. Continue stays disabled until Phase 3.
 3. `ui/duplicates/{mod,picks,rows}.rs`: find on open, the list, suggested picks (identical extras in Review groups included), toggling, the never-every-copy rule, Clear and Suggested, Show Dismissed.
-4. `DuplicateCopyMenu` on copy rows:
+4. `DuplicateRowMenu` in every row. On a copy:
    - Keep This Copy and Keep Copies in This Folder, through `DuplicatesUi` callbacks;
    - Open Containing Folder, through `Nav.reveal-in-folder`;
    - Copy Path, through `CopyActions.copy-tracks("path", …)`.
-5. `DuplicateGroupMenu` on header rows: Not Duplicates and Count as Duplicates, through `DuplicatesUi` to `library::duplicates`.
+5. On a header: Not Duplicates and Count as Duplicates, through `DuplicatesUi` to `library::duplicates`. `visibility_off` joins `scripts/icons.txt`.
 6. `DuplicatesSection` with the Find row in Settings ▸ Library.
 7. Run `scripts/update-translations.py` and finish all 15 catalogs.
-8. Docs: `ui-patterns.md` names the duplicates body under Inputs/Dialog, with the two-steps-on-one-kind contract.
+8. Docs: `ui-patterns.md` names the duplicates body under Inputs and the grouped list under Lists. The two-steps-on-one-kind contract lands with the Confirm step, in Phase 3.
 
 Hand test, on the dev library:
 - The 11 identical pairs list as Identical and picked.
@@ -375,10 +385,11 @@ Hand test, on the dev library:
 5. `remove_duplicates` with the merge rules from decision 5, re-checking each group inside its transaction.
 6. The flush request; `replace_ids` and the queue remap.
 7. `library::duplicates::apply`, with the love sync and the Now Playing mirror.
-8. The Confirm step's summary, Back, the Remove button disabled during a scan, and the result line.
+8. `DuplicatesUi.step`, the Confirm step's summary, Back, the Remove button disabled during a scan, and the result line.
 9. Translations.
 10. Docs:
     - `library-data.md`: "A per-track column the user builds up joins `remove_duplicates`' merge", and "a new ingest path consults `excluded_files` inside its inserting transaction, and a rename or move carries an exclusion as it carries a row".
+    - `ui-patterns.md`: the two-steps-on-one-kind contract, under Inputs beside the duplicates body.
     - `README.md`: the feature.
 
 Hand test, the issue's list:
