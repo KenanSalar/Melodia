@@ -20,7 +20,7 @@ pub(crate) enum IngestSource {
     /// current row missing artwork takes the file's.
     FolderScan(i64),
     /// Files the user named, each taken as named and filed under the library folder holding it,
-    /// else under a folder of its own directory's.
+    /// else under a folder made for its own directory.
     Import,
 }
 
@@ -508,7 +508,7 @@ async fn resolve_folder_id(
             }
             // A file inside a library folder is that folder's, so its scans pair the file with its
             // row and removing the folder takes the track along.
-            let id = match queries::scan::find_library_folder_for_path(tx, file_path_str).await? {
+            let id = match queries::scan::find_folder_for_path(tx, file_path_str).await? {
                 Some(id) => id,
                 None => queries::folder::upsert_folder(tx, &parent_dir).await?,
             };

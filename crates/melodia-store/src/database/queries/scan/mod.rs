@@ -16,9 +16,7 @@ mod watch_batch;
 
 pub use finish::{Unwalked, commit_scan};
 pub use lookups::visit_folder_tracks;
-pub(crate) use lookups::{
-    find_folder_for_path, find_library_folder_for_path, get_track_id_by_path, track_exists_by_path,
-};
+pub(crate) use lookups::{find_folder_for_path, get_track_id_by_path, track_exists_by_path};
 pub(crate) use moves::MoveCandidates;
 pub use mutations::{INSERT_CHUNK_ROWS, NewTrackRow};
 pub(crate) use mutations::{
@@ -42,21 +40,14 @@ pub struct ResolvedIds {
     pub folder_id: i64,
 }
 
-/// Resolves a path's library folder and its artist, album and genre rows, upserting what's
-/// missing; `None`, logged under `context`, for a path outside every library folder.
+/// Resolves a track's artist, album and genre rows, upserting what's missing, beside the folder it
+/// is filed under.
 pub(crate) async fn resolve_track_context(
     tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
-    path: &std::path::Path,
-    path_str: &str,
+    folder_id: i64,
     meta: &melodia_core::entities::scan::ExtractedMetadata,
-    context: &str,
     names: &mut NameCache,
-) -> Result<Option<ResolvedIds>, melodia_core::error::AppError> {
-    let Some(folder_id) = find_folder_for_path(tx, path_str).await? else {
-        log::debug!("{context} file not in any library folder, skipping: {}", path.display());
-        return Ok(None);
-    };
-
+) -> Result<ResolvedIds, melodia_core::error::AppError> {
     // The **first** credited name: a row named "X feat. Y" is an artist nobody recorded under.
     let artist_name = meta.artist.primary_name();
     let album_name = meta.album.as_deref().unwrap_or("");
@@ -76,7 +67,7 @@ pub(crate) async fn resolve_track_context(
         upsert_album(tx, album_name, album_artist_id, &album_credit, meta, names).await?;
     let genre_id = names.genre(tx, genre_name).await?;
 
-    Ok(Some(ResolvedIds { artist_id, album_id, genre_id, folder_id }))
+    Ok(ResolvedIds { artist_id, album_id, genre_id, folder_id })
 }
 
 #[cfg(test)]

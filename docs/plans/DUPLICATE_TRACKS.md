@@ -194,7 +194,7 @@ Right-clicking a group's header offers **Not Duplicates**, for copies you keep o
      - The paths come from one `excluded_files` read and land through `ui::clipboard::write`, which shows the Copied toast and never logs the text.
      - A library added twice puts about 50k lines on the clipboard, which is fine for an action taken on purpose.
    - A returned file comes back as a new track, its old history staying with the keeper. Where its bytes match a row whose own file is gone, it takes that row back, history included, as any moved file does.
-   - The import files a returned file, like any file dropped in from a library folder, under the library folder holding it (`find_library_folder_for_path`). Only a file outside every library folder gets a disabled folder row for its directory.
+   - The import files a returned file, like any file dropped in from a library folder, under the library folder holding it (`find_folder_for_path`, which passes an import's folder by). Only a file outside every library folder gets a disabled folder row for its directory.
 10. **The surface is the shared Dialog: one new kind for the finder, two steps.**
     - `DialogKind.duplicates` takes the widest card, 760 px (`dialog.slint:63-73`). It joins `body-scrolls` (`:93-95`) and owns its scroller. `kept-out-files` does the same.
     - **Review step.** The list. Primary is **Continue**, enabled with one pick or more. The footer note shows the picked count and size (`:100-103`).
@@ -312,7 +312,8 @@ Right-clicking a group's header offers **Not Duplicates**, for copies you keep o
 | `migrations/20261102000001_excluded_files.sql` (new, P3) | The table and its folder and hash indexes; the stamp columns (P5). |
 | `crates/melodia-store/src/database/queries/excluded_files.rs` (new, P3) | Exclude (`pub(crate)`, the merge's), excluded among paths, move candidates by hash, re-point, lift, forget unseen, count; ids in path order, rows by id, every path in path order (P4); a folder's exclusions with their stamps, and the restamp (P5). |
 | `crates/melodia-store/src/database/queries/ingest.rs`, `queries/scan/watch_batch.rs` | `IngestSource`; the exclusion check inside the inserting transaction, exclusions among the move candidates, a rename's re-point and lift, `Removed`'s `gone` (P3). The restamp of a kept-out file read again, and an import filed under the library folder holding it (P5). |
-| `crates/melodia-store/src/database/queries/scan/lookups.rs` | `find_library_folder_for_path`, `find_folder_for_path` among library folders alone (P5). |
+| `crates/melodia-store/src/database/queries/scan/lookups.rs` | `find_folder_for_path` among library folders alone, which the import and the watcher both ask (P5). |
+| `crates/melodia-store/src/database/queries/scan/retag.rs`, `scan/mod.rs` | A tag edit keeps each row's own folder, and `resolve_track_context` takes the folder from its caller (P5). |
 | `crates/melodia-store/src/database/queries/scan/moves.rs` (new, P3) | `MoveCandidates`: the rows and kept-out files a new path's bytes may have moved from, shared by the ingest and the watcher. |
 | `crates/melodia-store/src/database/queries/scan/finish.rs` | `Unwalked`: the rows a complete walk purges and the exclusions it forgets (P3). |
 | `crates/melodia-store/src/database/queries/folder.rs` | `absorb_folders` re-points exclusions with the tracks (P3). |
@@ -485,6 +486,7 @@ Status: built and hand-checked (2026-11-02). The gate passed: fmt, clippy and th
    - A kept-out file read again goes through the ordinary parse rather than a hash-only pass, so the scan and the watcher need no second pipeline. A cover that parse stores for it, when the store lacks one, is referenced by nothing, and the artwork sweep retires it.
 2. **The Playing chip marked a paused track's copy.** The hold-back is right, since `current_track()` includes a paused or loaded track, so only the label changed: it reads Now Playing, the app's own name for the player's track.
 3. **A file dropped in from inside a library folder got a disabled folder row of its own**, and so did every file Bring Back returned. Its directory showed in Settings ▸ Library Folders, and removing the enclosing folder left it behind, until that folder's next completed scan absorbed the row. The import now files it under the library folder holding it (decision 9). Rows made before this are absorbed by that scan as they always were, their exclusions with them.
+   - With the folder lookup answering library folders alone, a tag edit no longer asks it: a track dropped in from outside every library folder would be reported as outside the library after its file was already rewritten, leaving its row stale. `commit_retag` keeps each row's own folder instead, and a row deleted while its file was written is reported as no longer in the library.
 
 Hand test, on the dev data folder:
 - Remove a spare. With watching on, retag it in a tagger. Close Melodia, move the file into another library subfolder, and launch: it stays out, listed at its new path.

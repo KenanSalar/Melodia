@@ -430,8 +430,8 @@ fn an_embedded_cover_is_stored_once_however_many_tracks_carry_it() -> Result<(),
 }
 
 /// The sweep unlinks a stored cover once nothing references it, which can land between the memo and
-/// a later track reaching it. A row written from that hit would not heal — `file_is_current` reads
-/// the track as current, so nothing re-extracts.
+/// a later track reaching it. A row written from that hit would not heal, since `file_is_current`
+/// reads the track as current and nothing re-extracts.
 #[test]
 fn a_hit_whose_file_the_sweep_retired_is_stored_again() -> Result<(), AppError> {
     let tmp = tempfile::tempdir()?;

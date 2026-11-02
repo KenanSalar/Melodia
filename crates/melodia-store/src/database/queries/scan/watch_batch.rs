@@ -254,11 +254,10 @@ async fn handle_created(
         return Ok(false);
     }
 
-    let Some(ids) =
-        resolve_track_context(tx, path, &path_str, meta, "Created", &mut batch.names).await?
-    else {
+    let Some(folder_id) = library_folder(tx, path, &path_str, "Created").await? else {
         return Ok(false);
     };
+    let ids = resolve_track_context(tx, folder_id, meta, &mut batch.names).await?;
 
     let file_name = file_name_owned(path);
     let now = melodia_core::utils::now_rfc3339();
@@ -367,16 +366,30 @@ async fn handle_modified(
         return handle_created(tx, path, meta, batch).await;
     }
 
-    let Some(ids) =
-        resolve_track_context(tx, path, &path_str, meta, "Modified", &mut batch.names).await?
-    else {
+    let Some(folder_id) = library_folder(tx, path, &path_str, "Modified").await? else {
         return Ok(false);
     };
+    let ids = resolve_track_context(tx, folder_id, meta, &mut batch.names).await?;
 
     update_track_metadata(tx, &path_str, meta, &ids, &mut batch.names).await?;
     log::info!("Updated metadata for: {path_str}");
 
     Ok(true)
+}
+
+/// The library folder holding a watched `path`, or `None`, logged under `context`, outside every
+/// one.
+async fn library_folder(
+    tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
+    path: &Path,
+    path_str: &str,
+    context: &str,
+) -> Result<Option<i64>, AppError> {
+    let folder_id = find_folder_for_path(tx, path_str).await?;
+    if folder_id.is_none() {
+        log::debug!("{context} file not in any library folder, skipping: {}", path.display());
+    }
+    Ok(folder_id)
 }
 
 #[cfg(test)]

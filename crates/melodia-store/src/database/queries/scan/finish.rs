@@ -13,7 +13,7 @@ use melodia_core::error::AppError;
 pub struct Unwalked {
     /// The folder's rows, which the commit purges.
     pub tracks: Vec<String>,
-    /// The kept-out files under its root, whose exclusions the commit forgets.
+    /// The folder's kept-out files, whose exclusions the commit forgets.
     pub exclusions: Vec<String>,
 }
 

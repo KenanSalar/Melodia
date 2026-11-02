@@ -3,8 +3,8 @@
 //!
 //! Do **not** shortcut this into a hand-built `UPDATE` from the form values: a tag write rewrites
 //! the file's bytes, and a fresh `date_modified` beside a stale `file_hash` is the one state
-//! `scanner::file_is_current` reads as current forever. The re-extract keeps hash, size and mtime
-//! honest together.
+//! `scanner::file_is_current` reads as current from then on. The re-extract keeps hash, size and
+//! mtime honest together.
 
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -368,8 +368,8 @@ async fn run_commit(
     let mut updated_ids: Vec<i64> = Vec::with_capacity(written.len());
     for ((f, outcome), retag) in written.into_iter().zip(retags) {
         match retag {
-            queries::scan::Retag::OutsideLibrary => {
-                report.failures.push((f.path.clone(), "not in a library folder".to_owned()));
+            queries::scan::Retag::Gone => {
+                report.failures.push((f.path.clone(), "no longer in the library".to_owned()));
             }
             queries::scan::Retag::Updated => {
                 updated_ids.push(f.id);

@@ -16,8 +16,9 @@ pub(crate) async fn track_exists_by_path(
     Ok(exists.is_some())
 }
 
-/// The folder holding `file_path`, a library folder or one an import made, by longest prefix, or
-/// `None` outside every one.
+/// The library folder holding `file_path`, by longest prefix, or `None` outside every one. An
+/// import's folder is passed by, so a file below a directory something was once imported from is
+/// filed under its library folder rather than with that import.
 ///
 /// **The separator is bound, never spelled**: a Windows folder is `C:\Music`, and a hardcoded `/`
 /// answers `None` for every file there, which callers read as outside the library. `/` is
@@ -26,23 +27,6 @@ pub(crate) async fn track_exists_by_path(
 /// `\` folder, a root folder already ending in a separator, and a case difference, `SQLite`
 /// comparing bytes.
 pub(crate) async fn find_folder_for_path(
-    tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
-    file_path: &str,
-) -> Result<Option<i64>, AppError> {
-    let id = sqlx::query_scalar::<_, i64>(
-        "SELECT id FROM folders WHERE SUBSTR(?, 1, LENGTH(path) + 1) IN (path || '/', path || ?) \
-         ORDER BY LENGTH(path) DESC LIMIT 1",
-    )
-    .bind(file_path)
-    .bind(std::path::MAIN_SEPARATOR_STR)
-    .fetch_optional(&mut **tx)
-    .await?;
-    Ok(id)
-}
-
-/// [`find_folder_for_path`] among the library folders alone. An import's folder is passed by, so
-/// a file from below a directory something was once imported from isn't filed with it.
-pub(crate) async fn find_library_folder_for_path(
     tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
     file_path: &str,
 ) -> Result<Option<i64>, AppError> {
