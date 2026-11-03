@@ -44,6 +44,21 @@ pub async fn get_smart_playlist_tracks_for_export(
     Ok(rows)
 }
 
+/// A smart playlist's membership as ids, in the order its detail page numbers them under `draw`,
+/// read on `tx` so a write keeps exactly what it read.
+pub(crate) async fn member_ids_tx(
+    tx: &mut sqlx::Transaction<'_, Sqlite>,
+    criteria: &SmartCriteria,
+    draw: Draw,
+) -> Result<Vec<i64>, AppError> {
+    if let Some(count) = random_cap(criteria) {
+        return pick_random(&mut **tx, criteria, count, draw).await;
+    }
+    let mut qb = membership_query("id", criteria);
+    let ids = qb.build_query_scalar::<i64>().persistent(false).fetch_all(&mut **tx).await?;
+    Ok(ids)
+}
+
 /// `SELECT columns FROM tracks` over the criteria's membership, ordered and capped.
 fn membership_query(columns: &str, criteria: &SmartCriteria) -> QueryBuilder<Sqlite> {
     let mut qb: QueryBuilder<Sqlite> = QueryBuilder::new(format!("SELECT {columns}"));
@@ -86,21 +101,33 @@ pub(crate) async fn first_cover(
     Ok(cover)
 }
 
+/// The count of a [`LimitOrder::Random`] cap, the cut [`pick_random`] makes rather than SQL.
+pub(crate) fn random_cap(criteria: &SmartCriteria) -> Option<u32> {
+    criteria
+        .limit
+        .as_ref()
+        .filter(|limit| limit.order == LimitOrder::Random)
+        .map(|limit| limit.count)
+}
+
 /// The `count` tracks `draw` picks from everything the rules match, in pick order, for a
-/// [`LimitOrder::Random`] cap a page reads more than once.
+/// [`LimitOrder::Random`] cap a page reads more than once and a convert keeps.
 ///
 /// In Rust because `RANDOM()` takes no seed. Ranked by a hash of the draw and the id rather than
 /// shuffled, so a track entering or leaving the matches moves only itself.
-pub(crate) async fn pick_random(
-    db: &DbPool,
+pub(crate) async fn pick_random<'e, E>(
+    executor: E,
     criteria: &SmartCriteria,
     count: u32,
     draw: Draw,
-) -> Result<Vec<i64>, AppError> {
+) -> Result<Vec<i64>, AppError>
+where
+    E: sqlx::Executor<'e, Database = Sqlite>,
+{
     let mut qb: QueryBuilder<Sqlite> =
         QueryBuilder::new("SELECT group_concat(id, ',') FROM tracks");
     push_where(&mut qb, criteria);
-    let matches = fetch_packed_ids(db, qb).await?;
+    let matches = fetch_packed_ids(executor, qb).await?;
     Ok(pick(matches, count, draw))
 }
 

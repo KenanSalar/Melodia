@@ -1,6 +1,6 @@
 # Plan: Convert a smart playlist to a regular one
 
-Status: **in progress**, Phase 0 implemented · Owner: Kenan · Created: 2026-11-03 · Issue #159, branch `feat/convert-smart-playlist`
+Status: **in progress**, Phases 0 and 1 implemented · Owner: Kenan · Created: 2026-11-03 · Issue #159, branch `feat/convert-smart-playlist`
 
 > **Validated 2026-11-03** against `2faa2442`. The sources were:
 > - three read-only code traces: the store and smart membership; the card menu, the detail page and the undo slot; the queue and what reads a playlist after a play;
@@ -84,11 +84,11 @@ Working doc. Delete it when its last phase (Tests) lands.
 
 | File | Owns |
 |---|---|
-| `crates/melodia-store/src/database/queries/playlist.rs` (639) | `tracks_still_there`, moved beside `insert_items_tx` as `pub(crate)`; `create_playlist_with_tracks` and `add_tracks_to_playlist` filter through it (P0). |
+| `crates/melodia-store/src/database/queries/playlist.rs` (639) | `tracks_still_there`, moved beside `insert_items_tx` as `pub(crate)`; `create_playlist_with_tracks` and `add_tracks_to_playlist` filter through it (P0); `contiguous` is `pub(crate)` for the convert (P1). |
 | `crates/melodia-store/src/database/queries/playlist_restore.rs` (184) | Imports `tracks_still_there` rather than owning it (P0). |
 | `crates/melodia-core/src/entities/playlist.rs` (58) | `DroppedRules` (P1). |
 | `crates/melodia-store/src/database/queries/track/keyset.rs` (190) | `fetch_packed_ids` takes an executor (P1). |
-| `crates/melodia-store/src/database/queries/smart_playlist.rs` (526) | `pick_random` takes an executor; `member_ids_tx` (P1). |
+| `crates/melodia-store/src/database/queries/smart_playlist.rs` (526) | `pick_random` takes an executor; `member_ids_tx`; `random_cap`, which `Membership::smart` asks too (P1). |
 | `crates/melodia-store/src/database/queries/playlist_convert.rs` (new, P1) | `convert_to_regular` and `restore_rules`, one transaction each. |
 | `crates/melodia-app/src/library/smart_playlists.rs` (112) | `convert_to_regular` and `restore_rules` (P1). |
 | `crates/melodia-views/src/ui/playlists/mod.rs` (201) | `draw_on_show` (P2). |

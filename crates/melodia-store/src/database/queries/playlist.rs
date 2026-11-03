@@ -282,7 +282,7 @@ pub(crate) struct NewItem<'a> {
 }
 
 /// `track_ids` as one run of rows from `start_position` on, all added at `added_at`.
-fn contiguous<'a>(
+pub(crate) fn contiguous<'a>(
     track_ids: &[i64],
     start_position: i32,
     added_at: &'a str,

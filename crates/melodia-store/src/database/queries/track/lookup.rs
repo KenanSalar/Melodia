@@ -152,7 +152,7 @@ pub async fn missing_ids(db: &DbPool, ids: &[i64]) -> Result<HashSet<i64>, AppEr
     let mut qb = QueryBuilder::<Sqlite>::new("SELECT group_concat(j.value, ',') FROM json_each(");
     qb.push_bind(json_array(ids))
         .push(") j WHERE NOT EXISTS (SELECT 1 FROM tracks t WHERE t.id = j.value)");
-    Ok(fetch_packed_ids(db, qb).await?.into_iter().collect())
+    Ok(fetch_packed_ids(db.read(), qb).await?.into_iter().collect())
 }
 
 /// `file_path → id` for each of `paths` that has a row.

@@ -50,17 +50,20 @@ pub async fn track_ids(
     qb.push(" ORDER BY ")
         .push(order_by(Page::of(&membership), order, membership.position()))
         .push(")");
-    fetch_packed_ids(db, qb).await
+    fetch_packed_ids(db.read(), qb).await
 }
 
 /// The ids `qb` reads back as one `group_concat(id, ',')`, in the order joined. The aggregate is
 /// NULL where nothing matched.
-pub(crate) async fn fetch_packed_ids(
-    db: &DbPool,
+pub(crate) async fn fetch_packed_ids<'e, E>(
+    executor: E,
     mut qb: QueryBuilder<Sqlite>,
-) -> Result<Vec<i64>, AppError> {
+) -> Result<Vec<i64>, AppError>
+where
+    E: sqlx::Executor<'e, Database = Sqlite>,
+{
     let packed: Option<String> =
-        qb.build_query_scalar().persistent(false).fetch_one(db.read()).await?;
+        qb.build_query_scalar().persistent(false).fetch_one(executor).await?;
     packed.map_or_else(|| Ok(Vec::new()), |packed| unpack_ids(&packed))
 }
 

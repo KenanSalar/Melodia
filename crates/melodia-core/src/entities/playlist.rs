@@ -40,6 +40,15 @@ pub struct PlaylistItemsCut {
     pub stamped_at: String,
 }
 
+/// The rules a convert to a regular playlist cleared, enough to make it smart again.
+#[derive(Debug, PartialEq)]
+pub struct DroppedRules {
+    pub playlist_id: i64,
+    pub name: String,
+    /// As stored, so the undo writes back exactly what the convert cleared.
+    pub smart_criteria: Option<String>,
+}
+
 /// A deleted playlist as a restore writes it back: the row under its own id, and every item.
 #[derive(Debug, PartialEq)]
 pub struct PlaylistSnapshot {
