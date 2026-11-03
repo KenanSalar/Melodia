@@ -1,6 +1,6 @@
-//! Converting a smart playlist to a regular one, from its card menu or its page. It converts at
-//! once and offers the undo that brings the rules back, asking first only where Settings turned
-//! undo off for playlists, the rules then having no way back.
+//! Converting a smart playlist to a regular one. It converts at once and offers the undo that
+//! brings the rules back, asking first only where Settings turned undo off for playlists, the rules
+//! then having no way back.
 
 use std::rc::Rc;
 use std::sync::Arc;

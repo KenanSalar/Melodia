@@ -347,9 +347,8 @@ fn picks_off_screen(view: &impl RowSelectionView, model: &TrackRows) -> HashSet<
     picks
 }
 
-/// Drops those of `picks` that `scope` no longer holds: a batch action would still act on one
-/// unseen, and its id can pass to the next track imported. Only those go, so a pick made while the
-/// store answers stays.
+/// Drops those of `picks` that `scope` no longer holds, whose ids can pass to the next track
+/// imported. Only those go, so a pick made while the store answers stays.
 fn forget_gone_picks<L: PagedTrackList>(
     state: &AppState,
     list: &L,

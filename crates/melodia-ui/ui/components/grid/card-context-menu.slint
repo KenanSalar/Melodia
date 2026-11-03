@@ -17,8 +17,7 @@ export component CardContextMenu inherits Rectangle {
     in property <string> card-kind;
     in property <int> card-id;
     in property <string> card-path;
-    // Gates the rule entries alone (`smart-edits`): Rename and Edit Artwork work on any playlist,
-    // as its buttons do.
+    // Gates only the rule entries: Rename and Edit Artwork work on any playlist, as its buttons do.
     in property <bool> card-is-smart: false;
     // 0 hides the entry.
     in property <int> card-artist-id: 0;

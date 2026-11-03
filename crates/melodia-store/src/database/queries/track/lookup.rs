@@ -172,7 +172,6 @@ pub async fn missing_from_scope(
     ids_outside(db.read(), ids, &membership).await
 }
 
-/// The ids in `ids` that `membership` doesn't hold.
 async fn ids_outside<'e, E>(
     executor: E,
     ids: &[i64],

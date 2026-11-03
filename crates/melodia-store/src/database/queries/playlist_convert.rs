@@ -9,9 +9,7 @@ use melodia_core::error::AppError;
 
 /// Makes smart playlist `id` a regular one holding what its rules match now, in its page's order
 /// under `draw`, and answers the rules it dropped: `None` where it is gone or already regular. It
-/// keeps its name, description, a picked cover and `updated_at`, so the card keeps its place. An
-/// automatic cover becomes the first item's: the card's own, unless a random cap is picked under a
-/// `draw` other than the card's default.
+/// keeps `updated_at`, so the card keeps its place; an automatic cover becomes the first item's.
 ///
 /// The membership is read inside the write that flips `is_smart`: a scan's delete, serialised on
 /// the one write connection, commits before it, so the rules miss the track, or after, so the
@@ -48,8 +46,7 @@ pub async fn convert_to_regular(
 }
 
 /// Makes a converted playlist smart again under the rules `dropped` holds. Its items go, any added
-/// since included, a smart playlist reading none; its name, description, a cover picked since and
-/// `updated_at` stay as they are now.
+/// since included, a smart playlist reading none; a cover picked since and `updated_at` stay.
 ///
 /// A playlist deleted since fails with [`AppError::not_found`], even once its id is reused.
 pub async fn restore_rules(db: &DbPool, dropped: &DroppedRules) -> Result<(), AppError> {
