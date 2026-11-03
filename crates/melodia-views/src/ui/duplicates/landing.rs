@@ -83,8 +83,13 @@ pub(super) trait TicketedDialog: Sized + 'static {
         work: impl Future<Output = T> + Send + 'static,
         land: impl FnOnce(&AppWindow, &Self, Option<T>) + 'static,
     ) -> bool {
+        let answer = self.runtime().spawn(work);
         let dialog = Rc::downgrade(self);
-        spawn_landing(self.runtime(), label, work, move |answer| {
+        let spawned = slint::spawn_local(async_compat::Compat::new(async move {
+            let answer = answer
+                .await
+                .inspect_err(|e| log::warn!("{label}: task failed: {}", describe(e)))
+                .ok();
             let Some(dialog) = dialog.upgrade() else {
                 return;
             };
@@ -92,7 +97,11 @@ pub(super) trait TicketedDialog: Sized + 'static {
                 return;
             };
             land(&ui, &dialog, answer);
-        })
+        }));
+        if let Err(e) = &spawned {
+            log::warn!("{label}: not spawned: {}", describe(e));
+        }
+        spawned.is_ok()
     }
 
     /// Reads the rows `request` asks for, `build` making them out of what `query` read. A fetch
@@ -116,25 +125,4 @@ pub(super) trait TicketedDialog: Sized + 'static {
         };
         spawn_fetch(self.runtime(), request, query, land, Self::ROWS_LABEL);
     }
-}
-
-/// Runs `work` on `runtime` and hands its answer to `land` on the UI thread, `None` for a task that
-/// failed to join, answering whether the landing was spawned. Either failure is logged under
-/// `label`.
-fn spawn_landing<T: Send + 'static>(
-    runtime: &Handle,
-    label: &'static str,
-    work: impl Future<Output = T> + Send + 'static,
-    land: impl FnOnce(Option<T>) + 'static,
-) -> bool {
-    let answer = runtime.spawn(work);
-    let spawned = slint::spawn_local(async_compat::Compat::new(async move {
-        let answer =
-            answer.await.inspect_err(|e| log::warn!("{label}: task failed: {}", describe(e))).ok();
-        land(answer);
-    }));
-    if let Err(e) = &spawned {
-        log::warn!("{label}: not spawned: {}", describe(e));
-    }
-    spawned.is_ok()
 }

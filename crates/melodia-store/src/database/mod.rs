@@ -192,9 +192,10 @@ where
     Ok(all_results)
 }
 
-/// [`chunked_in_query_on`] for a statement that returns no rows, answering how many it touched.
+/// [`chunked_in_query_on`] for a statement that returns no rows, answering how many it touched. It
+/// takes a transaction, so a write spanning chunks lands whole.
 pub(crate) async fn chunked_in_execute_on<B>(
-    conn: &mut SqliteConnection,
+    tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
     items: &[B],
     build_sql: impl Fn(&str) -> String,
 ) -> Result<u64, AppError>
@@ -207,7 +208,7 @@ where
         for item in chunk {
             query = query.bind(item);
         }
-        touched += query.persistent(false).execute(&mut *conn).await?.rows_affected();
+        touched += query.persistent(false).execute(&mut **tx).await?.rows_affected();
     }
     Ok(touched)
 }
