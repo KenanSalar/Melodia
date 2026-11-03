@@ -1,27 +1,33 @@
-import { Theme } from "../../theme.slint";
-import { OnboardingPanelHeader } from "onboarding-panel-header.slint";
 import { Settings } from "../../settings.slint";
 import { Onboarding } from "../../globals/onboarding.slint";
 import { MelodiaUpdater } from "../../globals/updater.slint";
 import { SectionButton } from "../settings/section-button.slint";
-import { SectionDivider } from "../settings/section-divider.slint";
 import { ToggleSwitch } from "../settings/toggle-switch.slint";
+import { OnboardingCard } from "onboarding-card.slint";
 import { OnboardingFeatureRow } from "onboarding-feature-row.slint";
+
+// A component rather than a mount: one handing the row its switch is inlined into the `if`, which
+// then measures the wrapped description at the row's preferred width, not the drawn one.
+component UpdateCheckRow inherits OnboardingFeatureRow {
+    icon: "update";
+    label: @tr("Check for updates automatically");
+    description: @tr("Once a day, Melodia asks GitHub whether a newer version is out.");
+    ToggleSwitch {
+        checked <=> MelodiaUpdater.auto-check-enabled;
+        toggled(v) => { MelodiaUpdater.auto-check-changed(v); }
+    }
+}
 
 // Step 3. One row per feature that leaves the machine, each carrying its own live state and each
 // flipping the same `Settings` callback its Settings row does, so nothing here needs a restart.
-export component OnboardingFeaturesPanel inherits VerticalLayout {
-    min-width: 0px;
-    spacing: Theme.pad-sm;
-
-    OnboardingPanelHeader {
-        title: @tr("What Melodia can reach");
-        summary: @tr("Melodia works offline. These are the parts that reach out.");
-    }
+export component OnboardingFeaturesPanel inherits OnboardingCard {
+    title: @tr("What Melodia can reach");
+    summary: @tr("Melodia works offline. These are the parts that reach out.");
 
     // Same labels as the Settings rows they mirror, so the two never describe one feature
     // differently.
     OnboardingFeatureRow {
+        first: true;
         icon: "radio";
         label: @tr("Internet radio");
         description: @tr("Browse and play live stations from radio-browser.info");
@@ -30,7 +36,6 @@ export component OnboardingFeaturesPanel inherits VerticalLayout {
             toggled(v) => { Settings.radio-enabled-changed(v); }
         }
     }
-    SectionDivider {}
 
     OnboardingFeatureRow {
         icon: "chat";
@@ -41,7 +46,6 @@ export component OnboardingFeaturesPanel inherits VerticalLayout {
             toggled(v) => { Settings.discord-rpc-enabled-changed(v); }
         }
     }
-    SectionDivider {}
 
     OnboardingFeatureRow {
         icon: "travel_explore";
@@ -52,7 +56,6 @@ export component OnboardingFeaturesPanel inherits VerticalLayout {
             toggled(v) => { Settings.lyrics-online-enabled-changed(v); }
         }
     }
-    SectionDivider {}
 
     // A button rather than a switch: both services need a login, which has no business inside a
     // welcome card. It closes onto the Settings category that already does it properly.
@@ -71,14 +74,5 @@ export component OnboardingFeaturesPanel inherits VerticalLayout {
 
     // The one row here that ships *on*, which is the whole reason it earns a place: nothing else
     // announces the daily check. Hidden where no in-app path reaches, the task never running there.
-    if MelodiaUpdater.updates-supported && !MelodiaUpdater.system-managed: SectionDivider {}
-    if MelodiaUpdater.updates-supported && !MelodiaUpdater.system-managed: OnboardingFeatureRow {
-        icon: "update";
-        label: @tr("Check for updates automatically");
-        description: @tr("Once a day, Melodia asks GitHub whether a newer version is out.");
-        ToggleSwitch {
-            checked <=> MelodiaUpdater.auto-check-enabled;
-            toggled(v) => { MelodiaUpdater.auto-check-changed(v); }
-        }
-    }
+    if MelodiaUpdater.updates-supported && !MelodiaUpdater.system-managed: UpdateCheckRow { }
 }

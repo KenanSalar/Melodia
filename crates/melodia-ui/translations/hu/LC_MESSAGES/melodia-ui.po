@@ -61,7 +61,6 @@ msgstr "Előző méret"
 
 #: ui/components/caption-buttons.slint
 #: ui/components/macos-titlebar-cluster.slint
-#: ui/components/onboarding/onboarding-overlay.slint
 #: ui/views/settings/duplicates-section.slint
 msgid "Close"
 msgstr "Bezárás"
@@ -1462,6 +1461,10 @@ msgstr "Másik mappa választása"
 #: ui/components/onboarding/onboarding-overlay.slint
 msgid "Welcome to Melodia"
 msgstr "Üdvözöl a Melodia"
+
+#: ui/components/onboarding/onboarding-overlay.slint
+msgid "Three quick steps to set Melodia up. You can change any of it later in Settings."
+msgstr "Három gyors lépés a Melodia beállításához. Később bármit módosíthatsz a Beállításokban."
 
 #: ui/components/onboarding/onboarding-overlay.slint
 msgid "Skip"

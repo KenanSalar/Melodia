@@ -26,10 +26,9 @@ const NOT_ITEMS: [&str; 1] = ["Timer"];
 
 /// The layers kept on purpose, and how many each file holds. Exact, so a second one in any of them
 /// is a decision to make rather than one this list already made.
-const LAYERED: [(&str, usize); 4] = [
-    // Cards of whole panels, size-stable, so each open draws its one texture once.
-    ("components/dialog/dialog.slint", 1),
-    ("components/onboarding/onboarding-overlay.slint", 1),
+const LAYERED: [(&str, usize); 3] = [
+    // The card under every modal, a whole panel layered only while it fades open or shut.
+    ("components/dialog/modal-card.slint", 1),
     // The selection box: `Checkbox` eases its brushes off its own `fade`, which an eased one stalls.
     ("components/grid/entity-card.slint", 1),
     // Every page passes through it, with no brushes of its own to take a fade.

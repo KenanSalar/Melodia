@@ -1,4 +1,4 @@
-//! The card's wiring. One way out, shared by the X, the backdrop, Escape and Skip.
+//! The card's wiring. One way out, shared by the backdrop, Escape, Skip and Done.
 
 use std::rc::Rc;
 

@@ -61,7 +61,6 @@ msgstr "Restaurar"
 
 #: ui/components/caption-buttons.slint
 #: ui/components/macos-titlebar-cluster.slint
-#: ui/components/onboarding/onboarding-overlay.slint
 #: ui/views/settings/duplicates-section.slint
 msgid "Close"
 msgstr "Fechar"
@@ -1460,6 +1459,10 @@ msgstr "Escolher outra pasta"
 #: ui/components/onboarding/onboarding-overlay.slint
 msgid "Welcome to Melodia"
 msgstr "Bem-vindo ao Melodia"
+
+#: ui/components/onboarding/onboarding-overlay.slint
+msgid "Three quick steps to set Melodia up. You can change any of it later in Settings."
+msgstr "Três passos rápidos para configurar o Melodia. Pode alterar tudo mais tarde nas Definições."
 
 #: ui/components/onboarding/onboarding-overlay.slint
 msgid "Skip"

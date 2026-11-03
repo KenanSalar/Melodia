@@ -17,12 +17,11 @@ import { AddStationBody } from "add-station-body.slint";
 import { DuplicatesBody } from "duplicates-body.slint";
 import { KeptOutBody } from "kept-out-body.slint";
 import { LabeledInput } from "../labeled-input.slint";
-import { MaterialIcon } from "../material-icon.slint";
+import { DialogHeader } from "dialog-header.slint";
+import { ModalCard } from "modal-card.slint";
 
 // The modal overlay the `Dialog` global drives, mounted once at the root. Always rendered, never
 // gated on `open`, so the close can play; its input is `enabled` only while open.
-//
-// Only `t` animates, everything else deriving from it, a derived `animate` phase-lagging.
 export component DialogOverlay inherits Rectangle {
     width: 100%;
     height: 100%;
@@ -42,171 +41,107 @@ export component DialogOverlay inherits Rectangle {
         }
     }
 
-    // Faster, so the card's small fade lands when the backdrop's dim reaches its perceptual
-    // ceiling; unbiased, the full-viewport dim wins.
-    private property <float> card-t: min(1.0, root.t * 1.5);
+    property <length> max-w:
+        DialogGlobal.kind == DialogKind.equalizer ? 600px
+        : DialogGlobal.kind == DialogKind.replaygain ? 480px
+        : DialogGlobal.kind == DialogKind.edit-playlist-artwork ? 520px
+        : DialogGlobal.kind == DialogKind.smart-playlist-editor ? 760px
+        : DialogGlobal.kind == DialogKind.duplicates ? 760px
+        : DialogGlobal.kind == DialogKind.kept-out-files ? 760px
+        : DialogGlobal.kind == DialogKind.edit-tags ? 720px
+        : DialogGlobal.kind == DialogKind.scrobble-lastfm-login ? 460px
+        : DialogGlobal.kind == DialogKind.scrobble-listenbrainz-login ? 460px
+        : DialogGlobal.kind == DialogKind.add-station ? 480px
+        : DialogGlobal.kind == DialogKind.edit-station ? 480px
+        : 540px;
+    // Confirmation kinds only, mapped by kind so a caller sets nothing extra.
+    property <string> kind-icon:
+        DialogGlobal.kind == DialogKind.delete-playlist
+            || DialogGlobal.kind == DialogKind.delete-playlists ? "delete" :
+        DialogGlobal.kind == DialogKind.remove-folder ? "folder_off" :
+        DialogGlobal.kind == DialogKind.remove-from-favorites
+            || DialogGlobal.kind == DialogKind.remove-from-recent ? "delete" :
+        DialogGlobal.kind == DialogKind.clear-queue ? "clear_all" :
+        DialogGlobal.kind == DialogKind.bit-perfect-exclusive ? "graphic_eq" :
+        DialogGlobal.kind == DialogKind.restart-titlebar
+            || DialogGlobal.kind == DialogKind.restart-tray
+            || DialogGlobal.kind == DialogKind.restart-backdrop ? "restart_alt" :
+        "";
+    // Only a kind whose body scrolls may be capped: nothing here clips, so a squeezed body paints
+    // its remainder, buttons included, onto the backdrop. A kind joining this list owes a scroller.
+    property <bool> body-scrolls:
+        DialogGlobal.kind == DialogKind.add-station || DialogGlobal.kind == DialogKind.edit-station
+        || DialogGlobal.kind == DialogKind.smart-playlist-editor
+        || DialogGlobal.kind == DialogKind.duplicates
+        || DialogGlobal.kind == DialogKind.kept-out-files;
+    property <length> eased-height: layout.preferred-height;
+    // A transition rather than `animate`, which would chase a window resize: its curve ends a
+    // fixed time after the step changed, so a later resize snaps. `in` only, finding being the
+    // default, so the card opens at rest and a close's teardown leaves nothing easing.
+    states [
+        finder-confirm when root.duplicates-confirming: {
+            eased-height: layout.preferred-height;
+            in {
+                animate eased-height { duration: Theme.dur-med; easing: cubic-bezier(0.2, 0, 0, 1); }
+            }
+        }
+        finder-list when DialogGlobal.kind == DialogKind.duplicates && DuplicatesUi.listing: {
+            eased-height: layout.preferred-height;
+            in {
+                animate eased-height { duration: Theme.dur-med; easing: cubic-bezier(0.2, 0, 0, 1); }
+            }
+        }
+        // Nothing listed, or the find failed.
+        finder-settled when DialogGlobal.kind == DialogKind.duplicates && !DuplicatesUi.busy: {
+            eased-height: layout.preferred-height;
+            in {
+                animate eased-height { duration: Theme.dur-med; easing: cubic-bezier(0.2, 0, 0, 1); }
+            }
+        }
+    ]
+    // The finder's second step, whose footer reads Back and Remove.
+    property <bool> duplicates-confirming:
+        DialogGlobal.kind == DialogKind.duplicates && DuplicatesUi.confirming;
+    // A fact about the form rather than an action on it, stated opposite the buttons.
+    property <string> footer-note:
+        DialogGlobal.kind == DialogKind.smart-playlist-editor && SmartEditor.match-count >= 0
+            ? @tr("{n} track" | "{n} tracks" % SmartEditor.match-count)
+        // A scan can retag or add a copy the list shows, so Remove waits it out.
+        : root.duplicates-confirming && LibrarySettings.scanning
+            ? @tr("Remove waits until the library scan finishes.")
+        : DialogGlobal.kind == DialogKind.duplicates && DuplicatesUi.picked-count > 0
+            // Translators: {} is the picked copies' total size, as 1.2 GB.
+            ? @tr("{n} copy picked · {}" | "{n} copies picked · {}" % DuplicatesUi.picked-count,
+                  DuplicatesUi.picked-size)
+            : "";
 
-    Rectangle {
-        width: 100%;
-        height: 100%;
-        background: rgba(0, 0, 0, 0.45 * root.t);
-    }
-    backdrop-touch := TouchArea {
-        width: 100%;
-        height: 100%;
-        enabled: DialogGlobal.open;
-        mouse-cursor: pointer;
-        clicked => {
+    frame := ModalCard {
+        t: root.t;
+        interactive: DialogGlobal.open;
+        max-card-width: root.max-w;
+        card-height: root.body-scrolls
+            // Floored so a step growing out of a shorter one keeps its footer on the card.
+            ? min(max(root.eased-height, layout.min-height), self.height-cap)
+            : layout.preferred-height;
+        backdrop-clicked => {
             // A dismiss is a cancel, so the dispatcher still cleans up.
             DialogGlobal.cancelled();
             DialogGlobal.open = false;
         }
-    }
-
-    card := Rectangle {
-        property <length> max-w:
-            DialogGlobal.kind == DialogKind.equalizer ? 600px
-            : DialogGlobal.kind == DialogKind.replaygain ? 480px
-            : DialogGlobal.kind == DialogKind.edit-playlist-artwork ? 520px
-            : DialogGlobal.kind == DialogKind.smart-playlist-editor ? 760px
-            : DialogGlobal.kind == DialogKind.duplicates ? 760px
-            : DialogGlobal.kind == DialogKind.kept-out-files ? 760px
-            : DialogGlobal.kind == DialogKind.edit-tags ? 720px
-            : DialogGlobal.kind == DialogKind.scrobble-lastfm-login ? 460px
-            : DialogGlobal.kind == DialogKind.scrobble-listenbrainz-login ? 460px
-            : DialogGlobal.kind == DialogKind.add-station ? 480px
-            : DialogGlobal.kind == DialogKind.edit-station ? 480px
-            : 540px;
-        // Confirmation kinds only, mapped by kind so a caller sets nothing extra.
-        property <string> kind-icon:
-            DialogGlobal.kind == DialogKind.delete-playlist
-                || DialogGlobal.kind == DialogKind.delete-playlists ? "delete" :
-            DialogGlobal.kind == DialogKind.remove-folder ? "folder_off" :
-            DialogGlobal.kind == DialogKind.remove-from-favorites
-                || DialogGlobal.kind == DialogKind.remove-from-recent ? "delete" :
-            DialogGlobal.kind == DialogKind.clear-queue ? "clear_all" :
-            DialogGlobal.kind == DialogKind.bit-perfect-exclusive ? "graphic_eq" :
-            DialogGlobal.kind == DialogKind.restart-titlebar
-                || DialogGlobal.kind == DialogKind.restart-tray
-                || DialogGlobal.kind == DialogKind.restart-backdrop ? "restart_alt" :
-            "";
-        width: min(self.max-w, max(360px, parent.width - 96px));
-        x: (parent.width - self.width) / 2;
-        y: (parent.height - self.height) / 2 + (1.0 - root.card-t) * 12px;
-        // A centred card left uncapped runs off both edges of a short window. Only a kind whose
-        // body scrolls may be capped: nothing here clips, so a squeezed body paints its remainder,
-        // buttons included, onto the backdrop. A kind joining this list owes a scroller.
-        property <bool> body-scrolls:
-            DialogGlobal.kind == DialogKind.add-station || DialogGlobal.kind == DialogKind.edit-station
-            || DialogGlobal.kind == DialogKind.smart-playlist-editor
-            || DialogGlobal.kind == DialogKind.duplicates
-            || DialogGlobal.kind == DialogKind.kept-out-files;
-        height: card.body-scrolls
-            // Floored so a step growing out of a shorter one keeps its footer on the card.
-            ? min(max(card.eased-height, layout.min-height), max(240px, parent.height - 96px))
-            : layout.preferred-height;
-        property <length> eased-height: layout.preferred-height;
-        // A transition rather than `animate`, which would chase a window resize: its curve ends a
-        // fixed time after the step changed, so a later resize snaps. `in` only, finding being the
-        // default, so the card opens at rest and a close's teardown leaves nothing easing.
-        states [
-            finder-confirm when card.duplicates-confirming: {
-                eased-height: layout.preferred-height;
-                in {
-                    animate eased-height { duration: Theme.dur-med; easing: cubic-bezier(0.2, 0, 0, 1); }
-                }
-            }
-            finder-list when DialogGlobal.kind == DialogKind.duplicates && DuplicatesUi.listing: {
-                eased-height: layout.preferred-height;
-                in {
-                    animate eased-height { duration: Theme.dur-med; easing: cubic-bezier(0.2, 0, 0, 1); }
-                }
-            }
-            // Nothing listed, or the find failed.
-            finder-settled when DialogGlobal.kind == DialogKind.duplicates && !DuplicatesUi.busy: {
-                eased-height: layout.preferred-height;
-                in {
-                    animate eased-height { duration: Theme.dur-med; easing: cubic-bezier(0.2, 0, 0, 1); }
-                }
-            }
-        ]
-        // The finder's second step, whose footer reads Back and Remove.
-        property <bool> duplicates-confirming:
-            DialogGlobal.kind == DialogKind.duplicates && DuplicatesUi.confirming;
-        // A fact about the form rather than an action on it, stated opposite the buttons.
-        property <string> footer-note:
-            DialogGlobal.kind == DialogKind.smart-playlist-editor && SmartEditor.match-count >= 0
-                ? @tr("{n} track" | "{n} tracks" % SmartEditor.match-count)
-            // A scan can retag or add a copy the list shows, so Remove waits it out.
-            : card.duplicates-confirming && LibrarySettings.scanning
-                ? @tr("Remove waits until the library scan finishes.")
-            : DialogGlobal.kind == DialogKind.duplicates && DuplicatesUi.picked-count > 0
-                // Translators: {} is the picked copies' total size, as 1.2 GB.
-                ? @tr("{n} copy picked · {}" | "{n} copies picked · {}" % DuplicatesUi.picked-count,
-                      DuplicatesUi.picked-size)
-                : "";
-        background: Theme.surface0;
-        // `surface2`, never `Theme.border`, which is `surface0` itself and so invisible here.
-        border-color: Theme.surface2;
-        border-width: 1px;
-        border-radius: Theme.radius-lg;
-        opacity: root.card-t;
-        // So a stale click can't reach a button mid-fade.
-        visible: root.card-t > 0.01;
-
-        // Keeps a click on the card from reaching the backdrop's dismiss.
-        card-touch := TouchArea {
-            width: 100%;
-            height: 100%;
-            enabled: DialogGlobal.open;
-            clicked => { }
-        }
 
         layout := VerticalLayout {
+            x: 0px;
+            y: 0px;
+            width: frame.card-width;
+            height: frame.card-height;
             padding: Theme.pad-lg;
             spacing: Theme.pad-md;
 
-            HorizontalLayout {
-                spacing: Theme.pad-md;
-                alignment: start;
-
-                if card.kind-icon != "": Rectangle {
-                    width: 48px;
-                    height: 48px;
-                    horizontal-stretch: 0;
-                    vertical-stretch: 0;
-                    border-radius: Theme.radius-md;
-                    background: DialogGlobal.destructive
-                        ? Theme.danger.with-alpha(0.15)
-                        : Theme.accent.with-alpha(0.15);
-                    MaterialIcon {
-                        name: card.kind-icon;
-                        icon-size: 28px;
-                        icon-color: DialogGlobal.destructive
-                            ? Theme.danger
-                            : Theme.accent;
-                    }
-                }
-
-                VerticalLayout {
-                    horizontal-stretch: 1;
-                    spacing: Theme.pad-xs;
-
-                    Text {
-                        text: DialogGlobal.title;
-                        color: Theme.text;
-                        font-size: Theme.font-size-lg;
-                        font-weight: 600;
-                        wrap: word-wrap;
-                    }
-
-                    if DialogGlobal.message != "": Text {
-                        text: DialogGlobal.message;
-                        color: Theme.subtext0;
-                        font-size: Theme.font-size-md;
-                        wrap: word-wrap;
-                    }
-                }
+            DialogHeader {
+                icon: root.kind-icon;
+                title: DialogGlobal.title;
+                message: DialogGlobal.message;
+                destructive: DialogGlobal.destructive;
             }
 
             // No auto-focus on init: `focus()` during the open re-enters Slint's property
@@ -269,9 +204,9 @@ export component DialogOverlay inherits Rectangle {
                 spacing: Theme.pad-sm;
                 padding-top: Theme.pad-sm;
 
-                if card.footer-note != "": Text {
+                if root.footer-note != "": Text {
                     horizontal-stretch: 0;
-                    text: card.footer-note;
+                    text: root.footer-note;
                     color: Theme.subtext0;
                     font-size: Theme.font-size-sm;
                     vertical-alignment: center;
@@ -282,13 +217,13 @@ export component DialogOverlay inherits Rectangle {
                 // `if` rather than `visible`, so an info-only dialog keeps its primary button
                 // flush right.
                 if DialogGlobal.cancel-label != "": SectionButton {
-                    label: card.duplicates-confirming ? @tr("Back") : DialogGlobal.cancel-label;
+                    label: root.duplicates-confirming ? @tr("Back") : DialogGlobal.cancel-label;
                     icon: "";
                     primary: false;
                     button-enabled: DialogGlobal.open
-                        && !(card.duplicates-confirming && DuplicatesUi.removing);
+                        && !(root.duplicates-confirming && DuplicatesUi.removing);
                     clicked => {
-                        if (card.duplicates-confirming) {
+                        if (root.duplicates-confirming) {
                             DuplicatesUi.confirming = false;
                         } else {
                             DialogGlobal.cancelled();
@@ -308,7 +243,7 @@ export component DialogOverlay inherits Rectangle {
                         : DialogGlobal.confirm-label;
                     icon: "";
                     primary: true;
-                    destructive: DialogGlobal.destructive || card.duplicates-confirming;
+                    destructive: DialogGlobal.destructive || root.duplicates-confirming;
                     // The dispatcher gates each commit on the same condition; disabled, the
                     // button shows the requirement instead of no-opping.
                     button-enabled: DialogGlobal.open

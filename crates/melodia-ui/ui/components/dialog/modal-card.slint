@@ -1,0 +1,65 @@
+import { Theme } from "../../theme.slint";
+
+// The dimmed backdrop and centred card a modal stands on. The host lays its content out at
+// `card-width` by `card-height` with an explicit origin: inside `@children`, `parent` is the host.
+//
+// No `changed` handler: the welcome card mounts this inside a branch that drops on close, which a
+// tracker can outlive and panic on the next open.
+export component ModalCard inherits Rectangle {
+    // The one animated input, the host's, everything here deriving from it: a derived `animate`
+    // phase-lags.
+    in property <float> t;
+    in property <bool> interactive;
+    in property <length> max-card-width;
+    in property <length> card-height;
+    callback backdrop-clicked();
+
+    out property <length> card-width: card.width;
+    // A centred card left uncapped runs off both edges of a short window.
+    out property <length> height-cap: max(240px, root.height - 96px);
+
+    width: 100%;
+    height: 100%;
+
+    // Faster, so the card's small fade lands when the backdrop's dim reaches its perceptual
+    // ceiling; unbiased, the full-viewport dim wins.
+    property <float> card-t: min(1.0, root.t * 1.5);
+
+    Rectangle {
+        width: 100%;
+        height: 100%;
+        background: rgba(0, 0, 0, 0.45 * root.t);
+    }
+    TouchArea {
+        width: 100%;
+        height: 100%;
+        enabled: root.interactive;
+        mouse-cursor: pointer;
+        clicked => { root.backdrop-clicked(); }
+    }
+
+    card := Rectangle {
+        width: min(root.max-card-width, max(360px, root.width - 96px));
+        height: root.card-height;
+        x: (root.width - self.width) / 2;
+        y: (root.height - self.height) / 2 + (1.0 - root.card-t) * 12px;
+        background: Theme.surface0;
+        // `surface2`, never `Theme.border`, which is `surface0` itself and so invisible here.
+        border-color: Theme.surface2;
+        border-width: 1px;
+        border-radius: Theme.radius-lg;
+        opacity: root.card-t;
+        // So a stale click can't reach a button mid-fade.
+        visible: root.card-t > 0.01;
+
+        // Keeps a click on the card from reaching the backdrop's dismiss.
+        TouchArea {
+            width: 100%;
+            height: 100%;
+            enabled: root.interactive;
+            clicked => { }
+        }
+
+        @children
+    }
+}

@@ -18,7 +18,8 @@ Paths are under `crates/melodia-ui/ui/components/` unless stated.
   Slint paints before its occluder). `PopupSurface` wraps every `PopupWindow` body, `MenuSurface` a
   Now Playing menu's; `PopupFit` and `PopupColumn` place and scroll one whose rows can outgrow the
   window. `FocusLossWatcher` goes inside every popup, `PopupDismissCatcher` over a popup's empty
-  regions, never a bare `TouchArea`.
+  regions, never a bare `TouchArea`. `dialog/modal-card.slint` is the backdrop and card under
+  every modal, the Dialog and the welcome card alike, and `dialog/dialog-header.slint` its title.
 - **Menus.** `context-menu.slint` holds every right-click menu's parts (`ContextMenuPopup`,
   `MenuItem`, `FavoriteMenuItem`, `MenuFlyout`, `CopyField`, `ContextClick`,
   `ContextMenuMetrics`); `track-list/track-context-menu.slint` is the row menu; `RatingMenuRow` is

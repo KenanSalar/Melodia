@@ -1,0 +1,51 @@
+import { Theme } from "../../theme.slint";
+import { MaterialIcon } from "../material-icon.slint";
+
+// A modal card's title over its message, beside a tinted tile where the card names an icon.
+export component DialogHeader inherits HorizontalLayout {
+    in property <string> icon;
+    in property <string> title;
+    in property <string> message;
+    in property <bool> destructive;
+
+    spacing: Theme.pad-md;
+    alignment: start;
+
+    if root.icon != "": Rectangle {
+        width: 48px;
+        height: 48px;
+        horizontal-stretch: 0;
+        vertical-stretch: 0;
+        border-radius: Theme.radius-md;
+        background: root.destructive
+            ? Theme.danger.with-alpha(0.15)
+            : Theme.accent.with-alpha(0.15);
+        MaterialIcon {
+            name: root.icon;
+            icon-size: 28px;
+            icon-color: root.destructive
+                ? Theme.danger
+                : Theme.accent;
+        }
+    }
+
+    VerticalLayout {
+        horizontal-stretch: 1;
+        spacing: Theme.pad-xs;
+
+        Text {
+            text: root.title;
+            color: Theme.text;
+            font-size: Theme.font-size-lg;
+            font-weight: 600;
+            wrap: word-wrap;
+        }
+
+        if root.message != "": Text {
+            text: root.message;
+            color: Theme.subtext0;
+            font-size: Theme.font-size-md;
+            wrap: word-wrap;
+        }
+    }
+}

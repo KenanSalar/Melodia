@@ -1,89 +1,71 @@
 import { Theme } from "../../theme.slint";
 import { Onboarding } from "../../globals/onboarding.slint";
-import { IconButton } from "../icon-button.slint";
 import { SectionButton } from "../settings/section-button.slint";
+import { DialogHeader } from "../dialog/dialog-header.slint";
+import { DialogScrollPane } from "../dialog/dialog-scroll-pane.slint";
+import { ModalCard } from "../dialog/modal-card.slint";
 import { OnboardingAppearancePanel } from "appearance-panel.slint";
 import { OnboardingMusicPanel } from "music-panel.slint";
 import { OnboardingFeaturesPanel } from "features-panel.slint";
 
-// The first-run card, on `DialogOverlay`'s backdrop and card treatment, with a step index and a
-// footer that doesn't close on Next.
+// The first-run card, laid out as the duplicate finder is: a header, the step dots over a well
+// holding the step's card, and a footer that doesn't close on Next.
 //
 // No `changed` handler watching anything outside the branch: the branch drops on close, so such a
 // tracker survives the first open and panics on the second. That rules out `TabBar`, `SearchBar`,
 // `GridColumnsSync`, `FilterThrottle` and `FocusLossWatcher` here.
-// `IconButton`'s `Tooltip` tracks only its own hover, so it may stay.
+// A `Tooltip`, the accent dots', tracks only its own hover, so it may stay.
 export component OnboardingOverlay inherits Rectangle {
     width: 100%;
     height: 100%;
 
     private property <float> t: Onboarding.open ? 1.0 : 0.0;
     animate t { duration: Theme.dur-fast; easing: ease-out; }
-    // `DialogOverlay`'s bias, for its reason.
-    private property <float> card-t: min(1.0, root.t * 1.5);
 
-    Rectangle {
-        width: 100%;
-        height: 100%;
-        background: rgba(0, 0, 0, 0.45 * root.t);
-    }
-    TouchArea {
-        width: 100%;
-        height: 100%;
-        enabled: Onboarding.open;
-        mouse-cursor: pointer;
-        clicked => { Onboarding.dismiss(); }
-    }
+    // `DialogOverlay`'s eased step height, floor and transition, for its reasons. Rust resets the
+    // step before the branch mounts, so the card opens at rest.
+    property <length> eased-height: layout.preferred-height;
+    states [
+        music when Onboarding.step == 0: {
+            eased-height: layout.preferred-height;
+            in {
+                animate eased-height { duration: Theme.dur-med; easing: cubic-bezier(0.2, 0, 0, 1); }
+            }
+        }
+        appearance when Onboarding.step == 1: {
+            eased-height: layout.preferred-height;
+            in {
+                animate eased-height { duration: Theme.dur-med; easing: cubic-bezier(0.2, 0, 0, 1); }
+            }
+        }
+        features when Onboarding.step == 2: {
+            eased-height: layout.preferred-height;
+            in {
+                animate eased-height { duration: Theme.dur-med; easing: cubic-bezier(0.2, 0, 0, 1); }
+            }
+        }
+    ]
 
-    card := Rectangle {
+    frame := ModalCard {
+        t: root.t;
+        interactive: Onboarding.open;
         // So the feature rows' copy doesn't wrap at every locale.
-        property <length> max-w: 560px;
-
-        width: min(self.max-w, max(360px, parent.width - 96px));
-        x: (parent.width - self.width) / 2;
-        y: (parent.height - self.height) / 2 + (1.0 - root.card-t) * 12px;
-        // Uncapped, for `DialogOverlay`'s reason: a panel outgrowing a short window owes a
-        // scroller, not a cap.
-        height: layout.preferred-height;
-        background: Theme.surface0;
-        // `surface2`, `Theme.border` being `surface0` itself and so invisible on this fill.
-        border-color: Theme.surface2;
-        border-width: 1px;
-        border-radius: Theme.radius-lg;
-        opacity: root.card-t;
-        visible: root.card-t > 0.01;
-
-        // Keeps a card click from reaching the backdrop's dismiss.
-        TouchArea {
-            width: 100%;
-            height: 100%;
-            enabled: Onboarding.open;
-            clicked => { }
-        }
-
-        close-button := IconButton {
-            x: parent.width - self.width - Theme.pad-sm;
-            y: Theme.pad-sm;
-            icon: "close";
-            icon-size: 18px;
-            diameter: 32px;
-            button-enabled: Onboarding.open;
-            tooltip-text: @tr("Close");
-            clicked => { Onboarding.dismiss(); }
-        }
+        max-card-width: 560px;
+        card-height: min(max(root.eased-height, layout.min-height), self.height-cap);
+        backdrop-clicked => { Onboarding.dismiss(); }
 
         layout := VerticalLayout {
+            x: 0px;
+            y: 0px;
+            width: frame.card-width;
+            height: frame.card-height;
             padding: Theme.pad-lg;
             spacing: Theme.pad-md;
 
-            Text {
+            DialogHeader {
                 // Translators: Melodia is the product name and stays as is
-                text: @tr("Welcome to Melodia");
-                font-size: Theme.hero-title-size;
-                font-weight: 700;
-                color: Theme.text;
-                // The default `clip` scissors a `Text` at its line box, shorter than the ink.
-                overflow: elide;
+                title: @tr("Welcome to Melodia");
+                message: @tr("Three quick steps to set Melodia up. You can change any of it later in Settings.");
             }
 
             // Hand-drawn rather than a `TabBar`, which carries a change tracker. The literal is
@@ -100,10 +82,34 @@ export component OnboardingOverlay inherits Rectangle {
                 }
             }
 
-            // The library first, nothing else filling it.
-            if Onboarding.step == 0: OnboardingMusicPanel { }
-            if Onboarding.step == 1: OnboardingAppearancePanel { }
-            if Onboarding.step == 2: OnboardingFeaturesPanel { }
+            // The card's scroller, so a step taller than a short window scrolls instead of pushing
+            // the footer off the card. Inset as the duplicate finder's well is.
+            Rectangle {
+                min-height: 96px;
+                preferred-height: pane.content-height + 2 * Theme.pad-xs;
+                vertical-stretch: 1;
+                background: Theme.base;
+                border-radius: Theme.radius-lg;
+
+                pane := DialogScrollPane {
+                    x: Theme.pad-md;
+                    y: Theme.pad-xs;
+                    width: parent.width - Theme.pad-md - Theme.pad-xs;
+                    height: parent.height - 2 * Theme.pad-xs;
+
+                    // A step's card keeps its height while the card eases taller than it.
+                    VerticalLayout {
+                        alignment: start;
+                        padding-top: Theme.pad-sm;
+                        padding-bottom: Theme.pad-sm;
+
+                        // The library first, nothing else filling it.
+                        if Onboarding.step == 0: OnboardingMusicPanel { }
+                        if Onboarding.step == 1: OnboardingAppearancePanel { }
+                        if Onboarding.step == 2: OnboardingFeaturesPanel { }
+                    }
+                }
+            }
 
             HorizontalLayout {
                 spacing: Theme.pad-sm;

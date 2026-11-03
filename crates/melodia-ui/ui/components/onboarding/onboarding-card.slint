@@ -1,0 +1,55 @@
+import { Theme } from "../../theme.slint";
+
+// One step of the welcome card: a header strip over the step's rows, shaped as a duplicate group's
+// card so the two dialogs read as one surface.
+export component OnboardingCard inherits Rectangle {
+    in property <string> title;
+    in property <string> summary;
+
+    min-width: 0px;
+    background: Theme.surface0;
+    border-radius: Theme.radius-md;
+
+    VerticalLayout {
+        VerticalLayout {
+            padding: Theme.pad-md;
+            spacing: 2px;
+
+            Text {
+                text: root.title;
+                color: Theme.text;
+                font-size: Theme.font-size-md;
+                font-weight: 600;
+                wrap: word-wrap;
+            }
+            Text {
+                text: root.summary;
+                color: Theme.subtext0;
+                font-size: Theme.font-size-sm;
+                wrap: word-wrap;
+            }
+        }
+        // Full width, where the rows' rules inset: it parts the step from its rows.
+        Rectangle {
+            height: 1px;
+            background: Theme.surface2;
+        }
+
+        @children
+    }
+}
+
+// A row of a step's card, parted from the one above by a rule starting at `rule-x`.
+export component OnboardingRow inherits Rectangle {
+    // The first row sits under the header strip's own rule.
+    in property <bool> first;
+    in property <length> rule-x: Theme.pad-md;
+
+    if !root.first: Rectangle {
+        x: root.rule-x;
+        y: 0px;
+        width: root.width - root.rule-x - Theme.pad-md;
+        height: 1px;
+        background: Theme.surface2;
+    }
+}

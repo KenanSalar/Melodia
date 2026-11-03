@@ -68,10 +68,10 @@ fn onboarding_sources() -> Vec<(String, String)> {
 /// the step indicator is hand-drawn dots rather than a `TabBar` for the same reason. Holding the
 /// whole directory to none is the cheap way to hold that, since the two cases look alike.
 ///
-/// **This reads the directory's own files, not what they mount.** `IconButton` brings a `Tooltip`
-/// in on the close button and that carries `changed hovered` — safe, the property being local to
-/// the branch, and `NowPlayingView` is the standing proof: it is `if`-mounted too and drops the
-/// same button on every close. A `SearchBar` in a panel would not be, and lives outside this walk.
+/// **This reads the directory's own files, not what they mount.** The accent dots bring a `Tooltip`
+/// in, which carries `changed hovered`: safe, the property being local to the branch, and
+/// `NowPlayingView` is the standing proof, `if`-mounted too and dropping the same tooltip on every
+/// close. A `SearchBar` in a panel would not be, and lives outside this walk.
 #[test]
 fn no_onboarding_component_carries_a_change_tracker() {
     let offenders: Vec<String> = onboarding_sources()

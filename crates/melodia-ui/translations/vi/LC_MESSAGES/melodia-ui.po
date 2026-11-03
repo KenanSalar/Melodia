@@ -61,7 +61,6 @@ msgstr "Khôi phục xuống"
 
 #: ui/components/caption-buttons.slint
 #: ui/components/macos-titlebar-cluster.slint
-#: ui/components/onboarding/onboarding-overlay.slint
 #: ui/views/settings/duplicates-section.slint
 msgid "Close"
 msgstr "Đóng"
@@ -1449,6 +1448,10 @@ msgstr "Chọn thư mục khác"
 #: ui/components/onboarding/onboarding-overlay.slint
 msgid "Welcome to Melodia"
 msgstr "Chào mừng đến với Melodia"
+
+#: ui/components/onboarding/onboarding-overlay.slint
+msgid "Three quick steps to set Melodia up. You can change any of it later in Settings."
+msgstr "Ba bước nhanh để thiết lập Melodia. Bạn có thể thay đổi mọi thứ sau này trong phần Cài đặt."
 
 #: ui/components/onboarding/onboarding-overlay.slint
 msgid "Skip"

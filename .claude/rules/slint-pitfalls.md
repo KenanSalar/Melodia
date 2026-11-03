@@ -115,7 +115,10 @@ there, never in the `.slint`.
   root pin can't steer it**: a root's `preferred-width`/`max-width` reaches only the horizontal arm
   (`get_layout_info_v_constrained_for_repeated`), so wrapped text reports one line. Pin a **cell**,
   whose `preferred-width` replaces what it asks where a root's only raises it (`LayoutInfo::merge`).
-  Tell: the `Vertical` arm reading `(… + …_layoutinfo_h ()).preferred`.
+  Tell: the `Vertical` arm reading `(… + …_layoutinfo_h ()).preferred`. **A mount handing children
+  is inlined into the branch and caught where the same component mounted bare can escape**, its arm
+  reading the root's `layoutinfo_v` at the drawn width (`features-panel.slint`'s `UpdateCheckRow`).
+  A `preferred-width` on a layout under a `Rectangle` root is never read, so it pins nothing.
 
 ## Bindings and animation
 
