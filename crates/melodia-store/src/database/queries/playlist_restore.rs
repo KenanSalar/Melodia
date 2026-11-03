@@ -29,16 +29,16 @@ pub async fn restore_playlist_items(
     db: &DbPool,
     cuts: &[PlaylistItemsCut],
 ) -> Result<(), AppError> {
-    let Some(first) = cuts.first() else {
+    let Some(playlist) = cuts.first().map(|cut| &cut.playlist) else {
         return Ok(());
     };
-    let playlist_id = first.playlist_id;
+    let playlist_id = playlist.id;
     let mut tx = db.write().begin().await?;
 
     let live_stamp: String =
         sqlx::query_scalar("SELECT updated_at FROM playlists WHERE id = ? AND created_at = ?")
             .bind(playlist_id)
-            .bind(&first.created_at)
+            .bind(&playlist.created_at)
             .fetch_optional(&mut *tx)
             .await?
             .ok_or_else(|| AppError::not_found("Playlist", playlist_id))?;

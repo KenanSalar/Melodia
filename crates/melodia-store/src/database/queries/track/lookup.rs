@@ -148,11 +148,7 @@ pub async fn get_track_links_by_ids(
 /// The ids in `ids` that no longer have a row. Asked this way round because the answer is almost
 /// always none: asking which survive hands a queue the size of the library back a row per track.
 pub async fn missing_ids(db: &DbPool, ids: &[i64]) -> Result<HashSet<i64>, AppError> {
-    if ids.is_empty() {
-        return Ok(HashSet::new());
-    }
-    let qb = ids_outside(ids, &Membership::Library);
-    Ok(fetch_packed_ids(db.read(), qb).await?.into_iter().collect())
+    ids_outside(db.read(), ids, &Membership::Library).await
 }
 
 /// [`missing_ids`] inside a transaction, for a write inserting the ids that still have a row.
@@ -160,11 +156,7 @@ pub(crate) async fn missing_ids_on(
     conn: &mut SqliteConnection,
     ids: &[i64],
 ) -> Result<HashSet<i64>, AppError> {
-    if ids.is_empty() {
-        return Ok(HashSet::new());
-    }
-    let qb = ids_outside(ids, &Membership::Library);
-    Ok(fetch_packed_ids(&mut *conn, qb).await?.into_iter().collect())
+    ids_outside(conn, ids, &Membership::Library).await
 }
 
 /// The ids in `ids` that `scope` no longer holds, asked the way round [`missing_ids`] is.
@@ -177,17 +169,26 @@ pub async fn missing_from_scope(
         return Ok(HashSet::new());
     }
     let membership = Membership::resolve(db, scope).await?;
-    let qb = ids_outside(ids, &membership);
-    Ok(fetch_packed_ids(db.read(), qb).await?.into_iter().collect())
+    ids_outside(db.read(), ids, &membership).await
 }
 
-/// The ids in `ids` that `membership` doesn't hold, packed into one row.
-fn ids_outside(ids: &[i64], membership: &Membership) -> QueryBuilder<Sqlite> {
+/// The ids in `ids` that `membership` doesn't hold.
+async fn ids_outside<'e, E>(
+    executor: E,
+    ids: &[i64],
+    membership: &Membership,
+) -> Result<HashSet<i64>, AppError>
+where
+    E: sqlx::Executor<'e, Database = Sqlite>,
+{
+    if ids.is_empty() {
+        return Ok(HashSet::new());
+    }
     let mut qb = QueryBuilder::<Sqlite>::new("SELECT group_concat(j.value, ',') FROM json_each(");
     qb.push_bind(json_array(ids)).push(") j WHERE j.value NOT IN (SELECT t.id FROM ");
     membership.push_members(&mut qb);
     qb.push(")");
-    qb
+    Ok(fetch_packed_ids(executor, qb).await?.into_iter().collect())
 }
 
 /// `file_path → id` for each of `paths` that has a row.

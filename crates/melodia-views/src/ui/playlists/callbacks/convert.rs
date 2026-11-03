@@ -52,7 +52,7 @@ impl PlaylistConvertUndo {
     /// Makes the playlist smart again, then refreshes as an edit does.
     pub async fn restore(self, state: &AppState, weak: &Weak<AppWindow>) -> Result<(), AppError> {
         library::smart_playlists::restore_rules(&state.db, &self.dropped).await?;
-        let id = self.dropped.playlist_id;
+        let id = self.dropped.playlist.id;
         spawn_refresh_after_edit(state, &self.playlists_ui, weak, id, "playlists::undo_convert");
         Ok(())
     }

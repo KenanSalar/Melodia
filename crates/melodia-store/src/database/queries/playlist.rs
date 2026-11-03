@@ -5,7 +5,7 @@ use sqlx::AssertSqlSafe;
 use crate::database::queries::search_name;
 use crate::database::queries::track::{columns, missing_ids_on};
 use crate::database::{DbPool, select_in_id_order};
-use melodia_core::entities::playlist::{CutItem, PlaylistItemsCut};
+use melodia_core::entities::playlist::{CutItem, PlaylistIdentity, PlaylistItemsCut};
 use melodia_core::entities::undo::{UNDO_HOLD_CAP, UndoCapture};
 use melodia_core::entities::{playlist, track};
 use melodia_core::error::AppError;
@@ -372,13 +372,8 @@ pub async fn remove_tracks_from_playlist_batch(
     update_playlist_thumbnail_and_timestamp_tx(&mut tx, playlist_id, &stamped_at).await?;
     tx.commit().await?;
 
-    Ok(UndoCapture::Held(PlaylistItemsCut {
-        playlist_id,
-        created_at,
-        rows,
-        updated_before,
-        stamped_at,
-    }))
+    let playlist = PlaylistIdentity { id: playlist_id, created_at };
+    Ok(UndoCapture::Held(PlaylistItemsCut { playlist, rows, updated_before, stamped_at }))
 }
 
 /// Removes `track_ids` from a playlist keeping nothing, and answers how many rows went. Removing

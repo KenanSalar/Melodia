@@ -29,12 +29,17 @@ pub struct PlaylistStats {
     pub total_duration_ms: i64,
 }
 
+/// A playlist as an undo finds it again, `created_at` telling it from one that reused its id.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct PlaylistIdentity {
+    pub id: i64,
+    pub created_at: String,
+}
+
 /// What one removal from a playlist took, enough to put each row back where it stood.
 #[derive(Debug, PartialEq)]
 pub struct PlaylistItemsCut {
-    pub playlist_id: i64,
-    /// Tells the playlist cut from one that took its id after a delete.
-    pub created_at: String,
+    pub playlist: PlaylistIdentity,
     /// Ascending by `row`.
     pub rows: Vec<CutItem>,
     pub updated_before: String,
@@ -45,9 +50,7 @@ pub struct PlaylistItemsCut {
 /// The rules a convert to a regular playlist cleared, enough to make it smart again.
 #[derive(Debug, PartialEq)]
 pub struct DroppedRules {
-    pub playlist_id: i64,
-    /// Tells the converted playlist from one that took its id after a delete.
-    pub created_at: String,
+    pub playlist: PlaylistIdentity,
     pub name: String,
     /// As stored, so the undo writes back exactly what the convert cleared.
     pub smart_criteria: Option<String>,

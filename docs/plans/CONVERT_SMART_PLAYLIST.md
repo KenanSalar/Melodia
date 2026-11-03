@@ -52,7 +52,7 @@ Working doc. Delete it when its last phase (Tests) lands.
    4. Insert the ids as positions 0 onward through `insert_items_tx`. The stats triggers count up from the smart row's stored 0.
    5. `update_playlist_thumbnail_and_timestamp_tx` with the row's own `updated_at`: an automatic cover points at the first item's, a custom one stays, and the card keeps its place.
 
-   It answers `DroppedRules { playlist_id, created_at, name, smart_criteria }`, the JSON exactly as stored.
+   It answers `DroppedRules { playlist, name, smart_criteria }`: `playlist` the row's `PlaylistIdentity` (its id and `created_at`), `smart_criteria` the JSON exactly as stored.
 2. **The membership is the page's, read on the transaction.** `fetch_packed_ids` and `pick_random` take the executor they read on rather than the pool, `Membership` passing `db.read()`. A new `smart_playlist::member_ids_tx(tx, criteria, draw)` answers "these ids, in this order": a random cap through `pick_random`, anything else through `membership_query("id", …)`, whose `ORDER BY` is the fragment the page numbers by. So the page and the convert can't disagree on which tracks or in what order.
 3. **The draw.** `PlaylistsUi::draw_on_show(id)` gives the page's draw while the open detail is `id` (`detail_playlist_id`), else `Draw::default()`, the draw the card's cover and the page's hero both use. One place decides, so the card entry and the pill share one callback.
 4. **The cover.** Wherever the old cover was automatic, the first item's cover is the one shown before, both being the first artwork in the same order. The exception is a random cap converted from its page. The hero there shows the default draw's cover, which can belong to a track the page's pick left out. The kept pick wins, by the issue's own rule, and the cover becomes the first kept track's: an automatic cover naming a track the playlist doesn't hold would be wrong from its next edit on.
@@ -85,12 +85,12 @@ Working doc. Delete it when its last phase (Tests) lands.
 
 | File | Owns |
 |---|---|
-| `crates/melodia-store/src/database/queries/playlist.rs` (639) | `create_playlist_with_tracks` and `add_tracks_to_playlist` filter through `missing_ids_on` (P0, P3); `contiguous` is `pub(crate)` for the convert; a removal's cut records `created_at` (P1). |
+| `crates/melodia-store/src/database/queries/playlist.rs` (639) | `create_playlist_with_tracks` and `add_tracks_to_playlist` filter through `missing_ids_on` (P0, P3); `contiguous` is `pub(crate)` for the convert; a removal's cut records the playlist's `PlaylistIdentity` (P1). |
 | `crates/melodia-store/src/database/queries/playlist_restore.rs` (184) | Both restores filter through `missing_ids_on` (P0, P3); `restore_playlist_items` matches the row on `created_at` too (P1). |
 | `crates/melodia-store/src/database/queries/track/lookup.rs` (283) | `missing_ids_on`, `missing_ids` on a connection the caller holds; `missing_from_scope`; `ids_outside`, the one query all three ask, the library being `Membership::Library` (P3). |
 | `crates/melodia-app/src/library/keyset.rs` (195) | `missing_from_scope` (P3). |
-| `crates/melodia-core/src/entities/playlist.rs` (58) | `DroppedRules`; `created_at` on it and on `PlaylistItemsCut` (P1). |
-| `crates/melodia-views/src/ui/playlists/callbacks/detail.rs` | `PlaylistCutUndo::same_playlist` merges only cuts sharing `created_at` (P1); its restore refreshes through `spawn_refresh_after_edit` (P2). |
+| `crates/melodia-core/src/entities/playlist.rs` (58) | `PlaylistIdentity`, a playlist's id and `created_at`, which `DroppedRules` and `PlaylistItemsCut` each carry (P1). |
+| `crates/melodia-views/src/ui/playlists/callbacks/detail.rs` | `PlaylistCutUndo` holds its playlist's `PlaylistIdentity`, so `same_playlist` merges only cuts from one playlist row (P1); its restore refreshes through `spawn_refresh_after_edit` (P2). |
 | `crates/melodia-store/src/database/queries/track/keyset.rs` (190) | `fetch_packed_ids` takes an executor (P1). |
 | `crates/melodia-store/src/database/queries/smart_playlist.rs` (526) | `pick_random` takes an executor; `member_ids_tx`; `random_cap`, which `Membership::smart` asks too (P1). |
 | `crates/melodia-store/src/database/queries/playlist_convert.rs` (new, P1) | `convert_to_regular` and `restore_rules`, one transaction each. |

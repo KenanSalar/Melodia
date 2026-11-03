@@ -3,7 +3,7 @@
 use super::playlist::{contiguous, insert_items_tx, update_playlist_thumbnail_and_timestamp_tx};
 use super::smart_playlist::member_ids_tx;
 use crate::database::DbPool;
-use melodia_core::entities::playlist::DroppedRules;
+use melodia_core::entities::playlist::{DroppedRules, PlaylistIdentity};
 use melodia_core::entities::smart_criteria::{Draw, SmartCriteria};
 use melodia_core::error::AppError;
 
@@ -43,7 +43,8 @@ pub async fn convert_to_regular(
     update_playlist_thumbnail_and_timestamp_tx(&mut tx, id, &updated_at).await?;
 
     tx.commit().await?;
-    Ok(Some(DroppedRules { playlist_id: id, created_at, name, smart_criteria }))
+    let playlist = PlaylistIdentity { id, created_at };
+    Ok(Some(DroppedRules { playlist, name, smart_criteria }))
 }
 
 /// Makes a converted playlist smart again under the rules `dropped` holds. Its items go, any added
@@ -52,6 +53,7 @@ pub async fn convert_to_regular(
 ///
 /// A playlist deleted since fails with [`AppError::not_found`], even once its id is reused.
 pub async fn restore_rules(db: &DbPool, dropped: &DroppedRules) -> Result<(), AppError> {
+    let playlist = &dropped.playlist;
     let mut tx = db.write().begin().await?;
     // A smart playlist's automatic cover is worked out on read, so the stored one goes.
     let restored = sqlx::query(
@@ -60,16 +62,16 @@ pub async fn restore_rules(db: &DbPool, dropped: &DroppedRules) -> Result<(), Ap
          WHERE id = ? AND created_at = ?",
     )
     .bind(&dropped.smart_criteria)
-    .bind(dropped.playlist_id)
-    .bind(&dropped.created_at)
+    .bind(playlist.id)
+    .bind(&playlist.created_at)
     .execute(&mut *tx)
     .await?
     .rows_affected();
     if restored == 0 {
-        return Err(AppError::not_found("Playlist", dropped.playlist_id));
+        return Err(AppError::not_found("Playlist", playlist.id));
     }
     sqlx::query("DELETE FROM playlist_items WHERE playlist_id = ?")
-        .bind(dropped.playlist_id)
+        .bind(playlist.id)
         .execute(&mut *tx)
         .await?;
 
