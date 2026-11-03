@@ -175,7 +175,7 @@ fn wire_add_tracks_to_selected(
         let _ = slint::spawn_local(Compat::new(async move {
             let added = add_to_each(&s, &pids, &track_ids).await;
             if added.playlists == 0 {
-                // Each failure was logged per playlist, and tracks the library lost add nothing.
+                // Failures were logged per playlist, and one that took nothing was left as it was.
                 return;
             }
             refresh_after_edit(&s, &pu, weak.clone(), &pids, "playlists::add_tracks_to_selected")

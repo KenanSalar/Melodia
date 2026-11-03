@@ -249,10 +249,6 @@ pub async fn add_tracks_to_playlist(
 
     let mut tx = db.write().begin().await?;
     let present = present_in_order(&mut tx, track_ids).await?;
-    // Nothing left to add leaves `updated_at` alone, so the card keeps its place.
-    if present.is_empty() {
-        return Ok(Vec::new());
-    }
 
     let max_pos: Option<i32> = sqlx::query_scalar::<_, Option<i32>>(
         "SELECT MAX(position) FROM playlist_items WHERE playlist_id = ?",
@@ -265,6 +261,10 @@ pub async fn add_tracks_to_playlist(
     let now = melodia_core::utils::now_rfc3339();
     let landed =
         insert_items_tx(&mut tx, playlist_id, &contiguous(&present, start_position, &now)?).await?;
+    // A playlist that took nothing keeps its `updated_at`, so its card keeps its place.
+    if landed.is_empty() {
+        return Ok(landed);
+    }
 
     // Closes the gaps ignored duplicates leave.
     renumber_playlist_positions_tx(&mut tx, playlist_id).await?;
