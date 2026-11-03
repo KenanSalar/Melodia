@@ -42,7 +42,11 @@ pub struct PlaylistCutUndo {
 
 impl PlaylistCutUndo {
     pub fn same_playlist(&self, other: &Self) -> bool {
-        self.playlist_id == other.playlist_id
+        self.playlist_id == other.playlist_id && self.created_at() == other.created_at()
+    }
+
+    fn created_at(&self) -> Option<&str> {
+        self.cuts.first().map(|cut| cut.created_at.as_str())
     }
 
     /// A later removal from the same playlist, whose rows are indexed as this one left it.

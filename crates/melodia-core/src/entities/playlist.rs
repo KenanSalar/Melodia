@@ -33,6 +33,8 @@ pub struct PlaylistStats {
 #[derive(Debug, PartialEq)]
 pub struct PlaylistItemsCut {
     pub playlist_id: i64,
+    /// Tells the playlist cut from one that took its id after a delete.
+    pub created_at: String,
     /// Ascending by `row`.
     pub rows: Vec<CutItem>,
     pub updated_before: String,
@@ -44,6 +46,8 @@ pub struct PlaylistItemsCut {
 #[derive(Debug, PartialEq)]
 pub struct DroppedRules {
     pub playlist_id: i64,
+    /// Tells the converted playlist from one that took its id after a delete.
+    pub created_at: String,
     pub name: String,
     /// As stored, so the undo writes back exactly what the convert cleared.
     pub smart_criteria: Option<String>,

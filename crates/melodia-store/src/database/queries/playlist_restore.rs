@@ -23,21 +23,24 @@ enum Slot<'a> {
 /// lands at its old index clamped to the list. One whose track is gone or back in the playlist
 /// stays out.
 ///
-/// The playlist going too fails it, the rows having nowhere to go.
+/// The playlist going too fails it, the rows having nowhere to go, even once its id is reused.
 pub async fn restore_playlist_items(
     db: &DbPool,
     cuts: &[PlaylistItemsCut],
 ) -> Result<(), AppError> {
-    let Some(playlist_id) = cuts.first().map(|cut| cut.playlist_id) else {
+    let Some(first) = cuts.first() else {
         return Ok(());
     };
+    let playlist_id = first.playlist_id;
     let mut tx = db.write().begin().await?;
 
-    let live_stamp: String = sqlx::query_scalar("SELECT updated_at FROM playlists WHERE id = ?")
-        .bind(playlist_id)
-        .fetch_optional(&mut *tx)
-        .await?
-        .ok_or_else(|| AppError::not_found("Playlist", playlist_id))?;
+    let live_stamp: String =
+        sqlx::query_scalar("SELECT updated_at FROM playlists WHERE id = ? AND created_at = ?")
+            .bind(playlist_id)
+            .bind(&first.created_at)
+            .fetch_optional(&mut *tx)
+            .await?
+            .ok_or_else(|| AppError::not_found("Playlist", playlist_id))?;
     let survivors: Vec<(i64, i64, i32)> = sqlx::query_as(
         "SELECT id, track_id, position FROM playlist_items WHERE playlist_id = ?
          ORDER BY position, id",

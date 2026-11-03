@@ -69,5 +69,4 @@ paths:
   `view-context`), file drop and Add to Playlist in Rust (`DetailPage::drop_target`,
   `add_picker`).
 - **A smart playlist becomes a regular one only through `queries::playlist_convert`**, which reads
-  the membership inside the write that flips `is_smart` (`convert_to_regular`), so the page and
-  the kept tracks can't disagree and a track a scan deletes meanwhile can't fail the insert.
+  the membership inside the write that flips `is_smart` (`convert_to_regular`).

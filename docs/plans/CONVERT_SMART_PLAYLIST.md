@@ -45,13 +45,13 @@ Working doc. Delete it when its last phase (Tests) lands.
 ## Decisions settled here
 
 1. **One store function converts, in one write transaction:** `queries::playlist_convert::convert_to_regular(db, id, draw)`.
-   1. Read `is_smart`, `smart_criteria`, `name` and `updated_at`. A row that is gone or already regular answers `None`, so a second press does nothing.
+   1. Read `is_smart`, `smart_criteria`, `name`, `created_at` and `updated_at`. A row that is gone or already regular answers `None`, so a second press does nothing.
    2. Read the membership on the transaction in the rules' order: the cap's order and count, the natural order when uncapped, a random cap through `pick` under `draw`.
    3. `UPDATE playlists SET is_smart = FALSE, smart_criteria = NULL`.
    4. Insert the ids as positions 0 onward through `insert_items_tx`. The stats triggers count up from the smart row's stored 0.
    5. `update_playlist_thumbnail_and_timestamp_tx` with the row's own `updated_at`: an automatic cover points at the first item's, a custom one stays, and the card keeps its place.
 
-   It answers `DroppedRules { playlist_id, name, smart_criteria }`, the JSON exactly as stored.
+   It answers `DroppedRules { playlist_id, created_at, name, smart_criteria }`, the JSON exactly as stored.
 2. **The membership is the page's, read on the transaction.** `fetch_packed_ids` and `pick_random` take the executor they read on rather than the pool, `Membership` passing `db.read()`. A new `smart_playlist::member_ids_tx(tx, criteria, draw)` answers "these ids, in this order": a random cap through `pick_random`, anything else through `membership_query("id", …)`, whose `ORDER BY` is the fragment the page numbers by. So the page and the convert can't disagree on which tracks or in what order.
 3. **The draw.** `PlaylistsUi::draw_on_show(id)` gives the page's draw while the open detail is `id` (`detail_playlist_id`), else `Draw::default()`, the draw the card's cover and the page's hero both use. One place decides, so the card entry and the pill share one callback.
 4. **The cover.** Wherever the old cover was automatic, the first item's cover is the one shown before, both being the first artwork in the same order. The exception is a random cap converted from its page. The hero there shows the default draw's cover, which can belong to a track the page's pick left out. The kept pick wins, by the issue's own rule, and the cover becomes the first kept track's: an automatic cover naming a track the playlist doesn't hold would be wrong from its next edit on.
@@ -59,7 +59,7 @@ Working doc. Delete it when its last phase (Tests) lands.
    - Delete the playlist's items, the triggers counting back to 0. Set `is_smart = TRUE` and `smart_criteria` to the held JSON. NULL an automatic `thumbnail_path`, which a smart row never stores.
    - The name, the description, a cover picked since and `updated_at` stay as they are now.
    - Tracks added since go with the items. A smart row never reads them, and making it smart again is what the notice offered.
-   - A playlist deleted since fails with `AppError::not_found`, which raises the slot's "Couldn't undo".
+   - A playlist deleted since fails with `AppError::not_found`, which raises the slot's "Couldn't undo". The row is matched on `created_at` as well as the id: the id is a bare `INTEGER PRIMARY KEY`, which SQLite reuses after the largest goes, and a notice raised while undo was on outlives turning it off, so a delete with no notice of its own can leave it up.
    - The automatic cover it clears names a track's own artwork file, so no `ArtworkHold` is owed.
 6. **The undo arm.** `Removal::PlaylistRules(PlaylistConvertUndo)`, of kind `UndoKind::Playlists` and size `RemovalSize::Whole`, so the one-item switch doesn't quiet it. It never merges: a second convert replaces the notice and the first stands, as any distinct removal does. Its restore calls `restore_rules`, then `refresh_after_edit`. It holds one small JSON string, so there's no cap to check.
 7. **Undo off for playlists asks first.** `DialogKind.convert-playlist` through `Dialog.open-convert-playlist(id)`, whose accept reaches `Playlists.convert-to-regular-confirmed(id)`. Settings answers synchronously, so the raise is inline and owes no `DialogClaim`. It is destructive, like Delete, since the rules can't come back. The confirmed path converts with no notice.
@@ -84,9 +84,10 @@ Working doc. Delete it when its last phase (Tests) lands.
 
 | File | Owns |
 |---|---|
-| `crates/melodia-store/src/database/queries/playlist.rs` (639) | `tracks_still_there`, moved beside `insert_items_tx` as `pub(crate)`; `create_playlist_with_tracks` and `add_tracks_to_playlist` filter through it (P0); `contiguous` is `pub(crate)` for the convert (P1). |
-| `crates/melodia-store/src/database/queries/playlist_restore.rs` (184) | Imports `tracks_still_there` rather than owning it (P0). |
-| `crates/melodia-core/src/entities/playlist.rs` (58) | `DroppedRules` (P1). |
+| `crates/melodia-store/src/database/queries/playlist.rs` (639) | `tracks_still_there`, moved beside `insert_items_tx` as `pub(crate)`; `create_playlist_with_tracks` and `add_tracks_to_playlist` filter through it (P0); `contiguous` is `pub(crate)` for the convert; a removal's cut records `created_at` (P1). |
+| `crates/melodia-store/src/database/queries/playlist_restore.rs` (184) | Imports `tracks_still_there` rather than owning it (P0); `restore_playlist_items` matches the row on `created_at` too (P1). |
+| `crates/melodia-core/src/entities/playlist.rs` (58) | `DroppedRules`; `created_at` on it and on `PlaylistItemsCut` (P1). |
+| `crates/melodia-views/src/ui/playlists/callbacks/detail.rs` | `PlaylistCutUndo::same_playlist` merges only cuts sharing `created_at` (P1). |
 | `crates/melodia-store/src/database/queries/track/keyset.rs` (190) | `fetch_packed_ids` takes an executor (P1). |
 | `crates/melodia-store/src/database/queries/smart_playlist.rs` (526) | `pick_random` takes an executor; `member_ids_tx`; `random_cap`, which `Membership::smart` asks too (P1). |
 | `crates/melodia-store/src/database/queries/playlist_convert.rs` (new, P1) | `convert_to_regular` and `restore_rules`, one transaction each. |

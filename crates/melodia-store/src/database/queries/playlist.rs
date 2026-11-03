@@ -372,8 +372,8 @@ pub async fn remove_tracks_from_playlist_batch(
     if rows.is_empty() {
         return Ok(UndoCapture::Nothing);
     }
-    let updated_before: String =
-        sqlx::query_scalar("SELECT updated_at FROM playlists WHERE id = ?")
+    let (created_at, updated_before): (String, String) =
+        sqlx::query_as("SELECT created_at, updated_at FROM playlists WHERE id = ?")
             .bind(playlist_id)
             .fetch_one(&mut *tx)
             .await?;
@@ -384,7 +384,13 @@ pub async fn remove_tracks_from_playlist_batch(
     update_playlist_thumbnail_and_timestamp_tx(&mut tx, playlist_id, &stamped_at).await?;
     tx.commit().await?;
 
-    Ok(UndoCapture::Held(PlaylistItemsCut { playlist_id, rows, updated_before, stamped_at }))
+    Ok(UndoCapture::Held(PlaylistItemsCut {
+        playlist_id,
+        created_at,
+        rows,
+        updated_before,
+        stamped_at,
+    }))
 }
 
 /// Removes `track_ids` from a playlist keeping nothing, and answers how many rows went. Removing
