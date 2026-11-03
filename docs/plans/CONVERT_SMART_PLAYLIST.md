@@ -87,8 +87,8 @@ Working doc. Delete it when its last phase (Tests) lands.
 |---|---|
 | `crates/melodia-store/src/database/queries/playlist.rs` (639) | `create_playlist_with_tracks` and `add_tracks_to_playlist` filter through `missing_ids_on` (P0, P3); `contiguous` is `pub(crate)` for the convert; a removal's cut records `created_at` (P1). |
 | `crates/melodia-store/src/database/queries/playlist_restore.rs` (184) | Both restores filter through `missing_ids_on` (P0, P3); `restore_playlist_items` matches the row on `created_at` too (P1). |
-| `crates/melodia-store/src/database/queries/track/lookup.rs` | `missing_ids_on`, `missing_ids` on a connection the caller holds; `missing_from_scope` (P3). |
-| `crates/melodia-app/src/library/keyset.rs` | `missing_from_scope` (P3). |
+| `crates/melodia-store/src/database/queries/track/lookup.rs` (283) | `missing_ids_on`, `missing_ids` on a connection the caller holds; `missing_from_scope`; `ids_outside`, the one query all three ask, the library being `Membership::Library` (P3). |
+| `crates/melodia-app/src/library/keyset.rs` (195) | `missing_from_scope` (P3). |
 | `crates/melodia-core/src/entities/playlist.rs` (58) | `DroppedRules`; `created_at` on it and on `PlaylistItemsCut` (P1). |
 | `crates/melodia-views/src/ui/playlists/callbacks/detail.rs` | `PlaylistCutUndo::same_playlist` merges only cuts sharing `created_at` (P1); its restore refreshes through `spawn_refresh_after_edit` (P2). |
 | `crates/melodia-store/src/database/queries/track/keyset.rs` (190) | `fetch_packed_ids` takes an executor (P1). |
@@ -170,7 +170,7 @@ Then:
 
 A perf pass over the branch found nothing hot, but two of its paths asked a library-sized question where `missing_ids` already asks the one-row inverse.
 
-1. `track/lookup.rs`: `missing_ids_on`, `missing_ids` on a connection the caller holds, and `missing_from_scope`, the ids a scope no longer holds, through `Membership::push_members` with no order.
+1. `track/lookup.rs`: `missing_ids_on`, `missing_ids` on a connection the caller holds, and `missing_from_scope`, the ids a scope no longer holds. All three ask one `ids_outside` query, through `Membership::push_members` with no order, the library being `Membership::Library`.
 2. `tracks_still_there` goes: `present_in_order` and both restores filter through `missing_ids_on`, and its foreign-key note moves to `insert_items_tx`'s doc.
 3. `forget_gone_picks` asks `library::keyset::missing_from_scope` about the hidden picks rather than reading the scope's whole sorted keyset.
 

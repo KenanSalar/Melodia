@@ -151,7 +151,8 @@ pub async fn missing_ids(db: &DbPool, ids: &[i64]) -> Result<HashSet<i64>, AppEr
     if ids.is_empty() {
         return Ok(HashSet::new());
     }
-    Ok(fetch_packed_ids(db.read(), missing_ids_query(ids)).await?.into_iter().collect())
+    let qb = ids_outside(ids, &Membership::Library);
+    Ok(fetch_packed_ids(db.read(), qb).await?.into_iter().collect())
 }
 
 /// [`missing_ids`] inside a transaction, for a write inserting the ids that still have a row.
@@ -162,14 +163,8 @@ pub(crate) async fn missing_ids_on(
     if ids.is_empty() {
         return Ok(HashSet::new());
     }
-    Ok(fetch_packed_ids(&mut *conn, missing_ids_query(ids)).await?.into_iter().collect())
-}
-
-fn missing_ids_query(ids: &[i64]) -> QueryBuilder<Sqlite> {
-    let mut qb = QueryBuilder::<Sqlite>::new("SELECT group_concat(j.value, ',') FROM json_each(");
-    qb.push_bind(json_array(ids))
-        .push(") j WHERE NOT EXISTS (SELECT 1 FROM tracks t WHERE t.id = j.value)");
-    qb
+    let qb = ids_outside(ids, &Membership::Library);
+    Ok(fetch_packed_ids(&mut *conn, qb).await?.into_iter().collect())
 }
 
 /// The ids in `ids` that `scope` no longer holds, asked the way round [`missing_ids`] is.
@@ -182,11 +177,17 @@ pub async fn missing_from_scope(
         return Ok(HashSet::new());
     }
     let membership = Membership::resolve(db, scope).await?;
+    let qb = ids_outside(ids, &membership);
+    Ok(fetch_packed_ids(db.read(), qb).await?.into_iter().collect())
+}
+
+/// The ids in `ids` that `membership` doesn't hold, packed into one row.
+fn ids_outside(ids: &[i64], membership: &Membership) -> QueryBuilder<Sqlite> {
     let mut qb = QueryBuilder::<Sqlite>::new("SELECT group_concat(j.value, ',') FROM json_each(");
     qb.push_bind(json_array(ids)).push(") j WHERE j.value NOT IN (SELECT t.id FROM ");
     membership.push_members(&mut qb);
     qb.push(")");
-    Ok(fetch_packed_ids(db.read(), qb).await?.into_iter().collect())
+    qb
 }
 
 /// `file_path → id` for each of `paths` that has a row.
