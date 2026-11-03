@@ -431,19 +431,19 @@ async fn a_playlist_created_with_no_tracks_is_empty() -> Result<(), AppError> {
     Ok(())
 }
 
-/// The playlist and its rows are one transaction, so an insert that fails can't leave an empty
-/// playlist for the user to find and delete.
+/// A scan can delete a picked track while the New Playlist dialog is open, and that one track
+/// mustn't sink the playlist.
 #[tokio::test]
-async fn a_track_the_library_lacks_leaves_no_playlist_behind() -> Result<(), AppError> {
+async fn a_track_the_library_lacks_is_left_out_of_a_new_playlist() -> Result<(), AppError> {
     let db = setup_seeded_db().await?;
     let ids = seeded_track_ids(&db).await?;
 
-    let refused =
+    let playlist =
         queries::playlist::create_playlist_with_tracks(&db, "Dangling", None, &[ids[0], 9_999])
-            .await;
+            .await?;
 
-    assert!(refused.is_err());
-    assert!(queries::playlist::get_all_playlists(&db).await?.is_empty());
+    assert_eq!(order(&db, playlist).await?, [ids[0]]);
+    assert_eq!(positions(&db, playlist).await?, [0]);
     Ok(())
 }
 

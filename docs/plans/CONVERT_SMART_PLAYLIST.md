@@ -1,6 +1,6 @@
 # Plan: Convert a smart playlist to a regular one
 
-Status: **proposed** · Owner: Kenan · Created: 2026-11-03 · Issue #159, branch `feat/convert-smart-playlist`
+Status: **in progress**, Phase 0 implemented · Owner: Kenan · Created: 2026-11-03 · Issue #159, branch `feat/convert-smart-playlist`
 
 > **Validated 2026-11-03** against `2faa2442`. The sources were:
 > - three read-only code traces: the store and smart membership; the card menu, the detail page and the undo slot; the queue and what reads a playlist after a play;
@@ -111,6 +111,7 @@ The counts are this session's `wc -l`. None of these files crosses 800.
 1. Move `tracks_still_there` beside `insert_items_tx` as `pub(crate)`; `playlist_restore` imports it.
 2. `create_playlist_with_tracks` and `add_tracks_to_playlist` filter `track_ids` through it inside their transaction, keeping the order, before `contiguous`.
 3. `insert_items_tx`'s doc states that its items name tracks present inside `tx`, which ids read before the transaction owe `tracks_still_there`.
+4. `insert_items_tx` and `add_tracks_to_playlist` return the tracks that landed. The Add to Playlist notice counts the playlists that took at least one track and the tracks that landed in at least one, rather than the tracks picked, and a drop onto a playlist counts the same way.
 
 Gate: `cargo fmt --all`, clippy and tests.
 

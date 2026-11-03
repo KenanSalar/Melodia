@@ -107,11 +107,12 @@ pub async fn restore_playlists(db: &DbPool, deleted: DeletedPlaylists) -> Result
     Ok(())
 }
 
+/// Appends `track_ids` to a playlist and returns the ones that landed.
 pub async fn add_to_playlist(
     db: &DbPool,
     playlist_id: i64,
     track_ids: Vec<i64>,
-) -> Result<(), AppError> {
+) -> Result<Vec<i64>, AppError> {
     queries::playlist::add_tracks_to_playlist(db, playlist_id, &track_ids).await
 }
 
@@ -239,8 +240,7 @@ async fn import_into_playlist(
         let mut summaries = std::mem::take(&mut result.summaries);
         summaries.sort_by(|a, b| natord::compare(&a.title, &b.title));
         let sorted_ids: Vec<i64> = summaries.iter().map(|s| s.id).collect();
-        queries::playlist::add_tracks_to_playlist(db, playlist_id, &sorted_ids).await?;
-        sorted_ids.len()
+        queries::playlist::add_tracks_to_playlist(db, playlist_id, &sorted_ids).await?.len()
     };
 
     Ok(ImportToPlaylistResult {

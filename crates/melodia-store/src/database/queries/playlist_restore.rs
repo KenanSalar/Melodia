@@ -3,11 +3,11 @@
 use std::collections::HashSet;
 
 use super::playlist::{
-    NewItem, batch_update_positions_pairs, insert_items_tx,
+    NewItem, batch_update_positions_pairs, insert_items_tx, tracks_still_there,
     update_playlist_thumbnail_and_timestamp_tx,
 };
 use super::search_name;
-use crate::database::{DbPool, chunked_in_query_on};
+use crate::database::DbPool;
 use melodia_core::entities::playlist::{CutItem, Playlist, PlaylistItemsCut, PlaylistSnapshot};
 use melodia_core::error::AppError;
 use melodia_core::utils::reinsert::reinsert;
@@ -168,17 +168,4 @@ async fn insert_playlist_tx(
     .fetch_one(&mut **tx)
     .await?;
     Ok(id)
-}
-
-/// Which of `track_ids` the library still holds. A scan hard-deletes a track whose file went, and
-/// an insert naming one fails its foreign key, which `OR IGNORE` doesn't cover.
-async fn tracks_still_there(
-    tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
-    track_ids: &[i64],
-) -> Result<HashSet<i64>, AppError> {
-    let present: Vec<(i64,)> = chunked_in_query_on(tx, track_ids, |placeholders| {
-        format!("SELECT id FROM tracks WHERE id IN ({placeholders})")
-    })
-    .await?;
-    Ok(present.into_iter().map(|(id,)| id).collect())
 }

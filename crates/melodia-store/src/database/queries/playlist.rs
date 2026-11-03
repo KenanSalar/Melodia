@@ -4,7 +4,7 @@ use sqlx::AssertSqlSafe;
 
 use crate::database::queries::search_name;
 use crate::database::queries::track::columns;
-use crate::database::{DbPool, select_in_id_order};
+use crate::database::{DbPool, chunked_in_query_on, select_in_id_order};
 use melodia_core::entities::playlist::{CutItem, PlaylistItemsCut};
 use melodia_core::entities::undo::{UNDO_HOLD_CAP, UndoCapture};
 use melodia_core::entities::{playlist, track};
@@ -46,7 +46,8 @@ where
     Ok(result)
 }
 
-/// Creates a playlist already holding `track_ids` in order, and returns its id.
+/// Creates a playlist already holding `track_ids` in order, less any the library lost since they
+/// were read, and returns its id.
 ///
 /// One transaction, so an insert that fails leaves no empty playlist behind.
 pub async fn create_playlist_with_tracks(
@@ -56,12 +57,13 @@ pub async fn create_playlist_with_tracks(
     track_ids: &[i64],
 ) -> Result<i64, AppError> {
     let mut tx = db.write().begin().await?;
+    let present = present_in_order(&mut tx, track_ids).await?;
     let playlist_id = create_playlist_on(&mut *tx, name, description).await?.id;
 
     let now = melodia_core::utils::now_rfc3339();
-    let inserted = insert_items_tx(&mut tx, playlist_id, &contiguous(track_ids, 0, &now)?).await?;
+    let landed = insert_items_tx(&mut tx, playlist_id, &contiguous(&present, 0, &now)?).await?;
     // Only a repeated track leaves a gap: the unique index keeps its first slot and drops the rest.
-    if inserted < u64::try_from(track_ids.len()).unwrap_or(u64::MAX) {
+    if landed.len() < present.len() {
         renumber_playlist_positions_tx(&mut tx, playlist_id).await?;
     }
     update_playlist_thumbnail_and_timestamp_tx(&mut tx, playlist_id, &now).await?;
@@ -234,16 +236,23 @@ pub async fn get_playlist_tracks_for_export(
     Ok(tracks)
 }
 
+/// Appends `track_ids` to a playlist, skipping any it already holds or the library lost since they
+/// were read, and returns the tracks that landed, in no set order.
 pub async fn add_tracks_to_playlist(
     db: &DbPool,
     playlist_id: i64,
     track_ids: &[i64],
-) -> Result<(), AppError> {
+) -> Result<Vec<i64>, AppError> {
     if track_ids.is_empty() {
-        return Ok(());
+        return Ok(Vec::new());
     }
 
     let mut tx = db.write().begin().await?;
+    let present = present_in_order(&mut tx, track_ids).await?;
+    // Nothing left to add leaves `updated_at` alone, so the card keeps its place.
+    if present.is_empty() {
+        return Ok(Vec::new());
+    }
 
     let max_pos: Option<i32> = sqlx::query_scalar::<_, Option<i32>>(
         "SELECT MAX(position) FROM playlist_items WHERE playlist_id = ?",
@@ -254,14 +263,15 @@ pub async fn add_tracks_to_playlist(
 
     let start_position = max_pos.unwrap_or(-1) + 1;
     let now = melodia_core::utils::now_rfc3339();
-    insert_items_tx(&mut tx, playlist_id, &contiguous(track_ids, start_position, &now)?).await?;
+    let landed =
+        insert_items_tx(&mut tx, playlist_id, &contiguous(&present, start_position, &now)?).await?;
 
     // Closes the gaps ignored duplicates leave.
     renumber_playlist_positions_tx(&mut tx, playlist_id).await?;
     update_playlist_thumbnail_and_timestamp_tx(&mut tx, playlist_id, &now).await?;
 
     tx.commit().await?;
-    Ok(())
+    Ok(landed)
 }
 
 /// A `playlist_items` row to insert.
@@ -290,17 +300,18 @@ fn contiguous<'a>(
         .collect()
 }
 
-/// Inserts `items`, skipping any track the playlist already holds, and returns how many rows
-/// landed.
+/// Inserts `items`, skipping any track the playlist already holds, and returns the tracks that
+/// landed, in no set order. Each item names a track present inside `tx`, so ids read before it
+/// opened go through [`tracks_still_there`] first.
 pub(crate) async fn insert_items_tx(
     tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
     playlist_id: i64,
     items: &[NewItem<'_>],
-) -> Result<u64, AppError> {
+) -> Result<Vec<i64>, AppError> {
     const COLS_PER_ROW: usize = 4;
     const CHUNK_SIZE: usize = crate::database::MAX_BINDS_PER_STATEMENT / COLS_PER_ROW;
 
-    let mut inserted: u64 = 0;
+    let mut landed = Vec::with_capacity(items.len());
     for chunk in items.chunks(CHUNK_SIZE) {
         let mut query_builder = sqlx::QueryBuilder::new(
             "INSERT OR IGNORE INTO playlist_items (playlist_id, track_id, position, added_at) ",
@@ -311,10 +322,34 @@ pub(crate) async fn insert_items_tx(
                 .push_bind(item.position)
                 .push_bind(item.added_at);
         });
-        let result = query_builder.build().persistent(false).execute(&mut **tx).await?;
-        inserted += result.rows_affected();
+        query_builder.push(" RETURNING track_id");
+        let chunk_landed: Vec<i64> =
+            query_builder.build_query_scalar().persistent(false).fetch_all(&mut **tx).await?;
+        landed.extend(chunk_landed);
     }
-    Ok(inserted)
+    Ok(landed)
+}
+
+/// Which of `track_ids` the library still holds. A scan hard-deletes a track whose file went, and
+/// an insert naming one fails its foreign key, which `OR IGNORE` doesn't cover.
+pub(crate) async fn tracks_still_there(
+    tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
+    track_ids: &[i64],
+) -> Result<HashSet<i64>, AppError> {
+    let present: Vec<(i64,)> = chunked_in_query_on(tx, track_ids, |placeholders| {
+        format!("SELECT id FROM tracks WHERE id IN ({placeholders})")
+    })
+    .await?;
+    Ok(present.into_iter().map(|(id,)| id).collect())
+}
+
+/// `track_ids` in their order, less any the library no longer holds.
+async fn present_in_order(
+    tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
+    track_ids: &[i64],
+) -> Result<Vec<i64>, AppError> {
+    let in_library = tracks_still_there(tx, track_ids).await?;
+    Ok(track_ids.iter().copied().filter(|id| in_library.contains(id)).collect())
 }
 
 /// Removes `track_ids` from a playlist, answering what puts them back, or only how many went where
