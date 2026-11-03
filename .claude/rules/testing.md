@@ -136,7 +136,8 @@ none of which a passing run can show:
 - **Pick one form of pattern assertion and use it everywhere.** `assert!(matches!(…))` and
   `assert_matches!` are both fine; mixing them within a tree is drift.
 - **Compare floats with an explicit tolerance**, never `==`, and state the tolerance.
-- **Do not assert on `Debug` output.** It is not a stable contract; assert on fields.
+- **Do not assert on `Debug` output.** It is not a stable contract; assert on fields. A
+  redacting `Debug` is the exception: what it leaves out is the contract under test.
 - **Avoid `unwrap`/`expect`/`panic!` in test bodies.** The workspace lints deny
   `unwrap_used` and warn `expect_used`, `panic` and the print macros with no test exemption,
   so reach for `?`, `let … else`, `matches!` or an `assert!` that reads well on failure.

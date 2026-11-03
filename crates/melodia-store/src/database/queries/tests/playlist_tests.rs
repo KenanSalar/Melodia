@@ -1,5 +1,4 @@
 use crate::database::queries;
-#[allow(clippy::wildcard_imports)]
 use crate::database::queries::fixtures::*;
 use melodia_core::entities::playlist::PlaylistItemsCut;
 use melodia_core::entities::undo::{UNDO_HOLD_CAP, UndoCapture};

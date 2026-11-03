@@ -4,7 +4,10 @@
 //! every slot from the live `kdeglobals` so the player matches Plasma's active scheme rather than
 //! this file's snapshot of it. Both answer for the same theme, so they live together.
 
-#![allow(clippy::unreadable_literal)]
+#![expect(
+    clippy::unreadable_literal,
+    reason = "the hex literals are 0xRRGGBB colours, written as each theme publishes them"
+)]
 
 use std::collections::HashMap;
 

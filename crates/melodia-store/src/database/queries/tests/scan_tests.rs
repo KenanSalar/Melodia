@@ -3,7 +3,6 @@ use std::path::Path;
 use super::upserts;
 use crate::database::DbPool;
 use crate::database::queries;
-#[allow(clippy::wildcard_imports)]
 use crate::database::queries::fixtures::*;
 use crate::database::queries::scan::NameCache;
 use melodia_core::entities::artist::ArtistCredit;

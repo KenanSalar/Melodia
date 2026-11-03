@@ -64,7 +64,8 @@ is safe, and so is every `*mut c_void` that is only *stored* — `media_controls
   does. `dwm_titlebar.rs`'s is the model: it says the pointer targets a stack local
   whose size matches the `cbAttribute` argument and that the API doesn't retain it —
   three claims a reviewer can check against the docs. "Calls `DwmSetWindowAttribute`"
-  would be worth nothing.
+  would be worth nothing. `undocumented_unsafe_blocks` holds that one sits above the block or
+  its statement; what it says is review's.
 - **Build raw pointers with `std::ptr::from_ref(&x).cast()`**, never
   `&x as *const _ as *const c_void`. The chained `as` silently accepts a reference that
   was never the type you meant.

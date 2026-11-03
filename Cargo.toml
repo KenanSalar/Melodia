@@ -341,6 +341,9 @@ dbg_macro     = "warn"
 print_stdout  = "warn"
 print_stderr  = "warn"
 
+allow_attributes_without_reason = "warn"
+undocumented_unsafe_blocks      = "warn"
+
 await_holding_lock        = "deny"
 await_holding_refcell_ref = "deny"
 mutex_atomic              = "warn"

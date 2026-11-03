@@ -84,7 +84,9 @@ strip = "debuginfo"   # Drop DWARF but keep symbols — end-user panic backtrace
                       # ("symbols"/true strips both)
 ```
 
-- Set `target-cpu=native` via `RUSTFLAGS` for platform-specific SIMD optimizations
+- No `target-cpu=native`, or any raised `target-cpu`, on a build that ships: it runs on CPUs we
+  never see, and one instruction the user's CPU lacks is an illegal-instruction crash. A local
+  benchmark build may use it
 - Since Rust 1.90, `rust-lld` is the default linker on `x86_64-unknown-linux-gnu` — dev links are
   fast out of the box (opt out with `-C linker-features=-lld`); `mold` is at best a marginal
   further gain, not a recommendation
@@ -133,6 +135,11 @@ strip = "debuginfo"   # Drop DWARF but keep symbols — end-user panic backtrace
   penalty
 - `NonZero*` types (e.g. `NonZeroU32`) allow the compiler to use 0 as a niche for
   `Option<NonZeroU32>` — same size as `u32`
+- `Box<str>` / `Box<[T]>` (`Arc<str>` when shared) for owned data that never changes once built
+  and exists in many copies: a two-word handle against `String`'s or `Vec`'s three, and no spare
+  capacity. `into_boxed_str()` / `into_boxed_slice()` shrink as they convert; a long-lived
+  collection that stays growable, built without an exact reservation, takes `shrink_to_fit()`
+  before it is stored
 
 ## Concurrency Patterns
 

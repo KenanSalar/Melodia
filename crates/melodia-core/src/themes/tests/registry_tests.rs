@@ -1,6 +1,7 @@
-// Theme tests verify hex literals byte-for-byte; underscores would obscure
-// the match against the colours as each theme publishes them.
-#![allow(clippy::unreadable_literal)]
+#![expect(
+    clippy::unreadable_literal,
+    reason = "the hex literals are 0xRRGGBB colours, written as each theme publishes them"
+)]
 
 use super::*;
 use crate::themes::palette::{LUMA_B, LUMA_G, LUMA_R, LUMA_THRESHOLD, on_accent_hex};

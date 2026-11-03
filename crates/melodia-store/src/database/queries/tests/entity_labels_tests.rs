@@ -5,7 +5,6 @@
 
 use crate::database::DbPool;
 use crate::database::queries;
-#[allow(clippy::wildcard_imports)]
 use crate::database::queries::fixtures::*;
 use melodia_core::entities::artist::ArtistCredit;
 use melodia_core::error::AppError;

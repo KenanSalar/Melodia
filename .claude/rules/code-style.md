@@ -63,6 +63,10 @@ tests, holds no duplication, says what it means, and has no more parts than that
 - **Meaning belongs in the type, not the primitive** - a bare `bool`, `u32` or `String` at a
   boundary lets the wrong one through in silence. An enum or newtype makes that a compile
   error and retires the comment explaining the unit.
+- **A newtype guards its invariant at construction** - one that carries an invariant keeps its
+  field private, checks the value in its constructor, and converts from the weaker type through
+  `TryFrom`, never `From`. A public field or an infallible conversion lets the invalid value in,
+  and the type proves nothing.
 - **Take what you keep, borrow what you read** - a parameter the function stores or consumes is
   taken owned (`String`, `Vec<T>`, `PathBuf`): a caller done with its value moves it in, one
   that isn't clones at the call site. A `&str` the body `.to_owned()`s copies on every call.
@@ -79,6 +83,9 @@ tests, holds no duplication, says what it means, and has no more parts than that
 - **Don't reach through** - `a.b().c().d()` couples the caller to the shape of everything in
   the middle. Ask the neighbour for the answer instead of walking its internals; the method
   you want usually belongs on the type you already hold.
+- **A free function unless it needs the type** - an inherent associated function that neither
+  builds `Self` nor takes `self` belongs outside the `impl`. Parked inside, it costs every caller
+  a `Type::` and claims a coupling that isn't there.
 
 **Reading order**
 

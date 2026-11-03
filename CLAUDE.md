@@ -90,11 +90,13 @@ cargo llvm-cov --workspace --html          # coverage → target/llvm-cov/html/
 - **No `unsafe` outside platform FFI, and never for performance** (`unsafe_code = "deny"`;
   `.claude/rules/unsafe-rust.md` lists the sites).
 - **`#[expect]`, never `allow`**, for a genuinely needed suppression: it fires once it goes stale.
+  Either carries a `reason` (`allow_attributes_without_reason`).
 - **A `log::` call handed an error formats it with `error::describe`**, never a bare `{e}`,
   whatever the error's type (`logged_errors.rs`). Failure text the user reads takes it too.
 - **An `AppError` keeps its cause**: `x(msg, source)`, never `x_msg(format!("…{e}"))`; no error
   carried as a `String`; failures told apart by variant, never by text (`error_as_string.rs`).
 - **Never log a credential, token or session key**: users attach the log tail to public issues.
+  A type holding one writes its own `Debug` that leaves it out (`credentials.rs`).
 
 ### State, threads and process
 

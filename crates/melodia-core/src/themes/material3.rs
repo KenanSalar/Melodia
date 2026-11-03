@@ -6,7 +6,10 @@
 //! lands, Material You's Tonal Spot paints exactly this. The accents are key colours, which the
 //! spec doesn't define, so they stay as picked.
 
-#![allow(clippy::unreadable_literal)]
+#![expect(
+    clippy::unreadable_literal,
+    reason = "the hex literals are 0xRRGGBB colours, written as each theme publishes them"
+)]
 
 use super::{AccentDef, Palette, ThemeDef, Variant};
 

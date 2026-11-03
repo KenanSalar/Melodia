@@ -1,5 +1,4 @@
 use crate::database::queries;
-#[allow(clippy::wildcard_imports)]
 use crate::database::queries::fixtures::*;
 use crate::database::{DbPool, IDS_PER_SET};
 use melodia_core::entities::smart_criteria::Draw;
