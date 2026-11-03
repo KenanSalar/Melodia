@@ -255,8 +255,7 @@ fn a_card_menu_entry_is_gated_on_the_operation_and_not_the_kind() {
     assert_eq!(
         kind_reads,
         ["property <bool> smart-edits: root.playlist-edits && root.card-is-smart;"],
-        "the kind is read once, into the one gate the rule entries share; an entry asking it \
-         directly is how Rename and Edit Artwork came to hide"
+        "the kind is read once, into the one gate the rule entries share"
     );
 
     let gated: BTreeSet<&str> = code
