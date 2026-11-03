@@ -1,0 +1,85 @@
+import { Dialog, DialogKind } from "../../globals/dialog.slint";
+import { DuplicatesUi, KeptOutUi } from "../../globals/duplicates.slint";
+import { SettingsPage } from "../../globals/settings-page.slint";
+import { SectionCard } from "../../components/settings/section-card.slint";
+import { SettingRow } from "../../components/settings/setting-row.slint";
+import { SectionButton } from "../../components/settings/section-button.slint";
+
+// The ways into the duplicate finder and the list of what it kept out. Each dialog raises at once
+// and fills behind its read, so its one opener stays here rather than in `Dialog`, which keeps
+// those for a raise that waits.
+export component DuplicatesSection inherits Rectangle {
+    horizontal-stretch: 1;
+    vertical-stretch: 0;
+
+    in property <string> category-name;
+
+    property <string> card-title: @tr("Duplicates");
+
+    pure function row-visible(label: string, desc: string) -> bool {
+        return SettingsPage.row-visible(root.category-name, root.card-title,
+                                        label + " " + desc,
+                                        SettingsPage.search-query);
+    }
+
+    property <string> find-label: @tr("Duplicate tracks");
+    property <string> find-desc: @tr("Find songs the library holds more than once, and pick the copies you don't need.");
+
+    property <bool> show-find: row-visible(find-label, find-desc);
+
+    property <string> kept-out-label: @tr("Files kept out of the library");
+    property <string> kept-out-desc: @tr("{n} removed copy. Its file is still on disk, and scans leave it out." | "{n} removed copies. Their files are still on disk, and scans leave them out." % KeptOutUi.count);
+
+    property <bool> show-kept-out: KeptOutUi.count > 0 && row-visible(kept-out-label, kept-out-desc);
+
+    out property <bool> has-matches: show-find || show-kept-out;
+
+    VerticalLayout {
+        if has-matches: SectionCard {
+            title: root.card-title;
+
+            if root.show-find: SettingRow {
+                icon: "library_music";
+                label: root.find-label;
+                description: root.find-desc;
+                SectionButton {
+                    label: @tr("Find…");
+                    icon: "";
+                    primary: false;
+                    clicked => {
+                        Dialog.title = @tr("Duplicate Tracks");
+                        Dialog.message = @tr("Songs the library seems to hold more than once. Pick the copies you don't need.");
+                        Dialog.cancel-label = @tr("Cancel");
+                        Dialog.destructive = false;
+                        Dialog.kind = DialogKind.duplicates;
+                        DuplicatesUi.busy = true;
+                        Dialog.open = true;
+                        DuplicatesUi.find();
+                    }
+                }
+            }
+
+            if root.show-kept-out: SettingRow {
+                icon: "folder_off";
+                label: root.kept-out-label;
+                description: root.kept-out-desc;
+                SectionButton {
+                    label: @tr("Show…");
+                    icon: "";
+                    primary: false;
+                    clicked => {
+                        Dialog.title = @tr("Files Kept Out of the Library");
+                        Dialog.message = @tr("Copies you removed as duplicates. Their files stay where they are, and scans leave them out until you bring them back.");
+                        Dialog.confirm-label = @tr("Close");
+                        Dialog.cancel-label = "";
+                        Dialog.destructive = false;
+                        Dialog.kind = DialogKind.kept-out-files;
+                        KeptOutUi.busy = true;
+                        Dialog.open = true;
+                        KeptOutUi.load();
+                    }
+                }
+            }
+        }
+    }
+}

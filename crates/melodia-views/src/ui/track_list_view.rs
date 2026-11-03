@@ -276,7 +276,7 @@ track_list_views! {
     Search => SEARCH, hidden = [genre, year];
 }
 
-#[allow(
+#[expect(
     clippy::cast_possible_truncation,
     reason = "column widths are small pixel counts; f32 mantissa is sufficient"
 )]

@@ -9,6 +9,13 @@ fn sample_rate_drops_trailing_zero() {
 }
 
 #[test]
+fn size_steps_up_a_unit_at_each_power_of_1024() {
+    assert_eq!(format_size(512), "512 B");
+    assert_eq!(format_size(2048), "2 KB");
+    assert_eq!(format_size(5 * 1024 * 1024), "5.0 MB");
+}
+
+#[test]
 fn channels_have_friendly_names() {
     assert_eq!(format_channels(1), "Mono");
     assert_eq!(format_channels(2), "Stereo");

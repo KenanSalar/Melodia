@@ -1,0 +1,159 @@
+import { CopyActions } from "../../globals/copy-actions.slint";
+import { DuplicatesUi, KeptOutUi } from "../../globals/duplicates.slint";
+import { Nav } from "../../globals/nav.slint";
+import { ContextMenuPopup, MenuItem, MenuSeparator } from "../context-menu.slint";
+
+// The duplicate finder's right-click menu, one per instantiated row and anchored as
+// `TrackContextMenu` is, its entries following the row's kind.
+export component DuplicateRowMenu inherits Rectangle {
+    in property <int> row-id;
+    in property <bool> is-header;
+    in property <bool> dismissed;
+
+    out property <bool> is-open: pop.is-open;
+
+    property <length> at-x;
+    property <length> at-y;
+
+    public function show-at(x: length, y: length) {
+        root.at-x = x;
+        root.at-y = y;
+        pop.show();
+    }
+
+    // Called by every entry after it acts: an entry reads `row-id` through the popup, which the
+    // close drops, so a read after it answers 0.
+    function dismiss() {
+        pop.close();
+    }
+
+    // Zero-size and pinned, as `TrackContextMenu` is, so the row's frame is the anchor's.
+    x: 0px;
+    y: 0px;
+    width: 0px;
+    height: 0px;
+
+    pop := ContextMenuPopup {
+        anchor-x: root.at-x;
+        anchor-y: root.at-y;
+        anchor-window-x: root.absolute-position.x + root.at-x;
+        anchor-window-y: root.absolute-position.y + root.at-y;
+        has-copy-flyout: false;
+        dismiss-requested => { root.dismiss(); }
+
+        if root.is-header && !root.dismissed: MenuItem {
+            label: @tr("Not Duplicates");
+            icon: "visibility_off";
+            clicked => {
+                DuplicatesUi.dismiss-group(root.row-id);
+                root.dismiss();
+            }
+        }
+        if root.is-header && root.dismissed: MenuItem {
+            label: @tr("Count as Duplicates");
+            icon: "visibility";
+            clicked => {
+                DuplicatesUi.restore-group(root.row-id);
+                root.dismiss();
+            }
+        }
+
+        // A dismissed group keeps no pick, so its copies offer only what looks at the file.
+        if !root.is-header && !root.dismissed: MenuItem {
+            label: @tr("Keep This Copy");
+            icon: "check_circle";
+            clicked => {
+                DuplicatesUi.keep-copy(root.row-id);
+                root.dismiss();
+            }
+        }
+        if !root.is-header && !root.dismissed: MenuItem {
+            label: @tr("Keep Copies in This Folder");
+            icon: "folder";
+            clicked => {
+                DuplicatesUi.keep-folder(root.row-id);
+                root.dismiss();
+            }
+        }
+        if !root.is-header && !root.dismissed: MenuSeparator { }
+        if !root.is-header: MenuItem {
+            label: @tr("Open Containing Folder");
+            icon: "folder_open";
+            clicked => {
+                Nav.reveal-in-folder(root.row-id);
+                root.dismiss();
+            }
+        }
+        if !root.is-header: MenuItem {
+            label: @tr("Copy Path");
+            icon: "content_copy";
+            clicked => {
+                CopyActions.copy-tracks("path", [root.row-id]);
+                root.dismiss();
+            }
+        }
+    }
+}
+
+// A kept-out file's right-click menu, shaped as `DuplicateRowMenu` is. A removed copy has no track
+// id, so its entries take the row's path where the track menu's take an id.
+export component KeptOutMenu inherits Rectangle {
+    in property <int> row-id;
+    in property <string> path;
+
+    out property <bool> is-open: pop.is-open;
+
+    property <length> at-x;
+    property <length> at-y;
+
+    public function show-at(x: length, y: length) {
+        root.at-x = x;
+        root.at-y = y;
+        pop.show();
+    }
+
+    // After the entry acts, for `DuplicateRowMenu.dismiss`'s reason.
+    function dismiss() {
+        pop.close();
+    }
+
+    x: 0px;
+    y: 0px;
+    width: 0px;
+    height: 0px;
+
+    pop := ContextMenuPopup {
+        anchor-x: root.at-x;
+        anchor-y: root.at-y;
+        anchor-window-x: root.absolute-position.x + root.at-x;
+        anchor-window-y: root.absolute-position.y + root.at-y;
+        has-copy-flyout: false;
+        dismiss-requested => { root.dismiss(); }
+
+        MenuItem {
+            label: @tr("Open Containing Folder");
+            icon: "folder_open";
+            clicked => {
+                KeptOutUi.open-folder(root.path);
+                root.dismiss();
+            }
+        }
+        MenuItem {
+            label: @tr("Copy Path");
+            icon: "content_copy";
+            clicked => {
+                CopyActions.copy-text(root.path);
+                root.dismiss();
+            }
+        }
+        if !KeptOutUi.bringing-back: MenuSeparator { }
+        if !KeptOutUi.bringing-back: MenuItem {
+            label: @tr("Bring Back");
+            icon: "library_add";
+            clicked => {
+                KeptOutUi.bring-back(root.row-id);
+                root.dismiss();
+            }
+        }
+    }
+}

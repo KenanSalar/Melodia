@@ -6,7 +6,7 @@ use std::collections::{HashMap, HashSet};
 use sqlx::{AssertSqlSafe, QueryBuilder, Sqlite, SqliteConnection};
 
 use super::{columns, fetch_packed_ids, json_array};
-use crate::database::{DbPool, MAX_BINDS_PER_STATEMENT, chunked_in_query, select_in_id_order};
+use crate::database::{DbPool, chunked_in_query, chunked_in_query_on, select_in_id_order};
 use melodia_core::entities::track;
 use melodia_core::error::AppError;
 
@@ -198,26 +198,21 @@ pub(crate) async fn lowest_id_by_hash_on(
     conn: &mut SqliteConnection,
     hashes: &[&str],
 ) -> Result<HashMap<String, (i64, String)>, AppError> {
-    let mut out: HashMap<String, (i64, String)> = HashMap::new();
     let unique: HashSet<&str> = hashes.iter().copied().collect();
     let unique: Vec<&str> = unique.into_iter().collect();
 
-    for chunk in unique.chunks(MAX_BINDS_PER_STATEMENT) {
-        let placeholders = crate::database::placeholders(chunk.len());
-        // `ORDER BY id` plus `or_insert` is what keeps the lowest id.
-        let sql = format!(
+    // `ORDER BY id` plus `or_insert` is what keeps the lowest id.
+    let rows: Vec<(String, i64, String)> = chunked_in_query_on(conn, &unique, |placeholders| {
+        format!(
             "SELECT file_hash, id, file_path FROM tracks
              WHERE file_hash IN ({placeholders})
              ORDER BY id ASC"
-        );
-        let mut query = sqlx::query_as::<_, (String, i64, String)>(AssertSqlSafe(sql));
-        for hash in chunk {
-            query = query.bind(*hash);
-        }
-        let rows = query.persistent(false).fetch_all(&mut *conn).await?;
-        for (hash, id, path) in rows {
-            out.entry(hash).or_insert((id, path));
-        }
+        )
+    })
+    .await?;
+    let mut out: HashMap<String, (i64, String)> = HashMap::new();
+    for (hash, id, path) in rows {
+        out.entry(hash).or_insert((id, path));
     }
     Ok(out)
 }

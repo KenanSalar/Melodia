@@ -8,10 +8,11 @@ use std::sync::Arc;
 use tempfile::TempDir;
 
 use super::write_tag_edit;
+use crate::library::import::import_files;
 use melodia_artwork::media::image::artwork;
 use melodia_core::entities::artist::ArtistCredit;
 use melodia_core::entities::genre::GenreList;
-use melodia_core::entities::scan::ExistingTrackSummary;
+use melodia_core::entities::scan::FileStamp;
 use melodia_core::entities::tags::{ArtworkEdit, FieldEdit, TagEdit};
 use melodia_core::error::AppError;
 use melodia_core::utils::self_writes::SelfWrites;
@@ -19,7 +20,7 @@ use melodia_store::database::DbPool;
 use melodia_store::database::queries;
 use melodia_store::database::queries::fixtures::{insert_test_track, set_test_artwork};
 use melodia_store::media::ingest::metadata::{compute_file_hash, date_modified_from_metadata};
-use melodia_store::media::ingest::scanner::track_is_current;
+use melodia_store::media::ingest::scanner::file_is_current;
 use melodia_testkit::ASSETS_DIR;
 
 fn assets_dir() -> PathBuf {
@@ -362,8 +363,8 @@ async fn replace_artwork_lands_on_every_track_and_the_shared_album() -> Result<(
 
 /// The module doc's warning, executed. A tag write rewrites the file, so the row owes a fresh
 /// hash, size and mtime *together*. Refresh the mtime and leave the hash behind and
-/// `track_is_current` reads the row as current forever, so no later scan repairs it: the stale
-/// hash is then what a cross-device move would be matched on, and the match that carries a
+/// `file_is_current` reads the row as current from then on, so no later scan repairs it: the
+/// stale hash is then what a cross-device move would be matched on, and the match that carries a
 /// rating and a play count across a delete fails.
 #[tokio::test]
 async fn a_tag_edit_leaves_the_row_describing_the_file_it_wrote() -> Result<(), AppError> {
@@ -403,8 +404,8 @@ async fn a_tag_edit_leaves_the_row_describing_the_file_it_wrote() -> Result<(), 
 
     // And so the incremental filter agrees the row is current, which is exactly what makes any
     // one of the three being stale permanent rather than self-correcting.
-    let row = ExistingTrackSummary { file_size: Some(size), date_modified: Some(mtime) };
-    assert!(track_is_current(&path, &row), "the next scan must have nothing left to do");
+    let row = FileStamp { file_size: Some(size), date_modified: Some(mtime) };
+    assert!(file_is_current(&path, &row), "the next scan must have nothing left to do");
     Ok(())
 }
 
@@ -587,11 +588,12 @@ async fn a_replace_with_no_source_touches_no_file() -> Result<(), AppError> {
     Ok(())
 }
 
-/// A file under no enabled library folder has no folder id to resolve against, so it is reported
-/// rather than committed. The row would otherwise be updated to describe a file the library does
-/// not claim, and nothing would ever re-scan it back.
+/// A track dropped in from outside every library folder sits under the folder its import made,
+/// which no library lookup answers. The edit rewrites its file all the same, so the row has to take
+/// it, under the folder it already has: reported instead, it would keep tags the file no longer
+/// carries, and no scan visits an import's folder to repair it.
 #[tokio::test]
-async fn a_track_outside_every_library_folder_is_reported() -> Result<(), AppError> {
+async fn a_track_imported_from_outside_the_library_takes_the_edit() -> Result<(), AppError> {
     let db = DbPool::test_pool().await?;
     let tmp = TempDir::new()?;
     // The library folder is a sibling of where the file actually sits.
@@ -600,15 +602,27 @@ async fn a_track_outside_every_library_folder_is_reported() -> Result<(), AppErr
     queries::folder::insert_folder(&db, &elsewhere.to_string_lossy(), true).await?;
 
     let path = stage(&tmp, "silence.mp3")?;
-    let id = seed_track(&db, &path.to_string_lossy()).await?;
-
     let artwork_dir = tmp.path().join("artwork");
     std::fs::create_dir(&artwork_dir)?;
+    let cover_cache = artwork::new_cover_cache();
+    let imported =
+        import_files(&db, &artwork_dir, &cover_cache, &[path.to_string_lossy().into_owned()])
+            .await?;
+    let [id] = imported.track_ids.as_slice() else {
+        return Err(AppError::not_found_msg("expected exactly the one imported track"));
+    };
+    let id = *id;
+    let folder_query = "SELECT t.folder_id, f.is_enabled FROM tracks t \
+                        JOIN folders f ON f.id = t.folder_id WHERE t.id = ?";
+    let (folder_before, is_library_folder): (i64, bool) =
+        sqlx::query_as(folder_query).bind(id).fetch_one(db.read()).await?;
+    assert!(!is_library_folder, "the import files it under a folder made for its own directory");
+
     let edit = TagEdit { title: FieldEdit::Set("Nowhere".to_owned()), ..TagEdit::default() };
     let (report, updated) = write_tag_edit(
         &db,
         &artwork_dir,
-        &artwork::new_cover_cache(),
+        &cover_cache,
         &Arc::new(SelfWrites::default()),
         &[id],
         &edit,
@@ -616,11 +630,18 @@ async fn a_track_outside_every_library_folder_is_reported() -> Result<(), AppErr
     )
     .await?;
 
-    assert_eq!(report.updated, 0);
-    assert!(updated.is_empty());
+    assert_eq!(report.updated, 1);
+    assert_eq!(updated, [id]);
+    let title: String = sqlx::query_scalar("SELECT title FROM tracks WHERE id = ?")
+        .bind(id)
+        .fetch_one(db.read())
+        .await?;
+    assert_eq!(title, "Nowhere");
+    let (folder_after, _): (i64, bool) =
+        sqlx::query_as(folder_query).bind(id).fetch_one(db.read()).await?;
     assert_eq!(
-        report.failures.first().map(|(_, why)| why.as_str()),
-        Some("not in a library folder"),
+        folder_after, folder_before,
+        "a tag edit moves no file, so its row keeps its folder"
     );
     Ok(())
 }

@@ -16,6 +16,7 @@ pub use signal::{SharedFlag, Signal};
 
 use crate::services::search_history::SearchHistoryState;
 use crate::services::settings;
+use crate::tasks::play_count_flusher::{FlushRequests, PlayCountFlush};
 use melodia_artwork::media::image::artwork::CoverCache;
 use melodia_core::config::Paths;
 use melodia_core::error::{AppError, AppResult, describe};
@@ -77,6 +78,7 @@ pub struct AppState {
     pub artwork_restoring: watch::Sender<u32>,
     /// The folder scan in flight: its progress for the Library settings bar, and its cancel.
     pub scan: Arc<ScanControl>,
+    pub play_count_flush: PlayCountFlush,
     pub watcher: Arc<parking_lot::Mutex<FolderWatcher>>,
     /// Files this process just wrote (tag edits), so the watcher drops the `Modified` events of
     /// its own writes. See [`SelfWrites`].
@@ -128,6 +130,7 @@ pub struct AppState {
 pub struct StartupChannels {
     pub media_control_rx: Option<mpsc::Receiver<PlayerEvent>>,
     pub file_event_rx: mpsc::Receiver<FileEvent>,
+    pub play_count_flushes: FlushRequests,
 }
 
 impl AppState {
@@ -144,24 +147,7 @@ impl AppState {
 
         let db = database::init_database(&paths).await?;
 
-        let player_state = Arc::new(PlayerStateHandle::default());
-        {
-            let mut s = lock_state(&player_state);
-            s.volume = settings.volume.min(melodia_engine::player::engine::state::MAX_VOLUME);
-            s.is_muted = settings.playback.is_muted;
-            s.pre_mute_volume = s.volume;
-            s.gapless_enabled = settings.playback.gapless_playback;
-            s.playback_speed = settings.playback.playback_speed.clamp(
-                melodia_engine::player::engine::state::MIN_SPEED,
-                melodia_engine::player::engine::state::MAX_SPEED,
-            );
-            let vol = s.effective_volume();
-            let speed = s.playback_speed;
-            drop(s);
-            engine.set_volume(vol);
-            engine.set_speed(speed);
-        }
-
+        let player_state = seeded_player_state(&engine, &settings);
         hydrate_audio_dsp(&engine, &settings);
 
         let cover_cache: CoverCache = melodia_artwork::media::image::artwork::new_cover_cache();
@@ -186,6 +172,7 @@ impl AppState {
 
         let (file_tx, file_rx) = mpsc::channel::<FileEvent>(256);
         let watcher = Arc::new(parking_lot::Mutex::new(FolderWatcher::new(file_tx)));
+        let (play_count_flush, play_count_flushes) = PlayCountFlush::channel();
 
         let always_on_top_capability = always_on_top::detect_capability();
         log::info!(
@@ -222,6 +209,7 @@ impl AppState {
             audio_device_lost: Signal::new(),
             artwork_restoring: watch::Sender::new(0),
             scan,
+            play_count_flush,
             watcher,
             self_writes: Arc::new(SelfWrites::default()),
             always_on_top: always_on_top_capability,
@@ -243,7 +231,11 @@ impl AppState {
             shutdown_token,
         };
 
-        let channels = StartupChannels { media_control_rx: Some(mc_rx), file_event_rx: file_rx };
+        let channels = StartupChannels {
+            media_control_rx: Some(mc_rx),
+            file_event_rx: file_rx,
+            play_count_flushes,
+        };
 
         Ok((state, channels))
     }
@@ -301,6 +293,29 @@ fn open_output(
     let output = AudioOutput::open(DECK_COUNT, health)?;
     log::info!("Audio output: {:?}", output.negotiated());
     Ok(output)
+}
+
+/// The player state the saved volume, mute, gapless and speed start from, handed to the engine too.
+fn seeded_player_state(
+    engine: &PlaybackEngine,
+    settings: &settings::SettingsData,
+) -> Arc<PlayerStateHandle> {
+    let player_state = Arc::new(PlayerStateHandle::default());
+    let mut s = lock_state(&player_state);
+    s.volume = settings.volume.min(melodia_engine::player::engine::state::MAX_VOLUME);
+    s.is_muted = settings.playback.is_muted;
+    s.pre_mute_volume = s.volume;
+    s.gapless_enabled = settings.playback.gapless_playback;
+    s.playback_speed = settings.playback.playback_speed.clamp(
+        melodia_engine::player::engine::state::MIN_SPEED,
+        melodia_engine::player::engine::state::MAX_SPEED,
+    );
+    let vol = s.effective_volume();
+    let speed = s.playback_speed;
+    drop(s);
+    engine.set_volume(vol);
+    engine.set_speed(speed);
+    player_state
 }
 
 /// Seed the engine's lock-free DSP cells from persisted settings before playback starts, so the

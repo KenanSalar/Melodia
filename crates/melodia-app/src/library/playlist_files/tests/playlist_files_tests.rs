@@ -2,7 +2,6 @@ use std::collections::HashSet;
 
 use chrono::TimeZone;
 
-#[allow(clippy::wildcard_imports)]
 use super::*;
 use melodia_core::entities::smart_criteria::{Draw, Rule, RuleField, RuleOp, RuleValue};
 use melodia_core::entities::track_list::{SortDir, TrackListScope, TrackOrder, TrackSortField};

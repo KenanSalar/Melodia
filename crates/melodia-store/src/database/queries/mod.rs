@@ -1,8 +1,10 @@
 pub mod album;
 pub mod artist;
 pub mod artwork;
+pub mod duplicate_dismissals;
 pub mod entity_keyset;
 pub mod entity_labels;
+pub mod excluded_files;
 #[doc(hidden)]
 pub mod fixtures;
 pub mod folder;

@@ -1,6 +1,8 @@
 use crate::database::queries;
 use crate::database::queries::fixtures::insert_test_track;
-use crate::database::{DbPool, MAX_BINDS_PER_STATEMENT, chunked_in_query, init_database};
+use crate::database::{
+    DbPool, MAX_BINDS_PER_STATEMENT, chunked_in_execute_on, chunked_in_query, init_database,
+};
 use melodia_core::config::Paths;
 use melodia_core::error::AppError;
 
@@ -148,6 +150,27 @@ async fn chunked_in_query_large_set_splits_correctly() -> Result<(), AppError> {
     .await?;
 
     assert_eq!(result.len(), count);
+    Ok(())
+}
+
+/// One past the bind budget, so the statement runs as two. The count answered is every chunk's:
+/// a scan's purge decides from it whether anything changed.
+#[tokio::test]
+async fn chunked_in_execute_on_counts_every_row_across_its_chunks() -> Result<(), AppError> {
+    let db = DbPool::test_pool().await?;
+    let names: Vec<String> = (0..=MAX_BINDS_PER_STATEMENT).map(|n| format!("item {n}")).collect();
+    let mut tx = db.write().begin().await?;
+    sqlx::query("CREATE TEMP TABLE items (name TEXT)").execute(&mut *tx).await?;
+    for name in &names {
+        sqlx::query("INSERT INTO items (name) VALUES (?)").bind(name).execute(&mut *tx).await?;
+    }
+
+    let deleted = chunked_in_execute_on(&mut tx, &names, |placeholders| {
+        format!("DELETE FROM items WHERE name IN ({placeholders})")
+    })
+    .await?;
+
+    assert_eq!(Some(deleted), u64::try_from(names.len()).ok());
     Ok(())
 }
 

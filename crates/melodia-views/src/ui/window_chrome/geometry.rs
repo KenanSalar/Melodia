@@ -98,7 +98,7 @@ fn logical_placement(
     geom: PersistedGeometry,
     floor: LogicalSize,
 ) -> (LogicalSize, LogicalPosition) {
-    #[allow(
+    #[expect(
         clippy::cast_possible_truncation,
         reason = "window pixel coordinates are small; f32 precision is sufficient"
     )]

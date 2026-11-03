@@ -1,5 +1,5 @@
 //! Re-reads the tags a library carried in before the ingest learned to look for them, once:
-//! `scanner::track_is_current` skips an unchanged file, so everything the reader gained since stays
+//! `scanner::file_is_current` skips an unchanged file, so everything the reader gained since stays
 //! unread however often it is rescanned, the migrations having seeded only what the database knew.
 //!
 //! **The pass is one UPDATE**, `queries::track::mark_every_track_stale`: a blank `date_modified`

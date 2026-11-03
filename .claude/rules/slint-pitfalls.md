@@ -115,7 +115,10 @@ there, never in the `.slint`.
   root pin can't steer it**: a root's `preferred-width`/`max-width` reaches only the horizontal arm
   (`get_layout_info_v_constrained_for_repeated`), so wrapped text reports one line. Pin a **cell**,
   whose `preferred-width` replaces what it asks where a root's only raises it (`LayoutInfo::merge`).
-  Tell: the `Vertical` arm reading `(… + …_layoutinfo_h ()).preferred`.
+  Tell: the `Vertical` arm reading `(… + …_layoutinfo_h ()).preferred`. **A mount handing children
+  is inlined into the branch and caught where the same component mounted bare can escape**, its arm
+  reading the root's `layoutinfo_v` at the drawn width (`features-panel.slint`'s `UpdateCheckRow`).
+  A `preferred-width` on a layout under a `Rectangle` root is never read, so it pins nothing.
 
 ## Bindings and animation
 
@@ -257,6 +260,12 @@ there, never in the `.slint`.
 - **`absolute-position` inside a `PopupWindow` is measured from the popup's corner**:
   `map_to_window` stops at popups (`StopAtPopups`) and no binding reaches `map_to_native_window`.
   Hence `Tooltip.in-popup`.
+
+- **An entry that closes its popup before it acts reads its host as defaults.** An entry inside an
+  `if` or `for` reaches the host's properties through the popup, `parent.upgrade()` per level
+  ending in `unwrap_or_default()`, and `close()` drops the popup, so the read answers `0` or `""`
+  and nothing warns. Act, then close (`TrackContextMenu`'s `dismiss()`). Tell: `fn_dismiss ()`
+  ahead of a `parent . upgrade ()` read in the entry's `clicked` handler.
 
 ## Lifecycle: `changed`, `init`, `Timer`
 

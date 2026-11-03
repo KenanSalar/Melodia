@@ -79,35 +79,3 @@ pub async fn get_tracks_by_ids(db: &DbPool, ids: &[i64]) -> Result<Vec<track::Tr
 
     Ok(ids.iter().filter_map(|id| track_map.remove(id)).collect())
 }
-
-/// The groups of tracks sharing a `file_hash`. Rows arrive sorted by `(file_hash, date_added)`,
-/// so a group is a run of equal hashes.
-pub async fn get_duplicate_tracks(db: &DbPool) -> Result<Vec<Vec<track::Track>>, AppError> {
-    let rows: Vec<track::Track> = sqlx::query_as(
-        "WITH dup_hashes AS (
-             SELECT file_hash FROM tracks
-             WHERE file_hash IS NOT NULL
-             GROUP BY file_hash HAVING COUNT(*) > 1
-         )
-         SELECT t.* FROM tracks t
-         JOIN dup_hashes d ON t.file_hash = d.file_hash
-         ORDER BY t.file_hash, t.date_added ASC",
-    )
-    .fetch_all(db.read())
-    .await?;
-
-    let mut groups: Vec<Vec<track::Track>> = Vec::new();
-    let mut cur_hash: Option<String> = None;
-    for t in rows {
-        // The CTE filter guarantees file_hash is Some for every row returned.
-        let h = t.file_hash.clone().unwrap_or_default();
-        match groups.last_mut() {
-            Some(group) if cur_hash.as_deref() == Some(h.as_str()) => group.push(t),
-            _ => {
-                cur_hash = Some(h);
-                groups.push(vec![t]);
-            }
-        }
-    }
-    Ok(groups)
-}

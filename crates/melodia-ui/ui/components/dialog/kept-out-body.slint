@@ -1,0 +1,217 @@
+import { ListView } from "std-widgets.slint";
+import { Theme } from "../../theme.slint";
+import { KeptOutUi } from "../../globals/duplicates.slint";
+import { KeptOutRow } from "../../models.slint";
+import { ContextClick } from "../context-menu.slint";
+import { GridEmptyState } from "../grid/grid-empty-state.slint";
+import { IconButton } from "../icon-button.slint";
+import { MaterialIcon } from "../material-icon.slint";
+import { OverlayScrollbar } from "../overlay-scrollbar.slint";
+import { TooltipSide } from "../tooltip.slint";
+import { KeptOutMenu } from "duplicates-menus.slint";
+import { ToolbarChip } from "toolbar-chip.slint";
+
+// One kept-out file, a card of its own in the well. Nothing in it picks, so a click is only its
+// Bring Back's, its more button's or a right-click's.
+component KeptOutRowItem inherits Rectangle {
+    in property <KeptOutRow> row-data;
+    in property <bool> list-start;
+    in property <bool> list-end;
+    // The cards' margins inside the list, the right one holding the list's scrollbar.
+    in property <length> inset-left;
+    in property <length> inset-right;
+
+    property <length> card-h: 60px;
+    property <length> more-d: 28px;
+    property <length> card-y: root.list-start ? Theme.pad-md : Theme.pad-xs;
+    property <length> card-w: root.width - root.inset-left - root.inset-right;
+    // A placeholder's path is empty until its fetch lands, so it offers no Bring Back yet.
+    property <bool> loaded: root.row-data.path != "";
+    property <length> trailing-room: Theme.pad-sm + bring.width + Theme.pad-sm + root.more-d + Theme.pad-sm;
+    // The chip and the button sit over the row's touch area, so their hover counts as the row's.
+    property <bool> hovered: touch.has-hover || bring.has-hover || more.has-hover || menu.is-open;
+
+    height: root.card-y + root.card-h + (root.list-end ? Theme.pad-md : 0px);
+
+    Rectangle {
+        x: root.inset-left;
+        y: root.card-y;
+        width: root.card-w;
+        height: root.card-h;
+        border-radius: Theme.radius-md;
+        background: root.hovered ? Theme.surface1 : Theme.surface0;
+        animate background { duration: Theme.dur-fast; easing: ease-in-out; enabled: !Theme.recoloring; }
+
+        HorizontalLayout {
+            padding-left: Theme.pad-md;
+            padding-right: root.trailing-room;
+
+            VerticalLayout {
+                alignment: center;
+                spacing: 2px;
+
+                Text {
+                    text: root.row-data.file_name;
+                    color: Theme.text;
+                    font-size: Theme.font-size-row;
+                    overflow: elide;
+                }
+                HorizontalLayout {
+                    spacing: Theme.pad-xs;
+                    if root.row-data.folder != "": VerticalLayout {
+                        alignment: center;
+                        MaterialIcon {
+                            name: "folder";
+                            icon-size: 14px;
+                            icon-color: Theme.subtext0;
+                        }
+                    }
+                    Text {
+                        horizontal-stretch: 1;
+                        text: root.row-data.folder;
+                        color: Theme.subtext0;
+                        font-size: Theme.font-size-sm;
+                        overflow: elide;
+                    }
+                    if root.row-data.removed != "": Text {
+                        // Translators: {} is the day the copy left the library, as 2026-11-02.
+                        text: @tr("Removed {}", root.row-data.removed);
+                        color: Theme.subtext0;
+                        font-size: Theme.font-size-sm;
+                    }
+                }
+            }
+        }
+    }
+
+    menu := KeptOutMenu {
+        row-id: root.row-data.id;
+        path: root.row-data.path;
+    }
+
+    touch := TouchArea {
+        x: root.inset-left;
+        y: root.card-y;
+        width: root.card-w;
+        height: root.card-h;
+        pointer-event(ev) => {
+            if (ContextClick.raises-menu(ev, self.mouse-x, self.mouse-y, self.width, self.height)) {
+                menu.show-at(self.x + self.mouse-x, self.y + self.mouse-y);
+            }
+        }
+    }
+
+    bring := ToolbarChip {
+        x: root.inset-left + root.card-w - Theme.pad-sm - root.more-d - Theme.pad-sm - self.width;
+        y: root.card-y + (root.card-h - self.height) / 2;
+        width: self.preferred-width;
+        visible: root.loaded && !KeptOutUi.bringing-back;
+        icon: "library_add";
+        label: @tr("Bring Back");
+        clicked => { KeptOutUi.bring-back(root.row-data.id); }
+    }
+
+    // Always shown, for `DuplicateRowItem`'s reason.
+    more := IconButton {
+        x: root.inset-left + root.card-w - self.width - Theme.pad-sm;
+        y: root.card-y + (root.card-h - self.height) / 2;
+        icon: "more_vert";
+        diameter: root.more-d;
+        icon-size: 18px;
+        idle-fg: Theme.subtext0;
+        hover-fg: Theme.text;
+        hover-bg: Theme.card-control;
+        force-bg: menu.is-open;
+        tooltip-text: @tr("More");
+        tooltip-side: TooltipSide.left;
+        clicked => { menu.show-at(self.x, self.y + self.height); }
+    }
+}
+
+// The files Remove kept out of the library, over the actions on all of them, or a state saying why
+// there are none. The list is the card's scroller, the kind being one of `body-scrolls`.
+export component KeptOutBody inherits VerticalLayout {
+    spacing: Theme.pad-md;
+
+    property <length> bar-inset: Theme.pad-xs;
+    property <length> bar-gutter: Theme.scrollbar-slot + 2 * root.bar-inset;
+
+    if KeptOutUi.listing: HorizontalLayout {
+        spacing: Theme.pad-sm;
+
+        Text {
+            text: @tr("{n} file" | "{n} files" % KeptOutUi.rows.length);
+            color: Theme.subtext0;
+            font-size: Theme.font-size-sm;
+            vertical-alignment: center;
+        }
+        Rectangle { horizontal-stretch: 1; }
+        ToolbarChip {
+            icon: "content_copy";
+            label: @tr("Copy All Paths");
+            clicked => { KeptOutUi.copy-all-paths(); }
+        }
+        if !KeptOutUi.bringing-back: ToolbarChip {
+            icon: "library_add";
+            label: @tr("Bring All Back");
+            clicked => { KeptOutUi.bring-all-back(); }
+        }
+        if KeptOutUi.bringing-back: Text {
+            text: @tr("Bringing back…");
+            color: Theme.subtext0;
+            font-size: Theme.font-size-sm;
+            vertical-alignment: center;
+        }
+    }
+
+    if !KeptOutUi.listing: GridEmptyState {
+        min-height: 200px;
+        preferred-height: 240px;
+        vertical-stretch: 1;
+        border-radius: Theme.radius-lg;
+        icon: KeptOutUi.busy ? "folder_off" : KeptOutUi.failed ? "error" : "check_circle";
+        title: KeptOutUi.busy ? @tr("Loading…")
+            : KeptOutUi.failed ? @tr("Couldn't read the list.")
+            : @tr("Nothing is kept out");
+        body: KeptOutUi.busy || KeptOutUi.failed ? "" : @tr("Every removed copy is back in the library.");
+    }
+
+    // No `clip`, for the finder's well's reason.
+    if KeptOutUi.listing: Rectangle {
+        min-height: 160px;
+        preferred-height: 520px;
+        vertical-stretch: 1;
+        background: Theme.base;
+        border-radius: Theme.radius-lg;
+
+        list := ListView {
+            x: 0px;
+            y: 0px;
+            width: parent.width;
+            height: parent.height;
+            vertical-scrollbar-policy: always-off;
+            horizontal-scrollbar-policy: always-off;
+            mouse-drag-pan-enabled: false;
+
+            for row[idx] in KeptOutUi.rows: KeptOutRowItem {
+                row-data: row;
+                list-start: idx == 0;
+                list-end: idx == KeptOutUi.rows.length - 1;
+                inset-left: Theme.pad-md;
+                inset-right: root.bar-gutter;
+            }
+        }
+
+        OverlayScrollbar {
+            x: parent.width - self.width - root.bar-inset;
+            y: root.bar-inset;
+            width: Theme.scrollbar-slot;
+            height: parent.height - 2 * root.bar-inset;
+            visible-size: list.visible-height;
+            content-size: list.content-height;
+            offset: -list.content-y;
+            track-color: Theme.scrollbar-track-on-card;
+            scroll-to(o) => { list.content-y = -o; }
+        }
+    }
+}

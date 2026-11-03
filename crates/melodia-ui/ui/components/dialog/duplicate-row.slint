@@ -1,0 +1,364 @@
+import { Theme } from "../../theme.slint";
+import { DuplicatesUi } from "../../globals/duplicates.slint";
+import { Player } from "../../globals/player.slint";
+import { DuplicateMatch, DuplicateRow } from "../../models.slint";
+import { Checkbox } from "../checkbox.slint";
+import { ContextClick } from "../context-menu.slint";
+import { IconButton } from "../icon-button.slint";
+import { MaterialIcon } from "../material-icon.slint";
+import { MetaChip } from "../meta-chip.slint";
+import { TooltipSide } from "../tooltip.slint";
+import { DuplicateRowMenu } from "duplicates-menus.slint";
+
+// One thing a copy carries, as an icon and a figure.
+component CarriedFact inherits HorizontalLayout {
+    in property <string> icon;
+    in property <string> label;
+    in property <brush> icon-color: Theme.subtext0;
+
+    spacing: 2px;
+
+    VerticalLayout {
+        alignment: center;
+        MaterialIcon {
+            name: root.icon;
+            icon-size: 14px;
+            icon-color: root.icon-color;
+        }
+    }
+    if root.label != "": Text {
+        text: root.label;
+        color: Theme.subtext0;
+        font-size: Theme.font-size-sm;
+        vertical-alignment: center;
+    }
+}
+
+// A chip centred in its row through the main axis, which keeps the row on the plain box solve.
+component RowChip inherits VerticalLayout {
+    in property <string> icon;
+    in property <string> text;
+    in property <brush> fill;
+    in property <brush> label-color;
+    in property <brush> icon-color: root.label-color;
+
+    alignment: center;
+
+    MetaChip {
+        icon: root.icon;
+        icon-color: root.icon-color;
+        text: root.text;
+        fill: root.fill;
+        label-color: root.label-color;
+    }
+}
+
+// A group's header, the top of its card: the copies below it close the card.
+component GroupHeaderRow inherits Rectangle {
+    in property <DuplicateRow> row-data;
+    in property <length> trailing-room;
+
+    // A placeholder's group facts are defaults, so they wait for the row a fetch lands.
+    property <bool> loaded: root.row-data.title != "";
+    property <bool> sure-match: root.row-data.match_kind == DuplicateMatch.identical
+        || root.row-data.match_kind == DuplicateMatch.same-release;
+    property <string> match-label:
+        root.row-data.match_kind == DuplicateMatch.identical ? @tr("Identical files")
+        : root.row-data.match_kind == DuplicateMatch.same-release ? @tr("Same release")
+        : root.row-data.match_kind == DuplicateMatch.no-artist ? @tr("Review: no artist tag")
+        : root.row-data.match_kind == DuplicateMatch.other-recording ? @tr("Review: different recordings")
+        : root.row-data.match_kind == DuplicateMatch.other-release ? @tr("Review: different releases")
+        : @tr("Review: different track numbers");
+
+    background: Theme.surface0;
+    border-top-left-radius: Theme.radius-md;
+    border-top-right-radius: Theme.radius-md;
+
+    HorizontalLayout {
+        padding-left: Theme.pad-md;
+        padding-right: root.trailing-room;
+        spacing: Theme.pad-sm;
+
+        VerticalLayout {
+            horizontal-stretch: 1;
+            alignment: center;
+            spacing: 2px;
+
+            Text {
+                text: root.row-data.title;
+                color: Theme.text;
+                font-size: Theme.font-size-md;
+                font-weight: 600;
+                overflow: elide;
+            }
+            if root.row-data.artist != "": Text {
+                text: root.row-data.artist;
+                color: Theme.subtext0;
+                font-size: Theme.font-size-sm;
+                overflow: elide;
+            }
+        }
+        if root.loaded: RowChip {
+            icon: root.sure-match ? "check_circle" : "info";
+            text: root.match-label;
+            fill: root.sure-match ? Theme.accent.with-alpha(0.18) : Theme.card-control;
+            label-color: root.sure-match ? Theme.accent : Theme.text;
+            icon-color: root.sure-match ? Theme.accent : Theme.yellow;
+        }
+        if root.loaded && root.row-data.dismissed: RowChip {
+            icon: "visibility_off";
+            text: @tr("Dismissed");
+            fill: Theme.card-control;
+            label-color: Theme.subtext0;
+        }
+        if root.loaded: Text {
+            text: @tr("{n} copy" | "{n} copies" % root.row-data.copy_count);
+            color: Theme.subtext0;
+            font-size: Theme.font-size-sm;
+            vertical-alignment: center;
+        }
+    }
+
+    // Full width, where the dividers between copies inset: it parts the song from its copies.
+    Rectangle {
+        x: 0px;
+        y: parent.height - self.height;
+        width: parent.width;
+        height: 1px;
+        background: Theme.surface2;
+    }
+}
+
+// One copy, a slice of its group's card.
+component CopyRow inherits Rectangle {
+    in property <DuplicateRow> row-data;
+    in property <bool> hovered;
+    in property <bool> first-copy;
+    in property <bool> last-copy;
+    in property <length> trailing-room;
+
+    property <length> checkbox-w: 16px;
+    // Where the text column starts, which the divider above it starts at too.
+    property <length> text-x: Theme.pad-md + root.checkbox-w + Theme.pad-md;
+
+    background: Theme.surface0;
+    border-bottom-left-radius: root.last-copy ? Theme.radius-md : 0px;
+    border-bottom-right-radius: root.last-copy ? Theme.radius-md : 0px;
+
+    Rectangle {
+        x: Theme.pad-xs;
+        y: Theme.pad-xs;
+        width: parent.width - 2 * Theme.pad-xs;
+        height: parent.height - 2 * Theme.pad-xs;
+        border-radius: Theme.radius-md;
+        background: root.row-data.selected
+            ? Theme.accent.with-alpha(0.16)
+            : (root.hovered && !root.row-data.dismissed ? Theme.surface1 : transparent);
+        animate background { duration: Theme.dur-fast; easing: ease-in-out; enabled: !Theme.recoloring; }
+    }
+
+    if !root.first-copy: Rectangle {
+        x: root.text-x;
+        y: 0px;
+        width: parent.width - root.text-x - Theme.pad-md;
+        height: 1px;
+        background: Theme.surface2;
+    }
+
+    HorizontalLayout {
+        padding-left: Theme.pad-md;
+        padding-right: root.trailing-room;
+        spacing: Theme.pad-md;
+
+        VerticalLayout {
+            alignment: center;
+            Rectangle {
+                width: root.checkbox-w;
+                height: root.checkbox-w;
+                if !root.row-data.dismissed: Checkbox {
+                    checked: root.row-data.selected;
+                    // The default border is the hover fill's own colour, so the box would
+                    // vanish under the pointer.
+                    unchecked-border: Theme.subtext0;
+                }
+            }
+        }
+
+        VerticalLayout {
+            horizontal-stretch: 1;
+            alignment: center;
+            spacing: 2px;
+
+            HorizontalLayout {
+                spacing: Theme.pad-sm;
+                Text {
+                    horizontal-stretch: 1;
+                    text: root.row-data.file_name;
+                    color: Theme.text;
+                    font-size: Theme.font-size-row;
+                    vertical-alignment: center;
+                    overflow: elide;
+                }
+                // Remove holds back the player's track, paused too, so the list says which it is.
+                if Player.vm.has_track && Player.vm.track.id == root.row-data.id: MetaChip {
+                    icon: "play_arrow";
+                    // Translators: on the copy that is the current track, playing or paused.
+                    text: @tr("Now Playing");
+                    fill: Theme.card-control;
+                    label-color: Theme.text;
+                }
+                // Lossless first in the keeper order, so it is the format worth spotting.
+                if root.row-data.format != "": MetaChip {
+                    text: root.row-data.format;
+                    fill: root.row-data.lossless ? Theme.accent.with-alpha(0.18) : Theme.card-control;
+                    label-color: root.row-data.lossless ? Theme.accent : Theme.text;
+                }
+            }
+            HorizontalLayout {
+                spacing: Theme.pad-sm;
+                Text {
+                    horizontal-stretch: 1;
+                    text: root.row-data.release;
+                    color: Theme.subtext0;
+                    font-size: Theme.font-size-sm;
+                    overflow: elide;
+                }
+                if root.row-data.plays > 0: CarriedFact {
+                    icon: "play_arrow";
+                    label: root.row-data.plays;
+                }
+                if root.row-data.rating > 0: CarriedFact {
+                    icon: "star";
+                    label: root.row-data.rating;
+                }
+                if root.row-data.favorite: CarriedFact {
+                    icon: "favorite";
+                    icon-color: Theme.red;
+                }
+                if root.row-data.playlists > 0: CarriedFact {
+                    icon: "queue_music";
+                    label: root.row-data.playlists;
+                }
+            }
+            HorizontalLayout {
+                spacing: Theme.pad-sm;
+                HorizontalLayout {
+                    horizontal-stretch: 1;
+                    spacing: Theme.pad-xs;
+                    if root.row-data.folder != "": VerticalLayout {
+                        alignment: center;
+                        MaterialIcon {
+                            name: "folder";
+                            icon-size: 14px;
+                            icon-color: Theme.subtext0;
+                        }
+                    }
+                    Text {
+                        horizontal-stretch: 1;
+                        text: root.row-data.folder;
+                        color: Theme.subtext0;
+                        font-size: Theme.font-size-sm;
+                        overflow: elide;
+                    }
+                }
+                if root.row-data.added != "": Text {
+                    // Translators: {} is the day the copy joined the library, as 2026-11-02.
+                    text: @tr("Added {}", root.row-data.added);
+                    color: Theme.subtext0;
+                    font-size: Theme.font-size-sm;
+                }
+            }
+        }
+    }
+}
+
+// One row of the finder's list, a group's header or one of its copies, both in one `ListView` so a
+// library-sized find scrolls as one list. Its height and its place in the card follow from its
+// neighbours' `is_header`, which a placeholder already carries, so a landing row moves nothing.
+export component DuplicateRowItem inherits Rectangle {
+    in property <DuplicateRow> row-data;
+    in property <bool> first-copy;
+    in property <bool> last-copy;
+    in property <bool> list-end;
+    // The card's margins inside the list, the right one holding the list's scrollbar.
+    in property <length> inset-left;
+    in property <length> inset-right;
+
+    property <length> header-h: 52px;
+    property <length> copy-h: 72px;
+    property <length> more-d: 28px;
+    property <length> card-y: root.row-data.is_header ? Theme.pad-md : 0px;
+    property <length> card-h: root.row-data.is_header ? root.header-h : root.copy-h;
+    property <length> card-w: root.width - root.inset-left - root.inset-right;
+    // The more button's column, which the row's own content stays clear of.
+    property <length> trailing-room: Theme.pad-sm + root.more-d + Theme.pad-sm;
+
+    // The button sits over the row's touch area, so its hover counts as the row's.
+    property <bool> hovered: touch.has-hover || more.has-hover || menu.is-open;
+
+    height: root.card-y + root.card-h + (root.list-end ? Theme.pad-md : 0px);
+
+    if root.row-data.is_header: GroupHeaderRow {
+        x: root.inset-left;
+        y: root.card-y;
+        width: root.card-w;
+        height: root.card-h;
+        row-data: root.row-data;
+        trailing-room: root.trailing-room;
+    }
+
+    if !root.row-data.is_header: CopyRow {
+        x: root.inset-left;
+        y: root.card-y;
+        width: root.card-w;
+        height: root.card-h;
+        row-data: root.row-data;
+        hovered: root.hovered;
+        first-copy: root.first-copy;
+        last-copy: root.last-copy;
+        trailing-room: root.trailing-room;
+    }
+
+    menu := DuplicateRowMenu {
+        row-id: root.row-data.id;
+        is-header: root.row-data.is_header;
+        dismissed: root.row-data.dismissed;
+    }
+
+    // Over the content, so it takes every press there: nothing in a row is a control of its own
+    // but the more button, and the pick rules are Rust's.
+    touch := TouchArea {
+        x: root.inset-left;
+        y: root.card-y;
+        width: root.card-w;
+        height: root.card-h;
+        mouse-cursor: root.row-data.is_header || root.row-data.dismissed ? default : pointer;
+        clicked => {
+            if (!root.row-data.is_header) {
+                DuplicatesUi.toggle(root.row-data.id);
+            }
+        }
+        pointer-event(ev) => {
+            if (ContextClick.raises-menu(ev, self.mouse-x, self.mouse-y, self.width, self.height)) {
+                menu.show-at(self.x + self.mouse-x, self.y + self.mouse-y);
+            }
+        }
+    }
+
+    // Always shown: a menu only a right-click reaches is one many never find.
+    more := IconButton {
+        x: root.inset-left + root.card-w - self.width - Theme.pad-sm;
+        y: root.card-y + (root.card-h - self.height) / 2;
+        icon: "more_vert";
+        diameter: root.more-d;
+        icon-size: 18px;
+        idle-fg: Theme.subtext0;
+        hover-fg: Theme.text;
+        hover-bg: Theme.card-control;
+        force-bg: menu.is-open;
+        tooltip-text: @tr("More");
+        // A pill above the first row would fall outside the list's viewport.
+        tooltip-side: TooltipSide.left;
+        clicked => { menu.show-at(self.x, self.y + self.height); }
+    }
+}

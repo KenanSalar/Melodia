@@ -12,6 +12,7 @@ pub mod cover_generation;
 pub mod detail_artwork;
 pub mod detail_view;
 pub mod drag;
+pub mod duplicates;
 pub mod equalizer;
 pub mod favorites;
 pub mod file_dialog;

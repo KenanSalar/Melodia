@@ -14,17 +14,17 @@ use serde::{Deserialize, Serialize};
 pub struct LibraryFlags {
     pub folder_watching_enabled: bool,
     /// Whether the artwork store has been brought inside its size bounds. The writer bounds new
-    /// files only, `scanner::track_is_current` skipping unchanged ones, so the pass over the rest
+    /// files only, `scanner::file_is_current` skipping unchanged ones, so the pass over the rest
     /// is one-shot and marked here, the store having no cheap way to say it was swept.
     pub artwork_store_normalized: bool,
     /// Whether a star set here is written into the file's tag too. A switch, since it makes a
     /// click rewrite the file.
     pub write_ratings_to_tags: bool,
-    /// Whether the files' own ratings have been read in once, `track_is_current` skipping an
+    /// Whether the files' own ratings have been read in once, `file_is_current` skipping an
     /// unchanged file. Marked, since an unrated row can't be told from one the user cleared.
     pub ratings_imported_from_tags: bool,
     /// Whether the files' tags have been re-read since the ingest widened: the migrations seeded
-    /// only what the database knew, and `track_is_current` never re-reads on its own.
+    /// only what the database knew, and `file_is_current` never re-reads on its own.
     pub tags_backfilled: bool,
 }
 

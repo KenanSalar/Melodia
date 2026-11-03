@@ -1,6 +1,6 @@
 //! Every way rows leave the queue, and the restores that put back what a removal held.
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 
 use melodia_core::utils::reinsert::reinsert;
 
@@ -313,6 +313,22 @@ impl QueueState {
             !self.playing_left && self.current_slot().is_some_and(|slot| gone[slot]);
         self.drop_rows(&gone);
         PruneOutcome { removed, playing_was_removed }
+    }
+
+    /// Swaps each queued track `replacement_of` names for its replacement, in place, so a track
+    /// leaving the library for a copy of itself keeps its rows rather than meeting
+    /// [`Self::prune_missing`]. No row moves and the cursor stays where it is.
+    pub fn replace_ids(&mut self, replacement_of: &HashMap<i64, i64>) {
+        let mut replaced = false;
+        for id in &mut self.tracks {
+            if let Some(&replacement) = replacement_of.get(id) {
+                *id = replacement;
+                replaced = true;
+            }
+        }
+        if replaced {
+            self.order_changed();
+        }
     }
 }
 

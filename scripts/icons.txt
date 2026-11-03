@@ -107,6 +107,7 @@ update
 upload
 view_list
 visibility
+visibility_off
 volume_down
 volume_off
 volume_up

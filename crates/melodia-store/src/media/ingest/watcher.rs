@@ -11,6 +11,7 @@ use tokio::sync::mpsc;
 
 use melodia_core::error::{AppError, describe};
 use melodia_core::utils::audio_ext::is_audio_extension;
+use melodia_core::utils::trash_dir::in_trash_dir;
 
 /// Classified file system event sent through the mpsc channel to the event processor.
 #[derive(Debug, Clone, PartialEq)]
@@ -193,7 +194,7 @@ fn classify_event(kind: EventKind, paths: &[PathBuf]) -> Vec<FileEvent> {
         EventKind::Create(CreateKind::File | CreateKind::Any)
         | EventKind::Modify(ModifyKind::Name(RenameMode::To)) => {
             for path in paths {
-                if is_audio_file(path) {
+                if is_library_file(path) {
                     events.push(FileEvent::Created(path.clone()));
                 }
             }
@@ -202,7 +203,7 @@ fn classify_event(kind: EventKind, paths: &[PathBuf]) -> Vec<FileEvent> {
         EventKind::Remove(RemoveKind::File | RemoveKind::Any)
         | EventKind::Modify(ModifyKind::Name(RenameMode::From)) => {
             for path in paths {
-                if is_audio_file(path) {
+                if is_library_file(path) {
                     events.push(FileEvent::Removed(path.clone()));
                 }
             }
@@ -211,13 +212,13 @@ fn classify_event(kind: EventKind, paths: &[PathBuf]) -> Vec<FileEvent> {
             if paths.len() >= 2 {
                 let from = &paths[0];
                 let to = &paths[1];
-                let from_audio = is_audio_file(from);
-                let to_audio = is_audio_file(to);
-                if from_audio && to_audio {
+                let from_library = is_library_file(from);
+                let to_library = is_library_file(to);
+                if from_library && to_library {
                     events.push(FileEvent::Renamed { from: from.clone(), to: to.clone() });
-                } else if from_audio {
+                } else if from_library {
                     events.push(FileEvent::Removed(from.clone()));
-                } else if to_audio {
+                } else if to_library {
                     events.push(FileEvent::Created(to.clone()));
                 }
             }
@@ -226,7 +227,7 @@ fn classify_event(kind: EventKind, paths: &[PathBuf]) -> Vec<FileEvent> {
             ModifyKind::Data(_) | ModifyKind::Any | ModifyKind::Name(RenameMode::Other),
         ) => {
             for path in paths {
-                if is_audio_file(path) {
+                if is_library_file(path) {
                     events.push(FileEvent::Modified(path.clone()));
                 }
             }
@@ -235,6 +236,11 @@ fn classify_event(kind: EventKind, paths: &[PathBuf]) -> Vec<FileEvent> {
     }
 
     events
+}
+
+/// Audio outside every trash folder: a trashed file reads as removed, a restored one as created.
+fn is_library_file(path: &Path) -> bool {
+    is_audio_file(path) && !in_trash_dir(path)
 }
 
 pub(crate) fn is_audio_file(path: &Path) -> bool {

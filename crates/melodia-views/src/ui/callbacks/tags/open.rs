@@ -12,7 +12,10 @@ use slint::{
 };
 
 use crate::ui::callbacks::DialogClaim;
-use crate::ui::util::{format_channels, format_sample_rate, len_as_i32, opt_shared};
+use crate::ui::util::{
+    format_bit_depth, format_bitrate, format_channels, format_codec, format_sample_rate,
+    format_size, len_as_i32, opt_shared,
+};
 use melodia_app::library;
 use melodia_app::state::AppState;
 use melodia_core::entities::album::ReleaseTagRow;
@@ -26,9 +29,7 @@ use melodia_ui::{AppWindow, Dialog, Settings, TagEditor};
 
 use super::artwork::decode_cover_preview;
 use super::credits::{rows_from_credit, write_credit_rows};
-use super::fold::{
-    bpm_key, common_by, common_str, common_value, fmt_bpm, fmt_int, fmt_size, int_key,
-};
+use super::fold::{bpm_key, common_by, common_str, common_value, fmt_bpm, fmt_int, int_key};
 use super::form::{CREDIT_ALBUM_ARTIST, CREDIT_ARTIST, CREDIT_FIELD_COUNT, FormState, ListFields};
 use super::lists::{common_roles, write_genre_rows, write_role_rows};
 use super::session::TagSession;
@@ -493,16 +494,14 @@ fn set_summary(te: &TagEditor, row: Option<&TagEditRow>) {
         opt_shared(row.map(get))
     }
     te.set_summary_path(s(row, |r| r.file_path.clone()));
-    te.set_summary_codec(s(row, |r| r.codec.as_deref().unwrap_or_default().to_uppercase()));
-    te.set_summary_bitrate(s(row, |r| r.bitrate.map(|b| format!("{b} kbps")).unwrap_or_default()));
+    te.set_summary_codec(s(row, |r| r.codec.as_deref().map(format_codec).unwrap_or_default()));
+    te.set_summary_bitrate(s(row, |r| r.bitrate.map(format_bitrate).unwrap_or_default()));
     te.set_summary_sample_rate(s(row, |r| {
         r.sample_rate.map(format_sample_rate).unwrap_or_default()
     }));
-    te.set_summary_bit_depth(s(row, |r| {
-        r.bit_depth.map(|d| format!("{d}-bit")).unwrap_or_default()
-    }));
+    te.set_summary_bit_depth(s(row, |r| r.bit_depth.map(format_bit_depth).unwrap_or_default()));
     te.set_summary_channels(s(row, |r| r.channels.map(format_channels).unwrap_or_default()));
-    te.set_summary_size(s(row, |r| r.file_size.map(fmt_size).unwrap_or_default()));
+    te.set_summary_size(s(row, |r| r.file_size.map(format_size).unwrap_or_default()));
     te.set_summary_duration(s(row, |r| crate::ui::tracks::format_duration_ms(r.duration_ms)));
     te.set_summary_modified(s(row, |r| r.date_modified.as_deref().unwrap_or_default().to_owned()));
     te.set_summary_hash(s(row, |r| r.file_hash.as_deref().unwrap_or_default().to_owned()));

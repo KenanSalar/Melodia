@@ -271,13 +271,10 @@ fn detect_system_locale_raw() -> Option<String> {
         }
     }
 
-    #[cfg(target_os = "windows")]
-    {
-        return detect_windows_locale();
+    cfg_select! {
+        target_os = "windows" => detect_windows_locale(),
+        _ => None,
     }
-
-    #[allow(unreachable_code)]
-    None
 }
 
 #[cfg(target_os = "windows")]

@@ -209,6 +209,33 @@ fn classify_rename_non_audio_to_non_audio_skipped() {
     assert!(events.is_empty());
 }
 
+/// Trashing from a file manager is a rename, which must not re-point the row into the trash.
+#[test]
+fn classify_rename_into_a_trash_as_removed() {
+    let kind = EventKind::Modify(ModifyKind::Name(RenameMode::Both));
+    let trashed = PathBuf::from("/music/.Trash-1000/files/song.mp3");
+    let paths = vec![PathBuf::from("/music/song.mp3"), trashed];
+    let events = super::classify_event(kind, &paths);
+    assert_eq!(events, [super::FileEvent::Removed(PathBuf::from("/music/song.mp3"))]);
+}
+
+#[test]
+fn classify_rename_out_of_a_trash_as_created() {
+    let kind = EventKind::Modify(ModifyKind::Name(RenameMode::Both));
+    let trashed = PathBuf::from("/music/.Trash-1000/files/song.mp3");
+    let paths = vec![trashed, PathBuf::from("/music/song.mp3")];
+    let events = super::classify_event(kind, &paths);
+    assert_eq!(events, [super::FileEvent::Created(PathBuf::from("/music/song.mp3"))]);
+}
+
+#[test]
+fn classify_create_inside_a_trash_skipped() {
+    let kind = EventKind::Create(CreateKind::File);
+    let paths = vec![PathBuf::from("/music/$RECYCLE.BIN/song.mp3")];
+    let events = super::classify_event(kind, &paths);
+    assert!(events.is_empty());
+}
+
 // === Rescan flag contract ===
 //
 // The watcher's debouncer callback short-circuits on `event.need_rescan()`

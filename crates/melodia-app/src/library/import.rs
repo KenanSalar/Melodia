@@ -22,7 +22,7 @@ pub struct ImportFilesResult {
 /// Imports audio files, answering the id of every valid one, new or already in the library. Takes
 /// the three pieces it reaches rather than `&AppState`, so a drop can be replayed against a
 /// `test_pool`.
-async fn import_files(
+pub(crate) async fn import_files(
     db: &DbPool,
     artwork_dir: &Path,
     cover_cache: &CoverCache,

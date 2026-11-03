@@ -1,0 +1,145 @@
+import { ListView } from "std-widgets.slint";
+import { Theme } from "../../theme.slint";
+import { DuplicatesUi } from "../../globals/duplicates.slint";
+import { GridEmptyState } from "../grid/grid-empty-state.slint";
+import { OverlayScrollbar } from "../overlay-scrollbar.slint";
+import { DuplicateRowItem } from "duplicate-row.slint";
+import { ToolbarChip } from "toolbar-chip.slint";
+
+component SummaryLine inherits Text {
+    color: Theme.subtext0;
+    font-size: Theme.font-size-md;
+    wrap: word-wrap;
+}
+
+// The Confirm step: what Remove does to the picked copies, said before it does it. Behind an `if`
+// its wrapped lines report one line each, so the well's floor holds them.
+component ConfirmSummary inherits Rectangle {
+    min-height: 180px;
+    vertical-stretch: 1;
+    background: Theme.base;
+    border-radius: Theme.radius-lg;
+
+    VerticalLayout {
+        alignment: start;
+        padding: Theme.pad-lg;
+        spacing: Theme.pad-sm;
+
+        SummaryLine {
+            text: @tr("{n} copy will leave the library." | "{n} copies will leave the library." % DuplicatesUi.picked-count);
+            color: Theme.text;
+            font-weight: 600;
+        }
+        SummaryLine {
+            text: @tr("Its file stays where it is, and later scans leave it out." | "Their files stay where they are, and later scans leave them out." % DuplicatesUi.picked-count);
+        }
+        SummaryLine {
+            text: @tr("Its plays, rating, heart and playlist places move to the copy you keep." | "Their plays, ratings, hearts and playlist places move to the copies you keep." % DuplicatesUi.picked-count);
+        }
+        SummaryLine {
+            // Translators: use the Settings row's own "Files kept out of the library".
+            text: @tr("You can find it, or bring it back, under Files kept out of the library in Settings." | "You can find them, or bring them back, under Files kept out of the library in Settings." % DuplicatesUi.picked-count);
+        }
+    }
+}
+
+// The duplicate finder: its picks toolbar over the groups, or a state saying why there are none,
+// and on Confirm the summary in their place. The list is the card's scroller, the kind being one
+// of `body-scrolls`, and keeps its bar inside its well, as the other list dialogs' lists do.
+export component DuplicatesBody inherits VerticalLayout {
+    spacing: Theme.pad-md;
+
+    property <bool> reviewing: !DuplicatesUi.confirming;
+    property <length> bar-inset: Theme.pad-xs;
+    // The cards stop short of the bar rather than running under a copy's carried facts.
+    property <length> bar-gutter: Theme.scrollbar-slot + 2 * root.bar-inset;
+
+    if DuplicatesUi.confirming: ConfirmSummary { }
+
+    if root.reviewing && DuplicatesUi.settled && (DuplicatesUi.group-count > 0 || DuplicatesUi.dismissed-count > 0): HorizontalLayout {
+        spacing: Theme.pad-sm;
+
+        if DuplicatesUi.listing: Text {
+            // Translators: {n} counts songs found more than once, each with its copies.
+            text: @tr("{n} group" | "{n} groups" % DuplicatesUi.group-count);
+            color: Theme.subtext0;
+            font-size: Theme.font-size-sm;
+            vertical-alignment: center;
+        }
+        Rectangle { horizontal-stretch: 1; }
+        if DuplicatesUi.listing: ToolbarChip {
+            icon: "auto_awesome";
+            label: @tr("Suggested Picks");
+            clicked => { DuplicatesUi.suggest(); }
+        }
+        if DuplicatesUi.listing: ToolbarChip {
+            icon: "clear_all";
+            label: @tr("Clear Picks");
+            clicked => { DuplicatesUi.clear-picks(); }
+        }
+        if DuplicatesUi.dismissed-count > 0: ToolbarChip {
+            icon: "visibility";
+            // Translators: {} is how many groups were marked Not Duplicates.
+            label: @tr("Show Dismissed ({})", DuplicatesUi.dismissed-count);
+            selected: DuplicatesUi.show-dismissed;
+            clicked => { DuplicatesUi.set-show-dismissed(!DuplicatesUi.show-dismissed); }
+        }
+    }
+
+    if root.reviewing && !DuplicatesUi.listing: GridEmptyState {
+        min-height: 200px;
+        preferred-height: 240px;
+        vertical-stretch: 1;
+        // Its fill is the well's, square unless rounded here.
+        border-radius: Theme.radius-lg;
+        icon: DuplicatesUi.busy ? "search" : DuplicatesUi.failed ? "error" : "check_circle";
+        title: DuplicatesUi.busy ? @tr("Looking for duplicates…")
+            : DuplicatesUi.failed ? @tr("Couldn't search the library.")
+            : @tr("No duplicates found");
+        body: !DuplicatesUi.settled ? ""
+            : DuplicatesUi.dismissed-count > 0
+                ? @tr("Every group left is one you marked Not Duplicates.")
+                : @tr("No song is in the library more than once.");
+    }
+
+    // No `clip`: a rounded one is a texture layer, and the cards' insets keep every row clear of
+    // the corners.
+    if root.reviewing && DuplicatesUi.listing: Rectangle {
+        min-height: 160px;
+        preferred-height: 520px;
+        vertical-stretch: 1;
+        background: Theme.base;
+        border-radius: Theme.radius-lg;
+
+        list := ListView {
+            x: 0px;
+            y: 0px;
+            width: parent.width;
+            height: parent.height;
+            vertical-scrollbar-policy: always-off;
+            horizontal-scrollbar-policy: always-off;
+            mouse-drag-pan-enabled: false;
+
+            for row[idx] in DuplicatesUi.rows: DuplicateRowItem {
+                row-data: row;
+                first-copy: idx > 0 && DuplicatesUi.rows[idx - 1].is_header;
+                last-copy: idx == DuplicatesUi.rows.length - 1 || DuplicatesUi.rows[idx + 1].is_header;
+                list-end: idx == DuplicatesUi.rows.length - 1;
+                inset-left: Theme.pad-md;
+                inset-right: root.bar-gutter;
+            }
+        }
+
+        OverlayScrollbar {
+            x: parent.width - self.width - root.bar-inset;
+            y: root.bar-inset;
+            width: Theme.scrollbar-slot;
+            height: parent.height - 2 * root.bar-inset;
+            visible-size: list.visible-height;
+            content-size: list.content-height;
+            offset: -list.content-y;
+            track-color: Theme.scrollbar-track-on-card;
+            scroll-to(o) => { list.content-y = -o; }
+        }
+    }
+}

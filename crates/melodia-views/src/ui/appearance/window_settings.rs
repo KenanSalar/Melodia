@@ -36,7 +36,7 @@ pub(super) fn wire_corner_radius_changed(ui: &AppWindow, state: &AppState) {
         let Some(ui) = weak.upgrade() else { return };
         // The chips emit presets only; this holds for a caller that doesn't.
         let radius = corner_radius_preset(u32::try_from(px_i32).unwrap_or(0));
-        #[allow(
+        #[expect(
             clippy::cast_precision_loss,
             reason = "snapped to {0,6,8,10,15}: exact f32 representation"
         )]

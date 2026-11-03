@@ -61,7 +61,7 @@ msgstr "Restaurar"
 
 #: ui/components/caption-buttons.slint
 #: ui/components/macos-titlebar-cluster.slint
-#: ui/components/onboarding/onboarding-overlay.slint
+#: ui/views/settings/duplicates-section.slint
 msgid "Close"
 msgstr "Cerrar"
 
@@ -160,6 +160,17 @@ msgstr[0] "{n} pista"
 msgstr[1] "{n} pistas"
 
 #: ui/components/dialog/dialog.slint
+msgid "Remove waits until the library scan finishes."
+msgstr "Eliminar espera a que termine el análisis de la biblioteca."
+
+#. Translators: {} is the picked copies' total size, as 1.2 GB.
+#: ui/components/dialog/dialog.slint
+msgid "{n} copy picked · {}"
+msgid_plural "{n} copies picked · {}"
+msgstr[0] "{n} copia seleccionada · {}"
+msgstr[1] "{n} copias seleccionadas · {}"
+
+#: ui/components/dialog/dialog.slint
 #: ui/components/dialog/smart-playlist-editor-body.slint
 #: ui/components/grid/station-context-menu.slint ui/views/favorites-view.slint
 #: ui/views/my-library/tab-pills.slint ui/views/radio/tab-pills.slint
@@ -181,6 +192,11 @@ msgid "Add a description…"
 msgstr "Añadir una descripción…"
 
 #: ui/components/dialog/dialog.slint
+#: ui/components/onboarding/onboarding-overlay.slint ui/views/browse-view.slint
+msgid "Back"
+msgstr "Atrás"
+
+#: ui/components/dialog/dialog.slint
 msgid "Finish"
 msgstr "Finalizar"
 
@@ -192,6 +208,163 @@ msgstr "Abrir Last.fm"
 msgid "Connect"
 msgstr "Conectar"
 
+#: ui/components/dialog/dialog.slint
+msgid "Continue"
+msgstr "Continuar"
+
+#: ui/components/dialog/dialog.slint ui/components/dialog/tag-editor-body.slint
+#: ui/components/settings/folder-row.slint ui/globals/dialog.slint
+#: ui/views/settings/library-section.slint
+msgid "Remove"
+msgstr "Eliminar"
+
+#: ui/components/dialog/duplicate-row.slint
+msgid "Identical files"
+msgstr "Archivos idénticos"
+
+#: ui/components/dialog/duplicate-row.slint
+msgid "Same release"
+msgstr "Misma edición"
+
+#: ui/components/dialog/duplicate-row.slint
+msgid "Review: no artist tag"
+msgstr "Revisar: sin etiqueta de artista"
+
+#: ui/components/dialog/duplicate-row.slint
+msgid "Review: different recordings"
+msgstr "Revisar: grabaciones distintas"
+
+#: ui/components/dialog/duplicate-row.slint
+msgid "Review: different releases"
+msgstr "Revisar: ediciones distintas"
+
+#: ui/components/dialog/duplicate-row.slint
+msgid "Review: different track numbers"
+msgstr "Revisar: números de pista distintos"
+
+#: ui/components/dialog/duplicate-row.slint
+msgid "Dismissed"
+msgstr "Descartado"
+
+#: ui/components/dialog/duplicate-row.slint
+msgid "{n} copy"
+msgid_plural "{n} copies"
+msgstr[0] "{n} copia"
+msgstr[1] "{n} copias"
+
+#. Translators: on the copy that is the current track, playing or paused.
+#: ui/components/dialog/duplicate-row.slint
+msgid "Now Playing"
+msgstr "Reproduciendo"
+
+#. Translators: {} is the day the copy joined the library, as 2026-11-02.
+#: ui/components/dialog/duplicate-row.slint
+msgid "Added {}"
+msgstr "Añadida el {}"
+
+#: ui/components/dialog/duplicate-row.slint
+#: ui/components/dialog/kept-out-body.slint
+#: ui/components/now-playing/overflow-menu.slint
+msgid "More"
+msgstr "Más opciones"
+
+#: ui/components/dialog/duplicates-body.slint
+msgid "{n} copy will leave the library."
+msgid_plural "{n} copies will leave the library."
+msgstr[0] "{n} copia saldrá de la biblioteca."
+msgstr[1] "{n} copias saldrán de la biblioteca."
+
+#: ui/components/dialog/duplicates-body.slint
+msgid "Its file stays where it is, and later scans leave it out."
+msgid_plural "Their files stay where they are, and later scans leave them out."
+msgstr[0] "Su archivo se queda donde está y los análisis posteriores lo omiten."
+msgstr[1] "Sus archivos se quedan donde están y los análisis posteriores los omiten."
+
+#: ui/components/dialog/duplicates-body.slint
+msgid "Its plays, rating, heart and playlist places move to the copy you keep."
+msgid_plural "Their plays, ratings, hearts and playlist places move to the copies you keep."
+msgstr[0] "Sus reproducciones, valoración, corazón y lugares en listas pasan a la copia que conservas."
+msgstr[1] "Sus reproducciones, valoraciones, corazones y lugares en listas pasan a las copias que conservas."
+
+#. Translators: use the Settings row's own "Files kept out of the library".
+#: ui/components/dialog/duplicates-body.slint
+msgid "You can find it, or bring it back, under Files kept out of the library in Settings."
+msgid_plural "You can find them, or bring them back, under Files kept out of the library in Settings."
+msgstr[0] "Puedes encontrarla, o recuperarla, en Archivos excluidos de la biblioteca, en Ajustes."
+msgstr[1] "Puedes encontrarlas, o recuperarlas, en Archivos excluidos de la biblioteca, en Ajustes."
+
+#. Translators: {n} counts songs found more than once, each with its copies.
+#: ui/components/dialog/duplicates-body.slint
+msgid "{n} group"
+msgid_plural "{n} groups"
+msgstr[0] "{n} grupo"
+msgstr[1] "{n} grupos"
+
+#: ui/components/dialog/duplicates-body.slint
+msgid "Suggested Picks"
+msgstr "Selección sugerida"
+
+#: ui/components/dialog/duplicates-body.slint
+msgid "Clear Picks"
+msgstr "Limpiar selección"
+
+#. Translators: {} is how many groups were marked Not Duplicates.
+#: ui/components/dialog/duplicates-body.slint
+msgid "Show Dismissed ({})"
+msgstr "Mostrar descartados ({})"
+
+#: ui/components/dialog/duplicates-body.slint
+msgid "Looking for duplicates…"
+msgstr "Buscando duplicados…"
+
+#: ui/components/dialog/duplicates-body.slint
+msgid "Couldn't search the library."
+msgstr "No se pudo buscar en la biblioteca."
+
+#: ui/components/dialog/duplicates-body.slint
+msgid "No duplicates found"
+msgstr "No se encontraron duplicados"
+
+#: ui/components/dialog/duplicates-body.slint
+msgid "Every group left is one you marked Not Duplicates."
+msgstr "Marcaste todos los grupos restantes como «No son duplicados»."
+
+#: ui/components/dialog/duplicates-body.slint
+msgid "No song is in the library more than once."
+msgstr "Ninguna canción está más de una vez en la biblioteca."
+
+#: ui/components/dialog/duplicates-menus.slint
+msgid "Not Duplicates"
+msgstr "No son duplicados"
+
+#: ui/components/dialog/duplicates-menus.slint
+msgid "Count as Duplicates"
+msgstr "Contar como duplicados"
+
+#: ui/components/dialog/duplicates-menus.slint
+msgid "Keep This Copy"
+msgstr "Conservar esta copia"
+
+#: ui/components/dialog/duplicates-menus.slint
+msgid "Keep Copies in This Folder"
+msgstr "Conservar las copias de esta carpeta"
+
+#: ui/components/dialog/duplicates-menus.slint
+#: ui/components/grid/card-context-menu.slint
+#: ui/components/track-list/track-context-menu.slint
+msgid "Open Containing Folder"
+msgstr "Abrir carpeta contenedora"
+
+#: ui/components/dialog/duplicates-menus.slint
+#: ui/components/grid/card-context-menu.slint
+msgid "Copy Path"
+msgstr "Copiar ruta"
+
+#: ui/components/dialog/duplicates-menus.slint
+#: ui/components/dialog/kept-out-body.slint
+msgid "Bring Back"
+msgstr "Recuperar"
+
 #: ui/components/dialog/export-playlist-picker.slint
 msgid "No playlists to export"
 msgstr "No hay listas para exportar"
@@ -199,6 +372,46 @@ msgstr "No hay listas para exportar"
 #: ui/components/dialog/export-playlist-picker.slint
 msgid "Several playlists are saved as one .zip file, which you can import directly without extracting it."
 msgstr "Varias listas se guardan como un único archivo .zip, que puedes importar directamente sin descomprimirlo."
+
+#. Translators: {} is the day the copy left the library, as 2026-11-02.
+#: ui/components/dialog/kept-out-body.slint
+msgid "Removed {}"
+msgstr "Eliminada el {}"
+
+#: ui/components/dialog/kept-out-body.slint
+msgid "{n} file"
+msgid_plural "{n} files"
+msgstr[0] "{n} archivo"
+msgstr[1] "{n} archivos"
+
+#: ui/components/dialog/kept-out-body.slint
+msgid "Copy All Paths"
+msgstr "Copiar todas las rutas"
+
+#: ui/components/dialog/kept-out-body.slint
+msgid "Bring All Back"
+msgstr "Recuperar todo"
+
+#: ui/components/dialog/kept-out-body.slint
+msgid "Bringing back…"
+msgstr "Recuperando…"
+
+#: ui/components/dialog/kept-out-body.slint ui/views/radio/browse-tab.slint
+#: ui/views/radio/facet-chip.slint
+msgid "Loading…"
+msgstr "Cargando…"
+
+#: ui/components/dialog/kept-out-body.slint
+msgid "Couldn't read the list."
+msgstr "No se pudo leer la lista."
+
+#: ui/components/dialog/kept-out-body.slint
+msgid "Nothing is kept out"
+msgstr "No hay nada excluido"
+
+#: ui/components/dialog/kept-out-body.slint
+msgid "Every removed copy is back in the library."
+msgstr "Todas las copias eliminadas han vuelto a la biblioteca."
 
 #: ui/components/dialog/playlist-mosaic-picker.slint
 msgid "No artwork"
@@ -574,12 +787,6 @@ msgstr "Remezclador"
 msgid "Replace…"
 msgstr "Reemplazar…"
 
-#: ui/components/dialog/tag-editor-body.slint
-#: ui/components/settings/folder-row.slint ui/globals/dialog.slint
-#: ui/views/settings/library-section.slint
-msgid "Remove"
-msgstr "Eliminar"
-
 #: ui/components/dialog/tag-editor-body.slint ui/settings.slint
 msgid "Details"
 msgstr "Detalles"
@@ -835,10 +1042,6 @@ msgstr "Copiar"
 msgid "Copy Name"
 msgstr "Copiar nombre"
 
-#: ui/components/grid/card-context-menu.slint
-msgid "Copy Path"
-msgstr "Copiar ruta"
-
 #: ui/components/grid/card-context-menu.slint ui/settings.slint
 #: ui/views/settings/diagnostics-section.slint
 msgid "Open Folder"
@@ -847,11 +1050,6 @@ msgstr "Abrir carpeta"
 #: ui/components/grid/card-context-menu.slint
 msgid "Show in File Manager"
 msgstr "Mostrar en el gestor de archivos"
-
-#: ui/components/grid/card-context-menu.slint
-#: ui/components/track-list/track-context-menu.slint
-msgid "Open Containing Folder"
-msgstr "Abrir carpeta contenedora"
 
 #: ui/components/grid/card-context-menu.slint
 #: ui/components/track-list/track-context-menu.slint
@@ -1076,10 +1274,6 @@ msgid "Done"
 msgstr "Listo"
 
 #: ui/components/now-playing/overflow-menu.slint
-msgid "More"
-msgstr "Más opciones"
-
-#: ui/components/now-playing/overflow-menu.slint
 #: ui/views/settings/output-section.slint
 msgid "Speed"
 msgstr "Velocidad"
@@ -1267,12 +1461,12 @@ msgid "Welcome to Melodia"
 msgstr "Te damos la bienvenida a Melodia"
 
 #: ui/components/onboarding/onboarding-overlay.slint
+msgid "Three quick steps to set Melodia up. You can change any of it later in Settings."
+msgstr "Tres pasos rápidos para configurar Melodia. Puedes cambiar cualquier cosa más tarde en Ajustes."
+
+#: ui/components/onboarding/onboarding-overlay.slint
 msgid "Skip"
 msgstr "Omitir"
-
-#: ui/components/onboarding/onboarding-overlay.slint ui/views/browse-view.slint
-msgid "Back"
-msgstr "Atrás"
 
 #: ui/components/onboarding/onboarding-overlay.slint ui/globals/player.slint
 msgid "Next"
@@ -1402,6 +1596,7 @@ msgstr "{} / {} archivos"
 #: ui/components/settings/scan-progress.slint ui/globals/dialog-forms.slint
 #: ui/globals/dialog.slint ui/views/queue-panel/queue-panel.slint
 #: ui/views/radio/tab-pills.slint ui/views/settings/appearance-section.slint
+#: ui/views/settings/duplicates-section.slint
 #: ui/views/settings/library-section.slint
 #: ui/views/settings/output-section.slint
 #: ui/views/settings/scrobbling-section.slint
@@ -1713,6 +1908,48 @@ msgstr "Elige las listas que exportar."
 msgid "Export"
 msgstr "Exportar"
 
+#: ui/globals/duplicates.slint
+msgid "{n} copy removed from the library"
+msgid_plural "{n} copies removed from the library"
+msgstr[0] "{n} copia eliminada de la biblioteca"
+msgstr[1] "{n} copias eliminadas de la biblioteca"
+
+#: ui/globals/duplicates.slint
+msgid "{n} copy skipped, as it was playing or had already gone."
+msgid_plural "{n} copies skipped, as they were playing or had already gone."
+msgstr[0] "{n} copia omitida, porque estaba sonando o ya no estaba."
+msgstr[1] "{n} copias omitidas, porque estaban sonando o ya no estaban."
+
+#: ui/globals/duplicates.slint
+msgid "Couldn't remove the copies"
+msgstr "No se pudieron eliminar las copias"
+
+#: ui/globals/duplicates.slint
+msgid "Nothing left the library. See the log for details."
+msgstr "Nada salió de la biblioteca. Consulta el registro para más detalles."
+
+#: ui/globals/duplicates.slint
+msgid "{n} file brought back to the library"
+msgid_plural "{n} files brought back to the library"
+msgstr[0] "{n} archivo ha vuelto a la biblioteca"
+msgstr[1] "{n} archivos han vuelto a la biblioteca"
+
+#: ui/globals/duplicates.slint
+msgid "{n} file wasn't found or couldn't be read, so it stays on the list."
+msgid_plural "{n} files weren't found or couldn't be read, so they stay on the list."
+msgstr[0] "{n} archivo no se encontró o no se pudo leer, así que sigue en la lista."
+msgstr[1] "{n} archivos no se encontraron o no se pudieron leer, así que siguen en la lista."
+
+#: ui/globals/duplicates.slint
+msgid "Couldn't bring the file back"
+msgid_plural "Couldn't bring the files back"
+msgstr[0] "No se pudo recuperar el archivo"
+msgstr[1] "No se pudieron recuperar los archivos"
+
+#: ui/globals/duplicates.slint ui/globals/undo-text.slint ui/settings.slint
+msgid "See the log for details."
+msgstr "Consulta el registro para más detalles."
+
 #: ui/globals/hero-chips.slint ui/views/my-library-view.slint
 msgid "{n} artist"
 msgid_plural "{n} artists"
@@ -1882,10 +2119,6 @@ msgstr "Demasiados para deshacer"
 #: ui/globals/undo-text.slint
 msgid "Couldn't undo"
 msgstr "No se pudo deshacer"
-
-#: ui/globals/undo-text.slint ui/settings.slint
-msgid "See the log for details."
-msgstr "Consulta el registro para más detalles."
 
 #. Translators: the action a click takes, expanding the sidebar
 #: ui/layout/sidebar.slint
@@ -2533,10 +2766,6 @@ msgstr "Prueba con otro nombre o quita un filtro."
 msgid "Load more stations"
 msgstr "Cargar más emisoras"
 
-#: ui/views/radio/browse-tab.slint ui/views/radio/facet-chip.slint
-msgid "Loading…"
-msgstr "Cargando…"
-
 #: ui/views/radio/facet-chip.slint
 msgid "Filter…"
 msgstr "Filtrar…"
@@ -2856,6 +3085,52 @@ msgstr "Conectado a Discord"
 #: ui/views/settings/discord-section.slint
 msgid "Discord not running"
 msgstr "Discord no está en ejecución"
+
+#: ui/views/settings/duplicates-section.slint
+msgid "Duplicates"
+msgstr "Duplicados"
+
+#: ui/views/settings/duplicates-section.slint
+msgid "Duplicate tracks"
+msgstr "Pistas duplicadas"
+
+#: ui/views/settings/duplicates-section.slint
+msgid "Find songs the library holds more than once, and pick the copies you don't need."
+msgstr "Busca canciones que están más de una vez en la biblioteca y selecciona las copias que no necesitas."
+
+#: ui/views/settings/duplicates-section.slint
+msgid "Files kept out of the library"
+msgstr "Archivos excluidos de la biblioteca"
+
+#: ui/views/settings/duplicates-section.slint
+msgid "{n} removed copy. Its file is still on disk, and scans leave it out."
+msgid_plural "{n} removed copies. Their files are still on disk, and scans leave them out."
+msgstr[0] "{n} copia eliminada. Su archivo sigue en el disco y los análisis lo omiten."
+msgstr[1] "{n} copias eliminadas. Sus archivos siguen en el disco y los análisis los omiten."
+
+#: ui/views/settings/duplicates-section.slint
+msgid "Find…"
+msgstr "Buscar…"
+
+#: ui/views/settings/duplicates-section.slint
+msgid "Duplicate Tracks"
+msgstr "Pistas duplicadas"
+
+#: ui/views/settings/duplicates-section.slint
+msgid "Songs the library seems to hold more than once. Pick the copies you don't need."
+msgstr "Canciones que parecen estar más de una vez en la biblioteca. Selecciona las copias que no necesitas."
+
+#: ui/views/settings/duplicates-section.slint
+msgid "Show…"
+msgstr "Mostrar…"
+
+#: ui/views/settings/duplicates-section.slint
+msgid "Files Kept Out of the Library"
+msgstr "Archivos excluidos de la biblioteca"
+
+#: ui/views/settings/duplicates-section.slint
+msgid "Copies you removed as duplicates. Their files stay where they are, and scans leave them out until you bring them back."
+msgstr "Copias que eliminaste como duplicados. Sus archivos se quedan donde están y los análisis los omiten hasta que los recuperes."
 
 #. Translators: an equalizer preset, such as Rock or Jazz
 #: ui/views/settings/equalizer-section.slint

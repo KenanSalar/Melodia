@@ -1,6 +1,6 @@
 //! Reads the ratings already in this library's files into their rows, once.
 //!
-//! `scanner::track_is_current` skips an unchanged file, so a library scanned before ratings were
+//! `scanner::file_is_current` skips an unchanged file, so a library scanned before ratings were
 //! read stays unrated however often it is rescanned, every star another player wrote sitting
 //! unread. **Not an `SQLx` migration**, for [`super::artwork_renormalize`]'s reason. Only unrated
 //! rows are read, and only once, since `rating = 0` can't tell an untouched row from a cleared one.

@@ -4,7 +4,7 @@ use std::collections::HashMap;
 
 use sqlx::{AssertSqlSafe, Row};
 
-use crate::database::{MAX_BINDS_PER_STATEMENT, placeholders};
+use crate::database::{MAX_BINDS_PER_STATEMENT, chunked_in_execute_on, placeholders};
 use melodia_core::entities::scan::ExtractedMetadata;
 use melodia_core::entities::track_search::SearchFields;
 use melodia_core::error::AppError;
@@ -442,20 +442,8 @@ pub(crate) async fn delete_tracks_by_paths_batch(
     tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
     file_paths: &[String],
 ) -> Result<u64, AppError> {
-    if file_paths.is_empty() {
-        return Ok(0);
-    }
-
-    let mut total_deleted: u64 = 0;
-    for chunk in file_paths.chunks(crate::database::MAX_BINDS_PER_STATEMENT) {
-        let placeholders = crate::database::placeholders(chunk.len());
-        let sql = format!("DELETE FROM tracks WHERE file_path IN ({placeholders})");
-        let mut query = sqlx::query(AssertSqlSafe(sql));
-        for path in chunk {
-            query = query.bind(path);
-        }
-        let result = query.persistent(false).execute(&mut **tx).await?;
-        total_deleted += result.rows_affected();
-    }
-    Ok(total_deleted)
+    chunked_in_execute_on(tx, file_paths, |placeholders| {
+        format!("DELETE FROM tracks WHERE file_path IN ({placeholders})")
+    })
+    .await
 }

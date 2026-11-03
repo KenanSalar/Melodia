@@ -93,7 +93,7 @@ fn seed_window_rows(ui: &AppWindow, settings: &SettingsData) {
 
     // The chips read `Settings.corner-radius`, the shell and the content panel paint
     // `Theme.shell-radius`.
-    #[allow(
+    #[expect(
         clippy::cast_possible_wrap,
         clippy::cast_precision_loss,
         reason = "corner_radius clamped to 0..=15: exact in i32 and exact in f32 (f32 mantissa has 23 bits)"

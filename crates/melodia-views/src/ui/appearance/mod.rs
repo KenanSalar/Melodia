@@ -168,7 +168,7 @@ pub(super) fn variant_id_at(theme: &ThemeDef, idx: usize) -> Option<&'static str
     theme.variants.get(idx).map(|v| v.id)
 }
 
-#[allow(
+#[expect(
     clippy::cast_sign_loss,
     reason = "Slint chip indices are i32 ≥ 0; negative slips fall through to default ids via .get(idx).map_or"
 )]
@@ -176,7 +176,7 @@ pub(super) fn usize_from(idx: i32) -> usize {
     if idx < 0 { usize::MAX } else { idx as usize }
 }
 
-#[allow(
+#[expect(
     clippy::cast_possible_truncation,
     clippy::cast_possible_wrap,
     reason = "Theme/variant/accent counts are tiny (≤ 14); never overflows i32"

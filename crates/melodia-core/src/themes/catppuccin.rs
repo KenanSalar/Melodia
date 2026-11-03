@@ -1,11 +1,10 @@
 //! Catppuccin theme: 4 variants (Latte / Frappe / Macchiato / Mocha) and
 //! 14 accent colours, each defined per-variant.
 
-// Palette data files are dense by design — every literal is a six-digit
-// `0xRRGGBB` hex colour. `unreadable_literal` fires on anything ≥ 5
-// digits, which would force underscores into every entry and obscure the
-// match against the upstream CSS source.
-#![allow(clippy::unreadable_literal)]
+#![expect(
+    clippy::unreadable_literal,
+    reason = "the hex literals are 0xRRGGBB colours, written as each theme publishes them"
+)]
 
 use super::{AccentDef, Palette, ThemeDef, Variant};
 

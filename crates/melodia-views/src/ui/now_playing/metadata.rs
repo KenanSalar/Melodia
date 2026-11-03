@@ -1,6 +1,8 @@
 //! Technical-metadata chip row formatter + display helpers.
 
-use crate::ui::util::{format_channels, format_sample_rate, opt_shared};
+use crate::ui::util::{
+    format_bit_depth, format_bitrate, format_channels, format_codec, format_sample_rate, opt_shared,
+};
 use melodia_core::entities::track::TrackMeta;
 use melodia_ui::TrackMetaRow;
 use slint::SharedString;
@@ -10,10 +12,10 @@ use slint::SharedString;
 pub(super) fn to_slint_track_meta(t: &TrackMeta) -> TrackMetaRow {
     TrackMetaRow {
         track_id: i32::try_from(t.id).unwrap_or(i32::MAX),
-        codec: opt_shared(t.codec.as_deref().map(str::to_uppercase)),
-        bitrate: opt_shared(t.bitrate.map(|b| format!("{b} kbps"))),
+        codec: opt_shared(t.codec.as_deref().map(format_codec)),
+        bitrate: opt_shared(t.bitrate.map(format_bitrate)),
         sample_rate: opt_shared(t.sample_rate.map(format_sample_rate)),
-        bit_depth: opt_shared(t.bit_depth.map(|d| format!("{d}-bit"))),
+        bit_depth: opt_shared(t.bit_depth.map(format_bit_depth)),
         channels: opt_shared(t.channels.map(format_channels)),
         year: opt_shared(t.year.filter(|y| *y > 0).map(|y| y.to_string())),
         genre: opt_shared(t.genre.as_deref()),

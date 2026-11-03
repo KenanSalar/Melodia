@@ -4,8 +4,10 @@ use std::path::PathBuf;
 use super::listed_as_spelled;
 use crate::database::DbPool;
 use crate::database::queries;
-use crate::database::queries::fixtures::{insert_test_track, make_test_metadata};
-use crate::database::queries::ingest::{FolderResolution, ingest_scanned_files};
+use crate::database::queries::fixtures::{insert_test_track, keep_out, make_test_metadata};
+use crate::database::queries::ingest::{
+    IngestResult, IngestSource, commit_import, ingest_scanned_files,
+};
 use crate::media::ingest::scan_pool::ScanPool;
 use melodia_core::entities::artist::ArtistCredit;
 use melodia_core::entities::genre::GenreList;
@@ -33,9 +35,8 @@ async fn ingest_empty_list_returns_zero() -> Result<(), AppError> {
     let result = ingest_scanned_files(
         &mut tx,
         &[],
-        &FolderResolution::Fixed(1),
+        &IngestSource::FolderScan(1),
         "2024-01-01T00:00:00Z",
-        false,
         &ScanPool::default(),
     )
     .await?;
@@ -55,9 +56,8 @@ async fn ingest_single_file_fixed_folder() -> Result<(), AppError> {
     let result = ingest_scanned_files(
         &mut tx,
         &files,
-        &FolderResolution::Fixed(1),
+        &IngestSource::FolderScan(1),
         "2024-01-01T00:00:00Z",
-        false,
         &ScanPool::default(),
     )
     .await?;
@@ -92,9 +92,8 @@ async fn ingest_deduplicates_artists() -> Result<(), AppError> {
     let result = ingest_scanned_files(
         &mut tx,
         &[f1, f2, f3],
-        &FolderResolution::Fixed(1),
+        &IngestSource::FolderScan(1),
         "2024-01-01T00:00:00Z",
-        false,
         &ScanPool::default(),
     )
     .await?;
@@ -126,9 +125,8 @@ async fn ingest_deduplicates_albums() -> Result<(), AppError> {
     ingest_scanned_files(
         &mut tx,
         &[f1, f2],
-        &FolderResolution::Fixed(1),
+        &IngestSource::FolderScan(1),
         "2024-01-01T00:00:00Z",
-        false,
         &ScanPool::default(),
     )
     .await?;
@@ -155,9 +153,8 @@ async fn ingest_deduplicates_genres() -> Result<(), AppError> {
     ingest_scanned_files(
         &mut tx,
         &[f1, f2],
-        &FolderResolution::Fixed(1),
+        &IngestSource::FolderScan(1),
         "2024-01-01T00:00:00Z",
-        false,
         &ScanPool::default(),
     )
     .await?;
@@ -182,9 +179,8 @@ async fn ingest_skips_existing_track() -> Result<(), AppError> {
     let result = ingest_scanned_files(
         &mut tx,
         &files,
-        &FolderResolution::Fixed(1),
+        &IngestSource::FolderScan(1),
         "2024-01-01T00:00:00Z",
-        false,
         &ScanPool::default(),
     )
     .await?;
@@ -196,7 +192,7 @@ async fn ingest_skips_existing_track() -> Result<(), AppError> {
 }
 
 #[tokio::test]
-async fn ingest_updates_artwork_on_existing_when_flag_set() -> Result<(), AppError> {
+async fn a_folder_scan_backfills_artwork_on_a_current_row() -> Result<(), AppError> {
     let db = DbPool::test_pool().await?;
     queries::folder::insert_folder(&db, "/music", true).await?;
     insert_test_track(&db, "/music/song.mp3", "Song", "Art", "Alb", "Pop").await?;
@@ -208,9 +204,8 @@ async fn ingest_updates_artwork_on_existing_when_flag_set() -> Result<(), AppErr
     let result = ingest_scanned_files(
         &mut tx,
         &[file],
-        &FolderResolution::Fixed(1),
+        &IngestSource::FolderScan(1),
         "2024-01-01T00:00:00Z",
-        true, // update artwork on existing
         &ScanPool::default(),
     )
     .await?;
@@ -232,7 +227,7 @@ async fn ingest_updates_artwork_on_existing_when_flag_set() -> Result<(), AppErr
 }
 
 #[tokio::test]
-async fn ingest_does_not_update_artwork_when_flag_false() -> Result<(), AppError> {
+async fn an_import_leaves_a_current_rows_artwork_alone() -> Result<(), AppError> {
     let db = DbPool::test_pool().await?;
     queries::folder::insert_folder(&db, "/music", true).await?;
     insert_test_track(&db, "/music/song.mp3", "Song", "Art", "Alb", "Pop").await?;
@@ -244,9 +239,8 @@ async fn ingest_does_not_update_artwork_when_flag_false() -> Result<(), AppError
     ingest_scanned_files(
         &mut tx,
         &[file],
-        &FolderResolution::Fixed(1),
+        &IngestSource::Import,
         "2024-01-01T00:00:00Z",
-        false, // don't update artwork
         &ScanPool::default(),
     )
     .await?;
@@ -270,9 +264,8 @@ async fn ingest_from_parent_dir_creates_folder() -> Result<(), AppError> {
     let result = ingest_scanned_files(
         &mut tx,
         &files,
-        &FolderResolution::FromParentDir,
+        &IngestSource::Import,
         "2024-01-01T00:00:00Z",
-        false,
         &ScanPool::default(),
     )
     .await?;
@@ -299,9 +292,8 @@ async fn ingest_from_parent_dir_caches_folder() -> Result<(), AppError> {
     ingest_scanned_files(
         &mut tx,
         &files,
-        &FolderResolution::FromParentDir,
+        &IngestSource::Import,
         "2024-01-01T00:00:00Z",
-        false,
         &ScanPool::default(),
     )
     .await?;
@@ -326,9 +318,8 @@ async fn ingest_empty_artist_gets_unknown_id() -> Result<(), AppError> {
     ingest_scanned_files(
         &mut tx,
         &[file],
-        &FolderResolution::Fixed(1),
+        &IngestSource::FolderScan(1),
         "2024-01-01T00:00:00Z",
-        false,
         &ScanPool::default(),
     )
     .await?;
@@ -355,9 +346,8 @@ async fn ingest_empty_album_gets_none() -> Result<(), AppError> {
     ingest_scanned_files(
         &mut tx,
         &[file],
-        &FolderResolution::Fixed(1),
+        &IngestSource::FolderScan(1),
         "2024-01-01T00:00:00Z",
-        false,
         &ScanPool::default(),
     )
     .await?;
@@ -387,9 +377,8 @@ async fn ingest_mixed_new_and_existing() -> Result<(), AppError> {
     let result = ingest_scanned_files(
         &mut tx,
         &files,
-        &FolderResolution::Fixed(1),
+        &IngestSource::FolderScan(1),
         "2024-01-01T00:00:00Z",
-        false,
         &ScanPool::default(),
     )
     .await?;
@@ -416,9 +405,8 @@ async fn ingest_same_album_different_artists() -> Result<(), AppError> {
     ingest_scanned_files(
         &mut tx,
         &[f1, f2],
-        &FolderResolution::Fixed(1),
+        &IngestSource::FolderScan(1),
         "2024-01-01T00:00:00Z",
-        false,
         &ScanPool::default(),
     )
     .await?;
@@ -456,9 +444,8 @@ async fn ingest_detects_moved_file() -> Result<(), AppError> {
     let result = ingest_scanned_files(
         &mut tx,
         &files,
-        &FolderResolution::Fixed(1),
+        &IngestSource::FolderScan(1),
         "2024-01-01T00:00:00Z",
-        false,
         &ScanPool::default(),
     )
     .await?;
@@ -507,9 +494,8 @@ async fn ingest_batched_inserts_preserve_input_order_across_chunks() -> Result<(
     let result = ingest_scanned_files(
         &mut tx,
         &files,
-        &FolderResolution::Fixed(1),
+        &IngestSource::FolderScan(1),
         "2024-01-01T00:00:00Z",
-        false,
         &ScanPool::default(),
     )
     .await?;
@@ -565,9 +551,8 @@ async fn ingest_duplicate_hash_repoints_once_inserts_second() -> Result<(), AppE
     let result = ingest_scanned_files(
         &mut tx,
         &files,
-        &FolderResolution::Fixed(1),
+        &IngestSource::FolderScan(1),
         "2024-01-01T00:00:00Z",
-        false,
         &ScanPool::default(),
     )
     .await?;
@@ -609,9 +594,8 @@ async fn ingest_does_not_move_when_hash_differs() -> Result<(), AppError> {
     let result = ingest_scanned_files(
         &mut tx,
         &files,
-        &FolderResolution::Fixed(1),
+        &IngestSource::FolderScan(1),
         "2024-01-01T00:00:00Z",
-        false,
         &ScanPool::default(),
     )
     .await?;
@@ -648,9 +632,8 @@ async fn ingest_moved_file_preserves_playback_state() -> Result<(), AppError> {
     ingest_scanned_files(
         &mut tx,
         &files,
-        &FolderResolution::Fixed(1),
+        &IngestSource::FolderScan(1),
         "2024-01-01T00:00:00Z",
-        false,
         &ScanPool::default(),
     )
     .await?;
@@ -680,9 +663,8 @@ async fn ingest_skips_unchanged_file() -> Result<(), AppError> {
     let result = ingest_scanned_files(
         &mut tx,
         &files,
-        &FolderResolution::Fixed(1),
+        &IngestSource::FolderScan(1),
         "2024-01-01T00:00:00Z",
-        false,
         &ScanPool::default(),
     )
     .await?;
@@ -707,9 +689,8 @@ async fn ingest_updates_metadata_when_file_changed() -> Result<(), AppError> {
     let result = ingest_scanned_files(
         &mut tx,
         &[file],
-        &FolderResolution::Fixed(1),
+        &IngestSource::FolderScan(1),
         "2024-01-01T00:00:00Z",
-        false,
         &ScanPool::default(),
     )
     .await?;
@@ -739,9 +720,8 @@ async fn ingest_stores_file_hash() -> Result<(), AppError> {
     ingest_scanned_files(
         &mut tx,
         &files,
-        &FolderResolution::Fixed(1),
+        &IngestSource::FolderScan(1),
         "2024-01-01T00:00:00Z",
-        false,
         &ScanPool::default(),
     )
     .await?;
@@ -845,9 +825,8 @@ async fn a_hard_link_beside_its_row_is_a_duplicate_rather_than_a_move() -> Resul
     let result = ingest_scanned_files(
         &mut tx,
         &files,
-        &FolderResolution::Fixed(1),
+        &IngestSource::FolderScan(1),
         "2024-01-01T00:00:00Z",
-        false,
         &ScanPool::default(),
     )
     .await?;
@@ -876,9 +855,8 @@ async fn a_case_only_rename_keeps_the_tracks_rating() -> Result<(), AppError> {
     ingest_scanned_files(
         &mut tx,
         &files,
-        &FolderResolution::Fixed(1),
+        &IngestSource::FolderScan(1),
         "2024-01-01T00:00:00Z",
-        false,
         &ScanPool::default(),
     )
     .await?;
@@ -887,5 +865,163 @@ async fn a_case_only_rename_keeps_the_tracks_rating() -> Result<(), AppError> {
     let track = queries::track::get_track_by_id(&db, id).await?;
     let renamed = renamed.to_string_lossy();
     assert_eq!((track.file_path.as_str(), track.rating), (renamed.as_ref(), 5), "(path, rating)");
+    Ok(())
+}
+
+// === Files the duplicate finder kept out ===
+
+const SCAN_TIMESTAMP: &str = "2024-01-01T00:00:00Z";
+
+/// A library folder at `/music`, filed as folder 1.
+async fn music_library() -> Result<DbPool, AppError> {
+    let db = DbPool::test_pool().await?;
+    queries::folder::insert_folder(&db, "/music", true).await?;
+    Ok(db)
+}
+
+async fn folder_scan(db: &DbPool, files: &[ScannedFile]) -> Result<IngestResult, AppError> {
+    let mut tx = db.write().begin().await?;
+    let source = IngestSource::FolderScan(1);
+    let result =
+        ingest_scanned_files(&mut tx, files, &source, SCAN_TIMESTAMP, &ScanPool::default()).await?;
+    tx.commit().await?;
+    Ok(result)
+}
+
+async fn import(db: &DbPool, files: &[ScannedFile]) -> Result<IngestResult, AppError> {
+    commit_import(db, files, SCAN_TIMESTAMP, &ScanPool::default()).await
+}
+
+async fn kept_out_paths(db: &DbPool) -> Result<Vec<String>, AppError> {
+    queries::excluded_files::paths(db).await
+}
+
+#[tokio::test]
+async fn a_folder_scan_leaves_a_kept_out_file_out() -> Result<(), AppError> {
+    let db = music_library().await?;
+    let spare = make_scanned_file("/music/spare.mp3", "Spare");
+    keep_out(&db, "/music/spare.mp3", &spare.metadata.file_hash).await?;
+
+    let result = folder_scan(&db, &[spare]).await?;
+
+    assert_eq!(result.inserted_count, 0);
+    Ok(())
+}
+
+/// A tagger rewrites a kept-out file's bytes; an exclusion left on the old hash loses the file the
+/// next time it moves while nothing watches.
+#[tokio::test]
+async fn a_folder_scan_restamps_a_kept_out_file_it_read() -> Result<(), AppError> {
+    let db = music_library().await?;
+    keep_out(&db, "/music/spare.mp3", "hash-at-removal").await?;
+    let mut retagged = make_scanned_file("/music/spare.mp3", "Spare");
+    retagged.metadata.file_size = 6_000_000;
+    retagged.metadata.date_modified = Some("2025-02-03T04:05:06+00:00".to_owned());
+    let new_hash = retagged.metadata.file_hash.clone();
+
+    folder_scan(&db, &[retagged]).await?;
+
+    let stamp: Vec<(Option<String>, Option<i64>, Option<String>)> =
+        sqlx::query_as("SELECT file_hash, file_size, date_modified FROM excluded_files")
+            .fetch_all(db.read())
+            .await?;
+    assert_eq!(
+        stamp,
+        [(Some(new_hash), Some(6_000_000), Some("2025-02-03T04:05:06+00:00".to_owned()))]
+    );
+    Ok(())
+}
+
+#[tokio::test]
+async fn a_kept_out_file_moved_within_a_folder_scan_carries_its_exclusion() -> Result<(), AppError>
+{
+    let db = music_library().await?;
+    keep_out(&db, "/music/old/spare.mp3", "spare-bytes").await?;
+    let moved = make_scanned_file_with_hash("/music/new/spare.mp3", "Spare", "spare-bytes");
+
+    folder_scan(&db, &[moved]).await?;
+
+    assert_eq!(kept_out_paths(&db).await?, ["/music/new/spare.mp3"]);
+    Ok(())
+}
+
+/// Two byte-identical copies, one kept and one kept out, both gone from where they were. The row
+/// claims the bytes first, or the keeper's history is stranded on a path that no longer exists.
+#[tokio::test]
+async fn a_moved_keeper_beside_its_kept_out_twin_takes_its_own_row_back() -> Result<(), AppError> {
+    let db = music_library().await?;
+    let keeper =
+        insert_test_track(&db, "/music/old/song.mp3", "Song", "Art", "Alb", "Rock").await?;
+    let bytes = make_test_metadata("Song").file_hash;
+    keep_out(&db, "/music/old/twin.mp3", &bytes).await?;
+    let moved = make_scanned_file_with_hash("/music/new/song.mp3", "Song", &bytes);
+
+    folder_scan(&db, &[moved]).await?;
+
+    let track = queries::track::get_track_by_id(&db, keeper).await?;
+    assert_eq!(track.file_path, "/music/new/song.mp3");
+    Ok(())
+}
+
+#[tokio::test]
+async fn an_import_brings_a_kept_out_file_back() -> Result<(), AppError> {
+    let db = music_library().await?;
+    let spare = make_scanned_file("/music/spare.mp3", "Spare");
+    keep_out(&db, "/music/spare.mp3", &spare.metadata.file_hash).await?;
+
+    let result = import(&db, &[spare]).await?;
+
+    assert_eq!(result.inserted_count, 1, "the file is a track again");
+    assert!(kept_out_paths(&db).await?.is_empty(), "and no longer listed as kept out");
+    Ok(())
+}
+
+/// What `kept_out::bring_back_page` counts a returned file by.
+#[tokio::test]
+async fn an_import_that_takes_an_old_row_back_still_lifts_the_kept_out_file() -> Result<(), AppError>
+{
+    let db = music_library().await?;
+    insert_test_track(&db, "/music/gone/song.mp3", "Song", "Art", "Alb", "Rock").await?;
+    let bytes = make_test_metadata("Song").file_hash;
+    keep_out(&db, "/music/spare.mp3", &bytes).await?;
+    let spare = make_scanned_file_with_hash("/music/spare.mp3", "Song", &bytes);
+
+    let result = import(&db, &[spare]).await?;
+
+    assert_eq!(result.moved_count, 1, "the premise: the import re-pointed the old row");
+    assert!(kept_out_paths(&db).await?.is_empty());
+    Ok(())
+}
+
+/// Filed under its own directory, the track would show as a folder of its own in Settings and
+/// outlive the removal of the library folder around it. The disabled row is an earlier import's.
+#[tokio::test]
+async fn an_import_inside_a_library_folder_is_filed_under_that_folder() -> Result<(), AppError> {
+    let db = DbPool::test_pool().await?;
+    let library = queries::folder::insert_folder(&db, "/music", true).await?;
+    queries::folder::insert_folder(&db, "/music/drop", false).await?;
+
+    let result = import(&db, &[make_scanned_file("/music/drop/song.mp3", "Song")]).await?;
+
+    let folder_ids: Vec<i64> =
+        sqlx::query_scalar("SELECT folder_id FROM tracks").fetch_all(db.read()).await?;
+    assert_eq!(result.inserted_count, 1, "the premise: the file was imported");
+    assert_eq!(folder_ids, [library.id]);
+    Ok(())
+}
+
+/// Records current behaviour rather than a stated rule: two rows of one file both gone, and the
+/// file back at a new path, takes back the lower id, the older row's history.
+#[tokio::test]
+async fn records_that_a_move_two_gone_rows_share_takes_back_the_lower_id() -> Result<(), AppError> {
+    let db = music_library().await?;
+    let older = insert_test_track(&db, "/music/a/song.mp3", "Song", "Art", "Alb", "Rock").await?;
+    insert_test_track(&db, "/music/b/song.mp3", "Song", "Art", "Alb", "Rock").await?;
+    let bytes = make_test_metadata("Song").file_hash;
+
+    folder_scan(&db, &[make_scanned_file_with_hash("/music/c/song.mp3", "Song", &bytes)]).await?;
+
+    let track = queries::track::get_track_by_id(&db, older).await?;
+    assert_eq!(track.file_path, "/music/c/song.mp3");
     Ok(())
 }

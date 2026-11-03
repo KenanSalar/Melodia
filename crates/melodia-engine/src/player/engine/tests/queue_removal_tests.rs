@@ -1,6 +1,8 @@
 //! What the queue's removals hold and how their undos land: the rows in both orders, and the
 //! cursor, which goes back only while nothing has started since.
 
+use std::collections::HashMap;
+
 use crate::player::engine::fixtures::{cut_rows, queue_of};
 use crate::player::engine::queue::{QueueCut, QueueEntry, QueueState};
 use crate::player::engine::types::RepeatMode;
@@ -434,4 +436,26 @@ fn an_undone_play_comes_back_in_insertion_order_once_shuffle_went_off() -> Resul
 
     assert_eq!(q.play_ids().to_vec(), [7, 8, 9]);
     Ok(())
+}
+
+/// A spare the duplicate finder removes becomes its keeper where it stands, or the next
+/// `library_changed` prunes its row and playback jumps. Read once before the swap, so a published
+/// order left stale by it fails here.
+#[test]
+fn replace_ids_swaps_each_queued_spare_for_its_keeper_in_place() {
+    let mut q = queue_of(&FIVE);
+    let _published = q.play_ids();
+
+    q.replace_ids(&HashMap::from([(2, 9), (4, 9)]));
+
+    assert_eq!(q.play_ids().to_vec(), [1, 9, 3, 9, 5]);
+}
+
+#[test]
+fn replace_ids_leaves_the_cursor_on_its_row() {
+    let mut q = five_playing(2);
+
+    q.replace_ids(&HashMap::from([(4, 9)]));
+
+    assert_eq!((q.playing_index(), q.current_id()), (Some(2), Some(3)));
 }

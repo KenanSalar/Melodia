@@ -1,12 +1,8 @@
 //! Taking stations out of a kept tab, and putting back what that took. Each is one transaction, so
 //! whether a row is still listed is decided on the row as the removal leaves it.
 
-use sqlx::AssertSqlSafe;
-
 use super::radio::kept_station_matching;
-use crate::database::{
-    DbPool, MAX_BINDS_PER_STATEMENT, chunked_in_query, chunked_in_query_on, placeholders,
-};
+use crate::database::{DbPool, chunked_in_execute_on, chunked_in_query, chunked_in_query_on};
 use melodia_core::entities::radio::{KeptList, RadioStation, StationCut};
 use melodia_core::error::AppError;
 
@@ -45,12 +41,14 @@ pub async fn remove_stations(
         KeptList::Favorites => "is_favorite = FALSE",
         KeptList::Recent => "last_played = NULL, play_count = 0",
     };
-    execute_by_ids(&mut tx, &kept, |ids| {
+    chunked_in_execute_on(&mut tx, &kept, |ids| {
         format!("UPDATE radio_stations SET {take} WHERE id IN ({ids})")
     })
     .await?;
-    execute_by_ids(&mut tx, &gone, |ids| format!("DELETE FROM radio_stations WHERE id IN ({ids})"))
-        .await?;
+    chunked_in_execute_on(&mut tx, &gone, |ids| {
+        format!("DELETE FROM radio_stations WHERE id IN ({ids})")
+    })
+    .await?;
 
     tx.commit().await?;
     Ok(cuts)
@@ -209,22 +207,5 @@ async fn reinsert_tx(
     .bind(station.play_count)
     .execute(&mut **tx)
     .await?;
-    Ok(())
-}
-
-/// `statement` is handed each chunk's placeholder list.
-async fn execute_by_ids(
-    tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
-    ids: &[i64],
-    statement: impl Fn(&str) -> String,
-) -> Result<(), AppError> {
-    for chunk in ids.chunks(MAX_BINDS_PER_STATEMENT) {
-        let mut query =
-            sqlx::query(AssertSqlSafe(statement(&placeholders(chunk.len())))).persistent(false);
-        for &id in chunk {
-            query = query.bind(id);
-        }
-        query.execute(&mut **tx).await?;
-    }
     Ok(())
 }

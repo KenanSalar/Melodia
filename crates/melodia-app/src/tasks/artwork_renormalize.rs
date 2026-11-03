@@ -1,6 +1,6 @@
 //! Brings an existing artwork store inside the size bounds the writers enforce, once:
 //! [`melodia_artwork::media::image::artwork::store_image`] bounds only what a scan writes, and
-//! `scanner::track_is_current` never re-derives an unchanged track's cover.
+//! `scanner::file_is_current` never re-derives an unchanged track's cover.
 //!
 //! **Not an `SQLx` migration.** It is a slow pass over a rebuildable cache, and a migration failure
 //! is fatal at boot. Nothing is deleted here: a re-encoded cover lands under a new hash, and the

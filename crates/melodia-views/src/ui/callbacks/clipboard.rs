@@ -64,7 +64,7 @@ pub fn wire(ui: &AppWindow, state: &AppState) {
 }
 
 /// Resolve the text on the runtime and hand it back to the event loop to copy.
-fn spawn_copy<Fut>(
+pub(in crate::ui) fn spawn_copy<Fut>(
     state: &AppState,
     weak: &Weak<AppWindow>,
     label: &'static str,

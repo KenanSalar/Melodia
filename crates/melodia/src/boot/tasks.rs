@@ -39,7 +39,7 @@ pub fn spawn_background_tasks(
     tasks::audio_health::spawn(spawner, state);
     tasks::device_volume::spawn(spawner, state);
     // Before any playback can fire an `UpdatePlayCount`.
-    tasks::play_count_flusher::spawn(spawner, state.db.clone(), state.stats_changed.clone());
+    tasks::play_count_flusher::spawn(spawner, state, channels.play_count_flushes);
     tasks::scrobble::spawn(spawner, state);
     tasks::discord_presence::spawn(spawner, state);
     // Started here when already enabled, so the card connects while idle rather than on the

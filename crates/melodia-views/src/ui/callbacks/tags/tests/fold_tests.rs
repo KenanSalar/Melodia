@@ -70,8 +70,4 @@ fn formatting_helpers() {
     assert_eq!(fmt_bpm(Some(128.5)), "128.5");
     assert_eq!(fmt_bpm(Some(f64::NAN)), "");
     assert_eq!(fmt_bpm(None), "");
-
-    assert_eq!(fmt_size(512), "512 B");
-    assert_eq!(fmt_size(2048), "2 KB");
-    assert_eq!(fmt_size(5 * 1024 * 1024), "5.0 MB");
 }

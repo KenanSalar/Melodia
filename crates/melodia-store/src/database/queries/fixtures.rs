@@ -168,6 +168,24 @@ pub(crate) async fn numbered_library(count: usize) -> Result<(DbPool, Vec<i64>),
     Ok((db, ids))
 }
 
+/// Keeps the file at `path` out of the library as the duplicate merge does, carrying `file_hash`
+/// and [`make_test_metadata`]'s stamp. `folder_id` is the seeded 1.
+#[cfg(test)]
+pub(crate) async fn keep_out(db: &DbPool, path: &str, file_hash: &str) -> Result<(), AppError> {
+    let stamp = make_test_metadata("");
+    let exclusion = queries::excluded_files::NewExclusion {
+        path,
+        file_hash: Some(file_hash),
+        file_size: Some(stamp.file_size),
+        date_modified: stamp.date_modified.as_deref(),
+        folder_id: 1,
+    };
+    let mut tx = db.write().begin().await?;
+    queries::excluded_files::exclude_on(&mut tx, &[exclusion]).await?;
+    tx.commit().await?;
+    Ok(())
+}
+
 /// The cards the Albums grid lists unfiltered, by name.
 #[cfg(test)]
 pub(crate) async fn listed_albums(db: &DbPool) -> Result<Vec<AlbumStats>, AppError> {

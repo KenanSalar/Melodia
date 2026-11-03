@@ -6,7 +6,7 @@ use tempfile::TempDir;
 use super::*;
 use melodia_artwork::media::image::artwork::CoverCache;
 use melodia_core::entities::artist::ArtistCredit;
-use melodia_core::entities::scan::ExistingTrackSummary;
+use melodia_core::entities::scan::FileStamp;
 use melodia_core::error::AppError;
 use melodia_core::utils::audio_ext::AUDIO_EXTENSIONS;
 
@@ -282,14 +282,14 @@ fn a_cancelled_parse_reads_nothing() -> Result<(), AppError> {
     Ok(())
 }
 
-// ── track_is_current and the walk index (incremental-scan filter) ──
+// ── file_is_current and the walk index (incremental-scan filter) ──
 
 /// The row a scan would hold for `path` as it stands on disk.
-fn row_for(path: &Path) -> Result<ExistingTrackSummary, AppError> {
+fn row_for(path: &Path) -> Result<FileStamp, AppError> {
     let meta = std::fs::metadata(path)?;
     let size = i64::try_from(meta.len()).unwrap_or(i64::MAX);
     let mtime = crate::media::ingest::metadata::date_modified_from_metadata(&meta);
-    Ok(ExistingTrackSummary { file_size: Some(size), date_modified: mtime })
+    Ok(FileStamp { file_size: Some(size), date_modified: mtime })
 }
 
 /// A row's path as the store spells it, which is what the index compares against.
@@ -297,8 +297,8 @@ fn stored(path: &Path) -> String {
     path.to_string_lossy().into_owned()
 }
 
-fn any_row() -> ExistingTrackSummary {
-    ExistingTrackSummary { file_size: None, date_modified: None }
+fn any_row() -> FileStamp {
+    FileStamp { file_size: None, date_modified: None }
 }
 
 #[test]
@@ -312,35 +312,35 @@ fn a_file_with_no_row_is_read() -> Result<(), AppError> {
 }
 
 #[test]
-fn track_is_current_true_when_size_and_mtime_match() -> Result<(), AppError> {
+fn file_is_current_true_when_size_and_mtime_match() -> Result<(), AppError> {
     let tmp = TempDir::new()?;
     let f = tmp.path().join("a.wav");
     create_minimal_wav(&f)?;
-    assert!(track_is_current(&f, &row_for(&f)?));
+    assert!(file_is_current(&f, &row_for(&f)?));
     Ok(())
 }
 
 #[test]
-fn track_is_current_false_when_size_differs() -> Result<(), AppError> {
+fn file_is_current_false_when_size_differs() -> Result<(), AppError> {
     let tmp = TempDir::new()?;
     let f = tmp.path().join("a.wav");
     create_minimal_wav(&f)?;
     let mut row = row_for(&f)?;
     // Simulate a content edit: stored size no longer matches the file.
     row.file_size = row.file_size.map(|s| s + 1);
-    assert!(!track_is_current(&f, &row));
+    assert!(!file_is_current(&f, &row));
     Ok(())
 }
 
 #[test]
-fn track_is_current_false_when_mtime_differs() -> Result<(), AppError> {
+fn file_is_current_false_when_mtime_differs() -> Result<(), AppError> {
     let tmp = TempDir::new()?;
     let f = tmp.path().join("a.wav");
     create_minimal_wav(&f)?;
     let mut row = row_for(&f)?;
     // Stored mtime no longer matches — e.g. tags were rewritten in place.
     row.date_modified = Some("1999-01-01T00:00:00Z".to_owned());
-    assert!(!track_is_current(&f, &row));
+    assert!(!file_is_current(&f, &row));
     Ok(())
 }
 
@@ -512,4 +512,86 @@ fn two_files_whose_names_read_back_alike_share_their_row() -> Result<(), AppErro
 
     assert_eq!(changed, Vec::<PathBuf>::new());
     Ok(())
+}
+
+// ── trash folders and kept-out files ──
+
+/// Anything a file manager trashed under a library folder would come back as a track.
+#[test]
+fn the_walk_skips_a_trash_folder_below_its_root() -> Result<(), AppError> {
+    let tmp = TempDir::new()?;
+    create_test_files(
+        tmp.path(),
+        &["kept.mp3", ".Trash-1000/files/trashed.mp3", "Album/$RECYCLE.BIN/binned.mp3"],
+    )?;
+
+    let files = walk(tmp.path())?;
+
+    assert_eq!(files, [tmp.path().join("kept.mp3")]);
+    Ok(())
+}
+
+#[test]
+fn a_root_named_like_a_trash_is_still_walked() -> Result<(), AppError> {
+    let tmp = TempDir::new()?;
+    let root = tmp.path().join(".Trash");
+    create_test_files(&root, &["song.mp3"])?;
+
+    let files = walk(&root)?;
+
+    assert_eq!(files, [root.join("song.mp3")]);
+    Ok(())
+}
+
+/// Pruning every hidden folder would purge, history and all, the tracks of anyone who keeps music
+/// under one.
+#[test]
+fn music_under_any_other_dot_folder_is_still_walked() -> Result<(), AppError> {
+    let tmp = TempDir::new()?;
+    create_test_files(tmp.path(), &[".hidden/song.mp3"])?;
+
+    let files = walk(tmp.path())?;
+
+    assert_eq!(files, [tmp.path().join(".hidden").join("song.mp3")]);
+    Ok(())
+}
+
+#[test]
+fn a_kept_out_file_that_matches_its_stamp_is_left_unread() -> Result<(), AppError> {
+    let tmp = TempDir::new()?;
+    let spare = tmp.path().join("spare.wav");
+    create_minimal_wav(&spare)?;
+    let mut index =
+        WalkIndex::new(MediaWalk { files: vec![spare.clone()], unreadable: Vec::new() });
+    index.add_kept_out(&stored(&spare), row_for(&spare)?);
+
+    let changed = index.changed(|_| true);
+
+    assert!(changed.is_empty());
+    Ok(())
+}
+
+#[test]
+fn only_a_kept_out_file_the_walk_did_not_find_is_unwalked() {
+    let root = PathBuf::from("music");
+    let (found, gone) = (root.join("found.mp3"), root.join("gone.mp3"));
+    let index = WalkIndex::new(MediaWalk { files: vec![found.clone()], unreadable: Vec::new() });
+
+    let unwalked = index.unwalked([stored(&found), stored(&gone)]);
+
+    assert_eq!(unwalked, [stored(&gone)]);
+}
+
+/// A directory the walk couldn't read says nothing about the kept-out files in it, and forgetting
+/// them brings each back on the next scan that can.
+#[test]
+fn a_kept_out_file_under_a_path_the_walk_could_not_read_is_spared() {
+    let root = PathBuf::from("music");
+    let unreadable = root.join("locked");
+    let (inside, gone) = (unreadable.join("spare.mp3"), root.join("gone.mp3"));
+    let index = WalkIndex::new(MediaWalk { files: Vec::new(), unreadable: vec![unreadable] });
+
+    let unwalked = index.unwalked([stored(&inside), stored(&gone)]);
+
+    assert_eq!(unwalked, [stored(&gone)]);
 }

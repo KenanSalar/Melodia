@@ -39,7 +39,7 @@ pub fn clamp_crossfade_ms(ms: u32) -> u32 {
 }
 
 /// The settings slider's seconds, clamped in float space so the cast lands in range.
-#[allow(
+#[expect(
     clippy::cast_possible_truncation,
     clippy::cast_sign_loss,
     reason = "value is clamped to MIN_CROSSFADE_MS..=MAX_CROSSFADE_MS before the cast, so it is a small non-negative integer"
@@ -53,7 +53,7 @@ pub fn secs_to_crossfade_ms(secs: f32) -> u32 {
 }
 
 /// Milliseconds → seconds, for seeding the settings slider.
-#[allow(
+#[expect(
     clippy::cast_precision_loss,
     reason = "clamped to at most MAX_CROSSFADE_MS, far inside f32's exact-integer range"
 )]
@@ -64,7 +64,7 @@ pub fn crossfade_ms_to_secs(ms: u32) -> f32 {
 
 /// Gain at ramp position `pos` of `total`, interpolating `start` → `target`. A zero `total`, or a
 /// `pos` past the end, lands on `target`.
-#[allow(
+#[expect(
     clippy::cast_precision_loss,
     reason = "pos <= total and both are bounded by a few seconds of samples, well inside f32's exact-integer range"
 )]
@@ -176,7 +176,7 @@ impl FadeShared {
 
 /// A `Copy` snapshot of the settings, taken once per decision so the flags can't shear against
 /// each other mid-evaluation.
-#[allow(
+#[expect(
     clippy::struct_excessive_bools,
     reason = "one field per independent user-facing toggle; a bitflags wrapper would only obscure them"
 )]

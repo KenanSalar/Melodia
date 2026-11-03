@@ -1,6 +1,6 @@
 //! The scan pipeline's boundary values, assembled rather than decoded, so none carries `FromRow`.
 //! Here because the store's two halves both name them: `media/` produces [`ExtractedMetadata`]
-//! and [`ScannedFile`] and reads [`ExistingTrackSummary`], and `database/queries/scan` the reverse.
+//! and [`ScannedFile`] and reads [`FileStamp`], and `database/queries/scan` the reverse.
 
 use std::path::PathBuf;
 
@@ -8,14 +8,22 @@ use super::artist::ArtistCredit;
 use super::credits::RoleCredits;
 use super::genre::GenreList;
 
-/// Size and mtime for a track already in the database, feeding the incremental-scan filter that
-/// decides whether an on-disk file is unchanged and can be skipped entirely.
-///
-/// See `media::ingest::scanner::track_is_current`, which compares `date_modified` byte-for-byte.
+/// The size and mtime the store last read a file at, a track's or a kept-out file's: a file that
+/// still matches them is unchanged and isn't read again.
 #[derive(Debug, Clone)]
-pub struct ExistingTrackSummary {
+pub struct FileStamp {
     pub file_size: Option<i64>,
     pub date_modified: Option<String>,
+}
+
+impl FileStamp {
+    /// Whether a file of `file_size` bytes, modified at `date_modified`, is the one stamped. The
+    /// mtime compares byte for byte, and a file with none never matches.
+    pub fn matches(&self, file_size: i64, date_modified: Option<&str>) -> bool {
+        self.file_size == Some(file_size)
+            && date_modified.is_some()
+            && self.date_modified.as_deref() == date_modified
+    }
 }
 
 /// One file the walk found, paired with what its tags read back as.
@@ -119,3 +127,7 @@ pub struct ExtractedMetadata {
     pub date_modified: Option<String>,
     pub artwork_path: Option<String>,
 }
+
+#[cfg(test)]
+#[path = "tests/scan_tests.rs"]
+mod tests;

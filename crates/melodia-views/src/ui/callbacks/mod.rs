@@ -7,7 +7,7 @@ pub(in crate::ui) mod macros;
 
 pub(in crate::ui) mod card_actions;
 pub(in crate::ui) mod card_selection;
-mod clipboard;
+pub(in crate::ui) mod clipboard;
 pub(in crate::ui) mod cross_tab_nav;
 mod dialog_closed;
 mod favorite_removal;

@@ -29,6 +29,7 @@ use melodia_core::entities::scan::ScannedFile;
 use melodia_core::error::{AppError, describe};
 use melodia_core::utils::toast::{self, ToastKind};
 use melodia_store::database::queries::ingest::Ingested;
+use melodia_store::database::queries::scan::Unwalked;
 use melodia_store::database::{DbPool, queries};
 use melodia_store::media::ingest::scan_pool::ScanPool;
 use melodia_store::media::ingest::scanner::{
@@ -158,7 +159,7 @@ async fn scan_one(
     }
     let scope = Arc::new(ScanScope::of(&state.db, &folder).await?);
 
-    let Some(Discovery { walked, to_scan, orphans, pool }) =
+    let Some(Discovery { walked, to_scan, unwalked, pool }) =
         discover(&state.db, folder.id, Arc::clone(&scope), Arc::clone(run)).await?
     else {
         return Ok(ScanOutcome::Stopped { rewrote_existing: false });
@@ -180,7 +181,7 @@ async fn scan_one(
 
     // Decided before the chunk loop consumes `to_scan`. The orphans count too, so a purge of
     // most of a folder runs with the triggers dropped rather than paying them per row.
-    let mut ingested = Ingested::for_delta(to_scan.len() + orphans.len());
+    let mut ingested = Ingested::for_delta(to_scan.len() + unwalked.tracks.len());
     run.begin_reading(u32::try_from(to_scan.len()).unwrap_or(u32::MAX));
 
     let scan_timestamp = melodia_core::utils::now_rfc3339();
@@ -218,17 +219,17 @@ async fn scan_one(
     // --- Stage 2. `queries::scan::commit_scan` argues what a stopped scan still owes.
     if !run.try_begin_finishing() {
         if ingested.any() {
-            queries::scan::commit_scan(&state.db, &folder, &[], &ingested).await?;
+            queries::scan::commit_scan(&state.db, &folder, &Unwalked::default(), &ingested).await?;
             state.library_changed.bump();
         }
         return Ok(ScanOutcome::Stopped { rewrote_existing: ingested.rewrote_existing() });
     }
-    queries::scan::commit_scan(&state.db, &folder, &orphans, &ingested).await?;
+    queries::scan::commit_scan(&state.db, &folder, &unwalked, &ingested).await?;
     finish::absorb_nested(&state.db, &folder, &scope.nested).await?;
     finish::after_completed(state, folder.id).await?;
     // Only for a change: every list showing the library re-fetches on a bump, and a launch scans
     // every folder. The folder's new `last_scanned` reaches Settings when the run ends instead.
-    if ingested.any() || !orphans.is_empty() || !scope.nested.is_empty() {
+    if ingested.any() || !unwalked.is_empty() || !scope.nested.is_empty() {
         state.library_changed.bump();
     }
 
@@ -264,8 +265,7 @@ struct Discovery {
     /// How many audio files the walk found.
     walked: usize,
     to_scan: Vec<PathBuf>,
-    /// The folder's rows the walk didn't find, for the commit to purge.
-    orphans: Vec<String>,
+    unwalked: Unwalked,
     /// One pool serves the sort, the filter, the parse and the ingest's stat, and ends with the
     /// ingest.
     pool: ScanPool,
@@ -300,20 +300,29 @@ async fn discover(
     };
 
     // `scan_one` purges nothing after an empty walk, so its rows would be read only to be dropped.
+    let mut kept_out = Vec::new();
     if !index.is_empty() {
-        queries::scan::visit_folder_tracks(db, folder_id, |path, row| index.add_row(path, row))
+        queries::scan::visit_folder_tracks(db, folder_id, |path, stamp| index.add_row(path, stamp))
             .await?;
+        for (path, stamp) in queries::excluded_files::in_folder(db, folder_id).await? {
+            index.add_kept_out(&path, stamp);
+            kept_out.push(path);
+        }
     }
 
     tokio::task::spawn_blocking(move || {
         // Reads only what this folder owns, but the walk stays whole: the purge checks the
-        // folder's rows against it, and some can sit inside a nested folder's directory.
+        // folder's rows against it, and some can sit inside a nested folder's directory. A
+        // kept-out file is read only once it has changed, for the ingest to restamp it.
         let to_scan =
             pool.install(|| index.changed(|path| !run.is_cancelled() && scope.owns(path)));
         if run.is_cancelled() {
             return None;
         }
-        Some(Discovery { walked: index.len(), to_scan, orphans: index.into_orphans(), pool })
+        let walked = index.len();
+        let exclusions = index.unwalked(kept_out);
+        let unwalked = Unwalked { tracks: index.into_orphans(), exclusions };
+        Some(Discovery { walked, to_scan, unwalked, pool })
     })
     .await
     .map_err(|e| AppError::scanner("Scan filter task failed", e))

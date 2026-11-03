@@ -1,6 +1,9 @@
 //! Windows Fluent theme: 2 variants (Dark / Light), 8 accents.
 
-#![allow(clippy::unreadable_literal)]
+#![expect(
+    clippy::unreadable_literal,
+    reason = "the hex literals are 0xRRGGBB colours, written as each theme publishes them"
+)]
 
 use super::{AccentDef, Palette, ThemeDef, Variant};
 

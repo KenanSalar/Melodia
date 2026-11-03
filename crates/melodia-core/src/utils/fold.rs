@@ -1,6 +1,6 @@
-//! Case- and accent-folding, for two strings a human would call the same. Two unrelated questions
-//! fold here, each arguing its reason where it asks; sharing one implementation keeps a fix from
-//! landing on half of them.
+//! Case- and accent-folding, for two strings a human would call the same. Unrelated questions fold
+//! here, each arguing its reason where it asks; sharing one implementation keeps a fix from landing
+//! on only some of them.
 
 use unicode_normalization::UnicodeNormalization;
 use unicode_normalization::char::is_combining_mark;
@@ -38,6 +38,30 @@ pub fn fold(s: &str) -> String {
     let mut out = String::with_capacity(s.len());
     push_folded(&mut out, s);
     out
+}
+
+/// Letters and digits, single-spaced, so punctuation can't make two spellings of a title unequal.
+/// An apostrophe is dropped rather than spaced: spaced, `don't` could never equal `dont`.
+#[must_use]
+pub fn squeeze(text: &str) -> String {
+    let mut out = String::with_capacity(text.len());
+    for ch in text.chars() {
+        if ch.is_alphanumeric() {
+            out.push(ch);
+        } else if !matches!(ch, '\'' | '\u{2019}' | '`' | '\u{02bc}') && !out.ends_with(' ') {
+            out.push(' ');
+        }
+    }
+    out.trim().to_owned()
+}
+
+/// [`fold`], then [`squeeze`], for telling two tags apart as one name or two. A string of nothing
+/// but punctuation keeps its fold, or every such title would squeeze to the same empty one.
+#[must_use]
+pub fn fold_words(s: &str) -> String {
+    let folded = fold(s);
+    let words = squeeze(&folded);
+    if words.is_empty() { folded } else { words }
 }
 
 #[cfg(test)]

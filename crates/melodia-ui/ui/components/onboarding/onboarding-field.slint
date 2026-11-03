@@ -1,0 +1,21 @@
+import { Theme } from "../../theme.slint";
+import { OnboardingRow } from "onboarding-card.slint";
+
+// One setting on the welcome card's appearance step: its name over the control in the slot.
+export component OnboardingField inherits OnboardingRow {
+    in property <string> label;
+
+    VerticalLayout {
+        padding: Theme.pad-md;
+        spacing: Theme.pad-sm;
+
+        Text {
+            text: root.label;
+            font-size: Theme.font-size-sm;
+            color: Theme.text-muted;
+            wrap: word-wrap;
+        }
+
+        @children
+    }
+}

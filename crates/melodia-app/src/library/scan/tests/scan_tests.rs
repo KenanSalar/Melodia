@@ -107,7 +107,7 @@ async fn a_rescan_of_an_unchanged_file_purges_nothing() -> Result<(), AppError> 
 
     let found = discovered(&db, tmp.path()).await?;
 
-    assert_eq!(found.orphans, Vec::<String>::new());
+    assert_eq!(found.unwalked.tracks, Vec::<String>::new());
     Ok(())
 }
 
@@ -130,7 +130,7 @@ async fn a_row_inside_a_nested_folders_directory_is_not_an_orphan() -> Result<()
 
     let found = discovered_in(&db, scope).await?;
 
-    assert_eq!(found.orphans, Vec::<String>::new());
+    assert_eq!(found.unwalked.tracks, Vec::<String>::new());
     Ok(())
 }
 
@@ -144,7 +144,7 @@ async fn a_row_whose_file_left_the_folder_is_an_orphan() -> Result<(), AppError>
 
     let found = discovered(&db, tmp.path()).await?;
 
-    assert_eq!(found.orphans, [gone.to_string_lossy()]);
+    assert_eq!(found.unwalked.tracks, [gone.to_string_lossy()]);
     Ok(())
 }
 
@@ -158,7 +158,7 @@ async fn an_empty_walk_names_no_orphan() -> Result<(), AppError> {
 
     let found = discovered(&db, tmp.path()).await?;
 
-    assert_eq!(found.orphans, Vec::<String>::new());
+    assert_eq!(found.unwalked.tracks, Vec::<String>::new());
     Ok(())
 }
 

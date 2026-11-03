@@ -8,14 +8,13 @@
 //! reconcile task's own tests drive it against real bytes, because a delete and a create only meet
 //! at that level.
 
-use std::collections::HashMap;
 use std::path::Path;
 
 use tempfile::TempDir;
 
 use super::*;
 use crate::database::queries;
-use crate::database::queries::fixtures::{insert_test_track, make_test_metadata};
+use crate::database::queries::fixtures::{insert_test_track, keep_out, make_test_metadata};
 
 /// An mtime no file on disk can have, so a value that reaches the row proves it
 /// came from what the handler was handed and not from a fresh `stat`.
@@ -76,7 +75,9 @@ async fn track_count(db: &DbPool) -> Result<i64, AppError> {
 /// A batch whose one move candidate is the row `id`, last seen at `vanished`.
 fn batch_with_candidate(hash: &str, id: i64, vanished: &Path) -> Batch {
     let candidate = (id, vanished.to_string_lossy().into_owned());
-    Batch { moved: HashMap::from([(hash.to_owned(), candidate)]), ..Batch::default() }
+    let mut moved = MoveCandidates::default();
+    moved.tracks.insert(hash.to_owned(), candidate);
+    Batch { moved, ..Batch::default() }
 }
 
 #[tokio::test]
@@ -186,7 +187,7 @@ async fn a_created_file_matching_a_vanished_row_repoints_it_once() -> Result<(),
 
     assert!(repointed);
     assert!(inserted);
-    assert!(batch.moved.is_empty(), "a consumed candidate must not re-point a second file");
+    assert!(batch.moved.tracks.is_empty(), "a consumed candidate must not re-point a second file");
     assert_eq!(track_id_at(&db, &moved).await?, Some(id), "the move keeps the original row");
     assert_eq!(track_count(&db).await?, 2, "the twin is a new file, not the same one again");
     Ok(())
@@ -211,7 +212,7 @@ async fn a_move_out_of_the_watched_tree_leaves_the_candidate_alone() -> Result<(
     let refused = handle_created(&mut tx, &outside, &meta, &mut batch).await?;
     assert!(!refused);
     assert!(
-        batch.moved.contains_key(&meta.file_hash),
+        batch.moved.tracks.contains_key(&meta.file_hash),
         "refusing a path outside the library must not spend the row's one chance to be found"
     );
 
@@ -341,5 +342,167 @@ async fn a_modify_of_a_path_the_library_does_not_know_inserts_it() -> Result<(),
 
     assert!(changed);
     assert!(track_id_at(&db, &path).await?.is_some());
+    Ok(())
+}
+
+// The kept-out files go through `apply_watch_batch`, since the lift of a gone file and the read of
+// the move candidates both happen there, around the handlers.
+
+fn spelled(path: &Path) -> String {
+    path.to_string_lossy().into_owned()
+}
+
+async fn kept_out_paths(db: &DbPool) -> Result<Vec<String>, AppError> {
+    queries::excluded_files::paths(db).await
+}
+
+/// [`seed_folder`] with `<dir>/spare.mp3` kept out, carrying `make_test_metadata("Spare")`'s bytes.
+async fn seed_kept_out(dir: &Path) -> Result<(DbPool, PathBuf), AppError> {
+    let db = seed_folder(dir).await?;
+    let spare = dir.join("spare.mp3");
+    keep_out(&db, &spelled(&spare), &make_test_metadata("Spare").file_hash).await?;
+    Ok((db, spare))
+}
+
+/// On disk, as a created file is, so it can't pass for its own move.
+#[tokio::test]
+async fn a_file_created_on_a_kept_out_path_stays_out() -> Result<(), AppError> {
+    let tmp = TempDir::new()?;
+    let (db, spare) = seed_kept_out(tmp.path()).await?;
+    std::fs::write(&spare, b"audio")?;
+    let created = WatchedChange::Created { path: spare, meta: make_test_metadata("Spare") };
+
+    apply_watch_batch(&db, vec![created]).await?;
+
+    assert_eq!(track_count(&db).await?, 0);
+    Ok(())
+}
+
+#[tokio::test]
+async fn a_kept_out_file_written_to_takes_its_new_hash() -> Result<(), AppError> {
+    let tmp = TempDir::new()?;
+    let (db, spare) = seed_kept_out(tmp.path()).await?;
+    let retagged = make_test_metadata("Retagged");
+    let new_hash = retagged.file_hash.clone();
+
+    apply_watch_batch(&db, vec![WatchedChange::Modified { path: spare, meta: retagged }]).await?;
+
+    let hashes: Vec<Option<String>> =
+        sqlx::query_scalar("SELECT file_hash FROM excluded_files").fetch_all(db.read()).await?;
+    assert_eq!(hashes, [Some(new_hash)]);
+    Ok(())
+}
+
+#[tokio::test]
+async fn a_kept_out_file_renamed_within_the_library_carries_its_exclusion() -> Result<(), AppError>
+{
+    let tmp = TempDir::new()?;
+    let (db, spare) = seed_kept_out(tmp.path()).await?;
+    let to = tmp.path().join("renamed.mp3");
+    let renamed = WatchedChange::Renamed {
+        from: spare,
+        to: to.clone(),
+        meta: Some(make_test_metadata("Spare")),
+        date_modified: None,
+    };
+
+    apply_watch_batch(&db, vec![renamed]).await?;
+
+    assert_eq!(kept_out_paths(&db).await?, [spelled(&to)]);
+    Ok(())
+}
+
+#[tokio::test]
+async fn a_kept_out_file_renamed_out_of_every_library_folder_is_lifted() -> Result<(), AppError> {
+    let tmp = TempDir::new()?;
+    let (db, spare) = seed_kept_out(&tmp.path().join("music")).await?;
+    let renamed = WatchedChange::Renamed {
+        from: spare,
+        to: tmp.path().join("elsewhere.mp3"),
+        meta: None,
+        date_modified: None,
+    };
+
+    apply_watch_batch(&db, vec![renamed]).await?;
+
+    assert!(kept_out_paths(&db).await?.is_empty());
+    Ok(())
+}
+
+#[tokio::test]
+async fn a_kept_out_file_gone_from_disk_leaves_the_list() -> Result<(), AppError> {
+    let tmp = TempDir::new()?;
+    let (db, spare) = seed_kept_out(tmp.path()).await?;
+
+    apply_watch_batch(&db, vec![WatchedChange::Removed { path: spare, gone: true }]).await?;
+
+    assert!(kept_out_paths(&db).await?.is_empty());
+    Ok(())
+}
+
+#[tokio::test]
+async fn a_removal_the_kept_out_file_outlived_keeps_it_out() -> Result<(), AppError> {
+    let tmp = TempDir::new()?;
+    let (db, spare) = seed_kept_out(tmp.path()).await?;
+    let removed = WatchedChange::Removed { path: spare.clone(), gone: false };
+
+    apply_watch_batch(&db, vec![removed]).await?;
+
+    assert_eq!(kept_out_paths(&db).await?, [spelled(&spare)]);
+    Ok(())
+}
+
+#[tokio::test]
+async fn a_track_renamed_onto_a_kept_out_path_lifts_the_exclusion() -> Result<(), AppError> {
+    let tmp = TempDir::new()?;
+    let (db, _) = seed_folder_with_track(tmp.path()).await?;
+    let spare = tmp.path().join("spare.mp3");
+    keep_out(&db, &spelled(&spare), "spare-bytes").await?;
+    let renamed = WatchedChange::Renamed {
+        from: tmp.path().join("from.mp3"),
+        to: spare,
+        meta: None,
+        date_modified: Some(SENTINEL_MTIME.to_owned()),
+    };
+
+    apply_watch_batch(&db, vec![renamed]).await?;
+
+    assert!(kept_out_paths(&db).await?.is_empty());
+    Ok(())
+}
+
+#[tokio::test]
+async fn a_kept_out_file_renamed_onto_a_tracks_path_is_lifted() -> Result<(), AppError> {
+    let tmp = TempDir::new()?;
+    let (db, _) = seed_folder_with_track(tmp.path()).await?;
+    let spare = tmp.path().join("spare.mp3");
+    keep_out(&db, &spelled(&spare), "spare-bytes").await?;
+    let renamed = WatchedChange::Renamed {
+        from: spare,
+        to: tmp.path().join("from.mp3"),
+        meta: Some(make_test_metadata("Spare")),
+        date_modified: None,
+    };
+
+    apply_watch_batch(&db, vec![renamed]).await?;
+
+    assert!(kept_out_paths(&db).await?.is_empty());
+    Ok(())
+}
+
+/// A folder reorganised in the file manager reaches the watcher as a create at the new path, its
+/// bytes the only link to the exclusion left at the old one.
+#[tokio::test]
+async fn a_kept_out_file_moved_to_a_new_path_carries_its_exclusion() -> Result<(), AppError> {
+    let tmp = TempDir::new()?;
+    let db = seed_folder(tmp.path()).await?;
+    let bytes = make_test_metadata("Spare");
+    keep_out(&db, &spelled(&tmp.path().join("old").join("spare.mp3")), &bytes.file_hash).await?;
+    let moved = tmp.path().join("new").join("spare.mp3");
+
+    apply_watch_batch(&db, vec![WatchedChange::Created { path: moved.clone(), meta: bytes }])
+        .await?;
+
+    assert_eq!(kept_out_paths(&db).await?, [spelled(&moved)]);
     Ok(())
 }

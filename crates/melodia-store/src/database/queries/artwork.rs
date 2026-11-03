@@ -4,7 +4,7 @@ use std::path::Path;
 use sqlx::AssertSqlSafe;
 
 use crate::database::{
-    DbPool, MAX_BINDS_PER_STATEMENT, placeholders, queries, values_placeholders,
+    DbPool, MAX_BINDS_PER_STATEMENT, chunked_in_execute_on, queries, values_placeholders,
 };
 use melodia_core::error::AppError;
 
@@ -94,16 +94,11 @@ pub async fn forget_paths(db: &DbPool, missing: &[String]) -> Result<u64, AppErr
 
     let mut tx = db.write().begin().await?;
     let mut touched = 0;
-    for chunk in missing.chunks(MAX_BINDS_PER_STATEMENT) {
-        let list = placeholders(chunk.len());
-        for (table, column, cleared) in FORGETS {
-            let sql = format!("UPDATE {table} SET {cleared} WHERE {column} IN ({list})");
-            let mut query = sqlx::query(AssertSqlSafe(sql)).persistent(false);
-            for path in chunk {
-                query = query.bind(path);
-            }
-            touched += query.execute(&mut *tx).await?.rows_affected();
-        }
+    for (table, column, cleared) in FORGETS {
+        touched += chunked_in_execute_on(&mut tx, missing, |list| {
+            format!("UPDATE {table} SET {cleared} WHERE {column} IN ({list})")
+        })
+        .await?;
     }
     queries::scan::roll_up_covers(&mut tx).await?;
     tx.commit().await?;

@@ -28,7 +28,13 @@ const ITEM_MENU_POPUP: &str = "ContextMenuPopup";
 
 /// The menus a row or card raises. An equality, so a menu that stops opening the popup can't
 /// leave the walk unnoticed, nor a renamed popup empty it and pass.
-const ITEM_MENUS: [&str; 3] = ["CardContextMenu", "StationContextMenu", "TrackContextMenu"];
+const ITEM_MENUS: [&str; 5] = [
+    "CardContextMenu",
+    "DuplicateRowMenu",
+    "KeptOutMenu",
+    "StationContextMenu",
+    "TrackContextMenu",
+];
 
 /// The callback a card raises its menu through, the menu being its host's.
 const MENU_REQUEST: &str = "callback context-requested(";

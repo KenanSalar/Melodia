@@ -2,7 +2,7 @@
 
 use futures_util::TryStreamExt;
 
-use melodia_core::entities::scan::ExistingTrackSummary;
+use melodia_core::entities::scan::FileStamp;
 use melodia_core::error::AppError;
 
 pub(crate) async fn track_exists_by_path(
@@ -16,7 +16,9 @@ pub(crate) async fn track_exists_by_path(
     Ok(exists.is_some())
 }
 
-/// The library folder holding `file_path`, by longest prefix, or `None` outside every one.
+/// The library folder holding `file_path`, by longest prefix, or `None` outside every one. An
+/// import's folder is passed by, so a file below a directory something was once imported from is
+/// filed under its library folder rather than with that import.
 ///
 /// **The separator is bound, never spelled**: a Windows folder is `C:\Music`, and a hardcoded `/`
 /// answers `None` for every file there, which callers read as outside the library. `/` is
@@ -29,7 +31,8 @@ pub(crate) async fn find_folder_for_path(
     file_path: &str,
 ) -> Result<Option<i64>, AppError> {
     let id = sqlx::query_scalar::<_, i64>(
-        "SELECT id FROM folders WHERE SUBSTR(?, 1, LENGTH(path) + 1) IN (path || '/', path || ?) \
+        "SELECT id FROM folders WHERE is_enabled \
+         AND SUBSTR(?, 1, LENGTH(path) + 1) IN (path || '/', path || ?) \
          ORDER BY LENGTH(path) DESC LIMIT 1",
     )
     .bind(file_path)
@@ -45,7 +48,7 @@ pub(crate) async fn find_folder_for_path(
 pub async fn visit_folder_tracks(
     db: &crate::database::DbPool,
     folder_id: i64,
-    mut visit: impl FnMut(String, ExistingTrackSummary),
+    mut visit: impl FnMut(String, FileStamp),
 ) -> Result<(), AppError> {
     let mut rows = sqlx::query_as::<_, (String, Option<i64>, Option<String>)>(
         "SELECT file_path, file_size, date_modified FROM tracks WHERE folder_id = ?",
@@ -54,7 +57,7 @@ pub async fn visit_folder_tracks(
     .fetch(db.read());
 
     while let Some((path, file_size, date_modified)) = rows.try_next().await? {
-        visit(path, ExistingTrackSummary { file_size, date_modified });
+        visit(path, FileStamp { file_size, date_modified });
     }
     Ok(())
 }

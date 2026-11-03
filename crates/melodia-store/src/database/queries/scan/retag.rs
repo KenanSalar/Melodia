@@ -2,14 +2,13 @@
 //! rewritten and read back, refreshed in one transaction.
 
 use std::collections::HashMap;
-use std::path::{Path, PathBuf};
 
 use super::{
     NameCache, ResolvedIds, prune_orphans, resolve_track_context, update_album_artwork_from_tracks,
     update_track_metadata,
 };
-use crate::database::DbPool;
 use crate::database::queries::{album, playlist, track};
+use crate::database::{DbPool, chunked_in_query_on};
 use melodia_core::entities::scan::ExtractedMetadata;
 use melodia_core::entities::tags::{ArtworkEdit, TagEdit};
 use melodia_core::error::AppError;
@@ -25,16 +24,17 @@ pub struct RetaggedFile<'a> {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Retag {
     Updated,
-    /// The file sits in no library folder, so its row was left as it was.
-    OutsideLibrary,
+    /// The row left the library while its file was written, so there was nothing to refresh.
+    Gone,
 }
 
-/// [`commit_retag`]'s memo key: everything [`resolve_track_context`] derives its ids from, the
-/// folder by way of the parent directory, and `year` because the album upsert coalesces it.
+/// [`commit_retag`]'s memo key: everything [`resolve_track_context`] derives its ids from, `year`
+/// because the album upsert coalesces it, and the row's folder, which a hit hands back as the
+/// `folder_id` the update writes.
 ///
 /// **Ids only**: a hit skips `upsert_album`'s release columns, so the first file to resolve a key
 /// writes them. Right for the dialog, where every selected file receives the same values.
-type ResolveKey = (PathBuf, String, String, String, Option<i32>, String);
+type ResolveKey = (i64, String, String, String, Option<i32>, String);
 
 /// Resolves ids for each file, refreshes its row and applies the artwork override the metadata
 /// UPDATE can't express, answering in `files`' order.
@@ -57,14 +57,19 @@ pub async fn commit_retag(
     // The release fields `upsert_album` can't empty, and the albums owed the statement that can.
     let cleared_release = edit.cleared_release_tags();
     let mut cleared_album_ids: Vec<i64> = Vec::new();
+    let folder_of = folder_ids(&mut tx, files).await?;
 
     for file in files {
-        let path = Path::new(file.path);
+        // A tag edit moves no file, so the row stays under its folder, an import's included.
+        let Some(&folder_id) = folder_of.get(&file.id) else {
+            outcomes.push(Retag::Gone);
+            continue;
+        };
         let meta = file.meta;
         // The **first** credited names, as `resolve_track_context` reads them, or a hit answers
         // with ids it would never produce.
         let key: ResolveKey = (
-            path.parent().map(Path::to_path_buf).unwrap_or_default(),
+            folder_id,
             meta.artist.primary_name().to_owned(),
             meta.album.clone().unwrap_or_default(),
             meta.album_artist.primary_name().to_owned(),
@@ -74,13 +79,7 @@ pub async fn commit_retag(
         let rids = if let Some(cached) = resolve_cache.get(&key) {
             *cached
         } else {
-            let Some(resolved) =
-                resolve_track_context(&mut tx, path, file.path, meta, "Tag edit", &mut names)
-                    .await?
-            else {
-                outcomes.push(Retag::OutsideLibrary);
-                continue;
-            };
+            let resolved = resolve_track_context(&mut tx, folder_id, meta, &mut names).await?;
             resolve_cache.insert(key, resolved);
             resolved
         };
@@ -144,6 +143,19 @@ pub async fn commit_retag(
 
     tx.commit().await?;
     Ok(outcomes)
+}
+
+/// `track id → folder_id` of the rows behind `files`. A row deleted since the edit began has none.
+async fn folder_ids(
+    tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
+    files: &[RetaggedFile<'_>],
+) -> Result<HashMap<i64, i64>, AppError> {
+    let ids: Vec<i64> = files.iter().map(|file| file.id).collect();
+    let rows: Vec<(i64, i64)> = chunked_in_query_on(tx, &ids, |placeholders| {
+        format!("SELECT id, folder_id FROM tracks WHERE id IN ({placeholders})")
+    })
+    .await?;
+    Ok(rows.into_iter().collect())
 }
 
 /// Overwrites every updated track's and album's cover with the one just cached, the roll-up only

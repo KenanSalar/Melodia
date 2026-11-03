@@ -1,0 +1,96 @@
+import { DuplicateRow, KeptOutRow } from "../models.slint";
+
+// The duplicate finder's state, owned by `ui::duplicates`. `Dialog` imports this for its accept and
+// its teardown, and never the reverse. Every pick rule is Rust's, the rows only reporting where a
+// click landed.
+export global DuplicatesUi {
+    in property <[DuplicateRow]> rows;
+    // Raised by the opener, which writes it in Slint so Rust touches nothing inside the click.
+    in-out property <bool> busy;
+    in property <bool> failed;
+    // Listed groups, so the dismissed ones only while they show.
+    in property <int> group-count;
+    // What Review shows, read by its body and by the card's step states.
+    out property <bool> settled: !root.busy && !root.failed;
+    out property <bool> listing: root.settled && root.group-count > 0;
+    in property <int> dismissed-count;
+    in property <bool> show-dismissed;
+    in property <int> picked-count;
+    // Built in Rust and untranslated, as the Edit Tags size is.
+    in property <string> picked-size;
+    // The Confirm step, Slint's alone: the footer reads it for Back, the primary label, its gate
+    // and `destructive`, and the teardown resets it.
+    in-out property <bool> confirming;
+    in property <bool> removing;
+
+    callback find();
+    callback toggle(int /*copy id*/);
+    callback keep-copy(int /*copy id*/);
+    callback keep-folder(int /*copy id*/);
+    callback suggest();
+    callback clear-picks();
+    callback set-show-dismissed(bool);
+    callback dismiss-group(int /*header id*/);
+    callback restore-group(int /*header id*/);
+    callback remove();
+    // `@tr` literals for the result toast Rust raises, Slint exposing no Rust-callable `tr`.
+    pure callback removed-title(int /*removed*/) -> string;
+    removed-title(removed) => {
+        return @tr("{n} copy removed from the library" | "{n} copies removed from the library" % removed);
+    }
+    pure callback removed-message(int /*skipped*/) -> string;
+    removed-message(skipped) => {
+        return skipped == 0 ? ""
+            : @tr("{n} copy skipped, as it was playing or had already gone." | "{n} copies skipped, as they were playing or had already gone." % skipped);
+    }
+    pure callback remove-failed-title() -> string;
+    remove-failed-title() => {
+        return @tr("Couldn't remove the copies");
+    }
+    pure callback remove-failed-message() -> string;
+    remove-failed-message() => {
+        return @tr("Nothing left the library. See the log for details.");
+    }
+    // From every kind's teardown: a dialog raised as the finder fades out skips the finder's.
+    callback released();
+}
+
+// The files Remove kept out of the library, owned by `ui::duplicates::kept_out`: the Settings row's
+// count and the list its dialog shows.
+export global KeptOutUi {
+    in property <int> count;
+    in property <[KeptOutRow]> rows;
+    // Raised by the opener, as `DuplicatesUi.busy` is.
+    in-out property <bool> busy;
+    in property <bool> failed;
+    out property <bool> listing: !root.busy && !root.failed && root.rows.length > 0;
+    // One Bring Back at a time, or a file both runs asked for is toasted as brought back twice.
+    in property <bool> bringing-back;
+
+    callback load();
+    callback bring-back(int /*exclusion id*/);
+    callback bring-all-back();
+    callback open-folder(string /*path*/);
+    callback copy-all-paths();
+    // From every kind's teardown, as `DuplicatesUi.released` is.
+    callback released();
+
+    // `@tr` literals for the toasts Rust raises.
+    pure callback brought-back-title(int /*returned*/) -> string;
+    brought-back-title(returned) => {
+        return @tr("{n} file brought back to the library" | "{n} files brought back to the library" % returned);
+    }
+    pure callback not-brought-back-message(int /*not returned*/) -> string;
+    not-brought-back-message(missing) => {
+        return missing == 0 ? ""
+            : @tr("{n} file wasn't found or couldn't be read, so it stays on the list." | "{n} files weren't found or couldn't be read, so they stay on the list." % missing);
+    }
+    pure callback bring-back-failed-title(int /*asked*/) -> string;
+    bring-back-failed-title(asked) => {
+        return @tr("Couldn't bring the file back" | "Couldn't bring the files back" % asked);
+    }
+    pure callback bring-back-failed-message() -> string;
+    bring-back-failed-message() => {
+        return @tr("See the log for details.");
+    }
+}

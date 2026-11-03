@@ -1,4 +1,5 @@
 import { Theme } from "../theme.slint";
+import { MaterialIcon } from "material-icon.slint";
 
 // One metadata chip, a codec under the Now Playing cover or a count on a hero band. Decorative:
 // `FilledChip` is the interactive pill, kept apart because one states a fact and the other
@@ -11,14 +12,27 @@ export component MetaChip inherits Rectangle {
     in property <string> text;
     in property <brush> fill: Theme.surface1;
     in property <brush> label-color: Theme.text;
+    in property <string> icon;
+    in property <brush> icon-color: root.label-color;
 
     height: Theme.meta-chip-h;
     border-radius: self.height / 2;
     background: root.fill;
 
     HorizontalLayout {
-        padding-left: Theme.pad-md;
+        // The glyph's own side bearing already reads as padding.
+        padding-left: root.icon != "" ? Theme.pad-sm : Theme.pad-md;
         padding-right: Theme.pad-md;
+        spacing: Theme.pad-xs;
+
+        if root.icon != "": VerticalLayout {
+            alignment: center;
+            MaterialIcon {
+                name: root.icon;
+                icon-size: 14px;
+                icon-color: root.icon-color;
+            }
+        }
         Text {
             text: root.text;
             color: root.label-color;

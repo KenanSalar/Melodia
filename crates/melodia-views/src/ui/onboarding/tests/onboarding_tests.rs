@@ -35,7 +35,7 @@ fn the_step_count_matches_the_panels_and_the_dots() {
 }
 
 /// Every way out of the card means the same thing, and the flag is spent on the way rather than on
-/// reaching the last panel: an X, the backdrop, Escape and Skip all reach `dismiss`.
+/// reaching the last panel: the backdrop, Escape, Skip and Done all reach `dismiss`.
 ///
 /// The guard is what keeps that idempotent — `dismiss` is an `Fn`, and a second Escape inside the
 /// fade would otherwise queue a second persist and a second unmount timer.

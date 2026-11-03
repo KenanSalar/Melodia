@@ -84,7 +84,7 @@ impl Default for ReplayGainFlags {
 
 /// Ships off, with `crossfade_skip_same_album` on so a continuous mix stays gapless once it isn't.
 /// `crossfade_duration_ms` is clamped to `MIN_CROSSFADE_MS..=MAX_CROSSFADE_MS`.
-#[allow(
+#[expect(
     clippy::struct_excessive_bools,
     reason = "one serde field per independent user-facing toggle; each must round-trip through settings.json by name"
 )]

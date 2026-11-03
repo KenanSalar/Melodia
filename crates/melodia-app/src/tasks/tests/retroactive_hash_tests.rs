@@ -69,7 +69,7 @@ async fn an_unhashed_row_gets_the_hash_of_its_own_file() -> Result<(), AppError>
 }
 
 /// The hash and the mtime are written together or the row is worse off than before: a fresh hash
-/// beside the mtime the row already had is the one state `track_is_current` reads as current and
+/// beside the mtime the row already had is the one state `file_is_current` reads as current and
 /// no re-scan repairs.
 #[tokio::test]
 async fn the_backfilled_mtime_comes_off_the_file() -> Result<(), AppError> {

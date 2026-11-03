@@ -18,7 +18,8 @@ Paths are under `crates/melodia-ui/ui/components/` unless stated.
   Slint paints before its occluder). `PopupSurface` wraps every `PopupWindow` body, `MenuSurface` a
   Now Playing menu's; `PopupFit` and `PopupColumn` place and scroll one whose rows can outgrow the
   window. `FocusLossWatcher` goes inside every popup, `PopupDismissCatcher` over a popup's empty
-  regions, never a bare `TouchArea`.
+  regions, never a bare `TouchArea`. `dialog/modal-card.slint` is the backdrop and card under
+  every modal, the Dialog and the welcome card alike, and `dialog/dialog-header.slint` its title.
 - **Menus.** `context-menu.slint` holds every right-click menu's parts (`ContextMenuPopup`,
   `MenuItem`, `FavoriteMenuItem`, `MenuFlyout`, `CopyField`, `ContextClick`,
   `ContextMenuMetrics`); `track-list/track-context-menu.slint` is the row menu; `RatingMenuRow` is
@@ -28,8 +29,9 @@ Paths are under `crates/melodia-ui/ui/components/` unless stated.
   `FilledChip` is the clickable pill, `QualityChip` the bar's verdict over `GradeDot`.
 - **Inputs.** `FieldFrame` under `LabeledInput`, `ControlledInput` and `MultilineInput`;
   `RemoveRowButton` closes an editor's row; `dialog/selectable-picker.slint` is the toolkit both
-  picker dialogs wire up. `HoldTouchArea` for a press whose hold differs from its click,
-  `SliderPointer` under every slider, `EdgeResizeHandle` for a resizable edge.
+  picker dialogs wire up, and `dialog/toolbar-chip.slint` an action over a dialog's list.
+  `HoldTouchArea` for a press whose hold differs from its click, `SliderPointer` under every
+  slider, `EdgeResizeHandle` for a resizable edge.
 - **Grids.** `EntityCard` inside `grid/card-cell.slint`'s `CardCell`, in a chunked `ListView` sized
   by `GridGeometry` and `GridColumnsSync`. `HorizontalCardStrip` only for a capped carousel,
   `EntityCardGrid` otherwise. `CardFavoriteButton` is a card's heart, `grid/play-count-badge.slint`
@@ -72,6 +74,11 @@ Paths are under `crates/melodia-ui/ui/components/` unless stated.
 - **A raise that crosses an `await` owes a `DialogClaim`, and a deferred raise is an opener too**,
   single caller or not: inline chrome bumps nothing. `dialog_openers.rs` walks only the kinds it
   lists, so a new dialog is on its own.
+- **A dialog with two steps is one kind whose step its own global holds**, the Dialog unable to
+  open a second over itself. The footer in `components/dialog/dialog.slint` reads the step for its
+  labels and gate, `accepted` advances it, the kind stays open after accept, and the step is reset
+  before the next open (`ScrobbleUi.lastfm-step` by its opener, `DuplicatesUi.confirming` by
+  `closed-teardown`).
 - **A popup host with flyouts closes through one `dismiss()` function**, every path it can reach
   calling it: a function rather than a callback, since a Rust handler would replace its body.
 - **Notifications** route through `ui::shell::notifications::run_action` by kind, and Undo through
@@ -93,7 +100,8 @@ Paths are under `crates/melodia-ui/ui/components/` unless stated.
   chunks them through `ui::grid_rows::chunk_built_rows` into `model_diff::replace_rows`.
 - **A list that can hold the library is `ui::paged_rows::PagedRows`, never a `VecModel` copy.** The
   library-sized Songs tabs and the four details are `track_rows::TrackRows`, loading through
-  `PagedTrackList`.
+  `PagedTrackList`. A grouped list is still one keyset, each header a negative id its fetch reads
+  through a lead row, its groups drawn as cards (`ui::duplicates`, `duplicate-row.slint`).
 - **A drag lifting a pick lifts every pick** (`picked-run()`), and every tier moves through
   `melodia_core::utils::block_move`.
 - **Shared wiring.** The four details go through `callbacks::track_detail`, the four grid tabs

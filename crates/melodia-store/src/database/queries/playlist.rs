@@ -487,7 +487,7 @@ pub async fn move_playlist_tracks(
 }
 
 /// Closes the gaps in a playlist's positions.
-async fn renumber_playlist_positions_tx(
+pub(crate) async fn renumber_playlist_positions_tx(
     tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
     playlist_id: i64,
 ) -> Result<(), AppError> {
