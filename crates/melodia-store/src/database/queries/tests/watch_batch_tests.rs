@@ -345,10 +345,8 @@ async fn a_modify_of_a_path_the_library_does_not_know_inserts_it() -> Result<(),
     Ok(())
 }
 
-// === Files the duplicate finder kept out ===
-//
-// Through `apply_watch_batch`, since the lift of a gone file and the read of the move candidates
-// both happen there, around the handlers.
+// The kept-out files go through `apply_watch_batch`, since the lift of a gone file and the read of
+// the move candidates both happen there, around the handlers.
 
 fn spelled(path: &Path) -> String {
     path.to_string_lossy().into_owned()

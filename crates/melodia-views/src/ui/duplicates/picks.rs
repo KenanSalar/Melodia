@@ -2,8 +2,7 @@
 //! with no Slint and no I/O.
 //!
 //! No copy's text is kept: a folder is an index interned while the set is built and a file hash a
-//! class within its group, so an open finder costs a few dozen bytes a copy. The rows re-read what
-//! they show by id.
+//! class within its group. The rows re-read what they show by id.
 
 use std::collections::{HashMap, HashSet};
 use std::ops::Range;

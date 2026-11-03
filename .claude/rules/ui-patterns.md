@@ -29,11 +29,9 @@ Paths are under `crates/melodia-ui/ui/components/` unless stated.
   `FilledChip` is the clickable pill, `QualityChip` the bar's verdict over `GradeDot`.
 - **Inputs.** `FieldFrame` under `LabeledInput`, `ControlledInput` and `MultilineInput`;
   `RemoveRowButton` closes an editor's row; `dialog/selectable-picker.slint` is the toolkit both
-  picker dialogs wire up, and `dialog/duplicates-body.slint` and `dialog/kept-out-body.slint` the
-  bodies whose lists can hold the library, each `ListView` the card's scroller, with
-  `dialog/toolbar-chip.slint` for an action over the list. `HoldTouchArea` for a press whose hold
-  differs from its click, `SliderPointer` under every slider, `EdgeResizeHandle` for a resizable
-  edge.
+  picker dialogs wire up, and `dialog/toolbar-chip.slint` an action over a dialog's list.
+  `HoldTouchArea` for a press whose hold differs from its click, `SliderPointer` under every
+  slider, `EdgeResizeHandle` for a resizable edge.
 - **Grids.** `EntityCard` inside `grid/card-cell.slint`'s `CardCell`, in a chunked `ListView` sized
   by `GridGeometry` and `GridColumnsSync`. `HorizontalCardStrip` only for a capped carousel,
   `EntityCardGrid` otherwise. `CardFavoriteButton` is a card's heart, `grid/play-count-badge.slint`
@@ -103,8 +101,7 @@ Paths are under `crates/melodia-ui/ui/components/` unless stated.
 - **A list that can hold the library is `ui::paged_rows::PagedRows`, never a `VecModel` copy.** The
   library-sized Songs tabs and the four details are `track_rows::TrackRows`, loading through
   `PagedTrackList`. A grouped list is still one keyset, each header a negative id its fetch reads
-  through a lead row (`ui::duplicates`). A group draws as a card, its rows painting the slices and
-  rounding the corners from their neighbours' `is_header` (`duplicate-row.slint`).
+  through a lead row, its groups drawn as cards (`ui::duplicates`, `duplicate-row.slint`).
 - **A drag lifting a pick lifts every pick** (`picked-run()`), and every tier moves through
   `melodia_core::utils::block_move`.
 - **Shared wiring.** The four details go through `callbacks::track_detail`, the four grid tabs

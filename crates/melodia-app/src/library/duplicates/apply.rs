@@ -49,8 +49,7 @@ pub async fn apply(
 /// Holds the playing copy back from its removal and swaps every other queued spare for its
 /// keeper, in one step under the player lock, answering how many copies were held.
 ///
-/// A play the playing copy finishes counts against its own id, which the delete would take. A
-/// remapped queue never meets a missing id, so playback never jumps the way a prune makes it.
+/// A play the playing copy finishes counts against its own id, which the delete would take.
 ///
 /// Under the exec lock, which an advance holds until it has sent the count for the track it left,
 /// so a spare that just stopped playing has its count in the flusher's channel before this runs.

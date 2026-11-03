@@ -26,15 +26,12 @@ paths:
 - **`utils::audio_ext::is_audio_extension` is the one audio-extension predicate**; never re-roll a
   lowercase-and-contains at a new call site.
 - **`utils::trash_dir` is the one trash-folder predicate**: a walk or watch that finds files by
-  itself asks it, never a trash name of its own. A file the user names is taken as named, as is
-  the root a walk starts from.
+  itself asks it, never a trash name of its own.
 - **Nothing inside a write transaction `stat`s a file**: a second `stat` can pair a new mtime with
   the previous scan's size, which then reads as current (`queries::scan::watch_batch`).
 - **A new ingest path consults `excluded_files` inside its inserting transaction, and a rename,
   move or rewrite carries an exclusion as it carries a row** (`queries::excluded_files`,
-  `scan::moves`), or a removed duplicate comes back: a kept-out file read again is restamped, as a
-  re-parse rewrites a row's hash. A check before the parse only saves the parse; an import lifts
-  the exclusion on what the user named.
+  `scan::moves`), or a removed duplicate comes back.
 
 ## Query shape
 
@@ -61,8 +58,7 @@ paths:
 - **What makes two rows one song lives in `library::duplicates::matcher`**: anything that groups
   copies asks `library::duplicates::find`, never a match of its own.
 - **A per-track column the user builds up joins `remove_duplicates`' merge**
-  (`queries::track::duplicate_merge`'s `History`), or removing a copy throws it away. Every other
-  column is the file's, which a rescan rewrites.
+  (`queries::track::duplicate_merge`'s `History`), or removing a copy throws it away.
 
 ## Smart playlists
 

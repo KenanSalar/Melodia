@@ -25,7 +25,6 @@ pub async fn count(db: &DbPool) -> Result<i64, AppError> {
     queries::excluded_files::count(db).await
 }
 
-/// Every kept-out file's id, in path order.
 pub async fn ids(db: &DbPool) -> Result<Vec<i64>, AppError> {
     queries::excluded_files::ids(db).await
 }
@@ -35,7 +34,6 @@ pub async fn files(db: &DbPool, ids: &[i64]) -> Result<Vec<KeptOutFile>, AppErro
     queries::excluded_files::files(db, ids).await
 }
 
-/// Every kept-out path, in path order.
 pub async fn paths(db: &DbPool) -> Result<Vec<String>, AppError> {
     queries::excluded_files::paths(db).await
 }
