@@ -513,3 +513,85 @@ fn two_files_whose_names_read_back_alike_share_their_row() -> Result<(), AppErro
     assert_eq!(changed, Vec::<PathBuf>::new());
     Ok(())
 }
+
+// ── trash folders and kept-out files ──
+
+/// Anything a file manager trashed under a library folder would come back as a track.
+#[test]
+fn the_walk_skips_a_trash_folder_below_its_root() -> Result<(), AppError> {
+    let tmp = TempDir::new()?;
+    create_test_files(
+        tmp.path(),
+        &["kept.mp3", ".Trash-1000/files/trashed.mp3", "Album/$RECYCLE.BIN/binned.mp3"],
+    )?;
+
+    let files = walk(tmp.path())?;
+
+    assert_eq!(files, [tmp.path().join("kept.mp3")]);
+    Ok(())
+}
+
+#[test]
+fn a_root_named_like_a_trash_is_still_walked() -> Result<(), AppError> {
+    let tmp = TempDir::new()?;
+    let root = tmp.path().join(".Trash");
+    create_test_files(&root, &["song.mp3"])?;
+
+    let files = walk(&root)?;
+
+    assert_eq!(files, [root.join("song.mp3")]);
+    Ok(())
+}
+
+/// Pruning every hidden folder would purge, history and all, the tracks of anyone who keeps music
+/// under one.
+#[test]
+fn music_under_any_other_dot_folder_is_still_walked() -> Result<(), AppError> {
+    let tmp = TempDir::new()?;
+    create_test_files(tmp.path(), &[".hidden/song.mp3"])?;
+
+    let files = walk(tmp.path())?;
+
+    assert_eq!(files, [tmp.path().join(".hidden").join("song.mp3")]);
+    Ok(())
+}
+
+#[test]
+fn a_kept_out_file_that_matches_its_stamp_is_left_unread() -> Result<(), AppError> {
+    let tmp = TempDir::new()?;
+    let spare = tmp.path().join("spare.wav");
+    create_minimal_wav(&spare)?;
+    let mut index =
+        WalkIndex::new(MediaWalk { files: vec![spare.clone()], unreadable: Vec::new() });
+    index.add_kept_out(&stored(&spare), row_for(&spare)?);
+
+    let changed = index.changed(|_| true);
+
+    assert!(changed.is_empty());
+    Ok(())
+}
+
+#[test]
+fn only_a_kept_out_file_the_walk_did_not_find_is_unwalked() {
+    let root = PathBuf::from("music");
+    let (found, gone) = (root.join("found.mp3"), root.join("gone.mp3"));
+    let index = WalkIndex::new(MediaWalk { files: vec![found.clone()], unreadable: Vec::new() });
+
+    let unwalked = index.unwalked([stored(&found), stored(&gone)]);
+
+    assert_eq!(unwalked, [stored(&gone)]);
+}
+
+/// A directory the walk couldn't read says nothing about the kept-out files in it, and forgetting
+/// them brings each back on the next scan that can.
+#[test]
+fn a_kept_out_file_under_a_path_the_walk_could_not_read_is_spared() {
+    let root = PathBuf::from("music");
+    let unreadable = root.join("locked");
+    let (inside, gone) = (unreadable.join("spare.mp3"), root.join("gone.mp3"));
+    let index = WalkIndex::new(MediaWalk { files: Vec::new(), unreadable: vec![unreadable] });
+
+    let unwalked = index.unwalked([stored(&inside), stored(&gone)]);
+
+    assert_eq!(unwalked, [stored(&gone)]);
+}

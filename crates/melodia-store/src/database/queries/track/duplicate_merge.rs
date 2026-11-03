@@ -268,3 +268,7 @@ async fn move_playlist_places(
     }
     Ok(by_playlist.into_keys().collect())
 }
+
+#[cfg(test)]
+#[path = "../tests/duplicate_merge_tests.rs"]
+mod tests;

@@ -168,3 +168,7 @@ fn shared_dismissal(copies: &[DuplicateCopy]) -> Option<DismissalSet> {
     let set = first.dismissal?;
     rest.iter().all(|copy| copy.dismissal == Some(set)).then_some(set)
 }
+
+#[cfg(test)]
+#[path = "tests/matcher_tests.rs"]
+mod tests;

@@ -127,3 +127,7 @@ pub struct ExtractedMetadata {
     pub date_modified: Option<String>,
     pub artwork_path: Option<String>,
 }
+
+#[cfg(test)]
+#[path = "tests/scan_tests.rs"]
+mod tests;

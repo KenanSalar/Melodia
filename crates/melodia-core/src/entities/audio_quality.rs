@@ -47,3 +47,7 @@ pub enum AudioQuality {
     Lossy { bitrate: i32 },
     Lossless { bit_depth: i32, sample_rate: i32 },
 }
+
+#[cfg(test)]
+#[path = "tests/audio_quality_tests.rs"]
+mod tests;

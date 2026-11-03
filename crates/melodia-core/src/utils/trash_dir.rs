@@ -45,3 +45,7 @@ fn is_home_trash(dir: &Path) -> bool {
 fn is_home_trash(_dir: &Path) -> bool {
     false
 }
+
+#[cfg(test)]
+#[path = "tests/trash_dir_tests.rs"]
+mod tests;

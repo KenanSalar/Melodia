@@ -238,3 +238,31 @@ async fn the_loop_writes_on_its_own_tick_without_waiting_for_shutdown() -> Resul
     assert_eq!(counts(&db, id).await?.0, 1, "the tick wrote it, and the exit flush must not again");
     Ok(())
 }
+
+/// The duplicate merge deletes the rows these counts name once the flush answers, so a count still
+/// held then is lost. Asked between ticks, so only the request can have written it.
+#[tokio::test]
+async fn a_flush_request_answers_once_the_held_counts_are_written() -> Result<(), AppError> {
+    let db = DbPool::test_pool().await?;
+    let id = seed(&db).await?;
+    let (tx, rx) = mpsc::unbounded_channel();
+    let (flush_handle, flushes) = PlayCountFlush::channel();
+    let shutdown = CancellationToken::new();
+    let looping = tokio::spawn(run(
+        Inbox { events: rx, flushes },
+        shutdown.clone(),
+        db.clone(),
+        Signal::new(),
+    ));
+    // Lets the loop spend the interval's immediate first tick on an empty batch.
+    tokio::task::yield_now().await;
+    assert!(tx.send(PlayCountEvent::Play(id)).is_ok());
+
+    let answered = tokio::time::timeout(FLUSH_INTERVAL, flush_handle.flush()).await;
+
+    assert!(answered.is_ok(), "the flusher answers a request rather than waiting for its tick");
+    assert_eq!(counts(&db, id).await?.0, 1);
+    shutdown.cancel();
+    assert!(looping.await.is_ok());
+    Ok(())
+}

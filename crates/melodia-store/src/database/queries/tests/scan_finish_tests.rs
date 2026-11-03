@@ -6,7 +6,7 @@ use super::{Unwalked, commit_scan};
 use crate::database::DbPool;
 use crate::database::queries;
 use crate::database::queries::fixtures::{
-    insert_test_track, make_test_metadata, numbered_library, setup_seeded_db,
+    insert_test_track, keep_out, make_test_metadata, numbered_library, setup_seeded_db,
 };
 use crate::database::queries::ingest::{Ingested, commit_scan_chunk};
 use crate::media::ingest::scan_pool::ScanPool;
@@ -128,5 +128,22 @@ async fn an_orphan_only_purge_prunes_the_album_it_emptied() -> Result<(), AppErr
         .fetch_one(db.read())
         .await?;
     assert_eq!(albums, 0);
+    Ok(())
+}
+
+/// Only the walk knows which kept-out files are gone, so one it found, or one written since it
+/// loaded the folder's exclusions, has to stay kept out.
+#[tokio::test]
+async fn a_scan_commit_forgets_exactly_the_exclusions_it_is_handed() -> Result<(), AppError> {
+    let db = DbPool::test_pool().await?;
+    let folder = queries::folder::insert_folder(&db, "/music", true).await?;
+    keep_out(&db, "/music/deleted.mp3", "deleted-bytes").await?;
+    keep_out(&db, "/music/still-there.mp3", "kept-bytes").await?;
+    let unwalked =
+        Unwalked { exclusions: vec!["/music/deleted.mp3".to_owned()], ..Unwalked::default() };
+
+    commit_scan(&db, &folder, &unwalked, &Ingested::for_delta(0)).await?;
+
+    assert_eq!(queries::excluded_files::paths(&db).await?, ["/music/still-there.mp3"]);
     Ok(())
 }

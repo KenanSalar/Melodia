@@ -37,3 +37,7 @@ pub async fn dismiss(db: &DbPool, track_ids: &[i64]) -> Result<DismissalSet, App
 pub async fn restore(db: &DbPool, set: DismissalSet) -> Result<(), AppError> {
     queries::duplicate_dismissals::restore(db, set).await
 }
+
+#[cfg(test)]
+#[path = "tests/duplicates_tests.rs"]
+mod tests;

@@ -64,3 +64,20 @@ fn push_folded_appends_rather_than_replaces() {
     push_folded(&mut out, "ADDED");
     assert_eq!(out, "kept added");
 }
+
+/// The duplicate finder keys a song on these words, so a spelling a tagger varies must not split
+/// one song in two.
+#[test]
+fn fold_words_reads_one_title_through_case_accents_and_punctuation() {
+    assert_eq!(fold_words("Don't Stop (Live)"), "dont stop live");
+    assert_eq!(fold_words("dont stop - live"), "dont stop live");
+    assert_eq!(fold_words("Beyonc\u{e9}"), "beyonce");
+}
+
+/// Squeezed, every such title would be the empty one, and two unrelated untitled tracks would key
+/// alike.
+#[test]
+fn a_title_of_nothing_but_punctuation_keeps_its_fold() {
+    assert_eq!(fold_words("!!!"), "!!!");
+    assert_eq!(fold_words("???"), "???");
+}

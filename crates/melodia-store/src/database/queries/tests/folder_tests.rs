@@ -203,3 +203,24 @@ async fn deleting_a_folder_moves_a_playlist_cover_off_the_tracks_it_took() -> Re
     assert_eq!(shown.as_deref(), Some("/art/stays.jpg"));
     Ok(())
 }
+
+/// The cascade on `excluded_files.folder_id` would take the exclusion, and the next scan would
+/// bring a removed duplicate back as a new track.
+#[tokio::test]
+async fn absorbing_a_folder_keeps_its_kept_out_files_out() -> Result<(), AppError> {
+    let db = DbPool::test_pool().await?;
+    let parent = queries::folder::insert_folder(&db, "/music", true).await?;
+    let child = queries::folder::insert_folder(&db, "/music/rock", true).await?;
+    keep_out(&db, "/music/rock/spare.mp3", "spare-bytes").await?;
+    sqlx::query("UPDATE excluded_files SET folder_id = ?")
+        .bind(child.id)
+        .execute(db.write())
+        .await?;
+
+    queries::folder::absorb_folders(&db, parent.id, &[child.id]).await?;
+
+    let folder_ids: Vec<i64> =
+        sqlx::query_scalar("SELECT folder_id FROM excluded_files").fetch_all(db.read()).await?;
+    assert_eq!(folder_ids, [parent.id]);
+    Ok(())
+}

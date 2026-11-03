@@ -309,3 +309,7 @@ fn pick_identical_spares(copies: &mut [CopyEntry]) {
         copy.picked = copy.hash_class.is_some_and(|class| !seen.insert(class));
     }
 }
+
+#[cfg(test)]
+#[path = "tests/picks_tests.rs"]
+mod tests;
