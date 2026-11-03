@@ -234,16 +234,16 @@ async fn write_keepers(
     Ok(())
 }
 
-/// Gives each keeper its spares' playlist places, at the spare's position and with its added
-/// date, returning the playlists touched. An insert rather than a re-point, since the playlist
-/// stats triggers watch only inserts and deletes; a playlist the keeper is already in keeps the
-/// keeper's own place.
+/// Gives each keeper its spares' playlist places, at its first spare's position and with that
+/// spare's added date, returning the playlists touched. An insert rather than a re-point, since
+/// the playlist stats triggers watch only inserts and deletes; a playlist the keeper is already in
+/// keeps the keeper's own place.
 async fn move_playlist_places(
     tx: &mut Transaction<'_, Sqlite>,
     keeper_of: &HashMap<i64, i64>,
 ) -> Result<BTreeSet<i64>, AppError> {
     let spare_ids: Vec<i64> = keeper_of.keys().copied().collect();
-    let places: Vec<(i64, i64, i32, String)> =
+    let mut places: Vec<(i64, i64, i32, String)> =
         chunked_in_query_on(tx, &spare_ids, |placeholders| {
             format!(
                 "SELECT playlist_id, track_id, position, added_at FROM playlist_items \
@@ -251,6 +251,8 @@ async fn move_playlist_places(
             )
         })
         .await?;
+    // Here rather than in SQL, so the order holds across chunks.
+    places.sort_unstable_by_key(|&(_, _, position, _)| position);
 
     let mut by_playlist: HashMap<i64, Vec<NewItem<'_>>> = HashMap::new();
     for (playlist_id, spare_id, position, added_at) in &places {
