@@ -255,7 +255,8 @@ fn a_card_menu_entry_is_gated_on_the_operation_and_not_the_kind() {
     assert_eq!(
         kind_reads,
         ["property <bool> smart-edits: root.playlist-edits && root.card-is-smart;"],
-        "the kind is read once, into the one gate the rule entries share"
+        "the kind is read once, into the gate the rule entries share: an entry asking it \
+         directly hides on a smart card beside a hover button that still works"
     );
 
     let gated: BTreeSet<&str> = code
