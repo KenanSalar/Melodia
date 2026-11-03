@@ -98,14 +98,12 @@ pub async fn apply_watch_batch(
                     ),
                 }
             }
-            WatchedChange::Removed { path, gone } => {
-                match handle_removed(&mut tx, path, *gone).await {
-                    Ok(wrote) => changed += usize::from(wrote),
-                    Err(e) => {
-                        log::warn!("Failed to remove track {}: {}", path.display(), describe(&e));
-                    }
+            WatchedChange::Removed { path, .. } => match handle_removed(&mut tx, path).await {
+                Ok(wrote) => changed += usize::from(wrote),
+                Err(e) => {
+                    log::warn!("Failed to remove track {}: {}", path.display(), describe(&e));
                 }
-            }
+            },
             WatchedChange::Renamed { from, to, meta, date_modified } => {
                 let renamed = handle_renamed(
                     &mut tx,
@@ -138,6 +136,7 @@ pub async fn apply_watch_batch(
             }
         }
     }
+    lift_gone(&mut tx, &changes).await;
 
     if is_bulk {
         // With nothing changed the counts are still right, and only the re-enable is owed.
@@ -210,7 +209,7 @@ async fn handle_created(
     if track_exists_by_path(tx, &path_str).await? {
         return Ok(false);
     }
-    if !excluded_files::among_on(tx, &[path_str.as_str()]).await?.is_empty() {
+    if excluded_files::id_at_on(tx, &path_str).await?.is_some() {
         excluded_files::restamp_on(tx, &[(path, meta)]).await?;
         log::debug!("Kept out of the library, restamped: {}", path.display());
         return Ok(false);
@@ -272,19 +271,32 @@ async fn handle_created(
 async fn handle_removed(
     tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
     path: &Path,
-    gone: bool,
 ) -> Result<bool, AppError> {
-    let path_str = path.to_string_lossy();
-    if gone {
-        excluded_files::lift_on(tx, &[path_str.as_ref()]).await?;
-    }
-    let deleted = delete_track_by_path(tx, &path_str).await?;
+    let deleted = delete_track_by_path(tx, &path.to_string_lossy()).await?;
     if deleted {
         log::info!("Removed track: {}", path.display());
     } else {
         log::debug!("Track not in DB, skip remove: {}", path.display());
     }
     Ok(deleted)
+}
+
+/// Lifts the exclusions whose file is gone. It runs after the events, so a `Created` has carried
+/// any that moved, and takes them together, deleting a folder being an event per file.
+async fn lift_gone(tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>, changes: &[WatchedChange]) {
+    let paths: Vec<_> = changes
+        .iter()
+        .filter_map(|change| match change {
+            WatchedChange::Removed { path, gone: true } => Some(path.to_string_lossy()),
+            _ => None,
+        })
+        .collect();
+    let paths: Vec<&str> = paths.iter().map(AsRef::as_ref).collect();
+    match excluded_files::lift_on(tx, &paths).await {
+        Ok(0) => {}
+        Ok(lifted) => log::info!("Forgot {lifted} kept-out files gone from disk"),
+        Err(e) => log::warn!("Failed to lift kept-out files: {}", describe(&e)),
+    }
 }
 
 /// Whether a row was written. A rename onto a kept-out path from outside the library, a tagger's
