@@ -96,6 +96,20 @@ async fn a_smart_row_reads_its_count_and_cover_from_its_rules() -> Result<(), Ap
     Ok(())
 }
 
+/// The card's cover goes from worked out on read to stored, and has to be the same one either side.
+#[tokio::test]
+async fn a_card_converted_from_its_menu_keeps_the_cover_it_showed() -> Result<(), AppError> {
+    let lib = library().await?;
+    let mut card = rock_row(&lib.db).await?;
+    fill_automatic_thumbnail(&lib.db, &mut card).await;
+
+    convert_to_regular(&lib.db, card.id, Draw::default()).await?;
+
+    let converted = playlists::get_playlist_detail(&lib.db, card.id).await?;
+    assert_eq!(converted.thumbnail_path, card.thumbnail_path);
+    Ok(())
+}
+
 /// Recounted, a manual row would be counted over no rules, which match the whole library.
 #[tokio::test]
 async fn a_manual_row_is_left_as_read() -> Result<(), AppError> {

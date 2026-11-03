@@ -1,8 +1,13 @@
+use std::collections::BTreeSet;
+
 use crate::database::queries;
 use crate::database::queries::fixtures::*;
-use melodia_core::entities::playlist::PlaylistItemsCut;
+use melodia_core::entities::playlist::{DroppedRules, PlaylistItemsCut};
+use melodia_core::entities::smart_criteria::Draw;
+use melodia_core::entities::track_list::{SortDir, TrackListScope, TrackOrder, TrackSortField};
 use melodia_core::entities::undo::{UNDO_HOLD_CAP, UndoCapture};
 use melodia_core::error::AppError;
+use melodia_core::utils::needle::Needle;
 
 #[tokio::test]
 async fn create_playlist_returns_correct_fields() -> Result<(), AppError> {
@@ -374,6 +379,17 @@ async fn backdate(db: &crate::database::DbPool, playlist_id: i64) -> Result<(), 
     Ok(())
 }
 
+/// Dates `playlist_id`'s creation to [`EARLIER`], so one created later in a test can't share its
+/// stamp to the millisecond.
+async fn created_earlier(db: &crate::database::DbPool, playlist_id: i64) -> Result<(), AppError> {
+    sqlx::query("UPDATE playlists SET created_at = ? WHERE id = ?")
+        .bind(EARLIER)
+        .bind(playlist_id)
+        .execute(db.write())
+        .await?;
+    Ok(())
+}
+
 async fn updated_at(db: &crate::database::DbPool, playlist_id: i64) -> Result<String, AppError> {
     Ok(sqlx::query_scalar("SELECT updated_at FROM playlists WHERE id = ?")
         .bind(playlist_id)
@@ -432,18 +448,22 @@ async fn a_playlist_created_with_no_tracks_is_empty() -> Result<(), AppError> {
 }
 
 /// A scan can delete a picked track while the New Playlist dialog is open, and that one track
-/// mustn't sink the playlist.
+/// mustn't sink the playlist. Mid-list, so the track after it has to close up behind it.
 #[tokio::test]
 async fn a_track_the_library_lacks_is_left_out_of_a_new_playlist() -> Result<(), AppError> {
     let db = setup_seeded_db().await?;
     let ids = seeded_track_ids(&db).await?;
 
-    let playlist =
-        queries::playlist::create_playlist_with_tracks(&db, "Dangling", None, &[ids[0], 9_999])
-            .await?;
+    let playlist = queries::playlist::create_playlist_with_tracks(
+        &db,
+        "Dangling",
+        None,
+        &[ids[0], 9_999, ids[2]],
+    )
+    .await?;
 
-    assert_eq!(order(&db, playlist).await?, [ids[0]]);
-    assert_eq!(positions(&db, playlist).await?, [0]);
+    assert_eq!(order(&db, playlist).await?, [ids[0], ids[2]]);
+    assert_eq!(positions(&db, playlist).await?, [0, 1]);
     Ok(())
 }
 
@@ -461,6 +481,65 @@ async fn tracks_past_the_first_insert_chunk_land_in_order_with_no_gap() -> Resul
 
     assert_eq!(order(&db, playlist).await?, ids);
     assert_eq!(position_spread(&db, playlist).await?, (250, 0, 249, 250));
+    Ok(())
+}
+
+// --- add_tracks_to_playlist ---
+
+/// A scan can delete a picked track while Add to Playlist is open, and that one track mustn't sink
+/// the rest of the add.
+#[tokio::test]
+async fn an_add_skips_a_track_the_library_lost_and_lands_the_rest() -> Result<(), AppError> {
+    let db = setup_seeded_db().await?;
+    let ids = seeded_track_ids(&db).await?;
+    let playlist =
+        queries::playlist::create_playlist_with_tracks(&db, "Held", None, &ids[..1]).await?;
+
+    queries::playlist::add_tracks_to_playlist(&db, playlist, &[ids[1], 9_999, ids[2]]).await?;
+
+    assert_eq!(order(&db, playlist).await?, ids);
+    assert_eq!(positions(&db, playlist).await?, [0, 1, 2]);
+    Ok(())
+}
+
+/// The Add to Playlist notice counts the tracks that went in, not the ones picked.
+#[tokio::test]
+async fn an_add_answers_only_the_tracks_that_landed() -> Result<(), AppError> {
+    let db = setup_seeded_db().await?;
+    let ids = seeded_track_ids(&db).await?;
+    let rows = [
+        ("every track new", vec![ids[1], ids[2]], BTreeSet::from([ids[1], ids[2]])),
+        ("one the playlist holds", vec![ids[0], ids[1]], BTreeSet::from([ids[1]])),
+        ("one the library lost", vec![ids[1], 9_999], BTreeSet::from([ids[1]])),
+        ("only tracks the playlist holds", vec![ids[0]], BTreeSet::new()),
+    ];
+    for (what, handed, expected) in rows {
+        let playlist =
+            queries::playlist::create_playlist_with_tracks(&db, what, None, &ids[..1]).await?;
+
+        let landed = queries::playlist::add_tracks_to_playlist(&db, playlist, &handed).await?;
+
+        assert_eq!(landed.into_iter().collect::<BTreeSet<i64>>(), expected, "{what}");
+    }
+    Ok(())
+}
+
+/// Stamping an add that wrote nothing would lift the card to the top of the grid.
+#[tokio::test]
+async fn an_add_that_lands_nothing_leaves_the_playlist_unstamped() -> Result<(), AppError> {
+    let db = setup_seeded_db().await?;
+    let ids = seeded_track_ids(&db).await?;
+    let rows =
+        [("only a track the playlist holds", ids[0]), ("only a track the library lost", 9_999)];
+    for (what, handed) in rows {
+        let playlist =
+            queries::playlist::create_playlist_with_tracks(&db, what, None, &ids[..1]).await?;
+        backdate(&db, playlist).await?;
+
+        queries::playlist::add_tracks_to_playlist(&db, playlist, &[handed]).await?;
+
+        assert_eq!(updated_at(&db, playlist).await?, EARLIER, "{what}");
+    }
     Ok(())
 }
 
@@ -1055,6 +1134,25 @@ async fn an_undo_into_a_playlist_deleted_since_fails() -> Result<(), AppError> {
     Ok(())
 }
 
+/// `SQLite` hands the freed id to the next playlist, which the undo would put the cut rows into.
+#[tokio::test]
+async fn an_undone_removal_leaves_the_playlist_that_took_its_id_alone() -> Result<(), AppError> {
+    let (db, playlist, ids) = five_track_playlist().await?;
+    created_earlier(&db, playlist).await?;
+    let removal = cut(&db, playlist, &[ids[1]]).await?;
+    queries::playlist_delete::delete_playlists(&db, &[playlist]).await?;
+    let newcomer =
+        queries::playlist::create_playlist_with_tracks(&db, "Newcomer", None, &ids[..1]).await?;
+    assert_eq!(newcomer, playlist, "test setup: the newcomer takes the freed id");
+    let before = items(&db, newcomer).await?;
+
+    let undone = queries::playlist_restore::restore_playlist_items(&db, &[removal]).await;
+
+    assert!(matches!(undone, Err(AppError::NotFound { .. })), "{undone:?}");
+    assert_eq!(items(&db, newcomer).await?, before);
+    Ok(())
+}
+
 #[tokio::test]
 async fn an_undo_puts_back_the_stamp_the_removal_replaced() -> Result<(), AppError> {
     let (db, playlist, ids) = five_track_playlist().await?;
@@ -1218,5 +1316,183 @@ async fn an_undone_delete_leaves_out_the_tracks_the_library_lost_since() -> Resu
 
     assert_eq!(order(&db, playlist).await?, on_rows(&ids, &[0, 2, 3, 4]));
     assert_eq!(positions(&db, playlist).await?, [0, 1, 2, 3]);
+    Ok(())
+}
+
+// --- converting a smart playlist ---
+
+const ROCK_ONLY: &str =
+    r#"{"rules":[{"field":"genre","op":"contains","value":{"kind":"text","value":"Rock"}}]}"#;
+const JAZZ_ONLY: &str =
+    r#"{"rules":[{"field":"genre","op":"contains","value":{"kind":"text","value":"Jazz"}}]}"#;
+const TOP_TWO_BY_PLAYS: &str = r#"{"limit":{"count":2,"order":"play_count_desc"}}"#;
+const RANDOM_THREE: &str = r#"{"limit":{"count":3,"order":"random"}}"#;
+
+/// `Charlie` (Rock, 9 plays), `Alpha` (Rock, 1) and `Bravo` (Pop, 5), inserted in that order, so
+/// insert, title and play order each differ.
+async fn lettered_library() -> Result<(crate::database::DbPool, [i64; 3]), AppError> {
+    let db = crate::database::DbPool::test_pool().await?;
+    queries::folder::insert_folder(&db, "/music", true).await?;
+    let charlie =
+        insert_test_track(&db, "/music/c.mp3", "Charlie", "Artist", "Album", "Rock").await?;
+    let alpha = insert_test_track(&db, "/music/a.mp3", "Alpha", "Artist", "Album", "Rock").await?;
+    let bravo = insert_test_track(&db, "/music/b.mp3", "Bravo", "Artist", "Album", "Pop").await?;
+    queries::track::add_play_counts(&db, &[(charlie, 9), (alpha, 1), (bravo, 5)], EARLIER).await?;
+    Ok((db, [charlie, alpha, bravo]))
+}
+
+async fn smart(db: &crate::database::DbPool, criteria: &str) -> Result<i64, AppError> {
+    Ok(queries::playlist::create_smart_playlist(db, "Smart", None, criteria).await?.id)
+}
+
+/// Converts `playlist` under the card's draw, answering the rules it dropped.
+async fn convert(db: &crate::database::DbPool, playlist: i64) -> Result<DroppedRules, AppError> {
+    queries::playlist_convert::convert_to_regular(db, playlist, Draw::default())
+        .await?
+        .ok_or_else(|| AppError::validation_msg(format!("playlist {playlist} didn't convert")))
+}
+
+/// What `playlist`'s page lists under `draw`, in its own order.
+async fn page(
+    db: &crate::database::DbPool,
+    playlist: i64,
+    draw: Draw,
+) -> Result<Vec<i64>, AppError> {
+    let own_order = TrackOrder { field: TrackSortField::Position, dir: SortDir::Asc };
+    let scope = TrackListScope::Playlist(playlist, draw);
+    queries::track::track_ids(db, scope, own_order, &Needle::default()).await
+}
+
+#[tokio::test]
+async fn a_convert_keeps_what_the_rules_match_in_the_page_s_order() -> Result<(), AppError> {
+    let (db, [charlie, alpha, _]) = lettered_library().await?;
+    let playlist = smart(&db, ROCK_ONLY).await?;
+
+    convert(&db, playlist).await?;
+
+    assert_eq!(order(&db, playlist).await?, [alpha, charlie]);
+    assert_eq!(positions(&db, playlist).await?, [0, 1]);
+    Ok(())
+}
+
+#[tokio::test]
+async fn a_capped_convert_keeps_the_cap_s_tracks_in_its_order() -> Result<(), AppError> {
+    let (db, [charlie, _, bravo]) = lettered_library().await?;
+    let playlist = smart(&db, TOP_TWO_BY_PLAYS).await?;
+
+    convert(&db, playlist).await?;
+
+    assert_eq!(order(&db, playlist).await?, [charlie, bravo]);
+    Ok(())
+}
+
+/// The pick is a hash of the draw, so the page's list is the expected answer, and the card's draw
+/// has to pick otherwise or the draw handed over goes unproven.
+#[tokio::test]
+async fn a_random_cap_converts_to_the_pick_its_draw_lists() -> Result<(), AppError> {
+    let (db, _) = numbered_library(6).await?;
+    let playlist = smart(&db, RANDOM_THREE).await?;
+    let listed = page(&db, playlist, Draw(7)).await?;
+    assert_ne!(listed, page(&db, playlist, Draw::default()).await?, "test setup: two draws");
+
+    queries::playlist_convert::convert_to_regular(&db, playlist, Draw(7)).await?;
+
+    assert_eq!(order(&db, playlist).await?, listed);
+    Ok(())
+}
+
+#[tokio::test]
+async fn a_rule_set_matching_nothing_converts_to_an_empty_regular_playlist() -> Result<(), AppError>
+{
+    let (db, _) = lettered_library().await?;
+    let playlist = smart(&db, JAZZ_ONLY).await?;
+
+    convert(&db, playlist).await?;
+
+    let stats = queries::playlist::get_playlist_by_id(&db, playlist).await?;
+    assert_eq!((stats.is_smart, stats.smart_criteria, stats.track_count), (false, None, 0));
+    Ok(())
+}
+
+/// Read as smart, a regular playlist's missing rules would match the whole library and add it.
+#[tokio::test]
+async fn a_second_convert_answers_nothing_and_leaves_the_playlist_alone() -> Result<(), AppError> {
+    let (db, [charlie, alpha, _]) = lettered_library().await?;
+    let playlist = smart(&db, ROCK_ONLY).await?;
+    convert(&db, playlist).await?;
+
+    let again =
+        queries::playlist_convert::convert_to_regular(&db, playlist, Draw::default()).await?;
+
+    assert_eq!(again, None);
+    assert_eq!(order(&db, playlist).await?, [alpha, charlie]);
+    Ok(())
+}
+
+/// The grid orders by `updated_at`, and the tracks on show are the ones it showed before.
+#[tokio::test]
+async fn a_convert_leaves_the_playlist_s_place_in_the_grid() -> Result<(), AppError> {
+    let (db, _) = lettered_library().await?;
+    let playlist = smart(&db, ROCK_ONLY).await?;
+    backdate(&db, playlist).await?;
+
+    convert(&db, playlist).await?;
+
+    assert_eq!(updated_at(&db, playlist).await?, EARLIER);
+    Ok(())
+}
+
+// --- undoing a convert ---
+
+/// Spaced as no serializer writes it, so rules re-serialized on the way back would show.
+const SPACED_TOP_TWO: &str = r#"{ "limit": { "count": 2, "order": "play_count_desc" } }"#;
+
+/// The rules as stored and the stamps come back, and the cover the convert stored goes, a smart
+/// playlist working out its own on read.
+#[tokio::test]
+async fn an_undone_convert_puts_the_smart_playlist_back_as_it_was() -> Result<(), AppError> {
+    let (db, [charlie, _, _]) = lettered_library().await?;
+    set_test_artwork(&db, charlie, "/artwork/charlie.jpg").await?;
+    let playlist = smart(&db, SPACED_TOP_TWO).await?;
+    let before = queries::playlist::get_playlist_by_id(&db, playlist).await?;
+    let dropped = convert(&db, playlist).await?;
+
+    queries::playlist_convert::restore_rules(&db, &dropped).await?;
+
+    assert_eq!(queries::playlist::get_playlist_by_id(&db, playlist).await?, before);
+    Ok(())
+}
+
+#[tokio::test]
+async fn a_cover_picked_after_a_convert_outlives_its_undo() -> Result<(), AppError> {
+    let (db, _) = lettered_library().await?;
+    let playlist = smart(&db, ROCK_ONLY).await?;
+    let dropped = convert(&db, playlist).await?;
+    queries::playlist::set_playlist_custom_thumbnail(&db, playlist, "/artwork/custom.jpg").await?;
+
+    queries::playlist_convert::restore_rules(&db, &dropped).await?;
+
+    let shown = queries::playlist::get_playlist_by_id(&db, playlist).await?.thumbnail_path;
+    assert_eq!(shown.as_deref(), Some("/artwork/custom.jpg"));
+    Ok(())
+}
+
+/// `SQLite` hands the freed id to the next playlist, which the undo would make smart and empty.
+#[tokio::test]
+async fn an_undone_convert_leaves_the_playlist_that_took_its_id_alone() -> Result<(), AppError> {
+    let (db, ids) = numbered_library(2).await?;
+    let playlist = smart(&db, TOP_TWO_BY_PLAYS).await?;
+    created_earlier(&db, playlist).await?;
+    let dropped = convert(&db, playlist).await?;
+    queries::playlist_delete::delete_playlists(&db, &[playlist]).await?;
+    let newcomer =
+        queries::playlist::create_playlist_with_tracks(&db, "Newcomer", None, &ids).await?;
+    assert_eq!(newcomer, playlist, "test setup: the newcomer takes the freed id");
+    let before = queries::playlist::get_playlist_by_id(&db, newcomer).await?;
+
+    let undone = queries::playlist_convert::restore_rules(&db, &dropped).await;
+
+    assert!(matches!(undone, Err(AppError::NotFound { .. })), "{undone:?}");
+    assert_eq!(queries::playlist::get_playlist_by_id(&db, newcomer).await?, before);
     Ok(())
 }
