@@ -298,8 +298,8 @@ pub fn keep_selection_within<V: RowSelectionView>(view: &V, held: impl FnOnce() 
     stamp_rows_selected(&view.track_rows(), &kept_set);
 }
 
-/// Drops `removed` from a view's selection, the anchor with it, when rows leave a list ahead of
-/// its refetch. Every other pick stays, the ones a filter hides included. UI thread only.
+/// Drops `removed` from a view's selection, the anchor with it, when rows leave a list. Every
+/// other pick stays, the ones a filter hides included. UI thread only.
 pub fn forget_rows<V: RowSelectionView, S: BuildHasher>(view: &V, removed: &HashSet<i32, S>) {
     let anchor = view.anchor();
     keep_selection_within(view, || {

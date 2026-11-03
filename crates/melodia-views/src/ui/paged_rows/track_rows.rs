@@ -222,8 +222,8 @@ pub fn remove_rows<L: PagedTrackList>(list: &L, ids: Vec<i64>) {
 }
 
 /// Drop `ids` from `model` and from `view`'s selection, for rows the user's own write just took
-/// out, ahead of the reload it brings. That reload can't drop them under a filter, and a pick left
-/// behind is one the next batch action acts on unseen. UI thread.
+/// out, ahead of the reload it brings, which under a filter drops them only once the store
+/// answers: a pick left behind meanwhile is one the next batch action acts on unseen. UI thread.
 pub fn remove_rows_from(view: &impl RowSelectionView, model: &TrackRows, ids: &[i64]) {
     model.remove(&ids.iter().copied().collect::<HashSet<i64>>());
     let removed: HashSet<i32> = ids.iter().map(|&id| clamp_i64_to_i32(id)).collect();

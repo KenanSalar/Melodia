@@ -39,6 +39,7 @@ Working doc. Delete it when its last phase (Tests) lands.
 
 **Not in the issue, found on the way:**
 - **New Playlist… and Add to Playlist fail outright when one of their tracks goes while the dialog is open.** `create_playlist_with_tracks` and `add_tracks_to_playlist` insert the ids the menu read with no check, so one track deleted meanwhile fails the foreign key and nothing is created or added. The two restores already filter through `tracks_still_there`. New Playlist… is one of the issue's "keeps working" paths, so Phase 0 fixes this on the branch, ahead of the rest.
+- **A filtered list kept a pick whose track left it.** On Songs, Favorites or a detail, a reload under a filter kept every pick the filter hid, a deleted track's included, so the menu counted it and a batch action reached it unseen. Phase 2 fixes it in `paged_rows::track_rows`: a filtered reload asks the store which hidden picks the set still holds and drops the rest.
 - **A test pins one smart-only entry in the card menu.** `a_card_menu_entry_is_gated_on_the_operation_and_not_the_kind` (`crates/melodia/tests/card_selection.rs:235-266`) asserts Edit Rules is the only entry gated on `card-is-smart`. Convert is the second, also offered on the page, so the test's expected set grows in Phase 2.
 - **Settings' Playlists undo row lists what it covers.** `undo-section.slint:38` reads "Tracks removed from a playlist, and deleted playlists.", and the convert's undo joins that list.
 
@@ -95,6 +96,7 @@ Working doc. Delete it when its last phase (Tests) lands.
 | `crates/melodia-views/src/ui/playlists/mod.rs` (201) | `draw_on_show` (P2). |
 | `crates/melodia-views/src/ui/playlists/callbacks/convert.rs` (new, P2) | `Converter`: `request` (covered: convert, refresh, offer the undo; uncovered: raise the confirmation) and `for_good` (the confirmed path); `PlaylistConvertUndo`. |
 | `crates/melodia-views/src/ui/playlists/callbacks/mod.rs` (73) | Wires `convert`; `spawn_refresh_after_edit`, the one spawn of `refresh_after_edit` for a write awaited on the UI thread: the convert, its undo and the cut's undo (P2). |
+| `crates/melodia-views/src/ui/paged_rows/track_rows.rs` | `forget_gone_picks`, through which a filtered reload drops the hidden picks the unfiltered set no longer holds (P2). |
 | `crates/melodia-views/src/ui/undo/removal.rs` (240) | The `PlaylistRules` arm: kind, size, recipe, restore (P2). |
 | `crates/melodia-ui/ui/globals/playlists.slint` (134) | `convert-to-regular(id)` and `convert-to-regular-confirmed(id)` (P2). |
 | `crates/melodia-ui/ui/globals/dialog.slint` (431) | `DialogKind.convert-playlist`, `open-convert-playlist(id)` and its accept arm (P2). |
