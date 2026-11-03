@@ -25,6 +25,7 @@ export enum DialogKind {
     export-playlists,
     add-to-playlist,
     smart-playlist-editor,
+    convert-playlist,
     edit-tags,
     add-station,
     edit-station,
@@ -159,6 +160,8 @@ export global Dialog {
             Playlists.add-tracks-to-selected();
         } else if (root.kind == DialogKind.smart-playlist-editor) {
             SmartEditor.commit();
+        } else if (root.kind == DialogKind.convert-playlist) {
+            Playlists.convert-to-regular-confirmed(root.target-id);
         } else if (root.kind == DialogKind.edit-tags) {
             TagEditor.commit();
         } else if (root.kind == DialogKind.add-station || root.kind == DialogKind.edit-station) {
@@ -374,6 +377,20 @@ export global Dialog {
         root.kind = DialogKind.smart-playlist-editor;
         root.target-id = id;
         SmartEditor.request-edit(id);
+    }
+
+    // Rust raises it a tick later, and only where Settings turned undo off for playlists: no notice
+    // follows to bring the rules back.
+    public function open-convert-playlist(id: int) {
+        root.claim-request();
+        root.title = @tr("Convert to regular playlist?");
+        root.message = @tr("It keeps the tracks it holds now, and its rules are removed for good.");
+        root.confirm-label = @tr("Convert");
+        root.cancel-label = @tr("Cancel");
+        root.destructive = true;
+        root.kind = DialogKind.convert-playlist;
+        root.target-id = id;
+        root.open = true;
     }
 
     // One caller, here for the claim: Rust raises the card from a later tick.

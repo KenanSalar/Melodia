@@ -22,6 +22,7 @@ export component PlaylistGrid inherits Rectangle {
     callback rename-playlist(int /*playlist_id*/);
     // Menu-only, having no room on the card.
     callback edit-playlist-rules(int /*playlist_id*/);
+    callback convert-playlist-to-regular(int /*playlist_id*/);
     // The repaint token: bumped as decodes land, so the `pure` cover lookup re-runs.
     in property <int> covers-generation: 0;
     pure callback request-cover(string /*artwork_path*/, int /*generation*/) -> image;
@@ -67,6 +68,7 @@ export component PlaylistGrid inherits Rectangle {
                         rename => { root.rename-playlist(playlist.id); }
                         edit-artwork => { root.edit-playlist-artwork(playlist.id); }
                         edit-rules => { root.edit-playlist-rules(playlist.id); }
+                        convert-to-regular => { root.convert-playlist-to-regular(playlist.id); }
                         delete-cards(ids) => { root.delete-playlists(ids); }
 
                         card := EntityCard {

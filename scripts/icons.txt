@@ -67,6 +67,7 @@ person
 play_arrow
 play_circle
 playlist_add
+playlist_add_check
 playlist_play
 playlist_remove
 push_pin

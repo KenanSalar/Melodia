@@ -1,6 +1,6 @@
 # Plan: Convert a smart playlist to a regular one
 
-Status: **in progress**, Phases 0 and 1 implemented · Owner: Kenan · Created: 2026-11-03 · Issue #159, branch `feat/convert-smart-playlist`
+Status: **in progress**, Phases 0, 1 and 2 implemented · Owner: Kenan · Created: 2026-11-03 · Issue #159, branch `feat/convert-smart-playlist`
 
 > **Validated 2026-11-03** against `2faa2442`. The sources were:
 > - three read-only code traces: the store and smart membership; the card menu, the detail page and the undo slot; the queue and what reads a playlist after a play;
@@ -62,7 +62,7 @@ Working doc. Delete it when its last phase (Tests) lands.
    - A playlist deleted since fails with `AppError::not_found`, which raises the slot's "Couldn't undo". The row is matched on `created_at` as well as the id: the id is a bare `INTEGER PRIMARY KEY`, which SQLite reuses after the largest goes, and a notice raised while undo was on outlives turning it off, so a delete with no notice of its own can leave it up.
    - The automatic cover it clears names a track's own artwork file, so no `ArtworkHold` is owed.
 6. **The undo arm.** `Removal::PlaylistRules(PlaylistConvertUndo)`, of kind `UndoKind::Playlists` and size `RemovalSize::Whole`, so the one-item switch doesn't quiet it. It never merges: a second convert replaces the notice and the first stands, as any distinct removal does. Its restore calls `restore_rules`, then `refresh_after_edit`. It holds one small JSON string, so there's no cap to check.
-7. **Undo off for playlists asks first.** `DialogKind.convert-playlist` through `Dialog.open-convert-playlist(id)`, whose accept reaches `Playlists.convert-to-regular-confirmed(id)`. Settings answers synchronously, so the raise is inline and owes no `DialogClaim`. It is destructive, like Delete, since the rules can't come back. The confirmed path converts with no notice.
+7. **Undo off for playlists asks first.** `DialogKind.convert-playlist` through `Dialog.open-convert-playlist(id)`, whose accept reaches `Playlists.convert-to-regular-confirmed(id)`. Settings answers synchronously, but a `Dialog` write inside the click trips Slint's recursion guard, so Rust raises it a tick later under a `DialogClaim`, as the radio removal's `confirm_first` does. It is destructive, like Delete, since the rules can't come back. The confirmed path converts with no notice.
 8. **No signal bump.** The convert changes no track, so it refreshes as Rename does, through `refresh_after_edit`: the grid, plus the page when it shows the playlist converted. `library_changed` would wake every grid and the queue tasks for nothing.
 9. **The entries and their strings.**
    - Card menu: **Convert to Regular Playlist**, icon `playlist_add_check`, right after Edit Rules…. Both entries gate on one named `smart-edits: playlist-edits && card-is-smart`, a single card only, as Edit Rules is today.
@@ -87,13 +87,14 @@ Working doc. Delete it when its last phase (Tests) lands.
 | `crates/melodia-store/src/database/queries/playlist.rs` (639) | `tracks_still_there`, moved beside `insert_items_tx` as `pub(crate)`; `create_playlist_with_tracks` and `add_tracks_to_playlist` filter through it (P0); `contiguous` is `pub(crate)` for the convert; a removal's cut records `created_at` (P1). |
 | `crates/melodia-store/src/database/queries/playlist_restore.rs` (184) | Imports `tracks_still_there` rather than owning it (P0); `restore_playlist_items` matches the row on `created_at` too (P1). |
 | `crates/melodia-core/src/entities/playlist.rs` (58) | `DroppedRules`; `created_at` on it and on `PlaylistItemsCut` (P1). |
-| `crates/melodia-views/src/ui/playlists/callbacks/detail.rs` | `PlaylistCutUndo::same_playlist` merges only cuts sharing `created_at` (P1). |
+| `crates/melodia-views/src/ui/playlists/callbacks/detail.rs` | `PlaylistCutUndo::same_playlist` merges only cuts sharing `created_at` (P1); its restore refreshes through `spawn_refresh_after_edit` (P2). |
 | `crates/melodia-store/src/database/queries/track/keyset.rs` (190) | `fetch_packed_ids` takes an executor (P1). |
 | `crates/melodia-store/src/database/queries/smart_playlist.rs` (526) | `pick_random` takes an executor; `member_ids_tx`; `random_cap`, which `Membership::smart` asks too (P1). |
 | `crates/melodia-store/src/database/queries/playlist_convert.rs` (new, P1) | `convert_to_regular` and `restore_rules`, one transaction each. |
 | `crates/melodia-app/src/library/smart_playlists.rs` (112) | `convert_to_regular` and `restore_rules` (P1). |
 | `crates/melodia-views/src/ui/playlists/mod.rs` (201) | `draw_on_show` (P2). |
-| `crates/melodia-views/src/ui/playlists/callbacks/convert.rs` (new, P2) | `Converter`: `request` (covered: convert, refresh, offer the undo; uncovered: raise the confirmation) and `for_good` (the confirmed path); `PlaylistConvertUndo`. Wired from `callbacks/mod.rs` (73). |
+| `crates/melodia-views/src/ui/playlists/callbacks/convert.rs` (new, P2) | `Converter`: `request` (covered: convert, refresh, offer the undo; uncovered: raise the confirmation) and `for_good` (the confirmed path); `PlaylistConvertUndo`. |
+| `crates/melodia-views/src/ui/playlists/callbacks/mod.rs` (73) | Wires `convert`; `spawn_refresh_after_edit`, the one spawn of `refresh_after_edit` for a write awaited on the UI thread: the convert, its undo and the cut's undo (P2). |
 | `crates/melodia-views/src/ui/undo/removal.rs` (240) | The `PlaylistRules` arm: kind, size, recipe, restore (P2). |
 | `crates/melodia-ui/ui/globals/playlists.slint` (134) | `convert-to-regular(id)` and `convert-to-regular-confirmed(id)` (P2). |
 | `crates/melodia-ui/ui/globals/dialog.slint` (431) | `DialogKind.convert-playlist`, `open-convert-playlist(id)` and its accept arm (P2). |
@@ -144,7 +145,7 @@ Gate: `cargo fmt --all`, clippy and tests. Nothing calls the convert until Phase
 3. Rust: `draw_on_show`, `callbacks/convert.rs`, and the `PlaylistRules` arm.
 4. `card_selection.rs`: the gate test's expected set becomes Edit Rules and Convert.
 5. Run `scripts/update-translations.py`, then finish every catalog.
-6. Docs: `README.md`'s playlists line (`:115`) names converting a smart playlist to a regular one.
+6. Docs: `README.md`'s Undo line (`:113`) names a converted smart playlist's rules, and its playlists line (`:115`) names converting a smart playlist to a regular one.
 
 Gate: `cargo fmt --all`, clippy, tests, and the comment audit in `code-style.md`.
 

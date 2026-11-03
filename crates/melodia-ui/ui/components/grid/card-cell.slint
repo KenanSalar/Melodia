@@ -47,6 +47,7 @@ export component CardCell inherits Rectangle {
     callback rename();
     callback edit-artwork();
     callback edit-rules();
+    callback convert-to-regular();
     callback delete-cards([int] /*card_ids*/);
     callback play-single();
 
@@ -95,6 +96,7 @@ export component CardCell inherits Rectangle {
         rename => { root.rename(); }
         edit-artwork => { root.edit-artwork(); }
         edit-rules => { root.edit-rules(); }
+        convert-to-regular => { root.convert-to-regular(); }
         delete-cards(ids) => { root.delete-cards(ids); }
         play-single => { root.play-single(); }
     }

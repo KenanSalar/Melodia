@@ -24,6 +24,10 @@ export global Playlists {
     // many tracks to undo, Rust asks first and the confirmation fires `delete-playlists-confirmed`.
     callback delete-playlists([int] /*ids*/);
 
+    // Converts a smart playlist at once, offering an undo. Where Settings turned undo off for
+    // playlists, Rust asks first and the confirmation fires `convert-to-regular-confirmed`.
+    callback convert-to-regular(int /*playlist_id*/);
+
     // Fired by `Dialog.accepted` on confirm.
     callback create-playlist(
         string /*name*/,
@@ -36,6 +40,7 @@ export global Playlists {
         string /*description (empty ⇒ clear)*/,
     );
     callback delete-playlists-confirmed([int] /*ids*/);
+    callback convert-to-regular-confirmed(int /*playlist_id*/);
 
     // 1–4 of the playlist's own covers, composed and persisted by Rust.
     callback apply-mosaic(int /*id*/, [string] /*paths*/);

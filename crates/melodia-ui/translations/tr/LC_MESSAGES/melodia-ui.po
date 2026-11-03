@@ -1079,6 +1079,10 @@ msgid "Edit Rules…"
 msgstr "Kuralları düzenle…"
 
 #: ui/components/grid/card-context-menu.slint
+msgid "Convert to Regular Playlist"
+msgstr "Normal çalma listesine dönüştür"
+
+#: ui/components/grid/card-context-menu.slint
 msgid "Delete {} Playlists"
 msgstr "{} çalma listesini sil"
 
@@ -1373,6 +1377,16 @@ msgid "Accent Color"
 msgstr "Vurgu Rengi"
 
 #: ui/components/onboarding/features-panel.slint
+#: ui/views/settings/update-section.slint
+msgid "Check for updates automatically"
+msgstr "Güncellemeleri otomatik denetle"
+
+#: ui/components/onboarding/features-panel.slint
+#: ui/views/settings/update-section.slint
+msgid "Once a day, Melodia asks GitHub whether a newer version is out."
+msgstr "Melodia günde bir kez GitHub'a daha yeni bir sürüm olup olmadığını sorar."
+
+#: ui/components/onboarding/features-panel.slint
 msgid "What Melodia can reach"
 msgstr "Melodia'nın erişebilecekleri"
 
@@ -1412,16 +1426,6 @@ msgstr "Dinlediklerinizi Last.fm veya ListenBrainz'e gönderin"
 #: ui/components/onboarding/features-panel.slint
 msgid "Set Up"
 msgstr "Kur"
-
-#: ui/components/onboarding/features-panel.slint
-#: ui/views/settings/update-section.slint
-msgid "Check for updates automatically"
-msgstr "Güncellemeleri otomatik denetle"
-
-#: ui/components/onboarding/features-panel.slint
-#: ui/views/settings/update-section.slint
-msgid "Once a day, Melodia asks GitHub whether a newer version is out."
-msgstr "Melodia günde bir kez GitHub'a daha yeni bir sürüm olup olmadığını sorar."
 
 #: ui/components/onboarding/music-panel.slint
 msgid "Your music"
@@ -1892,6 +1896,18 @@ msgstr "İstasyonlar favorilerinden kaldırılacak. Elle eklediklerin, dinlenme 
 msgid "Edit Rules"
 msgstr "Kuralları düzenle"
 
+#: ui/globals/dialog.slint
+msgid "Convert to regular playlist?"
+msgstr "Normal çalma listesine dönüştürülsün mü?"
+
+#: ui/globals/dialog.slint
+msgid "It keeps the tracks it holds now, and its rules are removed for good."
+msgstr "Şu an içerdiği parçaları korur, kuralları ise kalıcı olarak kaldırılır."
+
+#: ui/globals/dialog.slint
+msgid "Convert"
+msgstr "Dönüştür"
+
 #: ui/globals/dialog.slint ui/views/my-library/tab-pills.slint
 msgid "New Smart Playlist"
 msgstr "Yeni Akıllı Liste"
@@ -2080,6 +2096,11 @@ msgid "{n} playlist deleted"
 msgid_plural "{n} playlists deleted"
 msgstr[0] "{n} çalma listesi silindi"
 msgstr[1] "{n} çalma listesi silindi"
+
+#. Translators: {} is the playlist's name.
+#: ui/globals/undo-text.slint
+msgid "{} is now a regular playlist"
+msgstr "{} artık normal bir çalma listesi"
 
 #. Translators: {} is the station's name.
 #: ui/globals/undo-text.slint
@@ -2622,6 +2643,10 @@ msgstr "Yeniden adlandır"
 #: ui/views/my-library/tab-pills.slint
 msgid "Edit rules"
 msgstr "Kuralları düzenle"
+
+#: ui/views/my-library/tab-pills.slint
+msgid "Convert to regular playlist"
+msgstr "Normal çalma listesine dönüştür"
 
 #: ui/views/my-library/tab-pills.slint
 msgid "Delete playlist"
@@ -3702,8 +3727,8 @@ msgid "Offer undo when only one track, playlist, station or favorite goes. Clear
 msgstr "Yalnızca bir parça, çalma listesi, istasyon veya favori kaldırıldığında da geri almayı öner. “Tümünü temizle”, “Sıfırla” ve “Sırayı temizle” her zaman önerir."
 
 #: ui/views/settings/undo-section.slint
-msgid "Tracks removed from a playlist, and deleted playlists."
-msgstr "Bir çalma listesinden kaldırılan parçalar ve silinen çalma listeleri."
+msgid "Tracks removed from a playlist, deleted playlists, and a converted smart playlist's rules."
+msgstr "Bir çalma listesinden kaldırılan parçalar, silinen çalma listeleri ve dönüştürülen akıllı listenin kuralları."
 
 #: ui/views/settings/undo-section.slint
 msgid "Tracks removed from the queue, Clear queue, and a play that replaces a queue you built."

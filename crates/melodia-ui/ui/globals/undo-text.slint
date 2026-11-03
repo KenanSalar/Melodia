@@ -31,6 +31,12 @@ export global UndoText {
         return @tr("{n} playlist deleted" | "{n} playlists deleted" % count);
     }
 
+    pure callback playlist-converted(string /*playlist*/) -> string;
+    playlist-converted(playlist) => {
+        // Translators: {} is the playlist's name.
+        return @tr("{} is now a regular playlist", playlist);
+    }
+
     // An empty `station` always takes the count.
     pure callback stations-removed-from-favorites(int /*count*/, string /*station*/) -> string;
     stations-removed-from-favorites(count, station) => {

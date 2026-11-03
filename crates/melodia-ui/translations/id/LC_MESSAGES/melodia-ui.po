@@ -1065,6 +1065,10 @@ msgid "Edit Rules…"
 msgstr "Edit Aturan…"
 
 #: ui/components/grid/card-context-menu.slint
+msgid "Convert to Regular Playlist"
+msgstr "Ubah ke Playlist Biasa"
+
+#: ui/components/grid/card-context-menu.slint
 msgid "Delete {} Playlists"
 msgstr "Hapus {} Playlist"
 
@@ -1359,6 +1363,16 @@ msgid "Accent Color"
 msgstr "Warna Aksen"
 
 #: ui/components/onboarding/features-panel.slint
+#: ui/views/settings/update-section.slint
+msgid "Check for updates automatically"
+msgstr "Periksa pembaruan secara otomatis"
+
+#: ui/components/onboarding/features-panel.slint
+#: ui/views/settings/update-section.slint
+msgid "Once a day, Melodia asks GitHub whether a newer version is out."
+msgstr "Sekali sehari, Melodia menanyakan ke GitHub apakah ada versi yang lebih baru."
+
+#: ui/components/onboarding/features-panel.slint
 msgid "What Melodia can reach"
 msgstr "Yang dapat dijangkau Melodia"
 
@@ -1398,16 +1412,6 @@ msgstr "Kirim yang Anda putar ke Last.fm atau ListenBrainz"
 #: ui/components/onboarding/features-panel.slint
 msgid "Set Up"
 msgstr "Siapkan"
-
-#: ui/components/onboarding/features-panel.slint
-#: ui/views/settings/update-section.slint
-msgid "Check for updates automatically"
-msgstr "Periksa pembaruan secara otomatis"
-
-#: ui/components/onboarding/features-panel.slint
-#: ui/views/settings/update-section.slint
-msgid "Once a day, Melodia asks GitHub whether a newer version is out."
-msgstr "Sekali sehari, Melodia menanyakan ke GitHub apakah ada versi yang lebih baru."
 
 #: ui/components/onboarding/music-panel.slint
 msgid "Your music"
@@ -1865,6 +1869,18 @@ msgstr "Stasiun tersebut akan dihapus dari favorit Anda. Stasiun yang Anda tamba
 msgid "Edit Rules"
 msgstr "Edit Aturan"
 
+#: ui/globals/dialog.slint
+msgid "Convert to regular playlist?"
+msgstr "Ubah ke playlist biasa?"
+
+#: ui/globals/dialog.slint
+msgid "It keeps the tracks it holds now, and its rules are removed for good."
+msgstr "Lagu yang ada di dalamnya sekarang tetap disimpan, dan aturannya dihapus permanen."
+
+#: ui/globals/dialog.slint
+msgid "Convert"
+msgstr "Ubah"
+
 #: ui/globals/dialog.slint ui/views/my-library/tab-pills.slint
 msgid "New Smart Playlist"
 msgstr "Playlist Pintar Baru"
@@ -2042,6 +2058,11 @@ msgstr "{} dihapus"
 msgid "{n} playlist deleted"
 msgid_plural "{n} playlists deleted"
 msgstr[0] "{n} playlist dihapus"
+
+#. Translators: {} is the playlist's name.
+#: ui/globals/undo-text.slint
+msgid "{} is now a regular playlist"
+msgstr "{} sekarang playlist biasa"
 
 #. Translators: {} is the station's name.
 #: ui/globals/undo-text.slint
@@ -2565,6 +2586,10 @@ msgstr "Ganti nama"
 #: ui/views/my-library/tab-pills.slint
 msgid "Edit rules"
 msgstr "Edit aturan"
+
+#: ui/views/my-library/tab-pills.slint
+msgid "Convert to regular playlist"
+msgstr "Ubah ke playlist biasa"
 
 #: ui/views/my-library/tab-pills.slint
 msgid "Delete playlist"
@@ -3637,8 +3662,8 @@ msgid "Offer undo when only one track, playlist, station or favorite goes. Clear
 msgstr "Tawarkan urungkan meski hanya satu lagu, playlist, stasiun, atau favorit yang dihapus. Hapus semua, Atur ulang, dan Kosongkan antrean selalu menawarkannya."
 
 #: ui/views/settings/undo-section.slint
-msgid "Tracks removed from a playlist, and deleted playlists."
-msgstr "Lagu yang dihapus dari playlist, dan playlist yang dihapus."
+msgid "Tracks removed from a playlist, deleted playlists, and a converted smart playlist's rules."
+msgstr "Lagu yang dihapus dari playlist, playlist yang dihapus, dan aturan playlist pintar yang diubah."
 
 #: ui/views/settings/undo-section.slint
 msgid "Tracks removed from the queue, Clear queue, and a play that replaces a queue you built."

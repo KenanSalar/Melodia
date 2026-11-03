@@ -1075,6 +1075,10 @@ msgid "Edit Rules…"
 msgstr "Editar reglas…"
 
 #: ui/components/grid/card-context-menu.slint
+msgid "Convert to Regular Playlist"
+msgstr "Convertir en lista normal"
+
+#: ui/components/grid/card-context-menu.slint
 msgid "Delete {} Playlists"
 msgstr "Eliminar {} listas"
 
@@ -1369,6 +1373,16 @@ msgid "Accent Color"
 msgstr "Color de acento"
 
 #: ui/components/onboarding/features-panel.slint
+#: ui/views/settings/update-section.slint
+msgid "Check for updates automatically"
+msgstr "Buscar actualizaciones automáticamente"
+
+#: ui/components/onboarding/features-panel.slint
+#: ui/views/settings/update-section.slint
+msgid "Once a day, Melodia asks GitHub whether a newer version is out."
+msgstr "Una vez al día, Melodia pregunta a GitHub si hay una versión más reciente."
+
+#: ui/components/onboarding/features-panel.slint
 msgid "What Melodia can reach"
 msgstr "A qué puede acceder Melodia"
 
@@ -1408,16 +1422,6 @@ msgstr "Envía lo que escuchas a Last.fm o ListenBrainz"
 #: ui/components/onboarding/features-panel.slint
 msgid "Set Up"
 msgstr "Configurar"
-
-#: ui/components/onboarding/features-panel.slint
-#: ui/views/settings/update-section.slint
-msgid "Check for updates automatically"
-msgstr "Buscar actualizaciones automáticamente"
-
-#: ui/components/onboarding/features-panel.slint
-#: ui/views/settings/update-section.slint
-msgid "Once a day, Melodia asks GitHub whether a newer version is out."
-msgstr "Una vez al día, Melodia pregunta a GitHub si hay una versión más reciente."
 
 #: ui/components/onboarding/music-panel.slint
 msgid "Your music"
@@ -1883,6 +1887,18 @@ msgstr "Las emisoras se quitarán de tus favoritos. Las que añadiste a mano se 
 msgid "Edit Rules"
 msgstr "Editar reglas"
 
+#: ui/globals/dialog.slint
+msgid "Convert to regular playlist?"
+msgstr "¿Convertir en lista normal?"
+
+#: ui/globals/dialog.slint
+msgid "It keeps the tracks it holds now, and its rules are removed for good."
+msgstr "Conserva las pistas que tiene ahora, y sus reglas se eliminan definitivamente."
+
+#: ui/globals/dialog.slint
+msgid "Convert"
+msgstr "Convertir"
+
 #: ui/globals/dialog.slint ui/views/my-library/tab-pills.slint
 msgid "New Smart Playlist"
 msgstr "Nueva lista inteligente"
@@ -2069,6 +2085,11 @@ msgid "{n} playlist deleted"
 msgid_plural "{n} playlists deleted"
 msgstr[0] "{n} lista eliminada"
 msgstr[1] "{n} listas eliminadas"
+
+#. Translators: {} is the playlist's name.
+#: ui/globals/undo-text.slint
+msgid "{} is now a regular playlist"
+msgstr "{} ahora es una lista normal"
 
 #. Translators: {} is the station's name.
 #: ui/globals/undo-text.slint
@@ -2610,6 +2631,10 @@ msgstr "Renombrar"
 #: ui/views/my-library/tab-pills.slint
 msgid "Edit rules"
 msgstr "Editar reglas"
+
+#: ui/views/my-library/tab-pills.slint
+msgid "Convert to regular playlist"
+msgstr "Convertir en lista normal"
 
 #: ui/views/my-library/tab-pills.slint
 msgid "Delete playlist"
@@ -3689,8 +3714,8 @@ msgid "Offer undo when only one track, playlist, station or favorite goes. Clear
 msgstr "Ofrecer deshacer aunque solo se quite una pista, lista, emisora o favorito. «Borrar todo», «Restablecer» y «Vaciar cola» siempre lo ofrecen."
 
 #: ui/views/settings/undo-section.slint
-msgid "Tracks removed from a playlist, and deleted playlists."
-msgstr "Pistas quitadas de una lista y listas eliminadas."
+msgid "Tracks removed from a playlist, deleted playlists, and a converted smart playlist's rules."
+msgstr "Pistas quitadas de una lista, listas eliminadas y las reglas de una lista inteligente convertida."
 
 #: ui/views/settings/undo-section.slint
 msgid "Tracks removed from the queue, Clear queue, and a play that replaces a queue you built."

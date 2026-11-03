@@ -1085,6 +1085,10 @@ msgid "Edit Rules…"
 msgstr "Змінити правила…"
 
 #: ui/components/grid/card-context-menu.slint
+msgid "Convert to Regular Playlist"
+msgstr "Перетворити на звичайний плейлист"
+
+#: ui/components/grid/card-context-menu.slint
 msgid "Delete {} Playlists"
 msgstr "Видалити плейлисти ({})"
 
@@ -1379,6 +1383,16 @@ msgid "Accent Color"
 msgstr "Акцентний колір"
 
 #: ui/components/onboarding/features-panel.slint
+#: ui/views/settings/update-section.slint
+msgid "Check for updates automatically"
+msgstr "Автоматично перевіряти оновлення"
+
+#: ui/components/onboarding/features-panel.slint
+#: ui/views/settings/update-section.slint
+msgid "Once a day, Melodia asks GitHub whether a newer version is out."
+msgstr "Раз на день Melodia запитує в GitHub, чи вийшла нова версія."
+
+#: ui/components/onboarding/features-panel.slint
 msgid "What Melodia can reach"
 msgstr "До чого може звертатися Melodia"
 
@@ -1418,16 +1432,6 @@ msgstr "Надсилати прослухане до Last.fm або ListenBrainz
 #: ui/components/onboarding/features-panel.slint
 msgid "Set Up"
 msgstr "Налаштувати"
-
-#: ui/components/onboarding/features-panel.slint
-#: ui/views/settings/update-section.slint
-msgid "Check for updates automatically"
-msgstr "Автоматично перевіряти оновлення"
-
-#: ui/components/onboarding/features-panel.slint
-#: ui/views/settings/update-section.slint
-msgid "Once a day, Melodia asks GitHub whether a newer version is out."
-msgstr "Раз на день Melodia запитує в GitHub, чи вийшла нова версія."
 
 #: ui/components/onboarding/music-panel.slint
 msgid "Your music"
@@ -1901,6 +1905,18 @@ msgstr "Станції буде вилучено з обраного. Додан
 msgid "Edit Rules"
 msgstr "Змінити правила"
 
+#: ui/globals/dialog.slint
+msgid "Convert to regular playlist?"
+msgstr "Перетворити на звичайний плейлист?"
+
+#: ui/globals/dialog.slint
+msgid "It keeps the tracks it holds now, and its rules are removed for good."
+msgstr "Він збереже треки, які містить зараз, а його правила буде видалено назавжди."
+
+#: ui/globals/dialog.slint
+msgid "Convert"
+msgstr "Перетворити"
+
 #: ui/globals/dialog.slint ui/views/my-library/tab-pills.slint
 msgid "New Smart Playlist"
 msgstr "Новий розумний плейлист"
@@ -2096,6 +2112,11 @@ msgid_plural "{n} playlists deleted"
 msgstr[0] "Видалено {n} плейлист"
 msgstr[1] "Видалено {n} плейлисти"
 msgstr[2] "Видалено {n} плейлистів"
+
+#. Translators: {} is the playlist's name.
+#: ui/globals/undo-text.slint
+msgid "{} is now a regular playlist"
+msgstr "Плейлист «{}» тепер звичайний"
 
 #. Translators: {} is the station's name.
 #: ui/globals/undo-text.slint
@@ -2655,6 +2676,10 @@ msgstr "Перейменувати"
 #: ui/views/my-library/tab-pills.slint
 msgid "Edit rules"
 msgstr "Змінити правила"
+
+#: ui/views/my-library/tab-pills.slint
+msgid "Convert to regular playlist"
+msgstr "Перетворити на звичайний плейлист"
 
 #: ui/views/my-library/tab-pills.slint
 msgid "Delete playlist"
@@ -3741,8 +3766,8 @@ msgid "Offer undo when only one track, playlist, station or favorite goes. Clear
 msgstr "Пропонувати скасування, навіть коли вилучено лише один трек, плейлист, станцію чи елемент обраного. «Очистити все», «Скинути» та «Очистити чергу» пропонують його завжди."
 
 #: ui/views/settings/undo-section.slint
-msgid "Tracks removed from a playlist, and deleted playlists."
-msgstr "Треки, вилучені з плейлиста, і видалені плейлисти."
+msgid "Tracks removed from a playlist, deleted playlists, and a converted smart playlist's rules."
+msgstr "Треки, вилучені з плейлиста, видалені плейлисти й правила перетвореного розумного плейлиста."
 
 #: ui/views/settings/undo-section.slint
 msgid "Tracks removed from the queue, Clear queue, and a play that replaces a queue you built."

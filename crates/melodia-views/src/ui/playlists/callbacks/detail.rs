@@ -68,11 +68,7 @@ impl PlaylistCutUndo {
     pub async fn restore(self, state: &AppState, weak: &Weak<AppWindow>) -> Result<(), AppError> {
         let Self { playlist_id, cuts, playlists_ui, .. } = self;
         library::playlists::restore_playlist_items(&state.db, cuts).await?;
-        let (s, weak) = (state.clone(), weak.clone());
-        state.runtime.spawn(async move {
-            super::refresh_after_edit(&s, &playlists_ui, weak, &[playlist_id], "playlists::undo")
-                .await;
-        });
+        super::spawn_refresh_after_edit(state, &playlists_ui, weak, playlist_id, "playlists::undo");
         Ok(())
     }
 }

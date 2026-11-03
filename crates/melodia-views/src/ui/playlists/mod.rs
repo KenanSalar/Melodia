@@ -45,7 +45,7 @@ pub(super) use detail::{
 };
 pub(super) use grid::{refresh_after_write, refresh_play_stats, shown_card};
 
-pub(crate) use callbacks::{PlaylistCutUndo, PlaylistDeleteUndo};
+pub(crate) use callbacks::{PlaylistConvertUndo, PlaylistCutUndo, PlaylistDeleteUndo};
 
 /// The M3U8 import and export and the Add-to-Playlist wiring, outside [`install`] for the
 /// `Rc<NotificationsUi>` their toasts need, which exists only after the views.
@@ -132,6 +132,12 @@ impl PlaylistsUi {
     /// Draws again, for a fresh open.
     fn redraw(&self) {
         *self.draw.lock() = Draw(rand::random());
+    }
+
+    /// The pick playlist `id`'s tracks on show come from: the open detail's while it shows `id`,
+    /// else the default draw its card's cover is worked out under.
+    fn draw_on_show(&self, id: i64) -> Draw {
+        if self.detail_playlist_id() == id { self.draw() } else { Draw::default() }
     }
 
     /// `Playlists.request-row-cover`, for the mosaic picker's 64 px tiles, off the row tier rather

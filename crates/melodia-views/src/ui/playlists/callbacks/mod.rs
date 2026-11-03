@@ -2,6 +2,7 @@
 //! [`files`]'s.
 
 mod artwork;
+mod convert;
 mod crud;
 mod detail;
 mod files;
@@ -22,6 +23,7 @@ use melodia_app::state::AppState;
 use melodia_core::error::describe;
 use melodia_ui::AppWindow;
 
+pub(crate) use convert::PlaylistConvertUndo;
 pub(crate) use crud::PlaylistDeleteUndo;
 pub(crate) use detail::PlaylistCutUndo;
 
@@ -33,6 +35,7 @@ pub(super) fn wire(cx: ViewCtx<'_>, playlists_ui: &Arc<PlaylistsUi>) {
     detail::wire(cx, playlists_ui);
     row_cover::wire(ui, playlists_ui);
     crud::wire(cx, playlists_ui);
+    convert::wire(cx, playlists_ui);
     artwork::wire(ui, state, playlists_ui);
     smart::wire(ui, state, playlists_ui);
     lifecycle::wire(ui, state, playlists_ui);
@@ -53,6 +56,20 @@ async fn refresh_after_edit(
     {
         log::warn!("{label} refresh detail: {}", describe(&e));
     }
+}
+
+/// [`refresh_after_edit`] of one playlist on the runtime, for a write awaited on the UI thread.
+fn spawn_refresh_after_edit(
+    state: &AppState,
+    playlists_ui: &Arc<PlaylistsUi>,
+    weak: &Weak<AppWindow>,
+    edited: i64,
+    label: &'static str,
+) {
+    let (s, pu, weak) = (state.clone(), playlists_ui.clone(), weak.clone());
+    state.runtime.spawn(async move {
+        refresh_after_edit(&s, &pu, weak, &[edited], label).await;
+    });
 }
 
 /// A description as stored: blank means none, so the database holds NULL rather than an empty

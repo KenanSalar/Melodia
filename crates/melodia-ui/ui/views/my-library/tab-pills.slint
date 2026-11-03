@@ -146,6 +146,12 @@ export component MyLibraryTabPills inherits Rectangle {
                 tooltip-text: @tr("Edit rules");
                 clicked => { Dialog.open-edit-smart-rules(PlaylistDetail.playlist-id); }
             }
+            if PlaylistDetail.playlist.is_smart: PillDivider { }
+            if PlaylistDetail.playlist.is_smart: PillButton {
+                icon: "playlist_add_check";
+                tooltip-text: @tr("Convert to regular playlist");
+                clicked => { Playlists.convert-to-regular(PlaylistDetail.playlist-id); }
+            }
             PillDivider { }
             PillButton {
                 icon: "delete";

@@ -238,6 +238,7 @@ fn a_selection_press_is_the_last_arm_of_the_escape_chain() {
 #[test]
 fn a_card_menu_entry_is_gated_on_the_operation_and_not_the_kind() {
     const LOOKAHEAD: usize = 6;
+    const SMART_GATE: &str = "if root.smart-edits:";
     let sources = slint_sources();
     let menu = sources
         .iter()
@@ -246,24 +247,36 @@ fn a_card_menu_entry_is_gated_on_the_operation_and_not_the_kind() {
 
     let code: Vec<&str> =
         menu.lines().map(str::trim).filter(|line| !line.is_empty()).collect::<Vec<&str>>();
-    let gates: Vec<usize> = code
+    let kind_reads: Vec<&str> = code
+        .iter()
+        .copied()
+        .filter(|line| line.contains("card-is-smart") && !line.starts_with("in property"))
+        .collect();
+    assert_eq!(
+        kind_reads,
+        ["property <bool> smart-edits: root.playlist-edits && root.card-is-smart;"],
+        "the kind is read once, into the one gate the rule entries share; an entry asking it \
+         directly is how Rename and Edit Artwork came to hide"
+    );
+
+    let gated: BTreeSet<&str> = code
         .iter()
         .enumerate()
-        .filter(|(_, line)| line.starts_with("if ") && line.contains("card-is-smart"))
-        .map(|(index, _)| index)
+        .filter(|(_, line)| line.starts_with(SMART_GATE))
+        .filter_map(|(reach, _)| {
+            let entry = code.get(reach..(reach + LOOKAHEAD).min(code.len()))?.join(" ");
+            ["root.edit-rules()", "root.convert-to-regular()"]
+                .into_iter()
+                .find(|action| entry.contains(action))
+        })
         .collect();
+    let gates = code.iter().filter(|line| line.starts_with(SMART_GATE)).count();
 
     assert_eq!(
-        gates.len(),
-        1,
-        "only Edit Rules is a smart playlist's alone; every other entry here is offered by the \
-         card's own hover trio and by the detail band"
-    );
-    let reach = gates.first().copied().unwrap_or(0);
-    let entry = code.get(reach..(reach + LOOKAHEAD).min(code.len())).unwrap_or(&[]).join(" ");
-    assert!(
-        entry.contains("root.edit-rules()"),
-        "the one kind gate must be Edit Rules', and it now reads: {entry}"
+        (gates, gated),
+        (2, BTreeSet::from(["root.convert-to-regular()", "root.edit-rules()"])),
+        "only Edit Rules and Convert are a smart playlist's alone; every other entry here is \
+         offered by the card's own hover trio and by the detail band"
     );
 }
 
