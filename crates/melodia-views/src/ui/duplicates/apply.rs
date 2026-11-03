@@ -5,7 +5,7 @@ use std::rc::Rc;
 use slint::ComponentHandle;
 
 use super::Finder;
-use super::landing::spawn_landing;
+use super::landing::TicketedDialog;
 use crate::ui::shell::notifications::{Completion, RowText};
 use crate::ui::util::len_as_i32;
 use melodia_app::library;
@@ -14,8 +14,7 @@ use melodia_core::error::describe;
 use melodia_ui::{AppWindow, Dialog, DuplicatesUi};
 
 impl Finder {
-    /// Removes the picked copies. Unlike the finder's other answers this one lands under any
-    /// ticket: a dialog closed mid-remove still removed, and its toast says so.
+    /// Removes the picked copies, the dialog closing on the answer only if it still shows them.
     pub(super) fn remove(self: &Rc<Self>) {
         let Some(ui) = self.ui.upgrade() else {
             return;
@@ -32,32 +31,25 @@ impl Finder {
         let ticket = self.ticket.get();
         let state = self.state.clone();
         let work = async move { library::duplicates::apply(&state, removals).await };
-        let finder = Rc::downgrade(self);
         let spawned =
-            spawn_landing(&self.state.runtime, "duplicates remove", work, move |removed| {
-                let Some(finder) = finder.upgrade() else {
-                    return;
-                };
-                let Some(ui) = finder.ui.upgrade() else {
-                    return;
-                };
+            self.after_any_ticket("duplicates remove", work, move |ui, finder, removed| {
                 ui.global::<DuplicatesUi>().set_removing(false);
                 let counts = match removed {
                     Some(Ok(counts)) => counts,
                     Some(Err(e)) => {
                         log::warn!("duplicates: remove failed: {}", describe(&e));
-                        finder.show_remove_failed(&ui);
+                        finder.show_remove_failed(ui);
                         return;
                     }
                     None => {
-                        finder.show_remove_failed(&ui);
+                        finder.show_remove_failed(ui);
                         return;
                     }
                 };
-                if finder.ticket.holds(ticket, &ui) {
+                if finder.ticket.holds(ticket, ui) {
                     ui.global::<Dialog>().set_open(false);
                 }
-                finder.show_removed(&ui, counts);
+                finder.show_removed(ui, counts);
             });
         if spawned {
             dup.set_removing(true);

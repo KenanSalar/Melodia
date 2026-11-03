@@ -12,7 +12,8 @@ use sqlx::sqlite::SqliteConnection;
 use sqlx::{AssertSqlSafe, QueryBuilder, Sqlite, Transaction};
 
 use crate::database::{
-    DbPool, MAX_BINDS_PER_STATEMENT, chunked_in_query, chunked_in_query_on, values_placeholders,
+    DbPool, MAX_BINDS_PER_STATEMENT, chunked_in_execute_on, chunked_in_query, chunked_in_query_on,
+    values_placeholders,
 };
 use melodia_core::entities::duplicates::KeptOutFile;
 use melodia_core::entities::scan::{ExtractedMetadata, FileStamp};
@@ -200,17 +201,8 @@ pub(crate) async fn lift_on(
     tx: &mut Transaction<'_, Sqlite>,
     paths: &[&str],
 ) -> Result<u64, AppError> {
-    let mut lifted = 0;
-    for chunk in paths.chunks(MAX_BINDS_PER_STATEMENT) {
-        let sql = format!(
-            "DELETE FROM excluded_files WHERE path IN ({})",
-            crate::database::placeholders(chunk.len())
-        );
-        let mut query = sqlx::query(AssertSqlSafe(sql));
-        for path in chunk {
-            query = query.bind(*path);
-        }
-        lifted += query.persistent(false).execute(&mut **tx).await?.rows_affected();
-    }
-    Ok(lifted)
+    chunked_in_execute_on(tx, paths, |placeholders| {
+        format!("DELETE FROM excluded_files WHERE path IN ({placeholders})")
+    })
+    .await
 }

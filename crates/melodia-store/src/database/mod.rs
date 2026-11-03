@@ -192,6 +192,26 @@ where
     Ok(all_results)
 }
 
+/// [`chunked_in_query_on`] for a statement that returns no rows, answering how many it touched.
+pub(crate) async fn chunked_in_execute_on<B>(
+    conn: &mut SqliteConnection,
+    items: &[B],
+    build_sql: impl Fn(&str) -> String,
+) -> Result<u64, AppError>
+where
+    for<'q> B: sqlx::Encode<'q, sqlx::Sqlite> + sqlx::Type<sqlx::Sqlite> + Send + Sync,
+{
+    let mut touched = 0;
+    for chunk in items.chunks(MAX_BINDS_PER_STATEMENT) {
+        let mut query = sqlx::query(AssertSqlSafe(build_sql(&placeholders(chunk.len()))));
+        for item in chunk {
+            query = query.bind(item);
+        }
+        touched += query.persistent(false).execute(&mut *conn).await?.rows_affected();
+    }
+    Ok(touched)
+}
+
 /// `rows`, fetched by an `IN (…)` over `ids`, put back in the order `ids` asked for. A row the
 /// fetch didn't return, deleted since the ids were read, is skipped, and so is a second ask for
 /// one id.

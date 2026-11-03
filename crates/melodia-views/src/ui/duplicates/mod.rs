@@ -11,18 +11,18 @@ mod rows;
 
 use std::cell::{Cell, RefCell};
 use std::collections::HashSet;
-use std::future::Future;
 use std::rc::{Rc, Weak};
 
 use slint::{ComponentHandle, ModelRc};
+use tokio::runtime::Handle;
 
-use crate::ui::paged_rows::{Keyset, PagedRows, ReadStamp, RowRequest, spawn_fetch};
+use crate::ui::paged_rows::{Keyset, PagedRows, ReadStamp, RowRequest};
 use crate::ui::shell::notifications::NotificationsUi;
 use crate::ui::util::{format_size, len_as_i32};
-use landing::{DialogTicket, spawn_landing};
+use landing::{DialogTicket, TicketedDialog};
 use melodia_app::library;
 use melodia_app::state::AppState;
-use melodia_core::error::{AppResult, describe};
+use melodia_core::error::describe;
 use melodia_ui::{AppWindow, DialogKind, DuplicateRow, DuplicatesUi};
 use picks::DuplicateSet;
 
@@ -195,55 +195,36 @@ impl Finder {
         dup.set_picked_count(len_as_i32(set.picked_count()));
         dup.set_picked_size(format_size(set.picked_bytes()).into());
     }
+}
 
-    /// Runs `work` on the runtime and hands its answer to `land` on the UI thread, while the
-    /// ticket it was sent under holds.
-    fn after<T: Send + 'static>(
-        self: &Rc<Self>,
-        work: impl Future<Output = AppResult<T>> + Send + 'static,
-        land: impl FnOnce(&AppWindow, &Self, AppResult<T>) + 'static,
-    ) {
-        let ticket = self.ticket.get();
-        let finder = Rc::downgrade(self);
-        spawn_landing(&self.state.runtime, "duplicates", work, move |answer| {
-            let Some(answer) = answer else {
-                return;
-            };
-            let Some(finder) = finder.upgrade() else {
-                return;
-            };
-            let Some(ui) = finder.ui.upgrade() else {
-                return;
-            };
-            if finder.ticket.holds(ticket, &ui) {
-                land(&ui, &finder, answer);
-            }
-        });
+impl TicketedDialog for Finder {
+    const LABEL: &'static str = "duplicates";
+    const ROWS_LABEL: &'static str = "duplicate rows";
+
+    fn window(&self) -> &slint::Weak<AppWindow> {
+        &self.ui
+    }
+
+    fn ticket(&self) -> &DialogTicket {
+        &self.ticket
+    }
+
+    fn runtime(&self) -> &Handle {
+        &self.state.runtime
     }
 }
 
-/// Reads the rows on screen by id, a header through its best copy. A fetch landing after the
-/// ticket moved is dropped, which frees the list to ask again.
+/// Reads the rows on screen by id, a header through its best copy.
 fn fetcher(finder: Weak<Finder>) -> impl Fn(RowRequest<DuplicateRow>) + 'static {
     move |request| {
-        let Some(this) = finder.upgrade() else {
+        let Some(finder) = finder.upgrade() else {
             return;
         };
-        let ids = rows::track_ids_for(&this.set.borrow(), request.ids());
-        let db = this.state.db.clone();
-        let ticket = this.ticket.get();
-        let finder = finder.clone();
-        let land = move |request: RowRequest<DuplicateRow>, copies: Vec<_>| {
-            let Some(this) = finder.upgrade() else {
-                return;
-            };
-            if this.ticket.get() != ticket {
-                return;
-            }
-            let rows = rows::build(&this.set.borrow(), request.ids(), &copies);
-            request.land(rows);
-        };
+        let ids = rows::track_ids_for(&finder.set.borrow(), request.ids());
+        let db = finder.state.db.clone();
         let copies = async move { library::duplicates::copies(&db, &ids).await };
-        spawn_fetch(&this.state.runtime, request, copies, land, "duplicate rows");
+        finder.fetch_rows(request, copies, |finder, asked, copies| {
+            rows::build(&finder.set.borrow(), asked, &copies)
+        });
     }
 }

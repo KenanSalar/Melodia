@@ -241,15 +241,7 @@ async fn handle_created(
     }
 
     if let Some((exclusion_id, old_path)) = batch.moved.take_exclusion(&meta.file_hash) {
-        match find_folder_for_path(tx, &path_str).await? {
-            Some(folder_id) => {
-                excluded_files::repoint_on(tx, exclusion_id, &path_str, folder_id).await?;
-                log::info!("Kept-out file moved: {old_path} -> {path_str}");
-            }
-            None => {
-                excluded_files::lift_on(tx, &[old_path.as_str()]).await?;
-            }
-        }
+        carry_kept_out(tx, exclusion_id, &old_path, &path_str).await?;
         return Ok(false);
     }
 
@@ -329,7 +321,7 @@ async fn handle_renamed(
         return Ok(true);
     }
     if let Some(exclusion_id) = excluded_files::id_at_on(tx, &from_str).await? {
-        rename_kept_out(tx, exclusion_id, &from_str, &to_str).await?;
+        carry_kept_out(tx, exclusion_id, &from_str, &to_str).await?;
         return Ok(false);
     }
     if let Some(meta) = meta {
@@ -339,10 +331,10 @@ async fn handle_renamed(
     Ok(false)
 }
 
-/// Carries a kept-out file's exclusion to its new name. It lifts instead where the new name is
-/// outside every library folder, or is a track's, the row keeping its history over the file
-/// written onto it.
-async fn rename_kept_out(
+/// Carries a kept-out file's exclusion to where it was renamed or moved. It lifts instead where the
+/// new path is outside every library folder, or is a track's, the row keeping its history over the
+/// file written onto it.
+async fn carry_kept_out(
     tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
     exclusion_id: i64,
     from: &str,
@@ -356,7 +348,7 @@ async fn rename_kept_out(
     match folder_id {
         Some(folder_id) => {
             excluded_files::repoint_on(tx, exclusion_id, to, folder_id).await?;
-            log::info!("Renamed kept-out file: {from} -> {to}");
+            log::info!("Kept-out file moved: {from} -> {to}");
         }
         None => {
             excluded_files::lift_on(tx, &[from]).await?;

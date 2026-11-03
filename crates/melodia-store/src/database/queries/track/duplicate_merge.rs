@@ -12,7 +12,10 @@ use crate::database::queries::excluded_files::{self, NewExclusion};
 use crate::database::queries::ingest::BULK_THRESHOLD;
 use crate::database::queries::playlist::{self, NewItem};
 use crate::database::queries::{scan, stats};
-use crate::database::{DbPool, MAX_BINDS_PER_STATEMENT, chunked_in_query_on, values_placeholders};
+use crate::database::{
+    DbPool, MAX_BINDS_PER_STATEMENT, chunked_in_execute_on, chunked_in_query_on,
+    values_placeholders,
+};
 use melodia_core::entities::duplicates::GroupRemoval;
 use melodia_core::error::AppError;
 
@@ -81,7 +84,10 @@ pub async fn remove_duplicates(
         plan.spares.iter().map(|spare| spare.exclusion()).collect();
     excluded_files::exclude_on(&mut tx, &exclusions).await?;
     let spare_ids: Vec<i64> = plan.spares.iter().map(|spare| spare.id).collect();
-    delete_tracks(&mut tx, &spare_ids).await?;
+    chunked_in_execute_on(&mut tx, &spare_ids, |placeholders| {
+        format!("DELETE FROM tracks WHERE id IN ({placeholders})")
+    })
+    .await?;
     for playlist_id in touched {
         playlist::renumber_playlist_positions_tx(&mut tx, playlist_id).await?;
     }
@@ -261,19 +267,4 @@ async fn move_playlist_places(
         playlist::insert_items_tx(tx, *playlist_id, items).await?;
     }
     Ok(by_playlist.into_keys().collect())
-}
-
-async fn delete_tracks(tx: &mut Transaction<'_, Sqlite>, ids: &[i64]) -> Result<(), AppError> {
-    for chunk in ids.chunks(MAX_BINDS_PER_STATEMENT) {
-        let sql = format!(
-            "DELETE FROM tracks WHERE id IN ({})",
-            crate::database::placeholders(chunk.len())
-        );
-        let mut query = sqlx::query(AssertSqlSafe(sql)).persistent(false);
-        for id in chunk {
-            query = query.bind(id);
-        }
-        query.execute(&mut **tx).await?;
-    }
-    Ok(())
 }

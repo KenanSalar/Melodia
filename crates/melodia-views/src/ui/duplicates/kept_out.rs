@@ -7,11 +7,12 @@ use std::path::Path;
 use std::rc::{Rc, Weak};
 
 use slint::{ComponentHandle, ModelRc};
+use tokio::runtime::Handle;
 
-use super::landing::{DialogTicket, spawn_landing};
+use super::landing::{DialogTicket, TicketedDialog};
 use super::rows::{day_of, file_and_folder};
 use crate::ui::callbacks::clipboard::spawn_copy;
-use crate::ui::paged_rows::{Keyset, PagedRow, PagedRows, ReadStamp, RowRequest, spawn_fetch};
+use crate::ui::paged_rows::{Keyset, PagedRow, PagedRows, ReadStamp, RowRequest};
 use crate::ui::shell::notifications::{Completion, NotificationsUi, RowText};
 use crate::ui::signal::on_signal;
 use crate::ui::util::{clamp_i64_to_i32, len_as_i32};
@@ -108,22 +109,13 @@ impl KeptOutList {
         let recount = self.recounts.get().wrapping_add(1);
         self.recounts.set(recount);
         let db = self.state.db.clone();
-        let list = Rc::downgrade(self);
         let work = async move { kept_out::count(&db).await };
-        spawn_landing(&self.state.runtime, "kept-out count", work, move |count| {
-            let Some(list) = list.upgrade() else {
-                return;
-            };
-            let Some(ui) = list.ui.upgrade() else {
-                return;
-            };
-            match count {
-                Some(Ok(count)) if list.recounts.get() == recount => {
-                    ui.global::<KeptOutUi>().set_count(clamp_i64_to_i32(count));
-                }
-                Some(Ok(_)) | None => {}
-                Some(Err(e)) => log::warn!("kept-out files: count failed: {}", describe(&e)),
+        self.after_any_ticket("kept-out count", work, move |ui, list, count| match count {
+            Some(Ok(count)) if list.recounts.get() == recount => {
+                ui.global::<KeptOutUi>().set_count(clamp_i64_to_i32(count));
             }
+            Some(Ok(_)) | None => {}
+            Some(Err(e)) => log::warn!("kept-out files: count failed: {}", describe(&e)),
         });
     }
 
@@ -138,8 +130,7 @@ impl KeptOutList {
         self.bring(asked, async move { kept_out::bring_all_back(&state).await });
     }
 
-    /// Runs a Bring Back and says what came of it. Like Remove's, its answer lands under any
-    /// ticket: a list closed mid-run still brought the files back, and its toast says so.
+    /// Runs a Bring Back and says what came of it.
     fn bring(
         self: &Rc<Self>,
         asked: usize,
@@ -152,23 +143,16 @@ impl KeptOutList {
         if kept.get_bringing_back() {
             return;
         }
-        let list = Rc::downgrade(self);
         let spawned =
-            spawn_landing(&self.state.runtime, "kept-out bring back", work, move |brought| {
-                let Some(list) = list.upgrade() else {
-                    return;
-                };
-                let Some(ui) = list.ui.upgrade() else {
-                    return;
-                };
+            self.after_any_ticket("kept-out bring back", work, move |ui, list, brought| {
                 ui.global::<KeptOutUi>().set_bringing_back(false);
                 match brought {
-                    Some(Ok(brought)) => list.show_brought_back(&ui, brought),
+                    Some(Ok(brought)) => list.show_brought_back(ui, brought),
                     Some(Err(e)) => {
                         log::warn!("kept-out files: bring back failed: {}", describe(&e));
-                        list.show_bring_back_failed(&ui, asked);
+                        list.show_bring_back_failed(ui, asked);
                     }
-                    None => list.show_bring_back_failed(&ui, asked),
+                    None => list.show_bring_back_failed(ui, asked),
                 }
             });
         if spawned {
@@ -240,29 +224,22 @@ impl KeptOutList {
         kept.set_busy(false);
         kept.set_failed(false);
     }
+}
 
-    /// The finder's `after`, under this list's ticket.
-    fn after<T: Send + 'static>(
-        self: &Rc<Self>,
-        work: impl Future<Output = AppResult<T>> + Send + 'static,
-        land: impl FnOnce(&AppWindow, &Self, AppResult<T>) + 'static,
-    ) {
-        let ticket = self.ticket.get();
-        let list = Rc::downgrade(self);
-        spawn_landing(&self.state.runtime, "kept-out files", work, move |answer| {
-            let Some(answer) = answer else {
-                return;
-            };
-            let Some(list) = list.upgrade() else {
-                return;
-            };
-            let Some(ui) = list.ui.upgrade() else {
-                return;
-            };
-            if list.ticket.holds(ticket, &ui) {
-                land(&ui, &list, answer);
-            }
-        });
+impl TicketedDialog for KeptOutList {
+    const LABEL: &'static str = "kept-out files";
+    const ROWS_LABEL: &'static str = "kept-out rows";
+
+    fn window(&self) -> &slint::Weak<AppWindow> {
+        &self.ui
+    }
+
+    fn ticket(&self) -> &DialogTicket {
+        &self.ticket
+    }
+
+    fn runtime(&self) -> &Handle {
+        &self.state.runtime
     }
 }
 
@@ -272,28 +249,18 @@ impl PagedRow for KeptOutRow {
     }
 }
 
-/// Reads the rows on screen by id. A fetch landing after the ticket moved is dropped, which frees
-/// the list to ask again.
+/// Reads the rows on screen by id.
 fn fetcher(list: Weak<KeptOutList>) -> impl Fn(RowRequest<KeptOutRow>) + 'static {
     move |request| {
-        let Some(this) = list.upgrade() else {
+        let Some(list) = list.upgrade() else {
             return;
         };
         let ids = request.ids().to_vec();
-        let db = this.state.db.clone();
-        let ticket = this.ticket.get();
-        let list = list.clone();
-        let land = move |request: RowRequest<KeptOutRow>, files: Vec<KeptOutFile>| {
-            let Some(this) = list.upgrade() else {
-                return;
-            };
-            if this.ticket.get() != ticket {
-                return;
-            }
-            request.land(files.iter().map(|file| (file.id, row(file))).collect());
-        };
+        let db = list.state.db.clone();
         let files = async move { kept_out::files(&db, &ids).await };
-        spawn_fetch(&this.state.runtime, request, files, land, "kept-out rows");
+        list.fetch_rows(request, files, |_, _, files: Vec<KeptOutFile>| {
+            files.iter().map(|file| (file.id, row(file))).collect()
+        });
     }
 }
 

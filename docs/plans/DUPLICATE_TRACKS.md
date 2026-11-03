@@ -1,6 +1,6 @@
 # Plan: Duplicate tracks (find the copies, clear out the spares)
 
-Status: **in progress** (Phases 0 to 5 done, Phase 6 next) · Owner: Kenan · Created: 2026-11-02 · Issue #158, branch `feat/duplicate-tracks`
+Status: **in progress** (Phases 0 to 6 done, Phase 7 next) · Owner: Kenan · Created: 2026-11-02 · Issue #158, branch `feat/duplicate-tracks`
 
 > **Validated 2026-11-02** against `b4c5ecff`, and re-validated the same day against `41c1f2e1`. The sources were:
 > - three read-only code traces: the store and per-track data; the removal, scan, watcher and queue paths; the UI surfaces;
@@ -306,12 +306,13 @@ Right-clicking a group's header offers **Not Duplicates**, for copies you keep o
 | `crates/melodia-views/src/ui/duplicates/rows.rs` (new, P2) | `DuplicateRow`'s placeholder, the rows built from what the fetch read, the header's lead copy, the format label, the release line and the folder. |
 | `crates/melodia-views/src/ui/duplicates/apply.rs` (new, P3) | Picks into `GroupRemoval`s, the call, the result line. |
 | `crates/melodia-views/src/ui/duplicates/kept_out.rs` (new, P4) | `KeptOutRow`'s paged rows, Open Containing Folder, Bring Back, Bring All Back, Copy All Paths, the Settings row's count. |
-| `crates/melodia-views/src/ui/duplicates/landing.rs` (new, P4) | `DialogTicket` and `spawn_landing`, which the finder, Remove and the kept-out list share. |
+| `crates/melodia-views/src/ui/duplicates/landing.rs` (new, P4) | `DialogTicket`, and `TicketedDialog` over the private `spawn_landing`, both dialogs' one landing path: `after` under the ticket, `after_any_ticket` for Remove, Bring Back and the count, `fetch_rows` for the rows (P6). |
 | `crates/melodia-views/src/ui/callbacks/clipboard.rs` | `spawn_copy` reaches `ui::` for Copy All Paths (P4). |
 | `crates/melodia-views/src/ui/util.rs` | `format_codec`, `format_bitrate`, `format_bit_depth` and `format_size` beside `format_sample_rate`, lifted from the inline closures in `now_playing/metadata.rs` and `callbacks/tags/open.rs` and from `callbacks/tags/fold.rs`'s `fmt_size` (P2, no behaviour change). |
 | `migrations/20261102000001_excluded_files.sql` (new, P3) | The table and its folder and hash indexes; the stamp columns (P5). |
 | `crates/melodia-store/src/database/queries/excluded_files.rs` (new, P3) | Exclude (`pub(crate)`, the merge's), excluded among paths, move candidates by hash, re-point, lift, forget unseen, count; ids in path order, rows by id, every path in path order (P4); a folder's exclusions with their stamps, and the restamp (P5). |
-| `crates/melodia-store/src/database/queries/ingest.rs`, `queries/scan/watch_batch.rs` | `IngestSource`; the exclusion check inside the inserting transaction, exclusions among the move candidates, a rename's re-point and lift, `Removed`'s `gone` (P3). The restamp of a kept-out file read again, and an import filed under the library folder holding it (P5). |
+| `crates/melodia-store/src/database/queries/ingest.rs`, `queries/scan/watch_batch.rs` | `IngestSource`; the exclusion check inside the inserting transaction, exclusions among the move candidates, a rename's re-point and lift, `Removed`'s `gone` (P3). The restamp of a kept-out file read again, and an import filed under the library folder holding it (P5). The watcher's `carry_kept_out`, the one re-point-or-lift for a renamed or moved kept-out file (P6). |
+| `crates/melodia-store/src/database/mod.rs` | `chunked_in_execute_on`, `chunked_in_query_on`'s twin for a statement that returns no rows, which the lift, the merge's delete, the orphan purge and the radio removal share (P6). |
 | `crates/melodia-store/src/database/queries/scan/lookups.rs` | `find_folder_for_path` among library folders alone, which the import and the watcher both ask (P5). |
 | `crates/melodia-store/src/database/queries/scan/retag.rs`, `scan/mod.rs` | A tag edit keeps each row's own folder, and `resolve_track_context` takes the folder from its caller (P5). |
 | `crates/melodia-store/src/database/queries/scan/moves.rs` (new, P3) | `MoveCandidates`: the rows and kept-out files a new path's bytes may have moved from, shared by the ingest and the watcher. |
@@ -496,7 +497,22 @@ Hand test, on the dev data folder:
 - Bring Back a file inside a library folder: no row joins Settings ▸ Library Folders, and removing the enclosing folder takes the track with it.
 - Drop a file from outside every library folder: its folder row appears, as before.
 
-### Phase 6: Tests
+### Phase 6: Refactor
+
+Status: built (2026-11-03). The gate passed: fmt, clippy and the suite. No behaviour change. Three scaffolds the branch had written more than once now have one home each:
+
+1. `database::chunked_in_execute_on` runs a single-column `IN (…)` statement in chunks. It replaces the loops in `excluded_files::lift_on`, the merge's track delete, `delete_tracks_by_paths_batch` and `radio_removal`'s `execute_by_ids`.
+2. `landing::TicketedDialog` holds the finder's and the kept-out list's landing: the ticket-held `after`, `after_any_ticket` (Remove, Bring Back, the count) and `fetch_rows`. Each controller only names its window, ticket and runtime.
+3. The watcher's created-file arm hands a moved kept-out file to `carry_kept_out`, the rename's own re-point-or-lift.
+
+Left as they are:
+- **The two list wells.** Slint virtualizes a `for` only when it is written directly inside its `ListView`.
+- **The two row menus' anchoring.** It is the tree's convention for every context menu.
+- **The three eased-height states.** Entering each state is what fires its ease.
+
+Hand test: Find, Not Duplicates and Count as Duplicates; a close mid-find and a reopen; Remove and its toast; Bring Back and Bring All Back; the Settings row's count after each.
+
+### Phase 7: Tests
 
 1. Tests are added where the landed change earns them, on Kenan's go.
 
