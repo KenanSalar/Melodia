@@ -251,7 +251,7 @@ async fn move_playlist_places(
             )
         })
         .await?;
-    // Here rather than in SQL, so the order holds across chunks.
+    // Lowest first, since the first insert wins; in Rust, as an ORDER BY holds per chunk only.
     places.sort_unstable_by_key(|&(_, _, position, _)| position);
 
     let mut by_playlist: HashMap<i64, Vec<NewItem<'_>>> = HashMap::new();

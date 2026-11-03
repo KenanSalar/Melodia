@@ -185,6 +185,69 @@ async fn a_spare_in_a_playlist_the_keeper_is_already_in_leaves_only_the_keepers_
     Ok(())
 }
 
+/// The spare placed first has the higher id, so its place isn't the first one the read returns.
+#[tokio::test]
+async fn a_keeper_with_two_spares_in_one_playlist_takes_the_earlier_place() -> Result<(), AppError>
+{
+    let (db, ids) = numbered_library(4).await?;
+    let (keeper, lower_spare, higher_spare, other) = (ids[0], ids[1], ids[2], ids[3]);
+    let playlist = crate::database::queries::playlist::create_playlist_with_tracks(
+        &db,
+        "Mix",
+        None,
+        &[higher_spare, other, lower_spare],
+    )
+    .await?;
+
+    remove(&db, keeper, &[lower_spare, higher_spare]).await?;
+
+    assert_eq!(playlist_order(&db, playlist).await?, [keeper, other]);
+    Ok(())
+}
+
+/// The earlier place holds the later date, so the date is that spare's, not the group's earliest.
+#[tokio::test]
+async fn a_keeper_takes_the_added_date_of_the_earlier_place() -> Result<(), AppError> {
+    let (db, ids) = numbered_library(3).await?;
+    let (keeper, lower_spare, higher_spare) = (ids[0], ids[1], ids[2]);
+    let playlist = crate::database::queries::playlist::create_playlist_with_tracks(
+        &db,
+        "Mix",
+        None,
+        &[higher_spare, lower_spare],
+    )
+    .await?;
+    set_added_at(&db, playlist, higher_spare, "2024-02-01T00:00:00+00:00").await?;
+    set_added_at(&db, playlist, lower_spare, "2022-02-01T00:00:00+00:00").await?;
+
+    remove(&db, keeper, &[lower_spare, higher_spare]).await?;
+
+    let added: String = sqlx::query_scalar(
+        "SELECT added_at FROM playlist_items WHERE playlist_id = ? AND track_id = ?",
+    )
+    .bind(playlist)
+    .bind(keeper)
+    .fetch_one(db.read())
+    .await?;
+    assert_eq!(added, "2024-02-01T00:00:00+00:00");
+    Ok(())
+}
+
+async fn set_added_at(
+    db: &DbPool,
+    playlist_id: i64,
+    track_id: i64,
+    added_at: &str,
+) -> Result<(), AppError> {
+    sqlx::query("UPDATE playlist_items SET added_at = ? WHERE playlist_id = ? AND track_id = ?")
+        .bind(added_at)
+        .bind(playlist_id)
+        .bind(track_id)
+        .execute(db.write())
+        .await?;
+    Ok(())
+}
+
 #[tokio::test]
 async fn a_removed_spare_leaves_the_library() -> Result<(), AppError> {
     let (db, keeper, spares) = keeper_and_two_spares().await?;
