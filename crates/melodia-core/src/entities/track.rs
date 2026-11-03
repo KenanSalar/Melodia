@@ -43,7 +43,7 @@ pub struct TrackSummary {
     pub replaygain_album_peak: Option<f32>,
 }
 
-#[allow(
+#[expect(
     clippy::cast_possible_truncation,
     reason = "ReplayGain dB/peak values are tiny and well within f32 range; the narrowing is intentional"
 )]

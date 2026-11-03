@@ -256,7 +256,7 @@ impl Limiter {
 /// The EQ, `ReplayGain` and fade over one decoded track. The master state is shared, so a change
 /// reaches the staged track too; the per-track gain is baked per source, a staged track having its
 /// own tags.
-#[allow(
+#[expect(
     clippy::struct_excessive_bools,
     reason = "audio-thread hot state: each flag gates a distinct branch in `next()` and is read per sample; packing them into bitflags would add masking to the hot path"
 )]
@@ -316,7 +316,7 @@ impl<S: AudioSource> EqSource<S> {
     ) -> Self {
         let channels = usize::from(input.channels().get());
         let sample_rate_hz = u64::from(input.sample_rate().get());
-        #[allow(
+        #[expect(
             clippy::cast_precision_loss,
             reason = "audio sample rates are well below 2^24 Hz and convert to f32 exactly"
         )]

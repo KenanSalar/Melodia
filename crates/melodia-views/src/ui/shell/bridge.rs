@@ -308,7 +308,7 @@ pub fn to_slint_player_vm(vm: &PlayerViewModelLight, cover_thumbs: &CoverThumbs)
     }
 }
 
-#[allow(
+#[expect(
     clippy::cast_possible_truncation,
     reason = "playback speed values (0.25..=2.0) round-trip through f32 without observable loss"
 )]

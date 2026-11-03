@@ -170,7 +170,7 @@ pub(crate) fn rgb_to_hex(r: u8, g: u8, b: u8) -> String {
 pub(crate) fn blend(a: (u8, u8, u8), b: (u8, u8, u8), factor: f32) -> (u8, u8, u8) {
     let mix = |a: u8, b: u8| -> u8 {
         let v = f32::from(a) * (1.0 - factor) + f32::from(b) * factor;
-        #[allow(
+        #[expect(
             clippy::cast_possible_truncation,
             clippy::cast_sign_loss,
             reason = "v is clamped to [0, 255] before narrowing"

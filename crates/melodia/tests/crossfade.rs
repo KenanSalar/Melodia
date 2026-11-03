@@ -135,7 +135,7 @@ fn write_dc_wav(path: &Path, seconds: u32, left: f32, right: f32) -> std::io::Re
     f.write_all(&buf)
 }
 
-#[allow(
+#[expect(
     clippy::cast_possible_truncation,
     reason = "amplitude is a small constant well inside i16 range"
 )]

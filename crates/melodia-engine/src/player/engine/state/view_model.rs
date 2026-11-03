@@ -18,7 +18,7 @@ pub struct PositionTick {
 
 /// Built only by the test-only `PlayerState::to_view_model`. The bools mirror the Slint structs in
 /// `crates/melodia-ui/ui/models.slint` exactly, so they can't collapse into bitflags.
-#[allow(
+#[expect(
     clippy::struct_excessive_bools,
     reason = "ViewModel mirrors Slint struct shape across the FFI boundary"
 )]
@@ -44,7 +44,7 @@ pub struct PlayerViewModel {
 }
 
 /// Lightweight `ViewModel` emitted on every state change — excludes queue data.
-#[allow(
+#[expect(
     clippy::struct_excessive_bools,
     reason = "ViewModel mirrors Slint struct shape across the FFI boundary"
 )]
@@ -168,7 +168,7 @@ impl PlayerState {
     }
 }
 
-#[allow(
+#[expect(
     clippy::cast_precision_loss,
     reason = "ms positions are < 2^53; widening to f64 is lossless for any real audio duration"
 )]
