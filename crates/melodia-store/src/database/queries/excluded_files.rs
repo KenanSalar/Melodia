@@ -1,4 +1,7 @@
-//! Files the duplicate finder took out of the library, which no scan or watcher event brings back.
+//! Files the duplicate finder took out of the library, which scans and the watcher leave out.
+//!
+//! A kept-out file is known by its path, and across a move by its whole-file hash as last read, as
+//! a track's row is, so one rewritten and then moved while nothing watched reads as a new file.
 //!
 //! A path here never has a track row: the merge deletes the row it excludes, an import lifts the
 //! exclusion ahead of its insert, and every other ingest path asks here inside its own write

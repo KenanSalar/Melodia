@@ -9,7 +9,7 @@ use crate::tasks::{self, TaskSpawner};
 use melodia_core::entities::duplicates::GroupRemoval;
 use melodia_core::error::AppError;
 use melodia_engine::player::engine::actions::emit_and_execute;
-use melodia_store::database::queries;
+use melodia_store::database::{DbPool, queries};
 
 /// What a Remove did, for its result line.
 #[derive(Clone, Copy, Debug)]
@@ -21,11 +21,15 @@ pub struct RemovalCounts {
 }
 
 /// Takes each removal's spares out of the library, leaving their files where they are.
+///
+/// A merge that fails leaves the queue swapped, each swapped row on its keeper: a copy of the same
+/// song, still in the library.
 pub async fn apply(
     state: &AppState,
     mut removals: Vec<GroupRemoval>,
 ) -> Result<RemovalCounts, AppError> {
     let referenced_before = queries::artwork::referenced_filenames(&state.db).await?;
+    let orphaned = drop_orphaned(&state.db, &mut removals).await?;
     let held = hold_back_playing_and_requeue(state, &mut removals);
     // After the hold-back no spare can start, so each count one earned lands before its row goes.
     state.play_count_flush.flush().await;
@@ -43,7 +47,17 @@ pub async fn apply(
     }
     favorites::merged_onto(state, &removed.hearted).await;
     ratings::merged_onto(state, &removed.rated);
-    Ok(RemovalCounts { removed: removed.removed, skipped: removed.skipped + held })
+    Ok(RemovalCounts { removed: removed.removed, skipped: removed.skipped + held + orphaned })
+}
+
+/// Drops the removals whose keeper left the library since the find, answering how many copies
+/// they picked: requeued onto a keeper that is gone, a spare's rows would be pruned while the
+/// spare itself stays.
+async fn drop_orphaned(db: &DbPool, removals: &mut Vec<GroupRemoval>) -> Result<usize, AppError> {
+    let keepers: Vec<i64> = removals.iter().map(|removal| removal.keeper).collect();
+    let gone = queries::track::missing_ids(db, &keepers).await?;
+    let orphaned = removals.extract_if(.., |removal| gone.contains(&removal.keeper));
+    Ok(orphaned.map(|removal| removal.spares.len()).sum())
 }
 
 /// Holds the playing copy back from its removal and swaps every other queued spare for its
