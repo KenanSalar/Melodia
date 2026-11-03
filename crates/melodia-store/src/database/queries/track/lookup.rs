@@ -5,9 +5,11 @@ use std::collections::{HashMap, HashSet};
 
 use sqlx::{AssertSqlSafe, QueryBuilder, Sqlite, SqliteConnection};
 
+use super::membership::Membership;
 use super::{columns, fetch_packed_ids, json_array};
 use crate::database::{DbPool, chunked_in_query, chunked_in_query_on, select_in_id_order};
 use melodia_core::entities::track;
+use melodia_core::entities::track_list::TrackListScope;
 use melodia_core::error::AppError;
 
 /// The Now Playing view's technical chips, `None` for a missing id.
@@ -149,9 +151,41 @@ pub async fn missing_ids(db: &DbPool, ids: &[i64]) -> Result<HashSet<i64>, AppEr
     if ids.is_empty() {
         return Ok(HashSet::new());
     }
+    Ok(fetch_packed_ids(db.read(), missing_ids_query(ids)).await?.into_iter().collect())
+}
+
+/// [`missing_ids`] inside a transaction, for a write inserting the ids that still have a row.
+pub(crate) async fn missing_ids_on(
+    conn: &mut SqliteConnection,
+    ids: &[i64],
+) -> Result<HashSet<i64>, AppError> {
+    if ids.is_empty() {
+        return Ok(HashSet::new());
+    }
+    Ok(fetch_packed_ids(&mut *conn, missing_ids_query(ids)).await?.into_iter().collect())
+}
+
+fn missing_ids_query(ids: &[i64]) -> QueryBuilder<Sqlite> {
     let mut qb = QueryBuilder::<Sqlite>::new("SELECT group_concat(j.value, ',') FROM json_each(");
     qb.push_bind(json_array(ids))
         .push(") j WHERE NOT EXISTS (SELECT 1 FROM tracks t WHERE t.id = j.value)");
+    qb
+}
+
+/// The ids in `ids` that `scope` no longer holds, asked the way round [`missing_ids`] is.
+pub async fn missing_from_scope(
+    db: &DbPool,
+    scope: TrackListScope,
+    ids: &[i64],
+) -> Result<HashSet<i64>, AppError> {
+    if ids.is_empty() {
+        return Ok(HashSet::new());
+    }
+    let membership = Membership::resolve(db, scope).await?;
+    let mut qb = QueryBuilder::<Sqlite>::new("SELECT group_concat(j.value, ',') FROM json_each(");
+    qb.push_bind(json_array(ids)).push(") j WHERE j.value NOT IN (SELECT t.id FROM ");
+    membership.push_members(&mut qb);
+    qb.push(")");
     Ok(fetch_packed_ids(db.read(), qb).await?.into_iter().collect())
 }
 

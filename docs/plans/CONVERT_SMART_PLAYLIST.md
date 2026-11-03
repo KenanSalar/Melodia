@@ -1,6 +1,6 @@
 # Plan: Convert a smart playlist to a regular one
 
-Status: **in progress**, Phases 0, 1 and 2 implemented · Owner: Kenan · Created: 2026-11-03 · Issue #159, branch `feat/convert-smart-playlist`
+Status: **in progress**, Phases 0, 1, 2 and 3 implemented · Owner: Kenan · Created: 2026-11-03 · Issue #159, branch `feat/convert-smart-playlist`
 
 > **Validated 2026-11-03** against `2faa2442`. The sources were:
 > - three read-only code traces: the store and smart membership; the card menu, the detail page and the undo slot; the queue and what reads a playlist after a play;
@@ -34,7 +34,7 @@ Working doc. Delete it when its last phase (Tests) lands.
 | Same name, artwork, description and place. | The grid orders by `updated_at DESC` (`queries/entity_keyset.rs`), and Edit Rules stamps it. A smart row's automatic cover is never stored: it is worked out on read as the first cover in its order (`scope_facts::first_cover`). A manual row's is stored as its first track's cover in position order (`first_track_cover!`, `playlist.rs:588-595`). | The convert keeps the row's own `updated_at` and stores the first item's cover, which is the cover shown before. One exception, decision 4. |
 | Behaves like a regular playlist afterwards. | Four gates read `is_smart`: reorder and Remove in Slint, file drop and Add to Playlist in Rust (`library-data.md`). Each reads it fresh: the page from its header (`refresh_header`), the store on every query (`Membership::resolve`). | Flipping `is_smart` and refreshing the page and the grid is enough. No gate changes. |
 | Undo brings the rules back, rather than asking first. | `ui::undo` holds one removal per notice. `ui-patterns.md`: a new removal offers its undo, and asks first only where undo doesn't cover it. | A new `Removal::PlaylistRules` arm holding the rules' JSON. It asks first only when Settings turns undo off for playlists, as Delete does (`Deleter::request`, `crud.rs`). |
-| A track removed meanwhile shouldn't come back. | One write connection serialises every writer (`database/mod.rs`, `max_connections(1)`). An insert naming a deleted track fails its foreign key and the whole transaction (`tracks_still_there`'s doc, `queries/playlist.rs`). | The membership is read inside the convert's own write transaction. A scan's delete commits either before it, so the rules no longer match the track, or after it, so the cascade removes the item. |
+| A track removed meanwhile shouldn't come back. | One write connection serialises every writer (`database/mod.rs`, `max_connections(1)`). An insert naming a deleted track fails its foreign key and the whole transaction (`insert_items_tx`'s doc, `queries/playlist.rs`). | The membership is read inside the convert's own write transaction. A scan's delete commits either before it, so the rules no longer match the track, or after it, so the cascade removes the item. |
 | Converting one that's playing. | The queue holds bare track ids (`QueueState`, `queue.json`), and nothing reads a playlist again after a play (`library::playback::player_play_tracks`). | Nothing to do. The hand test confirms it. |
 
 **Not in the issue, found on the way:**
@@ -85,8 +85,10 @@ Working doc. Delete it when its last phase (Tests) lands.
 
 | File | Owns |
 |---|---|
-| `crates/melodia-store/src/database/queries/playlist.rs` (639) | `tracks_still_there`, moved beside `insert_items_tx` as `pub(crate)`; `create_playlist_with_tracks` and `add_tracks_to_playlist` filter through it (P0); `contiguous` is `pub(crate)` for the convert; a removal's cut records `created_at` (P1). |
-| `crates/melodia-store/src/database/queries/playlist_restore.rs` (184) | Imports `tracks_still_there` rather than owning it (P0); `restore_playlist_items` matches the row on `created_at` too (P1). |
+| `crates/melodia-store/src/database/queries/playlist.rs` (639) | `create_playlist_with_tracks` and `add_tracks_to_playlist` filter through `missing_ids_on` (P0, P3); `contiguous` is `pub(crate)` for the convert; a removal's cut records `created_at` (P1). |
+| `crates/melodia-store/src/database/queries/playlist_restore.rs` (184) | Both restores filter through `missing_ids_on` (P0, P3); `restore_playlist_items` matches the row on `created_at` too (P1). |
+| `crates/melodia-store/src/database/queries/track/lookup.rs` | `missing_ids_on`, `missing_ids` on a connection the caller holds; `missing_from_scope` (P3). |
+| `crates/melodia-app/src/library/keyset.rs` | `missing_from_scope` (P3). |
 | `crates/melodia-core/src/entities/playlist.rs` (58) | `DroppedRules`; `created_at` on it and on `PlaylistItemsCut` (P1). |
 | `crates/melodia-views/src/ui/playlists/callbacks/detail.rs` | `PlaylistCutUndo::same_playlist` merges only cuts sharing `created_at` (P1); its restore refreshes through `spawn_refresh_after_edit` (P2). |
 | `crates/melodia-store/src/database/queries/track/keyset.rs` (190) | `fetch_packed_ids` takes an executor (P1). |
@@ -96,7 +98,7 @@ Working doc. Delete it when its last phase (Tests) lands.
 | `crates/melodia-views/src/ui/playlists/mod.rs` (201) | `draw_on_show` (P2). |
 | `crates/melodia-views/src/ui/playlists/callbacks/convert.rs` (new, P2) | `Converter`: `request` (covered: convert, refresh, offer the undo; uncovered: raise the confirmation) and `for_good` (the confirmed path); `PlaylistConvertUndo`. |
 | `crates/melodia-views/src/ui/playlists/callbacks/mod.rs` (73) | Wires `convert`; `spawn_refresh_after_edit`, the one spawn of `refresh_after_edit` for a write awaited on the UI thread: the convert, its undo and the cut's undo (P2). |
-| `crates/melodia-views/src/ui/paged_rows/track_rows.rs` | `forget_gone_picks`, through which a filtered reload drops the hidden picks the unfiltered set no longer holds (P2). |
+| `crates/melodia-views/src/ui/paged_rows/track_rows.rs` | `forget_gone_picks`, through which a filtered reload drops the hidden picks the scope no longer holds, asking about those picks only (P2, P3). |
 | `crates/melodia-views/src/ui/undo/removal.rs` (240) | The `PlaylistRules` arm: kind, size, recipe, restore (P2). |
 | `crates/melodia-ui/ui/globals/playlists.slint` (134) | `convert-to-regular(id)` and `convert-to-regular-confirmed(id)` (P2). |
 | `crates/melodia-ui/ui/globals/dialog.slint` (431) | `DialogKind.convert-playlist`, `open-convert-playlist(id)` and its accept arm (P2). |
@@ -164,7 +166,21 @@ Then:
 - With undo off for playlists in Settings, it asks first, and Convert converts with no notice.
 - New Playlist… on a smart card still makes a separate copy, and the smart one stays smart.
 
-### Phase 3: Tests
+### Phase 3: Ask the store only about the ids in hand
+
+A perf pass over the branch found nothing hot, but two of its paths asked a library-sized question where `missing_ids` already asks the one-row inverse.
+
+1. `track/lookup.rs`: `missing_ids_on`, `missing_ids` on a connection the caller holds, and `missing_from_scope`, the ids a scope no longer holds, through `Membership::push_members` with no order.
+2. `tracks_still_there` goes: `present_in_order` and both restores filter through `missing_ids_on`, and its foreign-key note moves to `insert_items_tx`'s doc.
+3. `forget_gone_picks` asks `library::keyset::missing_from_scope` about the hidden picks rather than reading the scope's whole sorted keyset.
+
+Gate: `cargo fmt --all`, clippy, tests and the comment audit.
+
+Hand test:
+- On Songs, click a row, filter it out of view, then delete its file: the pick count drops after the watcher batch. Heart another track while a hidden pick's track is still there: that pick stays.
+- Add to Playlist with a large selection: the toast count is right, and with one picked file deleted while the picker is open, the rest is added.
+
+### Phase 4: Tests
 
 Tests are added where the landed change earns them, on Kenan's go.
 

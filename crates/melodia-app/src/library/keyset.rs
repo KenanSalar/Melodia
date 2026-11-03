@@ -42,6 +42,15 @@ pub async fn existing_in_order(db: &DbPool, ids: &[i64]) -> Result<Vec<i64>, App
     Ok(ids.iter().copied().filter(|id| !missing.contains(id) && seen.insert(*id)).collect())
 }
 
+/// The ids in `ids` that `scope` no longer holds, whatever a list's filter hides.
+pub async fn missing_from_scope(
+    db: &DbPool,
+    scope: TrackListScope,
+    ids: &[i64],
+) -> Result<HashSet<i64>, AppError> {
+    queries::track::missing_from_scope(db, scope, ids).await
+}
+
 /// How many tracks `scope` holds, how long they run and how many artists and albums they span.
 pub async fn facts(db: &DbPool, scope: TrackListScope) -> Result<ScopeFacts, AppError> {
     queries::track::scope_facts(db, scope).await

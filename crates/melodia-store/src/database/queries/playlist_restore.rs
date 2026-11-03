@@ -3,10 +3,11 @@
 use std::collections::HashSet;
 
 use super::playlist::{
-    NewItem, batch_update_positions_pairs, insert_items_tx, tracks_still_there,
+    NewItem, batch_update_positions_pairs, insert_items_tx,
     update_playlist_thumbnail_and_timestamp_tx,
 };
 use super::search_name;
+use super::track::missing_ids_on;
 use crate::database::DbPool;
 use melodia_core::entities::playlist::{CutItem, Playlist, PlaylistItemsCut, PlaylistSnapshot};
 use melodia_core::error::AppError;
@@ -51,7 +52,7 @@ pub async fn restore_playlist_items(
 
     let held_ids: Vec<i64> =
         cuts.iter().flat_map(|cut| &cut.rows).map(|item| item.track_id).collect();
-    let in_library = tracks_still_there(&mut tx, &held_ids).await?;
+    let missing = missing_ids_on(&mut tx, &held_ids).await?;
     let listed: HashSet<i64> = survivors.iter().map(|&(_, track_id, _)| track_id).collect();
 
     // Newest first, each cut's indices being the playlist's at the moment it was made. A row that
@@ -63,7 +64,7 @@ pub async fn restore_playlist_items(
     });
     let restored = merged.into_iter().filter(|slot| match slot {
         Slot::Kept { .. } => true,
-        Slot::Back(item) => in_library.contains(&item.track_id) && !listed.contains(&item.track_id),
+        Slot::Back(item) => !missing.contains(&item.track_id) && !listed.contains(&item.track_id),
     });
 
     let mut moved = Vec::new();
@@ -115,14 +116,14 @@ pub async fn restore_playlists(
 
     let held_ids: Vec<i64> =
         snapshots.iter().flat_map(|snapshot| &snapshot.items).map(|item| item.track_id).collect();
-    let in_library = tracks_still_there(&mut tx, &held_ids).await?;
+    let missing = missing_ids_on(&mut tx, &held_ids).await?;
 
     for snapshot in snapshots {
         let id = insert_playlist_tx(&mut tx, &snapshot.playlist).await?;
         let items: Vec<NewItem<'_>> = snapshot
             .items
             .iter()
-            .filter(|item| in_library.contains(&item.track_id))
+            .filter(|item| !missing.contains(&item.track_id))
             .enumerate()
             .map(|(index, item)| NewItem {
                 track_id: item.track_id,

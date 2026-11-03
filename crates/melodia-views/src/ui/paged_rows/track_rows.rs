@@ -327,7 +327,7 @@ fn show<L: PagedTrackList>(state: &AppState, list: &L, g: &L::Global, landing: L
     }
     let off_screen = picks_off_screen(g, model);
     if !off_screen.is_empty() {
-        forget_gone_picks(state, list, &query, off_screen);
+        forget_gone_picks(state, list, query.scope, off_screen);
     }
 }
 
@@ -347,24 +347,22 @@ fn picks_off_screen(view: &impl RowSelectionView, model: &TrackRows) -> HashSet<
     picks
 }
 
-/// Drops those of `picks` that `query`'s unfiltered set no longer holds: a batch action would
-/// still act on one unseen, and its id can pass to the next track imported. Only those go, so a
-/// pick made while the store answers stays.
+/// Drops those of `picks` that `scope` no longer holds: a batch action would still act on one
+/// unseen, and its id can pass to the next track imported. Only those go, so a pick made while the
+/// store answers stays.
 fn forget_gone_picks<L: PagedTrackList>(
     state: &AppState,
     list: &L,
-    query: &ListQuery,
+    scope: TrackListScope,
     picks: HashSet<i32>,
 ) {
-    let (db, scope, order) = (state.db.clone(), query.scope, query.order);
+    let db = state.db.clone();
     let global = list.global().clone();
     spawn_logged!(state, format_args!("{}::forget_gone_picks", L::LABEL), async move {
-        let held: HashSet<i64> = library::keyset::track_ids(&db, scope, order, &Needle::default())
-            .await?
-            .into_iter()
-            .collect();
+        let asked: Vec<i64> = picks.iter().map(|&id| i64::from(id)).collect();
+        let missing = library::keyset::missing_from_scope(&db, scope, &asked).await?;
         let gone: HashSet<i32> =
-            picks.into_iter().filter(|&id| !held.contains(&i64::from(id))).collect();
+            picks.into_iter().filter(|&id| missing.contains(&i64::from(id))).collect();
         if !gone.is_empty() {
             let _ = global.upgrade_in_event_loop(move |g| list_selection::forget_rows(&g, &gone));
         }

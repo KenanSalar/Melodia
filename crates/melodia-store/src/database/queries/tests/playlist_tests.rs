@@ -1206,8 +1206,8 @@ async fn a_playlist_created_since_in_the_deleted_ones_id_keeps_it() -> Result<()
     Ok(())
 }
 
-/// Past `tracks_still_there`'s filter, the lost track's item fails its foreign key and the whole
-/// undo with it.
+/// Past `missing_ids_on`'s filter, the lost track's item fails its foreign key and the whole undo
+/// with it.
 #[tokio::test]
 async fn an_undone_delete_leaves_out_the_tracks_the_library_lost_since() -> Result<(), AppError> {
     let (db, playlist, ids) = five_track_playlist().await?;

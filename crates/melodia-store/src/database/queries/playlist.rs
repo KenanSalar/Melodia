@@ -3,8 +3,8 @@ use std::collections::{HashMap, HashSet};
 use sqlx::AssertSqlSafe;
 
 use crate::database::queries::search_name;
-use crate::database::queries::track::columns;
-use crate::database::{DbPool, chunked_in_query_on, select_in_id_order};
+use crate::database::queries::track::{columns, missing_ids_on};
+use crate::database::{DbPool, select_in_id_order};
 use melodia_core::entities::playlist::{CutItem, PlaylistItemsCut};
 use melodia_core::entities::undo::{UNDO_HOLD_CAP, UndoCapture};
 use melodia_core::entities::{playlist, track};
@@ -301,8 +301,9 @@ pub(crate) fn contiguous<'a>(
 }
 
 /// Inserts `items`, skipping any track the playlist already holds, and returns the tracks that
-/// landed, in no set order. Each item names a track present inside `tx`, so ids read before it
-/// opened go through [`tracks_still_there`] first.
+/// landed, in no set order. Each item names a track present inside `tx`: a scan hard-deletes a
+/// track whose file went, and an insert naming one fails its foreign key, which `OR IGNORE`
+/// doesn't cover. Ids read before `tx` opened go through [`missing_ids_on`] first.
 pub(crate) async fn insert_items_tx(
     tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
     playlist_id: i64,
@@ -330,26 +331,13 @@ pub(crate) async fn insert_items_tx(
     Ok(landed)
 }
 
-/// Which of `track_ids` the library still holds. A scan hard-deletes a track whose file went, and
-/// an insert naming one fails its foreign key, which `OR IGNORE` doesn't cover.
-pub(crate) async fn tracks_still_there(
-    tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
-    track_ids: &[i64],
-) -> Result<HashSet<i64>, AppError> {
-    let present: Vec<(i64,)> = chunked_in_query_on(tx, track_ids, |placeholders| {
-        format!("SELECT id FROM tracks WHERE id IN ({placeholders})")
-    })
-    .await?;
-    Ok(present.into_iter().map(|(id,)| id).collect())
-}
-
 /// `track_ids` in their order, less any the library no longer holds.
 async fn present_in_order(
     tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
     track_ids: &[i64],
 ) -> Result<Vec<i64>, AppError> {
-    let in_library = tracks_still_there(tx, track_ids).await?;
-    Ok(track_ids.iter().copied().filter(|id| in_library.contains(id)).collect())
+    let missing = missing_ids_on(tx, track_ids).await?;
+    Ok(track_ids.iter().copied().filter(|id| !missing.contains(id)).collect())
 }
 
 /// Removes `track_ids` from a playlist, answering what puts them back, or only how many went where
