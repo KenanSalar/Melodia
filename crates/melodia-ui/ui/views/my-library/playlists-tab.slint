@@ -35,6 +35,7 @@ export component MyLibraryPlaylistsTab inherits Rectangle {
         }
         // Menu-only; the detail view's pill row raises the same dialog.
         edit-playlist-rules(id) => { Dialog.open-edit-smart-rules(id); }
+        convert-playlist-to-regular(id) => { Playlists.convert-to-regular(id); }
         covers-generation: Playlists.covers-generation;
         request-cover(p, g) => { Playlists.request-cover(p, g) }
     }

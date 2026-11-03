@@ -112,7 +112,7 @@ async fn a_dropped_batch_lands_in_natural_order_rather_than_the_order_it_arrived
 }
 
 /// A drop of nothing importable must leave the playlist alone rather than adding a row per
-/// refused path, since the caller reports `added_count` to the user as what it gained.
+/// refused path.
 #[tokio::test]
 async fn a_drop_with_nothing_importable_adds_nothing_to_the_playlist() -> Result<(), AppError> {
     let (tmp, artwork_dir) = staging()?;

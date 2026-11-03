@@ -6,9 +6,9 @@ use sqlx::{QueryBuilder, Sqlite};
 use super::json_array;
 use crate::database::DbPool;
 use crate::database::queries::smart_playlist::{
-    pick_random, push_member_ids, push_positioned_membership,
+    pick_random, push_member_ids, push_positioned_membership, random_cap,
 };
-use melodia_core::entities::smart_criteria::{Draw, LimitOrder, SmartCriteria};
+use melodia_core::entities::smart_criteria::{Draw, SmartCriteria};
 use melodia_core::entities::track_list::TrackListScope;
 use melodia_core::error::AppError;
 
@@ -55,13 +55,8 @@ impl Membership {
 
     /// A random cap is picked here, the one cut SQL can't repeat from query to query.
     async fn smart(db: &DbPool, criteria: SmartCriteria, draw: Draw) -> Result<Self, AppError> {
-        let random_cap = criteria
-            .limit
-            .as_ref()
-            .filter(|limit| limit.order == LimitOrder::Random)
-            .map(|limit| limit.count);
-        Ok(match random_cap {
-            Some(count) => Self::Drawn(pick_random(db, &criteria, count, draw).await?),
+        Ok(match random_cap(&criteria) {
+            Some(count) => Self::Drawn(pick_random(db.read(), &criteria, count, draw).await?),
             None => Self::SmartPlaylist(criteria),
         })
     }

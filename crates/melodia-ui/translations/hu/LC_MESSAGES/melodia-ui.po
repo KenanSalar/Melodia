@@ -1077,6 +1077,10 @@ msgid "Edit Rules…"
 msgstr "Szabályok szerkesztése…"
 
 #: ui/components/grid/card-context-menu.slint
+msgid "Convert to Regular Playlist"
+msgstr "Átalakítás normál lejátszási listává"
+
+#: ui/components/grid/card-context-menu.slint
 msgid "Delete {} Playlists"
 msgstr "{} lejátszási lista törlése"
 
@@ -1371,6 +1375,16 @@ msgid "Accent Color"
 msgstr "Kiemelőszín"
 
 #: ui/components/onboarding/features-panel.slint
+#: ui/views/settings/update-section.slint
+msgid "Check for updates automatically"
+msgstr "Frissítések automatikus keresése"
+
+#: ui/components/onboarding/features-panel.slint
+#: ui/views/settings/update-section.slint
+msgid "Once a day, Melodia asks GitHub whether a newer version is out."
+msgstr "A Melodia naponta egyszer megkérdezi a GitHubot, hogy megjelent-e újabb verzió."
+
+#: ui/components/onboarding/features-panel.slint
 msgid "What Melodia can reach"
 msgstr "Mit ér el a Melodia"
 
@@ -1410,16 +1424,6 @@ msgstr "A lejátszott számok elküldése a Last.fm vagy a ListenBrainz szolgál
 #: ui/components/onboarding/features-panel.slint
 msgid "Set Up"
 msgstr "Beállítás"
-
-#: ui/components/onboarding/features-panel.slint
-#: ui/views/settings/update-section.slint
-msgid "Check for updates automatically"
-msgstr "Frissítések automatikus keresése"
-
-#: ui/components/onboarding/features-panel.slint
-#: ui/views/settings/update-section.slint
-msgid "Once a day, Melodia asks GitHub whether a newer version is out."
-msgstr "A Melodia naponta egyszer megkérdezi a GitHubot, hogy megjelent-e újabb verzió."
 
 #: ui/components/onboarding/music-panel.slint
 msgid "Your music"
@@ -1885,6 +1889,18 @@ msgstr "Az állomások kikerülnek a kedvenceid közül. A kézzel hozzáadottak
 msgid "Edit Rules"
 msgstr "Szabályok szerkesztése"
 
+#: ui/globals/dialog.slint
+msgid "Convert to regular playlist?"
+msgstr "Átalakítod normál lejátszási listává?"
+
+#: ui/globals/dialog.slint
+msgid "It keeps the tracks it holds now, and its rules are removed for good."
+msgstr "Megtartja a most benne lévő számokat, a szabályai pedig végleg törlődnek."
+
+#: ui/globals/dialog.slint
+msgid "Convert"
+msgstr "Átalakítás"
+
 #: ui/globals/dialog.slint ui/views/my-library/tab-pills.slint
 msgid "New Smart Playlist"
 msgstr "Új intelligens lejátszási lista"
@@ -2071,6 +2087,11 @@ msgid "{n} playlist deleted"
 msgid_plural "{n} playlists deleted"
 msgstr[0] "{n} lejátszási lista törölve"
 msgstr[1] "{n} lejátszási lista törölve"
+
+#. Translators: {} is the playlist's name.
+#: ui/globals/undo-text.slint
+msgid "{} is now a regular playlist"
+msgstr "{} mostantól normál lejátszási lista"
 
 #. Translators: {} is the station's name.
 #: ui/globals/undo-text.slint
@@ -2612,6 +2633,10 @@ msgstr "Átnevezés"
 #: ui/views/my-library/tab-pills.slint
 msgid "Edit rules"
 msgstr "Szabályok szerkesztése"
+
+#: ui/views/my-library/tab-pills.slint
+msgid "Convert to regular playlist"
+msgstr "Átalakítás normál lejátszási listává"
 
 #: ui/views/my-library/tab-pills.slint
 msgid "Delete playlist"
@@ -3691,8 +3716,8 @@ msgid "Offer undo when only one track, playlist, station or favorite goes. Clear
 msgstr "Visszavonás felajánlása akkor is, ha csak egy szám, lejátszási lista, állomás vagy kedvenc kerül eltávolításra. Az „Összes törlése”, a „Visszaállítás” és a „Lejátszási sor törlése” mindig felajánlja."
 
 #: ui/views/settings/undo-section.slint
-msgid "Tracks removed from a playlist, and deleted playlists."
-msgstr "Lejátszási listából eltávolított számok és törölt lejátszási listák."
+msgid "Tracks removed from a playlist, deleted playlists, and a converted smart playlist's rules."
+msgstr "Lejátszási listából eltávolított számok, törölt lejátszási listák és egy átalakított intelligens lejátszási lista szabályai."
 
 #: ui/views/settings/undo-section.slint
 msgid "Tracks removed from the queue, Clear queue, and a play that replaces a queue you built."

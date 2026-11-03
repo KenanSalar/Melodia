@@ -17,7 +17,7 @@ export component CardContextMenu inherits Rectangle {
     in property <string> card-kind;
     in property <int> card-id;
     in property <string> card-path;
-    // Gates Edit Rules alone: Rename and Edit Artwork work on any playlist, as its buttons do.
+    // Gates only the rule entries: Rename and Edit Artwork work on any playlist, as its buttons do.
     in property <bool> card-is-smart: false;
     // 0 hides the entry.
     in property <int> card-artist-id: 0;
@@ -39,6 +39,7 @@ export component CardContextMenu inherits Rectangle {
     // A folder never joins a selection.
     property <bool> folder-single: root.is-folder && !root.multi-active;
     property <bool> playlist-edits: root.is-playlist && !root.multi-active;
+    property <bool> smart-edits: root.playlist-edits && root.card-is-smart;
 
     // Only a kind with more than one field opens a flyout, so the rest reserve no room for one.
     property <bool> has-flyout: root.is-track || root.card-kind == "album";
@@ -68,6 +69,7 @@ export component CardContextMenu inherits Rectangle {
     callback rename();
     callback edit-artwork();
     callback edit-rules();
+    callback convert-to-regular();
     callback delete-cards([int] /*playlist_ids*/);
     callback select-all();
     callback clear-selection();
@@ -327,11 +329,19 @@ export component CardContextMenu inherits Rectangle {
                 root.dismiss();
             }
         }
-        if root.is-playlist && !root.multi-active && root.card-is-smart: MenuItem {
+        if root.smart-edits: MenuItem {
             label: @tr("Edit Rules…");
             icon: "auto_awesome";
             clicked => {
                 root.edit-rules();
+                root.dismiss();
+            }
+        }
+        if root.smart-edits: MenuItem {
+            label: @tr("Convert to Regular Playlist");
+            icon: "playlist_add_check";
+            clicked => {
+                root.convert-to-regular();
                 root.dismiss();
             }
         }

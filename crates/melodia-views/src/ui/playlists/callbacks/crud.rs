@@ -64,7 +64,7 @@ impl PlaylistDeleteUndo {
     }
 }
 
-/// The playlist and its pending tracks land together or not at all.
+/// The playlist lands with the pending tracks the library still holds, or not at all.
 fn wire_create(ui: &AppWindow, state: &AppState, playlists_ui: &Arc<PlaylistsUi>) {
     let s = state.clone();
     let pu = playlists_ui.clone();

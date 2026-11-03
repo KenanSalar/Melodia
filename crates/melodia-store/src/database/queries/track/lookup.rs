@@ -5,9 +5,11 @@ use std::collections::{HashMap, HashSet};
 
 use sqlx::{AssertSqlSafe, QueryBuilder, Sqlite, SqliteConnection};
 
+use super::membership::Membership;
 use super::{columns, fetch_packed_ids, json_array};
 use crate::database::{DbPool, chunked_in_query, chunked_in_query_on, select_in_id_order};
 use melodia_core::entities::track;
+use melodia_core::entities::track_list::TrackListScope;
 use melodia_core::error::AppError;
 
 /// The Now Playing view's technical chips, `None` for a missing id.
@@ -146,13 +148,46 @@ pub async fn get_track_links_by_ids(
 /// The ids in `ids` that no longer have a row. Asked this way round because the answer is almost
 /// always none: asking which survive hands a queue the size of the library back a row per track.
 pub async fn missing_ids(db: &DbPool, ids: &[i64]) -> Result<HashSet<i64>, AppError> {
+    ids_outside(db.read(), ids, &Membership::Library).await
+}
+
+/// [`missing_ids`] inside a transaction, for a write inserting the ids that still have a row.
+pub(crate) async fn missing_ids_on(
+    conn: &mut SqliteConnection,
+    ids: &[i64],
+) -> Result<HashSet<i64>, AppError> {
+    ids_outside(conn, ids, &Membership::Library).await
+}
+
+/// The ids in `ids` that `scope` no longer holds, asked the way round [`missing_ids`] is.
+pub async fn missing_from_scope(
+    db: &DbPool,
+    scope: TrackListScope,
+    ids: &[i64],
+) -> Result<HashSet<i64>, AppError> {
+    if ids.is_empty() {
+        return Ok(HashSet::new());
+    }
+    let membership = Membership::resolve(db, scope).await?;
+    ids_outside(db.read(), ids, &membership).await
+}
+
+async fn ids_outside<'e, E>(
+    executor: E,
+    ids: &[i64],
+    membership: &Membership,
+) -> Result<HashSet<i64>, AppError>
+where
+    E: sqlx::Executor<'e, Database = Sqlite>,
+{
     if ids.is_empty() {
         return Ok(HashSet::new());
     }
     let mut qb = QueryBuilder::<Sqlite>::new("SELECT group_concat(j.value, ',') FROM json_each(");
-    qb.push_bind(json_array(ids))
-        .push(") j WHERE NOT EXISTS (SELECT 1 FROM tracks t WHERE t.id = j.value)");
-    Ok(fetch_packed_ids(db, qb).await?.into_iter().collect())
+    qb.push_bind(json_array(ids)).push(") j WHERE j.value NOT IN (SELECT t.id FROM ");
+    membership.push_members(&mut qb);
+    qb.push(")");
+    Ok(fetch_packed_ids(executor, qb).await?.into_iter().collect())
 }
 
 /// `file_path → id` for each of `paths` that has a row.

@@ -12,7 +12,7 @@ use std::collections::HashSet;
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use slint::{StrongHandle, Weak};
+use slint::{Model, StrongHandle, Weak};
 
 use super::{
     Keyset, KeysetTickets, Load, PagedRow, PagedRows, ReadStamp, RowRequest, ScrollPoint, Ticket,
@@ -28,7 +28,7 @@ use melodia_app::state::AppState;
 use melodia_artwork::media::image::cover_thumbs::CoverThumbs;
 use melodia_core::entities::track::TrackListRow as RsTrackListRow;
 use melodia_core::entities::track_list::{TrackListScope, TrackOrder};
-use melodia_core::error::{AppResult, describe};
+use melodia_core::error::{AppError, AppResult, describe};
 use melodia_core::utils::needle::Needle;
 use melodia_ui::TrackListRow as UiTrackListRow;
 
@@ -222,8 +222,8 @@ pub fn remove_rows<L: PagedTrackList>(list: &L, ids: Vec<i64>) {
 }
 
 /// Drop `ids` from `model` and from `view`'s selection, for rows the user's own write just took
-/// out, ahead of the reload it brings. That reload can't drop them under a filter, and a pick left
-/// behind is one the next batch action acts on unseen. UI thread.
+/// out, ahead of the reload it brings, which under a filter drops them only once the store
+/// answers: a pick left behind meanwhile is one the next batch action acts on unseen. UI thread.
 pub fn remove_rows_from(view: &impl RowSelectionView, model: &TrackRows, ids: &[i64]) {
     model.remove(&ids.iter().copied().collect::<HashSet<i64>>());
     let removed: HashSet<i32> = ids.iter().map(|&id| clamp_i64_to_i32(id)).collect();
@@ -256,6 +256,7 @@ async fn reload_under<L: PagedTrackList>(
         return Ok(());
     }
     land(
+        state,
         Arc::clone(list),
         Landing { query, keyset, load: Load::Reload(ticket), facts: Some(facts) },
     );
@@ -272,7 +273,7 @@ async fn requery_now<L: PagedTrackList>(
     };
     let keyset =
         load(state, &query, &list.loads().scroll).await.inspect_err(|_| list.load_dropped())?;
-    land(list, Landing { query, keyset, load: Load::Requery(ticket), facts: None });
+    land(state, list, Landing { query, keyset, load: Load::Requery(ticket), facts: None });
     Ok(())
 }
 
@@ -284,15 +285,16 @@ struct Landing<F> {
     facts: Option<F>,
 }
 
-fn land<L: PagedTrackList>(list: Arc<L>, landing: Landing<L::Facts>) {
+fn land<L: PagedTrackList>(state: &AppState, list: Arc<L>, landing: Landing<L::Facts>) {
     let global = list.global().clone();
-    let _ = global.upgrade_in_event_loop(move |g| show(&*list, &g, landing));
+    let state = state.clone();
+    let _ = global.upgrade_in_event_loop(move |g| show(&state, &*list, &g, landing));
 }
 
 /// Show `landing`, unless a newer load was asked for since or the list no longer wants it, and
 /// settle a reload once it has: every row the list still holds read again, and the picks it no
 /// longer holds dropped. UI thread.
-fn show<L: PagedTrackList>(list: &L, g: &L::Global, landing: Landing<L::Facts>) {
+fn show<L: PagedTrackList>(state: &AppState, list: &L, g: &L::Global, landing: Landing<L::Facts>) {
     let Landing { query, keyset, load, facts } = landing;
     let (Load::Requery(ticket) | Load::Reload(ticket)) = load;
     let tickets = &list.loads().tickets;
@@ -318,10 +320,53 @@ fn show<L: PagedTrackList>(list: &L, g: &L::Global, landing: Landing<L::Facts>) 
     model.reread();
     tickets.reload_shown(ticket);
     // Only an unfiltered keyset can say which picks the list no longer holds, a filter hiding
-    // rows without dropping their picks.
+    // rows without dropping their picks, so under one the store is asked about the picks it hides.
     if query.needle.is_empty() {
         list_selection::keep_selection_within(g, || model.row_ids().into_iter().collect());
+        return;
     }
+    let off_screen = picks_off_screen(g, model);
+    if !off_screen.is_empty() {
+        forget_gone_picks(state, list, query.scope, off_screen);
+    }
+}
+
+/// The picks, anchor included, that `model` doesn't list: under a filter, each one either hidden
+/// by it or gone from the set. UI thread.
+fn picks_off_screen(view: &impl RowSelectionView, model: &TrackRows) -> HashSet<i32> {
+    let mut picks: HashSet<i32> = view.selected_ids().iter().collect();
+    let anchor = view.anchor();
+    if anchor != list_selection::NO_ANCHOR {
+        picks.insert(anchor);
+    }
+    if !picks.is_empty() {
+        for id in model.row_ids() {
+            picks.remove(&id);
+        }
+    }
+    picks
+}
+
+/// Drops those of `picks` that `scope` no longer holds, whose ids can pass to the next track
+/// imported. Only those go, so a pick made while the store answers stays.
+fn forget_gone_picks<L: PagedTrackList>(
+    state: &AppState,
+    list: &L,
+    scope: TrackListScope,
+    picks: HashSet<i32>,
+) {
+    let db = state.db.clone();
+    let global = list.global().clone();
+    spawn_logged!(state, format_args!("{}::forget_gone_picks", L::LABEL), async move {
+        let asked: Vec<i64> = picks.iter().map(|&id| i64::from(id)).collect();
+        let missing = library::keyset::missing_from_scope(&db, scope, &asked).await?;
+        let gone: HashSet<i32> =
+            picks.into_iter().filter(|&id| missing.contains(&i64::from(id))).collect();
+        if !gone.is_empty() {
+            let _ = global.upgrade_in_event_loop(move |g| list_selection::forget_rows(&g, &gone));
+        }
+        Ok::<(), AppError>(())
+    });
 }
 
 /// One fetch's rows, sharing a pool so an album's tracks share their strings.

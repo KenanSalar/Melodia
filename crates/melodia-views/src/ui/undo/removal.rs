@@ -5,7 +5,7 @@ use slint::{ComponentHandle, SharedString};
 
 use crate::ui::callbacks::FavoriteRemovalUndo;
 use crate::ui::equalizer::ResetUndo;
-use crate::ui::playlists::{PlaylistCutUndo, PlaylistDeleteUndo};
+use crate::ui::playlists::{PlaylistConvertUndo, PlaylistCutUndo, PlaylistDeleteUndo};
 use crate::ui::queue_panel::{QueueClearUndo, QueueCutUndo, QueueReplaceUndo};
 use crate::ui::radio::StationRemovalUndo;
 use crate::ui::search::RecentClearUndo;
@@ -28,6 +28,7 @@ pub enum Removal {
     RecentSearches(RecentClearUndo),
     PlaylistTracks(PlaylistCutUndo),
     Playlists(PlaylistDeleteUndo),
+    PlaylistRules(PlaylistConvertUndo),
     RadioStations(StationRemovalUndo),
     Favorites(FavoriteRemovalUndo),
     QueueRows(QueueCutUndo),
@@ -107,7 +108,9 @@ impl Removal {
         match self {
             Removal::Equalizer(_) => UndoKind::Equalizer,
             Removal::RecentSearches(_) => UndoKind::RecentSearches,
-            Removal::PlaylistTracks(_) | Removal::Playlists(_) => UndoKind::Playlists,
+            Removal::PlaylistTracks(_) | Removal::Playlists(_) | Removal::PlaylistRules(_) => {
+                UndoKind::Playlists
+            }
             Removal::RadioStations(_) => UndoKind::Radio,
             Removal::Favorites(_) => UndoKind::Favorites,
             Removal::QueueRows(_) | Removal::QueueCleared(_) | Removal::QueueReplaced(_) => {
@@ -121,6 +124,7 @@ impl Removal {
         match self {
             Removal::Equalizer(_)
             | Removal::RecentSearches(_)
+            | Removal::PlaylistRules(_)
             | Removal::QueueCleared(_)
             | Removal::QueueReplaced(_) => RemovalSize::Whole,
             Removal::PlaylistTracks(cut) => RemovalSize::Items(cut.count()),
@@ -140,6 +144,10 @@ impl Removal {
             Removal::PlaylistTracks(cut) => titled(tracks_removed_from(cut.count(), cut.name())),
             Removal::Playlists(deleted) => {
                 titled(playlists_deleted(deleted.count(), deleted.name()))
+            }
+            Removal::PlaylistRules(converted) => {
+                let name = converted.name();
+                titled(move |ui| ui.global::<UndoText>().invoke_playlist_converted(name.clone()))
             }
             Removal::RadioStations(removed) => {
                 titled(stations_removed(removed.list(), removed.count(), removed.name()))
@@ -177,6 +185,7 @@ impl Removal {
             Removal::RecentSearches(cleared) => cleared.restore(state, ui).await,
             Removal::PlaylistTracks(cut) => cut.restore(state, ui).await,
             Removal::Playlists(deleted) => deleted.restore(state, ui).await,
+            Removal::PlaylistRules(converted) => converted.restore(state, ui).await,
             Removal::RadioStations(removed) => removed.restore(state, ui).await,
             Removal::Favorites(removed) => removed.restore(state).await,
             Removal::QueueRows(cut) => {

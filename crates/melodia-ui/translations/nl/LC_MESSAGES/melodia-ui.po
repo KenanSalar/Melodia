@@ -1075,6 +1075,10 @@ msgid "Edit Rules…"
 msgstr "Regels bewerken…"
 
 #: ui/components/grid/card-context-menu.slint
+msgid "Convert to Regular Playlist"
+msgstr "Omzetten naar gewone afspeellijst"
+
+#: ui/components/grid/card-context-menu.slint
 msgid "Delete {} Playlists"
 msgstr "{} afspeellijsten verwijderen"
 
@@ -1369,6 +1373,16 @@ msgid "Accent Color"
 msgstr "Accentkleur"
 
 #: ui/components/onboarding/features-panel.slint
+#: ui/views/settings/update-section.slint
+msgid "Check for updates automatically"
+msgstr "Automatisch controleren op updates"
+
+#: ui/components/onboarding/features-panel.slint
+#: ui/views/settings/update-section.slint
+msgid "Once a day, Melodia asks GitHub whether a newer version is out."
+msgstr "Eén keer per dag vraagt Melodia aan GitHub of er een nieuwere versie is."
+
+#: ui/components/onboarding/features-panel.slint
 msgid "What Melodia can reach"
 msgstr "Waar Melodia verbinding mee maakt"
 
@@ -1408,16 +1422,6 @@ msgstr "Stuur wat je afspeelt naar Last.fm of ListenBrainz"
 #: ui/components/onboarding/features-panel.slint
 msgid "Set Up"
 msgstr "Instellen"
-
-#: ui/components/onboarding/features-panel.slint
-#: ui/views/settings/update-section.slint
-msgid "Check for updates automatically"
-msgstr "Automatisch controleren op updates"
-
-#: ui/components/onboarding/features-panel.slint
-#: ui/views/settings/update-section.slint
-msgid "Once a day, Melodia asks GitHub whether a newer version is out."
-msgstr "Eén keer per dag vraagt Melodia aan GitHub of er een nieuwere versie is."
 
 #: ui/components/onboarding/music-panel.slint
 msgid "Your music"
@@ -1883,6 +1887,18 @@ msgstr "De zenders worden verwijderd uit je favorieten. Zenders die je zelf hebt
 msgid "Edit Rules"
 msgstr "Regels bewerken"
 
+#: ui/globals/dialog.slint
+msgid "Convert to regular playlist?"
+msgstr "Omzetten naar gewone afspeellijst?"
+
+#: ui/globals/dialog.slint
+msgid "It keeps the tracks it holds now, and its rules are removed for good."
+msgstr "De nummers die er nu in staan blijven behouden, en de regels worden definitief verwijderd."
+
+#: ui/globals/dialog.slint
+msgid "Convert"
+msgstr "Omzetten"
+
 #: ui/globals/dialog.slint ui/views/my-library/tab-pills.slint
 msgid "New Smart Playlist"
 msgstr "Nieuwe slimme afspeellijst"
@@ -2069,6 +2085,11 @@ msgid "{n} playlist deleted"
 msgid_plural "{n} playlists deleted"
 msgstr[0] "{n} afspeellijst verwijderd"
 msgstr[1] "{n} afspeellijsten verwijderd"
+
+#. Translators: {} is the playlist's name.
+#: ui/globals/undo-text.slint
+msgid "{} is now a regular playlist"
+msgstr "{} is nu een gewone afspeellijst"
 
 #. Translators: {} is the station's name.
 #: ui/globals/undo-text.slint
@@ -2610,6 +2631,10 @@ msgstr "Naam wijzigen"
 #: ui/views/my-library/tab-pills.slint
 msgid "Edit rules"
 msgstr "Regels bewerken"
+
+#: ui/views/my-library/tab-pills.slint
+msgid "Convert to regular playlist"
+msgstr "Omzetten naar gewone afspeellijst"
 
 #: ui/views/my-library/tab-pills.slint
 msgid "Delete playlist"
@@ -3689,8 +3714,8 @@ msgid "Offer undo when only one track, playlist, station or favorite goes. Clear
 msgstr "Bied ongedaan maken ook aan als er maar één nummer, afspeellijst, zender of favoriet verdwijnt. ‘Alles wissen’, ‘Resetten’ en ‘Wachtrij wissen’ bieden het altijd aan."
 
 #: ui/views/settings/undo-section.slint
-msgid "Tracks removed from a playlist, and deleted playlists."
-msgstr "Nummers verwijderd uit een afspeellijst, en verwijderde afspeellijsten."
+msgid "Tracks removed from a playlist, deleted playlists, and a converted smart playlist's rules."
+msgstr "Nummers verwijderd uit een afspeellijst, verwijderde afspeellijsten, en de regels van een omgezette slimme afspeellijst."
 
 #: ui/views/settings/undo-section.slint
 msgid "Tracks removed from the queue, Clear queue, and a play that replaces a queue you built."

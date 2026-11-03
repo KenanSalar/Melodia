@@ -81,7 +81,7 @@ async fn ranked_ids(
         push_needle(&mut qb, needle);
     }
     qb.push(" ORDER BY ").push(MOST_PLAYED_ORDER).push(")");
-    fetch_packed_ids(db, qb).await
+    fetch_packed_ids(db.read(), qb).await
 }
 
 /// What the library-wide Most Played tab adds up to, whatever its filter shows: the band states

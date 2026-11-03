@@ -1065,6 +1065,10 @@ msgid "Edit Rules…"
 msgstr "Sửa quy tắc…"
 
 #: ui/components/grid/card-context-menu.slint
+msgid "Convert to Regular Playlist"
+msgstr "Chuyển thành danh sách phát thường"
+
+#: ui/components/grid/card-context-menu.slint
 msgid "Delete {} Playlists"
 msgstr "Xóa {} danh sách phát"
 
@@ -1359,6 +1363,16 @@ msgid "Accent Color"
 msgstr "Màu nhấn"
 
 #: ui/components/onboarding/features-panel.slint
+#: ui/views/settings/update-section.slint
+msgid "Check for updates automatically"
+msgstr "Tự động kiểm tra bản cập nhật"
+
+#: ui/components/onboarding/features-panel.slint
+#: ui/views/settings/update-section.slint
+msgid "Once a day, Melodia asks GitHub whether a newer version is out."
+msgstr "Mỗi ngày một lần, Melodia hỏi GitHub xem đã có phiên bản mới hơn chưa."
+
+#: ui/components/onboarding/features-panel.slint
 msgid "What Melodia can reach"
 msgstr "Những gì Melodia có thể kết nối"
 
@@ -1398,16 +1412,6 @@ msgstr "Gửi những gì bạn nghe tới Last.fm hoặc ListenBrainz"
 #: ui/components/onboarding/features-panel.slint
 msgid "Set Up"
 msgstr "Thiết lập"
-
-#: ui/components/onboarding/features-panel.slint
-#: ui/views/settings/update-section.slint
-msgid "Check for updates automatically"
-msgstr "Tự động kiểm tra bản cập nhật"
-
-#: ui/components/onboarding/features-panel.slint
-#: ui/views/settings/update-section.slint
-msgid "Once a day, Melodia asks GitHub whether a newer version is out."
-msgstr "Mỗi ngày một lần, Melodia hỏi GitHub xem đã có phiên bản mới hơn chưa."
 
 #: ui/components/onboarding/music-panel.slint
 msgid "Your music"
@@ -1865,6 +1869,18 @@ msgstr "Các đài sẽ bị xóa khỏi mục yêu thích của bạn. Những 
 msgid "Edit Rules"
 msgstr "Sửa quy tắc"
 
+#: ui/globals/dialog.slint
+msgid "Convert to regular playlist?"
+msgstr "Chuyển thành danh sách phát thường?"
+
+#: ui/globals/dialog.slint
+msgid "It keeps the tracks it holds now, and its rules are removed for good."
+msgstr "Danh sách giữ lại các bản nhạc hiện có, và các quy tắc của nó bị xóa vĩnh viễn."
+
+#: ui/globals/dialog.slint
+msgid "Convert"
+msgstr "Chuyển"
+
 #: ui/globals/dialog.slint ui/views/my-library/tab-pills.slint
 msgid "New Smart Playlist"
 msgstr "Danh sách phát thông minh mới"
@@ -2042,6 +2058,11 @@ msgstr "Đã xóa {}"
 msgid "{n} playlist deleted"
 msgid_plural "{n} playlists deleted"
 msgstr[0] "Đã xóa {n} danh sách phát"
+
+#. Translators: {} is the playlist's name.
+#: ui/globals/undo-text.slint
+msgid "{} is now a regular playlist"
+msgstr "{} giờ là danh sách phát thường"
 
 #. Translators: {} is the station's name.
 #: ui/globals/undo-text.slint
@@ -2565,6 +2586,10 @@ msgstr "Đổi tên"
 #: ui/views/my-library/tab-pills.slint
 msgid "Edit rules"
 msgstr "Sửa quy tắc"
+
+#: ui/views/my-library/tab-pills.slint
+msgid "Convert to regular playlist"
+msgstr "Chuyển thành danh sách phát thường"
 
 #: ui/views/my-library/tab-pills.slint
 msgid "Delete playlist"
@@ -3637,8 +3662,8 @@ msgid "Offer undo when only one track, playlist, station or favorite goes. Clear
 msgstr "Đề nghị hoàn tác cả khi chỉ xóa một bản nhạc, danh sách phát, đài hoặc mục yêu thích. Xóa tất cả, Đặt lại và Xóa hàng đợi luôn đề nghị hoàn tác."
 
 #: ui/views/settings/undo-section.slint
-msgid "Tracks removed from a playlist, and deleted playlists."
-msgstr "Bản nhạc bị xóa khỏi danh sách phát và các danh sách phát đã xóa."
+msgid "Tracks removed from a playlist, deleted playlists, and a converted smart playlist's rules."
+msgstr "Bản nhạc bị xóa khỏi danh sách phát, các danh sách phát đã xóa và quy tắc của danh sách phát thông minh đã chuyển đổi."
 
 #: ui/views/settings/undo-section.slint
 msgid "Tracks removed from the queue, Clear queue, and a play that replaces a queue you built."

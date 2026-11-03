@@ -7,7 +7,8 @@ use super::playlist::{
     update_playlist_thumbnail_and_timestamp_tx,
 };
 use super::search_name;
-use crate::database::{DbPool, chunked_in_query_on};
+use super::track::missing_ids_on;
+use crate::database::DbPool;
 use melodia_core::entities::playlist::{CutItem, Playlist, PlaylistItemsCut, PlaylistSnapshot};
 use melodia_core::error::AppError;
 use melodia_core::utils::reinsert::reinsert;
@@ -23,21 +24,24 @@ enum Slot<'a> {
 /// lands at its old index clamped to the list. One whose track is gone or back in the playlist
 /// stays out.
 ///
-/// The playlist going too fails it, the rows having nowhere to go.
+/// The playlist going too fails it, the rows having nowhere to go, even once its id is reused.
 pub async fn restore_playlist_items(
     db: &DbPool,
     cuts: &[PlaylistItemsCut],
 ) -> Result<(), AppError> {
-    let Some(playlist_id) = cuts.first().map(|cut| cut.playlist_id) else {
+    let Some(playlist) = cuts.first().map(|cut| &cut.playlist) else {
         return Ok(());
     };
+    let playlist_id = playlist.id;
     let mut tx = db.write().begin().await?;
 
-    let live_stamp: String = sqlx::query_scalar("SELECT updated_at FROM playlists WHERE id = ?")
-        .bind(playlist_id)
-        .fetch_optional(&mut *tx)
-        .await?
-        .ok_or_else(|| AppError::not_found("Playlist", playlist_id))?;
+    let live_stamp: String =
+        sqlx::query_scalar("SELECT updated_at FROM playlists WHERE id = ? AND created_at = ?")
+            .bind(playlist_id)
+            .bind(&playlist.created_at)
+            .fetch_optional(&mut *tx)
+            .await?
+            .ok_or_else(|| AppError::not_found("Playlist", playlist_id))?;
     let survivors: Vec<(i64, i64, i32)> = sqlx::query_as(
         "SELECT id, track_id, position FROM playlist_items WHERE playlist_id = ?
          ORDER BY position, id",
@@ -48,7 +52,7 @@ pub async fn restore_playlist_items(
 
     let held_ids: Vec<i64> =
         cuts.iter().flat_map(|cut| &cut.rows).map(|item| item.track_id).collect();
-    let in_library = tracks_still_there(&mut tx, &held_ids).await?;
+    let missing = missing_ids_on(&mut tx, &held_ids).await?;
     let listed: HashSet<i64> = survivors.iter().map(|&(_, track_id, _)| track_id).collect();
 
     // Newest first, each cut's indices being the playlist's at the moment it was made. A row that
@@ -60,7 +64,7 @@ pub async fn restore_playlist_items(
     });
     let restored = merged.into_iter().filter(|slot| match slot {
         Slot::Kept { .. } => true,
-        Slot::Back(item) => in_library.contains(&item.track_id) && !listed.contains(&item.track_id),
+        Slot::Back(item) => !missing.contains(&item.track_id) && !listed.contains(&item.track_id),
     });
 
     let mut moved = Vec::new();
@@ -112,14 +116,14 @@ pub async fn restore_playlists(
 
     let held_ids: Vec<i64> =
         snapshots.iter().flat_map(|snapshot| &snapshot.items).map(|item| item.track_id).collect();
-    let in_library = tracks_still_there(&mut tx, &held_ids).await?;
+    let missing = missing_ids_on(&mut tx, &held_ids).await?;
 
     for snapshot in snapshots {
         let id = insert_playlist_tx(&mut tx, &snapshot.playlist).await?;
         let items: Vec<NewItem<'_>> = snapshot
             .items
             .iter()
-            .filter(|item| in_library.contains(&item.track_id))
+            .filter(|item| !missing.contains(&item.track_id))
             .enumerate()
             .map(|(index, item)| NewItem {
                 track_id: item.track_id,
@@ -168,17 +172,4 @@ async fn insert_playlist_tx(
     .fetch_one(&mut **tx)
     .await?;
     Ok(id)
-}
-
-/// Which of `track_ids` the library still holds. A scan hard-deletes a track whose file went, and
-/// an insert naming one fails its foreign key, which `OR IGNORE` doesn't cover.
-async fn tracks_still_there(
-    tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
-    track_ids: &[i64],
-) -> Result<HashSet<i64>, AppError> {
-    let present: Vec<(i64,)> = chunked_in_query_on(tx, track_ids, |placeholders| {
-        format!("SELECT id FROM tracks WHERE id IN ({placeholders})")
-    })
-    .await?;
-    Ok(present.into_iter().map(|(id,)| id).collect())
 }

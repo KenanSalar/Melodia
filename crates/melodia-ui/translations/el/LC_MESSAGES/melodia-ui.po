@@ -1076,6 +1076,10 @@ msgid "Edit Rules…"
 msgstr "Επεξεργασία κανόνων…"
 
 #: ui/components/grid/card-context-menu.slint
+msgid "Convert to Regular Playlist"
+msgstr "Μετατροπή σε κανονική λίστα"
+
+#: ui/components/grid/card-context-menu.slint
 msgid "Delete {} Playlists"
 msgstr "Διαγραφή {} λιστών"
 
@@ -1370,6 +1374,16 @@ msgid "Accent Color"
 msgstr "Χρώμα τονισμού"
 
 #: ui/components/onboarding/features-panel.slint
+#: ui/views/settings/update-section.slint
+msgid "Check for updates automatically"
+msgstr "Αυτόματος έλεγχος για ενημερώσεις"
+
+#: ui/components/onboarding/features-panel.slint
+#: ui/views/settings/update-section.slint
+msgid "Once a day, Melodia asks GitHub whether a newer version is out."
+msgstr "Μία φορά την ημέρα, το Melodia ρωτά το GitHub αν υπάρχει νεότερη έκδοση."
+
+#: ui/components/onboarding/features-panel.slint
 msgid "What Melodia can reach"
 msgstr "Πού μπορεί να συνδεθεί το Melodia"
 
@@ -1409,16 +1423,6 @@ msgstr "Στείλτε ό,τι ακούτε στο Last.fm ή στο ListenBrain
 #: ui/components/onboarding/features-panel.slint
 msgid "Set Up"
 msgstr "Ρύθμιση"
-
-#: ui/components/onboarding/features-panel.slint
-#: ui/views/settings/update-section.slint
-msgid "Check for updates automatically"
-msgstr "Αυτόματος έλεγχος για ενημερώσεις"
-
-#: ui/components/onboarding/features-panel.slint
-#: ui/views/settings/update-section.slint
-msgid "Once a day, Melodia asks GitHub whether a newer version is out."
-msgstr "Μία φορά την ημέρα, το Melodia ρωτά το GitHub αν υπάρχει νεότερη έκδοση."
 
 #: ui/components/onboarding/music-panel.slint
 msgid "Your music"
@@ -1885,6 +1889,18 @@ msgstr "Οι σταθμοί θα αφαιρεθούν από τα αγαπημέ
 msgid "Edit Rules"
 msgstr "Επεξεργασία κανόνων"
 
+#: ui/globals/dialog.slint
+msgid "Convert to regular playlist?"
+msgstr "Μετατροπή σε κανονική λίστα;"
+
+#: ui/globals/dialog.slint
+msgid "It keeps the tracks it holds now, and its rules are removed for good."
+msgstr "Κρατά τα κομμάτια που περιέχει τώρα, και οι κανόνες της αφαιρούνται οριστικά."
+
+#: ui/globals/dialog.slint
+msgid "Convert"
+msgstr "Μετατροπή"
+
 #: ui/globals/dialog.slint ui/views/my-library/tab-pills.slint
 msgid "New Smart Playlist"
 msgstr "Νέα έξυπνη λίστα"
@@ -2071,6 +2087,11 @@ msgid "{n} playlist deleted"
 msgid_plural "{n} playlists deleted"
 msgstr[0] "{n} λίστα διαγράφηκε"
 msgstr[1] "{n} λίστες διαγράφηκαν"
+
+#. Translators: {} is the playlist's name.
+#: ui/globals/undo-text.slint
+msgid "{} is now a regular playlist"
+msgstr "Η λίστα «{}» είναι πλέον κανονική"
 
 #. Translators: {} is the station's name.
 #: ui/globals/undo-text.slint
@@ -2612,6 +2633,10 @@ msgstr "Μετονομασία"
 #: ui/views/my-library/tab-pills.slint
 msgid "Edit rules"
 msgstr "Επεξεργασία κανόνων"
+
+#: ui/views/my-library/tab-pills.slint
+msgid "Convert to regular playlist"
+msgstr "Μετατροπή σε κανονική λίστα"
 
 #: ui/views/my-library/tab-pills.slint
 msgid "Delete playlist"
@@ -3693,8 +3718,8 @@ msgid "Offer undo when only one track, playlist, station or favorite goes. Clear
 msgstr "Προσφορά αναίρεσης και όταν αφαιρείται μόνο ένα κομμάτι, μία λίστα αναπαραγωγής, ένας σταθμός ή ένα αγαπημένο. Τα «Καθαρισμός όλων», «Επαναφορά» και «Εκκαθάριση ουράς» την προσφέρουν πάντα."
 
 #: ui/views/settings/undo-section.slint
-msgid "Tracks removed from a playlist, and deleted playlists."
-msgstr "Κομμάτια που αφαιρέθηκαν από λίστα αναπαραγωγής και λίστες αναπαραγωγής που διαγράφηκαν."
+msgid "Tracks removed from a playlist, deleted playlists, and a converted smart playlist's rules."
+msgstr "Κομμάτια που αφαιρέθηκαν από λίστα αναπαραγωγής, λίστες αναπαραγωγής που διαγράφηκαν και οι κανόνες μιας έξυπνης λίστας που μετατράπηκε."
 
 #: ui/views/settings/undo-section.slint
 msgid "Tracks removed from the queue, Clear queue, and a play that replaces a queue you built."

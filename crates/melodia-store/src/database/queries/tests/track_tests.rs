@@ -1,3 +1,5 @@
+use std::collections::HashSet;
+
 use crate::database::queries;
 use crate::database::queries::fixtures::*;
 use crate::database::{DbPool, IDS_PER_SET};
@@ -1444,5 +1446,68 @@ async fn a_smart_playlist_keyset_sorts_its_capped_membership() -> Result<(), App
 
     assert_eq!(ranked, [gamma, alpha]);
     assert_eq!(titled, [alpha, gamma]);
+    Ok(())
+}
+
+/// A filtered list drops a hidden pick only once its scope stops holding the track: one a filter
+/// merely hides stays picked. Each row asks a track the scope holds, one the library holds outside
+/// it, and one the library lost.
+#[tokio::test]
+async fn a_scope_misses_exactly_the_picks_its_list_no_longer_holds() -> Result<(), AppError> {
+    let db = seed_db().await?;
+    let (alpha, beta, gamma) =
+        (id_of(&db, "Alpha").await?, id_of(&db, "Beta").await?, id_of(&db, "Gamma").await?);
+    let lost = 999_999;
+    queries::track::set_favorite(&db, &[beta], true).await?;
+    queries::track::add_play_counts(
+        &db,
+        &[(alpha, 4), (beta, 1), (gamma, 9)],
+        "2026-10-18T00:00:00Z",
+    )
+    .await?;
+    let mix = queries::playlist::create_playlist_with_tracks(&db, "Mix", None, &[gamma]).await?;
+    let rock = queries::playlist::create_smart_playlist(
+        &db,
+        "Rock",
+        None,
+        r#"{"rules":[{"field":"genre","op":"contains","value":{"kind":"text","value":"Rock"}}]}"#,
+    )
+    .await?;
+    let top = queries::playlist::create_smart_playlist(
+        &db,
+        "Top one",
+        None,
+        r#"{"limit":{"count":1,"order":"play_count_desc"}}"#,
+    )
+    .await?;
+    let playlist = |id| TrackListScope::Playlist(id, Draw::default());
+    let rows = [
+        ("the library", TrackListScope::Library, vec![alpha, lost], HashSet::from([lost])),
+        (
+            "favorites",
+            TrackListScope::Favorites,
+            vec![beta, alpha, lost],
+            HashSet::from([alpha, lost]),
+        ),
+        ("a playlist", playlist(mix), vec![gamma, alpha, lost], HashSet::from([alpha, lost])),
+        (
+            "a smart playlist's rules",
+            playlist(rock.id),
+            vec![beta, alpha, lost],
+            HashSet::from([alpha, lost]),
+        ),
+        (
+            "a smart playlist's cap",
+            playlist(top.id),
+            vec![gamma, alpha, lost],
+            HashSet::from([alpha, lost]),
+        ),
+    ];
+
+    for (what, scope, asked, expected) in rows {
+        let missing = queries::track::missing_from_scope(&db, scope, &asked).await?;
+
+        assert_eq!(missing, expected, "{what}");
+    }
     Ok(())
 }

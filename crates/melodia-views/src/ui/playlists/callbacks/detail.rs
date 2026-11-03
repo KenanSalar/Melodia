@@ -16,7 +16,7 @@ use crate::ui::undo::{Removal, tracks_removed_from};
 use crate::ui::view_ctx::ViewCtx;
 use melodia_app::library;
 use melodia_app::state::AppState;
-use melodia_core::entities::playlist::PlaylistItemsCut;
+use melodia_core::entities::playlist::{PlaylistIdentity, PlaylistItemsCut};
 use melodia_core::entities::undo::{RemovalSize, UndoCapture, UndoKind};
 use melodia_core::error::{AppError, describe};
 use melodia_core::utils::block_move;
@@ -33,7 +33,7 @@ pub(super) fn wire(cx: ViewCtx<'_>, playlists_ui: &Arc<PlaylistsUi>) {
 
 /// What a run of removals from one playlist took, put back newest first.
 pub struct PlaylistCutUndo {
-    playlist_id: i64,
+    playlist: PlaylistIdentity,
     cuts: Vec<PlaylistItemsCut>,
     /// As the detail header showed it at the latest removal.
     name: SharedString,
@@ -42,7 +42,7 @@ pub struct PlaylistCutUndo {
 
 impl PlaylistCutUndo {
     pub fn same_playlist(&self, other: &Self) -> bool {
-        self.playlist_id == other.playlist_id
+        self.playlist == other.playlist
     }
 
     /// A later removal from the same playlist, whose rows are indexed as this one left it.
@@ -62,13 +62,9 @@ impl PlaylistCutUndo {
     /// Writes the rows back, then refreshes as an edit does: the grid, and the detail only while
     /// it still shows this playlist.
     pub async fn restore(self, state: &AppState, weak: &Weak<AppWindow>) -> Result<(), AppError> {
-        let Self { playlist_id, cuts, playlists_ui, .. } = self;
+        let Self { playlist, cuts, playlists_ui, .. } = self;
         library::playlists::restore_playlist_items(&state.db, cuts).await?;
-        let (s, weak) = (state.clone(), weak.clone());
-        state.runtime.spawn(async move {
-            super::refresh_after_edit(&s, &playlists_ui, weak, &[playlist_id], "playlists::undo")
-                .await;
-        });
+        super::spawn_refresh_after_edit(state, &playlists_ui, weak, playlist.id, "playlists::undo");
         Ok(())
     }
 }
@@ -231,8 +227,9 @@ fn wire_remove_track(cx: ViewCtx<'_>, playlists_ui: &Arc<PlaylistsUi>) {
             match removed {
                 UndoCapture::Nothing => {}
                 UndoCapture::Held(cut) => {
+                    let playlist = cut.playlist.clone();
                     let cuts = vec![cut];
-                    let hold = PlaylistCutUndo { playlist_id, cuts, name, playlists_ui: pu };
+                    let hold = PlaylistCutUndo { playlist, cuts, name, playlists_ui: pu };
                     undo.offer(Removal::PlaylistTracks(hold));
                 }
                 UndoCapture::OverCap { rows } => {

@@ -1,8 +1,8 @@
-//! Smart playlists, whose membership resolves live from the stored criteria and is never
-//! materialized into `playlist_items`.
+//! Smart playlists, whose membership resolves live from the stored criteria and reaches
+//! `playlist_items` only when a convert makes one a regular playlist.
 
 use crate::state::AppState;
-use melodia_core::entities::playlist::{Playlist, PlaylistStats};
+use melodia_core::entities::playlist::{DroppedRules, Playlist, PlaylistStats};
 use melodia_core::entities::smart_criteria::{Draw, SmartCriteria};
 use melodia_core::entities::track_list::TrackListScope;
 use melodia_core::error::{AppError, describe};
@@ -105,6 +105,21 @@ pub async fn update_smart_criteria(
     let playlist = queries::playlist::update_smart_criteria(&state.db, id, &criteria_json).await?;
     state.library_changed.bump();
     Ok(playlist)
+}
+
+/// Makes a smart playlist a regular one holding its membership under `draw`, answering the rules
+/// it dropped. No track changes, so nothing is bumped.
+pub async fn convert_to_regular(
+    db: &DbPool,
+    id: i64,
+    draw: Draw,
+) -> Result<Option<DroppedRules>, AppError> {
+    queries::playlist_convert::convert_to_regular(db, id, draw).await
+}
+
+/// Undoes a convert, making the playlist smart again under the rules it dropped.
+pub async fn restore_rules(db: &DbPool, dropped: &DroppedRules) -> Result<(), AppError> {
+    queries::playlist_convert::restore_rules(db, dropped).await
 }
 
 #[cfg(test)]

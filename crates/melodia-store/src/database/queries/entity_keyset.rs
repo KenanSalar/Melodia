@@ -200,7 +200,7 @@ async fn ids(
         qb.push(" GROUP BY ").push(group_by);
     }
     qb.push(" ORDER BY ").push(order_by(keys, grid.id, dir)).push(")");
-    fetch_packed_ids(db, qb).await
+    fetch_packed_ids(db.read(), qb).await
 }
 
 fn order_by(keys: &[String], id: &str, dir: SortDir) -> String {

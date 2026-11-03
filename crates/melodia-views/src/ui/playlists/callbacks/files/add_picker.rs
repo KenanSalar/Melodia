@@ -1,7 +1,7 @@
 //! The Add-to-Playlist picker: its opener, its picks, a playlist already holding every pending
 //! track being unpickable, and the commit.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::rc::Rc;
 use std::sync::Arc;
 
@@ -174,8 +174,8 @@ fn wire_add_tracks_to_selected(
         let notifications = notifications.clone();
         let _ = slint::spawn_local(Compat::new(async move {
             let added = add_to_each(&s, &pids, &track_ids).await;
-            if added == 0 {
-                // Each failure was logged per playlist.
+            if added.playlists == 0 {
+                // Failures were logged per playlist, and one that took nothing was left as it was.
                 return;
             }
             refresh_after_edit(&s, &pu, weak.clone(), &pids, "playlists::add_tracks_to_selected")
@@ -184,24 +184,35 @@ fn wire_add_tracks_to_selected(
             let Some(ui) = weak.upgrade() else { return };
             let settings = ui.global::<Settings>();
             notifications.show_completion(
-                Completion::partial_if(added < pids.len()),
-                settings.invoke_add_to_playlist_title(len_as_i32(added)),
-                settings.invoke_add_to_playlist_message(len_as_i32(track_ids.len())),
+                Completion::partial_if(added.playlists < pids.len()),
+                settings.invoke_add_to_playlist_title(len_as_i32(added.playlists)),
+                settings.invoke_add_to_playlist_message(len_as_i32(added.tracks)),
             );
         }));
     });
 }
 
-/// Add `track_ids` to every playlist in `pids`, returning how many took them.
-async fn add_to_each(state: &AppState, pids: &[i64], track_ids: &[i64]) -> usize {
-    let mut added: usize = 0;
+/// What [`add_to_each`] added: the playlists that took at least one track, and the tracks that
+/// landed in at least one.
+struct Added {
+    playlists: usize,
+    tracks: usize,
+}
+
+async fn add_to_each(state: &AppState, pids: &[i64], track_ids: &[i64]) -> Added {
+    let mut playlists: usize = 0;
+    let mut tracks: HashSet<i64> = HashSet::new();
     for pid in pids {
         match library::playlists::add_to_playlist(&state.db, *pid, track_ids.to_vec()).await {
-            Ok(()) => added += 1,
+            Ok(landed) if landed.is_empty() => {}
+            Ok(landed) => {
+                playlists += 1;
+                tracks.extend(landed);
+            }
             Err(e) => {
                 log::warn!("playlists::add_tracks_to_selected({pid}): {}", describe(&e));
             }
         }
     }
-    added
+    Added { playlists, tracks: tracks.len() }
 }
