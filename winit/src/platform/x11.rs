@@ -137,9 +137,26 @@ impl<T> EventLoopBuilderExtX11 for EventLoopBuilder<T> {
 }
 
 /// Additional methods on [`Window`] that are specific to X11.
-pub trait WindowExtX11 {}
+pub trait WindowExtX11 {
+    /// Asks the window manager to activate the window on the user's behalf.
+    ///
+    /// Sends `_NET_ACTIVE_WINDOW` with source indication 2, the one pagers and tray icons send for
+    /// a direct user action, which window managers honour rather than putting it through their
+    /// focus-stealing prevention as they do [`Window::focus_window`]'s application request. Unlike
+    /// that, it is sent whether or not the window is mapped yet, so it can follow a `set_visible`.
+    ///
+    /// ## Platform-specific
+    ///
+    /// - **Wayland:** Does nothing.
+    fn activate_for_user(&self);
+}
 
-impl WindowExtX11 for Window {}
+impl WindowExtX11 for Window {
+    #[inline]
+    fn activate_for_user(&self) {
+        self.window.activate_for_user()
+    }
+}
 
 /// Additional methods on [`WindowAttributes`] that are specific to X11.
 pub trait WindowAttributesExtX11 {

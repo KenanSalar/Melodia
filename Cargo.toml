@@ -278,7 +278,7 @@ zbus = "5.19.0"
 # Defaults off: ksni's default `tokio` feature turns on `zbus/tokio` and walks into
 # the footgun above. `async-io` is mandatory (`compat` won't compile without an
 # executor feature) and matches accesskit's.
-ksni = { version = "0.3.6", default-features = false, features = ["blocking", "async-io"] }
+ksni = { version = "0.3.7", default-features = false, features = ["blocking", "async-io"] }
 # Two glibc-only knobs, cfg-gated at their call sites since musl has neither:
 # `mallopt` caps the per-thread arenas and pins the mmap/trim thresholds, which
 # otherwise ratchet up until nothing returns to the kernel, and `malloc_trim` hands

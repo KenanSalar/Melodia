@@ -351,14 +351,23 @@ fn maximized(width: f64, height: f64) -> Placement {
 
 /// The mirror after a window's first reading, the way [`record`] takes it.
 fn recorded(seen: Placement, at: Instant) -> LiveGeometry {
-    let mut mirror = LiveGeometry::first(seen, at);
+    recorded_after(None, seen, at)
+}
+
+/// [`recorded`] behind the size [`restore`] launched the window at, if it ran.
+fn recorded_after(launch_size: Option<LogicalSize>, seen: Placement, at: Instant) -> LiveGeometry {
+    let mut mirror = LiveGeometry::first(seen, launch_size, at);
     mirror.observe(seen, at);
     mirror
 }
 
+fn is_logical_size(got: LogicalSize, width: f32, height: f32) -> bool {
+    (got.width - width).abs() < TOLERANCE && (got.height - height).abs() < TOLERANCE
+}
+
 fn assert_logical_size(got: LogicalSize, width: f32, height: f32) {
     assert!(
-        (got.width - width).abs() < TOLERANCE && (got.height - height).abs() < TOLERANCE,
+        is_logical_size(got, width, height),
         "expected {width}×{height}, got {}×{}",
         got.width,
         got.height
@@ -496,6 +505,17 @@ fn a_maximized_reading_keeps_the_restore_size() {
     assert_placement_size(mirror.current, 1200.0, 800.0);
 }
 
+/// Launched maximized, the window has only read the screen's size. Recorded as the restore size, a
+/// Wayland tray restore rebuilds it there and un-maximizing it leaves it the screen's size.
+#[test]
+fn a_window_launched_maximized_keeps_its_launch_size_to_restore_to() {
+    let launch = LogicalSize::new(1200.0, 800.0);
+
+    let mirror = recorded_after(Some(launch), maximized(2560.0, 1440.0), Instant::now());
+
+    assert_placement_size(mirror.current, 1200.0, 800.0);
+}
+
 #[test]
 fn a_maximized_reading_is_recorded_as_maximized() {
     let t0 = Instant::now();
@@ -531,6 +551,45 @@ fn a_window_that_never_reports_a_position_stays_unplaced() {
     mirror.observe(unplaced(1000.0, 700.0), t0 + SETTLE);
 
     assert!(!mirror.current.position_known, "the zeros standing in for a position would persist");
+}
+
+#[test]
+fn a_window_hidden_maximized_is_rebuilt_at_its_restore_size_then_maximized() {
+    let mirror = recorded(maximized(1200.0, 800.0), Instant::now());
+
+    let reshow = reshow_from(mirror);
+
+    assert!(
+        matches!(reshow, Reshow::Maximized { restore_size }
+            if is_logical_size(restore_size, 1200.0, 800.0)),
+        "rebuilt as {reshow:?}"
+    );
+}
+
+#[test]
+fn a_window_hidden_restored_is_rebuilt_at_its_own_size() {
+    let mirror = recorded(placed(1000.0, 700.0), Instant::now());
+
+    let reshow = reshow_from(mirror);
+
+    assert!(
+        matches!(reshow, Reshow::Restored(size) if is_logical_size(size, 1000.0, 700.0)),
+        "rebuilt as {reshow:?}"
+    );
+}
+
+/// The miniplayer is a window size, so a floor such as the full player's would rebuild it as the
+/// full player.
+#[test]
+fn a_miniplayer_hidden_to_the_tray_is_rebuilt_as_the_miniplayer() {
+    let mirror = recorded(placed(350.0, 90.0), Instant::now());
+
+    let reshow = reshow_from(mirror);
+
+    assert!(
+        matches!(reshow, Reshow::Restored(size) if is_logical_size(size, 350.0, 90.0)),
+        "rebuilt as {reshow:?}"
+    );
 }
 
 #[test]

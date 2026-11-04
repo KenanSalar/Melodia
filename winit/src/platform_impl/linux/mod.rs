@@ -537,6 +537,16 @@ impl Window {
         x11_or_wayland!(match self; Window(w) => w.focus_window())
     }
 
+    #[inline]
+    pub fn activate_for_user(&self) {
+        match self {
+            #[cfg(x11_platform)]
+            Window::X(ref window) => window.activate_for_user(),
+            #[cfg(wayland_platform)]
+            Window::Wayland(_) => (),
+        }
+    }
+
     pub fn request_user_attention(&self, request_type: Option<UserAttentionType>) {
         x11_or_wayland!(match self; Window(w) => w.request_user_attention(request_type))
     }

@@ -1,5 +1,5 @@
 //! Window geometry: restored before `app.show()`, mirrored from winit while the window lives,
-//! snapshotted at exit.
+//! read back by [`reshow`] when a Wayland hide re-creates the window, snapshotted at exit.
 //!
 //! Restore goes through `slint::Window::set_size`/`set_position` rather than the attributes hook:
 //! `set_size` sets the backend's `has_explicit_size`, which stops Slint snapping the window to its
@@ -67,6 +67,7 @@ pub fn restore(app: &AppWindow, geom: PersistedGeometry, full_player: Option<Ful
     let mini = app.global::<MiniPlayer>();
     let floor = LogicalSize::new(mini.get_window_min_width(), mini.get_window_min_height());
     let (size, position) = logical_placement(geom, floor);
+    *launch_size().lock() = Some(size);
     let window = app.window();
     window.set_size(size);
     window.set_position(position);
@@ -153,8 +154,16 @@ struct LiveGeometry {
 }
 
 impl LiveGeometry {
-    fn first(seen: Placement, now: Instant) -> Self {
-        let unplaced = Placement { position_known: false, ..seen };
+    /// A window launched maximized reads the screen's size, so its restore size is the one the
+    /// launch applied.
+    fn first(seen: Placement, launch_size: Option<LogicalSize>, now: Instant) -> Self {
+        let mut unplaced = Placement { position_known: false, ..seen };
+        if seen.geom.maximized
+            && let Some(size) = launch_size
+        {
+            unplaced.geom.width = f64::from(size.width);
+            unplaced.geom.height = f64::from(size.height);
+        }
         Self { current: unplaced, recorded_at: now, settled: unplaced }
     }
 
@@ -186,6 +195,14 @@ static LIVE_GEOMETRY: OnceLock<Mutex<Option<LiveGeometry>>> = OnceLock::new();
 
 fn live() -> &'static Mutex<Option<LiveGeometry>> {
     LIVE_GEOMETRY.get_or_init(|| Mutex::new(None))
+}
+
+/// The size [`restore`] applied, which [`LiveGeometry::first`] keeps for a window launched
+/// maximized.
+static LAUNCH_SIZE: OnceLock<Mutex<Option<LogicalSize>>> = OnceLock::new();
+
+fn launch_size() -> &'static Mutex<Option<LogicalSize>> {
+    LAUNCH_SIZE.get_or_init(|| Mutex::new(None))
 }
 
 /// The full player's placement while the miniplayer is up, `None` otherwise.
@@ -267,7 +284,33 @@ pub fn record(w: &WinitWindow, reading: WindowReading) {
     };
 
     let now = Instant::now();
-    live().lock().get_or_insert_with(|| LiveGeometry::first(seen, now)).observe(seen, now);
+    let mut mirror = live().lock();
+    mirror
+        .get_or_insert_with(|| LiveGeometry::first(seen, *launch_size().lock(), now))
+        .observe(seen, now);
+}
+
+/// What a window re-created behind a Wayland hide is rebuilt to.
+#[derive(Debug, Clone, Copy)]
+pub enum Reshow {
+    Restored(LogicalSize),
+    /// Built at `restore_size`, the size un-maximizing it returns to, then maximized.
+    Maximized {
+        restore_size: LogicalSize,
+    },
+}
+
+/// The live mirror's placement as a rebuild takes it, `None` before the window's first reading.
+pub fn reshow() -> Option<Reshow> {
+    let mirror = (*live().lock())?;
+    Some(reshow_from(mirror))
+}
+
+/// [`reshow`] past its lock read.
+fn reshow_from(mirror: LiveGeometry) -> Reshow {
+    let geom = mirror.current.geom;
+    let (size, _) = logical_placement(geom, LogicalSize::default());
+    if geom.maximized { Reshow::Maximized { restore_size: size } } else { Reshow::Restored(size) }
 }
 
 /// Holds the placement the full player last settled at, the miniplayer having taken over. A hold
