@@ -1,0 +1,382 @@
+# Plan: Move the library database from sqlx to rusqlite
+
+Status: **proposed** · Owner: Kenan · Created: 2026-11-04
+
+> **Validated 2026-11-04** against `8fe1eb93` (`chore/deps-and-fixes`) with three read-only inventories:
+>
+> - every sqlx use in `melodia-store`;
+> - every use outside it;
+> - every doc, rule, CI and script line that names sqlx or its behaviour.
+>
+> Library internals were checked in their sources: sqlx 0.9.0 (`sqlx-sqlite`'s `connection/worker.rs` and `migrate.rs`, `sqlx-core`'s `migrate/`) and rusqlite 0.41.1 (features, `column_index`, the statement cache), plus libsqlite3-sys 0.30.1 and 0.39.1 (`build.rs` compile flags). Release data is from crates.io and GitHub on 2026-11-03. The benchmark in [Evidence](#evidence-2026-11-04) ran on 2026-11-04.
+>
+> **Re-validated 2026-11-04** against `76551945` (`main`), which `8fe1eb93` precedes with nothing under `database/`, core or `migrations/` changed between, by three fresh inventories (the store's counts and driver hazards; the pool, runtime and backup; everything outside the store with the docs). Sources added: `sqlx-sqlite`'s `arguments.rs`, rusqlite 0.41.1's `execute`, `execute_batch` and `pragma_update`, libsqlite3-sys 0.37.0's `build.rs`, tokio 1.54.1's blocking scheduler, rusqlite's 0.40 and 0.41 release notes and rusqlite 0.39.0's manifest on crates.io.
+
+Working doc. Delete when every phase has shipped, Tests included.
+
+## Context
+
+**What you see today.**
+- **The bundled SQLite is held back, and only a sqlx release can move it.** `Cargo.lock` resolves libsqlite3-sys 0.30.1, SQLite 3.46.0. sqlx 0.9.0 accepts up to libsqlite3-sys `<0.38` (SQLite 3.51.3), while libsqlite3-sys's current 0.39.1, which rusqlite 0.41 takes, bundles 3.54.1. sqlx shipped 0.9.0 on 2026-05-21; its main branch has 48 commits since (GitHub's compare, 2026-11-04), SQLite fixes among them, and no release.
+- **Every statement and every row crosses a thread.** sqlx gives each connection its own OS thread. It sends each statement there as a command and copies each result row into an owned `SqliteRow` that comes back over a channel.
+- **The store already works around that.** `fetch_packed_ids` folds a whole keyset into one `group_concat` string and parses it back, and its doc says why: "sqlx hands every row across from its connection's worker thread on its own, which over a library costs more than the sort."
+- **The cost is measured, and it is CPU more than wait.** On Melodia's real schema, pool shape and runtime, with one SQLite build under both drivers, rusqlite was faster or level on every workload. It ran a mix of store calls in 1.45× less wall time and about half the CPU, with writes 2 to 3× faster and concurrent reads 2.9× ([Evidence](#evidence-2026-11-04)).
+- **Lists and search are not where it shows.** The pager's keyset is one packed row, and FTS5 does its own work, so a Songs or Albums open and a search keystroke take the same time under either driver. The pager is what already made them cheap.
+
+Users see nothing broken, and no list or search opens faster after the move. The gain is the CPU every store call spends crossing sqlx's worker thread, faster writes and concurrent reads, and less heap kept.
+
+**Outcome.** The store talks to SQLite through rusqlite: a small async pool of its own over synchronous connections, a migrator of its own over the same history table, and the same SQL.
+
+- **Unchanged:**
+  - every query's result, sort order and filter;
+  - FTS5 search and `UNICODE_LOWER` ordering;
+  - the database file, which opens as-is;
+  - the migration history, which stays in `_sqlx_migrations` in sqlx's exact row format, so an older build still refuses a database a newer one migrated, as it does today;
+  - the backup before a pending migration;
+  - the one-writer, two-to-four-readers layout;
+  - idle connections closing after `IDLE_TIMEOUT`, so idle memory and `heap_trim`'s schedule hold;
+  - each role's pragmas, as `init_database` and `test_pool` set them;
+  - every public store function staying `async` and returning what it returns today. A parameter its closure keeps becomes owned (Cross-cutting), and the two visitors become folds (Phase 4);
+  - `DbPool::test_pool()`'s signature, which its 282 call sites name.
+- **Removed:**
+  - sqlx and its per-connection worker threads;
+  - the sqlx pool defaults the code never set: the 30-minute `max_lifetime`, the 30 s `acquire_timeout` (a caller waits for its lane instead, every closure being bounded work), the ping before an idle connection is reused, and one connection opened per pool at creation (the writer opens at init for the migrator, readers on first use);
+  - `QueryBuilder` and the `TrackBinder` trait's two impls;
+  - the executor-generic functions;
+  - the `chunked_in_query` / `chunked_in_query_on` split;
+  - `&mut **tx` reborrows;
+  - the `FromRow` derives in `melodia-core`;
+  - sqlx test dev-dependencies in `melodia-app` and `melodia`.
+- **Added:**
+  - `database/pool/`, `database/migrate.rs` with a store `build.rs`, `database/sql.rs` and `database/rows/`;
+  - the dependency `rusqlite`, and `sha2` as a store build-dependency;
+  - `AppError::DatabaseClosed` (Decision 6).
+
+## Decisions settled here
+
+1. **rusqlite, not another driver.** The survey (chat, 2026-11-03) covered:
+   - **Diesel:** a DSL rewrite of hand-written SQL.
+   - **SeaORM:** its async side runs on sqlx 0.9.
+   - **Turso:** no FTS5 and no custom collations, and it silently treats an unknown collation as the default.
+   - **libsql:** its owner's README names the Rust rewrite as the direction.
+   - **Toasty:** pre-release churn.
+
+   rusqlite's project maintains libsqlite3-sys, so new SQLite versions land there first. It has shipped five releases since May.
+2. **No async wrapper or pool crate.** libsqlite3-sys declares `links = "sqlite3"`, so every crate in the graph must agree on one rusqlite minor version. Of the wrappers:
+   - tokio-rusqlite 0.8.0, deadpool-sqlite 0.14.0, r2d2_sqlite 0.35.0, rusqlite_migration 2.6.0 and refinery 0.10.0 are all on 0.40;
+   - sea-query-rusqlite 0.8.0 is on 0.38;
+   - only async-sqlite 0.7.0 follows 0.41.
+
+   A wrapper brings back the wait for someone else's release. The pool here is small and the store's own (Structure).
+3. **Our own migrator, keeping `_sqlx_migrations` in sqlx's format.** Same DDL, SHA-384 over each file's bytes, the same rows (`execution_time` -1 inside the migration's transaction, the real time after commit) and the same refusals:
+   - a dirty version;
+   - an applied file whose checksum changed;
+   - an applied version this build doesn't know.
+
+   That needs no bridging step on first launch. It keeps "a shipped migration is never edited" enforced, and it leaves downgrade behaviour exactly as it is. rusqlite_migration tracks state with `user_version` and keeps no checksums; refinery keeps its own table. Both would need a one-time bridge, and both lag rusqlite releases.
+
+   - The checksums are computed in `build.rs`, as `sqlx::migrate!` computes them at compile time, so `sha2` is a build-dependency and the binary hashes nothing at boot.
+   - Each file runs through `execute_batch` inside its transaction, on the writer connection, so the pragmas the frozen migrations ran under (`foreign_keys` among them) stay in force.
+4. **Row mapping lives in the store, by column name.**
+   - `melodia-core`'s entities become plain data. The store's own `FromRow` trait maps them by name, as sqlx's derive did, so `queries::track::columns`' "the order carries nothing" stays true.
+   - Tuples map by index, as sqlx's did.
+   - rusqlite's by-name `get` scans the statement's columns on each call. That's cheap at these widths (a page of `TrackListRow`s, a grid of cards). Phase 5 measures the wide projections before anything moves to by-index.
+   - `DismissalSet`'s field is private, so its `ToSql` / `FromSql` live in core beside it, as its `sqlx::Type` derive does today.
+5. **One builder for dynamic SQL, and caching follows the SQL's type.**
+   - A `&'static str` statement goes through `prepare_cached`.
+   - A built `Sql` goes through `prepare`.
+   - That reproduces today's split, where the 31 `.persistent(false)` sites are the dynamic ones (the 32nd match is `mod.rs:20`'s doc comment).
+   - `Sql::trusted` takes runtime-built structure (placeholder lists, column projections) and replaces `AssertSqlSafe` as the deliberate marker.
+   - rusqlite refuses three things sqlx let through, each checked against the tree:
+     - **A second statement in one string** (`MultipleStatement`). Only the migrations hold one (Decision 3). `stats.rs`'s trigger DDL runs one statement per call, and rusqlite allows a trailing tail with no statement in it.
+     - **A row from `execute`** (`ExecuteReturnedResults`). `journal_mode` and `mmap_size` answer with a row, so `pool/open.rs` sets pragmas through `pragma_update`, which runs `execute_batch`. All 18 `RETURNING` sites already read through `fetch_*`.
+     - **A bind count that differs from the statement's** (`InvalidParameterCount`). sqlx binds a missing parameter as NULL and ignores extras (`sqlx-sqlite`'s `arguments.rs:100-107`). An audit of 352 literal-SQL chains found no mismatch, and the one `?1` used twice (`renumber_playlist_positions_tx`) binds once in both drivers.
+   - rusqlite counts changed rows as `usize` where sqlx gave `u64`. The 15 `rows_affected` sites convert, so the public return types stay.
+6. **Each store function runs in one closure on the runtime's blocking pool.**
+   - A store function stays an `async fn`. Its body awaits a lane: a semaphore permit (async, so a burst never fills the 32-thread blocking pool), then `Handle::spawn_blocking` with the connection.
+   - The handle is captured at init, so a call awaited on the Slint thread never runs SQLite there. `main.rs` enters the runtime on that thread, but the pool doesn't lean on it.
+   - A write transaction is synchronous inside its closure, so nothing can `.await` inside one.
+   - **The permit and the connection travel together.** Both move into the blocking closure and go back to the lane only when it ends. A dropped future then never frees a permit while its connection still works, so the writer lane can't open a second writer.
+   - **After `close()`, `read` and `write` fail at once**, as sqlx's `PoolClosed` does. `play_count_flusher_tests.rs:151` stages its failed write that way.
+   - **That failure, and a blocking task cancelled at runtime shutdown, return `AppError::DatabaseClosed`.** A `SQLITE_ABORT` made up for it would carry no real cause, where failures are told apart by variant. `kept.rs:199` takes it beside `Database`, or its `_` arm reports "not audio".
+7. **The cutover lands as one commit, after three phases that shrink it.**
+   - A half-converted store can't run: a transaction can't span drivers, and an in-memory test database can't be shared between them. So the driver swap itself is one commit.
+   - Phases 1 to 3 take out of it everything that can land and be validated under sqlx: the cross-crate tests, the migrator and the dynamic SQL.
+   - Running both drivers side by side was rejected. It needs a file-backed test pool, two error variants and two collation registrations, and it brings `SQLITE_BUSY` between two writers into the hand tests. All of that is machinery built to be deleted.
+8. **The cutover keeps the engine Phase 0 lands, and Phase 5 moves it.**
+   - The cutover pins rusqlite 0.39.x, whose libsqlite3-sys 0.37 is the 3.51.3 Phase 0 resolves. Phase 5's before/after measurement then isolates the driver.
+   - The bump to the latest rusqlite (0.41.x, SQLite 3.54) follows as its own step. What it moves:
+     - libsqlite3-sys 0.39 drops `-DSQLITE_ENABLE_MEMORY_MANAGEMENT` from the bundled build (rusqlite #1900; `build.rs` diffed between 0.37.0 and 0.39.1). The flag only gives `sqlite3_release_memory` and the soft heap limit something to free, and the tree calls neither.
+     - In 0.41, `Statement::column_names` and `columns` return iterators, and `pragma_update` takes the schema as `Option<&str>` and checks the name against `pragma_list`.
+     - The soundness fixes between (vtab, `array`'s `Rc` values, savepoint names, `trace_v2` and `busy_handler`) touch nothing this store calls, so 0.39 is safe for the one step.
+
+## Structure (who owns what afterwards)
+
+Everything is in `crates/melodia-store/src/database/` unless noted.
+
+| File | Owns | Single reason to change |
+|---|---|---|
+| `pool/mod.rs` | `DbPool` (cheap `Clone` over an `Arc`), `read(work)` / `write(work)` (`pub(crate)`), `close()`, `test_pool()`, `IDLE_CONNECTIONS_CLOSED_WITHIN` | How the store hands out connections |
+| `pool/lane.rs` | One lane: semaphore, idle stack with last-used times, run-on-blocking-pool (permit and connection moving into the closure together), the reaper (ticking every `IDLE_TIMEOUT` from the lane's creation, as sqlx's does and `heap_trim` assumes, and closing on the blocking pool, since the last close checkpoints the WAL) | Concurrency and idle-close semantics |
+| `pool/open.rs` | Opening a connection per role (writer, reader, in-memory test): flags, pragmas as `init_database` sets them (writer: WAL, `foreign_keys`, `synchronous=NORMAL`, `cache_size`, `temp_store`, `mmap_size`; readers the same without `synchronous`; test: `foreign_keys`, `synchronous`, `temp_store`), `busy_timeout`, collation, statement-cache capacity | Connection configuration |
+| `migrate.rs` | Comparing checksums, validation against `_sqlx_migrations`, applying pending migrations, the pending check the backup asks | Migration semantics |
+| `crates/melodia-store/build.rs` | Embedding the workspace root's `migrations/*.sql` (`../../migrations`, the path `sqlx::migrate!` reads) in version order with their SHA-384 checksums, `rerun-if-changed` on that directory, the sqlx-style description, refusing a `-- no-transaction` header or `.up`/`.down` names | The migrations directory's shape |
+| `sql.rs` | `Sql` (text plus `Param`s), `push` / `push_trusted` / `push_bind` / values lists, and the execution vocabulary (`fetch_all`, `fetch_optional`, `fetch_one`, `fetch_scalar`, `execute`) for static and built SQL | How SQL is assembled and run |
+| `rows/mod.rs` | The store's `FromRow` trait and tuple impls | Row decoding |
+| `rows/{track,library,radio,duplicates}.rs` | Entity impls, grouped as `melodia-core/src/entities/` groups them | An entity's columns |
+| `mod.rs` | Bind budget and chunk helpers (`chunked_in_query`, `chunked_in_execute_on`, `select_in_id_order`, `set_where_id_in`, `backfill_folded`), `init_database` | Bulk-statement shape |
+| `collation.rs`, `backup.rs` | Unchanged roles, on rusqlite | |
+| `melodia-core/src/error.rs` | `Database(#[from] rusqlite::Error)`, `Migration(#[from] MigrationError)` (four variants: `Dirty`, `Edited`, `Unknown`, `Apply { version, source }`), `DatabaseClosed` | |
+
+**Duplication collapsed on the way through:**
+- `chunked_in_query` and `chunked_in_query_on` become one function on `&Connection`, because a `Transaction` derefs to one. `chunked_in_execute_on` keeps `&Transaction`, its contract being a write that lands whole.
+- The 8 executor-generic functions and the 9 that take a `&mut SqliteConnection` become plain `&Connection` functions.
+- `TrackBinder`'s two impls (over sqlx's `Query` and `Separated`) become one: `bind_track_columns` pushes into `Sql`.
+- The 73 functions taking a transaction stop reborrowing (`&mut **tx`) and stop being `async`.
+
+**Line budget.**
+- `mod.rs` (480) shrinks as the pool and the migrator move out.
+- The files nearest the 800 cap are `queries/playlist.rs` (663), `queries/ingest.rs` (580), `queries/smart_playlist.rs` (553), `queries/radio.rs` (459) and `queries/scan/mutations.rs` (449). Each is counted at the end of the phase that grows it.
+
+## Every phase
+
+- **Gates:** `cargo fmt --all`, `cargo clippy --all-targets --locked --workspace -- -D warnings`, `cargo test --locked --workspace`.
+- **Doc files:** each phase updates the doc files it makes stale, held to a fact at its anchor; no phase is "docs".
+- **Existing tests:** a test the phase breaks is brought to the new truth in that phase. New tests wait for the Tests phase.
+- **Hand tests** run in the dev data folder (`~/.local/share/Melodia-dev`), backed up first.
+
+## Phase 0: The newest SQLite sqlx accepts
+
+- `cargo update -p libsqlite3-sys`: 0.30.1 to 0.37.0, SQLite 3.46.0 to 3.51.3. The dry run confirms this is the whole change.
+- Delete the stale `.gitignore` block (lines 28-31), which says `.sqlx/` is committed. No `.sqlx/` exists, and no query macro reads one.
+- **Hand test:** boot the dev library, search, rescan a folder, quit. After quit, note whether `melodia.db-wal` is left behind.
+  - Today's `close()` shuts the writer before the readers (`mod.rs:288-297`), so the writer is not the last connection, and a read-only last connection can't checkpoint. The WAL probably survives quit today; that is inferred, not tested.
+  - Phase 4's quit check then knows whether a folded WAL is new.
+- **Docs:** none. `sqlx.md`'s "`libsqlite3-sys` is version-ranged" stays true.
+
+## Phase 1: Store-owned test seams; the pools go crate-private
+
+The 56 statements outside the store that name sqlx are all test seeding and readback:
+- 15 test files under `crates/melodia-app/src/`;
+- `crates/melodia/tests/cross_tier.rs`;
+- `crates/melodia/tests/headless.rs`.
+
+No production code outside the store calls `db.read()` or `db.write()`.
+
+- Add a driver-neutral seam in `queries::fixtures` (`#[doc(hidden)] pub`, as the rest of `fixtures` is):
+  - an `execute` for literal SQL;
+  - typed scalar and row reads over a store-owned trait implemented for the types the tests read (`i64`, `Option<i64>`, `String`, `Option<String>`, `bool`, small tuples);
+  - test values written inline as literals.
+- Port the 56 statements to it.
+  - `play_count_flusher_tests.rs:151` closes `db.write()` directly. It moves to `DbPool::close()`, as `artist_images_tests` already does, once the test's intent is confirmed.
+- `DbPool::read()` / `write()` become `pub(crate)`.
+- Remove the `sqlx` dev-dependency from `melodia-app` and `melodia`, with their comments. `melodia`'s names `pragma_table_info`, which nothing reads.
+- **Hand test:** none; the change is test-only, and the suite is its proof.
+- **Docs:** none.
+
+## Phase 2: Our own migrator, history unchanged
+
+- `build.rs` embeds the directory, and `migrate.rs` replaces `sqlx::migrate!` and the `Migrate` trait calls in `init_database` and `test_pool` (Decision 3). Its SQL still runs through sqlx until Phase 4.
+- Add `sha2` 0.11.1 as a store build-dependency. Dropping sqlx's `migrate` feature drops `sha2` 0.10.9, which only `sqlx-core` pulls in (`cargo tree -i`).
+- `AppError::Migration` holds `MigrationError`. `Apply`'s source is `sqlx::Error` until the cutover.
+- Drop sqlx's `migrate` and `macros` features, and rewrite the comment block above the workspace dependency, which exists to explain `macros`.
+- **Hand test:**
+  1. **The dev library boots with nothing pending and nothing mismatched.** That proves the checksums equal sqlx's on a real history.
+  2. **A fresh data folder applies all 14.** Its `_sqlx_migrations` rows match a sqlx-applied database's in version, description, success and checksum, compared with `/usr/bin/sqlite3`; `installed_on` and `execution_time` differ by nature.
+  3. **A database whose history holds a version this build lacks refuses to boot,** as today.
+- **Docs:**
+  - `CLAUDE.md`'s "sqlx checksums the file" and `code-style.md`'s "sqlx checksums the whole file" now name the migrator.
+  - `sqlx.md`'s `Migrate`-trait and `sqlx.toml` bullets go, with a pointer to `migrate.rs`.
+  - The `//!` headers of `melodia-app`'s `tasks/artwork_renormalize.rs:5`, `rating_import.rs:5` and `tag_backfill.rs:8` say "Not an `SQLx` migration", which becomes "Not a migration".
+
+## Phase 3: One builder for dynamic SQL
+
+- Add `database/sql.rs` (Decision 5). Under sqlx, its execution binds each `Param` and keeps `.persistent(false)`.
+- Convert to it:
+  - the 15 `QueryBuilder` constructions;
+  - the helpers that take `&mut QueryBuilder<Sqlite>`: `push_needle`, `push_folded_match`, `sql_direction`, `detail_order`, `Membership::push_*`, `push_member_ids` and `push_positioned_membership`;
+  - `fetch_packed_ids`;
+  - `set_where_id_in`, which returns `Sql`;
+  - the chunk helpers' SQL;
+  - `backfill_folded`'s page update;
+  - the three `push_values` sites;
+  - all 39 `AssertSqlSafe` sites.
+- These counts are production sites. One `QueryBuilder` (`smart_playlist_tests.rs:499`) and 11 `AssertSqlSafe` calls in store tests move with the tests in Phase 4.
+- The backup's `VACUUM INTO` binds its path (`VACUUM INTO ?1`, run under `/usr/bin/sqlite3` 3.51.2 on 2026-11-04) instead of interpolating it, which drops the quote-doubling and the lossy `display()`. `backup_tests` proves it, file-backed.
+- Collapse `TrackBinder` into `bind_track_columns` over `Sql`.
+- **Hand test:**
+  - every smart-playlist rule kind, a capped and a random one;
+  - every Songs and detail sort and filter;
+  - the seven grids' keysets;
+  - search;
+  - a first scan and a rescan (the bulk-insert path);
+  - Keep Out and its undo.
+- **Docs:** `sqlx.md`'s `AssertSqlSafe` and `QueryBuilder::push_values` bullets name the builder, and its `VACUUM INTO` "Takes no bind parameter" goes.
+
+## Phase 4: The cutover (one commit)
+
+The store and core move to rusqlite together. In working order:
+
+1. **Dependencies.**
+   - Workspace `rusqlite = { version = "0.39.x", features = ["bundled", "collation"] }` (Decision 8). `prepare_cached` sits behind rusqlite's default `cache` feature, so a `default-features = false` line lists it.
+   - `fallible_uint` stays off: nothing binds or decodes a `u64` or `usize`.
+   - sqlx comes out of the workspace, `melodia-core` and `melodia-store`. `melodia-core` takes `rusqlite` in its place, for `AppError::Database` and `DismissalSet`.
+   - The store's `futures-util` line goes if `TryStreamExt` was its only use.
+2. **`pool/`.**
+   - **Writer lane:** one connection.
+   - **Read lane:** 2 to 4 read-only connections, sized as `init_database` sizes them now.
+   - **Reaper:** a runtime task that closes a connection idle past `IDLE_TIMEOUT`, keeping `IDLE_CONNECTIONS_CLOSED_WITHIN`'s bound.
+   - **Contracts:** Decision 6's three.
+   - **`close()`:** `PRAGMA optimize` and `FTS_OPTIMIZE` as today, then waits for in-flight work and closes every connection explicitly, since `main()` ends in `process::exit`. The readers close first and the writer last, so the writer's close folds the WAL.
+   - **`test_pool()`:** one in-memory connection serving both lanes, with no reaper, since closing it would drop the database. It runs no timer at all, and tokio holds a paused current-thread clock still while a `spawn_blocking` task runs (`runtime/blocking/schedule.rs`), so a `start_paused` test no longer races the database.
+   - **Statement-cache capacity:** a named constant starting at sqlx's 100, so memory and speed compare like for like. Phase 5 tunes it.
+   - **A failed blocking task:** a panic is resumed, so a test reports it; a cancellation at runtime shutdown returns `AppError::DatabaseClosed`.
+3. **`rows/`.** The trait, tuple impls and the 24 core entity impls (`StoredLogoAnswer` among them), plus the store's own four rows: `CopyFacts`, `DuplicateKeyRow`, `search_name::Inputs`, `search_text::Unfilled`. `#[sqlx(flatten)]` becomes a nested `from_row`.
+4. **`sql.rs`** executes on `&Connection`: static SQL cached, built SQL uncached.
+5. **Core.**
+   - The `FromRow` derives and the three `#[sqlx(...)]` attributes go.
+   - `DismissalSet` gets `ToSql` / `FromSql`.
+   - `AppError::Database` holds `rusqlite::Error`, and `describe`'s doc (`error.rs:163`, "sqlx print theirs in `Display`") names rusqlite.
+   - `error_tests` constructs `QueryReturnedNoRows` (`:163`, `:176-178`), and `:51-65` stop copying sqlx's message shape.
+   - `track/keyset.rs:73`'s hand-built `sqlx::Error::Decode` becomes `FromSqlConversionFailure`.
+6. **The migrator's and the backup's SQL** run on rusqlite. `backup_tests` reopens the copy read-only through `Connection::open_with_flags`.
+7. **`database/mod.rs`'s helpers** run on `&Connection` (Structure's collapse). A loop that writes per chunk or page outside a transaction takes one write closure per iteration, so a waiting writer still waits for one chunk rather than the table: `backfill_folded`, and the chunk loops at `track/write.rs:56,88,117` and `artist.rs:51`.
+8. **Query modules.**
+   - Each `pub async fn` stays `async` with its result type and runs its body in one read or write closure, the chunk loops of step 7 and `search_all` below excepted.
+   - The functions taking a transaction become synchronous.
+   - `watch_batch`'s held `db.read().acquire()` becomes one read closure.
+   - `search_all`'s four concurrent reads (`search.rs:131`, `try_join!`) stay four read closures.
+   - **The one transaction that awaits more than the database.** `commit_scan_chunk` and `commit_import` stat files inside their transaction on purpose, through `resolve_move_candidates` (`ingest.rs:327-328` argues it). Of the 29 transactions, it is the only one that does. `batch_still_on_disk` becomes synchronous inside the write closure, its rayon pass running under `ScanPool::install` on the blocking thread it is already on, with the `ScanPool` cloned in. Its small-batch stats leave the runtime thread they run on today.
+   - The order is by cluster, each cluster's transactions sharing helpers:
+     1. scan: `ingest`, `scan/*`, `stats`, `artwork`, `excluded_files`, `search_name`;
+     2. playlists: `playlist`, `playlist_convert`, `playlist_delete`, `playlist_restore`, `smart_playlist`;
+     3. tracks: `track/*`;
+     4. entities: `album`, `artist`, `genre`, `folder`, `entity_keyset`, `entity_labels`, `search`;
+     5. radio: `radio`, `radio_removal`;
+     6. duplicates: `duplicate_dismissals`, `track/duplicates`, `track/duplicate_merge`.
+9. **The two visitors become folds.** `visit_folder_tracks` and `visit_duplicate_keys` take an owned accumulator into the blocking task and hand it back, still one row at a time. Their callers are in `library/scan/mod.rs:305` and `library/duplicates/mod.rs:20`.
+10. **Inputs into closures** (Cross-cutting) are applied function by function.
+11. **The 22 of the store's 31 test files that reach the database, `fixtures.rs` and Phase 1's seam** move to rusqlite. Tests that drop a transaction uncommitted keep working, since rusqlite's `Transaction` rolls back on drop.
+12. **Comments that name sqlx:**
+    - `melodia-engine/.../actions.rs:80-81`;
+    - `melodia-views/src/ui/track_links.rs:106`;
+    - the "deliberately not `start_paused`" reasoning in `play_count_flusher_tests.rs:210-213` (with `:229`) and `rating_writeback_tests.rs:179-181`, whose premise (sqlx's idle and lifetime timers on the test pool) no longer holds (step 2);
+    - `IDLE_TIMEOUT`'s doc ("sqlx's reaper checks once per this period");
+    - `heap_trim.rs:1-3` and `:21-22` and `shutdown.rs:95-100`, re-read against the new reaper and `close()`;
+    - `scripts/measure-footprint.py:129-132`, which names the reaper;
+    - the manifest comments in the workspace, core and store.
+
+**Hand test:** the whole app on the dev library:
+- a boot with nothing pending;
+- a boot from an older backup, so the backup-then-migrate path runs;
+- a first scan, a rescan and watcher moves and renames;
+- search, and every list and grid sort and filter;
+- manual and smart playlists, convert, restore and delete;
+- radio favourites and logos;
+- the duplicate finder and Keep Out;
+- tag editing;
+- quit, after which the WAL folds and no `-wal` stays behind.
+
+**Docs:**
+- `.claude/rules/sqlx.md` becomes `rusqlite.md` with the same `paths:` globs (`rules_globs.rs` holds them). The SQLite-generic sections stay; the sqlx-specific ones go. Its in-memory `VACUUM INTO` note is re-checked under rusqlite before it is kept.
+- The rusqlite mechanics the code can't hold go in the new rule: cached versus uncached by SQL type, by-name `get` cost, owned inputs, lanes bounding concurrency under the blocking cap.
+- `CLAUDE.md`'s rules table, `library-data.md:19` and `:38-42` (the collapsed helper names), and `README.md:443` and `:509` change to match.
+
+## Phase 5: Measure, tune, take the latest rusqlite
+
+Each measurement step waits for Kenan's go.
+
+1. **Measure the driver.** Fresh release builds of the commit before Phase 4 and of Phase 4, each in its own detached worktree, `cmp`'d first. On the dev library measure:
+   - a full scan's wall time;
+   - Songs open;
+   - typing a search;
+   - idle Anonymous and a heaptrack diff;
+   - the 150 s settle, to see connections close;
+   - peak threads, the blocking pool having spawned beyond the five lanes under bursts in the benchmark (Cross-cutting).
+2. **Tune from what that shows:**
+   - the statement-cache capacity, memory against re-prepares;
+   - dropping `fetch_packed_ids`' `group_concat` packing and `unpack_ids`, whose stated reason is sqlx's per-row hop. Under rusqlite a row per id measured no slower than the packed row ([Evidence](#evidence-2026-11-04)); the dev library confirms it before the packing goes;
+   - by-index mapping for a wide projection, only if a profile shows column lookup.
+3. **Bump rusqlite** to the latest release (0.41.x at the time of writing, SQLite 3.54), adapting to the API changes Decision 8 lists, and re-measure the scan and the list open.
+- **Docs:**
+  - `rusqlite.md` takes what tuning settled.
+  - The README footprint tables are retaken by their protocol only if a column moves beyond run-to-run noise.
+
+## Phase 6: Tests
+
+Tests are added where the landed change earns them, on Kenan's go.
+
+## Cross-cutting
+
+- **Inputs into closures.** A closure on the blocking pool is `'static`. A store function whose input it needs takes that input owned where callers are done with it (scan batches, id lists built for the call). A borrowed input the caller keeps using is cloned in.
+- **Cancellation.** A dropped store future no longer stops its query. sqlx stopped at its next row send; a rusqlite closure runs to the end. Where code drops a query future to abandon it (a superseded search), the read finishes and is discarded, its permit and connection staying with the closure until then (Decision 6). `InterruptHandle` is the lever if Phase 5 shows it matters.
+- **Threads.** No new named threads: the work runs on tokio's blocking pool, and the reaper is a runtime task. The lanes bound database concurrency at one writer plus the read connections, inside the blocking cap of 32. `packaging.rs`'s `RUNTIME_NAMED` list is unaffected. The pool's thread count is not bounded by the lanes, though: a permit freed inside a closure lets the next call spawn before that thread is idle again, so bursts took the benchmark's process to 12 to 27 threads, against 9 under sqlx's fixed one per connection. Each idle one retires after tokio's keep-alive, and the heap still came out smaller (Phase 5 measures it on the app).
+- **Errors** still go through `error::describe` when logged. Unchanged rules: `Nothing inside a write transaction stats a file`, `UNICODE_LOWER` query-side only, and `database::placeholders` for every IN list.
+
+## Risks / notes
+
+- **Phase 4 is large:** about 43 store files, core's 12 entity files and 22 store test files, plus the `melodia-app` callers whose inputs become owned. It is mechanical once Phases 1 to 3 have landed, and it lands as one commit because a half-converted store can't run.
+- **Driver strictness.** A statement the suite doesn't reach can fail only at runtime, through any of Decision 5's three refusals. Phase 4's hand test is the net.
+- **Copying inputs into closures** adds allocations where a large borrowed input is cloned. Cross-cutting's rule keeps the big ones owned.
+- **The statement cache** holds sqlx's capacity to start. rusqlite's default of 16 would change re-prepare costs and memory at once.
+- **The reaper's timing** carries `IDLE_CONNECTIONS_CLOSED_WITHIN`. `heap_trim`'s second trim and the README's 150 s settle both depend on it.
+- **The database path.** Today it reaches sqlx as `format!("sqlite:{}", db_path.display())` on every platform, which sqlx splits at the first `?` and percent-decodes, `display()` being lossy besides. rusqlite takes the `Path`: its bytes on Unix, `to_str` or `InvalidPath` elsewhere. Its default flags include `SQLITE_OPEN_URI` and the bundled build sets `SQLITE_USE_URI`, but a name without `file:` stays a plain filename, so a data root holding `%` or `?` now opens the file it names. The Windows and macOS hand checks cover the boot.
+
+## Checked and left alone
+
+- **The 14 migration files.** They are frozen. None carries a sqlx directive, and every top-level statement is safe inside the migrator's transaction. `20260514000000_initial_schema.sql:3` ("PRAGMAs are configured via SqliteConnectOptions, not here") goes stale and stays, its comments frozen with its checksum.
+- **FTS5 SQL and triggers, `UNICODE_LOWER`'s comparator, `queries::track::columns`' lists** (by-name mapping keeps their doc true), **`strip_windows_verbatim_paths`** (a data fix, not a driver workaround) and **the bundled build's flags.** libsqlite3-sys's `bundled` sets the same `SQLITE_ENABLE_FTS5`, `JSON1`, `STAT4`, `THREADSAFE=1`, `DEFAULT_FOREIGN_KEYS=1` and `USE_URI` in 0.30.1, 0.37.0 and 0.39.1, and sqlx and rusqlite share that crate. 0.39 drops `SQLITE_ENABLE_MEMORY_MANAGEMENT` (Decision 8).
+- **CI:** `pr-validation.yml:155` names libsqlite3-sys among the C builds, still true. No workflow installs sqlx-cli or reads `DATABASE_URL`.
+
+## Evidence (2026-11-04)
+
+**Setup.**
+- sqlx 0.9.0 and rusqlite 0.39.0 in one release build with Melodia's profile, both on libsqlite3-sys 0.37.0, so one SQLite 3.51.3 serves both and only the driver differs.
+- A fresh 50,000-track database per process, built by the 14 migrations, so FTS5 and the stats triggers fire. 2,000 artists, 5,000 albums, 40 genres.
+- `init_database`'s pools and pragmas, a statement cache of 100, a runtime with two workers and the blocking pool at 32, and `allocator.rs`'s glibc caps through `GLIBC_TUNABLES`. The rusqlite side is Decision 6's lanes.
+- Medians of five interleaved rounds on tmpfs, the order alternating, each driver and suite in its own process. Every run returned the same checksums.
+- Anonymous memory is sampled every 5 ms. `VmHWM` is left out: it counts the database's tmpfs-backed map, the same under both.
+
+**A mix of store calls**, each awaited as a store function is:
+
+| Workload | sqlx | rusqlite | sqlx / rusqlite |
+|---|---|---|---|
+| Insert 50k tracks, 100 transactions | 1,659 ms | 1,374 ms | 1.21× |
+| 20k point lookups, one call each | 240 ms | 145 ms | 1.65× |
+| Full sorted track list ×10 (50k rows) | 2,032 ms | 1,090 ms | 1.87× |
+| Keyset-paged walk ×2 (200-row pages) | 476 ms | 244 ms | 1.95× |
+| Album grid in `UNICODE_LOWER` order ×50 | 873 ms | 507 ms | 1.72× |
+| Album `GROUP BY` ×100 | 1,241 ms | 883 ms | 1.41× |
+| FTS5 prefix search, a call per keystroke | 1,087 ms | 1,054 ms | 1.03× |
+| 10k play-count updates, one transaction | 54 ms | 18 ms | 3.10× |
+| 1k rating writes, a call each | 19 ms | 9 ms | 2.03× |
+| 8 tasks × 2.5k lookups at once | 120 ms | 41 ms | 2.90× |
+| **Wall, all workloads** | 7,795 ms | 5,382 ms | 1.45× |
+| **CPU, all workloads** | 10,400 ms | 5,490 ms | 1.89× |
+
+| After that mix | sqlx | rusqlite |
+|---|---|---|
+| Peak anonymous memory | 46.8 MiB | 41.3 MiB |
+| Anonymous, pools open | 32.7 MiB (23.0 to 32.7 across runs) | 18.7 MiB |
+| Anonymous, pools closed | 25.8 MiB | 18.7 MiB |
+| Peak threads | 9 | 14 (12 to 21 across runs) |
+
+**The lists as the app loads them.** A full fetch of every row, against the pager's packed keyset plus the first 128-row window (`paged_rows`' fetch):
+
+| Workload | sqlx | rusqlite | sqlx / rusqlite |
+|---|---|---|---|
+| Songs open ×10, all 50k rows | 3,007 ms | 1,752 ms | 1.72× |
+| Songs open ×10, keyset + first window | 764 ms | 754 ms | 1.01× |
+| Albums open ×50, all 5k cards | 841 ms | 477 ms | 1.76× |
+| Albums open ×50, keyset + first window | 189 ms | 177 ms | 1.07× |
+| Songs scrolled end to end, 391 windows | 264 ms | 129 ms | 2.05× |
+| Songs keyset ×10, a row per id | 981 ms | 735 ms | 1.34× |
+
+| Anonymous memory the lists added at peak | sqlx | rusqlite |
+|---|---|---|
+| Full fetch | 24.8 MiB | 23.4 MiB |
+| Pager | 4.8 MiB | 4.0 MiB |
+
+- The pager opens lists 2.3 to 4.4× faster than a full fetch and adds about 20 MiB less, under either driver. With it, the open is the engine's work, and the driver stops mattering.
+- A keyset fetched a row per id costs sqlx about 30 % over the packed row and costs rusqlite nothing (Phase 5's packing step).
+- Not measured here: disk I/O, a real scan's tag reads and hashing around the inserts, and idle memory once the reaper has closed the connections. Phase 5 measures those on the app.
