@@ -39,8 +39,8 @@ const REQUEST_TIMEOUT: Duration = Duration::from_secs(20);
 /// Generous because a mirror may add fields, bounded because a mirror is a third party.
 const DIRECTORY_MAX_BYTES: u64 = 16 * 1024 * 1024;
 
-/// Sends after the first that a connection reset earns: a mirror under load resets some new
-/// connections at the handshake while letting others through.
+/// Extra sends a connection reset earns: a mirror under load resets some new connections at
+/// the handshake and lets others through.
 const RESET_RETRIES: u32 = 2;
 
 /// The wait before the first retry, doubled before each one after it.
@@ -285,6 +285,10 @@ async fn send(request: reqwest::RequestBuilder) -> reqwest::Result<reqwest::Resp
         };
         match attempt.send().await {
             Err(e) if reset_while_connecting(&e) => {
+                log::debug!(
+                    "radio: the directory reset the connection, retrying in {delay:?}: {}",
+                    melodia_core::error::describe(&e)
+                );
                 tokio::time::sleep(delay).await;
                 delay *= 2;
             }
