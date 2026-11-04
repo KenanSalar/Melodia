@@ -270,11 +270,11 @@ pub struct DbPool {
 }
 
 impl DbPool {
-    pub fn read(&self) -> &SqlitePool {
+    pub(crate) fn read(&self) -> &SqlitePool {
         &self.read
     }
 
-    pub fn write(&self) -> &SqlitePool {
+    pub(crate) fn write(&self) -> &SqlitePool {
         &self.write
     }
 

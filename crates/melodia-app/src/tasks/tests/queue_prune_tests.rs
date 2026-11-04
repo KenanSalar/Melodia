@@ -13,6 +13,7 @@ use melodia_core::error::AppError;
 use melodia_engine::player::engine::fixtures::test_station;
 use melodia_engine::player::engine::state::with_state_emit;
 use melodia_engine::player::engine::types::PlaybackStatus;
+use melodia_store::database::queries::fixtures::execute;
 
 /// A fixture playing `count` staged files from the head, as the header Play pill starts one.
 async fn playing(count: usize) -> Result<(TestPlayback, Vec<i64>), AppError> {
@@ -24,8 +25,7 @@ async fn playing(count: usize) -> Result<(TestPlayback, Vec<i64>), AppError> {
 
 /// The watcher's own delete: a hard `DELETE`, with nothing left behind to find.
 async fn delete_row(fx: &TestPlayback, id: i64) -> Result<(), AppError> {
-    sqlx::query("DELETE FROM tracks WHERE id = ?").bind(id).execute(fx.ctx.db.write()).await?;
-    Ok(())
+    execute(&fx.ctx.db, &format!("DELETE FROM tracks WHERE id = {id}")).await
 }
 
 fn queued_ids(fx: &TestPlayback) -> Vec<i64> {

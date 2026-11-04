@@ -12,7 +12,7 @@ use tokio::sync::mpsc;
 use super::*;
 use melodia_core::error::AppError;
 use melodia_store::database::queries;
-use melodia_store::database::queries::fixtures::insert_test_track;
+use melodia_store::database::queries::fixtures::{fetch_one, insert_test_track};
 
 /// A pool with one library folder and one track, which is all any of these need: the subject is
 /// the batch, not the row.
@@ -27,12 +27,11 @@ fn inbox(events: mpsc::UnboundedReceiver<PlayCountEvent>) -> Inbox {
 }
 
 async fn counts(db: &DbPool, id: i64) -> Result<(i64, i64, Option<String>), AppError> {
-    let row: (i64, i64, Option<String>) =
-        sqlx::query_as("SELECT play_count, skip_count, last_played FROM tracks WHERE id = ?")
-            .bind(id)
-            .fetch_one(db.read())
-            .await?;
-    Ok(row)
+    fetch_one(
+        db,
+        &format!("SELECT play_count, skip_count, last_played FROM tracks WHERE id = {id}"),
+    )
+    .await
 }
 
 #[test]
@@ -148,7 +147,7 @@ async fn a_write_that_failed_does_not_announce_itself() -> Result<(), AppError> 
     let before = *rx.borrow();
 
     // Closing the pool is the only failure this suite can stage that the schema cannot prevent.
-    db.write().close().await;
+    db.close().await;
 
     let mut plays = HashMap::from([(id, 1)]);
     flush(&db, &mut plays, &mut HashMap::new(), &stats).await;

@@ -11,6 +11,7 @@ use melodia_core::entities::radio::DirectoryStation;
 use melodia_core::error::AppError;
 use melodia_engine::player::engine::fixtures::test_station;
 use melodia_engine::player::engine::types::RadioNowPlaying;
+use melodia_store::database::queries::fixtures::execute;
 use melodia_store::database::{DbPool, queries};
 
 use super::{click_uuid, keep_station, record_probed_codec, set_directory_favorite};
@@ -134,10 +135,7 @@ async fn a_measurement_of_nothing_is_not_recorded() -> Result<(), AppError> {
 async fn a_station_with_no_row_of_its_own_records_nothing() -> Result<(), AppError> {
     let db = DbPool::test_pool().await?;
     let id = keep_station(&db, &browsed("uuid-1"), None).await?;
-    sqlx::query("UPDATE radio_stations SET id = 0 WHERE id = ?")
-        .bind(id)
-        .execute(db.write())
-        .await?;
+    execute(&db, &format!("UPDATE radio_stations SET id = 0 WHERE id = {id}")).await?;
 
     record_probed_codec(&db, &now_playing(0), "OPUS").await;
 

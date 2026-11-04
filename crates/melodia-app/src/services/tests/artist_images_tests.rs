@@ -20,7 +20,7 @@ use melodia_core::utils::now_unix;
 use melodia_net::media::fetch::deezer::DeezerAnswer;
 use melodia_store::database::DbPool;
 use melodia_store::database::queries;
-use melodia_store::database::queries::fixtures::insert_test_track;
+use melodia_store::database::queries::fixtures::{execute, insert_test_track};
 use melodia_testkit::http::{TestResponse, TestServer};
 use tempfile::TempDir;
 
@@ -85,17 +85,19 @@ async fn one_artist() -> Result<DbPool, AppError> {
 /// [`one_artist`], with every artist given an image.
 async fn every_image_in_place() -> Result<DbPool, AppError> {
     let db = one_artist().await?;
-    sqlx::query("UPDATE artists SET image_path = '/cached/artist.jpg'").execute(db.write()).await?;
+    execute(&db, "UPDATE artists SET image_path = '/cached/artist.jpg'").await?;
     Ok(db)
 }
 
 /// [`one_artist`], its last search having found nothing `missed_secs_ago`.
 async fn missed(missed_secs_ago: i64) -> Result<DbPool, AppError> {
     let db = one_artist().await?;
-    sqlx::query("UPDATE artists SET image_search_missed_at = ? WHERE name = 'Artist A'")
-        .bind(now_unix() - missed_secs_ago)
-        .execute(db.write())
-        .await?;
+    let missed_at = now_unix() - missed_secs_ago;
+    execute(
+        &db,
+        &format!("UPDATE artists SET image_search_missed_at = {missed_at} WHERE name = 'Artist A'"),
+    )
+    .await?;
     Ok(db)
 }
 

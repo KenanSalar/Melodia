@@ -7,6 +7,7 @@
 
 use melodia_core::entities::radio::NewRadioStation;
 use melodia_core::error::AppError;
+use melodia_store::database::queries::fixtures::fetch_one;
 use melodia_store::database::{DbPool, queries};
 
 use super::merged_onto_existing;
@@ -32,9 +33,7 @@ fn typed() -> NewRadioStation {
 }
 
 async fn station_count(db: &DbPool) -> Result<i64, AppError> {
-    Ok(sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM radio_stations")
-        .fetch_one(db.read())
-        .await?)
+    fetch_one(db, "SELECT COUNT(*) FROM radio_stations").await
 }
 
 /// A URL nothing holds has to fall through to the probe rather than being answered here, and it

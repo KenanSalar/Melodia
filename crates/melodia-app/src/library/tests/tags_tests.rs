@@ -18,7 +18,9 @@ use melodia_core::error::AppError;
 use melodia_core::utils::self_writes::SelfWrites;
 use melodia_store::database::DbPool;
 use melodia_store::database::queries;
-use melodia_store::database::queries::fixtures::{insert_test_track, set_test_artwork};
+use melodia_store::database::queries::fixtures::{
+    execute, fetch_one, insert_test_track, set_test_artwork,
+};
 use melodia_store::media::ingest::metadata::{compute_file_hash, date_modified_from_metadata};
 use melodia_store::media::ingest::scanner::file_is_current;
 use melodia_testkit::ASSETS_DIR;
@@ -51,14 +53,13 @@ async fn single_track_edit_updates_row_and_preserves_stats() -> Result<(), AppEr
     let id = seed_track(&db, &path_str).await?;
 
     // Playback state that a metadata refresh must preserve.
-    sqlx::query("UPDATE tracks SET play_count = 5, rating = 4, is_favorite = 1 WHERE id = ?")
-        .bind(id)
-        .execute(db.write())
-        .await?;
-    let old_hash: String = sqlx::query_scalar("SELECT file_hash FROM tracks WHERE id = ?")
-        .bind(id)
-        .fetch_one(db.read())
-        .await?;
+    execute(
+        &db,
+        &format!("UPDATE tracks SET play_count = 5, rating = 4, is_favorite = 1 WHERE id = {id}"),
+    )
+    .await?;
+    let old_hash: String =
+        fetch_one(&db, &format!("SELECT file_hash FROM tracks WHERE id = {id}")).await?;
 
     let artwork_dir = tmp.path().join("artwork");
     std::fs::create_dir(&artwork_dir)?;
@@ -75,11 +76,13 @@ async fn single_track_edit_updates_row_and_preserves_stats() -> Result<(), AppEr
     assert!(report.failures.is_empty());
 
     let (album, play_count, rating, is_favorite, new_hash): (String, i64, i64, i64, String) =
-        sqlx::query_as(
-            "SELECT album, play_count, rating, is_favorite, file_hash FROM tracks WHERE id = ?",
+        fetch_one(
+            &db,
+            &format!(
+                "SELECT album, play_count, rating, is_favorite, file_hash \
+                 FROM tracks WHERE id = {id}"
+            ),
         )
-        .bind(id)
-        .fetch_one(db.read())
         .await?;
 
     assert_eq!(album, "Brand New Album");
@@ -127,10 +130,8 @@ async fn batch_edit_reports_failure_and_commits_the_rest() -> Result<(), AppErro
     assert_eq!(report.failures.len(), 1);
     assert_eq!(report.failures[0].0, ghost_str);
 
-    let title: String = sqlx::query_scalar("SELECT title FROM tracks WHERE id = ?")
-        .bind(good_id)
-        .fetch_one(db.read())
-        .await?;
+    let title: String =
+        fetch_one(&db, &format!("SELECT title FROM tracks WHERE id = {good_id}")).await?;
     assert_eq!(title, "Renamed", "the good row still committed its refresh");
     Ok(())
 }
@@ -146,10 +147,8 @@ async fn album_rename_moves_track_to_new_album_id() -> Result<(), AppError> {
     let path_str = path.to_string_lossy().into_owned();
     let id = seed_track(&db, &path_str).await?;
 
-    let old_album_id: i64 = sqlx::query_scalar("SELECT album_id FROM tracks WHERE id = ?")
-        .bind(id)
-        .fetch_one(db.read())
-        .await?;
+    let old_album_id: i64 =
+        fetch_one(&db, &format!("SELECT album_id FROM tracks WHERE id = {id}")).await?;
 
     let artwork_dir = tmp.path().join("artwork");
     std::fs::create_dir(&artwork_dir)?;
@@ -162,16 +161,12 @@ async fn album_rename_moves_track_to_new_album_id() -> Result<(), AppError> {
     };
     write_tag_edit(&db, &artwork_dir, &cover_cache, &self_writes, &[id], &edit, None).await?;
 
-    let new_album_id: i64 = sqlx::query_scalar("SELECT album_id FROM tracks WHERE id = ?")
-        .bind(id)
-        .fetch_one(db.read())
-        .await?;
+    let new_album_id: i64 =
+        fetch_one(&db, &format!("SELECT album_id FROM tracks WHERE id = {id}")).await?;
     assert_ne!(new_album_id, old_album_id, "the album rename must repoint album_id");
 
-    let name: String = sqlx::query_scalar("SELECT name FROM albums WHERE id = ?")
-        .bind(new_album_id)
-        .fetch_one(db.read())
-        .await?;
+    let name: String =
+        fetch_one(&db, &format!("SELECT name FROM albums WHERE id = {new_album_id}")).await?;
     assert_eq!(name, "A Totally Different Album");
     Ok(())
 }
@@ -190,10 +185,8 @@ async fn set_genre(
         TagEdit { genres: FieldEdit::Set(GenreList::from_name(genre)), ..TagEdit::default() };
     write_tag_edit(db, artwork_dir, cover_cache, self_writes, &[id], &edit, None).await?;
 
-    let row: (String, i64) = sqlx::query_as("SELECT genre, genre_id FROM tracks WHERE id = ?")
-        .bind(id)
-        .fetch_one(db.read())
-        .await?;
+    let row: (String, i64) =
+        fetch_one(db, &format!("SELECT genre, genre_id FROM tracks WHERE id = {id}")).await?;
     assert_eq!(row.0, genre, "the genre write has to land, or the caller is testing nothing");
     Ok(row)
 }
@@ -227,7 +220,7 @@ async fn a_rating_only_edit_sweeps_nothing_and_keeps_its_cover() -> Result<(), A
 
     // A cover on the row and an orphan beside it: the two things the gated passes would reach.
     set_test_artwork(&db, id, "/covers/kept.jpg").await?;
-    sqlx::query("INSERT INTO genres (name) VALUES ('Stray Genre')").execute(db.write()).await?;
+    execute(&db, "INSERT INTO genres (name) VALUES ('Stray Genre')").await?;
 
     let edit = TagEdit { rating: FieldEdit::Set(4), ..TagEdit::default() };
     let (report, _) =
@@ -235,19 +228,18 @@ async fn a_rating_only_edit_sweeps_nothing_and_keeps_its_cover() -> Result<(), A
     assert_eq!(report.updated, 1);
     assert!(report.failures.is_empty());
 
-    let (artwork_path, genre_after, rating): (String, i64, i64) =
-        sqlx::query_as("SELECT artwork_path, genre_id, rating FROM tracks WHERE id = ?")
-            .bind(id)
-            .fetch_one(db.read())
-            .await?;
+    let (artwork_path, genre_after, rating): (String, i64, i64) = fetch_one(
+        &db,
+        &format!("SELECT artwork_path, genre_id, rating FROM tracks WHERE id = {id}"),
+    )
+    .await?;
 
     assert_eq!(rating, 4, "the star still reaches the row through the re-extract");
     assert_eq!(artwork_path, "/covers/kept.jpg", "the skipped re-extract must not null the cover");
     assert_eq!(genre_after, genre_before, "a rating write re-homes nothing");
 
-    let strays: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM genres WHERE name = 'Stray Genre'")
-        .fetch_one(db.read())
-        .await?;
+    let strays: i64 =
+        fetch_one(&db, "SELECT COUNT(*) FROM genres WHERE name = 'Stray Genre'").await?;
     assert_eq!(strays, 1, "a rating write must not pay for a whole-table orphan sweep");
     Ok(())
 }
@@ -277,10 +269,8 @@ async fn a_genre_edit_still_sweeps_the_genre_it_emptied() -> Result<(), AppError
 
     assert_ne!(landed_id, emptied_id, "the genre rename must repoint genre_id");
 
-    let survivors: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM genres WHERE id = ?")
-        .bind(emptied_id)
-        .fetch_one(db.read())
-        .await?;
+    let survivors: i64 =
+        fetch_one(&db, &format!("SELECT COUNT(*) FROM genres WHERE id = {emptied_id}")).await?;
     assert_eq!(survivors, 0, "the genre the move emptied is swept in the same transaction");
     Ok(())
 }
@@ -335,14 +325,10 @@ async fn replace_artwork_lands_on_every_track_and_the_shared_album() -> Result<(
     // Bind to non-null types (both columns are set after a successful Replace),
     // so a NULL would fail the test rather than needing an `expect`.
     let (art_a, album_a): (String, i64) =
-        sqlx::query_as("SELECT artwork_path, album_id FROM tracks WHERE id = ?")
-            .bind(a_id)
-            .fetch_one(db.read())
+        fetch_one(&db, &format!("SELECT artwork_path, album_id FROM tracks WHERE id = {a_id}"))
             .await?;
     let (art_b, album_b): (String, i64) =
-        sqlx::query_as("SELECT artwork_path, album_id FROM tracks WHERE id = ?")
-            .bind(b_id)
-            .fetch_one(db.read())
+        fetch_one(&db, &format!("SELECT artwork_path, album_id FROM tracks WHERE id = {b_id}"))
             .await?;
 
     assert_eq!(art_a, art_b, "both tracks share the replaced cover");
@@ -352,10 +338,8 @@ async fn replace_artwork_lands_on_every_track_and_the_shared_album() -> Result<(
     );
     assert_eq!(album_a, album_b, "same-album batch resolves to one album_id");
 
-    let album_art: String = sqlx::query_scalar("SELECT artwork_path FROM albums WHERE id = ?")
-        .bind(album_a)
-        .fetch_one(db.read())
-        .await?;
+    let album_art: String =
+        fetch_one(&db, &format!("SELECT artwork_path FROM albums WHERE id = {album_a}")).await?;
     assert_eq!(album_art, art_a, "the album card gets the replaced cover too");
 
     Ok(())
@@ -391,11 +375,11 @@ async fn a_tag_edit_leaves_the_row_describing_the_file_it_wrote() -> Result<(), 
     )
     .await?;
 
-    let (hash, size, mtime): (String, i64, String) =
-        sqlx::query_as("SELECT file_hash, file_size, date_modified FROM tracks WHERE id = ?")
-            .bind(id)
-            .fetch_one(db.read())
-            .await?;
+    let (hash, size, mtime): (String, i64, String) = fetch_one(
+        &db,
+        &format!("SELECT file_hash, file_size, date_modified FROM tracks WHERE id = {id}"),
+    )
+    .await?;
 
     let on_disk = std::fs::metadata(&path)?;
     assert_eq!(hash, compute_file_hash(&path)?, "the row's hash is the file's, or a move is lost");
@@ -438,10 +422,8 @@ async fn removing_a_cover_with_no_fallback_nulls_the_row() -> Result<(), AppErro
     .await?;
     assert_eq!(report.updated, 1);
 
-    let art: Option<String> = sqlx::query_scalar("SELECT artwork_path FROM tracks WHERE id = ?")
-        .bind(id)
-        .fetch_one(db.read())
-        .await?;
+    let art: Option<String> =
+        fetch_one(&db, &format!("SELECT artwork_path FROM tracks WHERE id = {id}")).await?;
     assert_eq!(art, None, "nothing is left pointing at the removed cover");
     Ok(())
 }
@@ -473,10 +455,8 @@ async fn removing_a_cover_falls_back_to_the_one_beside_the_file() -> Result<(), 
     )
     .await?;
 
-    let art: String = sqlx::query_scalar("SELECT artwork_path FROM tracks WHERE id = ?")
-        .bind(id)
-        .fetch_one(db.read())
-        .await?;
+    let art: String =
+        fetch_one(&db, &format!("SELECT artwork_path FROM tracks WHERE id = {id}")).await?;
     assert!(
         art.starts_with(&*artwork_dir.to_string_lossy()),
         "the external cover is cached and kept, not nulled: {art}"
@@ -612,10 +592,11 @@ async fn a_track_imported_from_outside_the_library_takes_the_edit() -> Result<()
         return Err(AppError::not_found_msg("expected exactly the one imported track"));
     };
     let id = *id;
-    let folder_query = "SELECT t.folder_id, f.is_enabled FROM tracks t \
-                        JOIN folders f ON f.id = t.folder_id WHERE t.id = ?";
-    let (folder_before, is_library_folder): (i64, bool) =
-        sqlx::query_as(folder_query).bind(id).fetch_one(db.read()).await?;
+    let folder_query = format!(
+        "SELECT t.folder_id, f.is_enabled FROM tracks t \
+         JOIN folders f ON f.id = t.folder_id WHERE t.id = {id}"
+    );
+    let (folder_before, is_library_folder): (i64, bool) = fetch_one(&db, &folder_query).await?;
     assert!(!is_library_folder, "the import files it under a folder made for its own directory");
 
     let edit = TagEdit { title: FieldEdit::Set("Nowhere".to_owned()), ..TagEdit::default() };
@@ -632,13 +613,10 @@ async fn a_track_imported_from_outside_the_library_takes_the_edit() -> Result<()
 
     assert_eq!(report.updated, 1);
     assert_eq!(updated, [id]);
-    let title: String = sqlx::query_scalar("SELECT title FROM tracks WHERE id = ?")
-        .bind(id)
-        .fetch_one(db.read())
-        .await?;
+    let title: String =
+        fetch_one(&db, &format!("SELECT title FROM tracks WHERE id = {id}")).await?;
     assert_eq!(title, "Nowhere");
-    let (folder_after, _): (i64, bool) =
-        sqlx::query_as(folder_query).bind(id).fetch_one(db.read()).await?;
+    let (folder_after, _): (i64, bool) = fetch_one(&db, &folder_query).await?;
     assert_eq!(
         folder_after, folder_before,
         "a tag edit moves no file, so its row keeps its folder"
@@ -739,14 +717,14 @@ async fn stored_release(
     db: &DbPool,
     track_id: i64,
 ) -> Result<(Option<String>, Option<String>, bool), AppError> {
-    let row = sqlx::query_as::<_, (Option<String>, Option<String>, bool)>(
-        "SELECT al.label, al.catalog_number, al.is_compilation \
-         FROM tracks t JOIN albums al ON al.id = t.album_id WHERE t.id = ?",
+    fetch_one(
+        db,
+        &format!(
+            "SELECT al.label, al.catalog_number, al.is_compilation \
+             FROM tracks t JOIN albums al ON al.id = t.album_id WHERE t.id = {track_id}"
+        ),
     )
-    .bind(track_id)
-    .fetch_one(db.read())
-    .await?;
-    Ok(row)
+    .await
 }
 
 /// Whether a batch's unsupported fields can be named in the toast or only counted.

@@ -1,6 +1,6 @@
 # Plan: Move the library database from sqlx to rusqlite
 
-Status: **Phase 0 complete** · Owner: Kenan · Created: 2026-11-04
+Status: **Phase 1 complete** · Owner: Kenan · Created: 2026-11-04
 
 > **Validated 2026-11-04** against `8fe1eb93` (`chore/deps-and-fixes`) with three read-only inventories:
 >
@@ -154,9 +154,9 @@ Everything is in `crates/melodia-store/src/database/` unless noted.
   - **Result (2026-11-04):** `melodia.db-wal` survives quit today, so Phase 4's folded WAL is new behaviour.
 - **Docs:** none. `sqlx.md`'s "`libsqlite3-sys` is version-ranged" stays true.
 
-## Phase 1: Store-owned test seams; the pools go crate-private
+## Phase 1: Store-owned test seams; the pools go crate-private ✅
 
-The 56 statements outside the store that name sqlx are all test seeding and readback:
+The 54 call sites outside the store that name sqlx (56 statements, `cross_tier.rs`'s `id_of` running three) are all test seeding and readback:
 - 15 test files under `crates/melodia-app/src/`;
 - `crates/melodia/tests/cross_tier.rs`;
 - `crates/melodia/tests/headless.rs`.
@@ -164,11 +164,11 @@ The 56 statements outside the store that name sqlx are all test seeding and read
 No production code outside the store calls `db.read()` or `db.write()`.
 
 - Add a driver-neutral seam in `queries::fixtures` (`#[doc(hidden)] pub`, as the rest of `fixtures` is):
-  - an `execute` for literal SQL;
-  - typed scalar and row reads over a store-owned trait implemented for the types the tests read (`i64`, `Option<i64>`, `String`, `Option<String>`, `bool`, small tuples);
-  - test values written inline as literals.
-- Port the 56 statements to it.
-  - `play_count_flusher_tests.rs:151` closes `db.write()` directly. It moves to `DbPool::close()`, as `artist_images_tests` already does, once the test's intent is confirmed.
+  - `execute` for literal SQL, on the writer;
+  - `fetch_one`, `fetch_optional` and `fetch_all` on a reader, decoding through the store-owned `Readback` trait. It has concrete impls for the column types the tests read (`i64`, `Option<i64>`, `String`, `Option<String>`, `bool`) and generic impls for tuples of 2 to 5;
+  - test values written inline as literals, text through `quoted`, which doubles `'`. Five of the six text values are tempdir paths, which on Windows sit under the user profile.
+- Port the statements to it.
+  - `play_count_flusher_tests.rs:151` closes `db.write()` directly. It moves to `DbPool::close()`, as `artist_images_tests` already does. The test stages a failed write, and on a `test_pool` closing either pool closes both.
 - `DbPool::read()` / `write()` become `pub(crate)`.
 - Remove the `sqlx` dev-dependency from `melodia-app` and `melodia`, with their comments. `melodia`'s names `pragma_table_info`, which nothing reads.
 - **Hand test:** none; the change is test-only, and the suite is its proof.
@@ -231,7 +231,7 @@ The store and core move to rusqlite together. In working order:
    - **`test_pool()`:** one in-memory connection serving both lanes, with no reaper, since closing it would drop the database. It runs no timer at all, and tokio holds a paused current-thread clock still while a `spawn_blocking` task runs (`runtime/blocking/schedule.rs`), so a `start_paused` test no longer races the database.
    - **Statement-cache capacity:** a named constant starting at sqlx's 100, so memory and speed compare like for like. Phase 5 tunes it.
    - **A failed blocking task:** a panic is resumed, so a test reports it; a cancellation at runtime shutdown returns `AppError::DatabaseClosed`.
-3. **`rows/`.** The trait, tuple impls and the 24 core entity impls (`StoredLogoAnswer` among them), plus the store's own four rows: `CopyFacts`, `DuplicateKeyRow`, `search_name::Inputs`, `search_text::Unfilled`. `#[sqlx(flatten)]` becomes a nested `from_row`.
+3. **`rows/`.** The trait, tuple impls and the 24 core entity impls (`StoredLogoAnswer` among them), plus the store's own four rows: `CopyFacts`, `DuplicateKeyRow`, `search_name::Inputs`, `search_text::Unfilled`. `#[sqlx(flatten)]` becomes a nested `from_row`. Phase 1's `Readback` folds in here rather than keeping a second set of tuple impls: its tuples become these, and its column impls sit beside them for the seam's scalar reads.
 4. **`sql.rs`** executes on `&Connection`: static SQL cached, built SQL uncached.
 5. **Core.**
    - The `FromRow` derives and the three `#[sqlx(...)]` attributes go.

@@ -2,7 +2,7 @@
 //! is `matcher_tests`'; these hold the two reads and the dismissal sets they carry.
 
 use super::*;
-use melodia_store::database::queries::fixtures::insert_test_track;
+use melodia_store::database::queries::fixtures::{execute, insert_test_track};
 
 /// A library folder and two copies of "Song", identical files since the fixture hashes the title.
 async fn two_copies() -> Result<(DbPool, i64, i64), AppError> {
@@ -33,9 +33,7 @@ async fn a_find_groups_the_copies_of_one_song_and_never_rows_of_unknown_length()
     for path in ["/music/a/untitled.mp3", "/music/b/untitled.mp3"] {
         insert_test_track(&db, path, "Untitled", "Artist", "Album", "Rock").await?;
     }
-    sqlx::query("UPDATE tracks SET duration_ms = 0 WHERE title = 'Untitled'")
-        .execute(db.write())
-        .await?;
+    execute(&db, "UPDATE tracks SET duration_ms = 0 WHERE title = 'Untitled'").await?;
 
     let groups = find(&db).await?;
 

@@ -187,7 +187,9 @@ async fn sorted_library() -> Result<Sorted, AppError> {
     use melodia_core::entities::genre::GenreList;
     use melodia_store::database::DbPool;
     use melodia_store::database::queries;
-    use melodia_store::database::queries::fixtures::{insert_tagged_track, make_test_metadata};
+    use melodia_store::database::queries::fixtures::{
+        fetch_one, insert_tagged_track, make_test_metadata,
+    };
 
     let db = DbPool::test_pool().await?;
     queries::folder::insert_folder(&db, "/music", true).await?;
@@ -219,16 +221,9 @@ async fn sorted_library() -> Result<Sorted, AppError> {
         insert_tagged_track(&db, &path.to_string_lossy(), &meta).await?;
     }
 
-    let album = sqlx::query_scalar::<_, i64>("SELECT id FROM albums WHERE name = 'Mid'")
-        .fetch_one(db.read())
-        .await?;
-    let artist =
-        sqlx::query_scalar::<_, i64>("SELECT id FROM artists WHERE name = 'Sorted Artist'")
-            .fetch_one(db.read())
-            .await?;
-    let genre = sqlx::query_scalar::<_, i64>("SELECT id FROM genres WHERE name = 'Sorted Genre'")
-        .fetch_one(db.read())
-        .await?;
+    let album = fetch_one(&db, "SELECT id FROM albums WHERE name = 'Mid'").await?;
+    let artist = fetch_one(&db, "SELECT id FROM artists WHERE name = 'Sorted Artist'").await?;
+    let genre = fetch_one(&db, "SELECT id FROM genres WHERE name = 'Sorted Genre'").await?;
     Ok(Sorted { db, album, artist, genre })
 }
 
@@ -506,8 +501,10 @@ async fn the_favorites_keyset_sorts_as_its_songs_tab_does() -> Result<(), AppErr
 /// name the entity its join tables do.
 #[tokio::test]
 async fn a_detail_keyset_sorts_as_its_page_does() -> Result<(), AppError> {
+    use melodia_store::database::queries::fixtures::fetch_one;
+
     let db = parity_library().await?;
-    let id_of = |sql: &'static str| sqlx::query_scalar::<_, i64>(sql).fetch_one(db.read());
+    let id_of = |sql: &'static str| fetch_one::<i64>(&db, sql);
     let album = id_of("SELECT id FROM albums WHERE name = 'Banana'").await?;
     let artist = id_of("SELECT id FROM artists WHERE name = 'Mango'").await?;
     let genre = id_of("SELECT id FROM genres WHERE name = 'Pop'").await?;

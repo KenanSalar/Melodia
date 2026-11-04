@@ -10,7 +10,7 @@ use std::path::Path;
 use tempfile::TempDir;
 
 use super::*;
-use melodia_store::database::queries::fixtures::{insert_test_track, set_test_artwork};
+use melodia_store::database::queries::fixtures::{fetch_one, insert_test_track, set_test_artwork};
 
 type TestResult = Result<(), Box<dyn std::error::Error>>;
 
@@ -40,10 +40,7 @@ impl Library {
     }
 
     async fn artwork_path(&self) -> Result<Option<String>, AppError> {
-        let path = sqlx::query_scalar::<_, Option<String>>("SELECT artwork_path FROM tracks")
-            .fetch_one(self.db.read())
-            .await?;
-        Ok(path)
+        fetch_one(&self.db, "SELECT artwork_path FROM tracks").await
     }
 }
 

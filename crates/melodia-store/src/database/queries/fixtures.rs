@@ -1,4 +1,5 @@
-//! Seeded rows for the suites that need a library to query.
+//! Seeded rows for the suites that need a library to query, and the literal SQL they seed and read
+//! back with where no store function does.
 //!
 //! `#[doc(hidden)] pub` rather than `#[cfg(test)]`, and not by preference: `library`'s and
 //! `tasks`' tests seed through these, and a `cfg(test)` item cannot cross a crate boundary.
@@ -12,6 +13,8 @@ use melodia_core::entities::credits::RoleCredits;
 use melodia_core::entities::genre::GenreList;
 use melodia_core::entities::scan::{ExtractedMetadata, ReleaseTags, SortTags};
 use melodia_core::error::AppError;
+use sqlx::sqlite::{Sqlite, SqliteRow};
+use sqlx::{AssertSqlSafe, Row};
 // For the `listed_*` helpers below, which only this crate's suites call.
 #[cfg(test)]
 use {
@@ -240,3 +243,68 @@ pub async fn setup_seeded_db() -> Result<DbPool, AppError> {
 
     Ok(db)
 }
+
+/// Runs `sql` on the writer, for a state no store function seeds. Values are written into the
+/// text, [`quoted`] where they are text, so a suite outside the store never names the driver.
+pub async fn execute(db: &DbPool, sql: &str) -> Result<(), AppError> {
+    sqlx::query(AssertSqlSafe(sql)).execute(db.write()).await?;
+    Ok(())
+}
+
+/// The one row `sql` answers, read on a reader.
+pub async fn fetch_one<T: Readback>(db: &DbPool, sql: &str) -> Result<T, AppError> {
+    let row = sqlx::query(AssertSqlSafe(sql)).fetch_one(db.read()).await?;
+    Ok(T::from_row(&row)?)
+}
+
+/// The row `sql` answers, if it answers one.
+pub async fn fetch_optional<T: Readback>(db: &DbPool, sql: &str) -> Result<Option<T>, AppError> {
+    let row = sqlx::query(AssertSqlSafe(sql)).fetch_optional(db.read()).await?;
+    Ok(row.as_ref().map(T::from_row).transpose()?)
+}
+
+/// Every row `sql` answers.
+pub async fn fetch_all<T: Readback>(db: &DbPool, sql: &str) -> Result<Vec<T>, AppError> {
+    let rows = sqlx::query(AssertSqlSafe(sql)).fetch_all(db.read()).await?;
+    Ok(rows.iter().map(T::from_row).collect::<Result<_, _>>()?)
+}
+
+/// `text` as an SQL string literal, for a value [`execute`] or a read writes into its statement.
+pub fn quoted(text: &str) -> String {
+    format!("'{}'", text.replace('\'', "''"))
+}
+
+/// What a read decodes each row into: one column, or a tuple of them in select order.
+pub trait Readback: Sized {
+    fn from_row(row: &SqliteRow) -> Result<Self, sqlx::Error>;
+}
+
+macro_rules! column_readback {
+    ($($column:ty),+) => {$(
+        impl Readback for $column {
+            fn from_row(row: &SqliteRow) -> Result<Self, sqlx::Error> {
+                row.try_get::<Self, usize>(0)
+            }
+        }
+    )+};
+}
+
+column_readback!(i64, Option<i64>, String, Option<String>, bool);
+
+macro_rules! tuple_readback {
+    ($($column:ident: $index:literal),+) => {
+        impl<$($column),+> Readback for ($($column,)+)
+        where
+            $($column: for<'r> sqlx::Decode<'r, Sqlite> + sqlx::Type<Sqlite>,)+
+        {
+            fn from_row(row: &SqliteRow) -> Result<Self, sqlx::Error> {
+                Ok(($(row.try_get::<$column, usize>($index)?,)+))
+            }
+        }
+    };
+}
+
+tuple_readback!(A: 0, B: 1);
+tuple_readback!(A: 0, B: 1, C: 2);
+tuple_readback!(A: 0, B: 1, C: 2, D: 3);
+tuple_readback!(A: 0, B: 1, C: 2, D: 3, E: 4);

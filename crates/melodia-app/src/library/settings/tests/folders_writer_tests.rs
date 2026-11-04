@@ -11,7 +11,7 @@ use tempfile::TempDir;
 
 use super::insert_validated;
 use melodia_core::error::AppError;
-use melodia_store::database::queries::fixtures::insert_test_track;
+use melodia_store::database::queries::fixtures::{fetch_one, insert_test_track};
 use melodia_store::database::{DbPool, queries};
 
 /// A real directory under `root`, since validation stats the path before it compares anything.
@@ -26,7 +26,7 @@ fn as_str(path: &Path) -> String {
 }
 
 async fn track_count(db: &DbPool) -> Result<i64, AppError> {
-    Ok(sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM tracks").fetch_one(db.read()).await?)
+    fetch_one(db, "SELECT COUNT(*) FROM tracks").await
 }
 
 #[tokio::test]

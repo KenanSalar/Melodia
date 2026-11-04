@@ -17,7 +17,9 @@ use super::*;
 use melodia_artwork::media::image::artwork;
 use melodia_core::error::AppError;
 use melodia_store::database::DbPool;
-use melodia_store::database::queries::fixtures::{insert_test_track, make_test_metadata};
+use melodia_store::database::queries::fixtures::{
+    execute, fetch_one, fetch_optional, insert_test_track, make_test_metadata, quoted,
+};
 use melodia_testkit::ASSETS_DIR;
 
 /// An mtime no file on disk can have, so a value that reaches the change proves it
@@ -33,32 +35,20 @@ async fn seed_folder(dir: &Path) -> Result<DbPool, AppError> {
 
 /// The two columns a move must not cost the user.
 async fn track_stats(db: &DbPool, id: i64) -> Result<(i64, i64), AppError> {
-    let row: (i64, i64) = sqlx::query_as("SELECT rating, play_count FROM tracks WHERE id = ?")
-        .bind(id)
-        .fetch_one(db.read())
-        .await?;
-    Ok(row)
+    fetch_one(db, &format!("SELECT rating, play_count FROM tracks WHERE id = {id}")).await
 }
 
 async fn track_id_at(db: &DbPool, path: &Path) -> Result<Option<i64>, AppError> {
-    let id: Option<i64> = sqlx::query_scalar("SELECT id FROM tracks WHERE file_path = ?")
-        .bind(path.to_string_lossy().into_owned())
-        .fetch_optional(db.read())
-        .await?;
-    Ok(id)
+    let path = quoted(&path.to_string_lossy());
+    fetch_optional(db, &format!("SELECT id FROM tracks WHERE file_path = {path}")).await
 }
 
 async fn track_count(db: &DbPool) -> Result<i64, AppError> {
-    let count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM tracks").fetch_one(db.read()).await?;
-    Ok(count)
+    fetch_one(db, "SELECT COUNT(*) FROM tracks").await
 }
 
 async fn albums_named(db: &DbPool, name: &str) -> Result<i64, AppError> {
-    let count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM albums WHERE name = ?")
-        .bind(name)
-        .fetch_one(db.read())
-        .await?;
-    Ok(count)
+    fetch_one(db, &format!("SELECT COUNT(*) FROM albums WHERE name = {}", quoted(name))).await
 }
 
 // --- the hand-off: the mtime a rename carries to the store -----------------------------------
@@ -147,10 +137,7 @@ async fn seed_ingested(
     let Some(id) = track_id_at(&db, &track).await? else {
         return Err(AppError::validation_msg("the seed ingest wrote no row"));
     };
-    sqlx::query("UPDATE tracks SET rating = 4, play_count = 7 WHERE id = ?")
-        .bind(id)
-        .execute(db.write())
-        .await?;
+    execute(&db, &format!("UPDATE tracks SET rating = 4, play_count = 7 WHERE id = {id}")).await?;
 
     Ok((db, track, id))
 }
@@ -237,7 +224,7 @@ async fn the_post_batch_sweeps_wait_for_a_real_change() -> Result<(), AppError> 
     // nothing but `prune_orphans` will retire it.
     let stranded = music.join("stranded.mp3").to_string_lossy().into_owned();
     let id = insert_test_track(&db, &stranded, "Gone", "Artist A", "Orphan Album", "Rock").await?;
-    sqlx::query("DELETE FROM tracks WHERE id = ?").bind(id).execute(db.write()).await?;
+    execute(&db, &format!("DELETE FROM tracks WHERE id = {id}")).await?;
 
     let untracked = vec![FileEvent::Removed(music.join("never-scanned.mp3"))];
     process_batch(&db, &paths, &cover_cache, untracked).await?;

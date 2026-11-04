@@ -8,7 +8,9 @@ use tokio::sync::watch;
 use super::forget_missing;
 use melodia_core::config::Paths;
 use melodia_core::error::AppError;
-use melodia_store::database::queries::fixtures::{insert_test_track, set_test_artwork};
+use melodia_store::database::queries::fixtures::{
+    execute, fetch_one, insert_test_track, quoted, set_test_artwork,
+};
 use melodia_store::database::{DbPool, queries};
 
 const STORED_NAME: &str = "33fb807d1f1b7cbb.jpg";
@@ -46,10 +48,8 @@ impl Library {
     }
 
     async fn cover(&self) -> Result<Option<String>, AppError> {
-        Ok(sqlx::query_scalar("SELECT artwork_path FROM tracks WHERE id = ?")
-            .bind(self.track)
-            .fetch_one(self.db.read())
-            .await?)
+        let id = self.track;
+        fetch_one(&self.db, &format!("SELECT artwork_path FROM tracks WHERE id = {id}")).await
     }
 }
 
@@ -94,17 +94,14 @@ async fn an_artist_image_under_a_moved_data_folder_is_found_in_its_own_store()
     let library = Library::new().await?;
     let current = library.paths.artists_dir.join(STORED_NAME);
     std::fs::write(&current, b"a photo")?;
-    sqlx::query("UPDATE artists SET image_path = ? WHERE name = 'Artist'")
-        .bind(as_str(&library.moved_root("artists", STORED_NAME)))
-        .execute(library.db.write())
+    let moved = quoted(&as_str(&library.moved_root("artists", STORED_NAME)));
+    execute(&library.db, &format!("UPDATE artists SET image_path = {moved} WHERE name = 'Artist'"))
         .await?;
 
     forget_missing(&library.db, &library.paths, &library.restoring).await?;
 
     let image: Option<String> =
-        sqlx::query_scalar("SELECT image_path FROM artists WHERE name = 'Artist'")
-            .fetch_one(library.db.read())
-            .await?;
+        fetch_one(&library.db, "SELECT image_path FROM artists WHERE name = 'Artist'").await?;
     assert_eq!(image, Some(as_str(&current)));
     Ok(())
 }
@@ -156,17 +153,17 @@ async fn clearing_a_cover_hands_the_album_one_a_sibling_still_holds() -> Result<
     .await?;
     library.set_cover(library.track, &gone).await?;
     library.set_cover(sibling, &held).await?;
-    sqlx::query("UPDATE albums SET artwork_path = ? WHERE name = 'Album'")
-        .bind(as_str(&gone))
-        .execute(library.db.write())
-        .await?;
+    let gone_cover = quoted(&as_str(&gone));
+    execute(
+        &library.db,
+        &format!("UPDATE albums SET artwork_path = {gone_cover} WHERE name = 'Album'"),
+    )
+    .await?;
 
     forget_missing(&library.db, &library.paths, &library.restoring).await?;
 
     let album: Option<String> =
-        sqlx::query_scalar("SELECT artwork_path FROM albums WHERE name = 'Album'")
-            .fetch_one(library.db.read())
-            .await?;
+        fetch_one(&library.db, "SELECT artwork_path FROM albums WHERE name = 'Album'").await?;
     assert_eq!(album, Some(as_str(&held)));
     Ok(())
 }

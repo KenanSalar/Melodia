@@ -5,6 +5,7 @@ use super::*;
 use crate::state::fixtures::TestPlayback;
 use melodia_core::error::AppError;
 use melodia_engine::player::engine::state::{lock_state, with_state_emit};
+use melodia_store::database::queries::fixtures::execute;
 
 /// A fixture with `count` staged tracks queued from the head and no record in the window, as a
 /// queue edit the task has yet to answer leaves it.
@@ -50,9 +51,8 @@ async fn only_a_library_tick_reads_a_held_record_again() -> Result<(), AppError>
     for (wake, expected) in rows {
         let (fx, ids) = queued_unfetched(3).await?;
         fill_window_of(&fx, WindowFill::Missing).await?;
-        sqlx::query("UPDATE tracks SET title = 'Retagged' WHERE id = ?")
-            .bind(ids[1])
-            .execute(fx.ctx.db.write())
+        let retagged = ids[1];
+        execute(&fx.ctx.db, &format!("UPDATE tracks SET title = 'Retagged' WHERE id = {retagged}"))
             .await?;
 
         fill_window_of(&fx, wake).await?;
