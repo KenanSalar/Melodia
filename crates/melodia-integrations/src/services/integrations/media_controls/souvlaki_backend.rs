@@ -123,13 +123,6 @@ fn create_controls(
         }
     })?;
 
-    // macOS hides the shuffle command until a state is published, and `sync` publishes only a
-    // move away from the off `Published` starts at.
-    #[cfg(target_os = "macos")]
-    if let Err(e) = controls.set_shuffle(Some(false)) {
-        log::debug!("Failed to enable the shuffle command: {}", describe(&e));
-    }
-
     Ok(controls)
 }
 
@@ -160,10 +153,9 @@ fn translate_event(event: MediaControlEvent) -> Option<PlayerEvent> {
             log::debug!("Media controls OpenUri requested (ignored): {uri}");
             None
         }
-        // The enum is `#[non_exhaustive]`: a variant a later souvlaki adds reaches nothing until
-        // it is mapped above.
-        _ => {
-            log::debug!("Unmapped media control event ignored");
+        // `#[non_exhaustive]`: a variant a later souvlaki adds goes unanswered until mapped above.
+        other => {
+            log::debug!("Unmapped media control event ignored: {other:?}");
             None
         }
     }

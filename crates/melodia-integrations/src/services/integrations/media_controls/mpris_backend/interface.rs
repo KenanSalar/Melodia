@@ -196,14 +196,14 @@ impl Player {
 
     #[zbus(property)]
     fn shuffle(&self) -> bool {
-        self.published.lock().shuffle_enabled
+        self.published.lock().shuffle_enabled.unwrap_or(false)
     }
 
     /// Recorded before the player applies it, for `set_volume`'s reason. An empty queue refuses
     /// to shuffle, and the sync that follows puts the answer back.
     #[zbus(property)]
     fn set_shuffle(&self, shuffle: bool) {
-        self.published.lock().shuffle_enabled = shuffle;
+        self.published.lock().shuffle_enabled = Some(shuffle);
         forward(&self.events, PlayerEvent::SetShuffle(shuffle));
     }
 

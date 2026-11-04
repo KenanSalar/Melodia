@@ -89,7 +89,9 @@ pub(super) struct Published {
     pub(super) position_ms: u64,
     pub(super) volume: u32,
     pub(super) is_muted: bool,
-    pub(super) shuffle_enabled: bool,
+    /// `None` until first published, so the first sync always flags it: souvlaki leaves the
+    /// macOS shuffle command disabled until a state is.
+    pub(super) shuffle_enabled: Option<bool>,
     pub(super) repeat_mode: Option<RepeatMode>,
     pub(super) rate: Option<PublishedRate>,
 }
@@ -111,7 +113,7 @@ impl Published {
             status: self.status != Some(status),
             position: self.position_ms != vm.position_ms,
             volume: self.volume != vm.volume || self.is_muted != vm.is_muted,
-            shuffle: self.shuffle_enabled != vm.shuffle_enabled,
+            shuffle: self.shuffle_enabled != Some(vm.shuffle_enabled),
             repeat: self.repeat_mode != Some(vm.repeat_mode),
             rate: self.rate != Some(PublishedRate::of(vm)),
         }
@@ -132,7 +134,7 @@ impl Published {
         self.position_ms = vm.position_ms;
         self.volume = vm.volume;
         self.is_muted = vm.is_muted;
-        self.shuffle_enabled = vm.shuffle_enabled;
+        self.shuffle_enabled = Some(vm.shuffle_enabled);
         self.repeat_mode = Some(vm.repeat_mode);
         self.rate = Some(PublishedRate::of(vm));
     }

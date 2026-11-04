@@ -312,9 +312,8 @@ winresource = "0.1.34"
 # every target; Linux takes `ksni`. The icon is created on the main thread, its menu events
 # pumped from Slint's winit loop.
 tray-icon = { version = "0.26.1", default-features = false }
-# SMTC and `MediaPlayer`. Linux serves MPRIS over `zbus` instead: souvlaki's `Position`
-# is whatever it was last pushed, and each push re-announces the playback status. Defaults
-# off, its `use_dbus` being that Linux backend, which would put `dbus` in `Cargo.lock`.
+# SMTC and `MediaPlayer`; Linux serves MPRIS itself, and `media_controls` says why. Defaults
+# off so `dbus`, which the default Linux backend pulls, stays out of `Cargo.lock`.
 souvlaki = { version = "0.9.3", default-features = false }
 
 [workspace.lints.rust]
