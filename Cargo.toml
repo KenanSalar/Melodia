@@ -243,11 +243,11 @@ open = "5.4.5"
 # The single-instance socket: one abstraction over a Linux abstract unix socket and
 # a Windows named pipe, whose *server* half would otherwise be `CreateNamedPipeW`, an
 # FFI site no Linux runner compiles. `tokio` would pull `tokio/net`, left off above.
-interprocess = "2.4.5"
+interprocess = "2.4.7"
 
 # Utilities
 rand = "0.10.3"
-lru = "0.18.5"
+lru = "0.19.0"
 # Atomic file writes (settings/queue/search-history persistence)
 tempfile = "3.27.0"
 # Several playlists export as one archive of `.m3u8` files. Deflate is the one method an
