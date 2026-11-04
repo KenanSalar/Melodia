@@ -283,7 +283,7 @@ ksni = { version = "0.3.7", default-features = false, features = ["blocking", "a
 # `mallopt` caps the per-thread arenas and pins the mmap/trim thresholds, which
 # otherwise ratchet up until nothing returns to the kernel, and `malloc_trim` hands
 # retained pages back.
-libc = "0.2.190"
+libc = "0.2.191"
 
 # Windows
 # `GetUserDefaultLocaleName`, the DWM accent values `window_border` reads out of
