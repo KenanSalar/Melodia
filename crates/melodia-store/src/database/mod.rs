@@ -1,9 +1,9 @@
 mod backup;
 mod collation;
+mod migrate;
 pub mod queries;
 
 use sqlx::AssertSqlSafe;
-use sqlx::migrate::Migrate;
 use sqlx::sqlite::{
     SqliteConnectOptions, SqliteConnection, SqliteJournalMode, SqlitePool, SqlitePoolOptions,
 };
@@ -20,9 +20,6 @@ use melodia_core::error::{AppError, describe};
 /// `.persistent(false)`) for a larger parameter array resident per statement, so move it against a
 /// profile of a first scan on a large library.
 pub const MAX_BINDS_PER_STATEMENT: usize = 999;
-
-/// sqlx's default, which the `Migrate` methods take explicitly.
-const MIGRATIONS_TABLE: &str = "_sqlx_migrations";
 
 /// The fts5 compaction [`DbPool::close`] issues, named so the test proving it still runs binds the
 /// same string: fts5 rejects an unknown command only at step time, and `close` can only log that.
@@ -385,43 +382,27 @@ pub async fn init_database(paths: &Paths) -> Result<DbPool, AppError> {
         .connect_with(write_opts)
         .await?;
 
-    let migrator = sqlx::migrate!("../../migrations");
-    let (has_pending, applied_version) = {
-        let mut conn = write_pool.acquire().await?;
-        conn.ensure_migrations_table(MIGRATIONS_TABLE).await?;
-        let applied: std::collections::HashSet<i64> = conn
-            .list_applied_migrations(MIGRATIONS_TABLE)
-            .await?
-            .into_iter()
-            .map(|m| m.version)
-            .collect();
-
-        let pending = migrator
-            .iter()
-            .filter(|m| !m.migration_type.is_down_migration())
-            .any(|m| !applied.contains(&m.version));
-
-        // The scope releases the single write connection.
-        (pending, applied.iter().max().copied().unwrap_or(0))
-    };
+    // The pool holds one write connection, so each acquire is a temporary its statement releases.
+    let pending = migrate::pending(&mut *write_pool.acquire().await?).await?;
 
     // Fatal on failure: a migration that runs without a recovery point is worse
     // than a boot that stops and says why.
-    let backup_path = if has_pending && db_existed {
-        Some(backup::create(&write_pool, &paths.backups_dir, applied_version).await?)
+    let backup_path = if !pending.is_empty() && db_existed {
+        Some(backup::create(&write_pool, &paths.backups_dir, pending.applied_version()).await?)
     } else {
         None
     };
     backup::maintain(&paths.data_dir, &paths.backups_dir);
 
-    if let Err(e) = migrator.run(&write_pool).await {
+    let migrated = migrate::apply(&mut *write_pool.acquire().await?, pending).await;
+    if let Err(e) = migrated {
         if let Some(path) = &backup_path {
             log::error!(
                 "Migration failed — the database as it stood before is at {}",
                 path.display()
             );
         }
-        return Err(e.into());
+        return Err(e);
     }
 
     // Existing rows only, new writes going through `canonicalize_path`: Browse's path-keyed map
@@ -469,7 +450,11 @@ impl DbPool {
 
         let pool = SqlitePoolOptions::new().max_connections(1).connect_with(opts).await?;
 
-        sqlx::migrate!("../../migrations").run(&pool).await?;
+        {
+            let mut conn = pool.acquire().await?;
+            let pending = migrate::pending(&mut conn).await?;
+            migrate::apply(&mut conn, pending).await?;
+        }
 
         Ok(DbPool { read: pool.clone(), write: pool })
     }

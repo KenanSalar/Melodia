@@ -36,6 +36,9 @@ log.workspace = true
 [target.'cfg(target_os = "windows")'.dependencies]
 dunce.workspace = true
 
+[build-dependencies]
+sha2.workspace = true
+
 [dev-dependencies]
 melodia-testkit = { path = "../melodia-testkit" }
 # The scan and watcher suites build a library under a throwaway root.

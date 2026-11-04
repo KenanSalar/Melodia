@@ -7,7 +7,7 @@ pub enum AppError {
     Database(#[from] sqlx::Error),
 
     #[error("Migration error: {0}")]
-    Migration(#[from] sqlx::migrate::MigrateError),
+    Migration(#[from] MigrationError),
 
     #[error("IO error: {0}")]
     Io(#[from] std::io::Error),
@@ -83,6 +83,27 @@ pub enum AppError {
         msg: String,
         #[source]
         source: Option<BoxedSource>,
+    },
+}
+
+/// Why a boot stopped short of the schema this build expects, by the version it stopped at.
+#[derive(Debug, thiserror::Error)]
+pub enum MigrationError {
+    #[error("migration {0} is recorded as failed")]
+    Dirty(i64),
+
+    #[error("migration {0} was edited after it was applied")]
+    Edited(i64),
+
+    /// The database was migrated by a newer build.
+    #[error("migration {0} was applied but is not in this build")]
+    Unknown(i64),
+
+    #[error("migration {version} failed")]
+    Apply {
+        version: i64,
+        #[source]
+        source: sqlx::Error,
     },
 }
 

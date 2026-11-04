@@ -2,7 +2,7 @@
 //! [`melodia_artwork::media::image::artwork::store_image`] bounds only what a scan writes, and
 //! `scanner::file_is_current` never re-derives an unchanged track's cover.
 //!
-//! **Not an `SQLx` migration.** It is a slow pass over a rebuildable cache, and a migration failure
+//! **Not a migration.** It is a slow pass over a rebuildable cache, and a migration failure
 //! is fatal at boot. Nothing is deleted here: a re-encoded cover lands under a new hash, and the
 //! file it replaces is left for the sweep.
 

@@ -1,6 +1,6 @@
 # Plan: Move the library database from sqlx to rusqlite
 
-Status: **Phase 1 complete** · Owner: Kenan · Created: 2026-11-04
+Status: **Phase 2 complete** · Owner: Kenan · Created: 2026-11-04
 
 > **Validated 2026-11-04** against `8fe1eb93` (`chore/deps-and-fixes`) with three read-only inventories:
 >
@@ -120,7 +120,7 @@ Everything is in `crates/melodia-store/src/database/` unless noted.
 | `pool/lane.rs` | One lane: semaphore, idle stack with last-used times, run-on-blocking-pool (permit and connection moving into the closure together), the reaper (ticking every `IDLE_TIMEOUT` from the lane's creation, as sqlx's does and `heap_trim` assumes, and closing on the blocking pool, since the last close checkpoints the WAL) | Concurrency and idle-close semantics |
 | `pool/open.rs` | Opening a connection per role (writer, reader, in-memory test): flags, pragmas as `init_database` sets them (writer: WAL, `foreign_keys`, `synchronous=NORMAL`, `cache_size`, `temp_store`, `mmap_size`; readers the same without `synchronous`; test: `foreign_keys`, `synchronous`, `temp_store`), `busy_timeout`, collation, statement-cache capacity | Connection configuration |
 | `migrate.rs` | Comparing checksums, validation against `_sqlx_migrations`, applying pending migrations, the pending check the backup asks | Migration semantics |
-| `crates/melodia-store/build.rs` | Embedding the workspace root's `migrations/*.sql` (`../../migrations`, the path `sqlx::migrate!` reads) in version order with their SHA-384 checksums, `rerun-if-changed` on that directory, the sqlx-style description, refusing a `-- no-transaction` header or `.up`/`.down` names | The migrations directory's shape |
+| `crates/melodia-store/build.rs` | Embedding the workspace root's `migrations/*.sql` (`../../migrations`, the path `sqlx::migrate!` reads) in version order with their SHA-384 checksums, `rerun-if-changed` on that directory, the sqlx-style description, refusing anything there but `<version>_<description>.sql` files (dotfiles skipped), a `-- no-transaction` header, `.up`/`.down` names, a version below 1 and a duplicate version | The migrations directory's shape |
 | `sql.rs` | `Sql` (text plus `Param`s), `push` / `push_trusted` / `push_bind` / values lists, and the execution vocabulary (`fetch_all`, `fetch_optional`, `fetch_one`, `fetch_scalar`, `execute`) for static and built SQL | How SQL is assembled and run |
 | `rows/mod.rs` | The store's `FromRow` trait and tuple impls | Row decoding |
 | `rows/{track,library,radio,duplicates}.rs` | Entity impls, grouped as `melodia-core/src/entities/` groups them | An entity's columns |
@@ -174,16 +174,20 @@ No production code outside the store calls `db.read()` or `db.write()`.
 - **Hand test:** none; the change is test-only, and the suite is its proof.
 - **Docs:** none.
 
-## Phase 2: Our own migrator, history unchanged
+## Phase 2: Our own migrator, history unchanged ✅
 
 - `build.rs` embeds the directory, and `migrate.rs` replaces `sqlx::migrate!` and the `Migrate` trait calls in `init_database` and `test_pool` (Decision 3). Its SQL still runs through sqlx until Phase 4.
-- Add `sha2` 0.11.1 as a store build-dependency. Dropping sqlx's `migrate` feature drops `sha2` 0.10.9, which only `sqlx-core` pulls in (`cargo tree -i`).
+- Add `sha2` 0.11.1 as a store build-dependency. `sha2` 0.10.9 stays until Phase 4: sqlx 0.9.0's manifest turns on `sqlx-core`'s `migrate` whatever features the workspace names. Dropping `macros` takes `sqlx-mysql`, `sqlx-postgres` and their crypto dependencies out of `Cargo.lock`.
 - `AppError::Migration` holds `MigrationError`. `Apply`'s source is `sqlx::Error` until the cutover.
-- Drop sqlx's `migrate` and `macros` features, and rewrite the comment block above the workspace dependency, which exists to explain `macros`.
+- Drop sqlx's `migrate` and `macros` features, and delete the comment block above the workspace dependency, whose only subject was `macros`.
 - **Hand test:**
   1. **The dev library boots with nothing pending and nothing mismatched.** That proves the checksums equal sqlx's on a real history.
   2. **A fresh data folder applies all 14.** Its `_sqlx_migrations` rows match a sqlx-applied database's in version, description, success and checksum, compared with `/usr/bin/sqlite3`; `installed_on` and `execution_time` differ by nature.
   3. **A database whose history holds a version this build lacks refuses to boot,** as today.
+  - **Result (2026-11-05):** all three pass.
+    1. History and `backups/` are unchanged across a boot and a tray quit.
+    2. The fresh history and schema (`sqlite_master`) equal the sqlx-applied library's, every `execution_time` is positive, and no backup is taken.
+    3. Boot exits 1 with `Migration(Unknown(…))` before any backup.
 - **Docs:**
   - `CLAUDE.md`'s "sqlx checksums the file" and `code-style.md`'s "sqlx checksums the whole file" now name the migrator.
   - `sqlx.md`'s `Migrate`-trait and `sqlx.toml` bullets go, with a pointer to `migrate.rs`.

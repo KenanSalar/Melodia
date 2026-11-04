@@ -71,13 +71,8 @@ paths:
 - Index columns used in WHERE, JOIN, and ORDER BY clauses
 - Use partial indexes for filtered queries (e.g., `WHERE deleted = 0`)
 - Avoid over-indexing — every index slows writes
-- `Migrate` trait methods (`ensure_migrations_table`, `list_applied_migrations`,
-  `dirty_version`, …) take a `table_name` arg in 0.9 — pass the default `_sqlx_migrations` unless
-  relocated; `Migrator` builder methods (`set_ignore_missing`, `set_locking`) return `&mut Self`
-- A per-crate `sqlx.toml` (0.9) can relocate the migrations table (`[migrate] table-name`), set
-  global type overrides, and rename the database-URL env var for multi-database workspaces —
-  changing the table name on a live database loses migration history unless the old table is
-  copied first
+- **Melodia migrates through `database::migrate`, not `sqlx::migrate!`**, over sqlx's
+  `_sqlx_migrations` table and row format; its `//!` says why the format stays
 
 ## Performance
 
