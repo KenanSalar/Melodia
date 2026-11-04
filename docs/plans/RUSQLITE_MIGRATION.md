@@ -1,6 +1,6 @@
 # Plan: Move the library database from sqlx to rusqlite
 
-Status: **proposed** · Owner: Kenan · Created: 2026-11-04
+Status: **Phase 0 complete** · Owner: Kenan · Created: 2026-11-04
 
 > **Validated 2026-11-04** against `8fe1eb93` (`chore/deps-and-fixes`) with three read-only inventories:
 >
@@ -145,13 +145,13 @@ Everything is in `crates/melodia-store/src/database/` unless noted.
 - **Existing tests:** a test the phase breaks is brought to the new truth in that phase. New tests wait for the Tests phase.
 - **Hand tests** run in the dev data folder (`~/.local/share/Melodia-dev`), backed up first.
 
-## Phase 0: The newest SQLite sqlx accepts
+## Phase 0: The newest SQLite sqlx accepts ✅
 
 - `cargo update -p libsqlite3-sys`: 0.30.1 to 0.37.0, SQLite 3.46.0 to 3.51.3. The dry run confirms this is the whole change.
 - Delete the stale `.gitignore` block (lines 28-31), which says `.sqlx/` is committed. No `.sqlx/` exists, and no query macro reads one.
 - **Hand test:** boot the dev library, search, rescan a folder, quit. After quit, note whether `melodia.db-wal` is left behind.
-  - Today's `close()` shuts the writer before the readers (`mod.rs:288-297`), so the writer is not the last connection, and a read-only last connection can't checkpoint. The WAL probably survives quit today; that is inferred, not tested.
-  - Phase 4's quit check then knows whether a folded WAL is new.
+  - Today's `close()` shuts the writer before the readers (`mod.rs:288-297`), so the writer is not the last connection, and a read-only last connection can't checkpoint.
+  - **Result (2026-11-04):** `melodia.db-wal` survives quit today, so Phase 4's folded WAL is new behaviour.
 - **Docs:** none. `sqlx.md`'s "`libsqlite3-sys` is version-ranged" stays true.
 
 ## Phase 1: Store-owned test seams; the pools go crate-private
