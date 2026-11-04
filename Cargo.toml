@@ -239,7 +239,7 @@ semver = "1.0.28"
 # OS integrations
 rfd = "0.17.2"
 # Hands a path to the OS default handler, for "Open Containing Folder".
-open = "5.4.4"
+open = "5.4.5"
 # The single-instance socket: one abstraction over a Linux abstract unix socket and
 # a Windows named pipe, whose *server* half would otherwise be `CreateNamedPipeW`, an
 # FFI site no Linux runner compiles. `tokio` would pull `tokio/net`, left off above.
