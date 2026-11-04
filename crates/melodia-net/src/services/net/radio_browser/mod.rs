@@ -9,6 +9,7 @@ mod model;
 mod query;
 
 use std::collections::BTreeMap;
+use std::error::Error as _;
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -37,6 +38,13 @@ const REQUEST_TIMEOUT: Duration = Duration::from_secs(20);
 /// The widest answer is the full country or language facet list, thousands of short objects.
 /// Generous because a mirror may add fields, bounded because a mirror is a third party.
 const DIRECTORY_MAX_BYTES: u64 = 16 * 1024 * 1024;
+
+/// Sends after the first that a connection reset earns: a mirror under load resets some new
+/// connections at the handshake while letting others through.
+const RESET_RETRIES: u32 = 2;
+
+/// The wait before the first retry, doubled before each one after it.
+const RESET_RETRY_DELAY: Duration = Duration::from_millis(500);
 
 pub async fn search(
     client: &reqwest::Client,
@@ -83,10 +91,7 @@ pub async fn count_click(client: &reqwest::Client, station_uuid: &str) -> Result
 }
 
 async fn count_click_at(client: &reqwest::Client, url: &str) -> Result<(), AppError> {
-    let response = client
-        .get(url)
-        .timeout(REQUEST_TIMEOUT)
-        .send()
+    let response = send(client.get(url).timeout(REQUEST_TIMEOUT))
         .await
         .map_err(|e| AppError::network("Radio directory click request failed", e))?;
 
@@ -247,11 +252,7 @@ async fn get_json<T: serde::de::DeserializeOwned>(
     params: &BTreeMap<&'static str, String>,
     what: &str,
 ) -> Result<T, AppError> {
-    let response = client
-        .get(url)
-        .query(params)
-        .timeout(REQUEST_TIMEOUT)
-        .send()
+    let response = send(client.get(url).query(params).timeout(REQUEST_TIMEOUT))
         .await
         .map_err(|e| AppError::network(format!("Radio directory {what} request failed"), e))?;
 
@@ -271,6 +272,41 @@ async fn get_json<T: serde::de::DeserializeOwned>(
 
     serde_json::from_slice(&body)
         .map_err(|e| AppError::network(format!("Failed to parse radio directory {what}"), e))
+}
+
+/// Sends `request`, again after a pause each time the directory resets the connection. Only a
+/// reset is retried: it arrives at once, where a retried connect timeout would double the wait on
+/// a dead network.
+async fn send(request: reqwest::RequestBuilder) -> reqwest::Result<reqwest::Response> {
+    let mut delay = RESET_RETRY_DELAY;
+    for _ in 0..RESET_RETRIES {
+        let Some(attempt) = request.try_clone() else {
+            break;
+        };
+        match attempt.send().await {
+            Err(e) if reset_while_connecting(&e) => {
+                tokio::time::sleep(delay).await;
+                delay *= 2;
+            }
+            outcome => return outcome,
+        }
+    }
+    request.send().await
+}
+
+/// A reset before the request went out, so sending it again can't count a vote or a click twice.
+fn reset_while_connecting(error: &reqwest::Error) -> bool {
+    error.is_connect()
+        && std::iter::successors(error.source(), |&cause| cause.source())
+            .filter_map(|cause| cause.downcast_ref::<std::io::Error>())
+            .any(is_reset)
+}
+
+/// hyper-rustls wraps a handshake failure in `io::Error::other`, whose `source` skips the error
+/// it wraps, so the kind is read off the wrapped one where there is one.
+fn is_reset(error: &std::io::Error) -> bool {
+    let wrapped = error.get_ref().and_then(|inner| inner.downcast_ref::<std::io::Error>());
+    wrapped.unwrap_or(error).kind() == std::io::ErrorKind::ConnectionReset
 }
 
 #[cfg(test)]
