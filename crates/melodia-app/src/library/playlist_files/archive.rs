@@ -149,7 +149,8 @@ pub fn read<R: Read + Seek>(reader: R) -> Result<Contents, AppError> {
 ///
 /// `None` for a directory. A name that climbs out of the archive is an error, so it is counted
 /// like any unreadable entry: used, it would pick the folder its playlist's relative paths resolve
-/// against. An absolute one comes back with its root stripped, so it lands inside too.
+/// against. An absolute one comes back with its root stripped, so it lands inside too. On Windows a
+/// name no file there can carry, such as `CON.m3u8` or one holding a `?`, is an error too.
 fn read_entry<R: Read + Seek>(
     archive: &mut ZipArchive<R>,
     index: usize,

@@ -3,12 +3,13 @@
 
 #[cfg(target_os = "linux")]
 use std::sync::LazyLock;
-use std::sync::Mutex;
 use std::sync::atomic::{AtomicBool, Ordering};
 
 use slint::ComponentHandle;
+use slint::winit_030::WinitWindowAccessor;
 
 use crate::ui::shell::event_sink::SlintEventSink;
+use crate::ui::window_chrome::geometry::{self, Reshow};
 use melodia_app::services::updater;
 use melodia_app::state::AppState;
 #[cfg(target_os = "linux")]
@@ -33,13 +34,10 @@ static WINDOW_VISIBLE: AtomicBool = AtomicBool::new(true);
 /// Close-to-tray falls back to quitting without a tray, or it would strand a hidden window.
 static TRAY_ACTIVE: AtomicBool = AtomicBool::new(false);
 
-/// Captured the instant the window is hidden, re-applied on the next show: hiding destroys
-/// the winit window, and Slint's first layout pass on the recreated one snaps to the
-/// content-preferred width and lets the compositor re-place it.
-static SAVED_WINDOW_GEOM: Mutex<Option<(slint::PhysicalSize, slint::PhysicalPosition)>> =
-    Mutex::new(None);
+/// Set by a tray hide and taken by the next show, which without it is restoring from a minimize.
+static HIDDEN_TO_TRAY: AtomicBool = AtomicBool::new(false);
 
-/// How many timer ticks a show re-asserts the saved geometry for.
+/// How many timer ticks a rebuilt window's size is re-asserted for.
 const RESTORE_ATTEMPTS: u8 = 8;
 
 /// Asks the Linux subscriber, which owns the tray, to re-read the panel under it.
@@ -80,72 +78,99 @@ pub fn is_window_visible() -> bool {
     WINDOW_VISIBLE.load(Ordering::Relaxed)
 }
 
-/// Hides the window to the tray, snapshotting its geometry for the show. A caller inside a winit
-/// `WindowEvent` dispatch posts it: there the dispatcher still borrows the window and Slint logs
-/// "references to the window still exist".
+/// Hides the window to the tray. A caller inside a winit `WindowEvent` dispatch posts it: there the
+/// dispatcher still borrows the window and Slint logs "references to the window still exist".
 pub fn hide_window(ui: &AppWindow) {
-    let window = ui.window();
-    if let Ok(mut slot) = SAVED_WINDOW_GEOM.lock() {
-        *slot = Some((window.size(), window.position()));
-    }
-    match window.hide() {
-        Ok(()) => set_window_visible(ui, false),
+    match ui.window().hide() {
+        Ok(()) => {
+            HIDDEN_TO_TRAY.store(true, Ordering::Relaxed);
+            set_window_visible(ui, false);
+        }
         Err(e) => log::warn!("tray: failed to hide the window: {}", describe(&e)),
     }
 }
 
-/// Shows the window at its pre-hide geometry. A saved geometry means `hide_window` unmapped it;
-/// none means the titlebar minimized it, and Wayland has no client-side un-minimize
-/// (`set_minimized` has no inverse and `focus_window` is a no-op), so the way back is `hide()` +
-/// `show()`.
+/// Shows the window again. Restoring from a minimize goes through `hide()` first, Wayland having
+/// no client-side un-minimize (`set_minimized` has no inverse and `focus_window` is a no-op).
 ///
-/// Both end in a `set_size`, setting `has_explicit_size` against Slint's first layout snapping to
-/// the minimum, and a timer re-asserting it between frames: resizing mid-dispatch desyncs the
-/// renderer.
+/// Only a Wayland hide tears the window down, so only there is it rebuilt. A window that survived
+/// keeps its own size, position and maximized state, and writing its position back would move it
+/// by the frame's height on X11.
 fn show_window(ui: &AppWindow) {
     let window = ui.window();
-    let from_tray_hide = SAVED_WINDOW_GEOM.lock().ok().and_then(|mut slot| slot.take());
+    if !HIDDEN_TO_TRAY.swap(false, Ordering::Relaxed)
+        && let Err(e) = window.hide()
+    {
+        log::warn!("tray: hide-for-restore failed: {}", describe(&e));
+        return;
+    }
 
-    let geom = if let Some(g) = from_tray_hide {
-        if let Err(e) = window.show() {
-            log::warn!("tray: failed to show the window: {}", describe(&e));
-            return;
-        }
-        g
-    } else {
-        // Snapshot first: the hide tears the surface down.
-        let g = (window.size(), window.position());
-        if let Err(e) = window.hide() {
-            log::warn!("tray: hide-for-restore failed: {}", describe(&e));
-            return;
-        }
-        if let Err(e) = window.show() {
-            log::warn!("tray: failed to show the window: {}", describe(&e));
-            return;
-        }
-        g
-    };
-
-    let (size, position) = geom;
-    window.set_size(size);
-    window.set_position(position);
-    log::debug!(
-        "tray: restoring window geometry {}x{} @ {},{}",
-        size.width,
-        size.height,
-        position.x,
-        position.y
-    );
-    reschedule_geometry_restore(ui.as_weak(), size, position, RESTORE_ATTEMPTS);
+    let recreated = window.with_winit_window(|_| ()).is_none();
+    let reshow = if recreated { geometry::reshow() } else { None };
+    if let Err(e) = window.show() {
+        log::warn!("tray: failed to show the window: {}", describe(&e));
+        return;
+    }
+    if let Some(reshow) = reshow {
+        rebuild(ui, reshow);
+    }
+    #[cfg(target_os = "linux")]
+    if !recreated {
+        activate_for_user(ui);
+    }
 
     set_window_visible(ui, true);
 }
 
-/// Bring the window to the user, whatever put it out of reach. Hidden — tray or minimize —
-/// goes through [`show_window`], the only path that knows about `SAVED_WINDOW_GEOM`.
-/// Merely buried is the window server's business, and Wayland gives a client no say.
+/// On X11 a window manager focuses only what is new or what asks, and a minimized window mapped
+/// again is neither. The tray click is the user's, so the window asks as a tray icon does.
+#[cfg(target_os = "linux")]
+fn activate_for_user(ui: &AppWindow) {
+    use slint::winit_030::winit::platform::x11::WindowExtX11;
+
+    ui.window().with_winit_window(WindowExtX11::activate_for_user);
+}
+
+/// Sizes a window Wayland re-created before the event loop builds it: the size lands in its
+/// attributes, against Slint's first layout snapping it to the minimum, and is the one
+/// un-maximizing returns to. A restored window's size is re-asserted between frames too, resizing
+/// mid-dispatch desyncing the renderer.
+fn rebuild(ui: &AppWindow, reshow: Reshow) {
+    let window = ui.window();
+    log::debug!("tray: rebuilding the window as {reshow:?}");
+    match reshow {
+        Reshow::Restored(size) => {
+            let size = size.to_physical(window.scale_factor());
+            window.set_size(size);
+            reschedule_size_restore(ui.as_weak(), size, RESTORE_ATTEMPTS);
+        }
+        Reshow::Maximized { restore_size } => {
+            window.set_size(restore_size);
+            maximize_once_built(ui.as_weak());
+        }
+    }
+}
+
+/// Through winit, once the event loop has built the window: Slint's own `set_maximized` is
+/// swallowed, its cached flag still `true` from before the hide.
+fn maximize_once_built(weak: slint::Weak<AppWindow>) {
+    if let Err(e) = slint::spawn_local(async move {
+        let Some(ui) = weak.upgrade() else { return };
+        match ui.window().winit_window().await {
+            Ok(window) => window.set_maximized(true),
+            Err(e) => log::warn!("tray: re-maximize: {}", describe(&e)),
+        }
+    }) {
+        log::warn!("tray: re-maximize: schedule: {}", describe(&e));
+    }
+}
+
+/// Bring the window to the user, whatever put it out of reach. Hidden, by the tray or a minimize,
+/// goes through [`show_window`], the only path that tells the two apart and rebuilds a window
+/// Wayland re-created. Merely buried is the window server's business, and Wayland gives a client
+/// no say.
 pub fn raise_window(ui: &AppWindow) {
-    use slint::winit_030::{WinitWindowAccessor, winit::window::Window as WinitWindow};
+    use slint::winit_030::winit::window::Window as WinitWindow;
 
     if !is_window_visible() {
         show_window(ui);
@@ -154,25 +179,18 @@ pub fn raise_window(ui: &AppWindow) {
     ui.window().with_winit_window(WinitWindow::focus_window);
 }
 
-/// Re-asserts the geometry each tick until the size sticks or `tries` runs out, the winit window
-/// being recreated asynchronously after `show()`.
-fn reschedule_geometry_restore(
-    weak: slint::Weak<AppWindow>,
-    size: slint::PhysicalSize,
-    position: slint::PhysicalPosition,
-    tries: u8,
-) {
+/// Re-asserts the size each tick until it sticks or `tries` runs out, the winit window being
+/// recreated asynchronously after `show()`.
+fn reschedule_size_restore(weak: slint::Weak<AppWindow>, size: slint::PhysicalSize, tries: u8) {
     slint::Timer::single_shot(std::time::Duration::from_millis(16), move || {
         let Some(ui) = weak.upgrade() else { return };
         let window = ui.window();
-        let current = window.size();
-        if current.width == size.width && current.height == size.height {
-            return; // settled
+        if window.size() == size {
+            return;
         }
         window.set_size(size);
-        window.set_position(position);
         if tries > 1 {
-            reschedule_geometry_restore(weak, size, position, tries - 1);
+            reschedule_size_restore(weak, size, tries - 1);
         }
     });
 }

@@ -242,34 +242,29 @@ fn open_window(settings: Option<&SettingsData>) -> AppResult<AppWindow> {
     Ok(app)
 }
 
+/// How the compositor finds our icon and label: Wayland's `app_id` and X11's `WM_CLASS` class both
+/// name the desktop file we install under this reverse-DNS id.
+const APP_ID: &str = "com.github.kenansalar.melodia";
+
 fn select_backend(restore_maximized: bool) -> AppResult<()> {
     let backend = slint::BackendSelector::new()
         .backend_name("winit".into())
         .with_winit_window_attributes_hook(move |attrs| {
-            let attrs = if restore_maximized { attrs.with_maximized(true) } else { attrs };
-            // How the compositor finds our icon and label. X11 matches `WM_CLASS` against the
-            // desktop file's `StartupWMClass`; Wayland matches `app_id` to a desktop file of the
-            // same basename, so it has to be the reverse-DNS id we install under.
-            #[cfg(target_os = "linux")]
-            let attrs = {
-                use slint::winit_030::winit::platform::wayland::WindowAttributesExtWayland;
-                use slint::winit_030::winit::platform::x11::WindowAttributesExtX11;
-                let attrs = WindowAttributesExtX11::with_name(attrs, "Melodia", "Melodia");
-                WindowAttributesExtWayland::with_name(
-                    attrs,
-                    "com.github.kenansalar.melodia",
-                    "com.github.kenansalar.melodia",
-                )
-            };
-            attrs
+            if restore_maximized { attrs.with_maximized(true) } else { attrs }
         });
     // Counts the loop's `NewEvents`, which is how the pump tells a Win32 drag's modal loop apart.
     #[cfg(target_os = "windows")]
     let backend =
         backend.with_winit_custom_application_handler(ui::window_chrome::parked_loop::LoopTicks);
-    backend.select().map_err(|e| AppError::io("backend selector", e))
+    backend.select().map_err(|e| AppError::io("backend selector", e))?;
+    // Not in the hook, which shapes only the first window: hiding on Wayland destroys it, and
+    // Slint applies this id to every window it creates, re-created ones included.
+    slint::set_xdg_app_id(APP_ID).map_err(|e| AppError::io("xdg app id", e))
 }
 
+#[cfg(test)]
+#[path = "tests/app_id_tests.rs"]
+mod app_id_tests;
 #[cfg(test)]
 #[path = "tests/main_order_tests.rs"]
 mod tests;

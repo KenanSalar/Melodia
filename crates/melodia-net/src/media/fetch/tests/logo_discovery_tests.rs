@@ -195,11 +195,9 @@ async fn a_site_that_refuses_the_document_still_answers_the_well_known_path() ->
 /// reads an `Err` as a moment offline and anything else as worth recording a backoff against.
 #[tokio::test]
 async fn a_site_that_cannot_be_reached_is_an_error_rather_than_a_guess() -> TestResult {
-    // Dropping the server closes its listener, so the port refuses rather than hangs.
-    let origin = {
-        let server = TestServer::start(|_| TestResponse::ok(""))?;
-        origin_of(&server)?
-    };
+    // Port 0 is "any" to `bind`, so nothing can listen on it and the connect fails. A dropped
+    // server's port is no such promise: a parallel test can be handed it and answer.
+    let origin = origin_for("http://127.0.0.1:0", "").ok_or("port 0 must parse as a site")?;
 
     let answered = icon_url(&reqwest::Client::new(), &origin).await;
 

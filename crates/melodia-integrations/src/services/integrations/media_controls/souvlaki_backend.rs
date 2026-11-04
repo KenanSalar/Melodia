@@ -138,6 +138,7 @@ fn translate_event(event: MediaControlEvent) -> Option<PlayerEvent> {
             Some(PlayerEvent::SeekTo(u64::try_from(pos.as_millis()).unwrap_or(u64::MAX)))
         }
         MediaControlEvent::SetVolume(vol) => Some(PlayerEvent::SetVolume(amplitude_to_volume(vol))),
+        MediaControlEvent::SetShuffle(on) => Some(PlayerEvent::SetShuffle(on)),
         // Relative seeks need the current position, which no `PlayerEvent` resolves.
         MediaControlEvent::Seek(_) | MediaControlEvent::SeekBy(_, _) => {
             log::debug!("Relative seek media event ignored (needs library API support)");
@@ -150,6 +151,11 @@ fn translate_event(event: MediaControlEvent) -> Option<PlayerEvent> {
         }
         MediaControlEvent::OpenUri(uri) => {
             log::debug!("Media controls OpenUri requested (ignored): {uri}");
+            None
+        }
+        // `#[non_exhaustive]`: a variant a later souvlaki adds goes unanswered until mapped above.
+        other => {
+            log::debug!("Unmapped media control event ignored: {other:?}");
             None
         }
     }
@@ -194,6 +200,14 @@ impl MediaControlsSync for MediaControlsHandle {
                 log::debug!("Failed to set media playback status: {}", describe(&e));
             }
             inner.last_timeline_push = Some(Instant::now());
+        }
+
+        // Published back once the player took it: the panel's own request changes nothing.
+        #[cfg(target_os = "macos")]
+        if changes.shuffle
+            && let Err(e) = controls.set_shuffle(Some(vm.shuffle_enabled))
+        {
+            log::debug!("Failed to set media shuffle state: {}", describe(&e));
         }
 
         inner.published.record(vm, status, changes);

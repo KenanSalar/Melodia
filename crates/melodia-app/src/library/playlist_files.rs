@@ -33,10 +33,12 @@ pub const ARCHIVE_EXTENSION: &str = "zip";
 /// In chars, well under the common 255-byte filename limit even for multi-byte names.
 const MAX_STEM_CHARS: usize = 120;
 
-/// Illegal as a stem even with an extension: `CON.m3u8` still resolves to the device.
+/// Device names Windows opens in place of a file. `zip` refuses an entry named after one on Windows,
+/// so an export that kept one wouldn't import back there.
 const WINDOWS_RESERVED: &[&str] = &[
-    "CON", "PRN", "AUX", "NUL", "COM1", "COM2", "COM3", "COM4", "COM5", "COM6", "COM7", "COM8",
-    "COM9", "LPT1", "LPT2", "LPT3", "LPT4", "LPT5", "LPT6", "LPT7", "LPT8", "LPT9",
+    "CON", "PRN", "AUX", "NUL", "CONIN$", "CONOUT$", "CLOCK$", "COM1", "COM2", "COM3", "COM4",
+    "COM5", "COM6", "COM7", "COM8", "COM9", "COM¹", "COM²", "COM³", "LPT1", "LPT2", "LPT3", "LPT4",
+    "LPT5", "LPT6", "LPT7", "LPT8", "LPT9", "LPT¹", "LPT²", "LPT³",
 ];
 
 #[derive(Debug)]
@@ -365,10 +367,6 @@ fn sanitize_stem(name: &str) -> String {
         return "playlist".to_owned();
     }
 
-    if WINDOWS_RESERVED.iter().any(|r| r.eq_ignore_ascii_case(&s)) {
-        s.insert(0, '_');
-    }
-
     if s.chars().count() > MAX_STEM_CHARS {
         s = s.chars().take(MAX_STEM_CHARS).collect();
         s = s.trim_end_matches(['.', ' ']).to_owned();
@@ -377,7 +375,19 @@ fn sanitize_stem(name: &str) -> String {
         }
     }
 
+    // After the cap, which can cut a name down to a device's.
+    if is_windows_device_name(&s) {
+        s.insert(0, '_');
+    }
+
     s
+}
+
+/// Whether Windows takes `stem` for a device, reading it up to the first dot with trailing spaces
+/// dropped: `Con.Air` opens the console.
+fn is_windows_device_name(stem: &str) -> bool {
+    let device = stem.split_once('.').map_or(stem, |(device, _)| device).trim_end_matches(' ');
+    WINDOWS_RESERVED.iter().any(|reserved| reserved.eq_ignore_ascii_case(device))
 }
 
 /// A `.m3u8` entry name no earlier entry holds, compared lowercased since the archive may be

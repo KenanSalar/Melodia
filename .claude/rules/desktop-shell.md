@@ -58,7 +58,8 @@ not at all, on at least one platform.
 ## Tray and media keys
 
 - **Hiding and showing go through `tray_bridge::hide_window` and `raise_window`**, the only paths
-  that know `SAVED_WINDOW_GEOM`, and every visibility change through `set_window_visible`, whose
-  shadow stands in for winit's `is_visible()`, `None` on Wayland.
+  that tell a tray hide from a minimize and rebuild the window a Wayland hide re-creates, and every
+  visibility change through `set_window_visible`, whose shadow stands in for winit's
+  `is_visible()`, `None` on Wayland.
 - **`player::engine::state::volume_to_amplitude` is the one volume conversion**, which the OS media
   panel and the device's own control both take; never re-roll `/ 100`.

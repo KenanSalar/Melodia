@@ -151,7 +151,7 @@ fn scripts_melodia_desktop_preserves_mime_block() {
         "Type=Application",
         "Exec=melodia %F",
         "Icon=melodia",
-        "StartupWMClass=Melodia",
+        "StartupWMClass=com.github.kenansalar.melodia",
         "Keywords=",
     ] {
         assert!(
@@ -179,7 +179,7 @@ fn desktop_template_contains_expected_keys() {
         "Name=Melodia",
         "Icon=melodia",
         "Exec=@EXEC@",
-        "StartupWMClass=Melodia",
+        "StartupWMClass=com.github.kenansalar.melodia",
         "Keywords=",
     ] {
         assert!(
@@ -260,8 +260,9 @@ fn all_desktop_sources_agree_on_mime_and_wmclass() {
             );
         }
         assert!(
-            body.contains("StartupWMClass=Melodia"),
-            "{name} missing `StartupWMClass=Melodia` — KDE shows two taskbar entries without it",
+            body.contains("StartupWMClass=com.github.kenansalar.melodia"),
+            "{name} missing `StartupWMClass=com.github.kenansalar.melodia` — KDE shows two \
+             taskbar entries without it",
         );
         assert!(
             body.contains("Keywords="),

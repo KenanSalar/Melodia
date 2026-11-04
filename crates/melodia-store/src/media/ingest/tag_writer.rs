@@ -18,11 +18,13 @@
 use std::path::Path;
 
 use lofty::config::WriteOptions;
-use lofty::file::{AudioFile, FileType, TaggedFileExt};
+use lofty::error::FileEncodingError;
+use lofty::file::{AudioFile, FileType, TaggedFile, TaggedFileExt};
+use lofty::ogg::tag::VorbisComments;
 use lofty::picture::{Picture, PictureType};
 use lofty::prelude::ItemKey;
 use lofty::tag::items::Timestamp;
-use lofty::tag::{ItemValue, Tag, TagItem, TagType};
+use lofty::tag::{ItemValue, Tag, TagExt, TagItem, TagType};
 
 use super::{metadata, rating_tags, role_tags};
 use melodia_core::entities::artist::ArtistCredit;
@@ -398,13 +400,49 @@ pub fn apply_to_file(
     let unsupported = apply_edit(tag, edit, picture);
 
     // Not in place: a tag edit routinely targets the track a deck holds open.
-    atomic_file::rewrite_with_sync(path, |target| {
-        tagged.save_to_path(target, WriteOptions::default()).map_err(|e| {
+    atomic_file::rewrite_with_sync(path, move |target| {
+        save_tags(tagged, target).map_err(|e| {
             AppError::metadata(format!("Failed to write tags to {}", path.display()), e)
         })
     })?;
 
     Ok(WriteOutcome { format, unsupported })
+}
+
+/// Saves `tagged` to `target`, a `VorbisComments` primary as [`vorbis_comments`] builds it: lofty's
+/// generic save writes that block from mapped items alone, dropping the companion.
+fn save_tags(mut tagged: TaggedFile, target: &Path) -> Result<(), FileEncodingError> {
+    let options = WriteOptions::default();
+    if tagged.primary_tag_type() == TagType::VorbisComments
+        && let Some(tag) = tagged.remove(TagType::VorbisComments)
+    {
+        return vorbis_comments(tag).save_to_path(target, options);
+    }
+    tagged.save_to_path(target, options)
+}
+
+/// `tag`'s mapped items verbatim, as lofty's generic save writes them, beside its pictures and
+/// companion. Only those two go through `VorbisComments::from`, whose merge skips a bare `RATING`
+/// and any flag it can't parse.
+fn vorbis_comments(mut tag: Tag) -> VorbisComments {
+    let vendor = tag.get_string(ItemKey::EncoderSoftware).unwrap_or_default().to_owned();
+    let mapped: Vec<(String, String)> = tag.items().filter_map(vorbis_comment).collect();
+
+    tag.retain(|_| false);
+    let mut comments = VorbisComments::from(tag);
+    comments.set_vendor(vendor);
+    for (key, value) in mapped {
+        comments.push(key, value);
+    }
+    comments
+}
+
+fn vorbis_comment(item: &TagItem) -> Option<(String, String)> {
+    let (ItemValue::Text(value) | ItemValue::Locator(value)) = item.value() else {
+        return None;
+    };
+    let key = item.key().map_key(TagType::VorbisComments)?;
+    Some((key.to_owned(), value.clone()))
 }
 
 /// Reads a file's lyrics tag, `Lyrics` before `UnsyncLyrics` as [`apply_edit`] writes them.

@@ -4,12 +4,14 @@ This directory is a **vendored, trimmed copy** of
 [winit](https://github.com/rust-windowing/winit) at the `v0.30.13` tag plus
 three commits that add Wayland file drag-and-drop support (upstream
 [winit#1881](https://github.com/rust-windowing/winit/issues/1881), unmerged),
-and a fourth that reports where a file drag is:
+a fourth that reports where a file drag is, and a fifth that lets an X11 window
+ask to be activated as a tray icon would:
 
 1. `wayland: register drag & drop events` (PR #4009 by PeakKS)
 2. `wayland-dnd: use platform-internal WindowId for v0.30.13`
 3. `wayland-dnd: percent-decode URIs in text/uri-list`
 4. `dnd: positioned drag events on Wayland, X11 and Windows`
+5. `x11: WindowExtX11::activate_for_user`
 
 The fourth adds `WindowEvent::DragEntered`, `DragMoved`, `DragDropped` and
 `DragLeft`, in the shape `v0.31.0-beta.1` and `beta.2` shipped them (PR #4079):
@@ -25,6 +27,13 @@ nothing, as on X11 and Windows.
 Upstream `master` has since replaced these events with ID-based ones whose paths
 are fetched separately (PR #4571), so retiring the fork rewrites the filter's
 four arms rather than deleting this directory alone.
+
+The fifth sends `_NET_ACTIVE_WINDOW` with source indication 2, the one EWMH
+gives pagers and other clients acting on a direct user request, where
+`focus_window` sends 1 and so passes through the window manager's
+focus-stealing prevention. Upstream has no equivalent. `ui::shell::tray_bridge`
+calls it after a tray restore, which on X11 maps a minimized window again
+without focusing it, so retiring the fork needs a replacement there.
 
 Melodia builds it via the `[patch.crates-io]` block in the repo-root
 `Cargo.toml` — see that comment for the full rationale and the upstream-bump

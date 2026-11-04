@@ -71,8 +71,8 @@ pub fn write_stars(tag: &mut Tag, stars: i32) -> bool {
         return true;
     }
 
-    // lofty encodes `ID3v2` alone, its writer converting the whole tag. Vorbis writes from a borrow
-    // that never runs the merge, so a value left to lofty lands in `RATING` verbatim, and `Ilst`
+    // lofty encodes `ID3v2` alone, its writer converting the whole tag. `tag_writer` writes Vorbis
+    // items verbatim, never through lofty's merge, so a value lands in `RATING` as given, and `Ilst`
     // passes text straight through: both are handed the number already scaled.
     let value = match tag.tag_type() {
         TagType::Id3v2 => format!("{POPM_EMAIL}|{stars}|0"),

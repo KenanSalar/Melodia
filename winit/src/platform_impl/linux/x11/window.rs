@@ -1792,6 +1792,31 @@ impl UnownedWindow {
         }
     }
 
+    /// `_NET_ACTIVE_WINDOW` as a pager sends it: source indication 2, with the last server time
+    /// seen, as KDE's `forceActiveWindow` does.
+    #[inline]
+    pub fn activate_for_user(&self) {
+        let atoms = self.xconn.atoms();
+        self.xconn
+            .send_client_msg(
+                self.xwindow,
+                self.root,
+                atoms[_NET_ACTIVE_WINDOW],
+                Some(
+                    xproto::EventMask::SUBSTRUCTURE_REDIRECT
+                        | xproto::EventMask::SUBSTRUCTURE_NOTIFY,
+                ),
+                [2, self.xconn.timestamp(), 0, 0, 0],
+            )
+            .expect_then_ignore_error("Failed to send client message");
+        if let Err(e) = self.xconn.flush_requests() {
+            tracing::error!(
+                "`flush` returned an error when activating the window. Error was: {}",
+                e
+            );
+        }
+    }
+
     #[inline]
     pub fn request_user_attention(&self, request_type: Option<UserAttentionType>) {
         let mut wm_hints =
