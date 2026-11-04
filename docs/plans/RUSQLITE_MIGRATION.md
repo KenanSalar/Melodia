@@ -156,7 +156,7 @@ Everything is in `crates/melodia-store/src/database/` unless noted.
 
 ## Phase 1: Store-owned test seams; the pools go crate-private ✅
 
-The 54 call sites outside the store that name sqlx (56 statements, `cross_tier.rs`'s `id_of` running three) are all test seeding and readback:
+The 56 call sites outside the store that name sqlx (58 statements, `cross_tier.rs`'s `id_of` running three) are all test seeding and readback:
 - 15 test files under `crates/melodia-app/src/`;
 - `crates/melodia/tests/cross_tier.rs`;
 - `crates/melodia/tests/headless.rs`.
