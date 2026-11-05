@@ -22,16 +22,16 @@ struct Migration {
 /// Every migration in `migrations/`, in version order.
 static MIGRATIONS: &[Migration] = include!(concat!(env!("OUT_DIR"), "/migrations.rs"));
 
-/// sqlx's own DDL, column for column.
-const CREATE_HISTORY: &str = "\
-    CREATE TABLE IF NOT EXISTS _sqlx_migrations (
-        version BIGINT PRIMARY KEY,
-        description TEXT NOT NULL,
-        installed_on TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-        success BOOLEAN NOT NULL,
-        checksum BLOB NOT NULL,
-        execution_time BIGINT NOT NULL
-    )";
+/// sqlx's own DDL down to its whitespace, which `sqlite_master` keeps, so a database created here
+/// reads the same as one sqlx created.
+const CREATE_HISTORY: &str = "CREATE TABLE IF NOT EXISTS _sqlx_migrations (
+    version BIGINT PRIMARY KEY,
+    description TEXT NOT NULL,
+    installed_on TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    success BOOLEAN NOT NULL,
+    checksum BLOB NOT NULL,
+    execution_time BIGINT NOT NULL
+)";
 
 const HISTORY_EXISTS: &str = "\
     SELECT EXISTS (SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = '_sqlx_migrations')";

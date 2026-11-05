@@ -1,6 +1,6 @@
 # Plan: Move the library database from sqlx to rusqlite
 
-Status: **Phase 4d complete** · Owner: Kenan · Created: 2026-11-04
+Status: **Phase 4 complete, hand test passed** · Owner: Kenan · Created: 2026-11-04
 
 > **Validated 2026-11-04** against `8fe1eb93` (`chore/deps-and-fixes`) with three read-only inventories:
 >
@@ -299,9 +299,9 @@ The store and core move to rusqlite together, over sub-phases 4a to 4d, each a c
 - [x] **4b Scan:** step 8's scan cluster, its fold (step 9) among it, with step 10 for each function it converts. Its first converted module is the template the other clusters copy, named under "Where it stands" once it lands.
 - [x] **4c The other clusters:** step 8's clusters 2 to 6, the duplicates fold, and step 10 for theirs. Done when no error is left outside the test targets, `melodia-app`'s callers included, which the compiler reaches only once the store builds.
 - [x] **4d Tests and comments:** steps 11 and 12, and the docs. Done when the three gates pass.
-- [ ] **Hand test**, below.
+- [x] **Hand test**, below.
 
-**Where it stands:** 4a to 4c have landed. 4d is done and waits on Kenan's commit, and the hand test follows on his go.
+**Where it stands:** 4a to 4d have landed and the hand test passed (below). Its one finding, the history table's DDL whitespace, is fixed in the working tree for its own commit. Phase 5 is next, each measurement on Kenan's go.
 
 - **Gates (2026-11-05):** `cargo fmt --all --check`, `cargo clippy --all-targets --locked --workspace -- -D warnings` and `cargo test --locked --workspace` pass, 4,429 tests and none failed. That was the first run of 4a to 4c's SQL, and it exposed no production defect, so nothing from the gates lands after 4d.
 - **4d's tests:**
@@ -406,6 +406,22 @@ The store and core move to rusqlite together, over sub-phases 4a to 4d, each a c
 - tag editing;
 - quit, after which the WAL folds and no `-wal` stays behind;
 - quit while a search or scan is running, which closes within `flush_tasks_and_db`'s budget: the log says "All background tasks completed" rather than the 3 s warning, and no `-wal` stays behind. A dropped read and a scan's call in flight both run to completion (Cross-cutting), and `close()` waits for them before the writer folds the WAL.
+- **Result (2026-11-05):** all pass, run unattended on Kenan's go. Audio went to a null sink, and the dev folder and WirePlumber's state were restored afterwards.
+  1. **Parity with sqlx.** Phase 3's harness ran on a snapshot of the dev library under `683febdd` (the last sqlx commit) and under `f447227f`: every list scope, order and filter, the grids, every smart rule, the lookups, search, and the write sequence (playlists with convert and restore, Not Duplicates, a duplicate removal, stations, artwork, backfills, an import, a watcher batch, folder absorb). All 7,804 answers matched, and so did both databases afterwards, row for row once "now" stamps were masked.
+  2. **The paths only the UI reaches.** A harness over `AppState` ran the duplicate finder, a real tag edit on three FLAC files, the radio logo answers, `set_artwork`, and a kept-tab removal with its undo, under both builds. They matched, but for the mtimes the tag writer stamps.
+  3. **Boot with nothing pending:** no backup, no migration, history and `backups/` unchanged.
+  4. **First scan and watcher:**
+     - A new 26-file folder scanned through the bulk path.
+     - Watcher create, rename, move, retag and delete each left the rows they should, a moved or renamed file keeping its id.
+     - A command-line import and a play from the command line landed, play counts flushed at quit.
+     - A rescan after an offline retag reparsed that one file and changed only its row.
+  5. **Older backup:** with `melodia-v20261102000000.db` live and its copy moved out of `backups/`, the boot took a fresh `VACUUM INTO` backup (openable, 13 history rows), applied `20261102000001`, and the 14 rows matched the dev library's.
+     - That boot's artwork sweep retired 21 radio logos only the newer database referenced, which is correct for the database it ran on.
+  6. **Fresh folder:** applied all 14, history equal to the sqlx-applied library's.
+     - Its `sqlite_master` differed in one place: the history table's stored DDL, indented as `CREATE_HISTORY`'s literal had been since Phase 2. Its own commit after 4d sets the literal to sqlx's whitespace, and the rerun's `sqlite_master` is byte-identical.
+  7. **Quit:** every run exited 0 through the tray with "All background tasks completed", and no `-wal` was left behind.
+     - A quit timed to the start of a 4,500-file insert loop stopped after 2,547 rows, inside the budget. It left integrity, FTS, the stats triggers and the counts intact, and the next boot resumed the remaining 1,953.
+     - A quit during a search was not staged: nothing drives typing, and the scan case puts a write in flight, which is the stronger one.
 
 **Docs:**
 - `.claude/rules/sqlx.md` becomes `rusqlite.md` with the same `paths:` globs (`rules_globs.rs` holds them). The SQLite-generic sections stay; the sqlx-specific ones go. Its in-memory `VACUUM INTO` note is re-checked under rusqlite before it is kept.
