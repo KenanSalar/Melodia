@@ -55,7 +55,7 @@ pub async fn commit_retag(
     db.transaction(move |tx| refresh_rows(tx, &files, &edit)).await
 }
 
-/// What the commit reads off its [`TagEdit`], taken ahead so the transaction owns it.
+/// What the commit needs from its [`TagEdit`] and the cached cover, owned by the transaction.
 struct EditFacts {
     artwork: ArtworkEdit,
     cleared_release: ClearedReleaseTags,

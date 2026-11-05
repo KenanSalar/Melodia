@@ -1,5 +1,7 @@
 //! A folder scan's last write.
 
+use rusqlite::Transaction;
+
 use super::{delete_tracks_by_paths_batch, prune_orphans, roll_up_covers};
 use crate::database::DbPool;
 use crate::database::queries::ingest::Ingested;
@@ -35,39 +37,9 @@ pub async fn commit_scan(
     unwalked: Unwalked,
     ingested: &Ingested,
 ) -> Result<(), AppError> {
-    let is_bulk = ingested.is_bulk();
-    let ingested_any = ingested.any();
-    let (removed, forgotten) = db
-        .transaction(move |tx| {
-            // On the bulk path the recalc below covers the purge, so its deletes skip the triggers.
-            let bulk_orphan_purge = is_bulk && !unwalked.tracks.is_empty();
-            if bulk_orphan_purge {
-                stats::disable_stats_triggers(tx)?;
-            }
-            // A row re-pointed as moved has left its orphaned path, so only the delete counts.
-            let removed = delete_tracks_by_paths_batch(tx, &unwalked.tracks)?;
-            let exclusions: Vec<&str> = unwalked.exclusions.iter().map(String::as_str).collect();
-            let forgotten = excluded_files::lift_on(tx, &exclusions)?;
-
-            // A rescan that changed nothing skips the sweeps, which would rewrite the same values.
-            let any_changes = ingested_any || removed > 0;
-
-            if any_changes {
-                roll_up_covers(tx)?;
-                prune_orphans(tx)?;
-            }
-            // A small delta kept its triggers, so its counts are already right.
-            if is_bulk {
-                if any_changes {
-                    stats::recalculate_all_stats(tx)?;
-                }
-                if bulk_orphan_purge {
-                    stats::enable_stats_triggers(tx)?;
-                }
-            }
-            Ok((removed, forgotten))
-        })
-        .await?;
+    let ingested = *ingested;
+    let (removed, forgotten) =
+        db.transaction(move |tx| finish_on(tx, &unwalked, &ingested)).await?;
 
     if removed > 0 {
         log::info!("Removed {removed} orphaned tracks from folder {}", folder.path);
@@ -82,6 +54,42 @@ pub async fn commit_scan(
         log::info!("Updated metadata for {} changed files", ingested.updated);
     }
     Ok(())
+}
+
+/// [`commit_scan`]'s transaction, answering the rows it purged and the exclusions it forgot.
+fn finish_on(
+    tx: &Transaction<'_>,
+    unwalked: &Unwalked,
+    ingested: &Ingested,
+) -> Result<(u64, u64), AppError> {
+    // On the bulk path the recalc below covers the purge, so its deletes skip the triggers.
+    let is_bulk = ingested.is_bulk();
+    let bulk_orphan_purge = is_bulk && !unwalked.tracks.is_empty();
+    if bulk_orphan_purge {
+        stats::disable_stats_triggers(tx)?;
+    }
+    // A row this scan re-pointed as moved has left its orphaned path, so only the delete counts.
+    let removed = delete_tracks_by_paths_batch(tx, &unwalked.tracks)?;
+    let exclusions: Vec<&str> = unwalked.exclusions.iter().map(String::as_str).collect();
+    let forgotten = excluded_files::lift_on(tx, &exclusions)?;
+
+    // A rescan that changed nothing skips the sweeps, which would only rewrite the same values.
+    let any_changes = ingested.any() || removed > 0;
+
+    if any_changes {
+        roll_up_covers(tx)?;
+        prune_orphans(tx)?;
+    }
+    // A small delta kept its triggers, so its counts are already right.
+    if is_bulk {
+        if any_changes {
+            stats::recalculate_all_stats(tx)?;
+        }
+        if bulk_orphan_purge {
+            stats::enable_stats_triggers(tx)?;
+        }
+    }
+    Ok((removed, forgotten))
 }
 
 #[cfg(test)]

@@ -50,6 +50,7 @@ pub struct IngestResult {
 pub(crate) const BULK_THRESHOLD: usize = 20;
 
 /// What a scan's chunks wrote, summed across them, and how.
+#[derive(Clone, Copy)]
 pub struct Ingested {
     /// The chunks commit with the stats triggers dropped, leaving the counts to the final recalc.
     bulk: bool,
