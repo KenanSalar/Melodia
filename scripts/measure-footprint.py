@@ -129,8 +129,7 @@ DEFAULT_SCENARIOS = list(SCENARIO_SETUP)
 # Both past the database pool's reap, the first counted from the launch and the second from each
 # prompt, so neither startup's reads nor a switch's reach a window. Every connection maps
 # melodia.db, and the reaper, looking once a minute for ones idle over a minute, closes one up to
-# two minutes after its last query (IDLE_TIMEOUT in
-# crates/melodia-store/src/database/pool/lane.rs).
+# two minutes after its last query (IDLE_TIMEOUT in melodia-store's database/pool/lane.rs).
 DEFAULT_SETTLE_SECONDS = "150"
 DEFAULT_SWITCH_SETTLE_SECONDS = DEFAULT_SETTLE_SECONDS
 DEFAULT_DURATION_SECONDS = "60"

@@ -43,7 +43,7 @@ async fn open_db(dir: &Path) -> Result<(Paths, DbPool), AppError> {
     Ok((paths, db))
 }
 
-/// The tracks the backup at `path` holds, opened read-only as a restore would find it.
+/// How many tracks the backup at `path` holds, opened read-only as a restore would find it.
 fn tracks_in(path: &Path) -> Result<i64, AppError> {
     let restored = Connection::open_with_flags(path, OpenFlags::SQLITE_OPEN_READ_ONLY)?;
     sql::fetch_one(&restored, "SELECT COUNT(*) FROM tracks", ())
@@ -103,10 +103,8 @@ async fn a_backup_survives_an_apostrophe_in_its_own_path() -> Result<(), AppErro
     Ok(())
 }
 
-/// The writer's open creates the database file before the backup is reached, so
-/// the existence check has to happen earlier than the backup itself. Get that
-/// wrong and every first launch leaves a snapshot of an empty schema behind
-/// permanently.
+/// The writer's open creates the database file, so the existence check runs before it, or every
+/// first launch backs up an empty schema.
 #[tokio::test]
 async fn a_fresh_database_is_not_backed_up() -> Result<(), AppError> {
     let tmp = tempfile::tempdir()?;

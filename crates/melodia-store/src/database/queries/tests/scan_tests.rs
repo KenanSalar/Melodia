@@ -201,7 +201,7 @@ async fn upsert_album_updates_year_on_conflict() -> Result<(), AppError> {
             )?;
             let album_id = id.ok_or_else(|| AppError::validation_msg("no album id"))?;
 
-            // Re-upsert of the same (name, artist_id) with a new year updates it (P2).
+            // Re-upsert of the same (name, artist_id) with a new year updates it.
             let same = queries::scan::upsert_album(
                 tx,
                 "Album",

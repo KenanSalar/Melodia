@@ -301,7 +301,7 @@ The store and core move to rusqlite together, over sub-phases 4a to 4d, each a c
 - [x] **4d Tests and comments:** steps 11 and 12, and the docs. Done when the three gates pass.
 - [x] **Hand test**, below.
 
-**Where it stands:** 4a to 4d have landed and the hand test passed (below). Its one finding, the history table's DDL whitespace, is fixed in the working tree for its own commit. Phase 5 is next, each measurement on Kenan's go.
+**Where it stands:** 4a to 4d have landed and the hand test passed (below). Its one finding, the history table's DDL whitespace, landed as its own commit, `0535bc9a`. Phase 5 is next, each measurement on Kenan's go.
 
 - **Gates (2026-11-05):** `cargo fmt --all --check`, `cargo clippy --all-targets --locked --workspace -- -D warnings` and `cargo test --locked --workspace` pass, 4,429 tests and none failed. That was the first run of 4a to 4c's SQL, and it exposed no production defect, so nothing from the gates lands after 4d.
 - **4d's tests:**
