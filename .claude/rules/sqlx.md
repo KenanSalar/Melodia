@@ -33,10 +33,10 @@ paths:
   workspace leaves sqlx's `macros` feature off, so `query!` and `query_as!` don't exist here
 - Always use parameterized queries — never string concatenation
 - Query strings are `impl SqlSafeStr` (0.9): string literals and named `const &'static str` pass
-  as-is; a runtime-built `String` must be wrapped in `sqlx::AssertSqlSafe(sql)` (impls for
-  `String`, `&str`, `Box<str>`, `Arc<str>`, `Cow<'static, str>`). The wrapper is an explicit
-  no-injection assertion — keep data in `.bind()`s and interpolate only SQL *structure*
-  (placeholder lists, column projections)
+  as-is. **A statement assembled at runtime is a `database::sql::Sql`**, whose `trusted` and
+  `push_trusted` are the explicit no-injection marker: values go in through `bind` / `push_bind`,
+  and the text holds only SQL *structure* (placeholder lists, column projections). Text fixed for
+  the whole run is interned as a `&'static str` (a `LazyLock<String>`) instead, so it stays cached
 - Guard against empty `IN` clauses — SQLx errors on empty bind lists; check before executing
 - Build dynamic `?` placeholders in a loop for IN clauses and bind values sequentially
 
@@ -51,8 +51,10 @@ paths:
   `UPDATE … WHERE id IN (…)` carries, the parent id an `IN`-list hangs off), and divide what
   remains by the query's binds-per-row. Subtract first: dividing first spends the reserved slots
   once per row
-- Use `QueryBuilder::push_values()` for building multi-row INSERT statements
-- Set `.persistent(false)` on dynamic bulk queries — prevents statement cache bloat
+- A multi-row INSERT spells its tuples with `database::values_placeholders` and binds them through
+  `Sql`
+- Statement caching follows `Sql`'s text (`database::sql`'s `//!`), so a bulk statement needs no
+  flag of its own
 - Always guard against zero-length input before building bulk queries
 
 ## Transactions
@@ -81,11 +83,10 @@ paths:
 - Use covering indexes for frequently accessed column combinations
 - Regular `VACUUM` for reclaiming space after bulk deletes (but not during normal operation)
 - `VACUUM INTO '<path>'` is the safe way to copy a *live* database — it runs through the open
-  connection, so WAL content is folded in and the output needs no `-wal`/`-shm` beside it. Takes
-  no bind parameter, so the path is interpolated (wrap in `AssertSqlSafe`, double any `'`).
-  **It silently no-ops against an in-memory pool**: `sqlite::memory:` through sqlx returns `Ok`
-  and writes no file, while the identical statement in the `sqlite3` CLI against `:memory:` does
-  write one. So a test covering a backup path must build a **file-backed** pool —
+  connection, so WAL content is folded in and the output needs no `-wal`/`-shm` beside it. The
+  path binds like any value. **It silently no-ops against an in-memory pool**: `sqlite::memory:`
+  through sqlx returns `Ok` and writes no file, while the identical statement in the `sqlite3` CLI
+  against `:memory:` does write one. So a test covering a backup path must build a **file-backed** pool —
   `DbPool::test_pool()` will pass while proving nothing.
   `crates/melodia-store/src/database/tests/backup_tests.rs::open_db` is the worked example.
 

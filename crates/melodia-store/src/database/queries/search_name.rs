@@ -6,8 +6,9 @@
 //! artist line is the one its card shows (`album_stats` reads `COALESCE(artist_credit, name)`),
 //! the unknown artist's seeded name included, whichever path wrote it.
 
-use sqlx::{AssertSqlSafe, SqliteConnection};
+use sqlx::SqliteConnection;
 
+use crate::database::sql::Sql;
 use crate::database::{DbPool, FoldedColumn, FoldedInputs, backfill_folded};
 use melodia_core::entities::track_search::FIELD_SEPARATOR;
 use melodia_core::error::AppError;
@@ -95,14 +96,14 @@ pub(crate) async fn refill(
     kind: Named,
     id: i64,
 ) -> Result<(), AppError> {
-    let sql = format!("{} WHERE x.id = ?", kind.inputs());
-    let Some(row) =
-        sqlx::query_as::<_, Inputs>(AssertSqlSafe(sql)).bind(id).fetch_optional(&mut *conn).await?
-    else {
+    let mut select = Sql::new(kind.inputs());
+    select.push(" WHERE x.id = ?").bind(id);
+    let Some(row) = select.fetch_optional::<Inputs, _>(&mut *conn).await? else {
         return Ok(());
     };
-    let sql = format!("UPDATE {} SET search_name = ? WHERE id = ?", kind.table());
-    sqlx::query(AssertSqlSafe(sql)).bind(row.packed()).bind(id).execute(&mut *conn).await?;
+    let mut update = Sql::new("UPDATE ");
+    update.push(kind.table()).push(" SET search_name = ? WHERE id = ?").bind(row.packed()).bind(id);
+    update.execute(&mut *conn).await?;
     Ok(())
 }
 

@@ -2,49 +2,57 @@
 //! page through.
 
 use std::collections::{HashMap, HashSet};
+use std::sync::LazyLock;
 
-use sqlx::{AssertSqlSafe, QueryBuilder, Sqlite, SqliteConnection};
+use sqlx::{Sqlite, SqliteConnection};
 
 use super::membership::Membership;
 use super::{columns, fetch_packed_ids, json_array};
+use crate::database::sql::Sql;
 use crate::database::{DbPool, chunked_in_query, chunked_in_query_on, select_in_id_order};
 use melodia_core::entities::track;
 use melodia_core::entities::track_list::TrackListScope;
 use melodia_core::error::AppError;
 
+static TRACK_META_BY_ID: LazyLock<String> = LazyLock::new(|| {
+    format!("SELECT {} FROM tracks WHERE id = ? LIMIT 1", columns::TRACK_META.joined())
+});
+
 /// The Now Playing view's technical chips, `None` for a missing id.
 pub async fn get_track_meta(db: &DbPool, id: i64) -> Result<Option<track::TrackMeta>, AppError> {
-    let cols = columns::TRACK_META.joined();
-    let sql = format!("SELECT {cols} FROM tracks WHERE id = ? LIMIT 1");
-    let row: Option<track::TrackMeta> = sqlx::query_as::<_, track::TrackMeta>(AssertSqlSafe(sql))
+    let row = sqlx::query_as::<_, track::TrackMeta>(TRACK_META_BY_ID.as_str())
         .bind(id)
         .fetch_optional(db.read())
         .await?;
     Ok(row)
 }
 
+static SCROBBLE_ROW_BY_ID: LazyLock<String> = LazyLock::new(|| {
+    format!("SELECT {} FROM tracks WHERE id = ? LIMIT 1", columns::SCROBBLE_ROW.joined())
+});
+
 /// The columns a scrobble needs, for the detector's per-track enrichment; `None` for a missing id.
 pub async fn get_scrobble_row(
     db: &DbPool,
     id: i64,
 ) -> Result<Option<track::ScrobbleRow>, AppError> {
-    let cols = columns::SCROBBLE_ROW.joined();
-    let sql = format!("SELECT {cols} FROM tracks WHERE id = ? LIMIT 1");
-    let row: Option<track::ScrobbleRow> =
-        sqlx::query_as::<_, track::ScrobbleRow>(AssertSqlSafe(sql))
-            .bind(id)
-            .fetch_optional(db.read())
-            .await?;
+    let row = sqlx::query_as::<_, track::ScrobbleRow>(SCROBBLE_ROW_BY_ID.as_str())
+        .bind(id)
+        .fetch_optional(db.read())
+        .await?;
     Ok(row)
 }
+
+static FAVORITE_SCROBBLE_ROWS: LazyLock<String> = LazyLock::new(|| {
+    format!("SELECT {} FROM tracks WHERE is_favorite = TRUE", columns::SCROBBLE_ROW.joined())
+});
 
 /// Every favorite's scrobble row, so connecting a service backfills its loves without re-toggling
 /// each heart.
 pub async fn get_favorite_scrobble_rows(db: &DbPool) -> Result<Vec<track::ScrobbleRow>, AppError> {
-    let cols = columns::SCROBBLE_ROW.joined();
-    let sql = format!("SELECT {cols} FROM tracks WHERE is_favorite = TRUE");
-    let rows =
-        sqlx::query_as::<_, track::ScrobbleRow>(AssertSqlSafe(sql)).fetch_all(db.read()).await?;
+    let rows = sqlx::query_as::<_, track::ScrobbleRow>(FAVORITE_SCROBBLE_ROWS.as_str())
+        .fetch_all(db.read())
+        .await?;
     Ok(rows)
 }
 
@@ -183,11 +191,11 @@ where
     if ids.is_empty() {
         return Ok(HashSet::new());
     }
-    let mut qb = QueryBuilder::<Sqlite>::new("SELECT group_concat(j.value, ',') FROM json_each(");
-    qb.push_bind(json_array(ids)).push(") j WHERE j.value NOT IN (SELECT t.id FROM ");
-    membership.push_members(&mut qb);
-    qb.push(")");
-    Ok(fetch_packed_ids(executor, qb).await?.into_iter().collect())
+    let mut sql = Sql::new("SELECT group_concat(j.value, ',') FROM json_each(");
+    sql.push_bind(json_array(ids)).push(") j WHERE j.value NOT IN (SELECT t.id FROM ");
+    membership.push_members(&mut sql);
+    sql.push(")");
+    Ok(fetch_packed_ids(executor, sql).await?.into_iter().collect())
 }
 
 /// `file_path → id` for each of `paths` that has a row.

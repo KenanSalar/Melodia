@@ -1,8 +1,7 @@
 use std::collections::HashSet;
 use std::path::Path;
 
-use sqlx::AssertSqlSafe;
-
+use crate::database::sql::Sql;
 use crate::database::{
     DbPool, MAX_BINDS_PER_STATEMENT, chunked_in_execute_on, queries, values_placeholders,
 };
@@ -123,17 +122,16 @@ pub async fn repoint_all(db: &DbPool, moves: &[(String, String)]) -> Result<u64,
     for chunk in moves.chunks(MAX_BINDS_PER_STATEMENT / COLS_PER_ROW) {
         let rows = values_placeholders(chunk.len(), COLS_PER_ROW);
         for (table, column) in ARTWORK_COLUMNS {
-            let sql = format!(
+            let mut sql = Sql::trusted(format!(
                 "WITH m(old_path, new_path) AS (VALUES {rows})
                  UPDATE {table}
                     SET {column} = (SELECT new_path FROM m WHERE m.old_path = {table}.{column})
                   WHERE {column} IN (SELECT old_path FROM m)"
-            );
-            let mut query = sqlx::query(AssertSqlSafe(sql)).persistent(false);
+            ));
             for (from, to) in chunk {
-                query = query.bind(from).bind(to);
+                sql.bind(from.as_str()).bind(to.as_str());
             }
-            touched += query.execute(&mut *tx).await?.rows_affected();
+            touched += sql.execute(&mut *tx).await?;
         }
     }
     tx.commit().await?;

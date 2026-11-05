@@ -1,8 +1,7 @@
 //! Not Duplicates: the sets of copies the duplicate finder leaves out of its list. Nothing but the
 //! finder reads them, so a write here moves no library signal.
 
-use sqlx::AssertSqlSafe;
-
+use crate::database::sql::Sql;
 use crate::database::{DbPool, IDS_PER_SET, placeholders};
 use melodia_core::entities::duplicates::DismissalSet;
 use melodia_core::error::AppError;
@@ -17,16 +16,16 @@ pub async fn dismiss(db: &DbPool, track_ids: &[i64]) -> Result<DismissalSet, App
             .await?;
 
     for chunk in track_ids.chunks(IDS_PER_SET) {
-        let sql = format!(
+        let mut sql = Sql::trusted(format!(
             "INSERT OR REPLACE INTO duplicate_dismissals (track_id, set_id) \
              SELECT id, ? FROM tracks WHERE id IN ({})",
             placeholders(chunk.len())
-        );
-        let mut query = sqlx::query(AssertSqlSafe(sql)).persistent(false).bind(set);
-        for id in chunk {
-            query = query.bind(*id);
+        ));
+        sql.bind(set);
+        for &id in chunk {
+            sql.bind(id);
         }
-        query.execute(&mut *tx).await?;
+        sql.execute(&mut *tx).await?;
     }
 
     tx.commit().await?;

@@ -19,7 +19,6 @@
 
 use std::path::{Path, PathBuf};
 
-use sqlx::AssertSqlSafe;
 use sqlx::sqlite::SqlitePool;
 
 use melodia_core::error::{AppError, describe};
@@ -97,9 +96,13 @@ pub(super) async fn create(
         })?;
     }
 
-    // `VACUUM INTO` takes no bind, so the path is interpolated with its quotes doubled.
-    let escaped = tmp_path.display().to_string().replace('\'', "''");
-    sqlx::raw_sql(AssertSqlSafe(format!("VACUUM INTO '{escaped}'"))).execute(pool).await?;
+    let Some(tmp) = tmp_path.to_str() else {
+        return Err(AppError::io_other(format!(
+            "The backup path {} is not valid UTF-8",
+            tmp_path.display()
+        )));
+    };
+    sqlx::query("VACUUM INTO ?").bind(tmp).execute(pool).await?;
     std::fs::rename(&tmp_path, &final_path).map_err(|e| {
         AppError::io(format!("Could not publish the backup as {}", final_path.display()), e)
     })?;

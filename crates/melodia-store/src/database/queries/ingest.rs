@@ -4,11 +4,11 @@ use std::ffi::OsString;
 use std::path::{Path, PathBuf};
 
 use rayon::prelude::*;
-use sqlx::AssertSqlSafe;
 
 use crate::database::queries;
 use crate::database::queries::artist::UNKNOWN_ARTIST_ID;
 use crate::database::queries::scan::{MoveCandidates, NameCache};
+use crate::database::sql::Sql;
 use crate::database::{DbPool, MAX_BINDS_PER_STATEMENT, values_placeholders};
 use crate::media::ingest::scan_pool::ScanPool;
 use melodia_core::entities::scan::{ExtractedMetadata, FileStamp, ScannedFile};
@@ -281,8 +281,8 @@ pub(crate) async fn ingest_scanned_files(
 
 /// The stored size and mtime of each scanned path that already has a row.
 ///
-/// Chunked over `scanned_files` itself, so a chunk's `Cow` binds drop at its end rather than a
-/// `String` per scanned path living for the whole ingest.
+/// Chunked over `scanned_files` itself, so a chunk's binds drop at its end rather than a `String`
+/// per scanned path living for the whole ingest.
 async fn load_existing(
     tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
     scanned_files: &[ScannedFile],
@@ -290,16 +290,13 @@ async fn load_existing(
     let mut existing_tracks = HashMap::with_capacity(scanned_files.len());
     for chunk in scanned_files.chunks(MAX_BINDS_PER_STATEMENT) {
         let placeholders = crate::database::placeholders(chunk.len());
-        let sql = format!(
+        let mut sql = Sql::trusted(format!(
             "SELECT file_path, file_size, date_modified FROM tracks WHERE file_path IN ({placeholders})"
-        );
-        let mut query =
-            sqlx::query_as::<_, (String, Option<i64>, Option<String>)>(AssertSqlSafe(sql));
-        let path_cows: Vec<Cow<'_, str>> = chunk.iter().map(|f| f.path.to_string_lossy()).collect();
-        for cow in &path_cows {
-            query = query.bind(cow.as_ref());
+        ));
+        for file in chunk {
+            sql.bind(file.path.to_string_lossy().into_owned());
         }
-        let rows = query.persistent(false).fetch_all(&mut **tx).await?;
+        let rows: Vec<(String, Option<i64>, Option<String>)> = sql.fetch_all(&mut **tx).await?;
         for (path, file_size, date_modified) in rows {
             existing_tracks.insert(path, FileStamp { file_size, date_modified });
         }
@@ -470,18 +467,17 @@ async fn flush_artwork_backfill(
 
     for chunk in pairs.chunks(chunk_size) {
         let rows = values_placeholders(chunk.len(), COLS_PER_ROW);
-        let sql = format!(
+        let mut sql = Sql::trusted(format!(
             "WITH v(path, art) AS (VALUES {rows})
              UPDATE tracks
                 SET artwork_path = (SELECT art FROM v WHERE v.path = tracks.file_path)
               WHERE file_path IN (SELECT path FROM v)
                 AND (artwork_path IS NULL OR artwork_path = '')"
-        );
-        let mut q = sqlx::query(AssertSqlSafe(sql)).persistent(false);
+        ));
         for (path, art) in chunk {
-            q = q.bind(path).bind(art);
+            sql.bind(path.as_str()).bind(art.as_str());
         }
-        q.execute(&mut **tx).await?;
+        sql.execute(&mut **tx).await?;
     }
     Ok(())
 }

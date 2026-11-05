@@ -1,6 +1,6 @@
 # Plan: Move the library database from sqlx to rusqlite
 
-Status: **Phase 2 complete** · Owner: Kenan · Created: 2026-11-04
+Status: **Phase 3 complete** · Owner: Kenan · Created: 2026-11-04
 
 > **Validated 2026-11-04** against `8fe1eb93` (`chore/deps-and-fixes`) with three read-only inventories:
 >
@@ -81,17 +81,18 @@ Users see nothing broken, and no list or search opens faster after the move. The
    - `melodia-core`'s entities become plain data. The store's own `FromRow` trait maps them by name, as sqlx's derive did, so `queries::track::columns`' "the order carries nothing" stays true.
    - Tuples map by index, as sqlx's did.
    - rusqlite's by-name `get` scans the statement's columns on each call. That's cheap at these widths (a page of `TrackListRow`s, a grid of cards). Phase 5 measures the wide projections before anything moves to by-index.
-   - `DismissalSet`'s field is private, so its `ToSql` / `FromSql` live in core beside it, as its `sqlx::Type` derive does today.
+   - `DismissalSet`'s field is private, so its `FromSql` lives in core beside it, as its `sqlx::Type` derive does today. It binds as a `Param` through core's `From<DismissalSet> for i64` (Phase 3).
 5. **One builder for dynamic SQL, and caching follows the SQL's type.**
-   - A `&'static str` statement goes through `prepare_cached`.
-   - A built `Sql` goes through `prepare`.
-   - That reproduces today's split, where the 31 `.persistent(false)` sites are the dynamic ones (the 32nd match is `mod.rs:20`'s doc comment).
+   - A `&'static str` statement goes through `prepare_cached`, and so does an `Sql` still holding only the `&'static str` it was made from (`update_track_metadata`, `insert_track`): `Sql` keeps its text as a `Cow<'static, str>`.
+   - An `Sql` with anything pushed onto it goes through `prepare`.
+   - Text fixed for the whole run is interned in a `LazyLock<String>` and runs as a `&'static str`, cached as sqlx kept it.
+   - That reproduces sqlx's split, where 31 `.persistent(false)` sites were the assembled ones, except for five statements spliced from a few fixed variants that sqlx cached: `search_name::refill`'s two, the radio station insert, `ranked_totals` and the backfill page select. Each runs per name write, save, tab open or launch, so they are assembled and uncached.
    - `Sql::trusted` takes runtime-built structure (placeholder lists, column projections) and replaces `AssertSqlSafe` as the deliberate marker.
    - rusqlite refuses three things sqlx let through, each checked against the tree:
      - **A second statement in one string** (`MultipleStatement`). Only the migrations hold one (Decision 3). `stats.rs`'s trigger DDL runs one statement per call, and rusqlite allows a trailing tail with no statement in it.
-     - **A row from `execute`** (`ExecuteReturnedResults`). `journal_mode` and `mmap_size` answer with a row, so `pool/open.rs` sets pragmas through `pragma_update`, which runs `execute_batch`. All 18 `RETURNING` sites already read through `fetch_*`.
+     - **A row from `execute`** (`ExecuteReturnedResults`). `journal_mode` and `mmap_size` answer with a row, so `pool/open.rs` sets pragmas through `pragma_update`, which runs `execute_batch`. All 19 `RETURNING` sites already read through `fetch_*`.
      - **A bind count that differs from the statement's** (`InvalidParameterCount`). sqlx binds a missing parameter as NULL and ignores extras (`sqlx-sqlite`'s `arguments.rs:100-107`). An audit of 352 literal-SQL chains found no mismatch, and the one `?1` used twice (`renumber_playlist_positions_tx`) binds once in both drivers.
-   - rusqlite counts changed rows as `usize` where sqlx gave `u64`. The 15 `rows_affected` sites convert, so the public return types stay.
+   - rusqlite counts changed rows as `usize` where sqlx gave `u64`. The 12 `rows_affected` sites convert, `Sql::execute`'s among them, so the public return types stay.
 6. **Each store function runs in one closure on the runtime's blocking pool.**
    - A store function stays an `async fn`. Its body awaits a lane: a semaphore permit (async, so a burst never fills the 32-thread blocking pool), then `Handle::spawn_blocking` with the connection.
    - The handle is captured at init, so a call awaited on the Slint thread never runs SQLite there. `main.rs` enters the runtime on that thread, but the pool doesn't lean on it.
@@ -121,10 +122,10 @@ Everything is in `crates/melodia-store/src/database/` unless noted.
 | `pool/open.rs` | Opening a connection per role (writer, reader, in-memory test): flags, pragmas as `init_database` sets them (writer: WAL, `foreign_keys`, `synchronous=NORMAL`, `cache_size`, `temp_store`, `mmap_size`; readers the same without `synchronous`; test: `foreign_keys`, `synchronous`, `temp_store`), `busy_timeout`, collation, statement-cache capacity | Connection configuration |
 | `migrate.rs` | Comparing checksums, validation against `_sqlx_migrations`, applying pending migrations, the pending check the backup asks | Migration semantics |
 | `crates/melodia-store/build.rs` | Embedding the workspace root's `migrations/*.sql` (`../../migrations`, the path `sqlx::migrate!` reads) in version order with their SHA-384 checksums, `rerun-if-changed` on that directory, the sqlx-style description, refusing anything there but `<version>_<description>.sql` files (dotfiles skipped), a `-- no-transaction` header, `.up`/`.down` names, a version below 1 and a duplicate version | The migrations directory's shape |
-| `sql.rs` | `Sql` (text plus `Param`s), `push` / `push_trusted` / `push_bind` / values lists, and the execution vocabulary (`fetch_all`, `fetch_optional`, `fetch_one`, `fetch_scalar`, `execute`) for static and built SQL | How SQL is assembled and run |
+| `sql.rs` | `Sql` (text plus `Param`s), `push` / `push_trusted` / `push_bind` / `bind`, and the execution vocabulary (`fetch_all`, `fetch_optional`, `fetch_one`, `execute`) for static and built SQL; a single column reads as a 1-tuple until `rows/` | How SQL is assembled and run |
 | `rows/mod.rs` | The store's `FromRow` trait and tuple impls | Row decoding |
 | `rows/{track,library,radio,duplicates}.rs` | Entity impls, grouped as `melodia-core/src/entities/` groups them | An entity's columns |
-| `mod.rs` | Bind budget and chunk helpers (`chunked_in_query`, `chunked_in_execute_on`, `select_in_id_order`, `set_where_id_in`, `backfill_folded`), `init_database` | Bulk-statement shape |
+| `mod.rs` | Bind budget, placeholder text (`placeholders`, `values_placeholders`, `values_list`, `case_by_id`) and chunk helpers (`chunked_in_query`, `chunked_in_execute_on`, `select_in_id_order`, `set_where_id_in`, `backfill_folded`), `init_database` | Bulk-statement shape |
 | `collation.rs`, `backup.rs` | Unchanged roles, on rusqlite | |
 | `melodia-core/src/error.rs` | `Database(#[from] rusqlite::Error)`, `Migration(#[from] MigrationError)` (four variants: `Dirty`, `Edited`, `Unknown`, `Apply { version, source }`), `DatabaseClosed` | |
 
@@ -193,9 +194,9 @@ No production code outside the store calls `db.read()` or `db.write()`.
   - `sqlx.md`'s `Migrate`-trait and `sqlx.toml` bullets go, with a pointer to `migrate.rs`.
   - The `//!` headers of `melodia-app`'s `tasks/artwork_renormalize.rs:5`, `rating_import.rs:5` and `tag_backfill.rs:8` say "Not an `SQLx` migration", which becomes "Not a migration".
 
-## Phase 3: One builder for dynamic SQL
+## Phase 3: One builder for dynamic SQL ✅
 
-- Add `database/sql.rs` (Decision 5). Under sqlx, its execution binds each `Param` and keeps `.persistent(false)`.
+- Add `database/sql.rs` (Decision 5). Under sqlx, its execution binds each `Param` and runs assembled text `.persistent(false)`.
 - Convert to it:
   - the 15 `QueryBuilder` constructions;
   - the helpers that take `&mut QueryBuilder<Sqlite>`: `push_needle`, `push_folded_match`, `sql_direction`, `detail_order`, `Membership::push_*`, `push_member_ids` and `push_positioned_membership`;
@@ -204,18 +205,29 @@ No production code outside the store calls `db.read()` or `db.write()`.
   - the chunk helpers' SQL;
   - `backfill_folded`'s page update;
   - the three `push_values` sites;
-  - all 39 `AssertSqlSafe` sites.
-- These counts are production sites. One `QueryBuilder` (`smart_playlist_tests.rs:499`) and 11 `AssertSqlSafe` calls in store tests move with the tests in Phase 4.
+  - all 39 `AssertSqlSafe` sites, the fixed-text ones as `LazyLock` statics (Decision 5).
+- These counts are production sites. `fixtures`' four seam calls, which Phase 1 added after the count, keep `AssertSqlSafe`: they decode raw rows through `Readback`, which Phase 4 folds into `rows/` (steps 3 and 11). `smart_playlist_tests`' one `QueryBuilder` moves here with `push_rule`; the 11 `AssertSqlSafe` calls in store tests move with the tests in Phase 4.
 - The backup's `VACUUM INTO` binds its path (`VACUUM INTO ?1`, run under `/usr/bin/sqlite3` 3.51.2 on 2026-11-04) instead of interpolating it, which drops the quote-doubling and the lossy `display()`. `backup_tests` proves it, file-backed.
-- Collapse `TrackBinder` into `bind_track_columns` over `Sql`.
+- Collapse `TrackBinder` into `bind_track_columns` over `Sql`. `insert_track` and the batch share one row tuple, the single insert's defaults becoming the batch's literals, and read their ids through `RETURNING`.
 - **Hand test:**
   - every smart-playlist rule kind, a capped and a random one;
   - every Songs and detail sort and filter;
   - the seven grids' keysets;
   - search;
   - a first scan and a rescan (the bulk-insert path);
-  - Keep Out and its undo.
-- **Docs:** `sqlx.md`'s `AssertSqlSafe` and `QueryBuilder::push_values` bullets name the builder, and its `VACUUM INTO` "Takes no bind parameter" goes.
+  - Keep Out and its undo;
+  - Not Duplicates and its restore;
+  - adding, removing and reordering playlist items;
+  - a bulk favourite and rating;
+  - saving a radio station;
+  - Most Played and Recently Played;
+  - a Browse folder;
+  - adding a folder that holds a library folder, which absorbs it once its scan completes.
+  - **Result (2026-11-05):** all pass, run unattended on Kenan's go.
+    1. A harness made 7,804 store calls on a snapshot of the dev library, under `1c9263b4` and under this phase: every track-list scope, order and filter, the grids, every smart-rule field and operator with limits, the lookups and search, then a fixed write sequence (favourites, ratings, plays, playlist edits and convert, Not Duplicates, a duplicate removal, stations, artwork, backfills, an import, a watcher batch, folder absorb). Every result matched, and so did both databases afterwards, row for row.
+    2. On the dev library, a launch scanned a new 26-file folder through the bulk insert, and watcher create, rename, retag and delete, a command-line import and repeated plays each left the rows they should. Nothing logged an error or warning, and the tray quit was clean.
+    3. No clicks were driven, the view code being unchanged: the UI reaches these paths through the same store calls.
+- **Docs:** `sqlx.md`'s `AssertSqlSafe`, `QueryBuilder::push_values` and `.persistent(false)` bullets name the builder, and its `VACUUM INTO` "Takes no bind parameter" goes.
 
 ## Phase 4: The cutover (one commit)
 
@@ -239,7 +251,7 @@ The store and core move to rusqlite together. In working order:
 4. **`sql.rs`** executes on `&Connection`: static SQL cached, built SQL uncached.
 5. **Core.**
    - The `FromRow` derives and the three `#[sqlx(...)]` attributes go.
-   - `DismissalSet` gets `ToSql` / `FromSql`.
+   - `DismissalSet` gets `FromSql`.
    - `AppError::Database` holds `rusqlite::Error`, and `describe`'s doc (`error.rs:163`, "sqlx print theirs in `Display`") names rusqlite.
    - `error_tests` constructs `QueryReturnedNoRows` (`:163`, `:176-178`), and `:51-65` stop copying sqlx's message shape.
    - `track/keyset.rs:73`'s hand-built `sqlx::Error::Decode` becomes `FromSqlConversionFailure`.

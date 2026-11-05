@@ -37,6 +37,13 @@ pub enum ReviewReason {
 #[sqlx(transparent)]
 pub struct DismissalSet(i64);
 
+/// The set's id as the store binds it. Only a read builds a set, so there is no way back.
+impl From<DismissalSet> for i64 {
+    fn from(set: DismissalSet) -> Self {
+        set.0
+    }
+}
+
 /// One copy in a group: what the matcher compares, and what the dialog shows.
 #[derive(Clone, Debug, FromRow)]
 pub struct DuplicateCopy {

@@ -1,5 +1,4 @@
-use sqlx::AssertSqlSafe;
-
+use crate::database::sql::Sql;
 use crate::database::{DbPool, select_in_id_order};
 use melodia_core::entities::{album, tags};
 use melodia_core::error::AppError;
@@ -126,7 +125,7 @@ pub(crate) async fn clear_release_tags(
     // Reserve the seven flag binds.
     for chunk in album_ids.chunks(crate::database::MAX_BINDS_PER_STATEMENT - 7) {
         let placeholders = crate::database::placeholders(chunk.len());
-        let sql = format!(
+        let mut sql = Sql::trusted(format!(
             "UPDATE albums SET
                  label = CASE WHEN ? THEN NULL ELSE label END,
                  catalog_number = CASE WHEN ? THEN NULL ELSE catalog_number END,
@@ -136,20 +135,18 @@ pub(crate) async fn clear_release_tags(
                  release_country = CASE WHEN ? THEN NULL ELSE release_country END,
                  is_compilation = CASE WHEN ? THEN FALSE ELSE is_compilation END
              WHERE id IN ({placeholders})"
-        );
-        let mut query = sqlx::query(AssertSqlSafe(sql))
-            .persistent(false)
-            .bind(cleared.label)
+        ));
+        sql.bind(cleared.label)
             .bind(cleared.catalog_number)
             .bind(cleared.barcode)
             .bind(cleared.media)
             .bind(cleared.release_type)
             .bind(cleared.release_country)
             .bind(cleared.compilation);
-        for id in chunk {
-            query = query.bind(*id);
+        for &id in chunk {
+            sql.bind(id);
         }
-        query.execute(&mut **tx).await?;
+        sql.execute(&mut **tx).await?;
     }
     Ok(())
 }

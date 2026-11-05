@@ -2,17 +2,19 @@
 //! where production reads the narrower projections beside this file.
 
 use std::collections::HashMap;
-
-use sqlx::AssertSqlSafe;
+use std::sync::LazyLock;
 
 use super::list::TRACK_LIST_ORDER;
 use crate::database::{DbPool, chunked_in_query};
 use melodia_core::entities::track;
 use melodia_core::error::AppError;
 
+static ALL_TRACKS: LazyLock<String> =
+    LazyLock::new(|| format!("SELECT * FROM tracks ORDER BY {TRACK_LIST_ORDER}"));
+
 pub async fn get_all_tracks(db: &DbPool) -> Result<Vec<track::Track>, AppError> {
-    let sql = format!("SELECT * FROM tracks ORDER BY {TRACK_LIST_ORDER}");
-    let tracks = sqlx::query_as::<_, track::Track>(AssertSqlSafe(sql)).fetch_all(db.read()).await?;
+    let tracks =
+        sqlx::query_as::<_, track::Track>(ALL_TRACKS.as_str()).fetch_all(db.read()).await?;
     Ok(tracks)
 }
 
@@ -29,33 +31,41 @@ pub async fn get_tracks_by_album(
     Ok(tracks)
 }
 
+static TRACKS_BY_ARTIST: LazyLock<String> = LazyLock::new(|| {
+    format!(
+        "SELECT * FROM tracks \
+         WHERE id IN (SELECT track_id FROM track_artists WHERE artist_id = ?) \
+         ORDER BY {TRACK_LIST_ORDER}"
+    )
+});
+
 pub async fn get_tracks_by_artist(
     db: &DbPool,
     artist_id: i64,
 ) -> Result<Vec<track::Track>, AppError> {
-    let tracks = sqlx::query_as::<_, track::Track>(AssertSqlSafe(format!(
-        "SELECT * FROM tracks \
-         WHERE id IN (SELECT track_id FROM track_artists WHERE artist_id = ?) \
-         ORDER BY {TRACK_LIST_ORDER}"
-    )))
-    .bind(artist_id)
-    .fetch_all(db.read())
-    .await?;
+    let tracks = sqlx::query_as::<_, track::Track>(TRACKS_BY_ARTIST.as_str())
+        .bind(artist_id)
+        .fetch_all(db.read())
+        .await?;
     Ok(tracks)
 }
+
+static TRACKS_BY_GENRE: LazyLock<String> = LazyLock::new(|| {
+    format!(
+        "SELECT * FROM tracks \
+         WHERE id IN (SELECT track_id FROM track_genres WHERE genre_id = ?) \
+         ORDER BY {TRACK_LIST_ORDER}"
+    )
+});
 
 pub async fn get_tracks_by_genre(
     db: &DbPool,
     genre_id: i64,
 ) -> Result<Vec<track::Track>, AppError> {
-    let tracks = sqlx::query_as::<_, track::Track>(AssertSqlSafe(format!(
-        "SELECT * FROM tracks \
-         WHERE id IN (SELECT track_id FROM track_genres WHERE genre_id = ?) \
-         ORDER BY {TRACK_LIST_ORDER}"
-    )))
-    .bind(genre_id)
-    .fetch_all(db.read())
-    .await?;
+    let tracks = sqlx::query_as::<_, track::Track>(TRACKS_BY_GENRE.as_str())
+        .bind(genre_id)
+        .fetch_all(db.read())
+        .await?;
     Ok(tracks)
 }
 

@@ -1,3 +1,4 @@
+use crate::database::sql::Sql;
 use melodia_core::error::AppError;
 
 // Must match the stats triggers `migrations/20260910000000_tag_vocabulary.sql` creates: the three
@@ -236,10 +237,9 @@ pub(crate) async fn disable_stats_triggers(
     tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
 ) -> Result<(), AppError> {
     for (name, _) in STATS_TRIGGERS {
-        sqlx::query(sqlx::AssertSqlSafe(format!("DROP TRIGGER IF EXISTS {name}")))
-            .persistent(false)
-            .execute(&mut **tx)
-            .await?;
+        let mut drop = Sql::new("DROP TRIGGER IF EXISTS ");
+        drop.push(name);
+        drop.execute(&mut **tx).await?;
     }
     Ok(())
 }

@@ -2,11 +2,10 @@
 //! answered in SQL over the same membership its keyset lists, so a page holding only ids still has
 //! its facts.
 
-use sqlx::{QueryBuilder, Sqlite};
-
 use super::membership::Membership;
 use crate::database::DbPool;
 use crate::database::queries::smart_playlist;
+use crate::database::sql::Sql;
 use melodia_core::entities::track_list::{ScopeFacts, TrackListScope};
 use melodia_core::error::AppError;
 
@@ -18,13 +17,13 @@ use melodia_core::error::AppError;
 /// its cap.
 pub async fn scope_facts(db: &DbPool, scope: TrackListScope) -> Result<ScopeFacts, AppError> {
     let membership = Membership::resolve(db, scope).await?;
-    let mut qb = QueryBuilder::<Sqlite>::new(
+    let mut sql = Sql::new(
         "SELECT COUNT(*), COALESCE(SUM(t.duration_ms), 0), \
                 COUNT(DISTINCT t.artist_id), COUNT(DISTINCT t.album_id) FROM ",
     );
-    membership.push_members(&mut qb);
+    membership.push_members(&mut sql);
     let (tracks, duration_ms, artists, albums): (i64, i64, i64, i64) =
-        qb.build_query_as().persistent(false).fetch_one(db.read()).await?;
+        sql.fetch_one(db.read()).await?;
     Ok(ScopeFacts { tracks, duration_ms, artists, albums })
 }
 
@@ -39,12 +38,11 @@ pub async fn genre_lines(
     scope: TrackListScope,
 ) -> Result<Vec<(String, i64)>, AppError> {
     let membership = Membership::resolve(db, scope).await?;
-    let mut qb = QueryBuilder::<Sqlite>::new("SELECT t.genre, COUNT(*) FROM ");
-    membership.push_members(&mut qb);
-    membership.push_and(&mut qb);
-    qb.push("t.genre IS NOT NULL GROUP BY t.genre ORDER BY COUNT(*) DESC, MIN(t.id)");
-    let lines = qb.build_query_as().persistent(false).fetch_all(db.read()).await?;
-    Ok(lines)
+    let mut sql = Sql::new("SELECT t.genre, COUNT(*) FROM ");
+    membership.push_members(&mut sql);
+    membership.push_and(&mut sql);
+    sql.push("t.genre IS NOT NULL GROUP BY t.genre ORDER BY COUNT(*) DESC, MIN(t.id)");
+    sql.fetch_all(db.read()).await
 }
 
 /// Up to `limit` distinct covers `scope`'s tracks carry, in the order the scope first reaches
@@ -67,17 +65,17 @@ async fn cover_paths_of(
     membership: &Membership,
     limit: i64,
 ) -> Result<Vec<String>, AppError> {
-    let mut qb = QueryBuilder::<Sqlite>::new("SELECT t.artwork_path FROM ");
-    membership.push_source(&mut qb);
-    membership.push_and(&mut qb);
-    qb.push(
+    let mut sql = Sql::new("SELECT t.artwork_path FROM ");
+    membership.push_source(&mut sql);
+    membership.push_and(&mut sql);
+    sql.push(
         "t.artwork_path IS NOT NULL AND t.artwork_path != '' GROUP BY t.artwork_path ORDER BY MIN(",
     )
     .push(membership.position().unwrap_or("t.id"))
     .push(") LIMIT ")
     .push_bind(limit);
-    let paths = qb.build_query_scalar().persistent(false).fetch_all(db.read()).await?;
-    Ok(paths)
+    let paths: Vec<(String,)> = sql.fetch_all(db.read()).await?;
+    Ok(paths.into_iter().map(|(path,)| path).collect())
 }
 
 /// The cover `scope`'s tracks reach first, [`cover_paths`]'s first answer. An uncapped smart

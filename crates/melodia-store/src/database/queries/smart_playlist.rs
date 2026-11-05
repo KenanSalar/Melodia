@@ -2,14 +2,15 @@
 //!
 //! **Only enum-derived `&'static str` fragments are pushed as SQL** (the columns and rows from
 //! [`field_source`], operator tokens, `ORDER BY`); every user value goes through
-//! [`sqlx::QueryBuilder::push_bind`].
+//! [`Sql::push_bind`].
 
 use std::hash::{BuildHasher, BuildHasherDefault, DefaultHasher};
 
-use sqlx::{QueryBuilder, Sqlite};
+use sqlx::Sqlite;
 
 use crate::database::DbPool;
 use crate::database::queries::track::{columns, fetch_packed_ids};
+use crate::database::sql::Sql;
 use melodia_core::entities::smart_criteria::{
     Draw, LimitOrder, MatchMode, Rule, RuleField, RuleOp, RuleValue, SmartCriteria, SmartLimit,
     ValueType, ops_for,
@@ -25,9 +26,8 @@ pub async fn get_smart_playlist_track_ids(
     db: &DbPool,
     criteria: &SmartCriteria,
 ) -> Result<Vec<i64>, AppError> {
-    let mut qb = membership_query("id", criteria);
-    let ids = qb.build_query_scalar::<i64>().persistent(false).fetch_all(db.read()).await?;
-    Ok(ids)
+    let ids: Vec<(i64,)> = membership_query("id", criteria).fetch_all(db.read()).await?;
+    Ok(ids.into_iter().map(|(id,)| id).collect())
 }
 
 /// [`get_smart_playlist_track_ids`] as M3U export rows, in the same order and under the same cap.
@@ -35,13 +35,9 @@ pub async fn get_smart_playlist_tracks_for_export(
     db: &DbPool,
     criteria: &SmartCriteria,
 ) -> Result<Vec<track::PlaylistExportRow>, AppError> {
-    let mut qb = membership_query(columns::PLAYLIST_EXPORT.prefixed("tracks"), criteria);
-    let rows = qb
-        .build_query_as::<track::PlaylistExportRow>()
-        .persistent(false)
+    membership_query(columns::PLAYLIST_EXPORT.prefixed("tracks"), criteria)
         .fetch_all(db.read())
-        .await?;
-    Ok(rows)
+        .await
 }
 
 /// A smart playlist's membership as ids, in the order its detail page numbers them under `draw`,
@@ -54,34 +50,34 @@ pub(crate) async fn member_ids_tx(
     if let Some(count) = random_cap(criteria) {
         return pick_random(&mut **tx, criteria, count, draw).await;
     }
-    let mut qb = membership_query("id", criteria);
-    let ids = qb.build_query_scalar::<i64>().persistent(false).fetch_all(&mut **tx).await?;
-    Ok(ids)
+    let ids: Vec<(i64,)> = membership_query("id", criteria).fetch_all(&mut **tx).await?;
+    Ok(ids.into_iter().map(|(id,)| id).collect())
 }
 
 /// `SELECT columns FROM tracks` over the criteria's membership, ordered and capped.
-fn membership_query(columns: &str, criteria: &SmartCriteria) -> QueryBuilder<Sqlite> {
-    let mut qb: QueryBuilder<Sqlite> = QueryBuilder::new(format!("SELECT {columns}"));
-    push_membership(&mut qb, criteria);
-    qb
+fn membership_query(columns: &'static str, criteria: &SmartCriteria) -> Sql {
+    let mut sql = Sql::new("SELECT ");
+    sql.push(columns);
+    push_membership(&mut sql, criteria);
+    sql
 }
 
 /// The membership as `(id, position)` rows, `position` numbering the criteria's own order, for a
 /// query that sorts or filters the set further and still needs that order to fall back on.
-pub(crate) fn push_positioned_membership(qb: &mut QueryBuilder<Sqlite>, criteria: &SmartCriteria) {
-    qb.push("SELECT id, ROW_NUMBER() OVER (")
+pub(crate) fn push_positioned_membership(sql: &mut Sql, criteria: &SmartCriteria) {
+    sql.push("SELECT id, ROW_NUMBER() OVER (")
         .push(order_by_fragment(criteria.limit.as_ref()))
         .push(") AS position");
-    push_membership(qb, criteria);
+    push_membership(sql, criteria);
 }
 
 /// The membership's ids in no order, for a query that only counts or groups them: numbering an
 /// uncapped set sorts every match. A cap keeps its order, that being what picks the ids it keeps.
-pub(crate) fn push_member_ids(qb: &mut QueryBuilder<Sqlite>, criteria: &SmartCriteria) {
-    qb.push("SELECT id FROM tracks");
-    push_where(qb, criteria);
+pub(crate) fn push_member_ids(sql: &mut Sql, criteria: &SmartCriteria) {
+    sql.push("SELECT id FROM tracks");
+    push_where(sql, criteria);
     if let Some(limit) = &criteria.limit {
-        push_order_and_limit(qb, limit);
+        push_order_and_limit(sql, limit);
     }
 }
 
@@ -92,13 +88,13 @@ pub(crate) async fn first_cover(
     db: &DbPool,
     criteria: &SmartCriteria,
 ) -> Result<Option<String>, AppError> {
-    let mut qb: QueryBuilder<Sqlite> = QueryBuilder::new(
+    let mut sql = Sql::new(
         "SELECT artwork_path FROM tracks WHERE artwork_path IS NOT NULL AND artwork_path != ''",
     );
-    push_and_rules(&mut qb, criteria);
-    qb.push(order_by_fragment(None)).push(" LIMIT 1");
-    let cover = qb.build_query_scalar().persistent(false).fetch_optional(db.read()).await?;
-    Ok(cover)
+    push_and_rules(&mut sql, criteria);
+    sql.push(order_by_fragment(None)).push(" LIMIT 1");
+    let cover: Option<(String,)> = sql.fetch_optional(db.read()).await?;
+    Ok(cover.map(|(path,)| path))
 }
 
 /// The count of a [`LimitOrder::Random`] cap, the cut [`pick_random`] makes rather than SQL.
@@ -124,10 +120,9 @@ pub(crate) async fn pick_random<'e, E>(
 where
     E: sqlx::Executor<'e, Database = Sqlite>,
 {
-    let mut qb: QueryBuilder<Sqlite> =
-        QueryBuilder::new("SELECT group_concat(id, ',') FROM tracks");
-    push_where(&mut qb, criteria);
-    let matches = fetch_packed_ids(executor, qb).await?;
+    let mut sql = Sql::new("SELECT group_concat(id, ',') FROM tracks");
+    push_where(&mut sql, criteria);
+    let matches = fetch_packed_ids(executor, sql).await?;
     Ok(pick(matches, count, draw))
 }
 
@@ -146,13 +141,13 @@ fn pick(matches: Vec<i64>, count: u32, draw: Draw) -> Vec<i64> {
 }
 
 /// `FROM tracks` plus the criteria's `WHERE`, order and cap.
-fn push_membership(qb: &mut QueryBuilder<Sqlite>, criteria: &SmartCriteria) {
-    qb.push(" FROM tracks");
-    push_where(qb, criteria);
+fn push_membership(sql: &mut Sql, criteria: &SmartCriteria) {
+    sql.push(" FROM tracks");
+    push_where(sql, criteria);
     if let Some(limit) = &criteria.limit {
-        push_order_and_limit(qb, limit);
+        push_order_and_limit(sql, limit);
     } else {
-        qb.push(order_by_fragment(None));
+        sql.push(order_by_fragment(None));
     }
 }
 
@@ -162,67 +157,66 @@ pub async fn count_smart_playlist(
     db: &DbPool,
     criteria: &SmartCriteria,
 ) -> Result<(i64, i64), AppError> {
-    let mut qb: QueryBuilder<Sqlite> = if criteria.limit.is_some() {
-        QueryBuilder::new(
+    let mut sql = if criteria.limit.is_some() {
+        Sql::new(
             "SELECT COUNT(*), COALESCE(SUM(duration_ms), 0) FROM \
              (SELECT duration_ms FROM tracks",
         )
     } else {
-        QueryBuilder::new("SELECT COUNT(*), COALESCE(SUM(duration_ms), 0) FROM tracks")
+        Sql::new("SELECT COUNT(*), COALESCE(SUM(duration_ms), 0) FROM tracks")
     };
-    push_where(&mut qb, criteria);
+    push_where(&mut sql, criteria);
     if let Some(limit) = &criteria.limit {
         // A deterministic order picks which rows are counted; a random one would sort the whole
         // match set to sum a slice that is random anyway.
         if limit.order != LimitOrder::Random {
-            qb.push(order_by_fragment(Some(limit)));
+            sql.push(order_by_fragment(Some(limit)));
         }
-        qb.push(" LIMIT ").push_bind(i64::from(limit.count));
-        qb.push(")");
+        sql.push(" LIMIT ").push_bind(i64::from(limit.count));
+        sql.push(")");
     }
-    let row = qb.build_query_as::<(i64, i64)>().persistent(false).fetch_one(db.read()).await?;
-    Ok(row)
+    sql.fetch_one(db.read()).await
 }
 
 /// Appends `WHERE (rule) AND|OR (rule) …`, skipping incoherent rules; with none left it matches
 /// the whole library.
-fn push_where(qb: &mut QueryBuilder<Sqlite>, criteria: &SmartCriteria) {
+fn push_where(sql: &mut Sql, criteria: &SmartCriteria) {
     let rules = renderable_rules(criteria);
     if rules.is_empty() {
         return;
     }
-    qb.push(" WHERE ");
-    push_rules(qb, &rules, criteria.match_mode);
+    sql.push(" WHERE ");
+    push_rules(sql, &rules, criteria.match_mode);
 }
 
 /// [`push_where`]'s rules as ` AND (…)`, after a `WHERE` holding a condition of its own. Grouped
 /// whole, or an `Any` set's `OR` would bind that condition to its first rule alone.
-fn push_and_rules(qb: &mut QueryBuilder<Sqlite>, criteria: &SmartCriteria) {
+fn push_and_rules(sql: &mut Sql, criteria: &SmartCriteria) {
     let rules = renderable_rules(criteria);
     if rules.is_empty() {
         return;
     }
-    qb.push(" AND (");
-    push_rules(qb, &rules, criteria.match_mode);
-    qb.push(")");
+    sql.push(" AND (");
+    push_rules(sql, &rules, criteria.match_mode);
+    sql.push(")");
 }
 
 fn renderable_rules(criteria: &SmartCriteria) -> Vec<&Rule> {
     criteria.rules.iter().filter(|r| rule_is_renderable(r)).collect()
 }
 
-fn push_rules(qb: &mut QueryBuilder<Sqlite>, rules: &[&Rule], match_mode: MatchMode) {
+fn push_rules(sql: &mut Sql, rules: &[&Rule], match_mode: MatchMode) {
     let sep = match match_mode {
         MatchMode::All => " AND ",
         MatchMode::Any => " OR ",
     };
     for (i, rule) in rules.iter().enumerate() {
         if i > 0 {
-            qb.push(sep);
+            sql.push(sep);
         }
-        qb.push("(");
-        push_rule(qb, rule);
-        qb.push(")");
+        sql.push("(");
+        push_rule(sql, rule);
+        sql.push(")");
     }
 }
 
@@ -248,28 +242,23 @@ fn rule_is_renderable(rule: &Rule) -> bool {
 }
 
 /// One rule's predicate, which the caller parenthesizes.
-fn push_rule(qb: &mut QueryBuilder<Sqlite>, rule: &Rule) {
+fn push_rule(sql: &mut Sql, rule: &Rule) {
     let value = rule.value.as_ref();
     let col = match field_source(rule.field) {
-        FieldSource::Members(rows) => return push_member_predicate(qb, rows, rule.op, value),
+        FieldSource::Members(rows) => return push_member_predicate(sql, rows, rule.op, value),
         FieldSource::Column(col) => col,
     };
     match rule.field.value_type() {
-        ValueType::Text => push_text_predicate(qb, col, rule.op, value),
-        ValueType::Number => push_numeric_predicate(qb, col, rule.field, rule.op, value),
-        ValueType::Bool => push_bool_predicate(qb, col, rule.op),
-        ValueType::Date => push_date_predicate(qb, col, rule.op, value),
+        ValueType::Text => push_text_predicate(sql, col, rule.op, value),
+        ValueType::Number => push_numeric_predicate(sql, col, rule.field, rule.op, value),
+        ValueType::Bool => push_bool_predicate(sql, col, rule.op),
+        ValueType::Date => push_date_predicate(sql, col, rule.op, value),
     }
 }
 
 /// A text predicate over a set-valued field's *rows*, as `(NOT) EXISTS` correlated on `tracks.id`.
 /// The negation is spelled once here, so a set matches when *any* member does.
-fn push_member_predicate(
-    qb: &mut QueryBuilder<Sqlite>,
-    rows: MemberRows,
-    op: RuleOp,
-    value: Option<&RuleValue>,
-) {
+fn push_member_predicate(sql: &mut Sql, rows: MemberRows, op: RuleOp, value: Option<&RuleValue>) {
     let (negated, op) = match op {
         RuleOp::NotContains => (true, RuleOp::Contains),
         RuleOp::IsNot => (true, RuleOp::Is),
@@ -279,63 +268,58 @@ fn push_member_predicate(
     // Ahead of the wrapper, not inside it: a value-shape mismatch owes an always-false term, and
     // one placed under `NOT EXISTS` is an always-true one.
     if op != RuleOp::IsSet && !matches!(value, Some(RuleValue::Text(_))) {
-        return push_false(qb);
+        return push_false(sql);
     }
 
     if negated {
-        qb.push("NOT ");
+        sql.push("NOT ");
     }
-    qb.push("EXISTS (SELECT 1 FROM ");
-    qb.push(rows.from);
-    qb.push(" WHERE ");
-    qb.push(rows.correlate);
+    sql.push("EXISTS (SELECT 1 FROM ");
+    sql.push(rows.from);
+    sql.push(" WHERE ");
+    sql.push(rows.correlate);
     // `IsSet` is the row existing, so the correlation already is the whole predicate.
     if op != RuleOp::IsSet {
         // Parenthesized: two of `push_text_predicate`'s arms spell a bare `OR`, and one reaching
         // here would bind the correlation to its left half and leave the `EXISTS` uncorrelated.
-        qb.push(" AND (");
-        push_text_predicate(qb, rows.name, op, value);
-        qb.push(")");
+        sql.push(" AND (");
+        push_text_predicate(sql, rows.name, op, value);
+        sql.push(")");
     }
-    qb.push(")");
+    sql.push(")");
 }
 
 /// An always-false term, for a value shape [`rule_is_renderable`] should have refused: matching
 /// nothing beats panicking on a user's library.
-fn push_false(qb: &mut QueryBuilder<Sqlite>) {
-    qb.push("0");
+fn push_false(sql: &mut Sql) {
+    sql.push("0");
 }
 
 /// The presence test every value category shares. A text column's empty string is "not set" too.
-fn push_presence(qb: &mut QueryBuilder<Sqlite>, col: &str, op: RuleOp, is_text: bool) {
+fn push_presence(sql: &mut Sql, col: &'static str, op: RuleOp, is_text: bool) {
     match op {
         RuleOp::IsSet => {
-            qb.push(col).push(" IS NOT NULL");
+            sql.push(col).push(" IS NOT NULL");
             if is_text {
-                qb.push(" AND ").push(col).push(" != ''");
+                sql.push(" AND ").push(col).push(" != ''");
             }
         }
         RuleOp::IsNotSet => {
-            qb.push(col).push(" IS NULL");
+            sql.push(col).push(" IS NULL");
             if is_text {
-                qb.push(" OR ").push(col).push(" = ''");
+                sql.push(" OR ").push(col).push(" = ''");
             }
         }
-        _ => push_false(qb),
+        _ => push_false(sql),
     }
 }
 
-fn push_text_predicate(
-    qb: &mut QueryBuilder<Sqlite>,
-    col: &str,
-    op: RuleOp,
-    value: Option<&RuleValue>,
-) {
+fn push_text_predicate(sql: &mut Sql, col: &'static str, op: RuleOp, value: Option<&RuleValue>) {
     match op {
-        RuleOp::IsSet | RuleOp::IsNotSet => push_presence(qb, col, op, true),
+        RuleOp::IsSet | RuleOp::IsNotSet => push_presence(sql, col, op, true),
         RuleOp::Contains | RuleOp::NotContains | RuleOp::StartsWith | RuleOp::EndsWith => {
             let Some(RuleValue::Text(s)) = value else {
-                return push_false(qb);
+                return push_false(sql);
             };
             let esc = escape_like(s);
             let pattern = match op {
@@ -344,45 +328,45 @@ fn push_text_predicate(
                 _ => format!("%{esc}%"),
             };
             if op == RuleOp::NotContains {
-                qb.push(col).push(" IS NULL OR ").push(col).push(" NOT LIKE ");
+                sql.push(col).push(" IS NULL OR ").push(col).push(" NOT LIKE ");
             } else {
-                qb.push(col).push(" LIKE ");
+                sql.push(col).push(" LIKE ");
             }
-            qb.push_bind(pattern).push(" ESCAPE '\\'");
+            sql.push_bind(pattern).push(" ESCAPE '\\'");
         }
         RuleOp::Is => {
             let Some(RuleValue::Text(s)) = value else {
-                return push_false(qb);
+                return push_false(sql);
             };
-            qb.push(col).push(" = ").push_bind(s.clone()).push(" COLLATE NOCASE");
+            sql.push(col).push(" = ").push_bind(s.as_str()).push(" COLLATE NOCASE");
         }
         RuleOp::IsNot => {
             let Some(RuleValue::Text(s)) = value else {
-                return push_false(qb);
+                return push_false(sql);
             };
-            qb.push(col)
+            sql.push(col)
                 .push(" IS NULL OR ")
                 .push(col)
                 .push(" <> ")
-                .push_bind(s.clone())
+                .push_bind(s.as_str())
                 .push(" COLLATE NOCASE");
         }
-        _ => push_false(qb),
+        _ => push_false(sql),
     }
 }
 
 fn push_numeric_predicate(
-    qb: &mut QueryBuilder<Sqlite>,
-    col: &str,
+    sql: &mut Sql,
+    col: &'static str,
     field: RuleField,
     op: RuleOp,
     value: Option<&RuleValue>,
 ) {
     match op {
-        RuleOp::IsSet | RuleOp::IsNotSet => push_presence(qb, col, op, false),
+        RuleOp::IsSet | RuleOp::IsNotSet => push_presence(sql, col, op, false),
         RuleOp::Eq | RuleOp::Ne | RuleOp::Gt | RuleOp::Gte | RuleOp::Lt | RuleOp::Lte => {
             let Some(RuleValue::Number(n)) = value else {
-                return push_false(qb);
+                return push_false(sql);
             };
             let sql_op = match op {
                 RuleOp::Eq => " = ",
@@ -394,45 +378,40 @@ fn push_numeric_predicate(
             };
             // The editor takes Duration in whole seconds, and the column holds milliseconds.
             let bound = if field == RuleField::DurationMs { *n * 1000.0 } else { *n };
-            qb.push(col).push(sql_op).push_bind(bound);
+            sql.push(col).push(sql_op).push_bind(bound);
         }
-        _ => push_false(qb),
+        _ => push_false(sql),
     }
 }
 
-fn push_bool_predicate(qb: &mut QueryBuilder<Sqlite>, col: &str, op: RuleOp) {
+fn push_bool_predicate(sql: &mut Sql, col: &'static str, op: RuleOp) {
     match op {
         RuleOp::IsTrue => {
-            qb.push(col).push(" = 1");
+            sql.push(col).push(" = 1");
         }
         RuleOp::IsFalse => {
-            qb.push(col).push(" = 0");
+            sql.push(col).push(" = 0");
         }
-        _ => push_false(qb),
+        _ => push_false(sql),
     }
 }
 
-fn push_date_predicate(
-    qb: &mut QueryBuilder<Sqlite>,
-    col: &str,
-    op: RuleOp,
-    value: Option<&RuleValue>,
-) {
+fn push_date_predicate(sql: &mut Sql, col: &'static str, op: RuleOp, value: Option<&RuleValue>) {
     match op {
-        RuleOp::IsSet | RuleOp::IsNotSet => push_presence(qb, col, op, false),
+        RuleOp::IsSet | RuleOp::IsNotSet => push_presence(sql, col, op, false),
         RuleOp::InLast | RuleOp::NotInLast => {
             let Some(RuleValue::Days(days)) = value else {
-                return push_false(qb);
+                return push_false(sql);
             };
             let cutoff = cutoff_rfc3339(*days);
             if op == RuleOp::InLast {
-                qb.push(col).push(" IS NOT NULL AND ").push(col).push(" >= ");
+                sql.push(col).push(" IS NOT NULL AND ").push(col).push(" >= ");
             } else {
-                qb.push(col).push(" IS NULL OR ").push(col).push(" < ");
+                sql.push(col).push(" IS NULL OR ").push(col).push(" < ");
             }
-            qb.push_bind(cutoff);
+            sql.push_bind(cutoff);
         }
-        _ => push_false(qb),
+        _ => push_false(sql),
     }
 }
 
@@ -499,9 +478,9 @@ fn field_source(field: RuleField) -> FieldSource {
 
 /// Appends `ORDER BY … LIMIT ?` for a capped playlist. The count subquery spells its own so it can
 /// leave a random order out.
-fn push_order_and_limit(qb: &mut QueryBuilder<Sqlite>, limit: &SmartLimit) {
-    qb.push(order_by_fragment(Some(limit)));
-    qb.push(" LIMIT ").push_bind(i64::from(limit.count));
+fn push_order_and_limit(sql: &mut Sql, limit: &SmartLimit) {
+    sql.push(order_by_fragment(Some(limit)));
+    sql.push(" LIMIT ").push_bind(i64::from(limit.count));
 }
 
 /// The `ORDER BY` clause, leading space included. RFC 3339 `last_played` and `date_added` sort

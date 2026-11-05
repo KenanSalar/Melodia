@@ -1,12 +1,11 @@
 use std::collections::HashSet;
 
-use sqlx::{QueryBuilder, Sqlite};
-
 use crate::database::DbPool;
 use crate::database::queries;
 use crate::database::queries::fixtures::{
     insert_tagged_track, insert_test_track, make_test_metadata,
 };
+use crate::database::sql::Sql;
 use melodia_core::entities::credits::{CreditRole, RoleCredit, RoleCredits};
 use melodia_core::entities::genre::GenreList;
 use melodia_core::entities::smart_criteria::{
@@ -496,9 +495,9 @@ async fn an_incoherent_rule_is_dropped_rather_than_matching_nothing() -> Result<
 /// One rule's predicate with no `WHERE` around it. [`super::push_false`] pushes exactly
 /// `"0"`, so a degraded rule is an equality rather than a search through real SQL.
 fn rendered_predicate(rule: &Rule) -> String {
-    let mut qb: QueryBuilder<Sqlite> = QueryBuilder::new("");
-    super::push_rule(&mut qb, rule);
-    qb.sql().as_str().to_owned()
+    let mut sql = Sql::new("");
+    super::push_rule(&mut sql, rule);
+    sql.text().to_owned()
 }
 
 /// The evaluator's half of the invariant `melodia-core`'s `smart_criteria_tests` holds

@@ -7,13 +7,13 @@
 //! exclusion ahead of its insert, and every other ingest path asks here inside its own write
 //! transaction, so a walk read before an exclusion committed still can't bring its file back.
 
-use std::borrow::Cow;
 use std::collections::{HashMap, HashSet};
 use std::path::Path;
 
 use sqlx::sqlite::SqliteConnection;
-use sqlx::{AssertSqlSafe, QueryBuilder, Sqlite, Transaction};
+use sqlx::{Sqlite, Transaction};
 
+use crate::database::sql::Sql;
 use crate::database::{
     DbPool, MAX_BINDS_PER_STATEMENT, chunked_in_execute_on, chunked_in_query, chunked_in_query_on,
     values_placeholders,
@@ -38,19 +38,20 @@ pub(crate) async fn exclude_on(
     const COLS_PER_ROW: usize = 6;
     let excluded_at = melodia_core::utils::now_rfc3339();
     for chunk in files.chunks(MAX_BINDS_PER_STATEMENT / COLS_PER_ROW) {
-        let mut builder = QueryBuilder::<Sqlite>::new(
+        let mut sql = Sql::trusted(format!(
             "INSERT INTO excluded_files \
-             (path, file_hash, file_size, date_modified, folder_id, excluded_at) ",
-        );
-        builder.push_values(chunk, |mut row, file| {
-            row.push_bind(file.path)
-                .push_bind(file.file_hash)
-                .push_bind(file.file_size)
-                .push_bind(file.date_modified)
-                .push_bind(file.folder_id)
-                .push_bind(excluded_at.as_str());
-        });
-        builder.build().persistent(false).execute(&mut **tx).await?;
+             (path, file_hash, file_size, date_modified, folder_id, excluded_at) VALUES {}",
+            values_placeholders(chunk.len(), COLS_PER_ROW)
+        ));
+        for file in chunk {
+            sql.bind(file.path)
+                .bind(file.file_hash)
+                .bind(file.file_size)
+                .bind(file.date_modified)
+                .bind(file.folder_id)
+                .bind(excluded_at.as_str());
+        }
+        sql.execute(&mut **tx).await?;
     }
     Ok(())
 }
@@ -64,23 +65,19 @@ pub(crate) async fn restamp_on(
     const COLS_PER_ROW: usize = 4;
     for chunk in files.chunks(MAX_BINDS_PER_STATEMENT / COLS_PER_ROW) {
         let rows = values_placeholders(chunk.len(), COLS_PER_ROW);
-        let sql = format!(
+        let mut sql = Sql::trusted(format!(
             "WITH v(path, file_hash, file_size, date_modified) AS (VALUES {rows}) \
              UPDATE excluded_files SET file_hash = v.file_hash, file_size = v.file_size, \
                     date_modified = v.date_modified \
              FROM v WHERE excluded_files.path = v.path"
-        );
-        let paths: Vec<Cow<'_, str>> =
-            chunk.iter().map(|(path, _)| path.to_string_lossy()).collect();
-        let mut query = sqlx::query(AssertSqlSafe(sql)).persistent(false);
-        for (path, (_, meta)) in paths.iter().zip(chunk) {
-            query = query
-                .bind(path.as_ref())
+        ));
+        for (path, meta) in chunk {
+            sql.bind(path.to_string_lossy().into_owned())
                 .bind(meta.file_hash.as_str())
                 .bind(meta.file_size)
                 .bind(meta.date_modified.as_deref());
         }
-        query.execute(&mut **tx).await?;
+        sql.execute(&mut **tx).await?;
     }
     Ok(())
 }

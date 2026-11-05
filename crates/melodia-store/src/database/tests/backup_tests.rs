@@ -82,10 +82,9 @@ async fn a_backup_round_trips_as_an_openable_database() -> Result<(), AppError> 
     Ok(())
 }
 
-/// `VACUUM INTO` takes no bind parameter, so the staging path is interpolated and every `'` in
-/// it has to be doubled. Undoubled, the first one closes the literal early and `SQLite` refuses
-/// the statement — which `main` treats as fatal, so the user cannot launch at all once a
-/// migration is pending.
+/// The staging path reaches `VACUUM INTO` bound, so a `'` in it is only text. Spliced into the
+/// statement, the first one would close the literal early and `SQLite` refuse the statement,
+/// which `main` treats as fatal: no launch at all once a migration is pending.
 ///
 /// Not a hypothetical directory: `MELODIA_DATA_DIR` makes the root the user's choice, and an
 /// apostrophe in a home folder name is ordinary on Windows and macOS. Every other test here

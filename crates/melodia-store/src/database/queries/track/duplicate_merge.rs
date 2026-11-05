@@ -6,12 +6,13 @@
 
 use std::collections::{BTreeSet, HashMap};
 
-use sqlx::{AssertSqlSafe, FromRow, Sqlite, Transaction};
+use sqlx::{FromRow, Sqlite, Transaction};
 
 use crate::database::queries::excluded_files::{self, NewExclusion};
 use crate::database::queries::ingest::BULK_THRESHOLD;
 use crate::database::queries::playlist::{self, NewItem};
 use crate::database::queries::{scan, stats};
+use crate::database::sql::Sql;
 use crate::database::{
     DbPool, MAX_BINDS_PER_STATEMENT, chunked_in_execute_on, chunked_in_query_on,
     values_placeholders,
@@ -210,18 +211,16 @@ async fn write_keepers(
     const COLS_PER_ROW: usize = 7;
     for chunk in keepers.chunks(MAX_BINDS_PER_STATEMENT / COLS_PER_ROW) {
         let rows = values_placeholders(chunk.len(), COLS_PER_ROW);
-        let sql = format!(
+        let mut sql = Sql::trusted(format!(
             "WITH v(id, is_favorite, rating, play_count, skip_count, last_played, date_added) \
                  AS (VALUES {rows}) \
              UPDATE tracks SET is_favorite = v.is_favorite, rating = v.rating, \
                     play_count = v.play_count, skip_count = v.skip_count, \
                     last_played = v.last_played, date_added = v.date_added \
              FROM v WHERE tracks.id = v.id"
-        );
-        let mut query = sqlx::query(AssertSqlSafe(sql)).persistent(false);
+        ));
         for (id, history) in chunk {
-            query = query
-                .bind(id)
+            sql.bind(*id)
                 .bind(history.is_favorite)
                 .bind(history.rating)
                 .bind(history.play_count)
@@ -229,7 +228,7 @@ async fn write_keepers(
                 .bind(history.last_played.as_deref())
                 .bind(history.date_added.as_str());
         }
-        query.execute(&mut **tx).await?;
+        sql.execute(&mut **tx).await?;
     }
     Ok(())
 }

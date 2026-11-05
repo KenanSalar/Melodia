@@ -1,6 +1,5 @@
-use sqlx::AssertSqlSafe;
-
 use crate::database::DbPool;
+use crate::database::sql::Sql;
 use melodia_core::entities::folder;
 use melodia_core::error::AppError;
 
@@ -68,19 +67,19 @@ pub async fn absorb_folders(db: &DbPool, parent_id: i64, ids: &[i64]) -> Result<
     for chunk in ids.chunks(crate::database::MAX_BINDS_PER_STATEMENT - 1) {
         let placeholders = crate::database::placeholders(chunk.len());
         for table in ["tracks", "excluded_files"] {
-            let sql =
-                format!("UPDATE {table} SET folder_id = ? WHERE folder_id IN ({placeholders})");
-            let mut repoint = sqlx::query(AssertSqlSafe(sql)).persistent(false).bind(parent_id);
-            for id in chunk {
-                repoint = repoint.bind(id);
+            let mut repoint = Sql::trusted(format!(
+                "UPDATE {table} SET folder_id = ? WHERE folder_id IN ({placeholders})"
+            ));
+            repoint.bind(parent_id);
+            for &id in chunk {
+                repoint.bind(id);
             }
             repoint.execute(&mut *tx).await?;
         }
 
-        let sql = format!("DELETE FROM folders WHERE id IN ({placeholders})");
-        let mut delete = sqlx::query(AssertSqlSafe(sql)).persistent(false);
-        for id in chunk {
-            delete = delete.bind(id);
+        let mut delete = Sql::trusted(format!("DELETE FROM folders WHERE id IN ({placeholders})"));
+        for &id in chunk {
+            delete.bind(id);
         }
         delete.execute(&mut *tx).await?;
     }

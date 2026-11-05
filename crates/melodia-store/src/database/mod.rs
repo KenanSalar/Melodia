@@ -2,8 +2,9 @@ mod backup;
 mod collation;
 mod migrate;
 pub mod queries;
+mod sql;
 
-use sqlx::AssertSqlSafe;
+use sql::{Param, Sql};
 use sqlx::sqlite::{
     SqliteConnectOptions, SqliteConnection, SqliteJournalMode, SqlitePool, SqlitePoolOptions,
 };
@@ -16,9 +17,9 @@ use melodia_core::error::{AppError, describe};
 /// Bind-variable budget for one statement, divided by a query's binds per row to size its chunks.
 ///
 /// Chosen rather than the engine's: the bundled `SQLite` allows 32766, and 999 is the older default
-/// this kept. Moving it trades both ways, a larger chunk buying fewer prepares (every bulk site is
-/// `.persistent(false)`) for a larger parameter array resident per statement, so move it against a
-/// profile of a first scan on a large library.
+/// this kept. Moving it trades both ways, a larger chunk buying fewer prepares (every bulk statement
+/// is assembled, so prepared per run) for a larger parameter array resident per statement, so move
+/// it against a profile of a first scan on a large library.
 pub const MAX_BINDS_PER_STATEMENT: usize = 999;
 
 /// The fts5 compaction [`DbPool::close`] issues, named so the test proving it still runs binds the
@@ -41,15 +42,19 @@ pub(crate) fn placeholders(n: usize) -> String {
     s
 }
 
-/// `rows` comma-separated tuples of `width` `?`s each, for a CTE's `VALUES` list.
+/// `rows` comma-separated tuples of `width` `?`s each, for a `VALUES` list.
 pub(crate) fn values_placeholders(rows: usize, width: usize) -> String {
-    let row = format!("({})", placeholders(width));
+    values_list(&format!("({})", placeholders(width)), rows)
+}
+
+/// The `VALUES` tuple `row` repeated `rows` times, comma-separated.
+pub(crate) fn values_list(row: &str, rows: usize) -> String {
     let mut s = String::with_capacity(rows * (row.len() + 2));
     for i in 0..rows {
         if i > 0 {
             s.push_str(", ");
         }
-        s.push_str(&row);
+        s.push_str(row);
     }
     s
 }
@@ -100,7 +105,7 @@ pub(crate) async fn backfill_folded<R: FoldedInputs>(
     target: &FoldedColumn,
 ) -> Result<u64, AppError> {
     let page_limit = i64::try_from(BACKFILL_PAGE_ROWS).unwrap_or(i64::MAX);
-    let sql = format!(
+    let page_select = format!(
         "{} WHERE x.{column} = '' AND x.id > ? ORDER BY x.id LIMIT ?",
         target.inputs,
         column = target.column,
@@ -108,11 +113,9 @@ pub(crate) async fn backfill_folded<R: FoldedInputs>(
     let mut after_id = 0_i64;
     let mut written = 0;
     loop {
-        let page: Vec<R> = sqlx::query_as(AssertSqlSafe(sql.as_str()))
-            .bind(after_id)
-            .bind(page_limit)
-            .fetch_all(db.read())
-            .await?;
+        let mut select = Sql::trusted(page_select.clone());
+        select.bind(after_id).bind(page_limit);
+        let page: Vec<R> = select.fetch_all(db.read()).await?;
         let Some(last) = page.last() else {
             return Ok(written);
         };
@@ -126,21 +129,20 @@ async fn fill_folded_page<R: FoldedInputs>(
     target: &FoldedColumn,
     page: &[R],
 ) -> Result<u64, AppError> {
-    let sql = format!(
+    let mut update = Sql::trusted(format!(
         "UPDATE {table} SET {column} = {case} WHERE id IN ({ids}) AND {column} = ''",
         table = target.table,
         column = target.column,
         case = case_by_id(page.len()),
         ids = placeholders(page.len()),
-    );
-    let mut query = sqlx::query(AssertSqlSafe(sql));
+    ));
     for row in page {
-        query = query.bind(row.id()).bind(row.packed());
+        update.bind(row.id()).bind(row.packed());
     }
     for row in page {
-        query = query.bind(row.id());
+        update.bind(row.id());
     }
-    Ok(query.persistent(false).execute(db.write()).await?.rows_affected())
+    update.execute(db.write()).await
 }
 
 /// Runs a single-column `IN (…)` query in chunks inside [`MAX_BINDS_PER_STATEMENT`], concatenating
@@ -152,7 +154,7 @@ pub(crate) async fn chunked_in_query<T, B>(
 ) -> Result<Vec<T>, AppError>
 where
     T: for<'r> sqlx::FromRow<'r, sqlx::sqlite::SqliteRow> + Send + Unpin,
-    for<'q> B: sqlx::Encode<'q, sqlx::Sqlite> + sqlx::Type<sqlx::Sqlite> + Send + Sync,
+    B: Clone + Into<Param> + Sync,
 {
     if items.is_empty() {
         return Ok(Vec::new());
@@ -170,19 +172,17 @@ pub(crate) async fn chunked_in_query_on<T, B>(
 ) -> Result<Vec<T>, AppError>
 where
     T: for<'r> sqlx::FromRow<'r, sqlx::sqlite::SqliteRow> + Send + Unpin,
-    for<'q> B: sqlx::Encode<'q, sqlx::Sqlite> + sqlx::Type<sqlx::Sqlite> + Send + Sync,
+    B: Clone + Into<Param> + Sync,
 {
     let mut all_results: Vec<T> = Vec::new();
 
     for chunk in items.chunks(MAX_BINDS_PER_STATEMENT) {
-        let sql = build_sql(&placeholders(chunk.len()));
-
-        let mut query = sqlx::query_as::<_, T>(AssertSqlSafe(sql));
+        let mut sql = Sql::trusted(build_sql(&placeholders(chunk.len())));
         for item in chunk {
-            query = query.bind(item);
+            sql.bind(item.clone());
         }
 
-        let rows = query.persistent(false).fetch_all(&mut *conn).await?;
+        let rows: Vec<T> = sql.fetch_all(&mut *conn).await?;
         all_results.extend(rows);
     }
 
@@ -197,15 +197,15 @@ pub(crate) async fn chunked_in_execute_on<B>(
     build_sql: impl Fn(&str) -> String,
 ) -> Result<u64, AppError>
 where
-    for<'q> B: sqlx::Encode<'q, sqlx::Sqlite> + sqlx::Type<sqlx::Sqlite> + Send + Sync,
+    B: Clone + Into<Param> + Sync,
 {
     let mut touched = 0;
     for chunk in items.chunks(MAX_BINDS_PER_STATEMENT) {
-        let mut query = sqlx::query(AssertSqlSafe(build_sql(&placeholders(chunk.len()))));
+        let mut sql = Sql::trusted(build_sql(&placeholders(chunk.len())));
         for item in chunk {
-            query = query.bind(item);
+            sql.bind(item.clone());
         }
-        touched += query.persistent(false).execute(&mut **tx).await?.rows_affected();
+        touched += sql.execute(&mut **tx).await?;
     }
     Ok(touched)
 }
@@ -241,23 +241,19 @@ where
 /// Ids per statement that binds one value ahead of its id list, as [`set_where_id_in`]'s does.
 pub(crate) const IDS_PER_SET: usize = MAX_BINDS_PER_STATEMENT - 1;
 
-/// One chunk of an `UPDATE … SET col = ? WHERE id IN (…)`, `value` bound first. `update_set` is
-/// `'static` because it is spliced in rather than bound; the caller chunks at [`IDS_PER_SET`] and
-/// picks the executor, some holding a transaction.
-pub(crate) fn set_where_id_in<'v, V>(
+/// One chunk of an `UPDATE … SET col = ? WHERE id IN (…)`, `value` bound first. The caller chunks
+/// at [`IDS_PER_SET`] and picks the executor, some holding a transaction.
+pub(crate) fn set_where_id_in(
     update_set: &'static str,
-    value: V,
+    value: impl Into<Param>,
     ids: &[i64],
-) -> sqlx::query::Query<'static, sqlx::Sqlite, sqlx::sqlite::SqliteArguments>
-where
-    V: sqlx::Encode<'v, sqlx::Sqlite> + sqlx::Type<sqlx::Sqlite>,
-{
-    let sql = format!("{update_set} WHERE id IN ({})", placeholders(ids.len()));
-    let mut query = sqlx::query(AssertSqlSafe(sql)).persistent(false).bind(value);
+) -> Sql {
+    let mut sql = Sql::new(update_set);
+    sql.bind(value).push(" WHERE id IN (").push_trusted(&placeholders(ids.len())).push(")");
     for id in ids {
-        query = query.bind(*id);
+        sql.bind(*id);
     }
-    query
+    sql
 }
 
 #[derive(Clone)]

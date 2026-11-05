@@ -1,10 +1,10 @@
 use std::collections::{HashMap, HashSet};
-
-use sqlx::AssertSqlSafe;
+use std::sync::LazyLock;
 
 use crate::database::queries::search_name;
 use crate::database::queries::track::{columns, missing_ids_on};
-use crate::database::{DbPool, select_in_id_order};
+use crate::database::sql::Sql;
+use crate::database::{DbPool, select_in_id_order, values_placeholders};
 use melodia_core::entities::playlist::{CutItem, PlaylistIdentity, PlaylistItemsCut};
 use melodia_core::entities::undo::{UNDO_HOLD_CAP, UndoCapture};
 use melodia_core::entities::{playlist, track};
@@ -217,19 +217,22 @@ pub async fn get_playlist_tracks(
     Ok(tracks)
 }
 
+static EXPORT_ROWS: LazyLock<String> = LazyLock::new(|| {
+    format!(
+        "SELECT {} FROM tracks t \
+         JOIN playlist_items pi ON pi.track_id = t.id \
+         WHERE pi.playlist_id = ? \
+         ORDER BY pi.position ASC",
+        columns::PLAYLIST_EXPORT.prefixed("t")
+    )
+});
+
 /// A playlist's M3U export rows, in playlist order.
 pub async fn get_playlist_tracks_for_export(
     db: &DbPool,
     playlist_id: i64,
 ) -> Result<Vec<track::PlaylistExportRow>, AppError> {
-    let cols = columns::PLAYLIST_EXPORT.prefixed("t");
-    let sql = format!(
-        "SELECT {cols} FROM tracks t \
-         JOIN playlist_items pi ON pi.track_id = t.id \
-         WHERE pi.playlist_id = ? \
-         ORDER BY pi.position ASC"
-    );
-    let tracks = sqlx::query_as::<_, track::PlaylistExportRow>(AssertSqlSafe(sql))
+    let tracks = sqlx::query_as::<_, track::PlaylistExportRow>(EXPORT_ROWS.as_str())
         .bind(playlist_id)
         .fetch_all(db.read())
         .await?;
@@ -314,19 +317,16 @@ pub(crate) async fn insert_items_tx(
 
     let mut landed = Vec::with_capacity(items.len());
     for chunk in items.chunks(CHUNK_SIZE) {
-        let mut query_builder = sqlx::QueryBuilder::new(
-            "INSERT OR IGNORE INTO playlist_items (playlist_id, track_id, position, added_at) ",
-        );
-        query_builder.push_values(chunk, |mut b, item| {
-            b.push_bind(playlist_id)
-                .push_bind(item.track_id)
-                .push_bind(item.position)
-                .push_bind(item.added_at);
-        });
-        query_builder.push(" RETURNING track_id");
-        let chunk_landed: Vec<i64> =
-            query_builder.build_query_scalar().persistent(false).fetch_all(&mut **tx).await?;
-        landed.extend(chunk_landed);
+        let mut sql = Sql::trusted(format!(
+            "INSERT OR IGNORE INTO playlist_items (playlist_id, track_id, position, added_at) \
+             VALUES {} RETURNING track_id",
+            values_placeholders(chunk.len(), COLS_PER_ROW)
+        ));
+        for item in chunk {
+            sql.bind(playlist_id).bind(item.track_id).bind(item.position).bind(item.added_at);
+        }
+        let chunk_landed: Vec<(i64,)> = sql.fetch_all(&mut **tx).await?;
+        landed.extend(chunk_landed.into_iter().map(|(track_id,)| track_id));
     }
     Ok(landed)
 }
@@ -409,19 +409,18 @@ async fn cut_rows_tx(
     // One bind of each statement is the `playlist_id`.
     for chunk in track_ids.chunks(crate::database::MAX_BINDS_PER_STATEMENT - 1) {
         let placeholders = crate::database::placeholders(chunk.len());
-        let sql = format!(
+        let mut sql = Sql::trusted(format!(
             "SELECT track_id, row, added_at FROM (
                 SELECT track_id, added_at, ROW_NUMBER() OVER (ORDER BY position, id) - 1 AS row
                 FROM playlist_items WHERE playlist_id = ?
             ) WHERE track_id IN ({placeholders})"
-        );
-        let mut query = sqlx::query_as::<_, (i64, i64, String)>(AssertSqlSafe(sql))
-            .persistent(false)
-            .bind(playlist_id);
+        ));
+        sql.bind(playlist_id);
         for &id in chunk {
-            query = query.bind(id);
+            sql.bind(id);
         }
-        for (track_id, row, added_at) in query.fetch_all(&mut **tx).await? {
+        let found: Vec<(i64, i64, String)> = sql.fetch_all(&mut **tx).await?;
+        for (track_id, row, added_at) in found {
             let row = usize::try_from(row).unwrap_or(usize::MAX);
             rows.push(CutItem { track_id, row, added_at });
         }
@@ -440,14 +439,14 @@ async fn delete_items_tx(
     // One bind of each statement is the `playlist_id`.
     for chunk in track_ids.chunks(crate::database::MAX_BINDS_PER_STATEMENT - 1) {
         let placeholders = crate::database::placeholders(chunk.len());
-        let sql = format!(
+        let mut sql = Sql::trusted(format!(
             "DELETE FROM playlist_items WHERE playlist_id = ? AND track_id IN ({placeholders})"
-        );
-        let mut query = sqlx::query(AssertSqlSafe(sql)).persistent(false).bind(playlist_id);
+        ));
+        sql.bind(playlist_id);
         for &id in chunk {
-            query = query.bind(id);
+            sql.bind(id);
         }
-        removed += query.execute(&mut **tx).await?.rows_affected();
+        removed += sql.execute(&mut **tx).await?;
     }
     Ok(usize::try_from(removed).unwrap_or(usize::MAX))
 }
@@ -544,20 +543,18 @@ pub(crate) async fn batch_update_positions_pairs(
     }
 
     for chunk in pairs.chunks(CHUNK_SIZE) {
-        let sql = format!(
+        let mut sql = Sql::trusted(format!(
             "UPDATE playlist_items SET position = {} WHERE id IN ({})",
             crate::database::case_by_id(chunk.len()),
             crate::database::placeholders(chunk.len()),
-        );
-
-        let mut query = sqlx::query(AssertSqlSafe(sql));
+        ));
         for &(id, pos) in chunk {
-            query = query.bind(id).bind(pos);
+            sql.bind(id).bind(pos);
         }
         for &(id, _) in chunk {
-            query = query.bind(id);
+            sql.bind(id);
         }
-        query.persistent(false).execute(&mut **tx).await?;
+        sql.execute(&mut **tx).await?;
     }
     Ok(())
 }

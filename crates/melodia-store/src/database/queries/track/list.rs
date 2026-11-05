@@ -1,6 +1,6 @@
 //! The `TrackListRow` fetches every track list renders from.
 
-use sqlx::AssertSqlSafe;
+use std::sync::LazyLock;
 
 use super::columns;
 use crate::database::DbPool;
@@ -16,13 +16,16 @@ use melodia_core::error::AppError;
 /// scan of `idx_tracks_sort_key` rather than a sort.
 pub(super) const TRACK_LIST_ORDER: &str = "sort_key COLLATE NOCASE ASC";
 
+static ALL_TRACK_LIST_ROWS: LazyLock<String> = LazyLock::new(|| {
+    format!("SELECT {} FROM tracks ORDER BY {TRACK_LIST_ORDER}", columns::TRACK_LIST.joined())
+});
+
 /// Every track as a list row, in [`TRACK_LIST_ORDER`], for the checks that hold an id query
 /// against them; a list fetches its rows by id.
 pub async fn get_all_tracks_for_list(db: &DbPool) -> Result<Vec<track::TrackListRow>, AppError> {
-    let cols = columns::TRACK_LIST.joined();
-    let sql = format!("SELECT {cols} FROM tracks ORDER BY {TRACK_LIST_ORDER}");
-    let tracks =
-        sqlx::query_as::<_, track::TrackListRow>(AssertSqlSafe(sql)).fetch_all(db.read()).await?;
+    let tracks = sqlx::query_as::<_, track::TrackListRow>(ALL_TRACK_LIST_ROWS.as_str())
+        .fetch_all(db.read())
+        .await?;
     Ok(tracks)
 }
 
@@ -40,6 +43,13 @@ pub(super) fn directory_like_prefix(dir_path: &str) -> String {
     format!("{escaped}{LIKE_SEPARATOR}")
 }
 
+static TRACKS_IN_DIRECTORY: LazyLock<String> = LazyLock::new(|| {
+    format!(
+        "SELECT file_path, {} FROM tracks WHERE file_path LIKE ? ESCAPE '\\' AND file_path NOT LIKE ? ESCAPE '\\'",
+        columns::TRACK_LIST.joined()
+    )
+});
+
 /// The tracks directly inside `dir_path`, each with the path Browse matches its file by: `LIKE`
 /// folds ASCII case, so a sibling folder spelled in another case answers here too.
 ///
@@ -54,11 +64,7 @@ pub async fn get_tracks_in_directory(
     let pattern = format!("{prefix}%");
     let subdir_pattern = format!("{prefix}%{LIKE_SEPARATOR}%");
 
-    let cols = columns::TRACK_LIST.joined();
-    let sql = format!(
-        "SELECT file_path, {cols} FROM tracks WHERE file_path LIKE ? ESCAPE '\\' AND file_path NOT LIKE ? ESCAPE '\\'"
-    );
-    let tracks = sqlx::query_as::<_, DirectoryTrack>(AssertSqlSafe(sql))
+    let tracks = sqlx::query_as::<_, DirectoryTrack>(TRACKS_IN_DIRECTORY.as_str())
         .bind(&pattern)
         .bind(&subdir_pattern)
         .fetch_all(db.read())
@@ -66,6 +72,16 @@ pub async fn get_tracks_in_directory(
 
     Ok(tracks)
 }
+
+static RECENTLY_PLAYED: LazyLock<String> = LazyLock::new(|| {
+    format!(
+        "SELECT {} FROM tracks \
+         WHERE last_played IS NOT NULL \
+         ORDER BY last_played DESC, id DESC \
+         LIMIT ?",
+        columns::TRACK_LIST.joined()
+    )
+});
 
 /// The `limit` most recently played tracks, newest first, which the view re-sorts and filters in
 /// memory rather than re-querying.
@@ -77,14 +93,7 @@ pub async fn get_recently_played(
     db: &DbPool,
     limit: i64,
 ) -> Result<Vec<track::TrackListRow>, AppError> {
-    let cols = columns::TRACK_LIST.joined();
-    let sql = format!(
-        "SELECT {cols} FROM tracks \
-         WHERE last_played IS NOT NULL \
-         ORDER BY last_played DESC, id DESC \
-         LIMIT ?"
-    );
-    let rows = sqlx::query_as::<_, track::TrackListRow>(AssertSqlSafe(sql))
+    let rows = sqlx::query_as::<_, track::TrackListRow>(RECENTLY_PLAYED.as_str())
         .bind(limit)
         .fetch_all(db.read())
         .await?;

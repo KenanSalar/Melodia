@@ -8,7 +8,7 @@
 //! The two FTS subqueries are unbounded: fts5 scores every match either way, and each costs a
 //! `tracks` rowid lookup per match, two more walks rather than a doubling of one.
 
-use sqlx::AssertSqlSafe;
+use std::sync::LazyLock;
 
 use crate::database::DbPool;
 use crate::database::queries::track::columns;
@@ -55,6 +55,19 @@ fn like_pattern_escape(s: &str) -> String {
     out
 }
 
+/// `tracks_fts MATCH`, never the alias: fts5 names the match column after the table, so
+/// `fts MATCH` fails to prepare. `rank` is bm25 under the weights the newest `tracks_fts` rebuild
+/// pins, which pick the 50 rows that survive the `LIMIT`, not only their order.
+static TRACK_MATCHES: LazyLock<String> = LazyLock::new(|| {
+    format!(
+        "SELECT {} FROM tracks t
+         JOIN tracks_fts fts ON fts.rowid = t.id
+         WHERE tracks_fts MATCH ?
+         ORDER BY rank LIMIT 50",
+        columns::TRACK_LIST.prefixed("t")
+    )
+});
+
 pub async fn search_all(db: &DbPool, query: &str) -> Result<SearchResults, AppError> {
     let trimmed = query.trim();
     if trimmed.is_empty() {
@@ -67,21 +80,11 @@ pub async fn search_all(db: &DbPool, query: &str) -> Result<SearchResults, AppEr
     }
 
     let fts_query = build_fts_query(trimmed);
-    let cols = columns::TRACK_LIST.prefixed("t");
 
     // `LIKE` over the `*_stats` views: small tables, no index to gain.
     let pattern = like_pattern_escape(trimmed);
 
-    // `tracks_fts MATCH`, never the alias: fts5 names the match column after the table, so
-    // `fts MATCH` fails to prepare. `rank` is bm25 under the weights the newest `tracks_fts`
-    // rebuild pins, which pick the 50 rows that survive the `LIMIT`, not only their order.
-    let sql = format!(
-        "SELECT {cols} FROM tracks t
-         JOIN tracks_fts fts ON fts.rowid = t.id
-         WHERE tracks_fts MATCH ?
-         ORDER BY rank LIMIT 50"
-    );
-    let tracks_fut = sqlx::query_as::<_, track::TrackListRow>(AssertSqlSafe(sql))
+    let tracks_fut = sqlx::query_as::<_, track::TrackListRow>(TRACK_MATCHES.as_str())
         .bind(&fts_query)
         .fetch_all(db.read());
 

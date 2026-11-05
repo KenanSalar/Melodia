@@ -6,11 +6,12 @@
 //! arm ends in the id, so the order is total and a descending sort is the exact reverse of the
 //! ascending one. Rows `ui::track_sort` leaves tied in fetch order come back in id order instead.
 
-use sqlx::{QueryBuilder, Sqlite};
+use sqlx::Sqlite;
 
 use super::membership::Membership;
 use crate::database::DbPool;
 use crate::database::collation::UNICODE_LOWER;
+use crate::database::sql::Sql;
 use melodia_core::entities::track_list::{SortDir, TrackListScope, TrackOrder, TrackSortField};
 use melodia_core::error::AppError;
 use melodia_core::utils::needle::Needle;
@@ -40,30 +41,25 @@ pub async fn track_ids(
     needle: &Needle,
 ) -> Result<Vec<i64>, AppError> {
     let membership = Membership::resolve(db, scope).await?;
-    let mut qb =
-        QueryBuilder::<Sqlite>::new("SELECT group_concat(id, ',') FROM (SELECT t.id FROM ");
-    membership.push_source(&mut qb);
+    let mut sql = Sql::new("SELECT group_concat(id, ',') FROM (SELECT t.id FROM ");
+    membership.push_source(&mut sql);
     if !needle.is_empty() {
-        membership.push_and(&mut qb);
-        push_needle(&mut qb, needle);
+        membership.push_and(&mut sql);
+        push_needle(&mut sql, needle);
     }
-    qb.push(" ORDER BY ")
-        .push(order_by(Page::of(&membership), order, membership.position()))
+    sql.push(" ORDER BY ")
+        .push_trusted(&order_by(Page::of(&membership), order, membership.position()))
         .push(")");
-    fetch_packed_ids(db.read(), qb).await
+    fetch_packed_ids(db.read(), sql).await
 }
 
-/// The ids `qb` reads back as one `group_concat(id, ',')`, in the order joined. The aggregate is
+/// The ids `sql` reads back as one `group_concat(id, ',')`, in the order joined. The aggregate is
 /// NULL where nothing matched.
-pub(crate) async fn fetch_packed_ids<'e, E>(
-    executor: E,
-    mut qb: QueryBuilder<Sqlite>,
-) -> Result<Vec<i64>, AppError>
+pub(crate) async fn fetch_packed_ids<'e, E>(executor: E, sql: Sql) -> Result<Vec<i64>, AppError>
 where
     E: sqlx::Executor<'e, Database = Sqlite>,
 {
-    let packed: Option<String> =
-        qb.build_query_scalar().persistent(false).fetch_one(executor).await?;
+    let (packed,): (Option<String>,) = sql.fetch_one(executor).await?;
     packed.map_or_else(|| Ok(Vec::new()), |packed| unpack_ids(&packed))
 }
 
@@ -82,8 +78,8 @@ pub(super) fn detail_order(field: TrackSortField) -> String {
 }
 
 /// Pushes the condition `needle` filters a track list by, for a caller that skips an empty needle.
-pub(super) fn push_needle(qb: &mut QueryBuilder<Sqlite>, needle: &Needle) {
-    push_folded_match(qb, needle, "search_text", Some("year"));
+pub(super) fn push_needle(sql: &mut Sql, needle: &Needle) {
+    push_folded_match(sql, needle, "search_text", Some("year"));
 }
 
 /// Pushes `needle` against the folded `column`, plus `year` in decimal wherever the needle can
@@ -92,22 +88,28 @@ pub(super) fn push_needle(qb: &mut QueryBuilder<Sqlite>, needle: &Needle) {
 /// A row the backfill hasn't reached yet matches every needle rather than none, so the window
 /// after an upgrade can only widen a list.
 pub(crate) fn push_folded_match(
-    qb: &mut QueryBuilder<Sqlite>,
+    sql: &mut Sql,
     needle: &Needle,
     column: &'static str,
     year: Option<&'static str>,
 ) {
-    qb.push(format!("({column} = '' OR instr({column}, "))
-        .push_bind(needle.as_str().to_owned())
+    sql.push("(")
+        .push(column)
+        .push(" = '' OR instr(")
+        .push(column)
+        .push(", ")
+        .push_bind(needle.as_str())
         .push(") > 0");
     if let Some(year) = year
         && needle.is_number()
     {
-        qb.push(format!(" OR instr(CAST({year} AS TEXT), "))
-            .push_bind(needle.as_str().to_owned())
+        sql.push(" OR instr(CAST(")
+            .push(year)
+            .push(" AS TEXT), ")
+            .push_bind(needle.as_str())
             .push(") > 0");
     }
-    qb.push(")");
+    sql.push(")");
 }
 
 /// Which page a list sits on, which decides its tie-break and how a row reads.

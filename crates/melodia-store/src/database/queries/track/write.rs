@@ -1,7 +1,6 @@
 //! Writes to track rows: counters, the per-row flags, artwork and hashes.
 
-use sqlx::AssertSqlSafe;
-
+use crate::database::sql::Sql;
 use crate::database::{
     DbPool, IDS_PER_SET, chunked_in_query_on, set_where_id_in, values_placeholders,
 };
@@ -54,23 +53,21 @@ async fn add_counts(
     let stamp = if last_played.is_some() { ", last_played = ?" } else { "" };
 
     for chunk in increments.chunks(max_rows) {
-        let sql = format!(
+        let mut sql = Sql::trusted(format!(
             "UPDATE tracks SET {column} = {column} + {}{stamp} WHERE id IN ({})",
             crate::database::case_by_id(chunk.len()),
             crate::database::placeholders(chunk.len()),
-        );
-
-        let mut query = sqlx::query(AssertSqlSafe(sql));
+        ));
         for &(id, n) in chunk {
-            query = query.bind(id).bind(i64::from(n));
+            sql.bind(id).bind(i64::from(n));
         }
         if let Some(now) = last_played {
-            query = query.bind(now);
+            sql.bind(now);
         }
         for &(id, _) in chunk {
-            query = query.bind(id);
+            sql.bind(id);
         }
-        query.persistent(false).execute(db.write()).await?;
+        sql.execute(db.write()).await?;
     }
     Ok(())
 }
@@ -162,18 +159,17 @@ pub async fn batch_update_hashes(
     let mut tx = db.write().begin().await?;
     for chunk in updates.chunks(CHUNK_SIZE) {
         let rows = values_placeholders(chunk.len(), COLS_PER_ROW);
-        let sql = format!(
+        let mut sql = Sql::trusted(format!(
             "WITH v(id, h, m) AS (VALUES {rows})
              UPDATE tracks
                 SET file_hash = (SELECT h FROM v WHERE v.id = tracks.id),
                     date_modified = (SELECT m FROM v WHERE v.id = tracks.id)
               WHERE id IN (SELECT id FROM v)"
-        );
-        let mut q = sqlx::query(AssertSqlSafe(sql)).persistent(false);
+        ));
         for (id, hash, mtime) in chunk {
-            q = q.bind(id).bind(hash).bind(mtime);
+            sql.bind(*id).bind(hash.as_str()).bind(mtime.as_deref());
         }
-        q.execute(&mut *tx).await?;
+        sql.execute(&mut *tx).await?;
     }
     tx.commit().await?;
     Ok(())

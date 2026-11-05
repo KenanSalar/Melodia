@@ -1,4 +1,5 @@
 use crate::database::queries::scan::to_natural_sort_key;
+use crate::database::sql::Sql;
 use crate::database::{DbPool, chunked_in_query};
 use melodia_core::entities::radio::{self, StoredLogoAnswer};
 use melodia_core::error::{AppError, describe};
@@ -48,31 +49,29 @@ where
 {
     let sort_key = to_natural_sort_key(&station.name);
     let now = melodia_core::utils::now_rfc3339();
-    let conflict = if station.station_uuid.is_some() { DIRECTORY_CONFLICT } else { "" };
 
-    let sql = format!(
-        "INSERT INTO radio_stations ({INSERT_COLUMNS})
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-         {conflict}
-         RETURNING id"
-    );
-    Ok(sqlx::query_scalar::<_, i64>(sqlx::AssertSqlSafe(sql))
-        .bind(&station.station_uuid)
-        .bind(&station.name)
-        .bind(&station.stream_url)
-        .bind(&station.homepage)
-        .bind(&station.favicon_url)
-        .bind(&station.tags)
-        .bind(&station.country)
-        .bind(&station.country_code)
-        .bind(&station.language)
-        .bind(&station.codec)
+    let mut sql = Sql::new("INSERT INTO radio_stations (");
+    sql.push(INSERT_COLUMNS).push(") VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ");
+    if station.station_uuid.is_some() {
+        sql.push(DIRECTORY_CONFLICT);
+    }
+    sql.push(" RETURNING id")
+        .bind(station.station_uuid.as_deref())
+        .bind(station.name.as_str())
+        .bind(station.stream_url.as_str())
+        .bind(station.homepage.as_deref())
+        .bind(station.favicon_url.as_deref())
+        .bind(station.tags.as_str())
+        .bind(station.country.as_str())
+        .bind(station.country_code.as_str())
+        .bind(station.language.as_str())
+        .bind(station.codec.as_str())
         .bind(station.bitrate)
         .bind(station.hls)
-        .bind(&sort_key)
-        .bind(&now)
-        .fetch_one(executor)
-        .await?)
+        .bind(sort_key)
+        .bind(now);
+    let (id,): (i64,) = sql.fetch_one(executor).await?;
+    Ok(id)
 }
 
 /// One station, or `AppError::NotFound` if it was deleted between a list render
