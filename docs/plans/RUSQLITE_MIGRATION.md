@@ -36,7 +36,7 @@ Users see nothing broken, and no list or search opens faster after the move. The
   - the one-writer, two-to-four-readers layout;
   - idle connections closing after `IDLE_TIMEOUT`, so idle memory and `heap_trim`'s schedule hold;
   - each role's pragmas, as `init_database` and `test_pool` set them;
-  - every public store function staying `async` and returning what it returns today. A parameter its closure keeps becomes owned (Cross-cutting), and the two visitors become folds (Phase 4);
+  - every public store function staying `async` and returning what it returns today. A parameter its closure keeps becomes owned (Cross-cutting), and the two visitors become folds (Phase 3.6);
   - `DbPool::test_pool()`'s signature, which its 282 call sites name.
 - **Removed:**
   - sqlx and its per-connection worker threads;
@@ -100,10 +100,11 @@ Users see nothing broken, and no list or search opens faster after the move. The
    - A write transaction is synchronous inside its closure, so nothing can `.await` inside one.
    - **The permit and the connection travel together.** Both move into the blocking closure and go back to the lane only when it ends. A dropped future then never frees a permit while its connection still works, so the writer lane can't open a second writer.
    - **After `close()`, `read` and `write` fail at once**, as sqlx's `PoolClosed` does. `play_count_flusher_tests.rs:151` stages its failed write that way.
-   - **That failure, and a blocking task cancelled at runtime shutdown, return `AppError::DatabaseClosed`.** A `SQLITE_ABORT` made up for it would carry no real cause, where failures are told apart by variant. `kept.rs:199` takes it beside `Database`, or its `_` arm reports "not audio".
-7. **The cutover lands as one commit, after three phases that shrink it.**
-   - A half-converted store can't run: a transaction can't span drivers, and an in-memory test database can't be shared between them. So the driver swap itself is one commit.
-   - Phases 1 to 3 take out of it everything that can land and be validated under sqlx: the cross-crate tests, the migrator and the dynamic SQL.
+   - **That failure, and a blocking task cancelled at runtime shutdown, return `AppError::DatabaseClosed`.** A `SQLITE_ABORT` made up for it would carry no real cause, where failures are told apart by variant. `melodia-views`' `radio/callbacks/kept.rs:199` takes it beside `Database`, or its `_` arm reports "not audio".
+7. **The cutover lands as one PR in four commits, after the phases that shrink it.**
+   - A half-converted store can't run: a transaction can't span drivers, and an in-memory test database can't be shared between them. So the swap is validated only once it is whole.
+   - It lands as sub-phases 4a to 4d, a commit each, and the workspace builds again only at 4d's. `main` takes PRs as merge commits, so its first-parent history stays buildable, and `git bisect --first-parent` never visits 4a to 4c.
+   - Phases 1 to 3 and 3.6 take out of it everything that can land and be validated under sqlx: the cross-crate tests, the migrator, the dynamic SQL and the visitors' fold shape.
    - Running both drivers side by side was rejected. It needs a file-backed test pool, two error variants and two collation registrations, and it brings `SQLITE_BUSY` between two writers into the hand tests. All of that is machinery built to be deleted.
 8. **The cutover keeps the engine Phase 0 lands, and Phase 5 moves it.**
    - The cutover pins rusqlite 0.39.x, whose libsqlite3-sys 0.37 is the 3.51.3 Phase 0 resolves. Phase 5's before/after measurement then isolates the driver.
@@ -265,9 +266,37 @@ The store's `build.rs` is the last user of `sha2` 0.11, kept for the SHA-384 sql
   - `migrate.rs`'s `//!` keeps sqlx's row format rather than "row for row".
   - `CLAUDE.md`'s migration bullet and `code-style.md`'s frozen-comments sentence name the build failure beside the boot one.
 
-## Phase 4: The cutover (one commit)
+## Phase 3.6: The visitors become folds
 
-The store and core move to rusqlite together. In working order:
+The cutover runs each read in a `'static` closure on the blocking pool, which a visitor borrowing its caller's state can't enter. The fold shape lands here, under sqlx, so the cutover leaves `melodia-app` only step 10's owned inputs.
+
+- `visit_folder_tracks` and `visit_duplicate_keys` become `fold_folder_tracks` and `fold_duplicate_keys`. Each takes an owned accumulator and a step called with `&mut` it and each row, both `Send + 'static`, and hands the accumulator back, still one row at a time. Under sqlx the body keeps streaming through `fetch`.
+- Their callers move their state in and take it back: `library/scan/mod.rs:305` its `WalkIndex`, `library/duplicates/mod.rs:20` its keys.
+- `scan_tests`' four `visit_folder_tracks` tests, whose closures borrow a local, move to the fold.
+- **Hand test:**
+  - a rescan with one file retagged between updates that row only;
+  - the duplicate finder lists the groups it lists today.
+- **Docs:** none beyond the two functions' own.
+
+## Phase 4: The cutover (one PR, four commits)
+
+The store and core move to rusqlite together, over sub-phases 4a to 4d, each a commit Kenan makes at its end.
+
+- **Builds.** Only 4d's commit builds. 4a to 4c's messages say the workspace builds again at 4d, so a plain `git bisect` knows to skip them.
+- **Checks.** A sub-phase ends when the compiler reports no error in the files it converted. The gates run once after 4d, and what they or the hand test find lands as its own commits after it.
+- **The PR** opens after 4d. Only `pr-validation.yml` runs on a branch, and only on `pull_request`, so pushing 4a to 4c runs nothing.
+
+**Progress.** Each session ends by ticking what landed and rewriting "Where it stands"; the next one starts there.
+
+- [ ] **4a Foundation:** steps 1 to 7. Done when no error is left outside `queries/`.
+- [ ] **4b Scan:** step 8's scan cluster, its fold (step 9) among it, with step 10 for each function it converts. Its first converted module is the template the other clusters copy, named under "Where it stands" once it lands.
+- [ ] **4c The other clusters:** step 8's clusters 2 to 6, the duplicates fold, and step 10 for theirs. Done when no error is left outside the test targets, `melodia-app`'s callers included, which the compiler reaches only once the store builds.
+- [ ] **4d Tests and comments:** steps 11 and 12, and the docs. Done when the three gates pass.
+- [ ] **Hand test**, below.
+
+**Where it stands:** not started.
+
+**Steps,** in working order:
 
 1. **Dependencies.**
    - Workspace `rusqlite = { version = "0.39.x", features = ["bundled", "collation"] }` (Decision 8). `prepare_cached` sits behind rusqlite's default `cache` feature, so a `default-features = false` line lists it.
@@ -306,7 +335,7 @@ The store and core move to rusqlite together. In working order:
      4. entities: `album`, `artist`, `genre`, `folder`, `entity_keyset`, `entity_labels`, `search`;
      5. radio: `radio`, `radio_removal`;
      6. duplicates: `duplicate_dismissals`, `track/duplicates`, `track/duplicate_merge`.
-9. **The two visitors become folds.** `visit_folder_tracks` and `visit_duplicate_keys` take an owned accumulator into the blocking task and hand it back, still one row at a time. Their callers are in `library/scan/mod.rs:305` and `library/duplicates/mod.rs:20`.
+9. **The two folds** (Phase 3.6) run their row loop inside one read closure, the accumulator moving in and back out. Their callers are unchanged.
 10. **Inputs into closures** (Cross-cutting) are applied function by function.
 11. **The 22 of the store's 31 test files that reach the database, `fixtures.rs` and Phase 1's seam** move to rusqlite. Tests that drop a transaction uncommitted keep working, since rusqlite's `Transaction` rolls back on drop.
 12. **Comments that name sqlx:**
@@ -338,7 +367,7 @@ The store and core move to rusqlite together. In working order:
 
 Each measurement step waits for Kenan's go.
 
-1. **Measure the driver.** Fresh release builds of the commit before Phase 4 and of Phase 4, each in its own detached worktree, `cmp`'d first. On the dev library measure:
+1. **Measure the driver.** Fresh release builds of the commit before 4a and of Phase 4's last, each in its own detached worktree, `cmp`'d first. On the dev library measure:
    - a full scan's wall time;
    - Songs open;
    - typing a search;
@@ -367,7 +396,7 @@ Tests are added where the landed change earns them, on Kenan's go.
 
 ## Risks / notes
 
-- **Phase 4 is large:** about 43 store files, core's 12 entity files and 22 store test files, plus the `melodia-app` callers whose inputs become owned. It is mechanical once Phases 1 to 3 have landed, and it lands as one commit because a half-converted store can't run.
+- **Phase 4 is large:** about 43 store files, core's 12 entity files and 22 store test files, plus the `melodia-app` callers whose inputs become owned. It is mechanical once Phases 1 to 3.6 have landed. A half-converted store can't run, so its four commits build only at the last (Decision 7).
 - **Driver strictness.** A statement the suite doesn't reach can fail only at runtime, through any of Decision 5's three refusals. Phase 4's hand test is the net.
 - **Copying inputs into closures** adds allocations where a large borrowed input is cloned. Cross-cutting's rule keeps the big ones owned.
 - **The statement cache** holds sqlx's capacity to start. rusqlite's default of 16 would change re-prepare costs and memory at once.
