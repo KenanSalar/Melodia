@@ -15,7 +15,7 @@ mod upserts;
 mod watch_batch;
 
 pub use finish::{Unwalked, commit_scan};
-pub use lookups::visit_folder_tracks;
+pub use lookups::fold_folder_tracks;
 pub(crate) use lookups::{find_folder_for_path, get_track_id_by_path, track_exists_by_path};
 pub(crate) use moves::MoveCandidates;
 pub use mutations::{INSERT_CHUNK_ROWS, NewTrackRow};

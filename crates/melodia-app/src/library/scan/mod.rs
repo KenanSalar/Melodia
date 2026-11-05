@@ -302,8 +302,7 @@ async fn discover(
     // `scan_one` purges nothing after an empty walk, so its rows would be read only to be dropped.
     let mut kept_out = Vec::new();
     if !index.is_empty() {
-        queries::scan::visit_folder_tracks(db, folder_id, |path, stamp| index.add_row(path, stamp))
-            .await?;
+        index = queries::scan::fold_folder_tracks(db, folder_id, index, WalkIndex::add_row).await?;
         for (path, stamp) in queries::excluded_files::in_folder(db, folder_id).await? {
             index.add_kept_out(&path, stamp);
             kept_out.push(path);

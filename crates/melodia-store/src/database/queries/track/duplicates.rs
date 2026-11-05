@@ -15,21 +15,23 @@ pub struct DuplicateKeyRow {
     pub artist: Option<String>,
 }
 
-/// Hands each track to `visit` one row at a time, so the library's titles are never all held at
-/// once. A zero length is one the decoder couldn't count either, which matches nothing.
-pub async fn visit_duplicate_keys(
+/// Folds each track into `init` through `step` one row at a time, so the library's titles are never
+/// all held at once. A zero length is one the decoder couldn't count either, which matches nothing.
+pub async fn fold_duplicate_keys<A: Send + 'static>(
     db: &DbPool,
-    mut visit: impl FnMut(DuplicateKeyRow),
-) -> Result<(), AppError> {
+    init: A,
+    mut step: impl FnMut(&mut A, DuplicateKeyRow) + Send + 'static,
+) -> Result<A, AppError> {
     let mut rows = sqlx::query_as::<_, DuplicateKeyRow>(
         "SELECT id, title, artist FROM tracks WHERE duration_ms > 0",
     )
     .fetch(db.read());
 
+    let mut acc = init;
     while let Some(row) = rows.try_next().await? {
-        visit(row);
+        step(&mut acc, row);
     }
-    Ok(())
+    Ok(acc)
 }
 
 /// The candidates' facts, each with its Not Duplicates set, in no particular order. The dialog's

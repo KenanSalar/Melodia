@@ -491,14 +491,16 @@ async fn find_folder_for_path_returns_none_for_unknown() -> Result<(), AppError>
     Ok(())
 }
 
-// === Tests for visit_folder_tracks ===
+// === Tests for fold_folder_tracks ===
 
 #[tokio::test]
-async fn visit_folder_tracks_hands_over_every_row_of_the_folder() -> Result<(), AppError> {
+async fn fold_folder_tracks_hands_over_every_row_of_the_folder() -> Result<(), AppError> {
     let db = setup_seeded_db().await?;
 
-    let mut paths = Vec::new();
-    queries::scan::visit_folder_tracks(&db, 1, |path, _row| paths.push(path)).await?;
+    let paths = queries::scan::fold_folder_tracks(&db, 1, Vec::new(), |paths, path, _stamp| {
+        paths.push(path);
+    })
+    .await?;
 
     assert_eq!(paths.len(), 3);
     assert!(paths.contains(&"/music/track1.mp3".to_owned()));
@@ -510,7 +512,7 @@ async fn visit_folder_tracks_hands_over_every_row_of_the_folder() -> Result<(), 
 /// The scan purges every row it is handed that its walk didn't find, so a row leaking in from
 /// another folder is deleted by it. The second folder's path starts with the first's.
 #[tokio::test]
-async fn visit_folder_tracks_hands_over_no_row_of_another_folder() -> Result<(), AppError> {
+async fn fold_folder_tracks_hands_over_no_row_of_another_folder() -> Result<(), AppError> {
     let db = setup_seeded_db().await?;
     let sibling = queries::folder::insert_folder(&db, "/music-extra", true).await?;
     let stray = "/music-extra/track4.mp3";
@@ -521,8 +523,10 @@ async fn visit_folder_tracks_hands_over_no_row_of_another_folder() -> Result<(),
         .execute(db.write())
         .await?;
 
-    let mut paths = Vec::new();
-    queries::scan::visit_folder_tracks(&db, 1, |path, _row| paths.push(path)).await?;
+    let mut paths = queries::scan::fold_folder_tracks(&db, 1, Vec::new(), |paths, path, _stamp| {
+        paths.push(path);
+    })
+    .await?;
 
     paths.sort_unstable();
     assert_eq!(paths, ["/music/track1.mp3", "/music/track2.mp3", "/music/track3.mp3"]);
@@ -532,14 +536,13 @@ async fn visit_folder_tracks_hands_over_no_row_of_another_folder() -> Result<(),
 /// What the incremental filter compares a file against. Another column read in their place reads
 /// every file as changed, and a launch re-parses the whole library.
 #[tokio::test]
-async fn visit_folder_tracks_hands_each_row_its_stored_size_and_mtime() -> Result<(), AppError> {
+async fn fold_folder_tracks_hands_each_row_its_stored_size_and_mtime() -> Result<(), AppError> {
     let db = DbPool::test_pool().await?;
     queries::folder::insert_folder(&db, "/music", true).await?;
     insert_test_track(&db, "/music/a.mp3", "Song", "Artist", "Album", "Rock").await?;
 
-    let mut rows = Vec::new();
-    queries::scan::visit_folder_tracks(&db, 1, |_path, row| {
-        rows.push((row.file_size, row.date_modified));
+    let rows = queries::scan::fold_folder_tracks(&db, 1, Vec::new(), |rows, _path, stamp| {
+        rows.push((stamp.file_size, stamp.date_modified));
     })
     .await?;
 
@@ -549,11 +552,12 @@ async fn visit_folder_tracks_hands_each_row_its_stored_size_and_mtime() -> Resul
 }
 
 #[tokio::test]
-async fn visit_folder_tracks_visits_nothing_for_an_unknown_folder() -> Result<(), AppError> {
+async fn fold_folder_tracks_folds_nothing_for_an_unknown_folder() -> Result<(), AppError> {
     let db = DbPool::test_pool().await?;
-    let mut visited = 0;
-    queries::scan::visit_folder_tracks(&db, 999, |_path, _row| visited += 1).await?;
-    assert_eq!(visited, 0);
+    let folded =
+        queries::scan::fold_folder_tracks(&db, 999, 0, |folded, _path, _stamp| *folded += 1)
+            .await?;
+    assert_eq!(folded, 0);
     Ok(())
 }
 

@@ -42,24 +42,26 @@ pub(crate) async fn find_folder_for_path(
     Ok(id)
 }
 
-/// Hands each of a folder's rows to `visit`, with the columns the incremental-scan filter needs,
-/// one row at a time, so the folder's paths are never all held at once. Read through the read
-/// pool, before the scan's writer transaction opens.
-pub async fn visit_folder_tracks(
+/// Folds each of a folder's rows into `init` through `step`, with the columns the incremental-scan
+/// filter needs, one row at a time, so the folder's paths are never all held at once. Read through
+/// the read pool, before the scan's writer transaction opens.
+pub async fn fold_folder_tracks<A: Send + 'static>(
     db: &crate::database::DbPool,
     folder_id: i64,
-    mut visit: impl FnMut(String, FileStamp),
-) -> Result<(), AppError> {
+    init: A,
+    mut step: impl FnMut(&mut A, String, FileStamp) + Send + 'static,
+) -> Result<A, AppError> {
     let mut rows = sqlx::query_as::<_, (String, Option<i64>, Option<String>)>(
         "SELECT file_path, file_size, date_modified FROM tracks WHERE folder_id = ?",
     )
     .bind(folder_id)
     .fetch(db.read());
 
+    let mut acc = init;
     while let Some((path, file_size, date_modified)) = rows.try_next().await? {
-        visit(path, FileStamp { file_size, date_modified });
+        step(&mut acc, path, FileStamp { file_size, date_modified });
     }
-    Ok(())
+    Ok(acc)
 }
 
 pub(crate) async fn get_track_id_by_path(

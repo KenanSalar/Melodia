@@ -1,6 +1,6 @@
 # Plan: Move the library database from sqlx to rusqlite
 
-Status: **Phase 3.5 complete** · Owner: Kenan · Created: 2026-11-04
+Status: **Phase 3.6 complete** · Owner: Kenan · Created: 2026-11-04
 
 > **Validated 2026-11-04** against `8fe1eb93` (`chore/deps-and-fixes`) with three read-only inventories:
 >
@@ -266,7 +266,7 @@ The store's `build.rs` is the last user of `sha2` 0.11, kept for the SHA-384 sql
   - `migrate.rs`'s `//!` keeps sqlx's row format rather than "row for row".
   - `CLAUDE.md`'s migration bullet and `code-style.md`'s frozen-comments sentence name the build failure beside the boot one.
 
-## Phase 3.6: The visitors become folds
+## Phase 3.6: The visitors become folds ✅
 
 The cutover runs each read in a `'static` closure on the blocking pool, which a visitor borrowing its caller's state can't enter. The fold shape lands here, under sqlx, so the cutover leaves `melodia-app` only step 10's owned inputs.
 
@@ -276,6 +276,13 @@ The cutover runs each read in a `'static` closure on the blocking pool, which a 
 - **Hand test:**
   - a rescan with one file retagged between updates that row only;
   - the duplicate finder lists the groups it lists today.
+  - **Result (2026-11-05):** both pass, run unattended on Kenan's go. Each boot quit through the tray and exited 0, and the dev folder was restored from its backup afterwards, byte for byte.
+    1. A scratch folder of four generated tones joined the dev library, a boot scanned it, and one file was retagged before a second boot.
+       - That boot re-parsed only the retagged file, skipping the folder's other 3.
+       - The 50,500- and 512-track folders skipped every file on both boots.
+       - The `tracks` tables after the two boots differ in that one row: its title, folded columns, size, mtime and hash, with its id and `date_added` kept.
+       - The one warning, zbus failing to parse `NameLost` at the second quit, appears in logs from before this phase.
+    2. `library::duplicates::find` on a snapshot of the dev library, under `a7d94dc5` and under this phase, printed byte-identical output: 14 groups and 28 copies, over 51,012 tracks.
 - **Docs:** none beyond the two functions' own.
 
 ## Phase 4: The cutover (one PR, four commits)
