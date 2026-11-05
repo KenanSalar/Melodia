@@ -20,10 +20,10 @@ use super::migrate;
 use lane::{IDLE_TIMEOUT, Lane};
 use open::Role;
 
-/// The planner-statistics refresh [`DbPool::close`] issues. `0x10000` weighs every table, not just
-/// those this connection queried, since the writer can be fresh from the reaper; `0x10` keeps the
-/// default time bound on any ANALYZE, which naming a mask otherwise drops.
-const STATS_OPTIMIZE: &str = "PRAGMA optimize=0x10012";
+/// The planner-statistics refresh [`DbPool::close`] issues: the default `0xfffe`, plus `0x10000`
+/// to weigh every table, not just those this connection queried, since the writer can be fresh
+/// from the reaper.
+const STATS_OPTIMIZE: &str = "PRAGMA optimize=0x1fffe";
 
 /// The fts5 compaction [`DbPool::close`] issues, named so the test proving it still runs binds the
 /// same string: fts5 rejects an unknown command only at step time, and `close` can only log that.

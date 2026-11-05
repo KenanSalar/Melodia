@@ -56,8 +56,8 @@ const REFERENCED_PATHS: &str = concat!(
     WHERE artwork_path IS NOT NULL AND artwork_path <> '')"
 );
 
-/// The library's share of [`REFERENCED_PATHS`], spelled through the same arms and `DISTINCT` so a
-/// column added to it cannot be missed by the sweep.
+/// The library's share of [`REFERENCED_PATHS`], spelled through the same arms so a column added
+/// to it cannot be missed by the sweep.
 const LIBRARY_REFERENCED_PATHS: &str =
     concat!("SELECT DISTINCT artwork_path FROM (", library_reference_arms!(), ")");
 

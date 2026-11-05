@@ -163,7 +163,7 @@ paths:
   write landing during a library-sized `fetch_each` grows the WAL until the fold returns
 - `PRAGMA optimize` keeps `sqlite_stat1` current and is usually a no-op. `DbPool::close` runs it
   on the writer at quit, the readers being read-only, with the mask `STATS_OPTIMIZE` argues. A
-  mask replaces the default whole, so one naming bits drops every default bit it leaves out
+  mask replaces the default whole, so a bit is added on top of the default `0xfffe`, never alone
 
 ## Fetching and Errors
 
