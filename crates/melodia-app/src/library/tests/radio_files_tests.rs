@@ -387,7 +387,7 @@ async fn an_import_restores_each_station_as_the_kind_it_was_exported_as() -> Res
     let text = serialize(&queries::radio::get_favorite_stations(&db).await?);
     queries::radio_removal::remove_stations(
         &db,
-        &[from_browse.id, hand_typed.id],
+        vec![from_browse.id, hand_typed.id],
         radio::KeptList::Favorites,
     )
     .await?;

@@ -440,7 +440,7 @@ decoding, the DSP chain, and the mix stay off the runtime entirely.
 Fourteen crates, layered so the compiler enforces the direction rather than a convention: the UI
 names no database or socket, the decoders name no mixer, the tag writer names no state machine.
 Slint 1.18 on FemtoVG, Tokio, Symphonia and cpal (with ALSA and WASAPI directly for exclusive output),
-SQLite via SQLx with WAL and FTS5, Lofty for tags, Rayon, BLAKE3, and minisign for the updater.
+SQLite via rusqlite with WAL and FTS5, Lofty for tags, Rayon, BLAKE3, and minisign for the updater.
 
 The doc comments are the architecture reference, [`CLAUDE.md`](CLAUDE.md) holds the repo-wide
 rules and commands for a coding agent, and [`docs/adr/`](docs/adr/) records why each piece was
@@ -506,7 +506,7 @@ every package carries alongside this file.
 Built on the work of the [Slint](https://slint.dev/),
 [cpal](https://github.com/RustAudio/cpal),
 [Symphonia](https://github.com/pdeljanov/Symphonia), and
-[SQLx](https://github.com/launchbadge/sqlx) projects, the
+[rusqlite](https://github.com/rusqlite/rusqlite) projects, the
 [Catppuccin](https://catppuccin.com/) palette, and
 [Material Foundation](https://m3.material.io/)'s color utilities, along with the many other crates
 listed in `Cargo.toml`. The station directory is [radio-browser.info](https://www.radio-browser.info)

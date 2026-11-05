@@ -13,8 +13,8 @@ use std::path::Path;
 use tempfile::TempDir;
 
 use super::*;
-use crate::database::queries;
 use crate::database::queries::fixtures::{insert_test_track, keep_out, make_test_metadata};
+use crate::database::{queries, sql};
 
 /// An mtime no file on disk can have, so a value that reaches the row proves it
 /// came from what the handler was handed and not from a fresh `stat`.
@@ -43,33 +43,27 @@ async fn seed_folder_with_track(dir: &Path) -> Result<(DbPool, i64), AppError> {
 
 /// Read back the columns a re-point is allowed to touch.
 async fn track_location(db: &DbPool, id: i64) -> Result<(String, Option<String>), AppError> {
-    let row: (String, Option<String>) =
-        sqlx::query_as("SELECT file_path, date_modified FROM tracks WHERE id = ?")
-            .bind(id)
-            .fetch_one(db.read())
-            .await?;
-    Ok(row)
+    db.read(move |conn| {
+        sql::fetch_one(conn, "SELECT file_path, date_modified FROM tracks WHERE id = ?", (id,))
+    })
+    .await
 }
 
 async fn track_hash(db: &DbPool, id: i64) -> Result<Option<String>, AppError> {
-    let hash: Option<String> = sqlx::query_scalar("SELECT file_hash FROM tracks WHERE id = ?")
-        .bind(id)
-        .fetch_one(db.read())
-        .await?;
-    Ok(hash)
+    db.read(move |conn| sql::fetch_one(conn, "SELECT file_hash FROM tracks WHERE id = ?", (id,)))
+        .await
 }
 
 async fn track_id_at(db: &DbPool, path: &Path) -> Result<Option<i64>, AppError> {
-    let id: Option<i64> = sqlx::query_scalar("SELECT id FROM tracks WHERE file_path = ?")
-        .bind(path.to_string_lossy().into_owned())
-        .fetch_optional(db.read())
-        .await?;
-    Ok(id)
+    let path = path.to_string_lossy().into_owned();
+    db.read(move |conn| {
+        sql::fetch_optional(conn, "SELECT id FROM tracks WHERE file_path = ?", (path,))
+    })
+    .await
 }
 
 async fn track_count(db: &DbPool) -> Result<i64, AppError> {
-    let count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM tracks").fetch_one(db.read()).await?;
-    Ok(count)
+    db.read(|conn| sql::fetch_one(conn, "SELECT COUNT(*) FROM tracks", ())).await
 }
 
 /// A batch whose one move candidate is the row `id`, last seen at `vanished`.
@@ -90,17 +84,22 @@ async fn a_rename_stores_the_mtime_it_is_handed() -> Result<(), AppError> {
 
     // The file on disk was just written, so its real mtime is ~now. If the
     // handler re-`stat`s instead of storing what it was handed, the row gets that.
-    let mut tx = db.write().begin().await?;
-    let changed = handle_renamed(
-        &mut tx,
-        &tmp.path().join("from.mp3"),
-        &to,
-        Some(&make_test_metadata("After")),
-        Some(SENTINEL_MTIME),
-        &mut Batch::default(),
-    )
-    .await?;
-    tx.commit().await?;
+    let from = tmp.path().join("from.mp3");
+    let changed = db
+        .transaction({
+            let to = to.clone();
+            move |tx| {
+                handle_renamed(
+                    tx,
+                    &from,
+                    &to,
+                    Some(&make_test_metadata("After")),
+                    Some(SENTINEL_MTIME),
+                    &mut Batch::default(),
+                )
+            }
+        })
+        .await?;
 
     assert!(changed, "an existing row at `from` must be re-pointed");
 
@@ -120,10 +119,12 @@ async fn a_created_file_inside_a_library_folder_lands_as_a_row() -> Result<(), A
     let db = seed_folder(tmp.path()).await?;
 
     let path = tmp.path().join("new.mp3");
-    let mut tx = db.write().begin().await?;
-    let changed =
-        handle_created(&mut tx, &path, &make_test_metadata("New"), &mut Batch::default()).await?;
-    tx.commit().await?;
+    let changed = db
+        .transaction({
+            let path = path.clone();
+            move |tx| handle_created(tx, &path, &make_test_metadata("New"), &mut Batch::default())
+        })
+        .await?;
 
     assert!(changed);
     assert!(track_id_at(&db, &path).await?.is_some());
@@ -138,10 +139,12 @@ async fn a_created_path_already_in_the_library_is_not_inserted_twice() -> Result
     let (db, id) = seed_folder_with_track(tmp.path()).await?;
 
     let path = tmp.path().join("from.mp3");
-    let mut tx = db.write().begin().await?;
-    let changed =
-        handle_created(&mut tx, &path, &make_test_metadata("Again"), &mut Batch::default()).await?;
-    tx.commit().await?;
+    let changed = db
+        .transaction({
+            let path = path.clone();
+            move |tx| handle_created(tx, &path, &make_test_metadata("Again"), &mut Batch::default())
+        })
+        .await?;
 
     assert!(!changed, "a path already in the library is not a change");
     assert_eq!(track_count(&db).await?, 1);
@@ -155,11 +158,11 @@ async fn a_created_file_outside_every_library_folder_is_skipped() -> Result<(), 
     let db = seed_folder(&tmp.path().join("music")).await?;
 
     let outside = tmp.path().join("elsewhere.mp3");
-    let mut tx = db.write().begin().await?;
-    let changed =
-        handle_created(&mut tx, &outside, &make_test_metadata("Stray"), &mut Batch::default())
-            .await?;
-    tx.commit().await?;
+    let changed = db
+        .transaction(move |tx| {
+            handle_created(tx, &outside, &make_test_metadata("Stray"), &mut Batch::default())
+        })
+        .await?;
 
     assert!(!changed);
     assert_eq!(track_count(&db).await?, 0, "a file nobody asked us to watch is not a track");
@@ -180,10 +183,16 @@ async fn a_created_file_matching_a_vanished_row_repoints_it_once() -> Result<(),
     let moved = tmp.path().join("moved.mp3");
     let twin = tmp.path().join("twin.mp3");
 
-    let mut tx = db.write().begin().await?;
-    let repointed = handle_created(&mut tx, &moved, &meta, &mut batch).await?;
-    let inserted = handle_created(&mut tx, &twin, &meta, &mut batch).await?;
-    tx.commit().await?;
+    let (repointed, inserted, batch) = db
+        .transaction({
+            let moved = moved.clone();
+            move |tx| {
+                let repointed = handle_created(tx, &moved, &meta, &mut batch)?;
+                let inserted = handle_created(tx, &twin, &meta, &mut batch)?;
+                Ok((repointed, inserted, batch))
+            }
+        })
+        .await?;
 
     assert!(repointed);
     assert!(inserted);
@@ -208,17 +217,23 @@ async fn a_move_out_of_the_watched_tree_leaves_the_candidate_alone() -> Result<(
     let outside = tmp.path().join("outside.mp3");
     let inside = music.join("moved.mp3");
 
-    let mut tx = db.write().begin().await?;
-    let refused = handle_created(&mut tx, &outside, &meta, &mut batch).await?;
+    let (refused, still_a_candidate, repointed) = db
+        .transaction({
+            let inside = inside.clone();
+            move |tx| {
+                let refused = handle_created(tx, &outside, &meta, &mut batch)?;
+                let still_a_candidate = batch.moved.tracks.contains_key(&meta.file_hash);
+                let repointed = handle_created(tx, &inside, &meta, &mut batch)?;
+                Ok((refused, still_a_candidate, repointed))
+            }
+        })
+        .await?;
+
     assert!(!refused);
     assert!(
-        batch.moved.tracks.contains_key(&meta.file_hash),
+        still_a_candidate,
         "refusing a path outside the library must not spend the row's one chance to be found"
     );
-
-    let repointed = handle_created(&mut tx, &inside, &meta, &mut batch).await?;
-    tx.commit().await?;
-
     assert!(repointed);
     assert_eq!(track_id_at(&db, &inside).await?, Some(id));
     assert_eq!(track_count(&db).await?, 1);
@@ -234,17 +249,21 @@ async fn a_rename_from_outside_the_library_lands_as_a_new_row() -> Result<(), Ap
     let to = tmp.path().join("landed.mp3");
     let meta = make_test_metadata("Fresh");
 
-    let mut tx = db.write().begin().await?;
-    let changed = handle_renamed(
-        &mut tx,
-        &from,
-        &to,
-        Some(&meta),
-        meta.date_modified.as_deref(),
-        &mut Batch::default(),
-    )
-    .await?;
-    tx.commit().await?;
+    let changed = db
+        .transaction({
+            let to = to.clone();
+            move |tx| {
+                handle_renamed(
+                    tx,
+                    &from,
+                    &to,
+                    Some(&meta),
+                    meta.date_modified.as_deref(),
+                    &mut Batch::default(),
+                )
+            }
+        })
+        .await?;
 
     assert!(changed);
     assert!(track_id_at(&db, &to).await?.is_some(), "a rename in from outside is an import");
@@ -263,17 +282,21 @@ async fn a_rename_out_of_the_library_writes_nothing() -> Result<(), AppError> {
     let to = tmp.path().join("outside.mp3");
     let meta = make_test_metadata("Before");
 
-    let mut tx = db.write().begin().await?;
-    let changed = handle_renamed(
-        &mut tx,
-        &from,
-        &to,
-        Some(&meta),
-        meta.date_modified.as_deref(),
-        &mut Batch::default(),
-    )
-    .await?;
-    tx.commit().await?;
+    let changed = db
+        .transaction({
+            let from = from.clone();
+            move |tx| {
+                handle_renamed(
+                    tx,
+                    &from,
+                    &to,
+                    Some(&meta),
+                    meta.date_modified.as_deref(),
+                    &mut Batch::default(),
+                )
+            }
+        })
+        .await?;
 
     assert!(!changed);
     let (path, _) = track_location(&db, id).await?;
@@ -290,17 +313,11 @@ async fn a_rename_with_neither_a_row_nor_metadata_writes_nothing() -> Result<(),
     let tmp = TempDir::new()?;
     let db = seed_folder(tmp.path()).await?;
 
-    let mut tx = db.write().begin().await?;
-    let changed = handle_renamed(
-        &mut tx,
-        &tmp.path().join("unknown.mp3"),
-        &tmp.path().join("gone.mp3"),
-        None,
-        None,
-        &mut Batch::default(),
-    )
-    .await?;
-    tx.commit().await?;
+    let from = tmp.path().join("unknown.mp3");
+    let to = tmp.path().join("gone.mp3");
+    let changed = db
+        .transaction(move |tx| handle_renamed(tx, &from, &to, None, None, &mut Batch::default()))
+        .await?;
 
     assert!(!changed);
     assert_eq!(track_count(&db).await?, 0);
@@ -315,11 +332,13 @@ async fn a_modify_rewrites_the_hash_in_place() -> Result<(), AppError> {
     let (db, id) = seed_folder_with_track(tmp.path()).await?;
 
     let retagged = make_test_metadata("After");
-    let mut tx = db.write().begin().await?;
-    let changed =
-        handle_modified(&mut tx, &tmp.path().join("from.mp3"), &retagged, &mut Batch::default())
-            .await?;
-    tx.commit().await?;
+    let from = tmp.path().join("from.mp3");
+    let changed = db
+        .transaction({
+            let retagged = retagged.clone();
+            move |tx| handle_modified(tx, &from, &retagged, &mut Batch::default())
+        })
+        .await?;
 
     assert!(changed);
     assert_eq!(track_count(&db).await?, 1, "a re-tag must not fork the row");
@@ -335,10 +354,12 @@ async fn a_modify_of_a_path_the_library_does_not_know_inserts_it() -> Result<(),
     let db = seed_folder(tmp.path()).await?;
 
     let path = tmp.path().join("unscanned.mp3");
-    let mut tx = db.write().begin().await?;
-    let changed =
-        handle_modified(&mut tx, &path, &make_test_metadata("Late"), &mut Batch::default()).await?;
-    tx.commit().await?;
+    let changed = db
+        .transaction({
+            let path = path.clone();
+            move |tx| handle_modified(tx, &path, &make_test_metadata("Late"), &mut Batch::default())
+        })
+        .await?;
 
     assert!(changed);
     assert!(track_id_at(&db, &path).await?.is_some());
@@ -388,7 +409,7 @@ async fn a_kept_out_file_written_to_takes_its_new_hash() -> Result<(), AppError>
     apply_watch_batch(&db, vec![WatchedChange::Modified { path: spare, meta: retagged }]).await?;
 
     let hashes: Vec<Option<String>> =
-        sqlx::query_scalar("SELECT file_hash FROM excluded_files").fetch_all(db.read()).await?;
+        db.read(|conn| sql::fetch_all(conn, "SELECT file_hash FROM excluded_files", ())).await?;
     assert_eq!(hashes, [Some(new_hash)]);
     Ok(())
 }

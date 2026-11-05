@@ -45,7 +45,7 @@ macro_rules! lone_column {
     )+};
 }
 
-lone_column!(i64, Option<i64>, Option<i32>, String, Option<String>, bool, DismissalSet);
+lone_column!(i64, Option<i64>, i32, Option<i32>, String, Option<String>, bool, DismissalSet);
 
 macro_rules! tuple {
     ($($column:ident: $index:literal),+) => {
@@ -61,3 +61,5 @@ tuple!(A: 0, B: 1);
 tuple!(A: 0, B: 1, C: 2);
 tuple!(A: 0, B: 1, C: 2, D: 3);
 tuple!(A: 0, B: 1, C: 2, D: 3, E: 4);
+tuple!(A: 0, B: 1, C: 2, D: 3, E: 4, F: 5);
+tuple!(A: 0, B: 1, C: 2, D: 3, E: 4, F: 5, G: 6);

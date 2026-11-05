@@ -132,3 +132,7 @@ impl DbPool {
 fn current_runtime() -> Result<Handle, AppError> {
     Handle::try_current().map_err(|e| AppError::io("The database pool needs a tokio runtime", e))
 }
+
+#[cfg(test)]
+#[path = "tests/mod_tests.rs"]
+mod tests;

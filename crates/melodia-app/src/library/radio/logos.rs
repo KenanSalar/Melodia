@@ -180,7 +180,7 @@ pub enum LogoAnswer {
 ///
 /// **The heal pass is who wants it.** Each station settles against the table twice before the
 /// network, its row's URL then its site, and one URL at a time those are one-element batched
-/// queries that rebuild their SQL and prepare non-persistent.
+/// queries that rebuild their SQL and prepare it each run.
 #[derive(Default)]
 pub struct AnswerSeed(std::collections::HashMap<String, radio::StoredLogoAnswer>);
 

@@ -92,8 +92,7 @@ pub fn flush_tasks_and_db(runtime: &tokio::runtime::Runtime, state: AppState) ->
     drop(state);
 
     // One budget over both: `spawn_blocking` work can't be cancelled from outside (a scan stops
-    // only at its own checkpoints), and `db.close()` waits for every connection to come back,
-    // which a task holding one across an await can pin indefinitely.
+    // only at its own checkpoints), and `db.close()` waits for every database call already running.
     runtime.block_on(async move {
         tokio::time::timeout(std::time::Duration::from_secs(3), async {
             tracker.wait().await;

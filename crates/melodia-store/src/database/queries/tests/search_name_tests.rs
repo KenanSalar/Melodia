@@ -7,6 +7,7 @@ use crate::database::DbPool;
 use crate::database::queries;
 use crate::database::queries::artist::UNKNOWN_ARTIST_ID;
 use crate::database::queries::fixtures::{insert_tagged_track, make_test_metadata};
+use crate::database::sql::{self, Sql};
 use melodia_core::entities::artist::ArtistCredit;
 use melodia_core::entities::genre::GenreList;
 use melodia_core::entities::scan::ExtractedMetadata;
@@ -42,10 +43,12 @@ async fn written_library() -> Result<DbPool, AppError> {
     add(&db, &sorted).await?;
 
     queries::playlist::create_playlist(&db, "Road Trip", None).await?;
-    queries::playlist::create_smart_playlist(&db, "Focus", None, "{}").await?;
+    queries::playlist::create_smart_playlist(&db, "Focus".to_owned(), None, "{}".to_owned())
+        .await?;
     for (before, after, clear_thumbnail) in [("Before", "After", false), ("Was", "Now", true)] {
         let id = queries::playlist::create_playlist(&db, before, None).await?.id;
-        queries::playlist::update_playlist(&db, id, after, None, clear_thumbnail).await?;
+        queries::playlist::update_playlist(&db, id, after.to_owned(), None, clear_thumbnail)
+            .await?;
     }
     Ok(db)
 }
@@ -53,27 +56,29 @@ async fn written_library() -> Result<DbPool, AppError> {
 /// Every row's `search_name` across the four tables, bar the seeded unknown artist's: no writer
 /// touches that row, so only the backfill ever fills it.
 async fn search_names(db: &DbPool) -> Result<Vec<(String, i64, String)>, AppError> {
-    let rows = sqlx::query_as(
-        "SELECT 'albums', id, search_name FROM albums \
-         UNION ALL SELECT 'artists', id, search_name FROM artists WHERE id <> ? \
-         UNION ALL SELECT 'genres', id, search_name FROM genres \
-         UNION ALL SELECT 'playlists', id, search_name FROM playlists \
-         ORDER BY 1, 2",
-    )
-    .bind(UNKNOWN_ARTIST_ID)
-    .fetch_all(db.read())
-    .await?;
-    Ok(rows)
+    db.read(|conn| {
+        sql::fetch_all(
+            conn,
+            "SELECT 'albums', id, search_name FROM albums \
+             UNION ALL SELECT 'artists', id, search_name FROM artists WHERE id <> ? \
+             UNION ALL SELECT 'genres', id, search_name FROM genres \
+             UNION ALL SELECT 'playlists', id, search_name FROM playlists \
+             ORDER BY 1, 2",
+            (UNKNOWN_ARTIST_ID,),
+        )
+    })
+    .await
 }
 
 /// The state the migration leaves an existing library in.
 async fn blank_every_search_name(db: &DbPool) -> Result<(), AppError> {
-    for table in ["albums", "artists", "genres", "playlists"] {
-        sqlx::query(sqlx::AssertSqlSafe(format!("UPDATE {table} SET search_name = ''")))
-            .execute(db.write())
-            .await?;
-    }
-    Ok(())
+    db.write(|conn| {
+        for table in ["albums", "artists", "genres", "playlists"] {
+            Sql::trusted(format!("UPDATE {table} SET search_name = ''")).execute(conn)?;
+        }
+        Ok(())
+    })
+    .await
 }
 
 /// One equality holds both halves: a writer that skips the column, or leaves an older name in it,

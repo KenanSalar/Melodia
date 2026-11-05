@@ -482,7 +482,7 @@ async fn removing_a_playlists_first_cover_moves_its_thumbnail_to_the_next() -> R
     set_test_artwork(&db, first, "/cached/first.jpg").await?;
     set_test_artwork(&db, second, "/cached/second.jpg").await?;
     let playlist = queries::playlist::create_playlist(&db, "Mix", None).await?;
-    queries::playlist::add_tracks_to_playlist(&db, playlist.id, &[first, second]).await?;
+    queries::playlist::add_tracks_to_playlist(&db, playlist.id, vec![first, second]).await?;
     let artwork_dir = tmp.path().join("artwork");
     std::fs::create_dir(&artwork_dir)?;
     let edit = TagEdit { artwork: ArtworkEdit::Remove, ..TagEdit::default() };
@@ -510,7 +510,7 @@ async fn replacing_a_playlists_first_cover_carries_its_thumbnail_along() -> Resu
     let first = seed_track(&db, &stage(&tmp, "silence.flac")?.to_string_lossy()).await?;
     set_test_artwork(&db, first, "/cached/old.jpg").await?;
     let playlist = queries::playlist::create_playlist(&db, "Mix", None).await?;
-    queries::playlist::add_tracks_to_playlist(&db, playlist.id, &[first]).await?;
+    queries::playlist::add_tracks_to_playlist(&db, playlist.id, vec![first]).await?;
     let artwork_dir = tmp.path().join("artwork");
     std::fs::create_dir(&artwork_dir)?;
     let edit = TagEdit { artwork: ArtworkEdit::Replace, ..TagEdit::default() };

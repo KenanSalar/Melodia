@@ -1,6 +1,5 @@
-use crate::database::DbPool;
-use crate::database::queries;
 use crate::database::queries::fixtures::*;
+use crate::database::{DbPool, queries, sql};
 use melodia_core::error::AppError;
 
 #[tokio::test]
@@ -62,17 +61,15 @@ async fn delete_folder_removes_it() -> Result<(), AppError> {
 async fn delete_folder_cascades_tracks() -> Result<(), AppError> {
     let db = DbPool::test_pool().await?;
     let f = queries::folder::insert_folder(&db, "/music", true).await?;
-    insert_test_track(&db, "/music/song.mp3", "Song", "Artist", "Album", "Rock").await?;
+    let id = insert_test_track(&db, "/music/song.mp3", "Song", "Artist", "Album", "Rock").await?;
 
     // Update folder_id to match our folder
-    sqlx::query("UPDATE tracks SET folder_id = ? WHERE file_path = '/music/song.mp3'")
-        .bind(f.id)
-        .execute(db.write())
-        .await?;
+    file_under(&db, id, f.id).await?;
 
     queries::folder::delete_folder(&db, f.id).await?;
 
-    let count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM tracks").fetch_one(db.read()).await?;
+    let count: i64 =
+        db.read(|conn| sql::fetch_one(conn, "SELECT COUNT(*) FROM tracks", ())).await?;
     assert_eq!(count, 0);
     Ok(())
 }
@@ -80,9 +77,7 @@ async fn delete_folder_cascades_tracks() -> Result<(), AppError> {
 #[tokio::test]
 async fn upsert_folder_creates_disabled() -> Result<(), AppError> {
     let db = DbPool::test_pool().await?;
-    let mut tx = db.write().begin().await?;
-    let id = queries::folder::upsert_folder(&mut tx, "/new_folder").await?;
-    tx.commit().await?;
+    let id = db.transaction(|tx| queries::folder::upsert_folder(tx, "/new_folder")).await?;
 
     let f = queries::folder::get_folder_by_id(&db, id).await?;
     assert!(!f.is_enabled);
@@ -92,10 +87,13 @@ async fn upsert_folder_creates_disabled() -> Result<(), AppError> {
 #[tokio::test]
 async fn upsert_folder_returns_same_id() -> Result<(), AppError> {
     let db = DbPool::test_pool().await?;
-    let mut tx = db.write().begin().await?;
-    let id1 = queries::folder::upsert_folder(&mut tx, "/music").await?;
-    let id2 = queries::folder::upsert_folder(&mut tx, "/music").await?;
-    tx.commit().await?;
+    let (id1, id2) = db
+        .transaction(|tx| {
+            let id1 = queries::folder::upsert_folder(tx, "/music")?;
+            let id2 = queries::folder::upsert_folder(tx, "/music")?;
+            Ok((id1, id2))
+        })
+        .await?;
     assert_eq!(id1, id2);
     Ok(())
 }
@@ -105,7 +103,7 @@ async fn update_folder_last_scanned() -> Result<(), AppError> {
     let db = DbPool::test_pool().await?;
     let f = queries::folder::insert_folder(&db, "/music", true).await?;
     let ts = "2024-06-15T12:00:00+00:00";
-    queries::folder::update_folder_last_scanned(&db, f.id, ts).await?;
+    queries::folder::update_folder_last_scanned(&db, f.id, ts.to_owned()).await?;
 
     let found = queries::folder::get_folder_by_id(&db, f.id).await?;
     assert_eq!(found.last_scanned.as_deref(), Some(ts));
@@ -116,11 +114,10 @@ async fn update_folder_last_scanned() -> Result<(), AppError> {
 
 /// Files `track_id` under `folder_id`, the fixture filing every track under the first folder.
 async fn file_under(db: &DbPool, track_id: i64, folder_id: i64) -> Result<(), AppError> {
-    sqlx::query("UPDATE tracks SET folder_id = ? WHERE id = ?")
-        .bind(folder_id)
-        .bind(track_id)
-        .execute(db.write())
-        .await?;
+    db.write(move |conn| {
+        sql::execute(conn, "UPDATE tracks SET folder_id = ? WHERE id = ?", (folder_id, track_id))
+    })
+    .await?;
     Ok(())
 }
 
@@ -140,12 +137,15 @@ async fn absorbing_a_folder_moves_its_tracks_to_the_parent_with_their_play_state
 
     queries::folder::absorb_folders(&db, parent.id, &[child.id]).await?;
 
-    let (folder_id, rating, play_count, is_favorite): (i64, i64, i64, bool) = sqlx::query_as(
-        "SELECT folder_id, rating, play_count, is_favorite FROM tracks WHERE id = ?",
-    )
-    .bind(id)
-    .fetch_one(db.read())
-    .await?;
+    let (folder_id, rating, play_count, is_favorite): (i64, i64, i64, bool) = db
+        .read(move |conn| {
+            sql::fetch_one(
+                conn,
+                "SELECT folder_id, rating, play_count, is_favorite FROM tracks WHERE id = ?",
+                (id,),
+            )
+        })
+        .await?;
     assert_eq!((folder_id, rating, play_count, is_favorite), (parent.id, 4, 3, true));
     let folders: Vec<i64> =
         queries::folder::get_all_folders(&db).await?.iter().map(|f| f.id).collect();
@@ -168,15 +168,20 @@ async fn deleting_a_folder_prunes_the_album_artist_and_genre_it_emptied() -> Res
     queries::folder::delete_folder(&db, removed.id).await?;
 
     let albums: Vec<String> =
-        sqlx::query_scalar("SELECT name FROM albums ORDER BY name").fetch_all(db.read()).await?;
+        db.read(|conn| sql::fetch_all(conn, "SELECT name FROM albums ORDER BY name", ())).await?;
     assert_eq!(albums, ["Kept Album"]);
-    let artists: Vec<String> = sqlx::query_scalar("SELECT name FROM artists WHERE id <> ?")
-        .bind(queries::artist::UNKNOWN_ARTIST_ID)
-        .fetch_all(db.read())
+    let artists: Vec<String> = db
+        .read(|conn| {
+            sql::fetch_all(
+                conn,
+                "SELECT name FROM artists WHERE id <> ?",
+                (queries::artist::UNKNOWN_ARTIST_ID,),
+            )
+        })
         .await?;
     assert_eq!(artists, ["Kept Artist"]);
     let genres: Vec<String> =
-        sqlx::query_scalar("SELECT name FROM genres ORDER BY name").fetch_all(db.read()).await?;
+        db.read(|conn| sql::fetch_all(conn, "SELECT name FROM genres ORDER BY name", ())).await?;
     assert_eq!(genres, ["Rock"]);
     Ok(())
 }
@@ -194,7 +199,7 @@ async fn deleting_a_folder_moves_a_playlist_cover_off_the_tracks_it_took() -> Re
     set_test_artwork(&db, gone, "/art/gone.jpg").await?;
     set_test_artwork(&db, stays, "/art/stays.jpg").await?;
     let playlist = queries::playlist::create_playlist(&db, "Mixed", None).await?;
-    queries::playlist::add_tracks_to_playlist(&db, playlist.id, &[gone, stays]).await?;
+    queries::playlist::add_tracks_to_playlist(&db, playlist.id, vec![gone, stays]).await?;
 
     queries::folder::delete_folder(&db, removed.id).await?;
 
@@ -211,15 +216,15 @@ async fn absorbing_a_folder_keeps_its_kept_out_files_out() -> Result<(), AppErro
     let parent = queries::folder::insert_folder(&db, "/music", true).await?;
     let child = queries::folder::insert_folder(&db, "/music/rock", true).await?;
     keep_out(&db, "/music/rock/spare.mp3", "spare-bytes").await?;
-    sqlx::query("UPDATE excluded_files SET folder_id = ?")
-        .bind(child.id)
-        .execute(db.write())
-        .await?;
+    db.write(move |conn| {
+        sql::execute(conn, "UPDATE excluded_files SET folder_id = ?", (child.id,))
+    })
+    .await?;
 
     queries::folder::absorb_folders(&db, parent.id, &[child.id]).await?;
 
     let folder_ids: Vec<i64> =
-        sqlx::query_scalar("SELECT folder_id FROM excluded_files").fetch_all(db.read()).await?;
+        db.read(|conn| sql::fetch_all(conn, "SELECT folder_id FROM excluded_files", ())).await?;
     assert_eq!(folder_ids, [parent.id]);
     Ok(())
 }

@@ -5,7 +5,7 @@ use crate::database::queries;
 use crate::database::queries::fixtures::{
     insert_tagged_track, insert_test_track, make_test_metadata,
 };
-use crate::database::sql::Sql;
+use crate::database::sql::{self, Sql};
 use melodia_core::entities::credits::{CreditRole, RoleCredit, RoleCredits};
 use melodia_core::entities::genre::GenreList;
 use melodia_core::entities::smart_criteria::{
@@ -32,16 +32,15 @@ async fn set_stats(
     is_favorite: bool,
     last_played: Option<&str>,
 ) -> Result<(), AppError> {
-    sqlx::query(
-        "UPDATE tracks SET rating = ?, play_count = ?, is_favorite = ?, \
-         last_played = ? WHERE id = ?",
-    )
-    .bind(rating)
-    .bind(play_count)
-    .bind(is_favorite)
-    .bind(last_played)
-    .bind(id)
-    .execute(db.write())
+    let last_played = last_played.map(str::to_owned);
+    db.write(move |conn| {
+        sql::execute(
+            conn,
+            "UPDATE tracks SET rating = ?, play_count = ?, is_favorite = ?, \
+             last_played = ? WHERE id = ?",
+            (rating, play_count, is_favorite, last_played, id),
+        )
+    })
     .await?;
     Ok(())
 }
@@ -84,7 +83,7 @@ fn ids(rows: &[TrackListRow]) -> HashSet<i64> {
 async fn resolve(db: &DbPool, c: &SmartCriteria) -> Result<Vec<TrackListRow>, AppError> {
     let criteria = c.to_json().map_err(|e| AppError::io("serialize smart_criteria", e))?;
     let playlist =
-        queries::playlist::create_smart_playlist(db, "Resolved", None, &criteria).await?;
+        queries::playlist::create_smart_playlist(db, "Resolved".to_owned(), None, criteria).await?;
     let own_order = TrackOrder { field: TrackSortField::Position, dir: SortDir::Asc };
     let ids = queries::track::track_ids(
         db,
@@ -93,7 +92,7 @@ async fn resolve(db: &DbPool, c: &SmartCriteria) -> Result<Vec<TrackListRow>, Ap
         &Needle::default(),
     )
     .await?;
-    queries::track::get_track_list_rows_by_ids(db, &ids).await
+    queries::track::get_track_list_rows_by_ids(db, ids).await
 }
 
 #[tokio::test]
@@ -276,11 +275,10 @@ async fn duration_rule_value_is_seconds() -> Result<(), AppError> {
     // in whole seconds ("Duration (sec)"), so a `Duration > 150` rule must
     // compare against 150_000 ms — not the raw 150 ms (which would match all).
     for (id, ms) in [(s.t1, 60_000_i64), (s.t2, 120_000), (s.t3, 240_000), (s.t4, 360_000)] {
-        sqlx::query("UPDATE tracks SET duration_ms = ? WHERE id = ?")
-            .bind(ms)
-            .bind(id)
-            .execute(s.db.write())
-            .await?;
+        s.db.write(move |conn| {
+            sql::execute(conn, "UPDATE tracks SET duration_ms = ? WHERE id = ?", (ms, id))
+        })
+        .await?;
     }
     let c = one(RuleField::DurationMs, RuleOp::Gt, Some(RuleValue::Number(150.0)));
     // 150 s == 150_000 ms → only t3 (240 s) and t4 (360 s) exceed it.
@@ -290,27 +288,28 @@ async fn duration_rule_value_is_seconds() -> Result<(), AppError> {
 
 /// Stage a title, for the cases whose subject is a `LIKE` metacharacter in one.
 async fn set_title(db: &DbPool, id: i64, title: &str) -> Result<(), AppError> {
-    sqlx::query("UPDATE tracks SET title = ? WHERE id = ?")
-        .bind(title)
-        .bind(id)
-        .execute(db.write())
-        .await?;
+    let title = title.to_owned();
+    db.write(move |conn| {
+        sql::execute(conn, "UPDATE tracks SET title = ? WHERE id = ?", (title, id))
+    })
+    .await?;
     Ok(())
 }
 
 /// Stage an album artist, which the scan helper always leaves null.
 async fn set_album_artist(db: &DbPool, id: i64, album_artist: &str) -> Result<(), AppError> {
-    sqlx::query("UPDATE tracks SET album_artist = ? WHERE id = ?")
-        .bind(album_artist)
-        .bind(id)
-        .execute(db.write())
-        .await?;
+    let album_artist = album_artist.to_owned();
+    db.write(move |conn| {
+        sql::execute(conn, "UPDATE tracks SET album_artist = ? WHERE id = ?", (album_artist, id))
+    })
+    .await?;
     Ok(())
 }
 
 /// Leave a row with no album at all, which the seed has no other way to produce.
 async fn clear_album(db: &DbPool, id: i64) -> Result<(), AppError> {
-    sqlx::query("UPDATE tracks SET album = NULL WHERE id = ?").bind(id).execute(db.write()).await?;
+    db.write(move |conn| sql::execute(conn, "UPDATE tracks SET album = NULL WHERE id = ?", (id,)))
+        .await?;
     Ok(())
 }
 
@@ -801,11 +800,15 @@ async fn tied_seed() -> Result<(DbPool, [i64; 4]), AppError> {
         insert_test_track(&db, "/music/3.mp3", "Three", "Artist", "Album", "Rock").await?,
         insert_test_track(&db, "/music/4.mp3", "Four", "Artist", "Album", "Rock").await?,
     ];
-    sqlx::query("UPDATE tracks SET date_added = ?, play_count = 3, last_played = ?, rating = 4")
-        .bind("2026-01-01T00:00:00+00:00")
-        .bind(days_ago(1))
-        .execute(db.write())
-        .await?;
+    let last_played = days_ago(1);
+    db.write(move |conn| {
+        sql::execute(
+            conn,
+            "UPDATE tracks SET date_added = ?, play_count = 3, last_played = ?, rating = 4",
+            ("2026-01-01T00:00:00+00:00", last_played),
+        )
+    })
+    .await?;
     Ok((db, ids))
 }
 

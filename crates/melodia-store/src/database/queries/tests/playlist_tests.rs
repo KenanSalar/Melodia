@@ -1,7 +1,7 @@
 use std::collections::BTreeSet;
 
-use crate::database::queries;
 use crate::database::queries::fixtures::*;
+use crate::database::{DbPool, queries, sql};
 use melodia_core::entities::playlist::{DroppedRules, PlaylistItemsCut};
 use melodia_core::entities::smart_criteria::Draw;
 use melodia_core::entities::track_list::{SortDir, TrackListScope, TrackOrder, TrackSortField};
@@ -61,8 +61,14 @@ async fn get_playlist_by_id_not_found() -> Result<(), AppError> {
 async fn update_playlist() -> Result<(), AppError> {
     let db = setup_seeded_db().await?;
     let pl = queries::playlist::create_playlist(&db, "Original", None).await?;
-    let updated =
-        queries::playlist::update_playlist(&db, pl.id, "Renamed", Some("New desc"), false).await?;
+    let updated = queries::playlist::update_playlist(
+        &db,
+        pl.id,
+        "Renamed".to_owned(),
+        Some("New desc".to_owned()),
+        false,
+    )
+    .await?;
     assert_eq!(updated.name, "Renamed");
     assert_eq!(updated.description.as_deref(), Some("New desc"));
     Ok(())
@@ -72,7 +78,7 @@ async fn update_playlist() -> Result<(), AppError> {
 async fn delete_playlist() -> Result<(), AppError> {
     let db = setup_seeded_db().await?;
     let pl = queries::playlist::create_playlist(&db, "ToDelete", None).await?;
-    queries::playlist_delete::delete_playlists(&db, &[pl.id]).await?;
+    queries::playlist_delete::delete_playlists(&db, vec![pl.id]).await?;
     let result = queries::playlist::get_playlist_by_id(&db, pl.id).await;
     assert!(result.is_err());
     Ok(())
@@ -86,7 +92,7 @@ async fn add_and_get_playlist_tracks() -> Result<(), AppError> {
     let all_tracks = queries::track::get_all_tracks(&db).await?;
     let track_ids: Vec<i64> = all_tracks.iter().map(|t| t.id).collect();
 
-    queries::playlist::add_tracks_to_playlist(&db, pl.id, &track_ids).await?;
+    queries::playlist::add_tracks_to_playlist(&db, pl.id, track_ids).await?;
 
     let tracks = queries::playlist::get_playlist_tracks(&db, pl.id).await?;
     assert_eq!(tracks.len(), 3);
@@ -97,7 +103,7 @@ async fn add_and_get_playlist_tracks() -> Result<(), AppError> {
 async fn add_tracks_empty_is_noop() -> Result<(), AppError> {
     let db = setup_seeded_db().await?;
     let pl = queries::playlist::create_playlist(&db, "Test", None).await?;
-    queries::playlist::add_tracks_to_playlist(&db, pl.id, &[]).await?;
+    queries::playlist::add_tracks_to_playlist(&db, pl.id, Vec::new()).await?;
     let tracks = queries::playlist::get_playlist_tracks(&db, pl.id).await?;
     assert!(tracks.is_empty());
     Ok(())
@@ -112,9 +118,9 @@ async fn remove_one_track_leaves_the_rest_renumbered() -> Result<(), AppError> {
     let all_tracks = queries::track::get_all_tracks(&db).await?;
     let track_ids: Vec<i64> = all_tracks.iter().map(|t| t.id).collect();
 
-    queries::playlist::add_tracks_to_playlist(&db, pl.id, &track_ids).await?;
+    queries::playlist::add_tracks_to_playlist(&db, pl.id, track_ids.clone()).await?;
 
-    queries::playlist::remove_tracks_from_playlist_batch(&db, pl.id, &track_ids[0..1]).await?;
+    queries::playlist::remove_tracks_from_playlist_batch(&db, pl.id, vec![track_ids[0]]).await?;
 
     let tracks = queries::playlist::get_playlist_tracks(&db, pl.id).await?;
     assert_eq!(tracks.len(), 2);
@@ -129,9 +135,10 @@ async fn remove_tracks_batch() -> Result<(), AppError> {
     let all_tracks = queries::track::get_all_tracks(&db).await?;
     let track_ids: Vec<i64> = all_tracks.iter().map(|t| t.id).collect();
 
-    queries::playlist::add_tracks_to_playlist(&db, pl.id, &track_ids).await?;
+    queries::playlist::add_tracks_to_playlist(&db, pl.id, track_ids.clone()).await?;
 
-    queries::playlist::remove_tracks_from_playlist_batch(&db, pl.id, &track_ids[0..2]).await?;
+    queries::playlist::remove_tracks_from_playlist_batch(&db, pl.id, track_ids[0..2].to_vec())
+        .await?;
 
     let tracks = queries::playlist::get_playlist_tracks(&db, pl.id).await?;
     assert_eq!(tracks.len(), 1);
@@ -142,7 +149,7 @@ async fn remove_tracks_batch() -> Result<(), AppError> {
 async fn remove_tracks_batch_empty_is_noop() -> Result<(), AppError> {
     let db = setup_seeded_db().await?;
     let pl = queries::playlist::create_playlist(&db, "Test", None).await?;
-    queries::playlist::remove_tracks_from_playlist_batch(&db, pl.id, &[]).await?;
+    queries::playlist::remove_tracks_from_playlist_batch(&db, pl.id, Vec::new()).await?;
     Ok(())
 }
 
@@ -153,10 +160,10 @@ async fn move_playlist_tracks() -> Result<(), AppError> {
     let all_tracks = queries::track::get_all_tracks(&db).await?;
     let track_ids: Vec<i64> = all_tracks.iter().map(|t| t.id).collect();
 
-    queries::playlist::add_tracks_to_playlist(&db, pl.id, &track_ids).await?;
+    queries::playlist::add_tracks_to_playlist(&db, pl.id, track_ids.clone()).await?;
 
     // Move first track to last position
-    queries::playlist::move_playlist_tracks(&db, pl.id, &[track_ids[0]], 2).await?;
+    queries::playlist::move_playlist_tracks(&db, pl.id, vec![track_ids[0]], 2).await?;
 
     let tracks = queries::playlist::get_playlist_tracks(&db, pl.id).await?;
     assert_eq!(tracks.len(), 3);
@@ -169,7 +176,7 @@ async fn move_playlist_tracks() -> Result<(), AppError> {
 async fn move_playlist_tracks_on_an_empty_playlist_is_refused() -> Result<(), AppError> {
     let db = setup_seeded_db().await?;
     let pl = queries::playlist::create_playlist(&db, "Test", None).await?;
-    let result = queries::playlist::move_playlist_tracks(&db, pl.id, &[1], 99).await;
+    let result = queries::playlist::move_playlist_tracks(&db, pl.id, vec![1], 99).await;
     assert!(result.is_err());
     Ok(())
 }
@@ -181,7 +188,7 @@ async fn playlist_stats_track_count() -> Result<(), AppError> {
     let all_tracks = queries::track::get_all_tracks(&db).await?;
     let track_ids: Vec<i64> = all_tracks.iter().map(|t| t.id).collect();
 
-    queries::playlist::add_tracks_to_playlist(&db, pl.id, &track_ids).await?;
+    queries::playlist::add_tracks_to_playlist(&db, pl.id, track_ids).await?;
 
     let stats = queries::playlist::get_playlist_by_id(&db, pl.id).await?;
     assert_eq!(stats.track_count, 3);
@@ -199,9 +206,10 @@ async fn clearing_thumbnail_persists_after_adding_tracks() -> Result<(), AppErro
 
     // Give every seeded track an artwork path so auto-regeneration has
     // something to latch onto.
-    sqlx::query("UPDATE tracks SET artwork_path = '/artwork/cover.jpg'")
-        .execute(db.write())
-        .await?;
+    db.write(|conn| {
+        sql::execute(conn, "UPDATE tracks SET artwork_path = '/artwork/cover.jpg'", ())
+    })
+    .await?;
 
     let all_tracks = queries::track::get_all_tracks(&db).await?;
     let track_ids: Vec<i64> = all_tracks.iter().map(|t| t.id).collect();
@@ -210,14 +218,15 @@ async fn clearing_thumbnail_persists_after_adding_tracks() -> Result<(), AppErro
     // Create playlist and add the first track — this auto-populates
     // thumbnail_path from the track's artwork while custom_thumbnail is FALSE.
     let pl = queries::playlist::create_playlist(&db, "Test", None).await?;
-    queries::playlist::add_tracks_to_playlist(&db, pl.id, &track_ids[..1]).await?;
+    queries::playlist::add_tracks_to_playlist(&db, pl.id, vec![track_ids[0]]).await?;
 
     let after_first_add = queries::playlist::get_playlist_by_id(&db, pl.id).await?;
     assert_eq!(after_first_add.thumbnail_path.as_deref(), Some("/artwork/cover.jpg"));
     assert!(!after_first_add.custom_thumbnail);
 
     // User clears the thumbnail via the edit dialog.
-    let cleared = queries::playlist::update_playlist(&db, pl.id, "Test", None, true).await?;
+    let cleared =
+        queries::playlist::update_playlist(&db, pl.id, "Test".to_owned(), None, true).await?;
     assert!(cleared.thumbnail_path.is_none());
     assert!(
         cleared.custom_thumbnail,
@@ -225,7 +234,7 @@ async fn clearing_thumbnail_persists_after_adding_tracks() -> Result<(), AppErro
     );
 
     // Add another track — must NOT bring the artwork back.
-    queries::playlist::add_tracks_to_playlist(&db, pl.id, &track_ids[1..2]).await?;
+    queries::playlist::add_tracks_to_playlist(&db, pl.id, vec![track_ids[1]]).await?;
 
     let after_second_add = queries::playlist::get_playlist_by_id(&db, pl.id).await?;
     assert!(
@@ -237,14 +246,20 @@ async fn clearing_thumbnail_persists_after_adding_tracks() -> Result<(), AppErro
 }
 
 /// The positions a playlist's rows actually hold, in position order.
-async fn positions(db: &crate::database::DbPool, playlist_id: i64) -> Result<Vec<i64>, AppError> {
-    let rows: Vec<(i64,)> = sqlx::query_as(
-        "SELECT position FROM playlist_items WHERE playlist_id = ? ORDER BY position",
-    )
-    .bind(playlist_id)
-    .fetch_all(db.read())
-    .await?;
-    Ok(rows.into_iter().map(|(p,)| p).collect())
+async fn positions(db: &DbPool, playlist_id: i64) -> Result<Vec<i64>, AppError> {
+    db.read(move |conn| {
+        sql::fetch_all(
+            conn,
+            "SELECT position FROM playlist_items WHERE playlist_id = ? ORDER BY position",
+            (playlist_id,),
+        )
+    })
+    .await
+}
+
+async fn delete_track(db: &DbPool, id: i64) -> Result<(), AppError> {
+    db.write(move |conn| sql::execute(conn, "DELETE FROM tracks WHERE id = ?", (id,))).await?;
+    Ok(())
 }
 
 /// **The reads order by `playlist_items.position` rather than showing it**, so the renumber that
@@ -257,10 +272,10 @@ async fn removing_a_middle_track_closes_the_gap_it_left() -> Result<(), AppError
     let track_ids: Vec<i64> =
         queries::track::get_all_tracks(&db).await?.into_iter().map(|t| t.id).collect();
     let pl = queries::playlist::create_playlist(&db, "Ordered", None).await?;
-    queries::playlist::add_tracks_to_playlist(&db, pl.id, &track_ids).await?;
+    queries::playlist::add_tracks_to_playlist(&db, pl.id, track_ids.clone()).await?;
     assert_eq!(positions(&db, pl.id).await?, [0, 1, 2]);
 
-    queries::playlist::remove_tracks_from_playlist_batch(&db, pl.id, &track_ids[1..2]).await?;
+    queries::playlist::remove_tracks_from_playlist_batch(&db, pl.id, vec![track_ids[1]]).await?;
 
     assert_eq!(positions(&db, pl.id).await?, [0, 1], "the survivors must renumber from zero");
     Ok(())
@@ -277,11 +292,10 @@ async fn the_selection_count_is_per_playlist() -> Result<(), AppError> {
     let holds_all = queries::playlist::create_playlist(&db, "All", None).await?;
     let holds_one = queries::playlist::create_playlist(&db, "One", None).await?;
     let holds_none = queries::playlist::create_playlist(&db, "None", None).await?;
-    queries::playlist::add_tracks_to_playlist(&db, holds_all.id, &track_ids).await?;
-    queries::playlist::add_tracks_to_playlist(&db, holds_one.id, &track_ids[..1]).await?;
+    queries::playlist::add_tracks_to_playlist(&db, holds_all.id, track_ids.clone()).await?;
+    queries::playlist::add_tracks_to_playlist(&db, holds_one.id, vec![track_ids[0]]).await?;
 
-    let counts =
-        queries::playlist::count_tracks_in_playlists_for_selection(&db, &track_ids).await?;
+    let counts = queries::playlist::count_tracks_in_playlists_for_selection(&db, track_ids).await?;
 
     assert_eq!(counts.get(&holds_all.id), Some(&3));
     assert_eq!(counts.get(&holds_one.id), Some(&1));
@@ -295,12 +309,18 @@ async fn the_selection_count_is_per_playlist() -> Result<(), AppError> {
 #[tokio::test]
 async fn a_smart_playlist_keeps_its_criteria_and_holds_no_items() -> Result<(), AppError> {
     let db = setup_seeded_db().await?;
-    let created =
-        queries::playlist::create_smart_playlist(&db, "Top Rated", None, r#"{"v":1}"#).await?;
+    let created = queries::playlist::create_smart_playlist(
+        &db,
+        "Top Rated".to_owned(),
+        None,
+        r#"{"v":1}"#.to_owned(),
+    )
+    .await?;
     assert!(created.is_smart);
     assert_eq!(created.smart_criteria.as_deref(), Some(r#"{"v":1}"#));
 
-    let updated = queries::playlist::update_smart_criteria(&db, created.id, r#"{"v":2}"#).await?;
+    let updated =
+        queries::playlist::update_smart_criteria(&db, created.id, r#"{"v":2}"#.to_owned()).await?;
     assert_eq!(updated.smart_criteria.as_deref(), Some(r#"{"v":2}"#));
 
     let stats = queries::playlist::get_playlist_by_id(&db, created.id).await?;
@@ -314,7 +334,8 @@ async fn a_smart_playlist_keeps_its_criteria_and_holds_no_items() -> Result<(), 
 async fn rewriting_the_criteria_of_a_missing_playlist_is_reported() -> Result<(), AppError> {
     let db = setup_seeded_db().await?;
 
-    let missing = queries::playlist::update_smart_criteria(&db, 9_999, r#"{"v":1}"#).await;
+    let missing =
+        queries::playlist::update_smart_criteria(&db, 9_999, r#"{"v":1}"#.to_owned()).await;
 
     assert!(matches!(missing, Err(AppError::NotFound { .. })), "{missing:?}");
     Ok(())
@@ -329,22 +350,39 @@ async fn re_adding_a_track_leaves_no_hole_where_it_was_skipped() -> Result<(), A
     let track_ids: Vec<i64> =
         queries::track::get_all_tracks(&db).await?.into_iter().map(|t| t.id).collect();
     let pl = queries::playlist::create_playlist(&db, "Re-added", None).await?;
-    queries::playlist::add_tracks_to_playlist(&db, pl.id, &track_ids[..1]).await?;
+    queries::playlist::add_tracks_to_playlist(&db, pl.id, vec![track_ids[0]]).await?;
 
     // The first id is already seated at 0, so its slot in this batch is ignored and the second
     // id lands at 2.
-    queries::playlist::add_tracks_to_playlist(&db, pl.id, &track_ids[..2]).await?;
+    queries::playlist::add_tracks_to_playlist(&db, pl.id, track_ids[..2].to_vec()).await?;
 
     assert_eq!(positions(&db, pl.id).await?, [0, 1]);
     Ok(())
 }
 
-async fn seeded_track_ids(db: &crate::database::DbPool) -> Result<Vec<i64>, AppError> {
+async fn seeded_track_ids(db: &DbPool) -> Result<Vec<i64>, AppError> {
     Ok(queries::track::get_all_tracks(db).await?.into_iter().map(|t| t.id).collect())
 }
 
+/// A new manual playlist named `name` holding `track_ids`.
+async fn playlist_holding(db: &DbPool, name: &str, track_ids: &[i64]) -> Result<i64, AppError> {
+    queries::playlist::create_playlist_with_tracks(db, name.to_owned(), None, track_ids.to_vec())
+        .await
+}
+
+/// Gives `playlist` a picked cover, which no edit to its tracks moves.
+async fn set_custom_cover(db: &DbPool, playlist: i64) -> Result<(), AppError> {
+    queries::playlist::set_playlist_custom_thumbnail(
+        db,
+        playlist,
+        "/artwork/custom.jpg".to_owned(),
+    )
+    .await?;
+    Ok(())
+}
+
 /// A playlist's track ids in the order it plays them.
-async fn order(db: &crate::database::DbPool, playlist_id: i64) -> Result<Vec<i64>, AppError> {
+async fn order(db: &DbPool, playlist_id: i64) -> Result<Vec<i64>, AppError> {
     Ok(queries::playlist::get_playlist_tracks(db, playlist_id)
         .await?
         .into_iter()
@@ -354,47 +392,44 @@ async fn order(db: &crate::database::DbPool, playlist_id: i64) -> Result<Vec<i64
 
 /// `(rows, lowest position, highest position, distinct positions)`, which is `(n, 0, n - 1, n)`
 /// exactly when the positions run from zero with no gap and no two rows sharing one.
-async fn position_spread(
-    db: &crate::database::DbPool,
-    playlist_id: i64,
-) -> Result<(i64, i64, i64, i64), AppError> {
-    Ok(sqlx::query_as(
-        "SELECT COUNT(*), MIN(position), MAX(position), COUNT(DISTINCT position)
-         FROM playlist_items WHERE playlist_id = ?",
-    )
-    .bind(playlist_id)
-    .fetch_one(db.read())
-    .await?)
+async fn position_spread(db: &DbPool, playlist_id: i64) -> Result<(i64, i64, i64, i64), AppError> {
+    db.read(move |conn| {
+        sql::fetch_one(
+            conn,
+            "SELECT COUNT(*), MIN(position), MAX(position), COUNT(DISTINCT position)
+             FROM playlist_items WHERE playlist_id = ?",
+            (playlist_id,),
+        )
+    })
+    .await
 }
 
 /// A stamp older than any clock a test runs under, so a write that stamps a playlist shows.
 const EARLIER: &str = "2020-01-01T00:00:00.000+00:00";
 
-async fn backdate(db: &crate::database::DbPool, playlist_id: i64) -> Result<(), AppError> {
-    sqlx::query("UPDATE playlists SET updated_at = ? WHERE id = ?")
-        .bind(EARLIER)
-        .bind(playlist_id)
-        .execute(db.write())
-        .await?;
-    Ok(())
+async fn backdate(db: &DbPool, playlist_id: i64) -> Result<(), AppError> {
+    set_updated_at(db, playlist_id, EARLIER).await
 }
 
 /// Dates `playlist_id`'s creation to [`EARLIER`], so one created later in a test can't share its
 /// stamp to the millisecond.
-async fn created_earlier(db: &crate::database::DbPool, playlist_id: i64) -> Result<(), AppError> {
-    sqlx::query("UPDATE playlists SET created_at = ? WHERE id = ?")
-        .bind(EARLIER)
-        .bind(playlist_id)
-        .execute(db.write())
-        .await?;
+async fn created_earlier(db: &DbPool, playlist_id: i64) -> Result<(), AppError> {
+    db.write(move |conn| {
+        sql::execute(
+            conn,
+            "UPDATE playlists SET created_at = ? WHERE id = ?",
+            (EARLIER, playlist_id),
+        )
+    })
+    .await?;
     Ok(())
 }
 
-async fn updated_at(db: &crate::database::DbPool, playlist_id: i64) -> Result<String, AppError> {
-    Ok(sqlx::query_scalar("SELECT updated_at FROM playlists WHERE id = ?")
-        .bind(playlist_id)
-        .fetch_one(db.read())
-        .await?)
+async fn updated_at(db: &DbPool, playlist_id: i64) -> Result<String, AppError> {
+    db.read(move |conn| {
+        sql::fetch_one(conn, "SELECT updated_at FROM playlists WHERE id = ?", (playlist_id,))
+    })
+    .await
 }
 
 // --- create_playlist_with_tracks ---
@@ -406,9 +441,9 @@ async fn a_playlist_created_with_tracks_holds_them_in_the_order_given() -> Resul
 
     let playlist = queries::playlist::create_playlist_with_tracks(
         &db,
-        "Given",
+        "Given".to_owned(),
         None,
-        &[ids[2], ids[0], ids[1]],
+        vec![ids[2], ids[0], ids[1]],
     )
     .await?;
 
@@ -426,9 +461,9 @@ async fn a_repeated_track_keeps_its_first_slot_and_leaves_no_gap() -> Result<(),
 
     let playlist = queries::playlist::create_playlist_with_tracks(
         &db,
-        "Repeats",
+        "Repeats".to_owned(),
         None,
-        &[ids[0], ids[1], ids[0], ids[2]],
+        vec![ids[0], ids[1], ids[0], ids[2]],
     )
     .await?;
 
@@ -441,7 +476,9 @@ async fn a_repeated_track_keeps_its_first_slot_and_leaves_no_gap() -> Result<(),
 async fn a_playlist_created_with_no_tracks_is_empty() -> Result<(), AppError> {
     let db = setup_seeded_db().await?;
 
-    let playlist = queries::playlist::create_playlist_with_tracks(&db, "Empty", None, &[]).await?;
+    let playlist =
+        queries::playlist::create_playlist_with_tracks(&db, "Empty".to_owned(), None, Vec::new())
+            .await?;
 
     assert_eq!(queries::playlist::get_playlist_by_id(&db, playlist).await?.track_count, 0);
     Ok(())
@@ -456,9 +493,9 @@ async fn a_track_the_library_lacks_is_left_out_of_a_new_playlist() -> Result<(),
 
     let playlist = queries::playlist::create_playlist_with_tracks(
         &db,
-        "Dangling",
+        "Dangling".to_owned(),
         None,
-        &[ids[0], 9_999, ids[2]],
+        vec![ids[0], 9_999, ids[2]],
     )
     .await?;
 
@@ -477,7 +514,7 @@ async fn tracks_past_the_first_insert_chunk_land_in_order_with_no_gap() -> Resul
     given.extend([ids[248], ids[249]]);
 
     let playlist =
-        queries::playlist::create_playlist_with_tracks(&db, "Long", None, &given).await?;
+        queries::playlist::create_playlist_with_tracks(&db, "Long".to_owned(), None, given).await?;
 
     assert_eq!(order(&db, playlist).await?, ids);
     assert_eq!(position_spread(&db, playlist).await?, (250, 0, 249, 250));
@@ -492,10 +529,9 @@ async fn tracks_past_the_first_insert_chunk_land_in_order_with_no_gap() -> Resul
 async fn an_add_skips_a_track_the_library_lost_and_lands_the_rest() -> Result<(), AppError> {
     let db = setup_seeded_db().await?;
     let ids = seeded_track_ids(&db).await?;
-    let playlist =
-        queries::playlist::create_playlist_with_tracks(&db, "Held", None, &ids[..1]).await?;
+    let playlist = playlist_holding(&db, "Held", &ids[..1]).await?;
 
-    queries::playlist::add_tracks_to_playlist(&db, playlist, &[ids[1], 9_999, ids[2]]).await?;
+    queries::playlist::add_tracks_to_playlist(&db, playlist, vec![ids[1], 9_999, ids[2]]).await?;
 
     assert_eq!(order(&db, playlist).await?, ids);
     assert_eq!(positions(&db, playlist).await?, [0, 1, 2]);
@@ -514,10 +550,9 @@ async fn an_add_answers_only_the_tracks_that_landed() -> Result<(), AppError> {
         ("only tracks the playlist holds", vec![ids[0]], BTreeSet::new()),
     ];
     for (what, handed, expected) in rows {
-        let playlist =
-            queries::playlist::create_playlist_with_tracks(&db, what, None, &ids[..1]).await?;
+        let playlist = playlist_holding(&db, what, &ids[..1]).await?;
 
-        let landed = queries::playlist::add_tracks_to_playlist(&db, playlist, &handed).await?;
+        let landed = queries::playlist::add_tracks_to_playlist(&db, playlist, handed).await?;
 
         assert_eq!(landed.into_iter().collect::<BTreeSet<i64>>(), expected, "{what}");
     }
@@ -532,11 +567,10 @@ async fn an_add_that_lands_nothing_leaves_the_playlist_unstamped() -> Result<(),
     let rows =
         [("only a track the playlist holds", ids[0]), ("only a track the library lost", 9_999)];
     for (what, handed) in rows {
-        let playlist =
-            queries::playlist::create_playlist_with_tracks(&db, what, None, &ids[..1]).await?;
+        let playlist = playlist_holding(&db, what, &ids[..1]).await?;
         backdate(&db, playlist).await?;
 
-        queries::playlist::add_tracks_to_playlist(&db, playlist, &[handed]).await?;
+        queries::playlist::add_tracks_to_playlist(&db, playlist, vec![handed]).await?;
 
         assert_eq!(updated_at(&db, playlist).await?, EARLIER, "{what}");
     }
@@ -545,10 +579,10 @@ async fn an_add_that_lands_nothing_leaves_the_playlist_unstamped() -> Result<(),
 
 // --- move_playlist_tracks ---
 
-async fn seeded_playlist() -> Result<(crate::database::DbPool, i64, Vec<i64>), AppError> {
+async fn seeded_playlist() -> Result<(DbPool, i64, Vec<i64>), AppError> {
     let db = setup_seeded_db().await?;
     let ids = seeded_track_ids(&db).await?;
-    let playlist = queries::playlist::create_playlist_with_tracks(&db, "Order", None, &ids).await?;
+    let playlist = playlist_holding(&db, "Order", &ids).await?;
     Ok((db, playlist, ids))
 }
 
@@ -556,7 +590,7 @@ async fn seeded_playlist() -> Result<(crate::database::DbPool, i64, Vec<i64>), A
 async fn moving_a_track_down_shifts_the_ones_it_passed_up() -> Result<(), AppError> {
     let (db, playlist, ids) = seeded_playlist().await?;
 
-    queries::playlist::move_playlist_tracks(&db, playlist, &[ids[0]], 2).await?;
+    queries::playlist::move_playlist_tracks(&db, playlist, vec![ids[0]], 2).await?;
 
     assert_eq!(order(&db, playlist).await?, [ids[1], ids[2], ids[0]]);
     assert_eq!(positions(&db, playlist).await?, [0, 1, 2]);
@@ -567,7 +601,7 @@ async fn moving_a_track_down_shifts_the_ones_it_passed_up() -> Result<(), AppErr
 async fn moving_a_track_up_shifts_the_ones_it_passed_down() -> Result<(), AppError> {
     let (db, playlist, ids) = seeded_playlist().await?;
 
-    queries::playlist::move_playlist_tracks(&db, playlist, &[ids[2]], 0).await?;
+    queries::playlist::move_playlist_tracks(&db, playlist, vec![ids[2]], 0).await?;
 
     assert_eq!(order(&db, playlist).await?, [ids[2], ids[0], ids[1]]);
     assert_eq!(positions(&db, playlist).await?, [0, 1, 2]);
@@ -578,7 +612,7 @@ async fn moving_a_track_up_shifts_the_ones_it_passed_down() -> Result<(), AppErr
 async fn dropping_a_track_back_onto_its_own_slot_changes_nothing() -> Result<(), AppError> {
     let (db, playlist, ids) = seeded_playlist().await?;
 
-    queries::playlist::move_playlist_tracks(&db, playlist, &[ids[1]], 1).await?;
+    queries::playlist::move_playlist_tracks(&db, playlist, vec![ids[1]], 1).await?;
 
     assert_eq!(order(&db, playlist).await?, ids);
     Ok(())
@@ -589,8 +623,8 @@ async fn a_track_outside_the_playlist_or_a_slot_past_its_end_is_refused_as_missi
 -> Result<(), AppError> {
     let (db, playlist, ids) = seeded_playlist().await?;
 
-    let from = queries::playlist::move_playlist_tracks(&db, playlist, &[-1], 0).await;
-    let to = queries::playlist::move_playlist_tracks(&db, playlist, &[ids[0]], 3).await;
+    let from = queries::playlist::move_playlist_tracks(&db, playlist, vec![-1], 0).await;
+    let to = queries::playlist::move_playlist_tracks(&db, playlist, vec![ids[0]], 3).await;
 
     assert!(matches!(from, Err(AppError::NotFound { .. })), "{from:?}");
     assert!(matches!(to, Err(AppError::NotFound { .. })), "{to:?}");
@@ -601,10 +635,10 @@ async fn a_track_outside_the_playlist_or_a_slot_past_its_end_is_refused_as_missi
 #[tokio::test]
 async fn a_reorder_closes_the_gap_a_deleted_track_left() -> Result<(), AppError> {
     let (db, playlist, ids) = seeded_playlist().await?;
-    sqlx::query("DELETE FROM tracks WHERE id = ?").bind(ids[1]).execute(db.write()).await?;
+    delete_track(&db, ids[1]).await?;
     assert_eq!(positions(&db, playlist).await?, [0, 2], "test setup: the delete leaves a gap");
 
-    queries::playlist::move_playlist_tracks(&db, playlist, &[ids[0]], 1).await?;
+    queries::playlist::move_playlist_tracks(&db, playlist, vec![ids[0]], 1).await?;
 
     assert_eq!(order(&db, playlist).await?, [ids[2], ids[0]]);
     assert_eq!(positions(&db, playlist).await?, [0, 1]);
@@ -614,9 +648,9 @@ async fn a_reorder_closes_the_gap_a_deleted_track_left() -> Result<(), AppError>
 #[tokio::test]
 async fn a_reorder_leaves_every_other_playlist_alone() -> Result<(), AppError> {
     let (db, playlist, ids) = seeded_playlist().await?;
-    let other = queries::playlist::create_playlist_with_tracks(&db, "Other", None, &ids).await?;
+    let other = playlist_holding(&db, "Other", &ids).await?;
 
-    queries::playlist::move_playlist_tracks(&db, playlist, &[ids[0]], 2).await?;
+    queries::playlist::move_playlist_tracks(&db, playlist, vec![ids[0]], 2).await?;
 
     assert_eq!(order(&db, other).await?, ids);
     assert_eq!(positions(&db, other).await?, [0, 1, 2]);
@@ -628,9 +662,9 @@ async fn a_reorder_leaves_every_other_playlist_alone() -> Result<(), AppError> {
 async fn a_reorder_moving_more_rows_than_one_update_holds_lands_every_position()
 -> Result<(), AppError> {
     let (db, ids) = numbered_library(400).await?;
-    let playlist = queries::playlist::create_playlist_with_tracks(&db, "Long", None, &ids).await?;
+    let playlist = playlist_holding(&db, "Long", &ids).await?;
 
-    queries::playlist::move_playlist_tracks(&db, playlist, &[ids[0]], 399).await?;
+    queries::playlist::move_playlist_tracks(&db, playlist, vec![ids[0]], 399).await?;
 
     let mut expected = ids[1..].to_vec();
     expected.push(ids[0]);
@@ -639,20 +673,18 @@ async fn a_reorder_moving_more_rows_than_one_update_holds_lands_every_position()
     Ok(())
 }
 
-async fn five_track_playlist() -> Result<(crate::database::DbPool, i64, Vec<i64>), AppError> {
+async fn five_track_playlist() -> Result<(DbPool, i64, Vec<i64>), AppError> {
     let (db, ids) = numbered_library(5).await?;
-    let playlist = queries::playlist::create_playlist_with_tracks(&db, "Five", None, &ids).await?;
+    let playlist = playlist_holding(&db, "Five", &ids).await?;
     Ok((db, playlist, ids))
 }
 
 /// [`five_track_playlist`] with covers on its first two tracks, so it takes the first one's.
-async fn covered_five_track_playlist() -> Result<(crate::database::DbPool, i64, Vec<i64>), AppError>
-{
+async fn covered_five_track_playlist() -> Result<(DbPool, i64, Vec<i64>), AppError> {
     let (db, ids) = numbered_library(5).await?;
     set_test_artwork(&db, ids[0], "/artwork/first.jpg").await?;
     set_test_artwork(&db, ids[1], "/artwork/second.jpg").await?;
-    let playlist =
-        queries::playlist::create_playlist_with_tracks(&db, "Covered", None, &ids).await?;
+    let playlist = playlist_holding(&db, "Covered", &ids).await?;
     Ok((db, playlist, ids))
 }
 
@@ -673,7 +705,7 @@ async fn a_block_lands_together_in_the_order_the_playlist_held_it() -> Result<()
     for (what, handed, to, expected) in rows {
         let (db, playlist, ids) = five_track_playlist().await?;
 
-        queries::playlist::move_playlist_tracks(&db, playlist, &on_rows(&ids, handed), to).await?;
+        queries::playlist::move_playlist_tracks(&db, playlist, on_rows(&ids, handed), to).await?;
 
         assert_eq!(
             (order(&db, playlist).await?, positions(&db, playlist).await?),
@@ -688,7 +720,8 @@ async fn a_block_lands_together_in_the_order_the_playlist_held_it() -> Result<()
 async fn a_block_running_one_past_the_end_is_refused() -> Result<(), AppError> {
     let (db, playlist, ids) = five_track_playlist().await?;
 
-    let refused = queries::playlist::move_playlist_tracks(&db, playlist, &ids[1..3], 4).await;
+    let refused =
+        queries::playlist::move_playlist_tracks(&db, playlist, ids[1..3].to_vec(), 4).await;
 
     assert!(matches!(refused, Err(AppError::NotFound { .. })), "{refused:?}");
     assert_eq!(order(&db, playlist).await?, ids);
@@ -701,7 +734,7 @@ async fn a_block_running_one_past_the_end_is_refused() -> Result<(), AppError> {
 async fn a_track_handed_over_twice_moves_once() -> Result<(), AppError> {
     let (db, playlist, ids) = five_track_playlist().await?;
 
-    queries::playlist::move_playlist_tracks(&db, playlist, &[ids[0], ids[0]], 4).await?;
+    queries::playlist::move_playlist_tracks(&db, playlist, vec![ids[0], ids[0]], 4).await?;
 
     assert_eq!(order(&db, playlist).await?, on_rows(&ids, &[1, 2, 3, 4, 0]));
     Ok(())
@@ -711,11 +744,11 @@ async fn a_track_handed_over_twice_moves_once() -> Result<(), AppError> {
 async fn one_track_outside_the_playlist_refuses_the_whole_move() -> Result<(), AppError> {
     let (db, ids) = numbered_library(6).await?;
     let held = &ids[..5];
-    let playlist = queries::playlist::create_playlist_with_tracks(&db, "Five", None, held).await?;
+    let playlist = playlist_holding(&db, "Five", held).await?;
     backdate(&db, playlist).await?;
 
     let refused =
-        queries::playlist::move_playlist_tracks(&db, playlist, &[ids[0], ids[5]], 2).await;
+        queries::playlist::move_playlist_tracks(&db, playlist, vec![ids[0], ids[5]], 2).await;
 
     assert!(matches!(refused, Err(AppError::NotFound { .. })), "{refused:?}");
     assert_eq!(
@@ -730,7 +763,7 @@ async fn one_track_outside_the_playlist_refuses_the_whole_move() -> Result<(), A
 async fn an_automatic_cover_follows_the_track_a_move_puts_first() -> Result<(), AppError> {
     let (db, playlist, ids) = covered_five_track_playlist().await?;
 
-    queries::playlist::move_playlist_tracks(&db, playlist, &[ids[0]], 2).await?;
+    queries::playlist::move_playlist_tracks(&db, playlist, vec![ids[0]], 2).await?;
 
     let shown = queries::playlist::get_playlist_by_id(&db, playlist).await?.thumbnail_path;
     assert_eq!(shown.as_deref(), Some("/artwork/second.jpg"));
@@ -740,9 +773,9 @@ async fn an_automatic_cover_follows_the_track_a_move_puts_first() -> Result<(), 
 #[tokio::test]
 async fn a_custom_cover_stays_whatever_a_move_puts_first() -> Result<(), AppError> {
     let (db, playlist, ids) = covered_five_track_playlist().await?;
-    queries::playlist::set_playlist_custom_thumbnail(&db, playlist, "/artwork/custom.jpg").await?;
+    set_custom_cover(&db, playlist).await?;
 
-    queries::playlist::move_playlist_tracks(&db, playlist, &[ids[0]], 2).await?;
+    queries::playlist::move_playlist_tracks(&db, playlist, vec![ids[0]], 2).await?;
 
     let shown = queries::playlist::get_playlist_by_id(&db, playlist).await?.thumbnail_path;
     assert_eq!(shown.as_deref(), Some("/artwork/custom.jpg"));
@@ -756,7 +789,7 @@ async fn a_move_that_moves_nothing_writes_nothing() -> Result<(), AppError> {
     let (db, playlist, ids) = five_track_playlist().await?;
     backdate(&db, playlist).await?;
 
-    queries::playlist::move_playlist_tracks(&db, playlist, &ids[1..3], 1).await?;
+    queries::playlist::move_playlist_tracks(&db, playlist, ids[1..3].to_vec(), 1).await?;
 
     assert_eq!(
         (order(&db, playlist).await?, updated_at(&db, playlist).await?),
@@ -773,21 +806,24 @@ async fn several_playlists_delete_in_one_pass() -> Result<(), AppError> {
     let db = setup_seeded_db().await?;
     let tracks: Vec<i64> =
         queries::track::get_all_tracks(&db).await?.iter().map(|t| t.id).collect();
-    let doomed =
-        queries::playlist::create_playlist_with_tracks(&db, "Doomed", None, &tracks).await?;
+    let doomed = playlist_holding(&db, "Doomed", &tracks).await?;
     let also = queries::playlist::create_playlist(&db, "Also Doomed", None).await?;
     let kept = queries::playlist::create_playlist(&db, "Kept", None).await?;
 
-    queries::playlist_delete::delete_playlists(&db, &[doomed, also.id]).await?;
+    queries::playlist_delete::delete_playlists(&db, vec![doomed, also.id]).await?;
 
     let left: Vec<i64> =
         queries::playlist::get_all_playlists(&db).await?.iter().map(|p| p.id).collect();
     assert_eq!(left, [kept.id]);
-    let orphans: i64 =
-        sqlx::query_scalar("SELECT COUNT(*) FROM playlist_items WHERE playlist_id = ?")
-            .bind(doomed)
-            .fetch_one(db.read())
-            .await?;
+    let orphans: i64 = db
+        .read(move |conn| {
+            sql::fetch_one(
+                conn,
+                "SELECT COUNT(*) FROM playlist_items WHERE playlist_id = ?",
+                (doomed,),
+            )
+        })
+        .await?;
     assert_eq!(orphans, 0, "the cascade takes the membership rows with the playlist");
     Ok(())
 }
@@ -797,7 +833,7 @@ async fn deleting_nothing_is_not_an_error() -> Result<(), AppError> {
     let db = setup_seeded_db().await?;
     queries::playlist::create_playlist(&db, "Kept", None).await?;
 
-    queries::playlist_delete::delete_playlists(&db, &[]).await?;
+    queries::playlist_delete::delete_playlists(&db, Vec::new()).await?;
 
     assert_eq!(queries::playlist::get_all_playlists(&db).await?.len(), 1);
     Ok(())
@@ -814,7 +850,7 @@ async fn more_playlists_than_one_statement_holds_all_delete() -> Result<(), AppE
         ids.push(queries::playlist::create_playlist(&db, &format!("P{index:04}"), None).await?.id);
     }
 
-    queries::playlist_delete::delete_playlists(&db, &ids).await?;
+    queries::playlist_delete::delete_playlists(&db, ids).await?;
 
     assert!(queries::playlist::get_all_playlists(&db).await?.is_empty());
     Ok(())
@@ -826,7 +862,13 @@ async fn more_playlists_than_one_statement_holds_all_delete() -> Result<(), AppE
 async fn the_smart_verdict_comes_back_for_every_id_that_still_exists() -> Result<(), AppError> {
     let db = setup_seeded_db().await?;
     let manual = queries::playlist::create_playlist(&db, "Manual", None).await?;
-    let smart = queries::playlist::create_smart_playlist(&db, "Smart", None, r#"{"x":1}"#).await?;
+    let smart = queries::playlist::create_smart_playlist(
+        &db,
+        "Smart".to_owned(),
+        None,
+        r#"{"x":1}"#.to_owned(),
+    )
+    .await?;
 
     let mut verdicts =
         queries::playlist::smart_criteria_for_playlists(&db, &[manual.id, smart.id]).await?;
@@ -844,7 +886,7 @@ async fn an_id_deleted_under_the_grid_is_simply_absent() -> Result<(), AppError>
     let db = setup_seeded_db().await?;
     let kept = queries::playlist::create_playlist(&db, "Kept", None).await?;
     let gone = queries::playlist::create_playlist(&db, "Gone", None).await?;
-    queries::playlist_delete::delete_playlists(&db, &[gone.id]).await?;
+    queries::playlist_delete::delete_playlists(&db, vec![gone.id]).await?;
 
     let verdicts =
         queries::playlist::smart_criteria_for_playlists(&db, &[kept.id, gone.id]).await?;
@@ -858,17 +900,15 @@ async fn an_id_deleted_under_the_grid_is_simply_absent() -> Result<(), AppError>
 /// Three backdated playlists over the first five of six tracks, on an automatic, a picked and a
 /// cleared cover. An edit keeps the last two covers but must still stamp, or the grid holds those
 /// playlists in place.
-async fn playlists_on_each_cover()
--> Result<(crate::database::DbPool, Vec<i64>, [(&'static str, i64); 3]), AppError> {
+async fn playlists_on_each_cover() -> Result<(DbPool, Vec<i64>, [(&'static str, i64); 3]), AppError>
+{
     let (db, ids) = numbered_library(6).await?;
     let held = &ids[..5];
-    let automatic =
-        queries::playlist::create_playlist_with_tracks(&db, "Automatic", None, held).await?;
-    let picked = queries::playlist::create_playlist_with_tracks(&db, "Picked", None, held).await?;
-    queries::playlist::set_playlist_custom_thumbnail(&db, picked, "/artwork/custom.jpg").await?;
-    let cleared =
-        queries::playlist::create_playlist_with_tracks(&db, "Cleared", None, held).await?;
-    queries::playlist::update_playlist(&db, cleared, "Cleared", None, true).await?;
+    let automatic = playlist_holding(&db, "Automatic", held).await?;
+    let picked = playlist_holding(&db, "Picked", held).await?;
+    set_custom_cover(&db, picked).await?;
+    let cleared = playlist_holding(&db, "Cleared", held).await?;
+    queries::playlist::update_playlist(&db, cleared, "Cleared".to_owned(), None, true).await?;
     backdate(&db, automatic).await?;
     backdate(&db, picked).await?;
     backdate(&db, cleared).await?;
@@ -885,7 +925,7 @@ async fn an_add_stamps_the_playlist_whatever_its_cover() -> Result<(), AppError>
     let (db, ids, covers) = playlists_on_each_cover().await?;
 
     for (cover, playlist) in covers {
-        queries::playlist::add_tracks_to_playlist(&db, playlist, &[ids[5]]).await?;
+        queries::playlist::add_tracks_to_playlist(&db, playlist, vec![ids[5]]).await?;
 
         assert_ne!(updated_at(&db, playlist).await?, EARLIER, "{cover}");
     }
@@ -897,7 +937,7 @@ async fn a_removal_stamps_the_playlist_whatever_its_cover() -> Result<(), AppErr
     let (db, ids, covers) = playlists_on_each_cover().await?;
 
     for (cover, playlist) in covers {
-        queries::playlist::remove_tracks_from_playlist_batch(&db, playlist, &[ids[4]]).await?;
+        queries::playlist::remove_tracks_from_playlist_batch(&db, playlist, vec![ids[4]]).await?;
 
         assert_ne!(updated_at(&db, playlist).await?, EARLIER, "{cover}");
     }
@@ -910,7 +950,7 @@ async fn a_move_stamps_the_playlist_whatever_its_cover() -> Result<(), AppError>
     let (db, ids, covers) = playlists_on_each_cover().await?;
 
     for (cover, playlist) in covers {
-        queries::playlist::move_playlist_tracks(&db, playlist, &[ids[0]], 2).await?;
+        queries::playlist::move_playlist_tracks(&db, playlist, vec![ids[0]], 2).await?;
 
         assert_ne!(updated_at(&db, playlist).await?, EARLIER, "{cover}");
     }
@@ -920,20 +960,17 @@ async fn a_move_stamps_the_playlist_whatever_its_cover() -> Result<(), AppError>
 // --- refresh_automatic_thumbnails ---
 
 /// A playlist over the seed's first two tracks, its thumbnail taken from the first one's cover.
-async fn covered_playlist(db: &crate::database::DbPool) -> Result<(i64, Vec<i64>), AppError> {
+async fn covered_playlist(db: &DbPool) -> Result<(i64, Vec<i64>), AppError> {
     let ids = seeded_track_ids(db).await?;
     set_test_artwork(db, ids[0], "/artwork/first.jpg").await?;
     set_test_artwork(db, ids[1], "/artwork/second.jpg").await?;
     let pl = queries::playlist::create_playlist(db, "Covered", None).await?;
-    queries::playlist::add_tracks_to_playlist(db, pl.id, &ids[..2]).await?;
+    queries::playlist::add_tracks_to_playlist(db, pl.id, ids[..2].to_vec()).await?;
     Ok((pl.id, ids))
 }
 
-async fn refresh(db: &crate::database::DbPool) -> Result<(), AppError> {
-    let mut tx = db.write().begin().await?;
-    queries::playlist::refresh_automatic_thumbnails(&mut tx).await?;
-    tx.commit().await?;
-    Ok(())
+async fn refresh(db: &DbPool) -> Result<(), AppError> {
+    db.transaction(queries::playlist::refresh_automatic_thumbnails).await
 }
 
 /// A cover can change under a playlist without an edit to it: a tag edit on its first track, or a
@@ -956,7 +993,7 @@ async fn an_automatic_thumbnail_follows_its_first_tracks_current_cover() -> Resu
 async fn a_playlist_whose_tracks_lost_every_cover_loses_its_thumbnail() -> Result<(), AppError> {
     let db = setup_seeded_db().await?;
     let (playlist, _) = covered_playlist(&db).await?;
-    sqlx::query("UPDATE tracks SET artwork_path = NULL").execute(db.write()).await?;
+    db.write(|conn| sql::execute(conn, "UPDATE tracks SET artwork_path = NULL", ())).await?;
 
     refresh(&db).await?;
 
@@ -969,7 +1006,7 @@ async fn a_playlist_whose_tracks_lost_every_cover_loses_its_thumbnail() -> Resul
 async fn a_custom_thumbnail_is_left_where_the_user_put_it() -> Result<(), AppError> {
     let db = setup_seeded_db().await?;
     let (playlist, ids) = covered_playlist(&db).await?;
-    queries::playlist::set_playlist_custom_thumbnail(&db, playlist, "/artwork/custom.jpg").await?;
+    set_custom_cover(&db, playlist).await?;
     set_test_artwork(&db, ids[0], "/artwork/edited.jpg").await?;
 
     refresh(&db).await?;
@@ -1001,9 +1038,9 @@ const EDITED: &str = "2021-06-01T00:00:00.000+00:00";
 
 /// Removes `track_ids`, answering the hold an undo puts them back from.
 async fn cut(
-    db: &crate::database::DbPool,
+    db: &DbPool,
     playlist: i64,
-    track_ids: &[i64],
+    track_ids: Vec<i64>,
 ) -> Result<PlaylistItemsCut, AppError> {
     match queries::playlist::remove_tracks_from_playlist_batch(db, playlist, track_ids).await? {
         UndoCapture::Held(cut) => Ok(cut),
@@ -1013,41 +1050,38 @@ async fn cut(
 
 /// Dates each row a day apart by position, where a create dates them all alike, so a row put back
 /// under the restore's own date shows.
-async fn date_rows_apart(db: &crate::database::DbPool, playlist: i64) -> Result<(), AppError> {
-    sqlx::query(
-        "UPDATE playlist_items SET added_at = printf('2020-01-%02dT00:00:00.000+00:00', position + 1)
-         WHERE playlist_id = ?",
-    )
-    .bind(playlist)
-    .execute(db.write())
+async fn date_rows_apart(db: &DbPool, playlist: i64) -> Result<(), AppError> {
+    db.write(move |conn| {
+        sql::execute(
+            conn,
+            "UPDATE playlist_items SET added_at = printf('2020-01-%02dT00:00:00.000+00:00', position + 1)
+             WHERE playlist_id = ?",
+            (playlist,),
+        )
+    })
     .await?;
     Ok(())
 }
 
 /// `(track, position, added_at)` for each row, in position order.
-async fn items(
-    db: &crate::database::DbPool,
-    playlist: i64,
-) -> Result<Vec<(i64, i64, String)>, AppError> {
-    Ok(sqlx::query_as(
-        "SELECT track_id, position, added_at FROM playlist_items WHERE playlist_id = ?
-         ORDER BY position",
-    )
-    .bind(playlist)
-    .fetch_all(db.read())
-    .await?)
+async fn items(db: &DbPool, playlist: i64) -> Result<Vec<(i64, i64, String)>, AppError> {
+    db.read(move |conn| {
+        sql::fetch_all(
+            conn,
+            "SELECT track_id, position, added_at FROM playlist_items WHERE playlist_id = ?
+             ORDER BY position",
+            (playlist,),
+        )
+    })
+    .await
 }
 
-async fn set_updated_at(
-    db: &crate::database::DbPool,
-    playlist: i64,
-    stamp: &str,
-) -> Result<(), AppError> {
-    sqlx::query("UPDATE playlists SET updated_at = ? WHERE id = ?")
-        .bind(stamp)
-        .bind(playlist)
-        .execute(db.write())
-        .await?;
+async fn set_updated_at(db: &DbPool, playlist: i64, stamp: &str) -> Result<(), AppError> {
+    let stamp = stamp.to_owned();
+    db.write(move |conn| {
+        sql::execute(conn, "UPDATE playlists SET updated_at = ? WHERE id = ?", (stamp, playlist))
+    })
+    .await?;
     Ok(())
 }
 
@@ -1057,9 +1091,9 @@ async fn an_undone_removal_puts_each_row_back_where_it_stood_with_its_own_date()
     let (db, playlist, ids) = five_track_playlist().await?;
     date_rows_apart(&db, playlist).await?;
     let before = items(&db, playlist).await?;
-    let removal = cut(&db, playlist, &on_rows(&ids, &[1, 4])).await?;
+    let removal = cut(&db, playlist, on_rows(&ids, &[1, 4])).await?;
 
-    queries::playlist_restore::restore_playlist_items(&db, &[removal]).await?;
+    queries::playlist_restore::restore_playlist_items(&db, vec![removal]).await?;
 
     assert_eq!(items(&db, playlist).await?, before);
     Ok(())
@@ -1070,11 +1104,11 @@ async fn an_undone_removal_puts_each_row_back_where_it_stood_with_its_own_date()
 #[tokio::test]
 async fn a_removal_across_a_hole_in_the_positions_comes_back_in_order() -> Result<(), AppError> {
     let (db, playlist, ids) = five_track_playlist().await?;
-    sqlx::query("DELETE FROM tracks WHERE id = ?").bind(ids[1]).execute(db.write()).await?;
+    delete_track(&db, ids[1]).await?;
     assert_eq!(positions(&db, playlist).await?, [0, 2, 3, 4], "test setup: a hole at 1");
-    let removal = cut(&db, playlist, &[ids[3]]).await?;
+    let removal = cut(&db, playlist, vec![ids[3]]).await?;
 
-    queries::playlist_restore::restore_playlist_items(&db, &[removal]).await?;
+    queries::playlist_restore::restore_playlist_items(&db, vec![removal]).await?;
 
     assert_eq!(order(&db, playlist).await?, on_rows(&ids, &[0, 2, 3, 4]));
     Ok(())
@@ -1086,10 +1120,10 @@ async fn a_removal_across_a_hole_in_the_positions_comes_back_in_order() -> Resul
 async fn a_row_the_library_lost_since_stays_out_and_the_rest_keep_their_places()
 -> Result<(), AppError> {
     let (db, playlist, ids) = five_track_playlist().await?;
-    let removal = cut(&db, playlist, &on_rows(&ids, &[1, 3])).await?;
-    sqlx::query("DELETE FROM tracks WHERE id = ?").bind(ids[1]).execute(db.write()).await?;
+    let removal = cut(&db, playlist, on_rows(&ids, &[1, 3])).await?;
+    delete_track(&db, ids[1]).await?;
 
-    queries::playlist_restore::restore_playlist_items(&db, &[removal]).await?;
+    queries::playlist_restore::restore_playlist_items(&db, vec![removal]).await?;
 
     assert_eq!(order(&db, playlist).await?, on_rows(&ids, &[0, 2, 3, 4]));
     assert_eq!(positions(&db, playlist).await?, [0, 1, 2, 3]);
@@ -1099,10 +1133,10 @@ async fn a_row_the_library_lost_since_stays_out_and_the_rest_keep_their_places()
 #[tokio::test]
 async fn a_track_added_back_since_keeps_the_place_it_was_added_at() -> Result<(), AppError> {
     let (db, playlist, ids) = five_track_playlist().await?;
-    let removal = cut(&db, playlist, &[ids[1]]).await?;
-    queries::playlist::add_tracks_to_playlist(&db, playlist, &[ids[1]]).await?;
+    let removal = cut(&db, playlist, vec![ids[1]]).await?;
+    queries::playlist::add_tracks_to_playlist(&db, playlist, vec![ids[1]]).await?;
 
-    queries::playlist_restore::restore_playlist_items(&db, &[removal]).await?;
+    queries::playlist_restore::restore_playlist_items(&db, vec![removal]).await?;
 
     assert_eq!(order(&db, playlist).await?, on_rows(&ids, &[0, 2, 3, 4, 1]));
     assert_eq!(positions(&db, playlist).await?, [0, 1, 2, 3, 4]);
@@ -1113,10 +1147,10 @@ async fn a_track_added_back_since_keeps_the_place_it_was_added_at() -> Result<()
 #[tokio::test]
 async fn a_run_of_removals_undone_together_puts_the_playlist_back_whole() -> Result<(), AppError> {
     let (db, playlist, ids) = five_track_playlist().await?;
-    let first = cut(&db, playlist, &[ids[1]]).await?;
-    let second = cut(&db, playlist, &[ids[3]]).await?;
+    let first = cut(&db, playlist, vec![ids[1]]).await?;
+    let second = cut(&db, playlist, vec![ids[3]]).await?;
 
-    queries::playlist_restore::restore_playlist_items(&db, &[first, second]).await?;
+    queries::playlist_restore::restore_playlist_items(&db, vec![first, second]).await?;
 
     assert_eq!(order(&db, playlist).await?, ids);
     Ok(())
@@ -1125,10 +1159,10 @@ async fn a_run_of_removals_undone_together_puts_the_playlist_back_whole() -> Res
 #[tokio::test]
 async fn an_undo_into_a_playlist_deleted_since_fails() -> Result<(), AppError> {
     let (db, playlist, ids) = five_track_playlist().await?;
-    let removal = cut(&db, playlist, &[ids[1]]).await?;
-    queries::playlist_delete::delete_playlists(&db, &[playlist]).await?;
+    let removal = cut(&db, playlist, vec![ids[1]]).await?;
+    queries::playlist_delete::delete_playlists(&db, vec![playlist]).await?;
 
-    let undone = queries::playlist_restore::restore_playlist_items(&db, &[removal]).await;
+    let undone = queries::playlist_restore::restore_playlist_items(&db, vec![removal]).await;
 
     assert!(matches!(undone, Err(AppError::NotFound { .. })), "{undone:?}");
     Ok(())
@@ -1139,14 +1173,13 @@ async fn an_undo_into_a_playlist_deleted_since_fails() -> Result<(), AppError> {
 async fn an_undone_removal_leaves_the_playlist_that_took_its_id_alone() -> Result<(), AppError> {
     let (db, playlist, ids) = five_track_playlist().await?;
     created_earlier(&db, playlist).await?;
-    let removal = cut(&db, playlist, &[ids[1]]).await?;
-    queries::playlist_delete::delete_playlists(&db, &[playlist]).await?;
-    let newcomer =
-        queries::playlist::create_playlist_with_tracks(&db, "Newcomer", None, &ids[..1]).await?;
+    let removal = cut(&db, playlist, vec![ids[1]]).await?;
+    queries::playlist_delete::delete_playlists(&db, vec![playlist]).await?;
+    let newcomer = playlist_holding(&db, "Newcomer", &ids[..1]).await?;
     assert_eq!(newcomer, playlist, "test setup: the newcomer takes the freed id");
     let before = items(&db, newcomer).await?;
 
-    let undone = queries::playlist_restore::restore_playlist_items(&db, &[removal]).await;
+    let undone = queries::playlist_restore::restore_playlist_items(&db, vec![removal]).await;
 
     assert!(matches!(undone, Err(AppError::NotFound { .. })), "{undone:?}");
     assert_eq!(items(&db, newcomer).await?, before);
@@ -1157,9 +1190,9 @@ async fn an_undone_removal_leaves_the_playlist_that_took_its_id_alone() -> Resul
 async fn an_undo_puts_back_the_stamp_the_removal_replaced() -> Result<(), AppError> {
     let (db, playlist, ids) = five_track_playlist().await?;
     backdate(&db, playlist).await?;
-    let removal = cut(&db, playlist, &[ids[1]]).await?;
+    let removal = cut(&db, playlist, vec![ids[1]]).await?;
 
-    queries::playlist_restore::restore_playlist_items(&db, &[removal]).await?;
+    queries::playlist_restore::restore_playlist_items(&db, vec![removal]).await?;
 
     assert_eq!(updated_at(&db, playlist).await?, EARLIER);
     Ok(())
@@ -1171,11 +1204,11 @@ async fn an_undo_puts_back_the_stamp_the_removal_replaced() -> Result<(), AppErr
 async fn an_edit_between_two_removals_keeps_its_own_stamp() -> Result<(), AppError> {
     let (db, playlist, ids) = five_track_playlist().await?;
     backdate(&db, playlist).await?;
-    let first = cut(&db, playlist, &[ids[1]]).await?;
+    let first = cut(&db, playlist, vec![ids[1]]).await?;
     set_updated_at(&db, playlist, EDITED).await?;
-    let second = cut(&db, playlist, &[ids[3]]).await?;
+    let second = cut(&db, playlist, vec![ids[3]]).await?;
 
-    queries::playlist_restore::restore_playlist_items(&db, &[first, second]).await?;
+    queries::playlist_restore::restore_playlist_items(&db, vec![first, second]).await?;
 
     assert_eq!(updated_at(&db, playlist).await?, EDITED);
     Ok(())
@@ -1185,10 +1218,10 @@ async fn an_edit_between_two_removals_keeps_its_own_stamp() -> Result<(), AppErr
 async fn an_undo_over_an_edit_since_is_stamped_as_an_edit() -> Result<(), AppError> {
     let (db, playlist, ids) = five_track_playlist().await?;
     backdate(&db, playlist).await?;
-    let removal = cut(&db, playlist, &[ids[1]]).await?;
+    let removal = cut(&db, playlist, vec![ids[1]]).await?;
     set_updated_at(&db, playlist, EDITED).await?;
 
-    queries::playlist_restore::restore_playlist_items(&db, &[removal]).await?;
+    queries::playlist_restore::restore_playlist_items(&db, vec![removal]).await?;
 
     let stamp = updated_at(&db, playlist).await?;
     assert_ne!(stamp, EARLIER, "the stamp before the removal belongs under the edit");
@@ -1202,12 +1235,11 @@ async fn an_undo_over_an_edit_since_is_stamped_as_an_edit() -> Result<(), AppErr
 async fn removing_tracks_the_playlist_does_not_hold_captures_nothing_and_stamps_nothing()
 -> Result<(), AppError> {
     let (db, ids) = numbered_library(6).await?;
-    let playlist =
-        queries::playlist::create_playlist_with_tracks(&db, "Five", None, &ids[..5]).await?;
+    let playlist = playlist_holding(&db, "Five", &ids[..5]).await?;
     backdate(&db, playlist).await?;
 
     let capture =
-        queries::playlist::remove_tracks_from_playlist_batch(&db, playlist, &[ids[5]]).await?;
+        queries::playlist::remove_tracks_from_playlist_batch(&db, playlist, vec![ids[5]]).await?;
 
     assert!(matches!(capture, UndoCapture::Nothing), "{capture:?}");
     assert_eq!(updated_at(&db, playlist).await?, EARLIER);
@@ -1234,13 +1266,12 @@ async fn a_selection_past_the_hold_cap_is_removed_for_good() -> Result<(), AppEr
     ];
     for (what, handed, expected) in rows {
         let (db, ids) = numbered_library(2).await?;
-        let playlist =
-            queries::playlist::create_playlist_with_tracks(&db, "One", None, &ids[..1]).await?;
+        let playlist = playlist_holding(&db, "One", &ids[..1]).await?;
         let mut selection = vec![ids[0]];
         selection.resize(handed, ids[1]);
 
         let capture =
-            queries::playlist::remove_tracks_from_playlist_batch(&db, playlist, &selection).await?;
+            queries::playlist::remove_tracks_from_playlist_batch(&db, playlist, selection).await?;
 
         assert_eq!(captured(&capture), expected, "{what}");
         assert!(order(&db, playlist).await?.is_empty(), "{what}: the removal writes either way");
@@ -1258,9 +1289,9 @@ async fn an_undone_delete_brings_the_playlist_back_as_it_was() -> Result<(), App
     backdate(&db, playlist).await?;
     let before =
         (queries::playlist::get_playlist_by_id(&db, playlist).await?, items(&db, playlist).await?);
-    let deleted = queries::playlist_delete::delete_playlists_held(&db, &[playlist]).await?;
+    let deleted = queries::playlist_delete::delete_playlists_held(&db, vec![playlist]).await?;
 
-    queries::playlist_restore::restore_playlists(&db, &deleted).await?;
+    queries::playlist_restore::restore_playlists(&db, deleted).await?;
 
     let after =
         (queries::playlist::get_playlist_by_id(&db, playlist).await?, items(&db, playlist).await?);
@@ -1271,12 +1302,17 @@ async fn an_undone_delete_brings_the_playlist_back_as_it_was() -> Result<(), App
 #[tokio::test]
 async fn an_undone_delete_of_a_smart_playlist_brings_back_its_rules() -> Result<(), AppError> {
     let db = setup_seeded_db().await?;
-    let smart =
-        queries::playlist::create_smart_playlist(&db, "Top Rated", None, r#"{"v":1}"#).await?;
+    let smart = queries::playlist::create_smart_playlist(
+        &db,
+        "Top Rated".to_owned(),
+        None,
+        r#"{"v":1}"#.to_owned(),
+    )
+    .await?;
     let before = queries::playlist::get_playlist_by_id(&db, smart.id).await?;
-    let deleted = queries::playlist_delete::delete_playlists_held(&db, &[smart.id]).await?;
+    let deleted = queries::playlist_delete::delete_playlists_held(&db, vec![smart.id]).await?;
 
-    queries::playlist_restore::restore_playlists(&db, &deleted).await?;
+    queries::playlist_restore::restore_playlists(&db, deleted).await?;
 
     assert_eq!(queries::playlist::get_playlist_by_id(&db, smart.id).await?, before);
     Ok(())
@@ -1287,11 +1323,11 @@ async fn an_undone_delete_of_a_smart_playlist_brings_back_its_rules() -> Result<
 #[tokio::test]
 async fn a_playlist_created_since_in_the_deleted_ones_id_keeps_it() -> Result<(), AppError> {
     let (db, playlist, _) = five_track_playlist().await?;
-    let deleted = queries::playlist_delete::delete_playlists_held(&db, &[playlist]).await?;
+    let deleted = queries::playlist_delete::delete_playlists_held(&db, vec![playlist]).await?;
     let newcomer = queries::playlist::create_playlist(&db, "Newcomer", None).await?;
     assert_eq!(newcomer.id, playlist, "test setup: the newcomer takes the freed id");
 
-    queries::playlist_restore::restore_playlists(&db, &deleted).await?;
+    queries::playlist_restore::restore_playlists(&db, deleted).await?;
 
     let mut kept: Vec<(String, i32)> = queries::playlist::get_all_playlists(&db)
         .await?
@@ -1309,10 +1345,10 @@ async fn a_playlist_created_since_in_the_deleted_ones_id_keeps_it() -> Result<()
 #[tokio::test]
 async fn an_undone_delete_leaves_out_the_tracks_the_library_lost_since() -> Result<(), AppError> {
     let (db, playlist, ids) = five_track_playlist().await?;
-    let deleted = queries::playlist_delete::delete_playlists_held(&db, &[playlist]).await?;
-    sqlx::query("DELETE FROM tracks WHERE id = ?").bind(ids[1]).execute(db.write()).await?;
+    let deleted = queries::playlist_delete::delete_playlists_held(&db, vec![playlist]).await?;
+    delete_track(&db, ids[1]).await?;
 
-    queries::playlist_restore::restore_playlists(&db, &deleted).await?;
+    queries::playlist_restore::restore_playlists(&db, deleted).await?;
 
     assert_eq!(order(&db, playlist).await?, on_rows(&ids, &[0, 2, 3, 4]));
     assert_eq!(positions(&db, playlist).await?, [0, 1, 2, 3]);
@@ -1330,8 +1366,8 @@ const RANDOM_THREE: &str = r#"{"limit":{"count":3,"order":"random"}}"#;
 
 /// `Charlie` (Rock, 9 plays), `Alpha` (Rock, 1) and `Bravo` (Pop, 5), inserted in that order, so
 /// insert, title and play order each differ.
-async fn lettered_library() -> Result<(crate::database::DbPool, [i64; 3]), AppError> {
-    let db = crate::database::DbPool::test_pool().await?;
+async fn lettered_library() -> Result<(DbPool, [i64; 3]), AppError> {
+    let db = DbPool::test_pool().await?;
     queries::folder::insert_folder(&db, "/music", true).await?;
     let charlie =
         insert_test_track(&db, "/music/c.mp3", "Charlie", "Artist", "Album", "Rock").await?;
@@ -1341,23 +1377,22 @@ async fn lettered_library() -> Result<(crate::database::DbPool, [i64; 3]), AppEr
     Ok((db, [charlie, alpha, bravo]))
 }
 
-async fn smart(db: &crate::database::DbPool, criteria: &str) -> Result<i64, AppError> {
-    Ok(queries::playlist::create_smart_playlist(db, "Smart", None, criteria).await?.id)
+async fn smart(db: &DbPool, criteria: &str) -> Result<i64, AppError> {
+    let created =
+        queries::playlist::create_smart_playlist(db, "Smart".to_owned(), None, criteria.to_owned())
+            .await?;
+    Ok(created.id)
 }
 
 /// Converts `playlist` under the card's draw, answering the rules it dropped.
-async fn convert(db: &crate::database::DbPool, playlist: i64) -> Result<DroppedRules, AppError> {
+async fn convert(db: &DbPool, playlist: i64) -> Result<DroppedRules, AppError> {
     queries::playlist_convert::convert_to_regular(db, playlist, Draw::default())
         .await?
         .ok_or_else(|| AppError::validation_msg(format!("playlist {playlist} didn't convert")))
 }
 
 /// What `playlist`'s page lists under `draw`, in its own order.
-async fn page(
-    db: &crate::database::DbPool,
-    playlist: i64,
-    draw: Draw,
-) -> Result<Vec<i64>, AppError> {
+async fn page(db: &DbPool, playlist: i64, draw: Draw) -> Result<Vec<i64>, AppError> {
     let own_order = TrackOrder { field: TrackSortField::Position, dir: SortDir::Asc };
     let scope = TrackListScope::Playlist(playlist, draw);
     queries::track::track_ids(db, scope, own_order, &Needle::default()).await
@@ -1457,7 +1492,7 @@ async fn an_undone_convert_puts_the_smart_playlist_back_as_it_was() -> Result<()
     let before = queries::playlist::get_playlist_by_id(&db, playlist).await?;
     let dropped = convert(&db, playlist).await?;
 
-    queries::playlist_convert::restore_rules(&db, &dropped).await?;
+    queries::playlist_convert::restore_rules(&db, dropped).await?;
 
     assert_eq!(queries::playlist::get_playlist_by_id(&db, playlist).await?, before);
     Ok(())
@@ -1468,9 +1503,9 @@ async fn a_cover_picked_after_a_convert_outlives_its_undo() -> Result<(), AppErr
     let (db, _) = lettered_library().await?;
     let playlist = smart(&db, ROCK_ONLY).await?;
     let dropped = convert(&db, playlist).await?;
-    queries::playlist::set_playlist_custom_thumbnail(&db, playlist, "/artwork/custom.jpg").await?;
+    set_custom_cover(&db, playlist).await?;
 
-    queries::playlist_convert::restore_rules(&db, &dropped).await?;
+    queries::playlist_convert::restore_rules(&db, dropped).await?;
 
     let shown = queries::playlist::get_playlist_by_id(&db, playlist).await?.thumbnail_path;
     assert_eq!(shown.as_deref(), Some("/artwork/custom.jpg"));
@@ -1484,13 +1519,12 @@ async fn an_undone_convert_leaves_the_playlist_that_took_its_id_alone() -> Resul
     let playlist = smart(&db, TOP_TWO_BY_PLAYS).await?;
     created_earlier(&db, playlist).await?;
     let dropped = convert(&db, playlist).await?;
-    queries::playlist_delete::delete_playlists(&db, &[playlist]).await?;
-    let newcomer =
-        queries::playlist::create_playlist_with_tracks(&db, "Newcomer", None, &ids).await?;
+    queries::playlist_delete::delete_playlists(&db, vec![playlist]).await?;
+    let newcomer = playlist_holding(&db, "Newcomer", &ids).await?;
     assert_eq!(newcomer, playlist, "test setup: the newcomer takes the freed id");
     let before = queries::playlist::get_playlist_by_id(&db, newcomer).await?;
 
-    let undone = queries::playlist_convert::restore_rules(&db, &dropped).await;
+    let undone = queries::playlist_convert::restore_rules(&db, dropped).await;
 
     assert!(matches!(undone, Err(AppError::NotFound { .. })), "{undone:?}");
     assert_eq!(queries::playlist::get_playlist_by_id(&db, newcomer).await?, before);

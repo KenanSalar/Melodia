@@ -131,7 +131,7 @@ async fn headless_scan_persists_track() -> Result<(), AppError> {
     let ids =
         library::keyset::track_ids(&state.db, TrackListScope::Library, order, &fold_needle(""))
             .await?;
-    let tracks = library::keyset::rows_by_ids(&state.db, &ids).await?;
+    let tracks = library::keyset::rows_by_ids(&state.db, ids).await?;
     assert_eq!(tracks.len(), 1, "exactly one track should be in DB");
 
     let row = &tracks[0];

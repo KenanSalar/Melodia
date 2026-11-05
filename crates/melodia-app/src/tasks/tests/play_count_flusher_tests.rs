@@ -205,11 +205,6 @@ async fn a_dropped_sender_flushes_before_the_loop_returns() -> Result<(), AppErr
 /// the interval alone. `tokio::time::interval` yields its first tick immediately, so the first
 /// batch lands as soon as the channel goes quiet rather than a whole `FLUSH_INTERVAL` later, and
 /// the happy path here costs no wall clock.
-///
-/// Deliberately not `start_paused`, which every timed test reaching for a `test_pool` has to
-/// resist: the pool is one connection onto `sqlite::memory:`, so the database lives *in* that
-/// connection, and a clock that auto-advances past sqlx's idle and lifetime timers has the pool
-/// reap it. What comes back is a pool timeout rather than anything about play counts.
 #[tokio::test]
 async fn the_loop_writes_on_its_own_tick_without_waiting_for_shutdown() -> Result<(), AppError> {
     let db = DbPool::test_pool().await?;
@@ -224,8 +219,7 @@ async fn the_loop_writes_on_its_own_tick_without_waiting_for_shutdown() -> Resul
     assert!(tx.send(PlayCountEvent::Play(id)).is_ok());
 
     // Waited for rather than slept past: the bump lands after the write, so it is the one signal
-    // that says the flush finished. Reading the row here instead would race the loop for
-    // `test_pool`'s single connection, which under a paused clock resolves as a pool timeout.
+    // that says the flush finished.
     let flushed = tokio::time::timeout(FLUSH_INTERVAL * 5, bumped.changed()).await;
     assert!(
         flushed.is_ok(),

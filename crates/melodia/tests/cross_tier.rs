@@ -241,7 +241,7 @@ async fn page_rows_by_id(
 ) -> Result<Vec<TrackListRow>, AppError> {
     let mut ids = keyset(db, scope, "", SortDir::Asc).await?;
     ids.sort_unstable();
-    melodia_store::database::queries::track::get_track_list_rows_by_ids(db, &ids).await
+    melodia_store::database::queries::track::get_track_list_rows_by_ids(db, ids).await
 }
 
 fn queued(pairs: &[(i64, i64)]) -> Vec<i64> {
@@ -542,9 +542,9 @@ async fn a_playlist_keyset_sorts_as_its_page_does() -> Result<(), AppError> {
     let ids: Vec<i64> = rows.iter().map(|r| r.id).collect();
     let playlist = melodia_store::database::queries::playlist::create_playlist_with_tracks(
         &db,
-        "Everything",
+        "Everything".to_owned(),
         None,
-        &ids,
+        ids,
     )
     .await?;
 

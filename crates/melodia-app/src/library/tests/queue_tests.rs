@@ -570,7 +570,7 @@ fn opened_file(dir: &std::path::Path, file_name: &str, title: &str) -> Result<St
 /// The queue's titles in play order, read back by id as everything showing the queue reads them.
 async fn queued_titles(ctx: &PlaybackContext) -> Result<Vec<String>, AppError> {
     let ids = lock_state(&ctx.player_state).queue.play_ids();
-    let rows = queries::track::get_track_summaries_by_ids(&ctx.db, &ids).await?;
+    let rows = queries::track::get_track_summaries_by_ids(&ctx.db, ids.to_vec()).await?;
     Ok(rows.into_iter().map(|track| track.title).collect())
 }
 

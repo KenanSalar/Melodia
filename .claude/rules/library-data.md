@@ -16,7 +16,7 @@ paths:
 
 # The library: what spans the store
 
-`sqlx.md`, `lofty.md`, `blake3.md` and `rayon.md` hold the per-crate mechanics.
+`rusqlite.md`, `lofty.md`, `blake3.md` and `rayon.md` hold the per-crate mechanics.
 
 ## Scan and artwork
 
@@ -35,11 +35,11 @@ paths:
 
 ## Query shape
 
-- **`database::placeholders(n)` builds every IN list**, paired with `chunked_in_query`, or
-  `chunked_in_query_on` on a connection or transaction already held, and `chunked_in_execute_on`
-  for a statement that returns no rows; never re-roll `repeat_n("?", n)`, or the chunk loop for a
-  statement binding only its list (`ingest::load_existing` excepted, its doc says why). A per-row
-  UPDATE is one chunked CTE statement per batch, its `VALUES` list from `values_placeholders`.
+- **`database::placeholders(n)` builds every IN list**, paired with `chunked_in_query`, and
+  `chunked_in_execute_on` for a statement that returns no rows; never re-roll `repeat_n("?", n)`,
+  or the chunk loop for a statement binding only its list (`ingest::load_existing` excepted, its
+  doc says why). A per-row UPDATE is one chunked CTE statement per batch, its `VALUES` list from
+  `values_placeholders`.
 - **Nothing outside the FTS migrations and `search_tests` names a shadow table**
   (`tracks_fts_{data,idx,docsize,config}`), fts5's private storage.
 - **A statement writing title, artist, album artist, album or genre writes `search_text` beside

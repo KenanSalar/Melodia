@@ -1,6 +1,6 @@
 # Plan: Move the library database from sqlx to rusqlite
 
-Status: **Phase 4c complete** · Owner: Kenan · Created: 2026-11-04
+Status: **Phase 4d complete** · Owner: Kenan · Created: 2026-11-04
 
 > **Validated 2026-11-04** against `8fe1eb93` (`chore/deps-and-fixes`) with three read-only inventories:
 >
@@ -298,25 +298,21 @@ The store and core move to rusqlite together, over sub-phases 4a to 4d, each a c
 - [x] **4a Foundation:** steps 1 to 7. Done when no error is left outside `queries/`.
 - [x] **4b Scan:** step 8's scan cluster, its fold (step 9) among it, with step 10 for each function it converts. Its first converted module is the template the other clusters copy, named under "Where it stands" once it lands.
 - [x] **4c The other clusters:** step 8's clusters 2 to 6, the duplicates fold, and step 10 for theirs. Done when no error is left outside the test targets, `melodia-app`'s callers included, which the compiler reaches only once the store builds.
-- [ ] **4d Tests and comments:** steps 11 and 12, and the docs. Done when the three gates pass.
+- [x] **4d Tests and comments:** steps 11 and 12, and the docs. Done when the three gates pass.
 - [ ] **Hand test**, below.
 
-**Where it stands:** 4a, 4b and 4c have landed, and 4d starts at step 11.
+**Where it stands:** 4a to 4c have landed. 4d is done and waits on Kenan's commit, and the hand test follows on his go.
 
-- **Checked so far:**
-  - `cargo fmt --all --check` and `cargo clippy --workspace --locked -- -D warnings` pass. Every non-test target builds and lints clean: the store, and its callers in `melodia-app` and `melodia-views`.
-  - That compile was the first of 4b's hand-edited callers. It found one mismatch, `library/duplicates/kept_out.rs` handing `files` a slice where it now takes a `Vec`.
-  - **What `--all-targets` still fails on** is 4d's:
-    - the store's 22 test files, on sqlx;
-    - seven test files outside the store, on signatures 4b or 4c made owned: `melodia-app`'s `playlist_files_tests.rs`, `queue_tests.rs`, `radio_files_tests.rs`, `smart_playlists_tests.rs` and `tags_tests.rs`, and `melodia`'s `cross_tier.rs` and `headless.rs`.
+- **Gates (2026-11-05):** `cargo fmt --all --check`, `cargo clippy --all-targets --locked --workspace -- -D warnings` and `cargo test --locked --workspace` pass, 4,429 tests and none failed. That was the first run of 4a to 4c's SQL, and it exposed no production defect, so nothing from the gates lands after 4d.
+- **4d's tests:**
+  - The store's 22 test files run through the production shapes: `db.read`, `db.write` and `db.transaction` over `sql::*` or `Sql`. One deviation: `track_tests`' literal-only staging goes through `fixtures::execute`, which runs several statements in one call, rather than a local copy of it.
+  - The pool's own four tests moved to `pool/tests/mod_tests.rs`, `FTS_OPTIMIZE` being private there.
+  - `rows/mod.rs` gained `i32` and tuple widths 6 and 7, which only tests read so far.
+  - `entity_keyset_tests`' `favorites_library` stages its six tracks in a `Vec`. `insert_tagged_track` now clones the metadata into its closure, and six held on the stack took the future past `large_futures`.
+  - The seven test files outside the store take the owned signatures.
+- **`VACUUM INTO` from the in-memory test pool writes a real, openable copy under rusqlite** (a scratch test, not kept). sqlx's no-op is gone, so `backup_tests::open_db` and `rusqlite.md` give the WAL a backup folds in as the reason the backup tests stay file-backed.
 - **Lock:** sqlx's tree left, `sha2` 0.10.9, `digest` 0.10.7, `generic-array` and `typenum` among it. rusqlite, `fallible-iterator` and `fallible-streaming-iterator` entered, plus `sqlite-wasm-rs` and `rsqlite-vfs`, which rusqlite takes only on wasm32 and which never build here. libsqlite3-sys stays at 0.37.0.
-- **The template:** `queries/excluded_files.rs`. It holds every shape a cluster meets, and step 11's tests read the database through the same ones:
-  - static reads in a read closure (`count`, `ids`, `paths`);
-  - owned input moved into one (`files`, `among`);
-  - a tuple decode (`in_folder`);
-  - `&Connection` reads (the `*_on` lookups);
-  - `&Transaction<'_>` writes over `Sql` and the chunk helpers.
-- **What the clusters copy:**
+- **The template:** `queries/excluded_files.rs`. `.claude/rules/rusqlite.md` now holds what the clusters copied, and this list keeps the sites for the PR:
   - **Pool calls:** `db.read(move |conn| …)`, `db.write(move |conn| …)` and `db.transaction(move |tx| …)`, each closure `Send + 'static` and returning `Result<T, AppError>`.
   - **A transaction's body** longer than a few lines is a sync `fn` on `&Transaction<'_>` that the closure calls (`watch_batch::apply_changes`, `retag::refresh_rows`), so its comments keep their lines.
   - **What a closure needs off a borrowed input** is read before it, into locals or a small struct (`retag::EditFacts`), rather than a clone of the whole input.
@@ -337,7 +333,7 @@ The store and core move to rusqlite together, over sub-phases 4a to 4d, each a c
   - **Helpers:** `chunked_in_query(conn, …)` (the `_on` form is gone), `chunked_in_execute_on(&tx, …)`, and `select_in_id_order(conn, …)` inside the caller's closure. `backfill_folded(db, target)` takes the `FoldedColumn` by value.
   - **A membership** resolves on the connection that reads it: `Membership::resolve`, `pick_random`, `fetch_packed_ids` and `smart_playlist::first_cover` are sync on `&Connection`, so a scoped keyset, scope fact or cover is one read closure.
   - **More than 16 binds** go through `rusqlite::params![]`, past the tuple `Params` limit (`radio_removal::reinsert_tx`'s 24).
-- **Watch for:**
+- **Watch for in the hand test**, the suite having reached none of these failing. A statement it never runs fails only at runtime, through one of Decision 5's three refusals or:
   - rusqlite's by-name `get` takes the first column of a name, matched case-insensitively, where sqlx's took the last, so a by-name projection naming a column twice now reads the other one.
   - rusqlite decodes by the value's storage class: an `i64` refuses a REAL, a `String` an INTEGER, and an `i32` an integer out of its range.
   - A transaction body returning `Ok` early now commits, where sqlx's dropped transaction rolled back. Each such return in the tree (`playlist.rs`'s four, `playlist_convert`, `playlist_restore`'s empty guard, `remove_duplicates`) comes before any write or after one that changed nothing, so the outcome is the same; a new one has to hold to that.
@@ -348,7 +344,7 @@ The store and core move to rusqlite together, over sub-phases 4a to 4d, each a c
   - step 5's `keyset.rs` line: `unpack_ids` builds `FromSqlConversionFailure`;
   - step 12's `IDLE_TIMEOUT` doc (rewritten as it moved into `pool/lane.rs`), its manifest comments (core's rewritten, the store's `futures-util` line gone) and `track_links.rs`' doc.
 - **The packing's stated reason went with sqlx.** `track_ids`' doc and `ranked_ids`' named sqlx's per-row hop, and both lines are gone; Phase 5's step 3 decides whether the packing stays.
-- **Moved:** step 6's `backup_tests` converts with step 11.
+- **Step 12 beyond its list:** `logos.rs`' "prepare non-persistent" and `backup_tests`' `create_if_missing` named sqlx too. `heap_trim.rs` needed no change: the reaper still ticks from the lane's creation and closes within `IDLE_CONNECTIONS_CLOSED_WITHIN`.
 
 **Steps,** in working order:
 

@@ -78,7 +78,7 @@ fn run<B: PlayerBackend>(
                 }
             }
             // No-ops until `boot::tasks` installs the flusher; a `DbPool` here would pin the
-            // engine to sqlx.
+            // engine to rusqlite.
             PlayerAction::UpdatePlayCount(track_id) => {
                 try_send(PlayCountEvent::Play(track_id));
             }

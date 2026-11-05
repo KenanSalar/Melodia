@@ -1,7 +1,7 @@
 //! What the table is easy to get wrong: which columns a re-import is allowed to touch, that a
 //! station with no uuid conflicts with nothing, and the two orderings the lists are read through.
 
-use crate::database::DbPool;
+use crate::database::{DbPool, sql};
 use melodia_core::entities::radio;
 use melodia_core::error::AppError;
 
@@ -31,9 +31,16 @@ fn custom_station(name: &str, stream_url: &str) -> radio::NewRadioStation {
 }
 
 async fn station_count(db: &DbPool) -> Result<i64, AppError> {
-    Ok(sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM radio_stations")
-        .fetch_one(db.read())
-        .await?)
+    db.read(|conn| sql::fetch_one(conn, "SELECT COUNT(*) FROM radio_stations", ())).await
+}
+
+/// The kept station an import entry carrying `uuid` and `url` lands on, if any.
+async fn kept_matching(
+    db: &DbPool,
+    uuid: Option<&'static str>,
+    url: &'static str,
+) -> Result<Option<(i64, bool)>, AppError> {
+    db.read(move |conn| super::kept_station_matching(conn, uuid, url)).await
 }
 
 /// The two homepage columns have one writer each, which is the whole reason there are two.
@@ -253,7 +260,7 @@ async fn clearing_a_history_drops_the_station_out_of_recents_and_leaves_the_favo
     set_favorite(&db, id, true).await?;
     mark_played(&db, id).await?;
 
-    remove_stations(&db, &[id], radio::KeptList::Recent).await?;
+    remove_stations(&db, vec![id], radio::KeptList::Recent).await?;
 
     let cleared = get_station_by_id(&db, id).await?;
     assert!(cleared.last_played.is_none());
@@ -277,11 +284,14 @@ async fn recents_come_back_newest_first_and_skip_the_unplayed() -> Result<(), Ap
 
     for (id, stamp) in [(older, "2026-08-01T00:00:00+00:00"), (newer, "2026-08-02T00:00:00+00:00")]
     {
-        sqlx::query("UPDATE radio_stations SET last_played = ? WHERE id = ?")
-            .bind(stamp)
-            .bind(id)
-            .execute(db.write())
-            .await?;
+        db.write(move |conn| {
+            sql::execute(
+                conn,
+                "UPDATE radio_stations SET last_played = ? WHERE id = ?",
+                (stamp, id),
+            )
+        })
+        .await?;
     }
 
     let names: Vec<String> =
@@ -297,7 +307,8 @@ async fn a_station_that_was_deleted_between_render_and_click_is_not_found() -> R
     let db = DbPool::test_pool().await?;
 
     let id = save_station(&db, &custom_station("A", "http://a.invalid/")).await?;
-    sqlx::query("DELETE FROM radio_stations WHERE id = ?").bind(id).execute(db.write()).await?;
+    db.write(move |conn| sql::execute(conn, "DELETE FROM radio_stations WHERE id = ?", (id,)))
+        .await?;
 
     let Err(err) = get_station_by_id(&db, id).await else {
         return Err(AppError::validation_msg("expected a deleted station to be NotFound"));
@@ -366,7 +377,7 @@ async fn editing_a_station_moves_its_sort_key_with_its_name() -> Result<(), AppE
         codec: "AAC".to_owned(),
         bitrate: 192,
     };
-    update_station(&db, id, &edit).await?;
+    update_station(&db, id, edit).await?;
 
     let edited = get_station_by_id(&db, id).await?;
     assert_eq!(edited.name, "Alpha FM");
@@ -444,25 +455,23 @@ async fn a_repointed_directory_row_is_found_by_its_uuid_and_not_by_its_old_url()
     let hand_typed = save_station(&db, &custom_station("Hand Typed", moved)).await?;
 
     assert_eq!(
-        super::kept_station_matching(db.read(), Some("uuid-1"), moved).await?,
+        kept_matching(&db, Some("uuid-1"), moved).await?,
         Some((listed, true)),
         "both keys match, and a different row each — the uuid is the directory's own identity \
          for a station, so it is the one that answers"
     );
     assert_eq!(
-        super::kept_station_matching(db.read(), None, moved).await?,
+        kept_matching(&db, None, moved).await?,
         Some((hand_typed, false)),
         "an entry carrying no uuid still has to find its row, that being every hand-typed one"
     );
     assert_eq!(
-        super::kept_station_matching(db.read(), Some("uuid-1"), "http://example.invalid/new")
-            .await?,
+        kept_matching(&db, Some("uuid-1"), "http://example.invalid/new").await?,
         Some((listed, true)),
         "the uuid alone is enough — a mount the row has never held is what a repoint looks like"
     );
     assert_eq!(
-        super::kept_station_matching(db.read(), Some("uuid-9"), "http://example.invalid/new")
-            .await?,
+        kept_matching(&db, Some("uuid-9"), "http://example.invalid/new").await?,
         None,
         "neither key matches, so the entry is new and the import inserts it"
     );
@@ -538,7 +547,7 @@ async fn the_byte_cap_keeps_the_newest_hits_and_drops_the_tail() -> Result<(), A
     }
 
     // Two rows' worth: the third crosses it and is the first to go.
-    assert_eq!(prune_logo_answers(&db, OLD, OLD, 800).await?, 1);
+    assert_eq!(prune_logo_answers(&db, OLD.to_owned(), OLD.to_owned(), 800).await?, 1);
 
     let kept: Vec<String> = logo_answers(&db, &["a".to_owned(), "b".to_owned(), "c".to_owned()])
         .await?
@@ -563,7 +572,7 @@ async fn each_kind_of_answer_ages_out_on_its_own_clock() -> Result<(), AppError>
     record_logo_miss(&db, "spent-miss", 1, OLD, OLD).await?;
 
     // A cutoff between the two stamps, and a cap far above what these rows occupy.
-    assert_eq!(prune_logo_answers(&db, RECENT, RECENT, 1 << 20).await?, 2);
+    assert_eq!(prune_logo_answers(&db, RECENT.to_owned(), RECENT.to_owned(), 1 << 20).await?, 2);
 
     let urls = ["fresh-hit", "stale-hit", "live-miss", "spent-miss"].map(str::to_owned);
     let kept: Vec<String> =
@@ -578,12 +587,15 @@ async fn each_kind_of_answer_ages_out_on_its_own_clock() -> Result<(), AppError>
 
 /// Stamps `id` as played `count` times, last at `when`, by hand so the stamp is a known value.
 async fn played(db: &DbPool, id: i64, when: &str, count: i32) -> Result<(), AppError> {
-    sqlx::query("UPDATE radio_stations SET last_played = ?, play_count = ? WHERE id = ?")
-        .bind(when)
-        .bind(count)
-        .bind(id)
-        .execute(db.write())
-        .await?;
+    let when = when.to_owned();
+    db.write(move |conn| {
+        sql::execute(
+            conn,
+            "UPDATE radio_stations SET last_played = ?, play_count = ? WHERE id = ?",
+            (when, count, id),
+        )
+    })
+    .await?;
     Ok(())
 }
 
@@ -649,9 +661,9 @@ async fn a_removal_and_its_undo_leave_the_station_as_it_was() -> Result<(), AppE
         let db = DbPool::test_pool().await?;
         let id = kept(&db, &station, keeping).await?;
         let before = get_station_by_id(&db, id).await?;
-        let cuts = remove_stations(&db, &[id], from).await?;
+        let cuts = remove_stations(&db, vec![id], from).await?;
 
-        restore_stations(&db, &cuts).await?;
+        restore_stations(&db, cuts).await?;
 
         assert_eq!(get_station_by_id(&db, id).await?, before, "{what}");
     }
@@ -669,7 +681,7 @@ async fn a_station_the_tab_does_not_list_is_left_alone() -> Result<(), AppError>
         let id = kept(&db, &directory_station("uuid-1", "A"), keeping).await?;
         let before = get_station_by_id(&db, id).await?;
 
-        let cuts = remove_stations(&db, &[id], from).await?;
+        let cuts = remove_stations(&db, vec![id], from).await?;
 
         assert_eq!(cuts, [], "{what}");
         assert_eq!(get_station_by_id(&db, id).await?, before, "{what}");
@@ -682,10 +694,10 @@ async fn an_undone_history_keeps_a_play_made_since() -> Result<(), AppError> {
     let db = DbPool::test_pool().await?;
     let keeping = Keeping { favorite: true, plays: Some((OLD, 2)) };
     let id = kept(&db, &directory_station("uuid-1", "A"), keeping).await?;
-    let cuts = remove_stations(&db, &[id], radio::KeptList::Recent).await?;
+    let cuts = remove_stations(&db, vec![id], radio::KeptList::Recent).await?;
     played(&db, id, NEWER, 1).await?;
 
-    restore_stations(&db, &cuts).await?;
+    restore_stations(&db, cuts).await?;
 
     let station = get_station_by_id(&db, id).await?;
     assert_eq!((station.play_count, station.last_played.as_deref()), (3, Some(NEWER)));
@@ -698,17 +710,16 @@ async fn an_undone_history_keeps_a_play_made_since() -> Result<(), AppError> {
 async fn an_undone_history_passes_over_a_station_that_took_its_id_since() -> Result<(), AppError> {
     let db = DbPool::test_pool().await?;
     let id = kept(&db, &directory_station("uuid-1", "A"), PLAYED_FAVORITE).await?;
-    sqlx::query("UPDATE radio_stations SET date_added = ? WHERE id = ?")
-        .bind(OLD)
-        .bind(id)
-        .execute(db.write())
-        .await?;
-    let history = remove_stations(&db, &[id], radio::KeptList::Recent).await?;
-    remove_stations(&db, &[id], radio::KeptList::Favorites).await?;
+    db.write(move |conn| {
+        sql::execute(conn, "UPDATE radio_stations SET date_added = ? WHERE id = ?", (OLD, id))
+    })
+    .await?;
+    let history = remove_stations(&db, vec![id], radio::KeptList::Recent).await?;
+    remove_stations(&db, vec![id], radio::KeptList::Favorites).await?;
     let newcomer = save_station(&db, &directory_station("uuid-2", "B")).await?;
     assert_eq!(newcomer, id, "test setup: the newcomer takes the freed id");
 
-    restore_stations(&db, &history).await?;
+    restore_stations(&db, history).await?;
 
     let station = get_station_by_id(&db, id).await?;
     assert_eq!((station.play_count, station.last_played), (0, None));
@@ -719,11 +730,11 @@ async fn an_undone_history_passes_over_a_station_that_took_its_id_since() -> Res
 async fn an_undone_delete_comes_back_beside_a_station_that_took_its_id() -> Result<(), AppError> {
     let db = DbPool::test_pool().await?;
     let id = kept(&db, &directory_station("uuid-1", "A"), UNPLAYED_FAVORITE).await?;
-    let cuts = remove_stations(&db, &[id], radio::KeptList::Favorites).await?;
+    let cuts = remove_stations(&db, vec![id], radio::KeptList::Favorites).await?;
     let newcomer = save_station(&db, &directory_station("uuid-2", "B")).await?;
     assert_eq!(newcomer, id, "test setup: the newcomer takes the freed id");
 
-    restore_stations(&db, &cuts).await?;
+    restore_stations(&db, cuts).await?;
 
     let favorites: Vec<String> =
         get_favorite_stations(&db).await?.into_iter().map(|s| s.name).collect();
@@ -744,10 +755,10 @@ async fn an_undone_delete_writes_nothing_over_a_station_kept_again_since() -> Re
     for (what, station) in rows {
         let db = DbPool::test_pool().await?;
         let id = kept(&db, &station, UNPLAYED_FAVORITE).await?;
-        let cuts = remove_stations(&db, &[id], radio::KeptList::Favorites).await?;
+        let cuts = remove_stations(&db, vec![id], radio::KeptList::Favorites).await?;
         kept(&db, &station, UNPLAYED_FAVORITE).await?;
 
-        restore_stations(&db, &cuts).await?;
+        restore_stations(&db, cuts).await?;
 
         assert_eq!(station_count(&db).await?, 1, "{what}");
     }

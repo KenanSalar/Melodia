@@ -1,7 +1,6 @@
 use super::*;
-use crate::database::DbPool;
-use crate::database::queries;
 use crate::database::queries::fixtures::{insert_test_track, setup_seeded_db};
+use crate::database::{DbPool, queries, sql};
 use melodia_core::error::AppError;
 
 #[test]
@@ -204,16 +203,14 @@ async fn an_artist_named_for_the_query_outranks_ones_found_through_tracks() -> R
 async fn a_narrow_retag_reindexes_the_new_fts_columns() -> Result<(), AppError> {
     let db = setup_seeded_db().await?;
 
-    sqlx::query(
-        "UPDATE tracks SET genre = ?, year = ?, album_artist = ?, credits = ?
-         WHERE file_path = ?",
-    )
-    .bind("Ambient")
-    .bind(1977)
-    .bind("Various Artists")
-    .bind("Gyorgy Ligeti")
-    .bind("/music/track1.mp3")
-    .execute(db.write())
+    db.write(|conn| {
+        sql::execute(
+            conn,
+            "UPDATE tracks SET genre = ?, year = ?, album_artist = ?, credits = ?
+             WHERE file_path = ?",
+            ("Ambient", 1977, "Various Artists", "Gyorgy Ligeti", "/music/track1.mp3"),
+        )
+    })
     .await?;
 
     let hit = |r: &melodia_core::entities::search::SearchResults| {
@@ -231,6 +228,11 @@ async fn a_narrow_retag_reindexes_the_new_fts_columns() -> Result<(), AppError> 
     Ok(())
 }
 
+async fn fts_columns(db: &DbPool) -> Result<Vec<String>, AppError> {
+    db.read(|conn| sql::fetch_all(conn, "SELECT name FROM pragma_table_info('tracks_fts')", ()))
+        .await
+}
+
 /// The bm25 weights are positional against the fts5 column list, so a ninth
 /// column silently shifts every one of them onto the wrong field — the table
 /// still builds, search still works, and only the ranking is wrong. Reading
@@ -245,14 +247,11 @@ async fn bm25_weights_cover_every_indexed_column() -> Result<(), AppError> {
 
     let db = DbPool::test_pool().await?;
 
-    let columns: Vec<String> =
-        sqlx::query_scalar("SELECT name FROM pragma_table_info('tracks_fts')")
-            .fetch_all(db.read())
-            .await?;
+    let columns = fts_columns(&db).await?;
     assert_eq!(columns, INDEXED, "fts5 column list moved");
 
-    let rank: String = sqlx::query_scalar("SELECT v FROM tracks_fts_config WHERE k = 'rank'")
-        .fetch_one(db.read())
+    let rank: String = db
+        .read(|conn| sql::fetch_one(conn, "SELECT v FROM tracks_fts_config WHERE k = 'rank'", ()))
         .await?;
     // A config that isn't a `bm25(…)` expression at all parses to zero
     // weights, so the arity assertion below covers that too — and prints the
@@ -297,10 +296,7 @@ async fn the_filter_boxes_search_every_indexed_column_they_can_reach() -> Result
     const NOT_TEXT_SEARCHED: [&str; 3] = ["credits", "file_name", "year"];
 
     let db = DbPool::test_pool().await?;
-    let indexed: Vec<String> =
-        sqlx::query_scalar("SELECT name FROM pragma_table_info('tracks_fts')")
-            .fetch_all(db.read())
-            .await?;
+    let indexed = fts_columns(&db).await?;
     let expected: Vec<&str> =
         indexed.iter().map(String::as_str).filter(|c| !NOT_TEXT_SEARCHED.contains(c)).collect();
 

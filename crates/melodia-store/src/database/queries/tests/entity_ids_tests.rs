@@ -11,9 +11,8 @@
 
 use std::path::Path;
 
-use crate::database::DbPool;
-use crate::database::queries;
 use crate::database::queries::fixtures::*;
+use crate::database::{DbPool, queries, sql};
 use melodia_core::entities::artist::ArtistCredit;
 use melodia_core::entities::genre::GenreList;
 use melodia_core::entities::scan::ExtractedMetadata;
@@ -48,42 +47,32 @@ fn numbered(title: &str, album: &str, disc: Option<i32>, track: Option<i32>) -> 
 }
 
 async fn album_id(db: &DbPool, name: &str) -> Result<i64, AppError> {
-    let id = sqlx::query_scalar::<_, i64>("SELECT id FROM albums WHERE name = ?")
-        .bind(name)
-        .fetch_one(db.read())
-        .await?;
-    Ok(id)
+    let name = name.to_owned();
+    db.read(move |conn| sql::fetch_one(conn, "SELECT id FROM albums WHERE name = ?", (name,))).await
 }
 
 async fn artist_id(db: &DbPool, name: &str) -> Result<i64, AppError> {
-    let id = sqlx::query_scalar::<_, i64>("SELECT id FROM artists WHERE name = ?")
-        .bind(name)
-        .fetch_one(db.read())
-        .await?;
-    Ok(id)
+    let name = name.to_owned();
+    db.read(move |conn| sql::fetch_one(conn, "SELECT id FROM artists WHERE name = ?", (name,)))
+        .await
 }
 
 async fn genre_id(db: &DbPool, name: &str) -> Result<i64, AppError> {
-    let id = sqlx::query_scalar::<_, i64>("SELECT id FROM genres WHERE name = ?")
-        .bind(name)
-        .fetch_one(db.read())
-        .await?;
-    Ok(id)
+    let name = name.to_owned();
+    db.read(move |conn| sql::fetch_one(conn, "SELECT id FROM genres WHERE name = ?", (name,))).await
 }
 
 /// Titles for the track ids a query answered with, so a failure names the tracks rather than
 /// whatever rowids the fixture happened to get.
 async fn titles_of(db: &DbPool, track_ids: &[i64]) -> Result<Vec<String>, AppError> {
-    let mut titles = Vec::with_capacity(track_ids.len());
-    for id in track_ids {
-        titles.push(
-            sqlx::query_scalar::<_, String>("SELECT title FROM tracks WHERE id = ?")
-                .bind(id)
-                .fetch_one(db.read())
-                .await?,
-        );
-    }
-    Ok(titles)
+    let track_ids = track_ids.to_vec();
+    db.read(move |conn| {
+        track_ids
+            .iter()
+            .map(|&id| sql::fetch_one(conn, "SELECT title FROM tracks WHERE id = ?", (id,)))
+            .collect()
+    })
+    .await
 }
 
 fn track_ids(pairs: &[(i64, i64)]) -> Vec<i64> {
@@ -224,9 +213,13 @@ async fn playlist_tracks_come_back_in_playlist_position() -> Result<(), AppError
     let third = stage(&db, &numbered("Gamma", "Ordered", Some(1), Some(3))).await?;
 
     // Neither rowid order nor any tag order.
-    let playlist =
-        queries::playlist::create_playlist_with_tracks(&db, "Mine", None, &[third, first, second])
-            .await?;
+    let playlist = queries::playlist::create_playlist_with_tracks(
+        &db,
+        "Mine".to_owned(),
+        None,
+        vec![third, first, second],
+    )
+    .await?;
 
     let pairs = queries::track::track_ids_by_playlists(&db, &[playlist]).await?;
 
@@ -240,7 +233,9 @@ async fn playlist_tracks_come_back_in_playlist_position() -> Result<(), AppError
 async fn a_smart_playlist_has_no_membership_rows() -> Result<(), AppError> {
     let db = empty_library().await?;
     stage(&db, &numbered("Alpha", "Ordered", Some(1), Some(1))).await?;
-    let smart = queries::playlist::create_smart_playlist(&db, "Rules", None, "{}").await?;
+    let smart =
+        queries::playlist::create_smart_playlist(&db, "Rules".to_owned(), None, "{}".to_owned())
+            .await?;
 
     let pairs = queries::track::track_ids_by_playlists(&db, &[smart.id]).await?;
 

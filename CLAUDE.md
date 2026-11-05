@@ -17,7 +17,7 @@ hit, so this table finds them. A rule missed where needed gets a wider glob, nev
 | `.claude/rules/radio.md` | a new way onto nav 10, stream URLs in logs, the `id == 0` sentinel |
 | `.claude/rules/ci-packaging.md` | action pinning, the shared composites, adding a workspace member |
 | `.claude/rules/testing.md` | testing practice, not this tree's inventory: the ISTQB principles, how to pick cases, what a corpus walk owes, the Rust attribute and determinism rules, assertion discipline |
-| `.claude/rules/*.md` (rest) | per-crate best practices (tokio, sqlx, slint, symphonia, lofty, rayon, serde, blake3, rust-performance) plus `slint-pitfalls`, `unsafe-rust` and `code-style` |
+| `.claude/rules/*.md` (rest) | per-crate best practices (tokio, rusqlite, slint, symphonia, lofty, rayon, serde, blake3, rust-performance) plus `slint-pitfalls`, `unsafe-rust` and `code-style` |
 
 - **A fact goes at its anchor**, the doc comment on what it constrains. A coupling across trees
   (Rust and `.slint`, Rust and CI) goes in a rule, a prohibition violable from anywhere here, and

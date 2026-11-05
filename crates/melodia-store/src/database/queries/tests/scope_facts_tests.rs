@@ -8,11 +8,10 @@
 use std::collections::HashSet;
 use std::path::Path;
 
-use crate::database::DbPool;
-use crate::database::queries;
 use crate::database::queries::fixtures::{
     insert_tagged_track, make_test_metadata, set_test_artwork, setup_seeded_db,
 };
+use crate::database::{DbPool, queries, sql};
 use melodia_core::entities::artist::ArtistCredit;
 use melodia_core::entities::genre::GenreList;
 use melodia_core::entities::scan::ExtractedMetadata;
@@ -86,20 +85,25 @@ async fn library() -> Result<Library, AppError> {
     Ok(Library { db, one, two, three, four })
 }
 
+async fn playlist_holding(db: &DbPool, name: &str, track_ids: Vec<i64>) -> Result<i64, AppError> {
+    queries::playlist::create_playlist_with_tracks(db, name.to_owned(), None, track_ids).await
+}
+
+async fn smart_playlist(db: &DbPool, name: &str, criteria: &str) -> Result<i64, AppError> {
+    let created =
+        queries::playlist::create_smart_playlist(db, name.to_owned(), None, criteria.to_owned())
+            .await?;
+    Ok(created.id)
+}
+
 async fn genre_id(db: &DbPool, name: &str) -> Result<i64, AppError> {
-    let id = sqlx::query_scalar("SELECT id FROM genres WHERE name = ?")
-        .bind(name)
-        .fetch_one(db.read())
-        .await?;
-    Ok(id)
+    let name = name.to_owned();
+    db.read(move |conn| sql::fetch_one(conn, "SELECT id FROM genres WHERE name = ?", (name,))).await
 }
 
 async fn album_id(db: &DbPool, name: &str) -> Result<i64, AppError> {
-    let id = sqlx::query_scalar("SELECT id FROM albums WHERE name = ?")
-        .bind(name)
-        .fetch_one(db.read())
-        .await?;
-    Ok(id)
+    let name = name.to_owned();
+    db.read(move |conn| sql::fetch_one(conn, "SELECT id FROM albums WHERE name = ?", (name,))).await
 }
 
 // === Scope facts ===
@@ -120,11 +124,8 @@ async fn a_genre_counts_every_track_tagged_with_it() -> Result<(), AppError> {
 #[tokio::test]
 async fn a_playlist_counts_its_own_items_and_no_other_playlists() -> Result<(), AppError> {
     let lib = library().await?;
-    let mix =
-        queries::playlist::create_playlist_with_tracks(&lib.db, "Mix", None, &[lib.three, lib.one])
-            .await?;
-    queries::playlist::create_playlist_with_tracks(&lib.db, "Other", None, &[lib.two, lib.four])
-        .await?;
+    let mix = playlist_holding(&lib.db, "Mix", vec![lib.three, lib.one]).await?;
+    playlist_holding(&lib.db, "Other", vec![lib.two, lib.four]).await?;
 
     let scope = TrackListScope::Playlist(mix, Draw::default());
     let facts = queries::track::scope_facts(&lib.db, scope).await?;
@@ -144,11 +145,9 @@ async fn a_capped_smart_playlist_is_counted_under_its_cap() -> Result<(), AppErr
         PLAYED_AT,
     )
     .await?;
-    let smart =
-        queries::playlist::create_smart_playlist(&lib.db, "Top two", None, TOP_TWO_BY_PLAYS)
-            .await?;
+    let smart = smart_playlist(&lib.db, "Top two", TOP_TWO_BY_PLAYS).await?;
 
-    let scope = TrackListScope::Playlist(smart.id, Draw::default());
+    let scope = TrackListScope::Playlist(smart, Draw::default());
     let facts = queries::track::scope_facts(&lib.db, scope).await?;
 
     assert_eq!(facts, ScopeFacts { tracks: 2, duration_ms: 500_000, artists: 2, albums: 2 });
@@ -238,7 +237,7 @@ async fn the_mosaic_candidates_are_distinct_and_in_playlist_order() -> Result<()
     set_test_artwork(&db, track_ids[1], "/artwork/middle.jpg").await?;
     set_test_artwork(&db, track_ids[2], "/artwork/shared.jpg").await?;
     let pl = queries::playlist::create_playlist(&db, "Mosaic", None).await?;
-    queries::playlist::add_tracks_to_playlist(&db, pl.id, &track_ids).await?;
+    queries::playlist::add_tracks_to_playlist(&db, pl.id, track_ids).await?;
 
     let scope = TrackListScope::Playlist(pl.id, Draw::default());
     let candidates = queries::track::cover_paths(&db, scope, 4).await?;
@@ -258,7 +257,7 @@ async fn a_track_with_no_cover_offers_no_mosaic_candidate() -> Result<(), AppErr
     set_test_artwork(&db, track_ids[0], "").await?;
     set_test_artwork(&db, track_ids[1], "/artwork/real.jpg").await?;
     let pl = queries::playlist::create_playlist(&db, "Sparse", None).await?;
-    queries::playlist::add_tracks_to_playlist(&db, pl.id, &track_ids).await?;
+    queries::playlist::add_tracks_to_playlist(&db, pl.id, track_ids).await?;
 
     let scope = TrackListScope::Playlist(pl.id, Draw::default());
     let candidates = queries::track::cover_paths(&db, scope, 4).await?;
@@ -278,7 +277,7 @@ async fn the_mosaic_candidate_list_stops_at_the_limit_it_was_given() -> Result<(
         set_test_artwork(&db, *id, &format!("/artwork/{index}.jpg")).await?;
     }
     let pl = queries::playlist::create_playlist(&db, "Capped", None).await?;
-    queries::playlist::add_tracks_to_playlist(&db, pl.id, &track_ids).await?;
+    queries::playlist::add_tracks_to_playlist(&db, pl.id, track_ids).await?;
 
     let scope = TrackListScope::Playlist(pl.id, Draw::default());
     let candidates = queries::track::cover_paths(&db, scope, 2).await?;
@@ -299,8 +298,7 @@ async fn cover_every_track(lib: &Library) -> Result<(), AppError> {
 async fn a_manual_playlist_offers_no_cover_from_a_track_it_does_not_hold() -> Result<(), AppError> {
     let lib = library().await?;
     cover_every_track(&lib).await?;
-    let lone =
-        queries::playlist::create_playlist_with_tracks(&lib.db, "Lone", None, &[lib.two]).await?;
+    let lone = playlist_holding(&lib.db, "Lone", vec![lib.two]).await?;
 
     let scope = TrackListScope::Playlist(lone, Draw::default());
     let candidates = queries::track::cover_paths(&lib.db, scope, 4).await?;
@@ -316,9 +314,9 @@ async fn a_smart_playlist_offers_the_covers_of_the_tracks_its_rules_match() -> R
 {
     let lib = library().await?;
     cover_every_track(&lib).await?;
-    let pop = queries::playlist::create_smart_playlist(&lib.db, "Pop", None, POP_ONLY).await?;
+    let pop = smart_playlist(&lib.db, "Pop", POP_ONLY).await?;
 
-    let scope = TrackListScope::Playlist(pop.id, Draw::default());
+    let scope = TrackListScope::Playlist(pop, Draw::default());
     let candidates = queries::track::cover_paths(&lib.db, scope, 4).await?;
 
     assert_eq!(candidates, ["/artwork/Four.jpg"]);
@@ -338,10 +336,9 @@ async fn a_capped_smart_playlist_offers_its_covers_in_the_order_its_cap_ranks_th
         PLAYED_AT,
     )
     .await?;
-    let top = queries::playlist::create_smart_playlist(&lib.db, "Top two", None, TOP_TWO_BY_PLAYS)
-        .await?;
+    let top = smart_playlist(&lib.db, "Top two", TOP_TWO_BY_PLAYS).await?;
 
-    let scope = TrackListScope::Playlist(top.id, Draw::default());
+    let scope = TrackListScope::Playlist(top, Draw::default());
     let candidates = queries::track::cover_paths(&lib.db, scope, 4).await?;
 
     assert_eq!(candidates, ["/artwork/Three.jpg", "/artwork/One.jpg"]);
@@ -354,13 +351,12 @@ async fn a_capped_smart_playlist_offers_its_covers_in_the_order_its_cap_ranks_th
 async fn a_random_cap_offers_the_covers_its_draw_lists_in_that_order() -> Result<(), AppError> {
     let lib = library().await?;
     cover_every_track(&lib).await?;
-    let random =
-        queries::playlist::create_smart_playlist(&lib.db, "Random", None, RANDOM_THREE).await?;
-    let scope = TrackListScope::Playlist(random.id, Draw(7));
+    let random = smart_playlist(&lib.db, "Random", RANDOM_THREE).await?;
+    let scope = TrackListScope::Playlist(random, Draw(7));
     let own_order = TrackOrder { field: TrackSortField::Position, dir: SortDir::Asc };
     let page = queries::track::track_ids(&lib.db, scope, own_order, &Needle::default()).await?;
     assert_eq!(page.len(), 3, "the fixture's draw keeps its cap");
-    let listed: Vec<String> = queries::track::get_track_list_rows_by_ids(&lib.db, &page)
+    let listed: Vec<String> = queries::track::get_track_list_rows_by_ids(&lib.db, page)
         .await?
         .into_iter()
         .filter_map(|row| row.artwork_path)
@@ -379,12 +375,11 @@ async fn a_scope_with_no_cover_offers_none() -> Result<(), AppError> {
     let lib = library().await?;
     set_test_artwork(&lib.db, lib.one, "/artwork/One.jpg").await?;
     let empty = queries::playlist::create_playlist(&lib.db, "Empty", None).await?;
-    let coverless =
-        queries::playlist::create_smart_playlist(&lib.db, "Pop", None, POP_ONLY).await?;
+    let coverless = smart_playlist(&lib.db, "Pop", POP_ONLY).await?;
     let cases = [
         (empty.id, "an empty playlist"),
         (ABSENT_PLAYLIST_ID, "a playlist that no longer exists"),
-        (coverless.id, "a smart playlist whose tracks carry no cover"),
+        (coverless, "a smart playlist whose tracks carry no cover"),
     ];
     for (id, case) in cases {
         let scope = TrackListScope::Playlist(id, Draw::default());

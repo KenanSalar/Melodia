@@ -1,5 +1,5 @@
-use crate::database::queries;
 use crate::database::queries::fixtures::*;
+use crate::database::{queries, sql};
 use melodia_core::entities::artist::FavoriteArtist;
 use melodia_core::error::AppError;
 
@@ -70,10 +70,14 @@ async fn an_artist_sits_the_search_out_until_its_miss_is_older_than_the_cutoff()
         [(None, true), (Some(CUTOFF - 1), true), (Some(CUTOFF), false), (Some(CUTOFF + 1), false)];
     for (missed_at, listed) in rows {
         let db = setup_seeded_db().await?;
-        sqlx::query("UPDATE artists SET image_search_missed_at = ? WHERE name = 'Artist A'")
-            .bind(missed_at)
-            .execute(db.write())
-            .await?;
+        db.write(move |conn| {
+            sql::execute(
+                conn,
+                "UPDATE artists SET image_search_missed_at = ? WHERE name = 'Artist A'",
+                (missed_at,),
+            )
+        })
+        .await?;
 
         let artists = queries::artist::get_artists_without_images(&db, CUTOFF).await?;
 
@@ -88,8 +92,8 @@ async fn an_artist_sits_the_search_out_until_its_miss_is_older_than_the_cutoff()
 #[tokio::test]
 async fn a_recorded_miss_names_exactly_the_artists_it_was_given() -> Result<(), AppError> {
     let db = setup_seeded_db().await?;
-    let artist_a: i64 = sqlx::query_scalar("SELECT id FROM artists WHERE name = 'Artist A'")
-        .fetch_one(db.read())
+    let artist_a: i64 = db
+        .read(|conn| sql::fetch_one(conn, "SELECT id FROM artists WHERE name = 'Artist A'", ()))
         .await?;
 
     queries::artist::mark_image_search_missed(&db, &[artist_a], CUTOFF + 1).await?;
@@ -110,10 +114,15 @@ async fn marking_no_artist_writes_nothing() -> Result<(), AppError> {
 
     queries::artist::mark_image_search_missed(&db, &[], CUTOFF).await?;
 
-    let marked: i64 =
-        sqlx::query_scalar("SELECT COUNT(*) FROM artists WHERE image_search_missed_at IS NOT NULL")
-            .fetch_one(db.read())
-            .await?;
+    let marked: i64 = db
+        .read(|conn| {
+            sql::fetch_one(
+                conn,
+                "SELECT COUNT(*) FROM artists WHERE image_search_missed_at IS NOT NULL",
+                (),
+            )
+        })
+        .await?;
     assert_eq!(marked, 0);
     Ok(())
 }
@@ -127,7 +136,8 @@ async fn update_artist_image_path() -> Result<(), AppError> {
         .find(|a| a.name == "Artist A")
         .ok_or_else(|| AppError::validation_msg("Artist A missing"))?;
 
-    queries::artist::update_artist_image_path(&db, artist.id, "/images/artist_a.jpg").await?;
+    queries::artist::update_artist_image_path(&db, artist.id, "/images/artist_a.jpg".to_owned())
+        .await?;
 
     let updated = queries::artist::get_artist_by_id(&db, artist.id).await?;
     assert_eq!(updated.image_path.as_deref(), Some("/images/artist_a.jpg"));
@@ -155,10 +165,15 @@ async fn a_favorited_artist_carries_the_count_of_its_favorited_tracks() -> Resul
         .ok_or_else(|| AppError::validation_msg("Artist A missing"))?;
 
     // Both of Artist A's tracks, and neither of Artist B's.
-    let ids: Vec<i64> =
-        sqlx::query_scalar("SELECT id FROM tracks WHERE title IN ('Alpha Song', 'Gamma Song')")
-            .fetch_all(db.read())
-            .await?;
+    let ids: Vec<i64> = db
+        .read(|conn| {
+            sql::fetch_all(
+                conn,
+                "SELECT id FROM tracks WHERE title IN ('Alpha Song', 'Gamma Song')",
+                (),
+            )
+        })
+        .await?;
     queries::track::set_favorite(&db, &ids, true).await?;
 
     let favorites = listed_favorite_artists(&db).await?;

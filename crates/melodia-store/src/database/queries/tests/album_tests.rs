@@ -1,6 +1,5 @@
-use crate::database::DbPool;
-use crate::database::queries;
 use crate::database::queries::fixtures::*;
+use crate::database::{DbPool, queries, sql};
 use melodia_core::entities::scan::{ExtractedMetadata, ReleaseTags};
 use melodia_core::entities::tags::ClearedReleaseTags;
 use melodia_core::error::AppError;
@@ -36,8 +35,8 @@ async fn get_album_by_id_not_found() -> Result<(), AppError> {
 #[tokio::test]
 async fn get_albums_by_artist() -> Result<(), AppError> {
     let db = setup_seeded_db().await?;
-    let artist_id: i64 = sqlx::query_scalar("SELECT id FROM artists WHERE name = 'Artist A'")
-        .fetch_one(db.read())
+    let artist_id: i64 = db
+        .read(|conn| sql::fetch_one(conn, "SELECT id FROM artists WHERE name = 'Artist A'", ()))
         .await?;
     let albums = queries::album::get_albums_by_artist(&db, artist_id).await?;
     assert_eq!(albums.len(), 1);
@@ -66,24 +65,29 @@ async fn an_album_card_counts_its_tracks() -> Result<(), AppError> {
 #[tokio::test]
 async fn set_album_artwork_replaces_existing_cover() -> Result<(), AppError> {
     let db = setup_seeded_db().await?;
-    let album_id: i64 = sqlx::query_scalar("SELECT id FROM albums WHERE name = 'Album One'")
-        .fetch_one(db.read())
+    let album_id: i64 = db
+        .read(|conn| sql::fetch_one(conn, "SELECT id FROM albums WHERE name = 'Album One'", ()))
         .await?;
 
     // Give the album an existing cover — the roll-up refuses to touch this case.
-    sqlx::query("UPDATE albums SET artwork_path = ? WHERE id = ?")
-        .bind("/covers/old.jpg")
-        .bind(album_id)
-        .execute(db.write())
-        .await?;
+    db.write(move |conn| {
+        sql::execute(
+            conn,
+            "UPDATE albums SET artwork_path = ? WHERE id = ?",
+            ("/covers/old.jpg", album_id),
+        )
+    })
+    .await?;
 
-    let mut tx = db.write().begin().await?;
-    queries::album::set_album_artwork(&mut tx, &[album_id], Some("/covers/new.jpg")).await?;
-    tx.commit().await?;
+    db.transaction(move |tx| {
+        queries::album::set_album_artwork(tx, &[album_id], Some("/covers/new.jpg"))
+    })
+    .await?;
 
-    let art: Option<String> = sqlx::query_scalar("SELECT artwork_path FROM albums WHERE id = ?")
-        .bind(album_id)
-        .fetch_one(db.read())
+    let art: Option<String> = db
+        .read(move |conn| {
+            sql::fetch_one(conn, "SELECT artwork_path FROM albums WHERE id = ?", (album_id,))
+        })
         .await?;
     assert_eq!(art.as_deref(), Some("/covers/new.jpg"));
     Ok(())
@@ -94,35 +98,33 @@ async fn prune_orphans_removes_emptied_album_artist_and_genre() -> Result<(), Ap
     let db = setup_seeded_db().await?;
     // "Album Two" / "Artist B" / genre "Pop" each have a single track (track2);
     // deleting it strands all three, while genre "Rock" (track1/track3) survives.
-    let mut tx = db.write().begin().await?;
-    let deleted = queries::scan::delete_track_by_path(&mut tx, "/music/track2.mp3").await?;
+    let deleted = db
+        .transaction(|tx| {
+            let deleted = queries::scan::delete_track_by_path(tx, "/music/track2.mp3")?;
+            queries::scan::prune_orphans(tx)?;
+            Ok(deleted)
+        })
+        .await?;
     assert!(deleted);
-    queries::scan::prune_orphans(&mut tx).await?;
-    tx.commit().await?;
 
     let albums: Vec<String> =
-        sqlx::query_scalar("SELECT name FROM albums ORDER BY name").fetch_all(db.read()).await?;
+        db.read(|conn| sql::fetch_all(conn, "SELECT name FROM albums ORDER BY name", ())).await?;
     assert_eq!(albums, vec!["Album One".to_owned()]);
 
-    let artist_b: Option<i64> =
-        sqlx::query_scalar("SELECT id FROM artists WHERE name = 'Artist B'")
-            .fetch_optional(db.read())
-            .await?;
+    let artist_b = artist_named(&db, "Artist B").await?;
     assert!(artist_b.is_none(), "orphaned Artist B should be pruned");
 
     // A still-used artist and the id-1 "unknown" default both survive.
-    let artist_a: Option<i64> =
-        sqlx::query_scalar("SELECT id FROM artists WHERE name = 'Artist A'")
-            .fetch_optional(db.read())
-            .await?;
+    let artist_a = artist_named(&db, "Artist A").await?;
     assert!(artist_a.is_some());
-    let unknown: Option<i64> =
-        sqlx::query_scalar("SELECT id FROM artists WHERE id = 1").fetch_optional(db.read()).await?;
+    let unknown: Option<i64> = db
+        .read(|conn| sql::fetch_optional(conn, "SELECT id FROM artists WHERE id = 1", ()))
+        .await?;
     assert!(unknown.is_some(), "the id-1 unknown default must never be pruned");
 
     // The emptied genre is pruned; a still-used genre survives.
     let genres: Vec<String> =
-        sqlx::query_scalar("SELECT name FROM genres ORDER BY name").fetch_all(db.read()).await?;
+        db.read(|conn| sql::fetch_all(conn, "SELECT name FROM genres ORDER BY name", ())).await?;
     assert_eq!(genres, vec!["Rock".to_owned()]);
 
     Ok(())
@@ -148,14 +150,20 @@ fn released(title: &str) -> ExtractedMetadata {
 
 /// The six text columns and the flag, as they sit on the row.
 async fn stored_release(db: &DbPool, album_id: i64) -> Result<Release, AppError> {
-    let row = sqlx::query_as::<_, Release>(
-        "SELECT label, catalog_number, barcode, media, release_type, release_country, \
-                is_compilation FROM albums WHERE id = ?",
-    )
-    .bind(album_id)
-    .fetch_one(db.read())
-    .await?;
-    Ok(row)
+    db.read(move |conn| {
+        sql::fetch_one(
+            conn,
+            "SELECT label, catalog_number, barcode, media, release_type, release_country, \
+                    is_compilation FROM albums WHERE id = ?",
+            (album_id,),
+        )
+    })
+    .await
+}
+
+async fn artist_named(db: &DbPool, name: &'static str) -> Result<Option<i64>, AppError> {
+    db.read(move |conn| sql::fetch_optional(conn, "SELECT id FROM artists WHERE name = ?", (name,)))
+        .await
 }
 
 type Release = (
@@ -202,22 +210,22 @@ async fn every_release_column_can_be_emptied() -> Result<(), AppError> {
         )
     );
 
-    let mut tx = db.write().begin().await?;
-    queries::album::clear_release_tags(
-        &mut tx,
-        &[album_id],
-        ClearedReleaseTags {
-            label: true,
-            catalog_number: true,
-            barcode: true,
-            media: true,
-            release_type: true,
-            release_country: true,
-            compilation: true,
-        },
-    )
+    db.transaction(move |tx| {
+        queries::album::clear_release_tags(
+            tx,
+            &[album_id],
+            ClearedReleaseTags {
+                label: true,
+                catalog_number: true,
+                barcode: true,
+                media: true,
+                release_type: true,
+                release_country: true,
+                compilation: true,
+            },
+        )
+    })
     .await?;
-    tx.commit().await?;
 
     assert_eq!(stored_release(&db, album_id).await?, (None, None, None, None, None, None, false));
     Ok(())
@@ -229,14 +237,14 @@ async fn every_release_column_can_be_emptied() -> Result<(), AppError> {
 async fn a_column_the_edit_did_not_clear_keeps_its_value() -> Result<(), AppError> {
     let (db, album_id) = seed_released_album().await?;
 
-    let mut tx = db.write().begin().await?;
-    queries::album::clear_release_tags(
-        &mut tx,
-        &[album_id],
-        ClearedReleaseTags { label: true, ..ClearedReleaseTags::default() },
-    )
+    db.transaction(move |tx| {
+        queries::album::clear_release_tags(
+            tx,
+            &[album_id],
+            ClearedReleaseTags { label: true, ..ClearedReleaseTags::default() },
+        )
+    })
     .await?;
-    tx.commit().await?;
 
     let stored = stored_release(&db, album_id).await?;
     assert_eq!(stored.0, None, "the one column the edit named");
@@ -252,15 +260,15 @@ async fn an_edit_that_cleared_nothing_touches_no_row() -> Result<(), AppError> {
     let (db, album_id) = seed_released_album().await?;
     let before = stored_release(&db, album_id).await?;
 
-    let mut tx = db.write().begin().await?;
-    queries::album::clear_release_tags(&mut tx, &[album_id], ClearedReleaseTags::default()).await?;
-    queries::album::clear_release_tags(
-        &mut tx,
-        &[],
-        ClearedReleaseTags { label: true, ..ClearedReleaseTags::default() },
-    )
+    db.transaction(move |tx| {
+        queries::album::clear_release_tags(tx, &[album_id], ClearedReleaseTags::default())?;
+        queries::album::clear_release_tags(
+            tx,
+            &[],
+            ClearedReleaseTags { label: true, ..ClearedReleaseTags::default() },
+        )
+    })
     .await?;
-    tx.commit().await?;
 
     assert_eq!(stored_release(&db, album_id).await?, before);
     Ok(())
