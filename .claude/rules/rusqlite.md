@@ -2,12 +2,27 @@
 paths:
   - crates/melodia-store/src/database/**/*.rs
   - crates/melodia-core/src/entities/**/*.rs
+  - crates/melodia-core/src/error.rs
   - crates/melodia-app/src/library/**/*.rs
   - crates/melodia-app/src/tasks/**/*.rs
+  - crates/melodia-app/src/services/artist_images.rs
+  - crates/melodia-app/src/services/diagnostics.rs
+  - crates/melodia/src/shutdown.rs
   - migrations/**/*.sql
+  - Cargo.toml
+  - crates/melodia-store/Cargo.toml
+  - crates/melodia-core/Cargo.toml
 ---
 
 # rusqlite (SQLite) Best Practices
+
+## Dependency
+
+- `libsqlite3-sys` declares `links = "sqlite3"`, so the graph holds one copy: a member takes
+  rusqlite through the workspace line, and a third-party crate over rusqlite enters only where it
+  resolves the same `libsqlite3-sys`
+- The workspace line names `bundled` and `collation` and keeps the default `cache`, which
+  `prepare_cached` sits behind: a `default-features = false` line has to list it
 
 ## Connections
 
@@ -25,13 +40,14 @@ paths:
 
 ## Pragmas & Configuration
 
-- Enable WAL mode: `PRAGMA journal_mode=WAL`
-- Set `PRAGMA synchronous=NORMAL` (safe with WAL, significant performance gain over FULL)
-- Set `PRAGMA foreign_keys=ON` (off by default in SQLite)
-- Consider `PRAGMA mmap_size=268435456` (256MB) for read-heavy workloads
-- Consider `PRAGMA temp_store=MEMORY` for faster temporary tables
-- Set them through `pragma_update`: `journal_mode` and `mmap_size` answer with a row, which
-  `execute` refuses
+- `pool/open.rs` sets each role's pragmas, its constants carrying why each value. Set one through
+  `pragma_update`: `journal_mode` and `mmap_size` answer with a row, which `execute` refuses
+- `synchronous=NORMAL` under WAL stays consistent but not durable: a commit just before a power
+  loss can roll back
+- The bundled build enforces foreign keys by default (`SQLITE_DEFAULT_FOREIGN_KEYS=1`) and stock
+  SQLite doesn't, so `open.rs` sets the pragma as well
+- String literals take single quotes. The bundled build keeps SQLite's double-quoted-string
+  fallback, so a misspelled `"column"` reads as a string literal rather than failing
 
 ## Queries
 
@@ -47,6 +63,10 @@ paths:
   - a row from `execute` (`ExecuteReturnedResults`): `RETURNING` reads through `fetch_*`
   - a bind count unlike the statement's (`InvalidParameterCount`)
 - Params are a tuple up to 16 values, `rusqlite::params![]` past it
+- A value used twice is one `?N` written twice and bound once, the bind count being the highest
+  index. A bare `?` takes the index after the highest so far, so a statement never mixes the two
+- A multi-row `RETURNING` answers in no set order: match each row back by a key it returns, as
+  `insert_tracks_batch` matches `file_path`
 - Always use parameterized queries — never string concatenation
 - Guard against empty `IN` lists before building the statement
 
@@ -55,6 +75,9 @@ paths:
 - `rows::FromRow` decodes a row: an entity by column name (`by_name!`, beside a store-private
   struct), a lone column or a tuple by position. A missing scalar type or tuple width is a line in
   `rows/mod.rs`
+- A field added to an entity is a column every projection decoding it has to select. The compiler
+  holds the `rows/` impl to the struct, but a projection missing the column fails only when it
+  runs (`InvalidColumnName`)
 - By-name `get` takes the first column of a name, matched case-insensitively, so a projection
   names each column once
 - By-name lookup scans the statement's columns on every call; move a wide projection to
@@ -85,28 +108,47 @@ paths:
 - `db.transaction` commits when its closure returns `Ok`, so an early `Ok` commits whatever ran
   before it: return early only before the first write, or after one that changed nothing
 - Melodia's transactions are `DEFERRED`; `DbPool::transaction`'s doc says why
-- Read transactions are fine for longer operations in WAL mode
+- Read transactions are fine for longer operations in WAL mode, at the WAL's cost (below)
 
 ## Schema Management
 
-- Use `IF NOT EXISTS` in all DDL for idempotent schema creation
+- Runtime DDL is idempotent, `IF NOT EXISTS` / `IF EXISTS`, as `stats.rs`' triggers and
+  `migrate.rs`' history table are
 - Index columns used in WHERE, JOIN, and ORDER BY clauses
-- Use partial indexes for filtered queries (e.g., `WHERE deleted = 0`)
+- A partial index serves only a query repeating one of its WHERE terms, `IS NOT NULL` aside, which
+  any comparison on the column implies: `rating >= ?` never used a `WHERE rating > 0` index
+  (`migrations/20260708000000_readd_rating_index.sql`)
 - Avoid over-indexing — every index slows writes
 - **Melodia migrates through `database::migrate`**, over sqlx's `_sqlx_migrations` table and row
   format; its `//!` says why the format stays
 
 ## Performance
 
-- Use `EXPLAIN QUERY PLAN` to verify index usage before optimizing
-- Avoid `SELECT *` — specify only needed columns
+- Read `EXPLAIN QUERY PLAN` before and after a change: `SCAN` with no index is a full pass, and
+  `USE TEMP B-TREE FOR ORDER BY` a sort on every run
+- An index answers an `ORDER BY` only on the bare column in the index's own collation: another
+  `COLLATE`, or an expression such as `COALESCE(col, '')`, sorts in a temp B-tree. No index
+  carries `UNICODE_LOWER` (`library-data.md`), so every sort through it is a full sort
+- `SELECT *` reads a whole entity by name from a stats view or a small table. A list names its
+  columns (`queries::track::columns`), `SELECT * FROM tracks` serving test fixtures only
+  (`track/full_rows.rs`)
 - Use covering indexes for frequently accessed column combinations
-- Regular `VACUUM` for reclaiming space after bulk deletes (but not during normal operation)
+- Nothing runs a plain `VACUUM`, which rewrites the whole file: a delete's pages go to the
+  freelist for later writes, and each pre-migration backup's `VACUUM INTO` writes a compacted copy
 - `VACUUM INTO ?1` is the safe way to copy a *live* database — it runs through the open
   connection, so WAL content is folded in and the output needs no `-wal`/`-shm` beside it. The
   path binds like any value. A test of the copy builds a **file-backed** pool, an in-memory one
   having no WAL to fold in: `crates/melodia-store/src/database/tests/backup_tests.rs::open_db` is
   the worked example.
+
+## WAL and Maintenance
+
+- The WAL checkpoints itself at SQLite's default 1000 pages, and a checkpoint resets it without
+  truncating it. The last connection to close checkpoints and deletes it (`DbPool::close`'s order)
+- A read holds its snapshot for its whole closure, and no checkpoint passes a live snapshot: a
+  write landing during a library-sized `fetch_each` grows the WAL until the fold returns
+- `PRAGMA optimize` keeps `sqlite_stat1` current and is usually a no-op. SQLite's guidance is one
+  run before each connection closes; `DbPool::close` runs it at quit
 
 ## Fetching and Errors
 
@@ -117,14 +159,5 @@ paths:
 - A constraint violation answers `Some(ErrorCode::ConstraintViolation)` from
   `sqlite_error_code()`; a UNIQUE one carries extended code 2067 (`SQLITE_CONSTRAINT_UNIQUE`) on
   `Error::SqliteFailure`
-
-## SQLite-Specific Pragmas
-
-- `PRAGMA cache_size = -64000` (64MB page cache) — significantly improves read performance for
-  large DBs. For a small single-user desktop DB (Melodia), size it modestly (e.g. `-16000`); with
-  `mmap_size` set, cold pages stay cheaply file-backed instead of being copied into
-  per-connection heap cache, so a large cache there is just idle resident overhead multiplied
-  across the pool.
-- `PRAGMA wal_autocheckpoint = 1000` — tune how often WAL is checkpointed (default 1000 pages)
-- `PRAGMA optimize` — run periodically (e.g. on app close) to update query planner statistics;
-  fast and safe
+- A match telling database failures apart takes `AppError::DatabaseClosed` beside `Database`, or
+  a closed pool falls to its catch-all (`radio/callbacks/kept.rs`)

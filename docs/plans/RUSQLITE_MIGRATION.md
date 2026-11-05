@@ -1,6 +1,6 @@
 # Plan: Move the library database from sqlx to rusqlite
 
-Status: **Phase 4 complete, hand test passed** · Owner: Kenan · Created: 2026-11-04
+Status: **Phase 5 step 1 measured; whether the move stays is Kenan's call** · Owner: Kenan · Created: 2026-11-04
 
 > **Validated 2026-11-04** against `8fe1eb93` (`chore/deps-and-fixes`) with three read-only inventories:
 >
@@ -301,7 +301,7 @@ The store and core move to rusqlite together, over sub-phases 4a to 4d, each a c
 - [x] **4d Tests and comments:** steps 11 and 12, and the docs. Done when the three gates pass.
 - [x] **Hand test**, below.
 
-**Where it stands:** 4a to 4d have landed and the hand test passed (below). Its one finding, the history table's DDL whitespace, landed as its own commit, `0535bc9a`. Phase 5 is next, each measurement on Kenan's go.
+**Where it stands:** 4a to 4d have landed and the hand test passed (below). Its one finding, the history table's DDL whitespace, landed as its own commit, `0535bc9a`. Phase 5's step 1 has run, and step 2 waits on Kenan's keep decision.
 
 - **Gates (2026-11-05):** `cargo fmt --all --check`, `cargo clippy --all-targets --locked --workspace -- -D warnings` and `cargo test --locked --workspace` pass, 4,429 tests and none failed. That was the first run of 4a to 4c's SQL, and it exposed no production defect, so nothing from the gates lands after 4d.
 - **4d's tests:**
@@ -439,6 +439,29 @@ Each measurement step waits for Kenan's go. Step 1's numbers decide whether the 
    - idle Anonymous and a heaptrack diff;
    - the 150 s settle, to see connections close;
    - peak threads, the blocking pool having spawned beyond the five lanes under bursts in the benchmark (Cross-cutting).
+   - **Result (2026-11-05):** run unattended on Kenan's go, `683febdd` (sqlx) against `20a5df8e` (rusqlite), the binaries `cmp`'d. Every run quit through the tray with "All background tasks completed", the network blocked by a dead proxy, and the dev folder was restored after each and checked against its manifest.
+     - **Full scan**, six runs each: an empty database holding the dev library's two folders (51,012 files), their page cache dropped first. rusqlite took 14.71 s median (14.55 to 15.04), sqlx 15.91 s (15.71 to 16.07), every rusqlite run ahead of every sqlx one. CPU (49.7 against 51.5 s) and instructions (630 against 633 G) overlap: the scan is tag parsing and hashing.
+     - **Boot with nothing changed:** the rescan is done at 0.33 s against 0.44 s, on 1.06 against 1.27 s of CPU for the same user instructions (8.35 against 8.37 G). A 190 s run spends 1.39 against 1.58 s of CPU.
+     - **Songs open, search and the grids**, a harness calling `library::keyset` and `library::search` as the views do, on a snapshot of the dev database. Medians per call over five interleaved rounds, every result identical under both:
+
+       | Call | sqlx | rusqlite | sqlx / rusqlite |
+       |---|---|---|---|
+       | Songs open, title order (ids, first 192 rows, count) | 9.73 ms | 9.15 ms | 1.06× |
+       | Songs open, artist order | 27.39 ms | 26.32 ms | 1.04× |
+       | Songs open, year order | 17.37 ms | 17.01 ms | 1.02× |
+       | Songs filter, a keystroke | 7.60 ms | 7.14 ms | 1.06× |
+       | Search, a keystroke (`search_all`) | 1.35 ms | 1.29 ms | 1.05× |
+       | Albums grid open | 3.13 ms | 2.74 ms | 1.14× |
+       | Artists grid open | 2.02 ms | 1.70 ms | 1.19× |
+       | Songs scrolled end to end, a 128-row window | 0.57 ms | 0.29 ms | 1.96× |
+
+       Scrolling cost 246 against 730 ms of process CPU for 3.63 against 3.78 G instructions.
+     - **Idle heap**, heaptrack at 185 s, one run each: a boot holds 19,834,560 bytes against 19,821,415 (+13 KiB), a boot into Songs 20,178,742 against 20,171,442 (+7 KiB). Before the 120 s reap rusqlite holds 0.2 MiB less, and a boot makes 1.81 million allocation calls against 2.11.
+     - **Idle Anonymous** spans 34.5 to 39.5 MiB across launches of either build (medians 37.0 against 35.7), so it can't tell them apart.
+     - **The settle:** every connection's map closes at the 120 s tick under both. sqlx keeps its five worker threads until then (31 threads), while rusqlite's blocking threads retire within seconds (26). Both idle at 26.
+     - **Peak threads:** 33 against 35 on a boot, 43 to 45 against 47 in a scan.
+     - **Quit:** after a full scan sqlx leaves a 9.9 MB `-wal` behind and rusqlite none; after a boot neither does.
+     - **Not settled: the scan's peak Anonymous.** Sampled at 20 Hz, rusqlite peaked at 434, 550 and 604 MiB, sqlx at 370, 404 and 505. The ranges overlap and the 2 Hz runs spread wider still (219 to 685 MiB), so neither a difference nor its absence is shown. heaptrack can't answer it: over a full scan its interpreter grew past 44 GB and the OOM killer took the terminal.
 2. **Keep it or not, then the ADRs.**
    - **The move stays if step 1 shows it faster and lighter** than the commit before 4a: the scan, Songs open and search no slower, idle Anonymous and the heaptrack diff no larger.
    - **If it doesn't, whether it stays is Kenan's call then**, and the ADRs are left as they are.
