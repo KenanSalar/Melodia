@@ -32,18 +32,23 @@ const TRACK_INSERT_COLUMNS: &str = "file_path, file_name,
     play_count, skip_count, rating, is_favorite, last_played, last_position,
     date_added";
 
-/// How many names a comma-separated column list holds, at compile time.
-const fn column_count(list: &str) -> usize {
-    let bytes = list.as_bytes();
-    let mut count = 1;
+/// How many times `byte` occurs in `text`, at compile time.
+const fn count_byte(text: &str, byte: u8) -> usize {
+    let bytes = text.as_bytes();
+    let mut count = 0;
     let mut i = 0;
     while i < bytes.len() {
-        if bytes[i] == b',' {
+        if bytes[i] == byte {
             count += 1;
         }
         i += 1;
     }
     count
+}
+
+/// How many names a comma-separated column list holds, at compile time.
+const fn column_count(list: &str) -> usize {
+    count_byte(list, b',') + 1
 }
 
 const TRACK_INSERT_COLUMN_COUNT: usize = column_count(TRACK_INSERT_COLUMNS);
@@ -53,7 +58,7 @@ const TRACK_INSERT_COLUMN_COUNT: usize = column_count(TRACK_INSERT_COLUMNS);
 const PLAYBACK_TAIL: &str = "0, 0, ?, 0, NULL, 0, ?";
 
 /// The literals in [`PLAYBACK_TAIL`], which spend no bind.
-const LITERAL_DEFAULTS: usize = 5;
+const LITERAL_DEFAULTS: usize = column_count(PLAYBACK_TAIL) - count_byte(PLAYBACK_TAIL, b'?');
 
 /// One `VALUES` tuple of [`TRACK_INSERT_COLUMNS`], as [`bind_new_track`] binds it.
 static TRACK_ROW: LazyLock<String> = LazyLock::new(|| {
