@@ -1,6 +1,6 @@
 # Plan: Move the library database from sqlx to rusqlite
 
-Status: **Phase 3 complete** · Owner: Kenan · Created: 2026-11-04
+Status: **Phase 3.5 complete** · Owner: Kenan · Created: 2026-11-04
 
 > **Validated 2026-11-04** against `8fe1eb93` (`chore/deps-and-fixes`) with three read-only inventories:
 >
@@ -230,7 +230,7 @@ No production code outside the store calls `db.read()` or `db.write()`.
     3. No clicks were driven, the view code being unchanged: the UI reaches these paths through the same store calls.
 - **Docs:** `sqlx.md`'s `AssertSqlSafe`, `QueryBuilder::push_values` and `.persistent(false)` bullets name the builder, and its `VACUUM INTO` "Takes no bind parameter" goes.
 
-## Phase 3.5: blake3 for the migration checksums
+## Phase 3.5: blake3 for the migration checksums ✅
 
 The store's `build.rs` is the last user of `sha2` 0.11, kept for the SHA-384 sqlx records. The 14 rows sqlx wrote keep that SHA-384, so an older build still reads them; every later migration records blake3.
 
@@ -250,7 +250,20 @@ The store's `build.rs` is the last user of `sha2` 0.11, kept for the SHA-384 sql
   3. A fresh data folder's 14 rows match a sqlx-applied database's in version, description, success and checksum, compared with `/usr/bin/sqlite3`.
   4. A byte appended to a shipped migration, and a shipped one renamed, each fail the build (restored after).
   5. A scratch 15th migration, never committed, records a 32-byte checksum, and a second boot finds nothing pending.
-- **Docs:** `build.rs`'s `//!` and `Migration::checksum`'s doc stop naming SHA-384 for every file.
+  - **Result (2026-11-05):** all five pass, run unattended on Kenan's go. Each boot quit through the tray and exited 0, and the dev folder was restored from its backup afterwards, byte for byte.
+    1. The pinned SHA-384s equal the dev library's 14 `_sqlx_migrations` rows (read with `/usr/bin/sqlite3 -readonly`), and the generated file's 14 checksums are unchanged byte for byte.
+    2. History and `backups/` are unchanged across a boot and a tray quit.
+    3. A fresh folder's 14 rows equal the dev library's in version, description, success and checksum. Every `execution_time` is positive, and no backup was taken.
+    4. A byte appended to `20261102000001_excluded_files.sql` fails with "changed after it shipped", and renaming it fails with "shipped and is missing". Both were restored, and `git status` and `sha384sum` came back clean.
+    5. A scratch `20261105000000` migration:
+       - generated a 32-byte checksum equal to its blake3;
+       - on the dev library, took `melodia-v20261102000001.db` first and then recorded that checksum with a positive time;
+       - left history and `backups/` unchanged on a second boot.
+  - The lock lost exactly the five packages above.
+- **Docs:**
+  - `build.rs`'s `//!` and `Migration::checksum`'s doc stop naming SHA-384 for every file.
+  - `migrate.rs`'s `//!` keeps sqlx's row format rather than "row for row".
+  - `CLAUDE.md`'s migration bullet and `code-style.md`'s frozen-comments sentence name the build failure beside the boot one.
 
 ## Phase 4: The cutover (one commit)
 

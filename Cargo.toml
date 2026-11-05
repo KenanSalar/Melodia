@@ -80,8 +80,6 @@ sqlx = { version = "0.9.0", default-features = false, features = [
     "sqlite",
     "derive",
 ] }
-# The store's `build.rs`, checksumming each migration as the history table records it.
-sha2 = { version = "0.11.1", default-features = false }
 
 # Audio
 # The device stream `player::playback::output` opens, and the `ErrorKind`s

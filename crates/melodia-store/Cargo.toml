@@ -37,7 +37,7 @@ log.workspace = true
 dunce.workspace = true
 
 [build-dependencies]
-sha2.workspace = true
+blake3.workspace = true
 
 [dev-dependencies]
 melodia-testkit = { path = "../melodia-testkit" }

@@ -190,5 +190,5 @@ cloc --by-file <new files>
 
 SQL migrations (`--`) and the `scripts/` helpers (`#`) have no doc-comment form either; the
 generic rules above are the whole contract there. A shipped migration's comments are frozen with
-its SQL: the migrator checksums the whole file, so trimming one fails the migration run on every
-database that already applied it.
+its SQL: the whole file is checksummed, so trimming one fails the store's build or the migration
+run on every database that already applied it.

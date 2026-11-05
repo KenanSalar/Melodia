@@ -1,6 +1,6 @@
 //! Brings the schema up to this build's, refusing a history it can't stand behind. The history
-//! stays sqlx's `_sqlx_migrations`, row for row, so an older build migrating through sqlx still
-//! reads it and refuses a newer database as before.
+//! stays sqlx's `_sqlx_migrations`, in sqlx's row format, so an older build migrating through sqlx
+//! still reads it and refuses a newer database as before.
 
 use sqlx::Connection as _;
 use sqlx::sqlite::SqliteConnection;
@@ -13,8 +13,8 @@ struct Migration {
     version: i64,
     description: &'static str,
     sql: &'static str,
-    /// SHA-384 over the file's bytes.
-    checksum: [u8; 48],
+    /// What its history row records, as `build.rs` pins or hashes it.
+    checksum: &'static [u8],
 }
 
 /// Every migration in `migrations/`, in version order.
@@ -142,7 +142,7 @@ async fn run_and_record(
     sqlx::query(RECORD)
         .bind(migration.version)
         .bind(migration.description)
-        .bind(migration.checksum.as_slice())
+        .bind(migration.checksum)
         .execute(&mut *tx)
         .await?;
     tx.commit().await

@@ -113,8 +113,8 @@ cargo llvm-cov --workspace --html          # coverage → target/llvm-cov/html/
 - **A dev build never shares the installed data root** (`config::Paths::data_root`). Prefs go in
   `settings.json`, per-view state in `views.json`, and a map in any JSON state file is a `BTreeMap`.
 - **Migrations run after a backup, and a failed backup is fatal.** A shipped migration is never
-  edited: `database::migrate` checksums the file, so every database that applied it fails the next
-  run.
+  edited: the store's `build.rs` pins the ones sqlx applied and `database::migrate` checksums the
+  rest, so an edit fails the build or the next run of every database that applied it.
 - **A moved file keeps its row through `queries::scan::apply_watch_batch`.** A test never proves
   that by the id, which SQLite re-uses when the deleted row held the largest.
 - **The Slint event loop owns the main thread**: never block it, never `ui.set_*` from another
