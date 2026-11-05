@@ -123,20 +123,27 @@ async fn apply_one(
     migration: &'static Migration,
 ) -> Result<(), AppError> {
     let started = Instant::now();
-    let mut tx = conn.begin().await?;
-    sqlx::raw_sql(migration.sql)
-        .execute(&mut *tx)
+    run_and_record(conn, migration)
         .await
         .map_err(|source| MigrationError::Apply { version: migration.version, source })?;
+
+    let elapsed_nanos = i64::try_from(started.elapsed().as_nanos()).unwrap_or(i64::MAX);
+    sqlx::query(RECORD_TIME).bind(elapsed_nanos).bind(migration.version).execute(conn).await?;
+    Ok(())
+}
+
+/// Any failure here leaves the migration unapplied, so the caller names its version.
+async fn run_and_record(
+    conn: &mut SqliteConnection,
+    migration: &Migration,
+) -> Result<(), sqlx::Error> {
+    let mut tx = conn.begin().await?;
+    sqlx::raw_sql(migration.sql).execute(&mut *tx).await?;
     sqlx::query(RECORD)
         .bind(migration.version)
         .bind(migration.description)
         .bind(migration.checksum.as_slice())
         .execute(&mut *tx)
         .await?;
-    tx.commit().await?;
-
-    let elapsed_nanos = i64::try_from(started.elapsed().as_nanos()).unwrap_or(i64::MAX);
-    sqlx::query(RECORD_TIME).bind(elapsed_nanos).bind(migration.version).execute(conn).await?;
-    Ok(())
+    tx.commit().await
 }

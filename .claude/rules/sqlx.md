@@ -29,8 +29,8 @@ paths:
 
 ## Queries
 
-- Prefer `query_as!` macro for compile-time checked queries when schemas are stable
-- Use `query_as()` runtime function for dynamic/generated queries
+- **Every query goes through the runtime functions** (`query`, `query_as`, `query_scalar`): the
+  workspace leaves sqlx's `macros` feature off, so `query!` and `query_as!` don't exist here
 - Always use parameterized queries — never string concatenation
 - Query strings are `impl SqlSafeStr` (0.9): string literals and named `const &'static str` pass
   as-is; a runtime-built `String` must be wrapped in `sqlx::AssertSqlSafe(sql)` (impls for
@@ -98,7 +98,7 @@ paths:
   bound, use `LIMIT`
 - `fetch` — returns a `Stream`; use for large result sets to avoid loading everything into memory
   at once
-- `query_scalar` / `query_scalar!` — extract the first column of each row directly to a scalar type
+- `query_scalar` — extract the first column of each row directly to a scalar type
 
 ## Error Handling
 
