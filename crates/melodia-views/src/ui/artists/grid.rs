@@ -57,7 +57,7 @@ impl CardGrid for ArtistsGrid {
     }
 
     async fn rows(state: AppState, ids: Vec<i64>) -> AppResult<Vec<ArtistStats>> {
-        library::keyset::artists_by_ids(&state.db, &ids).await
+        library::keyset::artists_by_ids(&state.db, ids).await
     }
 
     fn card(_: &AppWindow, artist: &ArtistStats) -> (i64, Card<Self>) {

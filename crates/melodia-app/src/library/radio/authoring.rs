@@ -200,7 +200,7 @@ pub async fn update_custom_station(
         edit.bitrate = facts.bitrate;
     }
 
-    queries::radio::update_station(&state.db, id, &edit).await?;
+    queries::radio::update_station(&state.db, id, edit).await?;
     if let Some(logo_url) = logo_url.as_deref() {
         adopt_logo(state, id, logo_url).await;
     }

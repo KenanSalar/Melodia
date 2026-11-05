@@ -3,7 +3,7 @@
 use std::sync::LazyLock;
 
 use super::columns;
-use crate::database::DbPool;
+use crate::database::{DbPool, sql};
 use melodia_core::entities::browse::DirectoryTrack;
 use melodia_core::entities::track;
 use melodia_core::error::AppError;
@@ -23,10 +23,7 @@ static ALL_TRACK_LIST_ROWS: LazyLock<String> = LazyLock::new(|| {
 /// Every track as a list row, in [`TRACK_LIST_ORDER`], for the checks that hold an id query
 /// against them; a list fetches its rows by id.
 pub async fn get_all_tracks_for_list(db: &DbPool) -> Result<Vec<track::TrackListRow>, AppError> {
-    let tracks = sqlx::query_as::<_, track::TrackListRow>(ALL_TRACK_LIST_ROWS.as_str())
-        .fetch_all(db.read())
-        .await?;
-    Ok(tracks)
+    db.read(|conn| sql::fetch_all(conn, ALL_TRACK_LIST_ROWS.as_str(), ())).await
 }
 
 /// The native path separator as it must appear *inside* a LIKE pattern. `\` is the ESCAPE
@@ -63,14 +60,10 @@ pub async fn get_tracks_in_directory(
     let prefix = directory_like_prefix(dir_path);
     let pattern = format!("{prefix}%");
     let subdir_pattern = format!("{prefix}%{LIKE_SEPARATOR}%");
-
-    let tracks = sqlx::query_as::<_, DirectoryTrack>(TRACKS_IN_DIRECTORY.as_str())
-        .bind(&pattern)
-        .bind(&subdir_pattern)
-        .fetch_all(db.read())
-        .await?;
-
-    Ok(tracks)
+    db.read(move |conn| {
+        sql::fetch_all(conn, TRACKS_IN_DIRECTORY.as_str(), (pattern, subdir_pattern))
+    })
+    .await
 }
 
 static RECENTLY_PLAYED: LazyLock<String> = LazyLock::new(|| {
@@ -93,9 +86,5 @@ pub async fn get_recently_played(
     db: &DbPool,
     limit: i64,
 ) -> Result<Vec<track::TrackListRow>, AppError> {
-    let rows = sqlx::query_as::<_, track::TrackListRow>(RECENTLY_PLAYED.as_str())
-        .bind(limit)
-        .fetch_all(db.read())
-        .await?;
-    Ok(rows)
+    db.read(move |conn| sql::fetch_all(conn, RECENTLY_PLAYED.as_str(), (limit,))).await
 }

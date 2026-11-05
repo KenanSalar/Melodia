@@ -1,6 +1,7 @@
 use rusqlite::Transaction;
 
 use crate::database::DbPool;
+use crate::database::queries::{playlist, scan};
 use crate::database::sql::{self, Sql};
 use melodia_core::entities::folder;
 use melodia_core::error::AppError;
@@ -10,30 +11,26 @@ pub async fn insert_folder(
     path: &str,
     is_enabled: bool,
 ) -> Result<folder::Folder, AppError> {
+    let path = path.to_owned();
     let now = melodia_core::utils::now_rfc3339();
-    let row = sqlx::query_as::<_, folder::Folder>(
-        "INSERT INTO folders (path, is_enabled, added_at)
-         VALUES (?, ?, ?)
-         RETURNING *",
-    )
-    .bind(path)
-    .bind(is_enabled)
-    .bind(&now)
-    .fetch_one(db.write())
-    .await?;
-    Ok(row)
+    db.write(move |conn| {
+        sql::fetch_one(
+            conn,
+            "INSERT INTO folders (path, is_enabled, added_at)
+             VALUES (?, ?, ?)
+             RETURNING *",
+            (path, is_enabled, now),
+        )
+    })
+    .await
 }
 
 pub async fn get_all_folders(db: &DbPool) -> Result<Vec<folder::Folder>, AppError> {
-    let folders =
-        sqlx::query_as::<_, folder::Folder>("SELECT * FROM folders").fetch_all(db.read()).await?;
-    Ok(folders)
+    db.read(|conn| sql::fetch_all(conn, "SELECT * FROM folders", ())).await
 }
 
 pub async fn get_folder_by_id(db: &DbPool, id: i64) -> Result<folder::Folder, AppError> {
-    sqlx::query_as::<_, folder::Folder>("SELECT * FROM folders WHERE id = ?")
-        .bind(id)
-        .fetch_optional(db.read())
+    db.read(move |conn| sql::fetch_optional(conn, "SELECT * FROM folders WHERE id = ?", (id,)))
         .await?
         .ok_or_else(|| AppError::not_found("Folder", id))
 }
@@ -45,12 +42,12 @@ pub async fn get_folder_by_id(db: &DbPool, id: i64) -> Result<folder::Folder, Ap
 /// playlist still showing one of their covers keeps that cover referenced, so the artwork sweep
 /// never retires it.
 pub async fn delete_folder(db: &DbPool, id: i64) -> Result<(), AppError> {
-    let mut tx = db.write().begin().await?;
-    sqlx::query("DELETE FROM folders WHERE id = ?").bind(id).execute(&mut *tx).await?;
-    crate::database::queries::scan::prune_orphans(&mut tx).await?;
-    crate::database::queries::playlist::refresh_automatic_thumbnails(&mut tx).await?;
-    tx.commit().await?;
-    Ok(())
+    db.transaction(move |tx| {
+        sql::execute(tx, "DELETE FROM folders WHERE id = ?", (id,))?;
+        scan::prune_orphans(tx)?;
+        playlist::refresh_automatic_thumbnails(tx)
+    })
+    .await
 }
 
 /// Hands the tracks and kept-out files of the folders in `ids` to `parent_id`, then deletes those
@@ -64,7 +61,7 @@ pub async fn absorb_folders(db: &DbPool, parent_id: i64, ids: &[i64]) -> Result<
     if ids.is_empty() {
         return Ok(());
     }
-    let mut tx = db.write().begin().await?;
+    let mut statements = Vec::new();
     // One bind of each budget goes to the parent's id.
     for chunk in ids.chunks(crate::database::MAX_BINDS_PER_STATEMENT - 1) {
         let placeholders = crate::database::placeholders(chunk.len());
@@ -76,17 +73,22 @@ pub async fn absorb_folders(db: &DbPool, parent_id: i64, ids: &[i64]) -> Result<
             for &id in chunk {
                 repoint.bind(id);
             }
-            repoint.execute(&mut *tx).await?;
+            statements.push(repoint);
         }
 
         let mut delete = Sql::trusted(format!("DELETE FROM folders WHERE id IN ({placeholders})"));
         for &id in chunk {
             delete.bind(id);
         }
-        delete.execute(&mut *tx).await?;
+        statements.push(delete);
     }
-    tx.commit().await?;
-    Ok(())
+    db.transaction(move |tx| {
+        for statement in statements {
+            statement.execute(tx)?;
+        }
+        Ok(())
+    })
+    .await
 }
 
 /// Finds or creates a folder by path, returning its id. A created one is disabled, so it is neither
@@ -106,13 +108,12 @@ pub(crate) fn upsert_folder(tx: &Transaction<'_>, path: &str) -> Result<i64, App
 pub async fn update_folder_last_scanned(
     db: &DbPool,
     id: i64,
-    timestamp: &str,
+    timestamp: String,
 ) -> Result<(), AppError> {
-    sqlx::query("UPDATE folders SET last_scanned = ? WHERE id = ?")
-        .bind(timestamp)
-        .bind(id)
-        .execute(db.write())
-        .await?;
+    db.write(move |conn| {
+        sql::execute(conn, "UPDATE folders SET last_scanned = ? WHERE id = ?", (timestamp, id))
+    })
+    .await?;
     Ok(())
 }
 

@@ -1,8 +1,10 @@
 //! Taking stations out of a kept tab, and putting back what that took. Each is one transaction, so
 //! whether a row is still listed is decided on the row as the removal leaves it.
 
+use rusqlite::{Transaction, params};
+
 use super::radio::kept_station_matching;
-use crate::database::{DbPool, chunked_in_execute_on, chunked_in_query, chunked_in_query_on};
+use crate::database::{DbPool, chunked_in_execute_on, chunked_in_query, sql};
 use melodia_core::entities::radio::{KeptList, RadioStation, StationCut};
 use melodia_core::error::AppError;
 
@@ -10,18 +12,23 @@ use melodia_core::error::AppError;
 /// each lost. A station `from` doesn't list is left alone and answers nothing.
 pub async fn remove_stations(
     db: &DbPool,
-    ids: &[i64],
+    ids: Vec<i64>,
     from: KeptList,
 ) -> Result<Vec<StationCut>, AppError> {
     if ids.is_empty() {
         return Ok(Vec::new());
     }
-    let mut tx = db.write().begin().await?;
+    db.transaction(move |tx| cut_stations(tx, &ids, from)).await
+}
 
-    let stations: Vec<RadioStation> = chunked_in_query_on(&mut tx, ids, |placeholders| {
+fn cut_stations(
+    tx: &Transaction<'_>,
+    ids: &[i64],
+    from: KeptList,
+) -> Result<Vec<StationCut>, AppError> {
+    let stations: Vec<RadioStation> = chunked_in_query(tx, ids, |placeholders| {
         format!("SELECT * FROM radio_stations WHERE id IN ({placeholders})")
-    })
-    .await?;
+    })?;
     let cuts: Vec<StationCut> =
         stations.into_iter().filter_map(|station| cut_from(station, from)).collect();
     let mut kept = Vec::new();
@@ -41,16 +48,12 @@ pub async fn remove_stations(
         KeptList::Favorites => "is_favorite = FALSE",
         KeptList::Recent => "last_played = NULL, play_count = 0",
     };
-    chunked_in_execute_on(&mut tx, &kept, |ids| {
+    chunked_in_execute_on(tx, &kept, |ids| {
         format!("UPDATE radio_stations SET {take} WHERE id IN ({ids})")
-    })
-    .await?;
-    chunked_in_execute_on(&mut tx, &gone, |ids| {
+    })?;
+    chunked_in_execute_on(tx, &gone, |ids| {
         format!("DELETE FROM radio_stations WHERE id IN ({ids})")
-    })
-    .await?;
-
-    tx.commit().await?;
+    })?;
     Ok(cuts)
 }
 
@@ -85,127 +88,119 @@ fn cut_from(station: RadioStation, from: KeptList) -> Option<StationCut> {
 
 /// Deletes the row of `id` if neither local tab lists it.
 pub async fn delete_if_unlisted(db: &DbPool, id: i64) -> Result<(), AppError> {
-    let mut tx = db.write().begin().await?;
-    let station = sqlx::query_as::<_, RadioStation>("SELECT * FROM radio_stations WHERE id = ?")
-        .bind(id)
-        .fetch_optional(&mut *tx)
-        .await?;
-    if station.is_some_and(|station| !station.is_listed()) {
-        sqlx::query("DELETE FROM radio_stations WHERE id = ?").bind(id).execute(&mut *tx).await?;
-    }
-    tx.commit().await?;
-    Ok(())
+    db.transaction(move |tx| {
+        let station: Option<RadioStation> =
+            sql::fetch_optional(tx, "SELECT * FROM radio_stations WHERE id = ?", (id,))?;
+        if station.is_some_and(|station| !station.is_listed()) {
+            sql::execute(tx, "DELETE FROM radio_stations WHERE id = ?", (id,))?;
+        }
+        Ok(())
+    })
+    .await
 }
 
 /// The stored logos `ids` name.
 pub async fn station_artwork(db: &DbPool, ids: &[i64]) -> Result<Vec<String>, AppError> {
-    let paths: Vec<(String,)> = chunked_in_query(db.read(), ids, |placeholders| {
-        format!(
-            "SELECT artwork_path FROM radio_stations
-             WHERE artwork_path IS NOT NULL AND id IN ({placeholders})"
-        )
+    let ids = ids.to_vec();
+    db.read(move |conn| {
+        chunked_in_query(conn, &ids, |placeholders| {
+            format!(
+                "SELECT artwork_path FROM radio_stations
+                 WHERE artwork_path IS NOT NULL AND id IN ({placeholders})"
+            )
+        })
     })
-    .await?;
-    Ok(paths.into_iter().map(|(path,)| path).collect())
+    .await
 }
 
 /// Puts back what `cuts` took, `cuts` in the order they were made, undone newest first. Each
 /// reverses only its own removal: a play or a favorite since stays, a row gone since stays gone, and
 /// a station kept again from Browse isn't written twice.
-pub async fn restore_stations(db: &DbPool, cuts: &[StationCut]) -> Result<(), AppError> {
+pub async fn restore_stations(db: &DbPool, cuts: Vec<StationCut>) -> Result<(), AppError> {
     if cuts.is_empty() {
         return Ok(());
     }
-    let mut tx = db.write().begin().await?;
+    db.transaction(move |tx| put_back_stations(tx, &cuts)).await
+}
+
+fn put_back_stations(tx: &Transaction<'_>, cuts: &[StationCut]) -> Result<(), AppError> {
     for cut in cuts.iter().rev() {
         match cut {
             // Both arms match `date_added`: SQLite re-issues the largest id once its row goes, and
             // Browse's un-heart can delete a row whose plays this undo holds without retiring it.
             StationCut::Unfavorited { id, date_added, .. } => {
-                sqlx::query(
+                sql::execute(
+                    tx,
                     "UPDATE radio_stations SET is_favorite = TRUE WHERE id = ? AND date_added = ?",
-                )
-                .bind(id)
-                .bind(date_added)
-                .execute(&mut *tx)
-                .await?;
+                    (id, date_added),
+                )?;
             }
             StationCut::HistoryCleared { id, date_added, last_played, play_count, .. } => {
                 // `MAX` answers NULL when either side is, so a station unplayed since takes the
                 // held stamp.
-                sqlx::query(
+                sql::execute(
+                    tx,
                     "UPDATE radio_stations
                      SET play_count = play_count + ?, last_played = COALESCE(MAX(last_played, ?), ?)
                      WHERE id = ? AND date_added = ?",
-                )
-                .bind(play_count)
-                .bind(last_played)
-                .bind(last_played)
-                .bind(id)
-                .bind(date_added)
-                .execute(&mut *tx)
-                .await?;
+                    (play_count, last_played, last_played, id, date_added),
+                )?;
             }
-            StationCut::Deleted(station) => reinsert_tx(&mut tx, station).await?,
+            StationCut::Deleted(station) => reinsert_tx(tx, station)?,
         }
     }
-    tx.commit().await?;
     Ok(())
 }
 
 /// Writes a deleted row back whole under its own id, or a fresh one where another station took
 /// it, unless the station is back already: kept again from Browse, or its URL typed in again.
-async fn reinsert_tx(
-    tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
-    station: &RadioStation,
-) -> Result<(), AppError> {
-    let back =
-        kept_station_matching(&mut **tx, station.station_uuid.as_deref(), &station.stream_url)
-            .await?;
+fn reinsert_tx(tx: &Transaction<'_>, station: &RadioStation) -> Result<(), AppError> {
+    let back = kept_station_matching(tx, station.station_uuid.as_deref(), &station.stream_url)?;
     if back.is_some() {
         return Ok(());
     }
-    let taken: bool =
-        sqlx::query_scalar("SELECT EXISTS (SELECT 1 FROM radio_stations WHERE id = ?)")
-            .bind(station.id)
-            .fetch_one(&mut **tx)
-            .await?;
+    let taken: bool = sql::fetch_one(
+        tx,
+        "SELECT EXISTS (SELECT 1 FROM radio_stations WHERE id = ?)",
+        (station.id,),
+    )?;
     // A NULL `INTEGER PRIMARY KEY` takes the next free id.
     let id = (!taken).then_some(station.id);
 
-    sqlx::query(
+    sql::execute(
+        tx,
         "INSERT INTO radio_stations (
              id, station_uuid, name, stream_url, homepage, local_homepage, favicon_url,
              local_favicon_url, local_tags, local_country, artwork_path, tags, country,
              country_code, language, codec, probed_codec, bitrate, hls, is_favorite, sort_key,
              date_added, last_played, play_count)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-    )
-    .bind(id)
-    .bind(&station.station_uuid)
-    .bind(&station.name)
-    .bind(&station.stream_url)
-    .bind(&station.homepage)
-    .bind(&station.local_homepage)
-    .bind(&station.favicon_url)
-    .bind(&station.local_favicon_url)
-    .bind(&station.local_tags)
-    .bind(&station.local_country)
-    .bind(&station.artwork_path)
-    .bind(&station.tags)
-    .bind(&station.country)
-    .bind(&station.country_code)
-    .bind(&station.language)
-    .bind(&station.codec)
-    .bind(&station.probed_codec)
-    .bind(station.bitrate)
-    .bind(station.hls)
-    .bind(station.is_favorite)
-    .bind(&station.sort_key)
-    .bind(&station.date_added)
-    .bind(&station.last_played)
-    .bind(station.play_count)
-    .execute(&mut **tx)
-    .await?;
+        params![
+            id,
+            station.station_uuid,
+            station.name,
+            station.stream_url,
+            station.homepage,
+            station.local_homepage,
+            station.favicon_url,
+            station.local_favicon_url,
+            station.local_tags,
+            station.local_country,
+            station.artwork_path,
+            station.tags,
+            station.country,
+            station.country_code,
+            station.language,
+            station.codec,
+            station.probed_codec,
+            station.bitrate,
+            station.hls,
+            station.is_favorite,
+            station.sort_key,
+            station.date_added,
+            station.last_played,
+            station.play_count,
+        ],
+    )?;
     Ok(())
 }

@@ -30,7 +30,7 @@ pub async fn track_ids(
 
 /// The rows behind `ids`, in the order asked. An id whose row has gone since the ids were read is
 /// dropped, so a short page is a library that changed under the list, not an error.
-pub async fn rows_by_ids(db: &DbPool, ids: &[i64]) -> Result<Vec<TrackListRow>, AppError> {
+pub async fn rows_by_ids(db: &DbPool, ids: Vec<i64>) -> Result<Vec<TrackListRow>, AppError> {
     queries::track::get_track_list_rows_by_ids(db, ids).await
 }
 
@@ -87,7 +87,7 @@ pub async fn most_played_favorite_totals(db: &DbPool) -> Result<MostPlayedTotals
 /// The Most Played cards behind `ids`, in the order asked, dropping any whose row has gone.
 pub async fn most_played_by_ids(
     db: &DbPool,
-    ids: &[i64],
+    ids: Vec<i64>,
 ) -> Result<Vec<MostPlayedFavorite>, AppError> {
     queries::track::get_most_played_by_ids(db, ids).await
 }
@@ -163,23 +163,23 @@ pub async fn favorite_artist_count(db: &DbPool) -> Result<i64, AppError> {
 }
 
 /// The album cards behind `ids`, in the order asked, dropping any whose row has gone.
-pub async fn albums_by_ids(db: &DbPool, ids: &[i64]) -> Result<Vec<AlbumStats>, AppError> {
+pub async fn albums_by_ids(db: &DbPool, ids: Vec<i64>) -> Result<Vec<AlbumStats>, AppError> {
     queries::album::get_albums_by_ids(db, ids).await
 }
 
 /// The artist cards behind `ids`, in the order asked, dropping any whose row has gone.
-pub async fn artists_by_ids(db: &DbPool, ids: &[i64]) -> Result<Vec<ArtistStats>, AppError> {
+pub async fn artists_by_ids(db: &DbPool, ids: Vec<i64>) -> Result<Vec<ArtistStats>, AppError> {
     queries::artist::get_artists_by_ids(db, ids).await
 }
 
 /// The genre cards behind `ids`, in the order asked, dropping any whose row has gone.
-pub async fn genres_by_ids(db: &DbPool, ids: &[i64]) -> Result<Vec<GenreStats>, AppError> {
+pub async fn genres_by_ids(db: &DbPool, ids: Vec<i64>) -> Result<Vec<GenreStats>, AppError> {
     queries::genre::get_genres_by_ids(db, ids).await
 }
 
 /// The playlist cards behind `ids`, in the order asked, each smart one carrying its live count and
 /// cover.
-pub async fn playlists_by_ids(db: &DbPool, ids: &[i64]) -> Result<Vec<PlaylistStats>, AppError> {
+pub async fn playlists_by_ids(db: &DbPool, ids: Vec<i64>) -> Result<Vec<PlaylistStats>, AppError> {
     let mut playlists = queries::playlist::get_playlists_by_ids(db, ids).await?;
     smart_playlists::fill_from_rules(db, &mut playlists).await;
     Ok(playlists)
@@ -189,7 +189,7 @@ pub async fn playlists_by_ids(db: &DbPool, ids: &[i64]) -> Result<Vec<PlaylistSt
 /// left.
 pub async fn favorite_artists_by_ids(
     db: &DbPool,
-    ids: &[i64],
+    ids: Vec<i64>,
 ) -> Result<Vec<FavoriteArtist>, AppError> {
     queries::artist::get_favorite_artists_by_ids(db, ids).await
 }

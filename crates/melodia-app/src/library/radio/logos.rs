@@ -76,8 +76,8 @@ pub async fn prune_logo_answers(db: &DbPool) -> Result<u64, AppError> {
     let hit_cutoff = now - chrono::TimeDelta::try_days(LOGO_CACHE_MAX_AGE_DAYS).unwrap_or_default();
     queries::radio::prune_logo_answers(
         db,
-        &miss_cutoff.to_rfc3339(),
-        &hit_cutoff.to_rfc3339(),
+        miss_cutoff.to_rfc3339(),
+        hit_cutoff.to_rfc3339(),
         LOGO_CACHE_MAX_BYTES,
     )
     .await

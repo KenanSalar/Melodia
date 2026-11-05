@@ -6,7 +6,8 @@
 //! arm ends in the id, so the order is total and a descending sort is the exact reverse of the
 //! ascending one. Rows `ui::track_sort` leaves tied in fetch order come back in id order instead.
 
-use sqlx::Sqlite;
+use rusqlite::Connection;
+use rusqlite::types::Type;
 
 use super::membership::Membership;
 use crate::database::DbPool;
@@ -28,9 +29,6 @@ const NATURAL: &str = "COALESCE(t.sort_key, '') COLLATE NOCASE";
 
 /// The ids of every track in `scope` that `needle` matches, in `order`.
 ///
-/// They come back as one comma-joined row rather than a row each: sqlx hands every row across
-/// from its connection's worker thread on its own, which over a library costs more than the sort.
-///
 /// The order is the subquery's, not the aggregate's own `ORDER BY`, which sorts slower wherever an
 /// index can't answer it. `SQLite`'s flattener keeps a FROM-clause subquery's `ORDER BY` under
 /// any aggregate but `count`, `min` and `max`, and `cross_tier` holds every arm to it.
@@ -40,33 +38,37 @@ pub async fn track_ids(
     order: TrackOrder,
     needle: &Needle,
 ) -> Result<Vec<i64>, AppError> {
-    let membership = Membership::resolve(db, scope).await?;
-    let mut sql = Sql::new("SELECT group_concat(id, ',') FROM (SELECT t.id FROM ");
-    membership.push_source(&mut sql);
-    if !needle.is_empty() {
-        membership.push_and(&mut sql);
-        push_needle(&mut sql, needle);
-    }
-    sql.push(" ORDER BY ")
-        .push_trusted(&order_by(Page::of(&membership), order, membership.position()))
-        .push(")");
-    fetch_packed_ids(db.read(), sql).await
+    let needle = needle.clone();
+    db.read(move |conn| {
+        let membership = Membership::resolve(conn, scope)?;
+        let mut sql = Sql::new("SELECT group_concat(id, ',') FROM (SELECT t.id FROM ");
+        membership.push_source(&mut sql);
+        if !needle.is_empty() {
+            membership.push_and(&mut sql);
+            push_needle(&mut sql, &needle);
+        }
+        sql.push(" ORDER BY ")
+            .push_trusted(&order_by(Page::of(&membership), order, membership.position()))
+            .push(")");
+        fetch_packed_ids(conn, sql)
+    })
+    .await
 }
 
 /// The ids `sql` reads back as one `group_concat(id, ',')`, in the order joined. The aggregate is
 /// NULL where nothing matched.
-pub(crate) async fn fetch_packed_ids<'e, E>(executor: E, sql: Sql) -> Result<Vec<i64>, AppError>
-where
-    E: sqlx::Executor<'e, Database = Sqlite>,
-{
-    let (packed,): (Option<String>,) = sql.fetch_one(executor).await?;
+pub(crate) fn fetch_packed_ids(conn: &Connection, sql: Sql) -> Result<Vec<i64>, AppError> {
+    let packed: Option<String> = sql.fetch_one(conn)?;
     packed.map_or_else(|| Ok(Vec::new()), |packed| unpack_ids(&packed))
 }
 
 fn unpack_ids(packed: &str) -> Result<Vec<i64>, AppError> {
     let mut ids = Vec::with_capacity(packed.bytes().filter(|&b| b == b',').count() + 1);
     for id in packed.split(',') {
-        ids.push(id.parse().map_err(|e| sqlx::Error::Decode(Box::new(e)))?);
+        let id = id
+            .parse()
+            .map_err(|e| rusqlite::Error::FromSqlConversionFailure(0, Type::Text, Box::new(e)))?;
+        ids.push(id);
     }
     Ok(ids)
 }

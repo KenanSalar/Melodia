@@ -8,7 +8,7 @@
 use super::track::{fetch_packed_ids, push_folded_match, sql_direction};
 use crate::database::DbPool;
 use crate::database::collation::UNICODE_LOWER;
-use crate::database::sql::Sql;
+use crate::database::sql::{self, Sql};
 use melodia_core::entities::grid_order::{AlbumSort, ArtistSort, FavoriteArtistSort, GenreSort};
 use melodia_core::entities::track_list::SortDir;
 use melodia_core::error::AppError;
@@ -173,12 +173,11 @@ pub async fn favorite_artist_count(db: &DbPool) -> Result<i64, AppError> {
     .await
 }
 
-async fn count(db: &DbPool, sql: &'static str) -> Result<i64, AppError> {
-    Ok(sqlx::query_scalar(sql).fetch_one(db.read()).await?)
+async fn count(db: &DbPool, statement: &'static str) -> Result<i64, AppError> {
+    db.read(move |conn| sql::fetch_one(conn, statement, ())).await
 }
 
-/// `grid`'s ids that `needle` matches, ordered by `keys` then the id, every one in `dir`, packed
-/// as `track::track_ids` argues.
+/// `grid`'s ids that `needle` matches, ordered by `keys` then the id, every one in `dir`.
 async fn ids(
     db: &DbPool,
     grid: &Grid,
@@ -199,7 +198,7 @@ async fn ids(
         sql.push(" GROUP BY ").push(group_by);
     }
     sql.push(" ORDER BY ").push_trusted(&order_by(keys, grid.id, dir)).push(")");
-    fetch_packed_ids(db.read(), sql).await
+    db.read(move |conn| fetch_packed_ids(conn, sql)).await
 }
 
 fn order_by(keys: &[String], id: &str, dir: SortDir) -> String {

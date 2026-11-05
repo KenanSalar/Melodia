@@ -28,7 +28,7 @@ pub(super) async fn absorb_nested(
 /// isn't scanned, and the next scan of it runs them.
 pub(super) async fn after_completed(state: &AppState, folder_id: i64) -> Result<(), AppError> {
     let now = melodia_core::utils::now_rfc3339();
-    queries::folder::update_folder_last_scanned(&state.db, folder_id, &now).await?;
+    queries::folder::update_folder_last_scanned(&state.db, folder_id, now).await?;
 
     services::artist_images::spawn_fetch(state);
     let spawner = TaskSpawner::from_state(state);

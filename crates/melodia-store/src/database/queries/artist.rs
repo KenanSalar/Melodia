@@ -1,5 +1,5 @@
 use crate::database::{
-    DbPool, IDS_PER_SET, chunked_in_query, in_id_order, select_in_id_order, set_where_id_in,
+    DbPool, IDS_PER_SET, chunked_in_query, in_id_order, select_in_id_order, set_where_id_in, sql,
 };
 use melodia_core::entities::artist;
 use melodia_core::error::AppError;
@@ -7,15 +7,16 @@ use melodia_core::error::AppError;
 /// The Artists grid's cards for `ids`, in the order asked for.
 pub async fn get_artists_by_ids(
     db: &DbPool,
-    ids: &[i64],
+    ids: Vec<i64>,
 ) -> Result<Vec<artist::ArtistStats>, AppError> {
-    select_in_id_order(db, "SELECT * FROM artist_stats", ids, |a: &artist::ArtistStats| a.id).await
+    db.read(move |conn| {
+        select_in_id_order(conn, "SELECT * FROM artist_stats", &ids, |a: &artist::ArtistStats| a.id)
+    })
+    .await
 }
 
 pub async fn get_artist_by_id(db: &DbPool, id: i64) -> Result<artist::ArtistStats, AppError> {
-    sqlx::query_as::<_, artist::ArtistStats>("SELECT * FROM artist_stats WHERE id = ?")
-        .bind(id)
-        .fetch_optional(db.read())
+    db.read(move |conn| sql::fetch_optional(conn, "SELECT * FROM artist_stats WHERE id = ?", (id,)))
         .await?
         .ok_or_else(|| AppError::not_found("Artist", id))
 }
@@ -35,23 +36,22 @@ pub async fn get_artists_without_images(
     db: &DbPool,
     missed_before: i64,
 ) -> Result<Vec<artist::Artist>, AppError> {
-    let artists = sqlx::query_as::<_, artist::Artist>(
-        "SELECT * FROM artists WHERE (image_path IS NULL OR image_path = '') AND id <> ? \
-         AND (image_search_missed_at IS NULL OR image_search_missed_at < ?)",
-    )
-    .bind(UNKNOWN_ARTIST_ID)
-    .bind(missed_before)
-    .fetch_all(db.read())
-    .await?;
-    Ok(artists)
+    db.read(move |conn| {
+        sql::fetch_all(
+            conn,
+            "SELECT * FROM artists WHERE (image_path IS NULL OR image_path = '') AND id <> ? \
+             AND (image_search_missed_at IS NULL OR image_search_missed_at < ?)",
+            (UNKNOWN_ARTIST_ID, missed_before),
+        )
+    })
+    .await
 }
 
 /// Records that the image search for each of `ids` found nothing, at `at` (Unix seconds).
 pub async fn mark_image_search_missed(db: &DbPool, ids: &[i64], at: i64) -> Result<(), AppError> {
     for chunk in ids.chunks(IDS_PER_SET) {
-        set_where_id_in("UPDATE artists SET image_search_missed_at = ?", at, chunk)
-            .execute(db.write())
-            .await?;
+        let sql = set_where_id_in("UPDATE artists SET image_search_missed_at = ?", at, chunk);
+        db.write(move |conn| sql.execute(conn)).await?;
     }
     Ok(())
 }
@@ -59,13 +59,16 @@ pub async fn mark_image_search_missed(db: &DbPool, ids: &[i64], at: i64) -> Resu
 pub async fn update_artist_image_path(
     db: &DbPool,
     artist_id: i64,
-    image_path: &str,
+    image_path: String,
 ) -> Result<(), AppError> {
-    sqlx::query("UPDATE artists SET image_path = ? WHERE id = ?")
-        .bind(image_path)
-        .bind(artist_id)
-        .execute(db.write())
-        .await?;
+    db.write(move |conn| {
+        sql::execute(
+            conn,
+            "UPDATE artists SET image_path = ? WHERE id = ?",
+            (image_path, artist_id),
+        )
+    })
+    .await?;
     Ok(())
 }
 
@@ -74,20 +77,22 @@ pub async fn update_artist_image_path(
 /// returns nothing.
 pub async fn get_favorite_artists_by_ids(
     db: &DbPool,
-    ids: &[i64],
+    ids: Vec<i64>,
 ) -> Result<Vec<artist::FavoriteArtist>, AppError> {
-    let rows = chunked_in_query(db.read(), ids, |placeholders| {
-        format!(
-            "SELECT ar.id, ar.name, ar.image_path, COUNT(DISTINCT t.id) AS favorite_count \
-             FROM artists ar \
-             JOIN track_artists ta ON ta.artist_id = ar.id \
-             JOIN tracks t ON t.id = ta.track_id AND t.is_favorite = TRUE \
-             WHERE ar.id IN ({placeholders}) \
-             GROUP BY ar.id"
-        )
+    db.read(move |conn| {
+        let rows = chunked_in_query(conn, &ids, |placeholders| {
+            format!(
+                "SELECT ar.id, ar.name, ar.image_path, COUNT(DISTINCT t.id) AS favorite_count \
+                 FROM artists ar \
+                 JOIN track_artists ta ON ta.artist_id = ar.id \
+                 JOIN tracks t ON t.id = ta.track_id AND t.is_favorite = TRUE \
+                 WHERE ar.id IN ({placeholders}) \
+                 GROUP BY ar.id"
+            )
+        })?;
+        Ok(in_id_order(rows, &ids, |a: &artist::FavoriteArtist| a.id))
     })
-    .await?;
-    Ok(in_id_order(rows, ids, |a: &artist::FavoriteArtist| a.id))
+    .await
 }
 
 #[cfg(test)]

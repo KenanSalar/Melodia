@@ -68,7 +68,7 @@ async fn reconcile_once(
 
     // The record playback moves on to, so the start below needn't wait on the window task.
     let successor = match unheld_successor(player_state, &to_remove) {
-        Some(id) => queries::track::get_track_summaries_by_ids(db, &[id]).await?,
+        Some(id) => queries::track::get_track_summaries_by_ids(db, vec![id]).await?,
         None => Vec::new(),
     };
 

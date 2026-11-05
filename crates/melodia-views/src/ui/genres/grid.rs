@@ -56,7 +56,7 @@ impl CardGrid for GenresGrid {
     }
 
     async fn rows(state: AppState, ids: Vec<i64>) -> AppResult<Vec<GenreStats>> {
-        library::keyset::genres_by_ids(&state.db, &ids).await
+        library::keyset::genres_by_ids(&state.db, ids).await
     }
 
     fn card(_: &AppWindow, genre: &GenreStats) -> (i64, Card<Self>) {

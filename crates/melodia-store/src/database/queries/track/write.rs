@@ -2,27 +2,30 @@
 
 use rusqlite::Transaction;
 
-use crate::database::sql::Sql;
+use crate::database::sql::{self, Sql};
 use crate::database::{
-    DbPool, IDS_PER_SET, chunked_in_query_on, set_where_id_in, values_placeholders,
+    DbPool, IDS_PER_SET, chunked_in_query, set_where_id_in, values_placeholders,
 };
 use melodia_core::error::AppError;
 
 pub async fn update_play_count(db: &DbPool, id: i64) -> Result<(), AppError> {
     let now = melodia_core::utils::now_rfc3339();
-    sqlx::query("UPDATE tracks SET play_count = play_count + 1, last_played = ? WHERE id = ?")
-        .bind(now)
-        .bind(id)
-        .execute(db.write())
-        .await?;
+    db.write(move |conn| {
+        sql::execute(
+            conn,
+            "UPDATE tracks SET play_count = play_count + 1, last_played = ? WHERE id = ?",
+            (now, id),
+        )
+    })
+    .await?;
     Ok(())
 }
 
 pub async fn update_skip_count(db: &DbPool, id: i64) -> Result<(), AppError> {
-    sqlx::query("UPDATE tracks SET skip_count = skip_count + 1 WHERE id = ?")
-        .bind(id)
-        .execute(db.write())
-        .await?;
+    db.write(move |conn| {
+        sql::execute(conn, "UPDATE tracks SET skip_count = skip_count + 1 WHERE id = ?", (id,))
+    })
+    .await?;
     Ok(())
 }
 
@@ -69,25 +72,23 @@ async fn add_counts(
         for &(id, _) in chunk {
             sql.bind(id);
         }
-        sql.execute(db.write()).await?;
+        db.write(move |conn| sql.execute(conn)).await?;
     }
     Ok(())
 }
 
 pub async fn update_last_position(db: &DbPool, id: i64, position_ms: i64) -> Result<(), AppError> {
-    sqlx::query("UPDATE tracks SET last_position = ? WHERE id = ?")
-        .bind(position_ms)
-        .bind(id)
-        .execute(db.write())
-        .await?;
+    db.write(move |conn| {
+        sql::execute(conn, "UPDATE tracks SET last_position = ? WHERE id = ?", (position_ms, id))
+    })
+    .await?;
     Ok(())
 }
 
 pub async fn set_favorite(db: &DbPool, ids: &[i64], favorite: bool) -> Result<(), AppError> {
     for chunk in ids.chunks(IDS_PER_SET) {
-        set_where_id_in("UPDATE tracks SET is_favorite = ?", favorite, chunk)
-            .execute(db.write())
-            .await?;
+        let sql = set_where_id_in("UPDATE tracks SET is_favorite = ?", favorite, chunk);
+        db.write(move |conn| sql.execute(conn)).await?;
     }
     Ok(())
 }
@@ -95,26 +96,26 @@ pub async fn set_favorite(db: &DbPool, ids: &[i64], favorite: bool) -> Result<()
 /// Clears the heart on those of `ids` that carry one, answering exactly those, so an undo puts
 /// back only what this took. One transaction: a failed chunk leaves nothing cleared that the
 /// answer doesn't name.
-pub async fn unfavorite(db: &DbPool, ids: &[i64]) -> Result<Vec<i64>, AppError> {
+pub async fn unfavorite(db: &DbPool, ids: Vec<i64>) -> Result<Vec<i64>, AppError> {
     if ids.is_empty() {
         return Ok(Vec::new());
     }
-    let mut tx = db.write().begin().await?;
-    let cleared: Vec<(i64,)> = chunked_in_query_on(&mut tx, ids, |placeholders| {
-        format!(
-            "UPDATE tracks SET is_favorite = 0 WHERE is_favorite = 1 AND id IN ({placeholders})
-             RETURNING id"
-        )
+    db.transaction(move |tx| {
+        chunked_in_query(tx, &ids, |placeholders| {
+            format!(
+                "UPDATE tracks SET is_favorite = 0 WHERE is_favorite = 1 AND id IN ({placeholders})
+                 RETURNING id"
+            )
+        })
     })
-    .await?;
-    tx.commit().await?;
-    Ok(cleared.into_iter().map(|(id,)| id).collect())
+    .await
 }
 
 /// Sets the star `rating`, which `library::ratings::set_rating` has already clamped.
 pub async fn set_rating(db: &DbPool, ids: &[i64], rating: i32) -> Result<(), AppError> {
     for chunk in ids.chunks(IDS_PER_SET) {
-        set_where_id_in("UPDATE tracks SET rating = ?", rating, chunk).execute(db.write()).await?;
+        let sql = set_where_id_in("UPDATE tracks SET rating = ?", rating, chunk);
+        db.write(move |conn| sql.execute(conn)).await?;
     }
     Ok(())
 }
@@ -136,11 +137,14 @@ pub(crate) fn set_track_artwork(
 /// matches no file's mtime in `file_is_current`, and the scan refills it from the `stat` that
 /// proved the file exists.
 pub async fn mark_every_track_stale(db: &DbPool) -> Result<u64, AppError> {
-    let result =
-        sqlx::query("UPDATE tracks SET date_modified = NULL WHERE date_modified IS NOT NULL")
-            .execute(db.write())
-            .await?;
-    Ok(result.rows_affected())
+    db.write(|conn| {
+        sql::execute(
+            conn,
+            "UPDATE tracks SET date_modified = NULL WHERE date_modified IS NOT NULL",
+            (),
+        )
+    })
+    .await
 }
 
 /// Writes `(id, file_hash, date_modified)` triples, a CTE-driven UPDATE per chunk inside one
@@ -156,21 +160,28 @@ pub async fn batch_update_hashes(
         return Ok(());
     }
 
-    let mut tx = db.write().begin().await?;
-    for chunk in updates.chunks(CHUNK_SIZE) {
-        let rows = values_placeholders(chunk.len(), COLS_PER_ROW);
-        let mut sql = Sql::trusted(format!(
-            "WITH v(id, h, m) AS (VALUES {rows})
-             UPDATE tracks
-                SET file_hash = (SELECT h FROM v WHERE v.id = tracks.id),
-                    date_modified = (SELECT m FROM v WHERE v.id = tracks.id)
-              WHERE id IN (SELECT id FROM v)"
-        ));
-        for (id, hash, mtime) in chunk {
-            sql.bind(*id).bind(hash.as_str()).bind(mtime.as_deref());
+    let statements: Vec<Sql> = updates
+        .chunks(CHUNK_SIZE)
+        .map(|chunk| {
+            let rows = values_placeholders(chunk.len(), COLS_PER_ROW);
+            let mut sql = Sql::trusted(format!(
+                "WITH v(id, h, m) AS (VALUES {rows})
+                 UPDATE tracks
+                    SET file_hash = (SELECT h FROM v WHERE v.id = tracks.id),
+                        date_modified = (SELECT m FROM v WHERE v.id = tracks.id)
+                  WHERE id IN (SELECT id FROM v)"
+            ));
+            for (id, hash, mtime) in chunk {
+                sql.bind(*id).bind(hash.as_str()).bind(mtime.as_deref());
+            }
+            sql
+        })
+        .collect();
+    db.transaction(move |tx| {
+        for sql in statements {
+            sql.execute(tx)?;
         }
-        sql.execute(&mut *tx).await?;
-    }
-    tx.commit().await?;
-    Ok(())
+        Ok(())
+    })
+    .await
 }

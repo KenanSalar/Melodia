@@ -1,12 +1,13 @@
 //! Which tracks a [`TrackListScope`] holds, as the `FROM` and `WHERE` a query over `tracks t`
 //! starts from. The keysets order and filter it; the scope facts add it up.
 
+use rusqlite::Connection;
+
 use super::json_array;
-use crate::database::DbPool;
 use crate::database::queries::smart_playlist::{
     pick_random, push_member_ids, push_positioned_membership, random_cap,
 };
-use crate::database::sql::Sql;
+use crate::database::sql::{self, Sql};
 use melodia_core::entities::smart_criteria::{Draw, SmartCriteria};
 use melodia_core::entities::track_list::TrackListScope;
 use melodia_core::error::AppError;
@@ -28,7 +29,7 @@ impl Membership {
     /// A playlist is the one scope that can't say where its tracks come from without asking: a
     /// smart one has no `playlist_items` rows and resolves through its stored criteria. One that
     /// no longer exists reads as an empty manual playlist.
-    pub(super) async fn resolve(db: &DbPool, scope: TrackListScope) -> Result<Self, AppError> {
+    pub(super) fn resolve(conn: &Connection, scope: TrackListScope) -> Result<Self, AppError> {
         Ok(match scope {
             TrackListScope::Library => Self::Library,
             TrackListScope::Favorites => Self::Favorites,
@@ -36,15 +37,14 @@ impl Membership {
             TrackListScope::Artist(id) => Self::Artist(id),
             TrackListScope::Genre(id) => Self::Genre(id),
             TrackListScope::Playlist(id, draw) => {
-                let verdict: Option<(bool, Option<String>)> =
-                    sqlx::query_as("SELECT is_smart, smart_criteria FROM playlists WHERE id = ?")
-                        .bind(id)
-                        .fetch_optional(db.read())
-                        .await?;
+                let verdict: Option<(bool, Option<String>)> = sql::fetch_optional(
+                    conn,
+                    "SELECT is_smart, smart_criteria FROM playlists WHERE id = ?",
+                    (id,),
+                )?;
                 match verdict {
                     Some((true, criteria)) => {
-                        Self::smart(db, SmartCriteria::from_json_opt(criteria.as_deref()), draw)
-                            .await?
+                        Self::smart(conn, SmartCriteria::from_json_opt(criteria.as_deref()), draw)?
                     }
                     _ => Self::ManualPlaylist(id),
                 }
@@ -53,9 +53,9 @@ impl Membership {
     }
 
     /// A random cap is picked here, the one cut SQL can't repeat from query to query.
-    async fn smart(db: &DbPool, criteria: SmartCriteria, draw: Draw) -> Result<Self, AppError> {
+    fn smart(conn: &Connection, criteria: SmartCriteria, draw: Draw) -> Result<Self, AppError> {
         Ok(match random_cap(&criteria) {
-            Some(count) => Self::Drawn(pick_random(db.read(), &criteria, count, draw).await?),
+            Some(count) => Self::Drawn(pick_random(conn, &criteria, count, draw)?),
             None => Self::SmartPlaylist(criteria),
         })
     }

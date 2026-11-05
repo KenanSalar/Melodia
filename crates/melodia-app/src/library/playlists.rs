@@ -18,8 +18,7 @@ pub async fn create_playlist(
     description: Option<String>,
     track_ids: Vec<i64>,
 ) -> Result<i64, AppError> {
-    queries::playlist::create_playlist_with_tracks(db, &name, description.as_deref(), &track_ids)
-        .await
+    queries::playlist::create_playlist_with_tracks(db, name, description, track_ids).await
 }
 
 pub async fn get_playlists(db: &DbPool) -> Result<Vec<playlist::PlaylistStats>, AppError> {
@@ -40,14 +39,8 @@ pub async fn update_playlist(
     description: Option<String>,
     clear_thumbnail: Option<bool>,
 ) -> Result<playlist::Playlist, AppError> {
-    queries::playlist::update_playlist(
-        db,
-        id,
-        &name,
-        description.as_deref(),
-        clear_thumbnail.unwrap_or(false),
-    )
-    .await
+    queries::playlist::update_playlist(db, id, name, description, clear_thumbnail.unwrap_or(false))
+        .await
 }
 
 /// What a delete took, and the custom covers kept from the sweep until the undo goes.
@@ -80,7 +73,7 @@ impl DeletedPlaylists {
 /// How many tracks deleting `ids` would take out of playlists, which decides whether the delete
 /// can be undone.
 pub async fn playlist_item_count(db: &DbPool, ids: Vec<i64>) -> Result<usize, AppError> {
-    queries::playlist_delete::item_count(db, &ids).await
+    queries::playlist_delete::item_count(db, ids).await
 }
 
 /// Deletes playlists, holding what puts them back, or answers `None` where none was there. Its
@@ -90,19 +83,19 @@ pub async fn delete_playlists_held(
     ids: Vec<i64>,
 ) -> Result<Option<DeletedPlaylists>, AppError> {
     let covers = ArtworkHold::new(queries::playlist_delete::custom_covers(db, &ids).await?);
-    let snapshots = queries::playlist_delete::delete_playlists_held(db, &ids).await?;
+    let snapshots = queries::playlist_delete::delete_playlists_held(db, ids).await?;
     Ok((!snapshots.is_empty()).then_some(DeletedPlaylists { snapshots, covers }))
 }
 
 /// Deletes playlists for good, answering the names of those that went.
 pub async fn delete_playlists(db: &DbPool, ids: Vec<i64>) -> Result<Vec<String>, AppError> {
-    queries::playlist_delete::delete_playlists(db, &ids).await
+    queries::playlist_delete::delete_playlists(db, ids).await
 }
 
 /// Undoes a delete. The covers stay held until the rows naming them are back.
 pub async fn restore_playlists(db: &DbPool, deleted: DeletedPlaylists) -> Result<(), AppError> {
     let DeletedPlaylists { snapshots, covers } = deleted;
-    queries::playlist_restore::restore_playlists(db, &snapshots).await?;
+    queries::playlist_restore::restore_playlists(db, snapshots).await?;
     drop(covers);
     Ok(())
 }
@@ -113,7 +106,7 @@ pub async fn add_to_playlist(
     playlist_id: i64,
     track_ids: Vec<i64>,
 ) -> Result<Vec<i64>, AppError> {
-    queries::playlist::add_tracks_to_playlist(db, playlist_id, &track_ids).await
+    queries::playlist::add_tracks_to_playlist(db, playlist_id, track_ids).await
 }
 
 /// For the Add-to-Playlist picker: how many of `track_ids` each playlist already holds, playlists
@@ -122,7 +115,7 @@ pub async fn count_tracks_in_playlists_for_selection(
     db: &DbPool,
     track_ids: Vec<i64>,
 ) -> Result<HashMap<i64, i64>, AppError> {
-    queries::playlist::count_tracks_in_playlists_for_selection(db, &track_ids).await
+    queries::playlist::count_tracks_in_playlists_for_selection(db, track_ids).await
 }
 
 pub async fn remove_tracks_from_playlist_batch(
@@ -130,7 +123,7 @@ pub async fn remove_tracks_from_playlist_batch(
     playlist_id: i64,
     track_ids: Vec<i64>,
 ) -> Result<UndoCapture<PlaylistItemsCut>, AppError> {
-    queries::playlist::remove_tracks_from_playlist_batch(db, playlist_id, &track_ids).await
+    queries::playlist::remove_tracks_from_playlist_batch(db, playlist_id, track_ids).await
 }
 
 /// Removes tracks keeping nothing to undo it, answering how many went.
@@ -139,7 +132,7 @@ pub async fn remove_tracks_from_playlist_for_good(
     playlist_id: i64,
     track_ids: Vec<i64>,
 ) -> Result<usize, AppError> {
-    queries::playlist::remove_tracks_from_playlist_for_good(db, playlist_id, &track_ids).await
+    queries::playlist::remove_tracks_from_playlist_for_good(db, playlist_id, track_ids).await
 }
 
 /// Undoes a run of removals from one playlist, `cuts` in the order they were made.
@@ -147,7 +140,7 @@ pub async fn restore_playlist_items(
     db: &DbPool,
     cuts: Vec<PlaylistItemsCut>,
 ) -> Result<(), AppError> {
-    queries::playlist_restore::restore_playlist_items(db, &cuts).await
+    queries::playlist_restore::restore_playlist_items(db, cuts).await
 }
 
 pub async fn move_playlist_tracks(
@@ -156,7 +149,7 @@ pub async fn move_playlist_tracks(
     track_ids: Vec<i64>,
     to: usize,
 ) -> Result<(), AppError> {
-    queries::playlist::move_playlist_tracks(db, playlist_id, &track_ids, to).await
+    queries::playlist::move_playlist_tracks(db, playlist_id, track_ids, to).await
 }
 
 /// How many distinct covers the Edit-Artwork mosaic picker offers. Its grid is a plain repeater,
@@ -197,7 +190,7 @@ async fn compose_thumbnail(
         melodia_artwork::media::image::artwork::compose_artwork(&source_paths, artwork_dir)
             .ok_or_else(|| AppError::io_other("Failed to compose artwork"))?;
 
-    queries::playlist::set_playlist_custom_thumbnail(db, playlist_id, &composite_path).await
+    queries::playlist::set_playlist_custom_thumbnail(db, playlist_id, composite_path).await
 }
 
 #[derive(Clone)]
@@ -240,7 +233,7 @@ async fn import_into_playlist(
         let mut summaries = std::mem::take(&mut result.summaries);
         summaries.sort_by(|a, b| natord::compare(&a.title, &b.title));
         let sorted_ids: Vec<i64> = summaries.iter().map(|s| s.id).collect();
-        queries::playlist::add_tracks_to_playlist(db, playlist_id, &sorted_ids).await?.len()
+        queries::playlist::add_tracks_to_playlist(db, playlist_id, sorted_ids).await?.len()
     };
 
     Ok(ImportToPlaylistResult {

@@ -1,7 +1,9 @@
 //! Not Duplicates: the sets of copies the duplicate finder leaves out of its list. Nothing but the
 //! finder reads them, so a write here moves no library signal.
 
-use crate::database::sql::Sql;
+use rusqlite::Transaction;
+
+use crate::database::sql::{self, Sql};
 use crate::database::{DbPool, IDS_PER_SET, placeholders};
 use melodia_core::entities::duplicates::DismissalSet;
 use melodia_core::error::AppError;
@@ -9,11 +11,13 @@ use melodia_core::error::AppError;
 /// Marks `track_ids` as one new set, moving any copy already in another. A copy deleted since the
 /// find is skipped rather than failing the foreign key.
 pub async fn dismiss(db: &DbPool, track_ids: &[i64]) -> Result<DismissalSet, AppError> {
-    let mut tx = db.write().begin().await?;
+    let track_ids = track_ids.to_vec();
+    db.transaction(move |tx| insert_set(tx, &track_ids)).await
+}
+
+fn insert_set(tx: &Transaction<'_>, track_ids: &[i64]) -> Result<DismissalSet, AppError> {
     let set: DismissalSet =
-        sqlx::query_scalar("SELECT COALESCE(MAX(set_id), 0) + 1 FROM duplicate_dismissals")
-            .fetch_one(&mut *tx)
-            .await?;
+        sql::fetch_one(tx, "SELECT COALESCE(MAX(set_id), 0) + 1 FROM duplicate_dismissals", ())?;
 
     for chunk in track_ids.chunks(IDS_PER_SET) {
         let mut sql = Sql::trusted(format!(
@@ -25,18 +29,16 @@ pub async fn dismiss(db: &DbPool, track_ids: &[i64]) -> Result<DismissalSet, App
         for &id in chunk {
             sql.bind(id);
         }
-        sql.execute(&mut *tx).await?;
+        sql.execute(tx)?;
     }
-
-    tx.commit().await?;
     Ok(set)
 }
 
 /// Counts a dismissed group as duplicates again.
 pub async fn restore(db: &DbPool, set: DismissalSet) -> Result<(), AppError> {
-    sqlx::query("DELETE FROM duplicate_dismissals WHERE set_id = ?")
-        .bind(set)
-        .execute(db.write())
-        .await?;
+    db.write(move |conn| {
+        sql::execute(conn, "DELETE FROM duplicate_dismissals WHERE set_id = ?", (i64::from(set),))
+    })
+    .await?;
     Ok(())
 }

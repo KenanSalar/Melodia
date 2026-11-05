@@ -113,8 +113,7 @@ impl Remover {
         }
         let this = self.clone();
         let spawned = slint::spawn_local(Compat::new(async move {
-            let removed =
-                library::radio::remove_stations_for_good(&this.state.db, &ids, from).await;
+            let removed = library::radio::remove_stations_for_good(&this.state.db, ids, from).await;
             this.finish();
             match removed {
                 Ok(0) => {}

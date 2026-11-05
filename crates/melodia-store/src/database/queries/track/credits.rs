@@ -2,7 +2,7 @@
 
 use std::collections::HashMap;
 
-use crate::database::{DbPool, chunked_in_query};
+use crate::database::{DbPool, chunked_in_query, sql};
 use melodia_core::entities::artist::{ArtistCredit, CreditedArtist};
 use melodia_core::entities::credits::{CreditRole, RoleCredit, RoleCredits};
 use melodia_core::entities::genre::GenreList;
@@ -15,27 +15,33 @@ pub async fn get_track_credits_by_ids(
     db: &DbPool,
     ids: &[i64],
 ) -> Result<HashMap<i64, (ArtistCredit, ArtistCredit)>, AppError> {
-    let track_rows: Vec<(i64, String, String)> = chunked_in_query(db.read(), ids, |placeholders| {
-        format!(
-            "SELECT ta.track_id, a.name, ta.join_phrase \
-                 FROM track_artists ta JOIN artists a ON a.id = ta.artist_id \
-                 WHERE ta.track_id IN ({placeholders}) ORDER BY ta.track_id, ta.position"
-        )
-    })
-    .await?;
+    let capacity = ids.len();
+    let ids = ids.to_vec();
+    let (track_rows, album_rows) = db
+        .read(move |conn| {
+            let track_rows: Vec<(i64, String, String)> =
+                chunked_in_query(conn, &ids, |placeholders| {
+                    format!(
+                        "SELECT ta.track_id, a.name, ta.join_phrase \
+                         FROM track_artists ta JOIN artists a ON a.id = ta.artist_id \
+                         WHERE ta.track_id IN ({placeholders}) ORDER BY ta.track_id, ta.position"
+                    )
+                })?;
+            let album_rows: Vec<(i64, String, String)> =
+                chunked_in_query(conn, &ids, |placeholders| {
+                    format!(
+                        "SELECT t.id, a.name, aa.join_phrase \
+                         FROM tracks t \
+                         JOIN album_artists aa ON aa.album_id = t.album_id \
+                         JOIN artists a ON a.id = aa.artist_id \
+                         WHERE t.id IN ({placeholders}) ORDER BY t.id, aa.position"
+                    )
+                })?;
+            Ok((track_rows, album_rows))
+        })
+        .await?;
 
-    let album_rows: Vec<(i64, String, String)> = chunked_in_query(db.read(), ids, |placeholders| {
-        format!(
-            "SELECT t.id, a.name, aa.join_phrase \
-                 FROM tracks t \
-                 JOIN album_artists aa ON aa.album_id = t.album_id \
-                 JOIN artists a ON a.id = aa.artist_id \
-                 WHERE t.id IN ({placeholders}) ORDER BY t.id, aa.position"
-        )
-    })
-    .await?;
-
-    let mut out: HashMap<i64, (ArtistCredit, ArtistCredit)> = HashMap::with_capacity(ids.len());
+    let mut out: HashMap<i64, (ArtistCredit, ArtistCredit)> = HashMap::with_capacity(capacity);
     for (id, artists) in group_credits(track_rows) {
         out.entry(id).or_default().0 = ArtistCredit::new(artists);
     }
@@ -53,13 +59,16 @@ pub async fn get_track_role_credits_by_ids(
     db: &DbPool,
     ids: &[i64],
 ) -> Result<HashMap<i64, RoleCredits>, AppError> {
-    let rows: Vec<(i64, String, String, String)> =
-        chunked_in_query(db.read(), ids, |placeholders| {
-            format!(
-                "SELECT tc.track_id, a.name, tc.role, tc.detail \
-                 FROM track_credits tc JOIN artists a ON a.id = tc.artist_id \
-                 WHERE tc.track_id IN ({placeholders}) ORDER BY tc.track_id, tc.position"
-            )
+    let ids = ids.to_vec();
+    let rows: Vec<(i64, String, String, String)> = db
+        .read(move |conn| {
+            chunked_in_query(conn, &ids, |placeholders| {
+                format!(
+                    "SELECT tc.track_id, a.name, tc.role, tc.detail \
+                     FROM track_credits tc JOIN artists a ON a.id = tc.artist_id \
+                     WHERE tc.track_id IN ({placeholders}) ORDER BY tc.track_id, tc.position"
+                )
+            })
         })
         .await?;
 
@@ -78,14 +87,18 @@ pub async fn get_track_genres_by_ids(
     db: &DbPool,
     ids: &[i64],
 ) -> Result<HashMap<i64, GenreList>, AppError> {
-    let rows: Vec<(i64, String)> = chunked_in_query(db.read(), ids, |placeholders| {
-        format!(
-            "SELECT tg.track_id, g.name \
-             FROM track_genres tg JOIN genres g ON g.id = tg.genre_id \
-             WHERE tg.track_id IN ({placeholders}) ORDER BY tg.track_id, tg.position"
-        )
-    })
-    .await?;
+    let ids = ids.to_vec();
+    let rows: Vec<(i64, String)> = db
+        .read(move |conn| {
+            chunked_in_query(conn, &ids, |placeholders| {
+                format!(
+                    "SELECT tg.track_id, g.name \
+                     FROM track_genres tg JOIN genres g ON g.id = tg.genre_id \
+                     WHERE tg.track_id IN ({placeholders}) ORDER BY tg.track_id, tg.position"
+                )
+            })
+        })
+        .await?;
 
     let mut grouped: HashMap<i64, Vec<String>> = HashMap::new();
     for (id, name) in rows {
@@ -96,14 +109,17 @@ pub async fn get_track_genres_by_ids(
 
 /// One track's ordered artist credit without the album's, for the lyrics lookup.
 pub async fn get_track_credit(db: &DbPool, id: i64) -> Result<ArtistCredit, AppError> {
-    let rows: Vec<(String, String)> = sqlx::query_as(
-        "SELECT a.name, ta.join_phrase \
-         FROM track_artists ta JOIN artists a ON a.id = ta.artist_id \
-         WHERE ta.track_id = ? ORDER BY ta.position",
-    )
-    .bind(id)
-    .fetch_all(db.read())
-    .await?;
+    let rows: Vec<(String, String)> = db
+        .read(move |conn| {
+            sql::fetch_all(
+                conn,
+                "SELECT a.name, ta.join_phrase \
+                 FROM track_artists ta JOIN artists a ON a.id = ta.artist_id \
+                 WHERE ta.track_id = ? ORDER BY ta.position",
+                (id,),
+            )
+        })
+        .await?;
 
     Ok(ArtistCredit::new(
         rows.into_iter().map(|(name, join_phrase)| CreditedArtist { name, join_phrase }).collect(),

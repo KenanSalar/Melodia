@@ -5,12 +5,12 @@ use std::collections::{HashMap, HashSet};
 use std::sync::LazyLock;
 
 use rusqlite::Connection;
-use sqlx::{Sqlite, SqliteConnection};
 
 use super::membership::Membership;
 use super::{columns, fetch_packed_ids, json_array};
-use crate::database::sql::Sql;
-use crate::database::{DbPool, chunked_in_query, chunked_in_query_on, select_in_id_order};
+use crate::database::rows::FromRow;
+use crate::database::sql::{self, Sql};
+use crate::database::{DbPool, chunked_in_query, select_in_id_order};
 use melodia_core::entities::track;
 use melodia_core::entities::track_list::TrackListScope;
 use melodia_core::error::AppError;
@@ -21,11 +21,7 @@ static TRACK_META_BY_ID: LazyLock<String> = LazyLock::new(|| {
 
 /// The Now Playing view's technical chips, `None` for a missing id.
 pub async fn get_track_meta(db: &DbPool, id: i64) -> Result<Option<track::TrackMeta>, AppError> {
-    let row = sqlx::query_as::<_, track::TrackMeta>(TRACK_META_BY_ID.as_str())
-        .bind(id)
-        .fetch_optional(db.read())
-        .await?;
-    Ok(row)
+    db.read(move |conn| sql::fetch_optional(conn, TRACK_META_BY_ID.as_str(), (id,))).await
 }
 
 static SCROBBLE_ROW_BY_ID: LazyLock<String> = LazyLock::new(|| {
@@ -37,11 +33,7 @@ pub async fn get_scrobble_row(
     db: &DbPool,
     id: i64,
 ) -> Result<Option<track::ScrobbleRow>, AppError> {
-    let row = sqlx::query_as::<_, track::ScrobbleRow>(SCROBBLE_ROW_BY_ID.as_str())
-        .bind(id)
-        .fetch_optional(db.read())
-        .await?;
-    Ok(row)
+    db.read(move |conn| sql::fetch_optional(conn, SCROBBLE_ROW_BY_ID.as_str(), (id,))).await
 }
 
 static FAVORITE_SCROBBLE_ROWS: LazyLock<String> = LazyLock::new(|| {
@@ -51,10 +43,7 @@ static FAVORITE_SCROBBLE_ROWS: LazyLock<String> = LazyLock::new(|| {
 /// Every favorite's scrobble row, so connecting a service backfills its loves without re-toggling
 /// each heart.
 pub async fn get_favorite_scrobble_rows(db: &DbPool) -> Result<Vec<track::ScrobbleRow>, AppError> {
-    let rows = sqlx::query_as::<_, track::ScrobbleRow>(FAVORITE_SCROBBLE_ROWS.as_str())
-        .fetch_all(db.read())
-        .await?;
-    Ok(rows)
+    db.read(|conn| sql::fetch_all(conn, FAVORITE_SCROBBLE_ROWS.as_str(), ())).await
 }
 
 /// [`get_scrobble_row`] for a multi-selection's favorite-to-love sync, in query order, the order of
@@ -64,31 +53,31 @@ pub async fn get_scrobble_rows_by_ids(
     ids: &[i64],
 ) -> Result<Vec<track::ScrobbleRow>, AppError> {
     let cols = columns::SCROBBLE_ROW.joined();
-    chunked_in_query(db.read(), ids, |placeholders| {
-        format!("SELECT {cols} FROM tracks WHERE id IN ({placeholders})")
+    let ids = ids.to_vec();
+    db.read(move |conn| {
+        chunked_in_query(conn, &ids, |placeholders| {
+            format!("SELECT {cols} FROM tracks WHERE id IN ({placeholders})")
+        })
     })
     .await
 }
 
 pub async fn get_track_file_path(db: &DbPool, id: i64) -> Result<Option<String>, AppError> {
-    let path: Option<String> =
-        sqlx::query_scalar("SELECT file_path FROM tracks WHERE id = ? LIMIT 1")
-            .bind(id)
-            .fetch_optional(db.read())
-            .await?;
-    Ok(path)
+    db.read(move |conn| {
+        sql::fetch_optional(conn, "SELECT file_path FROM tracks WHERE id = ? LIMIT 1", (id,))
+    })
+    .await
 }
 
 /// How many tracks the library holds, for the diagnostics bundle and a filtered Songs list's total.
 pub async fn count_tracks(db: &DbPool) -> Result<i64, AppError> {
-    let count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM tracks").fetch_one(db.read()).await?;
-    Ok(count)
+    db.read(|conn| sql::fetch_one(conn, "SELECT COUNT(*) FROM tracks", ())).await
 }
 
 /// `TrackSummary` rows for `ids`, in order: what the queue, Now Playing and playback read.
 pub async fn get_track_summaries_by_ids(
     db: &DbPool,
-    ids: &[i64],
+    ids: Vec<i64>,
 ) -> Result<Vec<track::TrackSummary>, AppError> {
     rows_in_id_order(db, columns::TRACK_SUMMARY.joined(), ids, |t: &track::TrackSummary| t.id).await
 }
@@ -96,7 +85,7 @@ pub async fn get_track_summaries_by_ids(
 /// `TrackListRow` rows for `ids`, in order: the page a list holding only its ids draws.
 pub async fn get_track_list_rows_by_ids(
     db: &DbPool,
-    ids: &[i64],
+    ids: Vec<i64>,
 ) -> Result<Vec<track::TrackListRow>, AppError> {
     rows_in_id_order(db, columns::TRACK_LIST.joined(), ids, |t: &track::TrackListRow| t.id).await
 }
@@ -104,7 +93,7 @@ pub async fn get_track_list_rows_by_ids(
 /// Most Played cards for `ids`, in order.
 pub async fn get_most_played_by_ids(
     db: &DbPool,
-    ids: &[i64],
+    ids: Vec<i64>,
 ) -> Result<Vec<track::MostPlayedFavorite>, AppError> {
     rows_in_id_order(db, columns::MOST_PLAYED.joined(), ids, |t: &track::MostPlayedFavorite| t.id)
         .await
@@ -113,14 +102,17 @@ pub async fn get_most_played_by_ids(
 /// `cols` of every track in `ids`, in the order `ids` asked for.
 async fn rows_in_id_order<T>(
     db: &DbPool,
-    cols: &str,
-    ids: &[i64],
-    id_of: impl Fn(&T) -> i64,
+    cols: &'static str,
+    ids: Vec<i64>,
+    id_of: impl Fn(&T) -> i64 + Send + 'static,
 ) -> Result<Vec<T>, AppError>
 where
-    T: for<'r> sqlx::FromRow<'r, sqlx::sqlite::SqliteRow> + Send + Unpin,
+    T: FromRow + Send + 'static,
 {
-    select_in_id_order(db, &format!("SELECT {cols} FROM tracks"), ids, id_of).await
+    db.read(move |conn| {
+        select_in_id_order(conn, &format!("SELECT {cols} FROM tracks"), &ids, id_of)
+    })
+    .await
 }
 
 /// `TagEditRow`s for `ids`, in order, for the Edit Track Information dialog: the editable
@@ -133,7 +125,8 @@ pub async fn get_tag_edit_rows_by_ids(
     db: &DbPool,
     ids: &[i64],
 ) -> Result<Vec<track::TagEditRow>, AppError> {
-    rows_in_id_order(db, columns::TRACK_TAG_EDIT.joined(), ids, |t: &track::TagEditRow| t.id).await
+    let cols = columns::TRACK_TAG_EDIT.joined();
+    rows_in_id_order(db, cols, ids.to_vec(), |t: &track::TagEditRow| t.id).await
 }
 
 /// `(id, file_path)` for `ids`, in order, so the tag writer's self-write marks land
@@ -142,14 +135,14 @@ pub async fn get_track_paths_by_ids(
     db: &DbPool,
     ids: &[i64],
 ) -> Result<Vec<(i64, String)>, AppError> {
-    rows_in_id_order(db, "id, file_path", ids, |&(id, _): &(i64, String)| id).await
+    rows_in_id_order(db, "id, file_path", ids.to_vec(), |&(id, _): &(i64, String)| id).await
 }
 
 /// `TrackLinks` for `ids`, in order: the foreign keys the now-playing bar's menu needs, which
 /// `TrackSummary` doesn't carry.
 pub async fn get_track_links_by_ids(
     db: &DbPool,
-    ids: &[i64],
+    ids: Vec<i64>,
 ) -> Result<Vec<track::TrackLinks>, AppError> {
     rows_in_id_order(db, columns::TRACK_LINKS.joined(), ids, |l: &track::TrackLinks| l.id).await
 }
@@ -157,15 +150,13 @@ pub async fn get_track_links_by_ids(
 /// The ids in `ids` that no longer have a row. Asked this way round because the answer is almost
 /// always none: asking which survive hands a queue the size of the library back a row per track.
 pub async fn missing_ids(db: &DbPool, ids: &[i64]) -> Result<HashSet<i64>, AppError> {
-    ids_outside(db.read(), ids, &Membership::Library).await
+    let ids = ids.to_vec();
+    db.read(move |conn| missing_ids_on(conn, &ids)).await
 }
 
 /// [`missing_ids`] inside a transaction, for a write inserting the ids that still have a row.
-pub(crate) async fn missing_ids_on(
-    conn: &mut SqliteConnection,
-    ids: &[i64],
-) -> Result<HashSet<i64>, AppError> {
-    ids_outside(conn, ids, &Membership::Library).await
+pub(crate) fn missing_ids_on(conn: &Connection, ids: &[i64]) -> Result<HashSet<i64>, AppError> {
+    ids_outside(conn, ids, &Membership::Library)
 }
 
 /// The ids in `ids` that `scope` no longer holds, asked the way round [`missing_ids`] is.
@@ -177,18 +168,19 @@ pub async fn missing_from_scope(
     if ids.is_empty() {
         return Ok(HashSet::new());
     }
-    let membership = Membership::resolve(db, scope).await?;
-    ids_outside(db.read(), ids, &membership).await
+    let ids = ids.to_vec();
+    db.read(move |conn| {
+        let membership = Membership::resolve(conn, scope)?;
+        ids_outside(conn, &ids, &membership)
+    })
+    .await
 }
 
-async fn ids_outside<'e, E>(
-    executor: E,
+fn ids_outside(
+    conn: &Connection,
     ids: &[i64],
     membership: &Membership,
-) -> Result<HashSet<i64>, AppError>
-where
-    E: sqlx::Executor<'e, Database = Sqlite>,
-{
+) -> Result<HashSet<i64>, AppError> {
     if ids.is_empty() {
         return Ok(HashSet::new());
     }
@@ -196,7 +188,7 @@ where
     sql.push_bind(json_array(ids)).push(") j WHERE j.value NOT IN (SELECT t.id FROM ");
     membership.push_members(&mut sql);
     sql.push(")");
-    Ok(fetch_packed_ids(executor, sql).await?.into_iter().collect())
+    Ok(fetch_packed_ids(conn, sql)?.into_iter().collect())
 }
 
 /// `file_path → id` for each of `paths` that has a row.
@@ -204,10 +196,14 @@ pub async fn get_track_ids_by_paths(
     db: &DbPool,
     paths: &[String],
 ) -> Result<HashMap<String, i64>, AppError> {
-    let rows: Vec<(i64, String)> = chunked_in_query(db.read(), paths, |placeholders| {
-        format!("SELECT id, file_path FROM tracks WHERE file_path IN ({placeholders})")
-    })
-    .await?;
+    let paths = paths.to_vec();
+    let rows: Vec<(i64, String)> = db
+        .read(move |conn| {
+            chunked_in_query(conn, &paths, |placeholders| {
+                format!("SELECT id, file_path FROM tracks WHERE file_path IN ({placeholders})")
+            })
+        })
+        .await?;
 
     let mut map = HashMap::with_capacity(rows.len());
     map.extend(rows.into_iter().map(|(id, path)| (path, id)));
@@ -218,15 +214,18 @@ pub async fn get_track_ids_by_paths(
 /// either playing the same audio for a playlist re-match.
 pub async fn get_track_ids_by_hashes(
     db: &DbPool,
-    hashes: &[String],
+    hashes: Vec<String>,
 ) -> Result<HashMap<String, i64>, AppError> {
-    let rows: Vec<(i64, String)> = chunked_in_query(db.read(), hashes, |placeholders| {
-        format!(
-            "SELECT id, file_hash FROM tracks \
-                 WHERE file_hash IS NOT NULL AND file_hash IN ({placeholders})"
-        )
-    })
-    .await?;
+    let rows: Vec<(i64, String)> = db
+        .read(move |conn| {
+            chunked_in_query(conn, &hashes, |placeholders| {
+                format!(
+                    "SELECT id, file_hash FROM tracks \
+                         WHERE file_hash IS NOT NULL AND file_hash IN ({placeholders})"
+                )
+            })
+        })
+        .await?;
 
     let mut map = HashMap::with_capacity(rows.len());
     map.extend(rows.into_iter().map(|(id, hash)| (hash, id)));
@@ -262,11 +261,10 @@ pub(crate) fn lowest_id_by_hash_on(
 
 /// The tracks with no `file_hash` yet, for the retroactive hash.
 pub async fn get_unhashed_track_paths(db: &DbPool) -> Result<Vec<(i64, String)>, AppError> {
-    let rows: Vec<(i64, String)> =
-        sqlx::query_as("SELECT id, file_path FROM tracks WHERE file_hash IS NULL")
-            .fetch_all(db.read())
-            .await?;
-    Ok(rows)
+    db.read(|conn| {
+        sql::fetch_all(conn, "SELECT id, file_path FROM tracks WHERE file_hash IS NULL", ())
+    })
+    .await
 }
 
 /// One page of unrated tracks past `after_id`, the one-shot rating import's work list.
@@ -280,12 +278,12 @@ pub async fn get_unrated_track_paths_after(
     after_id: i64,
     limit: i64,
 ) -> Result<Vec<(i64, String)>, AppError> {
-    let rows: Vec<(i64, String)> = sqlx::query_as(
-        "SELECT id, file_path FROM tracks WHERE rating = 0 AND id > ? ORDER BY id LIMIT ?",
-    )
-    .bind(after_id)
-    .bind(limit)
-    .fetch_all(db.read())
-    .await?;
-    Ok(rows)
+    db.read(move |conn| {
+        sql::fetch_all(
+            conn,
+            "SELECT id, file_path FROM tracks WHERE rating = 0 AND id > ? ORDER BY id LIMIT ?",
+            (after_id, limit),
+        )
+    })
+    .await
 }

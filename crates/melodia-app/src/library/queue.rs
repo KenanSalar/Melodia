@@ -203,7 +203,7 @@ pub async fn queue_skip_to_index(state: &AppState, index: usize) -> Result<(), A
         (entry, s.queue.id_at(index).filter(|&id| s.record(id).is_none()))
     };
     let fetched = match unheld {
-        Some(id) => queries::track::get_track_summaries_by_ids(&state.db, &[id]).await?,
+        Some(id) => queries::track::get_track_summaries_by_ids(&state.db, vec![id]).await?,
         None => Vec::new(),
     };
     emit_and_execute(&*state.engine, &state.player_state, &state.sinks, |s| {
@@ -382,7 +382,7 @@ async fn plan_restore(
     queue.repeat_mode = repeat_mode;
     queue.shuffle_enabled = shuffle_enabled;
 
-    let records = queries::track::get_track_summaries_by_ids(db, &queue.window_ids())
+    let records = queries::track::get_track_summaries_by_ids(db, queue.window_ids())
         .await?
         .into_iter()
         .map(Arc::new)

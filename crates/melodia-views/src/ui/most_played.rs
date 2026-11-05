@@ -45,5 +45,5 @@ pub fn to_slint_most_played_row(t: &MostPlayedFavorite) -> UiEntityStripRow {
 
 /// The Most Played cards behind `ids`, in the order asked.
 pub async fn rows(state: AppState, ids: Vec<i64>) -> AppResult<Vec<MostPlayedFavorite>> {
-    library::keyset::most_played_by_ids(&state.db, &ids).await
+    library::keyset::most_played_by_ids(&state.db, ids).await
 }

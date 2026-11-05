@@ -6,7 +6,7 @@
 //! its `ORDER BY`; the entities' own order is the caller's to restore.
 
 use super::keyset::detail_order;
-use crate::database::{DbPool, chunked_in_query};
+use crate::database::{DbPool, chunked_in_query, sql};
 use melodia_core::entities::track_list::TrackSortField;
 use melodia_core::error::AppError;
 
@@ -18,12 +18,15 @@ pub async fn track_ids_by_albums(
     album_ids: &[i64],
 ) -> Result<Vec<(i64, i64)>, AppError> {
     let order = detail_order(TrackSortField::TrackNumber);
-    chunked_in_query(db.read(), album_ids, |placeholders| {
-        format!(
-            "SELECT t.album_id, t.id FROM tracks t \
-             WHERE t.album_id IN ({placeholders}) \
-             ORDER BY {order}"
-        )
+    let album_ids = album_ids.to_vec();
+    db.read(move |conn| {
+        chunked_in_query(conn, &album_ids, |placeholders| {
+            format!(
+                "SELECT t.album_id, t.id FROM tracks t \
+                 WHERE t.album_id IN ({placeholders}) \
+                 ORDER BY {order}"
+            )
+        })
     })
     .await
 }
@@ -38,13 +41,16 @@ pub async fn track_ids_by_artists(
     artist_ids: &[i64],
 ) -> Result<Vec<(i64, i64)>, AppError> {
     let order = detail_order(TrackSortField::Album);
-    chunked_in_query(db.read(), artist_ids, |placeholders| {
-        format!(
-            "SELECT ta.artist_id, t.id FROM tracks t \
-             JOIN track_artists ta ON ta.track_id = t.id \
-             WHERE ta.artist_id IN ({placeholders}) \
-             ORDER BY {order}"
-        )
+    let artist_ids = artist_ids.to_vec();
+    db.read(move |conn| {
+        chunked_in_query(conn, &artist_ids, |placeholders| {
+            format!(
+                "SELECT ta.artist_id, t.id FROM tracks t \
+                 JOIN track_artists ta ON ta.track_id = t.id \
+                 WHERE ta.artist_id IN ({placeholders}) \
+                 ORDER BY {order}"
+            )
+        })
     })
     .await
 }
@@ -56,13 +62,16 @@ pub async fn track_ids_by_genres(
     genre_ids: &[i64],
 ) -> Result<Vec<(i64, i64)>, AppError> {
     let order = detail_order(TrackSortField::Album);
-    chunked_in_query(db.read(), genre_ids, |placeholders| {
-        format!(
-            "SELECT tg.genre_id, t.id FROM tracks t \
-             JOIN track_genres tg ON tg.track_id = t.id \
-             WHERE tg.genre_id IN ({placeholders}) \
-             ORDER BY {order}"
-        )
+    let genre_ids = genre_ids.to_vec();
+    db.read(move |conn| {
+        chunked_in_query(conn, &genre_ids, |placeholders| {
+            format!(
+                "SELECT tg.genre_id, t.id FROM tracks t \
+                 JOIN track_genres tg ON tg.track_id = t.id \
+                 WHERE tg.genre_id IN ({placeholders}) \
+                 ORDER BY {order}"
+            )
+        })
     })
     .await
 }
@@ -74,12 +83,15 @@ pub async fn track_ids_by_playlists(
     db: &DbPool,
     playlist_ids: &[i64],
 ) -> Result<Vec<(i64, i64)>, AppError> {
-    chunked_in_query(db.read(), playlist_ids, |placeholders| {
-        format!(
-            "SELECT playlist_id, track_id FROM playlist_items \
-             WHERE playlist_id IN ({placeholders}) \
-             ORDER BY position ASC"
-        )
+    let playlist_ids = playlist_ids.to_vec();
+    db.read(move |conn| {
+        chunked_in_query(conn, &playlist_ids, |placeholders| {
+            format!(
+                "SELECT playlist_id, track_id FROM playlist_items \
+                 WHERE playlist_id IN ({placeholders}) \
+                 ORDER BY position ASC"
+            )
+        })
     })
     .await
 }
@@ -93,14 +105,15 @@ pub async fn track_ids_by_playlists(
 /// so **case is the whole of the agreement**.
 pub async fn track_ids_under_directory(db: &DbPool, dir_path: &str) -> Result<Vec<i64>, AppError> {
     let pattern = format!("{}%", super::list::directory_like_prefix(dir_path));
-    let ids = sqlx::query_scalar::<_, i64>(
-        "SELECT id FROM tracks WHERE file_path LIKE ? ESCAPE '\\' \
-         ORDER BY file_path COLLATE NOCASE ASC",
-    )
-    .bind(&pattern)
-    .fetch_all(db.read())
-    .await?;
-    Ok(ids)
+    db.read(move |conn| {
+        sql::fetch_all(
+            conn,
+            "SELECT id FROM tracks WHERE file_path LIKE ? ESCAPE '\\' \
+             ORDER BY file_path COLLATE NOCASE ASC",
+            (pattern,),
+        )
+    })
+    .await
 }
 
 #[cfg(test)]

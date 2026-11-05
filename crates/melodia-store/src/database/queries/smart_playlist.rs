@@ -6,7 +6,7 @@
 
 use std::hash::{BuildHasher, BuildHasherDefault, DefaultHasher};
 
-use sqlx::Sqlite;
+use rusqlite::{Connection, Transaction};
 
 use crate::database::DbPool;
 use crate::database::queries::track::{columns, fetch_packed_ids};
@@ -26,8 +26,8 @@ pub async fn get_smart_playlist_track_ids(
     db: &DbPool,
     criteria: &SmartCriteria,
 ) -> Result<Vec<i64>, AppError> {
-    let ids: Vec<(i64,)> = membership_query("id", criteria).fetch_all(db.read()).await?;
-    Ok(ids.into_iter().map(|(id,)| id).collect())
+    let sql = membership_query("id", criteria);
+    db.read(move |conn| sql.fetch_all(conn)).await
 }
 
 /// [`get_smart_playlist_track_ids`] as M3U export rows, in the same order and under the same cap.
@@ -35,23 +35,21 @@ pub async fn get_smart_playlist_tracks_for_export(
     db: &DbPool,
     criteria: &SmartCriteria,
 ) -> Result<Vec<track::PlaylistExportRow>, AppError> {
-    membership_query(columns::PLAYLIST_EXPORT.prefixed("tracks"), criteria)
-        .fetch_all(db.read())
-        .await
+    let sql = membership_query(columns::PLAYLIST_EXPORT.prefixed("tracks"), criteria);
+    db.read(move |conn| sql.fetch_all(conn)).await
 }
 
 /// A smart playlist's membership as ids, in the order its detail page numbers them under `draw`,
 /// read on `tx` so a write keeps exactly what it read.
-pub(crate) async fn member_ids_tx(
-    tx: &mut sqlx::Transaction<'_, Sqlite>,
+pub(crate) fn member_ids_tx(
+    tx: &Transaction<'_>,
     criteria: &SmartCriteria,
     draw: Draw,
 ) -> Result<Vec<i64>, AppError> {
     if let Some(count) = random_cap(criteria) {
-        return pick_random(&mut **tx, criteria, count, draw).await;
+        return pick_random(tx, criteria, count, draw);
     }
-    let ids: Vec<(i64,)> = membership_query("id", criteria).fetch_all(&mut **tx).await?;
-    Ok(ids.into_iter().map(|(id,)| id).collect())
+    membership_query("id", criteria).fetch_all(tx)
 }
 
 /// `SELECT columns FROM tracks` over the criteria's membership, ordered and capped.
@@ -84,8 +82,8 @@ pub(crate) fn push_member_ids(sql: &mut Sql, criteria: &SmartCriteria) {
 /// The first cover an uncapped playlist's rules reach in its natural order, the one its automatic
 /// thumbnail shows. Ordered as `idx_tracks_sort_key` is, so a plan can walk it and stop at the
 /// first match carrying one, where numbering the set sorts every match.
-pub(crate) async fn first_cover(
-    db: &DbPool,
+pub(crate) fn first_cover(
+    conn: &Connection,
     criteria: &SmartCriteria,
 ) -> Result<Option<String>, AppError> {
     let mut sql = Sql::new(
@@ -93,8 +91,7 @@ pub(crate) async fn first_cover(
     );
     push_and_rules(&mut sql, criteria);
     sql.push(order_by_fragment(None)).push(" LIMIT 1");
-    let cover: Option<(String,)> = sql.fetch_optional(db.read()).await?;
-    Ok(cover.map(|(path,)| path))
+    sql.fetch_optional(conn)
 }
 
 /// The count of a [`LimitOrder::Random`] cap, the cut [`pick_random`] makes rather than SQL.
@@ -111,18 +108,15 @@ pub(crate) fn random_cap(criteria: &SmartCriteria) -> Option<u32> {
 ///
 /// In Rust because `RANDOM()` takes no seed. Ranked by a hash of the draw and the id rather than
 /// shuffled, so a track entering or leaving the matches moves only itself.
-pub(crate) async fn pick_random<'e, E>(
-    executor: E,
+pub(crate) fn pick_random(
+    conn: &Connection,
     criteria: &SmartCriteria,
     count: u32,
     draw: Draw,
-) -> Result<Vec<i64>, AppError>
-where
-    E: sqlx::Executor<'e, Database = Sqlite>,
-{
+) -> Result<Vec<i64>, AppError> {
     let mut sql = Sql::new("SELECT group_concat(id, ',') FROM tracks");
     push_where(&mut sql, criteria);
-    let matches = fetch_packed_ids(executor, sql).await?;
+    let matches = fetch_packed_ids(conn, sql)?;
     Ok(pick(matches, count, draw))
 }
 
@@ -175,7 +169,7 @@ pub async fn count_smart_playlist(
         sql.push(" LIMIT ").push_bind(i64::from(limit.count));
         sql.push(")");
     }
-    sql.fetch_one(db.read()).await
+    db.read(move |conn| sql.fetch_one(conn)).await
 }
 
 /// Appends `WHERE (rule) AND|OR (rule) …`, skipping incoherent rules; with none left it matches

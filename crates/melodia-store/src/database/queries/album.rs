@@ -1,9 +1,19 @@
+use std::collections::HashMap;
+
 use rusqlite::Transaction;
 
-use crate::database::sql::Sql;
-use crate::database::{DbPool, select_in_id_order};
+use crate::database::rows::by_name;
+use crate::database::sql::{self, Sql};
+use crate::database::{DbPool, chunked_in_query, select_in_id_order};
 use melodia_core::entities::{album, tags};
 use melodia_core::error::AppError;
+
+struct TrackRelease {
+    id: i64,
+    tags: album::ReleaseTagRow,
+}
+
+by_name!(TrackRelease { id, tags: album::ReleaseTagRow });
 
 /// The release tags behind each of `ids`, in the order given.
 ///
@@ -15,68 +25,44 @@ pub async fn get_release_tags_for_tracks(
     db: &DbPool,
     ids: &[i64],
 ) -> Result<Vec<album::ReleaseTagRow>, AppError> {
-    // A flat tuple rather than `(i64, ReleaseTagRow)`: sqlx decodes a tuple element per *column*,
-    // so a nested row type there asks it to decode a struct out of one value.
-    type Row = (i64, String, String, String, String, String, String, bool);
-    let rows: Vec<Row> = crate::database::chunked_in_query(db.read(), ids, |placeholders| {
-        format!(
-            "SELECT t.id, \
-                COALESCE(al.label, ''), \
-                COALESCE(al.catalog_number, ''), \
-                COALESCE(al.barcode, ''), \
-                COALESCE(al.media, ''), \
-                COALESCE(al.release_type, ''), \
-                COALESCE(al.release_country, ''), \
-                COALESCE(al.is_compilation, FALSE) \
-             FROM tracks t LEFT JOIN albums al ON al.id = t.album_id \
-             WHERE t.id IN ({placeholders})"
-        )
-    })
-    .await?;
-
-    let by_id: std::collections::HashMap<i64, album::ReleaseTagRow> = rows
-        .into_iter()
-        .map(
-            |(
-                id,
-                label,
-                catalog_number,
-                barcode,
-                media,
-                release_type,
-                release_country,
-                compilation,
-            )| {
-                (
-                    id,
-                    album::ReleaseTagRow {
-                        label,
-                        catalog_number,
-                        barcode,
-                        media,
-                        release_type,
-                        release_country,
-                        is_compilation: compilation,
-                    },
+    let wanted = ids.to_vec();
+    let rows: Vec<TrackRelease> = db
+        .read(move |conn| {
+            chunked_in_query(conn, &wanted, |placeholders| {
+                format!(
+                    "SELECT t.id, \
+                        COALESCE(al.label, '') AS label, \
+                        COALESCE(al.catalog_number, '') AS catalog_number, \
+                        COALESCE(al.barcode, '') AS barcode, \
+                        COALESCE(al.media, '') AS media, \
+                        COALESCE(al.release_type, '') AS release_type, \
+                        COALESCE(al.release_country, '') AS release_country, \
+                        COALESCE(al.is_compilation, FALSE) AS is_compilation \
+                     FROM tracks t LEFT JOIN albums al ON al.id = t.album_id \
+                     WHERE t.id IN ({placeholders})"
                 )
-            },
-        )
-        .collect();
+            })
+        })
+        .await?;
+
+    let by_id: HashMap<i64, album::ReleaseTagRow> =
+        rows.into_iter().map(|row| (row.id, row.tags)).collect();
     Ok(ids.iter().map(|id| by_id.get(id).cloned().unwrap_or_default()).collect())
 }
 
 /// The Albums grid's cards for `ids`, in the order asked for.
 pub async fn get_albums_by_ids(
     db: &DbPool,
-    ids: &[i64],
+    ids: Vec<i64>,
 ) -> Result<Vec<album::AlbumStats>, AppError> {
-    select_in_id_order(db, "SELECT * FROM album_stats", ids, |a: &album::AlbumStats| a.id).await
+    db.read(move |conn| {
+        select_in_id_order(conn, "SELECT * FROM album_stats", &ids, |a: &album::AlbumStats| a.id)
+    })
+    .await
 }
 
 pub async fn get_album_by_id(db: &DbPool, id: i64) -> Result<album::AlbumStats, AppError> {
-    sqlx::query_as::<_, album::AlbumStats>("SELECT * FROM album_stats WHERE id = ?")
-        .bind(id)
-        .fetch_optional(db.read())
+    db.read(move |conn| sql::fetch_optional(conn, "SELECT * FROM album_stats WHERE id = ?", (id,)))
         .await?
         .ok_or_else(|| AppError::not_found("Album", id))
 }
@@ -85,15 +71,16 @@ pub async fn get_albums_by_artist(
     db: &DbPool,
     artist_id: i64,
 ) -> Result<Vec<album::AlbumStats>, AppError> {
-    let albums = sqlx::query_as::<_, album::AlbumStats>(
-        "SELECT * FROM album_stats \
-         WHERE id IN (SELECT album_id FROM album_artists WHERE artist_id = ?) \
-         ORDER BY year ASC",
-    )
-    .bind(artist_id)
-    .fetch_all(db.read())
-    .await?;
-    Ok(albums)
+    db.read(move |conn| {
+        sql::fetch_all(
+            conn,
+            "SELECT * FROM album_stats \
+             WHERE id IN (SELECT album_id FROM album_artists WHERE artist_id = ?) \
+             ORDER BY year ASC",
+            (artist_id,),
+        )
+    })
+    .await
 }
 
 /// Overwrites the albums' `artwork_path` inside the tag edit's transaction, where

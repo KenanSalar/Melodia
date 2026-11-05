@@ -40,7 +40,7 @@ pub fn wire(ui: &AppWindow, state: &AppState) {
             };
             let ids = collect_nonzero_track_ids(&ids);
             spawn_copy(&state, &weak, "copy tracks", move |state| async move {
-                track_lines(&state.db, &ids, field).await
+                track_lines(&state.db, ids, field).await
             });
         });
     }

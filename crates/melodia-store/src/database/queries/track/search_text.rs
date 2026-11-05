@@ -1,5 +1,6 @@
 //! Filling `tracks.search_text` on the rows ingested before the column existed.
 
+use crate::database::rows::by_name;
 use crate::database::{DbPool, FoldedColumn, FoldedInputs, backfill_folded};
 use melodia_core::entities::track_search::SearchFields;
 use melodia_core::error::AppError;
@@ -11,7 +12,6 @@ const SEARCH_TEXT: FoldedColumn = FoldedColumn {
 };
 
 /// The five columns a row's search text is packed from.
-#[derive(sqlx::FromRow)]
 struct Unfilled {
     id: i64,
     title: String,
@@ -20,6 +20,8 @@ struct Unfilled {
     album: Option<String>,
     genre: Option<String>,
 }
+
+by_name!(Unfilled { id, title, artist, album_artist, album, genre });
 
 impl FoldedInputs for Unfilled {
     fn id(&self) -> i64 {
@@ -41,5 +43,5 @@ impl FoldedInputs for Unfilled {
 /// Fills `search_text` on every row still holding `''`, returning how many rows it wrote
 /// ([`backfill_folded`]).
 pub async fn backfill_search_text(db: &DbPool) -> Result<u64, AppError> {
-    backfill_folded::<Unfilled>(db, &SEARCH_TEXT).await
+    backfill_folded::<Unfilled>(db, SEARCH_TEXT).await
 }

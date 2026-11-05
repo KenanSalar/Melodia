@@ -34,7 +34,7 @@ pub async fn apply(
     // After the hold-back no spare can start, so each count one earned lands before its row goes.
     state.play_count_flush.flush().await;
 
-    let removed = queries::track::remove_duplicates(&state.db, &removals).await?;
+    let removed = queries::track::remove_duplicates(&state.db, removals).await?;
     if removed.removed > 0 {
         state.library_changed.bump();
         // Counts moved onto the keepers, which re-rank what sorts by plays.

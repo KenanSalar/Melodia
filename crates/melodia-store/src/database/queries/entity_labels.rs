@@ -4,6 +4,7 @@
 //! where a `get_*_by_id` per card would fetch a whole stats row to read one column of it. Rows come
 //! back in whatever order the database picks, and restoring the order asked in is the caller's.
 
+use crate::database::rows::FromRow;
 use crate::database::{DbPool, chunked_in_query};
 use melodia_core::error::AppError;
 
@@ -13,31 +14,40 @@ pub async fn album_labels(
     db: &DbPool,
     ids: &[i64],
 ) -> Result<Vec<(i64, String, String)>, AppError> {
-    chunked_in_query(db.read(), ids, |placeholders| {
+    labels(db, ids, |placeholders| {
         format!("SELECT id, name, artist_name FROM album_stats WHERE id IN ({placeholders})")
     })
     .await
 }
 
 pub async fn artist_names(db: &DbPool, ids: &[i64]) -> Result<Vec<(i64, String)>, AppError> {
-    chunked_in_query(db.read(), ids, |placeholders| {
+    labels(db, ids, |placeholders| {
         format!("SELECT id, name FROM artists WHERE id IN ({placeholders})")
     })
     .await
 }
 
 pub async fn genre_names(db: &DbPool, ids: &[i64]) -> Result<Vec<(i64, String)>, AppError> {
-    chunked_in_query(db.read(), ids, |placeholders| {
+    labels(db, ids, |placeholders| {
         format!("SELECT id, name FROM genres WHERE id IN ({placeholders})")
     })
     .await
 }
 
 pub async fn playlist_names(db: &DbPool, ids: &[i64]) -> Result<Vec<(i64, String)>, AppError> {
-    chunked_in_query(db.read(), ids, |placeholders| {
+    labels(db, ids, |placeholders| {
         format!("SELECT id, name FROM playlists WHERE id IN ({placeholders})")
     })
     .await
+}
+
+async fn labels<T: FromRow + Send + 'static>(
+    db: &DbPool,
+    ids: &[i64],
+    build_sql: fn(&str) -> String,
+) -> Result<Vec<T>, AppError> {
+    let ids = ids.to_vec();
+    db.read(move |conn| chunked_in_query(conn, &ids, build_sql)).await
 }
 
 #[cfg(test)]

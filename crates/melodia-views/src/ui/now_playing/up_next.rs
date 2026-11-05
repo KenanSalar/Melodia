@@ -325,7 +325,7 @@ async fn fetch_slice(
     let fetched = state
         .runtime
         .spawn(async move {
-            library::keyset::rows_by_ids(&db, &asked).await.map(|rows| queue_rows::convert(&rows))
+            library::keyset::rows_by_ids(&db, asked).await.map(|rows| queue_rows::convert(&rows))
         })
         .await;
     let rows = match fetched {

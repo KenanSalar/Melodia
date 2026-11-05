@@ -4,8 +4,9 @@
 use std::sync::LazyLock;
 
 use super::keyset::{fetch_packed_ids, push_needle};
+use super::scope_facts::facts_on;
 use crate::database::DbPool;
-use crate::database::sql::Sql;
+use crate::database::sql::{self, Sql};
 use melodia_core::entities::track;
 use melodia_core::entities::track_list::{MostPlayedTotals, TrackListScope};
 use melodia_core::error::AppError;
@@ -39,9 +40,13 @@ static FAVORITE_COVERS: LazyLock<String> = LazyLock::new(|| {
 /// Aggregate stats for the Favorites hero header: count, total duration, the artist and album
 /// spread, up to 4 artwork paths.
 pub async fn get_favorite_stats(db: &DbPool) -> Result<track::FavoriteStats, AppError> {
-    let facts = super::scope_facts(db, TrackListScope::Favorites).await?;
-    let artwork_paths: Vec<String> =
-        sqlx::query_scalar(FAVORITE_COVERS.as_str()).fetch_all(db.read()).await?;
+    let (facts, artwork_paths) = db
+        .read(|conn| {
+            let facts = facts_on(conn, TrackListScope::Favorites)?;
+            let artwork_paths: Vec<String> = sql::fetch_all(conn, FAVORITE_COVERS.as_str(), ())?;
+            Ok((facts, artwork_paths))
+        })
+        .await?;
 
     Ok(track::FavoriteStats {
         count: facts.tracks,
@@ -69,7 +74,6 @@ pub async fn most_played_favorite_ids(db: &DbPool, needle: &Needle) -> Result<Ve
     ranked_ids(db, PLAYED_FAVORITES, needle).await
 }
 
-/// Read back packed, as `track_ids` argues: a played set can be most of a library.
 async fn ranked_ids(
     db: &DbPool,
     membership: &'static str,
@@ -82,7 +86,7 @@ async fn ranked_ids(
         push_needle(&mut sql, needle);
     }
     sql.push(" ORDER BY ").push(MOST_PLAYED_ORDER).push(")");
-    fetch_packed_ids(db.read(), sql).await
+    db.read(move |conn| fetch_packed_ids(conn, sql)).await
 }
 
 /// What the library-wide Most Played tab adds up to, whatever its filter shows: the band states
@@ -105,7 +109,8 @@ async fn ranked_totals(
            FROM tracks WHERE ",
     );
     sql.push(membership);
-    let (tracks, duration_ms, plays): (i64, i64, i64) = sql.fetch_one(db.read()).await?;
+    let (tracks, duration_ms, plays): (i64, i64, i64) =
+        db.read(move |conn| sql.fetch_one(conn)).await?;
     Ok(MostPlayedTotals {
         tracks: i32::try_from(tracks).unwrap_or(i32::MAX),
         duration_ms,

@@ -164,7 +164,7 @@ pub async fn import_stations_from_file(
 
     let entries = parse(&body);
     let stations: Vec<_> = entries.iter().filter_map(StationEntry::to_import).collect();
-    let imported = queries::radio::import_stations(db, &stations).await?;
+    let imported = queries::radio::import_stations(db, stations).await?;
     let listed = u32::try_from(entries.len()).unwrap_or(u32::MAX);
     Ok(ImportStationsResult { imported, skipped: listed.saturating_sub(imported) })
 }

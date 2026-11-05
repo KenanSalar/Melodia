@@ -9,6 +9,8 @@ mod track;
 use rusqlite::Row;
 use rusqlite::types::FromSql;
 
+use melodia_core::entities::duplicates::DismissalSet;
+
 /// A value one result row decodes into.
 pub trait FromRow: Sized {
     fn from_row(row: &Row<'_>) -> rusqlite::Result<Self>;
@@ -43,7 +45,7 @@ macro_rules! lone_column {
     )+};
 }
 
-lone_column!(i64, Option<i64>, String, Option<String>, bool);
+lone_column!(i64, Option<i64>, Option<i32>, String, Option<String>, bool, DismissalSet);
 
 macro_rules! tuple {
     ($($column:ident: $index:literal),+) => {

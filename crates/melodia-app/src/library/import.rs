@@ -110,7 +110,7 @@ pub(crate) async fn import_and_summarize(
 ) -> Result<ImportFilesResult, AppError> {
     let mut result = import_files(db, artwork_dir, cover_cache, file_paths).await?;
     if !result.track_ids.is_empty() {
-        result.summaries = queries::track::get_track_summaries_by_ids(db, &result.track_ids)
+        result.summaries = queries::track::get_track_summaries_by_ids(db, result.track_ids.clone())
             .await?
             .into_iter()
             .map(Arc::new)

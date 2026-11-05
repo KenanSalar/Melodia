@@ -129,7 +129,7 @@ impl CardGrid for FavoriteArtistsGrid {
     }
 
     async fn rows(state: AppState, ids: Vec<i64>) -> AppResult<Vec<FavoriteArtist>> {
-        library::keyset::favorite_artists_by_ids(&state.db, &ids).await
+        library::keyset::favorite_artists_by_ids(&state.db, ids).await
     }
 
     // The subtitle is a translated plural, which only the UI thread can resolve.
