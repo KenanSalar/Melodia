@@ -25,38 +25,41 @@ pub(super) const ARTWORK_COLUMNS: [(&str, &str); 6] = [
     ("radio_logo_answers", "artwork_path"),
 ];
 
-/// The four arms of the reference set a library scan can re-derive, as one literal both unions
+/// The four arms of the reference set a library scan can re-derive, as one literal both sets
 /// below are built from. Radio's two stay out: `library::radio` drops a logo whose file is gone and
 /// fetches it again on its own.
 macro_rules! library_reference_arms {
     () => {
         "\
         SELECT artwork_path FROM tracks WHERE artwork_path IS NOT NULL AND artwork_path <> '' \
-        UNION \
+        UNION ALL \
         SELECT artwork_path FROM albums WHERE artwork_path IS NOT NULL AND artwork_path <> '' \
-        UNION \
+        UNION ALL \
         SELECT image_path FROM artists WHERE image_path IS NOT NULL AND image_path <> '' \
-        UNION \
+        UNION ALL \
         SELECT thumbnail_path FROM playlists \
         WHERE thumbnail_path IS NOT NULL AND thumbnail_path <> ''"
     };
 }
 
-/// The read half of [`ARTWORK_COLUMNS`]. `UNION`, so a library's repeated track covers are
-/// deduplicated in `SQLite` rather than carried across; the `''` test because ingest writes it as
-/// readily as `NULL`.
+/// The read half of [`ARTWORK_COLUMNS`], deduplicated in `SQLite` rather than carried across, a
+/// library repeating each cover over its tracks; the `''` test because ingest writes it as readily
+/// as `NULL`. One `DISTINCT` over the arms, where a `UNION` sorts every arm before merging them, a
+/// row allocation each under `temp_store=MEMORY`.
 const REFERENCED_PATHS: &str = concat!(
+    "SELECT DISTINCT artwork_path FROM (",
     library_reference_arms!(),
-    " UNION \
+    " UNION ALL \
     SELECT artwork_path FROM radio_stations WHERE artwork_path IS NOT NULL AND artwork_path <> '' \
-    UNION \
+    UNION ALL \
     SELECT artwork_path FROM radio_logo_answers \
-    WHERE artwork_path IS NOT NULL AND artwork_path <> ''"
+    WHERE artwork_path IS NOT NULL AND artwork_path <> '')"
 );
 
-/// The library's share of [`REFERENCED_PATHS`], spelled through the same arms so a column added
-/// to it cannot be missed by the sweep.
-const LIBRARY_REFERENCED_PATHS: &str = library_reference_arms!();
+/// The library's share of [`REFERENCED_PATHS`], spelled through the same arms and `DISTINCT` so a
+/// column added to it cannot be missed by the sweep.
+const LIBRARY_REFERENCED_PATHS: &str =
+    concat!("SELECT DISTINCT artwork_path FROM (", library_reference_arms!(), ")");
 
 /// The bare filenames every artwork column points at, which the sweep compares against a listing;
 /// a row written before the data directory moved still names its file.

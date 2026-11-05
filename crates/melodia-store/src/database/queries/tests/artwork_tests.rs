@@ -52,8 +52,9 @@ fn the_reference_query_names_every_artwork_column() {
     }
     assert_eq!(
         REFERENCED_PATHS.matches("SELECT").count(),
-        EXPECTED_COLUMNS.len(),
-        "the query has an arm `EXPECTED_COLUMNS` doesn't name, or names one twice"
+        EXPECTED_COLUMNS.len() + 1,
+        "the query has an arm `EXPECTED_COLUMNS` doesn't name, or names one twice, beside the \
+         `SELECT DISTINCT` around them"
     );
 }
 

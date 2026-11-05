@@ -23,6 +23,9 @@ paths:
   resolves the same `libsqlite3-sys`
 - The workspace line names `bundled` and `collation` and keeps the default `cache`, which
   `prepare_cached` sits behind: a `default-features = false` line has to list it
+- The bundled build compiles without `SQLITE_ENABLE_MEMORY_MANAGEMENT`, so each connection keeps
+  a page cache of its own, `cache_size` apiece and behind no lock, and `sqlite3_release_memory`
+  frees nothing. Defining it again pools every connection's pages behind one global mutex
 
 ## Connections
 
@@ -42,12 +45,16 @@ paths:
 
 - `pool/open.rs` sets each role's pragmas, its constants carrying why each value. Set one through
   `pragma_update`: `journal_mode` and `mmap_size` answer with a row, which `execute` refuses
+- SQLite ignores a pragma it doesn't know, and `pragma_update` checks only that the name is an
+  identifier (`extra_check`, which would check it against `pragma_list`, is off): a misspelled
+  pragma changes nothing and reports nothing
 - `synchronous=NORMAL` under WAL stays consistent but not durable: a commit just before a power
   loss can roll back
 - The bundled build enforces foreign keys by default (`SQLITE_DEFAULT_FOREIGN_KEYS=1`) and stock
   SQLite doesn't, so `open.rs` sets the pragma as well
-- String literals take single quotes. The bundled build keeps SQLite's double-quoted-string
-  fallback, so a misspelled `"column"` reads as a string literal rather than failing
+- String literals take single quotes: every connection turns SQLite's double-quoted-string
+  fallback off (`pool/open.rs`), so a double-quoted literal fails when it is prepared, a new
+  migration's included
 
 ## Queries
 
@@ -82,6 +89,7 @@ paths:
   names each column once
 - By-name lookup scans the statement's columns on every call; move a wide projection to
   by-index only where a profile shows that scan
+- `get_ref` borrows a column's value where `get` copies it out, for text read only to parse it
 - Decoding follows the value's storage class: an `i64` refuses a REAL, a `String` an INTEGER, an
   `i32` an integer outside its range. `bool` reads an INTEGER, and `Option<T>` reads NULL as `None`
 - `fallible_uint` is off, so a `u64` or `usize` neither binds nor decodes: convert at the edge, as
@@ -100,6 +108,9 @@ paths:
   once per row
 - A multi-row INSERT spells its tuples with `database::values_placeholders` and binds them through
   `Sql`, so it runs uncached with no flag of its own
+- Inside one transaction, a cached single-row statement run per row skips the parse a multi-row
+  one pays on every chunk. Which shape is faster turns on the row's width, so a new bulk path
+  measures both
 - Always guard against zero-length input before building bulk queries
 
 ## Transactions
@@ -133,6 +144,8 @@ paths:
   columns (`queries::track::columns`), `SELECT * FROM tracks` serving test fixtures only
   (`track/full_rows.rs`)
 - Use covering indexes for frequently accessed column combinations
+- A set read across tables is one `DISTINCT` over their `UNION ALL`, never a `UNION`, which sorts
+  every arm before merging them (`queries::artwork`'s `REFERENCED_PATHS` argues it)
 - Nothing runs a plain `VACUUM`, which rewrites the whole file: a delete's pages go to the
   freelist for later writes, and each pre-migration backup's `VACUUM INTO` writes a compacted copy
 - `VACUUM INTO ?1` is the safe way to copy a *live* database — it runs through the open
@@ -144,11 +157,13 @@ paths:
 ## WAL and Maintenance
 
 - The WAL checkpoints itself at SQLite's default 1000 pages, and a checkpoint resets it without
-  truncating it. The last connection to close checkpoints and deletes it (`DbPool::close`'s order)
+  truncating it unless `journal_size_limit` is set. The last connection to close checkpoints and
+  deletes it (`DbPool::close`'s order)
 - A read holds its snapshot for its whole closure, and no checkpoint passes a live snapshot: a
   write landing during a library-sized `fetch_each` grows the WAL until the fold returns
-- `PRAGMA optimize` keeps `sqlite_stat1` current and is usually a no-op. SQLite's guidance is one
-  run before each connection closes; `DbPool::close` runs it at quit
+- `PRAGMA optimize` keeps `sqlite_stat1` current and is usually a no-op. `DbPool::close` runs it
+  on the writer at quit, the readers being read-only, with the mask `STATS_OPTIMIZE` argues. A
+  mask replaces the default whole, so one naming bits drops every default bit it leaves out
 
 ## Fetching and Errors
 
@@ -157,7 +172,7 @@ paths:
 - `fetch_all` collects the whole result set: give it a known bound (`LIMIT`, a page, a chunk)
 - `fetch_each` hands each row to a fold, for a library-sized result never held whole
 - A constraint violation answers `Some(ErrorCode::ConstraintViolation)` from
-  `sqlite_error_code()`; a UNIQUE one carries extended code 2067 (`SQLITE_CONSTRAINT_UNIQUE`) on
-  `Error::SqliteFailure`
+  `sqlite_error_code()`, and `sqlite_extended_error_code()` tells a UNIQUE one apart with
+  `Some(ffi::SQLITE_CONSTRAINT_UNIQUE)`
 - A match telling database failures apart takes `AppError::DatabaseClosed` beside `Database`, or
   a closed pool falls to its catch-all (`radio/callbacks/kept.rs`)

@@ -3,6 +3,7 @@
 use std::path::Path;
 use std::time::Duration;
 
+use rusqlite::config::DbConfig;
 use rusqlite::{Connection, OpenFlags};
 
 use super::super::collation;
@@ -64,5 +65,14 @@ pub(super) fn open_in_memory() -> rusqlite::Result<Connection> {
 fn configure(conn: &Connection) -> rusqlite::Result<()> {
     conn.busy_timeout(BUSY_TIMEOUT)?;
     conn.set_prepared_statement_cache_capacity(STATEMENT_CACHE_CAPACITY);
+    reject_double_quoted_strings(conn)?;
     collation::register(conn)
+}
+
+/// `SQLite` otherwise reads a double-quoted name matching no column as a string literal, so a
+/// misspelled identifier queries a constant rather than failing. A schema holding one still loads.
+fn reject_double_quoted_strings(conn: &Connection) -> rusqlite::Result<()> {
+    conn.set_db_config(DbConfig::SQLITE_DBCONFIG_DQS_DML, false)?;
+    conn.set_db_config(DbConfig::SQLITE_DBCONFIG_DQS_DDL, false)?;
+    Ok(())
 }

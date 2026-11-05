@@ -20,6 +20,11 @@ use super::migrate;
 use lane::{IDLE_TIMEOUT, Lane};
 use open::Role;
 
+/// The planner-statistics refresh [`DbPool::close`] issues. `0x10000` weighs every table, not just
+/// those this connection queried, since the writer can be fresh from the reaper; `0x10` keeps the
+/// default time bound on any ANALYZE, which naming a mask otherwise drops.
+const STATS_OPTIMIZE: &str = "PRAGMA optimize=0x10012";
+
 /// The fts5 compaction [`DbPool::close`] issues, named so the test proving it still runs binds the
 /// same string: fts5 rejects an unknown command only at step time, and `close` can only log that.
 ///
@@ -85,7 +90,7 @@ impl DbPool {
     /// Refreshes planner statistics, compacts the search index and closes every connection, at
     /// shutdown.
     ///
-    /// `PRAGMA optimize` updates `sqlite_stat1`; [`FTS_OPTIMIZE`] collapses the index's segments
+    /// [`STATS_OPTIMIZE`] updates `sqlite_stat1`; [`FTS_OPTIMIZE`] collapses the index's segments
     /// and drops the tombstone every track delete leaves, a smaller index for each pre-migration
     /// `VACUUM INTO` to copy. The merge is what can outgrow `flush_tasks_and_db`'s budget, and an
     /// unfinished one is rolled back on the next open, the index correct and merely un-compacted.
@@ -94,7 +99,7 @@ impl DbPool {
     pub async fn close(&self) {
         let optimized = self
             .write(|conn| {
-                if let Err(e) = conn.execute_batch("PRAGMA optimize") {
+                if let Err(e) = conn.execute_batch(STATS_OPTIMIZE) {
                     log::warn!("db close: PRAGMA optimize: {}", describe(&e));
                 }
                 if let Err(e) = conn.execute_batch(FTS_OPTIMIZE) {

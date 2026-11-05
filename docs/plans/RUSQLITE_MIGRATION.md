@@ -1,6 +1,6 @@
 # Plan: Move the library database from sqlx to rusqlite
 
-Status: **Phase 5 step 1 measured; whether the move stays is Kenan's call** · Owner: Kenan · Created: 2026-11-04
+Status: **Phase 5 step 1 measured; whether the move stays is Kenan's call. Step 4's bump has landed and is re-measured** · Owner: Kenan · Created: 2026-11-04
 
 > **Validated 2026-11-04** against `8fe1eb93` (`chore/deps-and-fixes`) with three read-only inventories:
 >
@@ -109,8 +109,8 @@ Users see nothing broken, and no list or search opens faster after the move. The
 8. **The cutover keeps the engine Phase 0 lands, and Phase 5 moves it.**
    - The cutover pins rusqlite 0.39.x, whose libsqlite3-sys 0.37 is the 3.51.3 Phase 0 resolves. Phase 5's before/after measurement then isolates the driver.
    - The bump to the latest rusqlite (0.41.x, SQLite 3.54) follows as its own step. What it moves:
-     - libsqlite3-sys 0.39 drops `-DSQLITE_ENABLE_MEMORY_MANAGEMENT` from the bundled build (rusqlite #1900; `build.rs` diffed between 0.37.0 and 0.39.1). The flag only gives `sqlite3_release_memory` and the soft heap limit something to free, and the tree calls neither.
-     - In 0.41, `Statement::column_names` and `columns` return iterators, and `pragma_update` checks the name against `pragma_list`. Its schema is already `Option<&str>` in 0.39.0 (`pragma.rs:224`).
+     - libsqlite3-sys 0.39 drops `-DSQLITE_ENABLE_MEMORY_MANAGEMENT` from the bundled build (rusqlite #1900; `build.rs` diffed between 0.37.0 and 0.39.1). The tree calls neither `sqlite3_release_memory` nor the soft heap limit it feeds. The flag also forced one page cache shared by every connection behind a global mutex (`pcache1Init` in the bundled `sqlite3.c`). Without it each connection keeps its own, with no lock, so concurrent reads stop serialising on it, and an idle connection's pages are no longer recycled for a busy one.
+     - In 0.41, `Statement::column_names` and `columns` return iterators, which nothing here calls. `pragma_update` checks the name against `pragma_list` only under the `extra_check` feature, which stays off, so its check is still 0.39's identifier test. Its schema is already `Option<&str>` in 0.39.0 (`pragma.rs:224`).
      - The soundness fixes between (vtab, `array`'s `Rc` values, savepoint names, `trace_v2` and `busy_handler`) touch nothing this store calls, so 0.39 is safe for the one step.
 
 ## Structure (who owns what afterwards)
@@ -301,7 +301,7 @@ The store and core move to rusqlite together, over sub-phases 4a to 4d, each a c
 - [x] **4d Tests and comments:** steps 11 and 12, and the docs. Done when the three gates pass.
 - [x] **Hand test**, below.
 
-**Where it stands:** 4a to 4d have landed and the hand test passed (below). Its one finding, the history table's DDL whitespace, landed as its own commit, `0535bc9a`. Phase 5's step 1 has run, and step 2 waits on Kenan's keep decision.
+**Where it stands:** 4a to 4d have landed and the hand test passed (below). Its one finding, the history table's DDL whitespace, landed as its own commit, `0535bc9a`. Phase 5's step 1 has run, step 2 waits on Kenan's keep decision, and step 4's bump has landed ahead of it.
 
 - **Gates (2026-11-05):** `cargo fmt --all --check`, `cargo clippy --all-targets --locked --workspace -- -D warnings` and `cargo test --locked --workspace` pass, 4,429 tests and none failed. That was the first run of 4a to 4c's SQL, and it exposed no production defect, so nothing from the gates lands after 4d.
 - **4d's tests:**
@@ -444,18 +444,18 @@ Each measurement step waits for Kenan's go. Step 1's numbers decide whether the 
      - **Boot with nothing changed:** the rescan is done at 0.33 s against 0.44 s, on 1.06 against 1.27 s of CPU for the same user instructions (8.35 against 8.37 G). A 190 s run spends 1.39 against 1.58 s of CPU.
      - **Songs open, search and the grids**, a harness calling `library::keyset` and `library::search` as the views do, on a snapshot of the dev database. Medians per call over five interleaved rounds, every result identical under both:
 
-       | Call | sqlx | rusqlite | sqlx / rusqlite |
-       |---|---|---|---|
-       | Songs open, title order (ids, first 192 rows, count) | 9.73 ms | 9.15 ms | 1.06× |
-       | Songs open, artist order | 27.39 ms | 26.32 ms | 1.04× |
-       | Songs open, year order | 17.37 ms | 17.01 ms | 1.02× |
-       | Songs filter, a keystroke | 7.60 ms | 7.14 ms | 1.06× |
-       | Search, a keystroke (`search_all`) | 1.35 ms | 1.29 ms | 1.05× |
-       | Albums grid open | 3.13 ms | 2.74 ms | 1.14× |
-       | Artists grid open | 2.02 ms | 1.70 ms | 1.19× |
-       | Songs scrolled end to end, a 128-row window | 0.57 ms | 0.29 ms | 1.96× |
+       | Call | sqlx | rusqlite | sqlx / rusqlite | rusqlite 0.41 (step 4) |
+       |---|---|---|---|---|
+       | Songs open, title order (ids, first 192 rows, count) | 9.73 ms | 9.15 ms | 1.06× | 9.01 ms |
+       | Songs open, artist order | 27.39 ms | 26.32 ms | 1.04× | 28.50 ms |
+       | Songs open, year order | 17.37 ms | 17.01 ms | 1.02× | 16.66 ms |
+       | Songs filter, a keystroke | 7.60 ms | 7.14 ms | 1.06× | 7.66 ms |
+       | Search, a keystroke (`search_all`) | 1.35 ms | 1.29 ms | 1.05× | 1.34 ms |
+       | Albums grid open | 3.13 ms | 2.74 ms | 1.14× | 2.71 ms |
+       | Artists grid open | 2.02 ms | 1.70 ms | 1.19× | 1.69 ms |
+       | Songs scrolled end to end, a 128-row window | 0.57 ms | 0.29 ms | 1.96× | 0.28 ms |
 
-       Scrolling cost 246 against 730 ms of process CPU for 3.63 against 3.78 G instructions.
+       Scrolling cost 246 against 730 ms of process CPU for 3.63 against 3.78 G instructions, and 239 ms for 3.58 G under step 4's build. That column is step 4's five rounds in a batch of its own, every result identical to the other two.
      - **Idle heap**, heaptrack at 185 s, one run each: a boot holds 19,834,560 bytes against 19,821,415 (+13 KiB), a boot into Songs 20,178,742 against 20,171,442 (+7 KiB). Before the 120 s reap rusqlite holds 0.2 MiB less, and a boot makes 1.81 million allocation calls against 2.11.
      - **Idle Anonymous** spans 34.5 to 39.5 MiB across launches of either build (medians 37.0 against 35.7), so it can't tell them apart.
      - **The settle:** every connection's map closes at the 120 s tick under both. sqlx keeps its five worker threads until then (31 threads), while rusqlite's blocking threads retire within seconds (26). Both idle at 26.
@@ -492,7 +492,22 @@ Each measurement step waits for Kenan's go. Step 1's numbers decide whether the 
    - the statement-cache capacity, memory against re-prepares;
    - dropping `fetch_packed_ids`' `group_concat` packing and `unpack_ids`, whose stated reason is sqlx's per-row hop. Under rusqlite a row per id measured no slower than the packed row ([Evidence](#evidence-2026-11-04)); the dev library confirms it before the packing goes;
    - by-index mapping for a wide projection, only if a profile shows column lookup.
-4. **Bump rusqlite** to the latest release (0.41.x at the time of writing, SQLite 3.54), adapting to the API changes Decision 8 lists, and re-measure the scan and the list open.
+4. **Bump rusqlite** to the latest release, and re-measure the scan, the list open and concurrent reads.
+   - **Landed (2026-11-05), ahead of steps 2 and 3,** so tuning runs on the engine that ships: rusqlite 0.41.1, libsqlite3-sys 0.39.1, SQLite 3.51.3 to 3.54.1. The lock moved those two and `hashlink` (0.11.1 to 0.12.2, no new `hashbrown` copy), and no code changed. fmt, clippy and the 4,429 tests pass.
+   - **What the engine moves** (SQLite's changelog; 3.52.0 was withdrawn into 3.53.0):
+     - REAL-to-text conversion rounds to 17 significant digits instead of 15. Nothing here turns a REAL into text: `bpm` and the four replay-gain columns bind and read as `f64`, and no trigger or projection casts them.
+     - The planner changed (UNION always sorts and merges, EXISTS-to-JOIN reaches further, `GROUP BY` and `ORDER BY` share an index), so a statement whose SQL fixes no order can return rows in a new one. The artwork sweep's UNION feeds a set. Phase 4's parity harness was not kept, so the hand test below is the check.
+   - **The re-measure,** each run on Kenan's go, against `../Melodia-m-rusqlite` (`20a5df8e`, only docs changed since): a full scan, Songs open, a search keystroke (`search_all`'s four concurrent reads, where the per-connection page cache would show) and idle and scan Anonymous, which that cache split can move either way (Decision 8).
+   - **From the bump's research,** also landed: every connection turns off the double-quoted-string fallback (`pool/open.rs`), and the quit-time `PRAGMA optimize` weighs every table within its time bound (`STATS_OPTIMIZE`). Statistics in both the dev and installed databases matched their row counts before the change.
+   - **Hand test:** every list and grid sort and filter, smart playlists and search on the dev library, then a quit that logs no `PRAGMA optimize` warning and leaves no `-wal` behind.
+   - **Result (2026-11-05):** run unattended on Kenan's go, step 1's protocol and scripts for the bump build alone (`../Melodia-m-bump`, the working tree on `dc0cf314`), compared with step 1's figures. The dev folder was restored after the batch and checked against its manifest.
+     - **Full scan,** six runs: 14.87 s median (14.72 to 15.00), against 14.71 for 0.39 and 15.91 for sqlx, every run still ahead of every sqlx one. Instructions are level (628 against 630 G); CPU read 52.7 against 49.7 s at a lower IPC in every run, which one session can't separate from drift. Peak threads 43 to 45, as before. Peak Anonymous at 20 Hz spread 341 to 923 MiB (median 538), against 434 to 604, so it stays unsettled.
+     - **Boot with nothing changed,** two runs each plain and into Songs: rescan done at 0.33 to 0.35 s on 1.10 to 1.15 s of CPU, 1.31 to 1.35 s of CPU and 8.48 to 9.36 G instructions over 190 s, 33 peak threads and 26 idle, every connection closed at the 120 s tick, idle Anonymous 33.9 to 36.2 MiB. The heap at 185 s into Songs is 20.21 against 20.18 MB. All level with 0.39.
+     - **A boot spike, from SQLite 3.53's UNION.** Anonymous holds 47.7 to 49.5 MiB from 2 to 10 s in all four runs, against 38.3 to 42.6 under either earlier build, then falls to the old level at `heap_trim`'s `AFTER_STARTUP` trim. heaptrack puts the peak heap at 34.00 against 31.89 MB (Songs 34.42 against 32.23) and the heap at 185 s level (19.76 against 19.83 MB). SQLite's own allocations rose from 21 thousand calls to 241 thousand, 225 thousand of them in `artwork::referenced_paths` and `referenced_library_paths`: 3.54 merges a UNION from each arm sorted (`MERGE (UNION)`, `USE TEMP B-TREE FOR ORDER BY`), and the sorter allocates per row under `temp_store=MEMORY`, where 3.51 kept one temp B-tree. A `DISTINCT` over a `UNION ALL` plans as that one temp B-tree on 3.54.
+     - **The store calls, same session,** five interleaved rounds of the bench against 0.39, every result identical: Songs open in artist order 28.7 against 25.7 ms (slower in every round) and a Songs filter keystroke 7.66 against 7.22 ms. The rest are level or ahead: title order 9.10 against 9.13 ms, year order 16.79 against 17.13, a search keystroke 1.30 against 1.33, the Albums grid 2.72 against 2.81, the Artists grid 1.82 against 1.70 (its rounds split both ways), a scroll window 0.29 against 0.30. Every mode runs fewer instructions; process CPU is 1,528 against 1,598 ms for search typing, 245 against 256 for scrolling, 2,273 against 2,178 for the filter and 1,161 against 1,112 for Songs open.
+     - **Quit:** all 12 runs through the tray with "All background tasks completed", no `PRAGMA optimize` warning and no `-wal` left behind.
+     - **The UNION fix landed:** both queries are one `DISTINCT` over a `UNION ALL` (`queries::artwork`), returning the same 5,488 paths on the dev library. A rebuilt boot holds 38.6 MiB Anonymous through the burst and idles at 34.4, its rescan done at 0.36 s and 1.37 s of CPU over 190 s, and heaptrack puts the heap at 185 s at 19.76 MB and the peak at 32.00 MB, SQLite's own allocations at 21,895 calls and the boot's at 1.79 million, back at 0.39's 31.89 MB, 20,908 and 1.81 million.
+     - **The slower Songs paths are code placement, not driver work.** Exact counts over 40 artist sorts: 25.64 against 25.57 G instructions, branch, cache and TLB misses level, 5.38 against 5.84 G cycles. The front end needs 7.9 % more op-cache accesses for the same ops, and the filter keystroke shows the same (instructions down 0.8 %, op-cache accesses up 15 %, cycles up 6.9 %). Run alone, every configuration of rusqlite 0.39 or 0.41 with SQLite 3.51 or 3.54 makes the same 540,637 comparisons over the same bytes; the two versions leave the sort level, and dropping `SQLITE_ENABLE_MEMORY_MANAGEMENT` makes it 5 % faster. Nothing at the driver moves it back. A lowercase sort key stored per track would take the collation out of these sorts altogether, a feature of its own.
 - **Docs:**
   - `rusqlite.md` takes what tuning settled.
   - The README footprint tables are retaken by their protocol only if a column moves beyond run-to-run noise.
