@@ -46,10 +46,11 @@ Users see nothing broken, and no list or search opens faster after the move. The
   - the `chunked_in_query` / `chunked_in_query_on` split;
   - `&mut **tx` reborrows;
   - the `FromRow` derives in `melodia-core`;
-  - sqlx test dev-dependencies in `melodia-app` and `melodia`.
+  - sqlx test dev-dependencies in `melodia-app` and `melodia`;
+  - `sha2`, the 14 sqlx-applied checksums pinned in its place (Phase 3.5).
 - **Added:**
   - `database/pool/`, `database/migrate.rs` with a store `build.rs`, `database/sql.rs` and `database/rows/`;
-  - the dependency `rusqlite`, and `sha2` as a store build-dependency;
+  - the dependency `rusqlite`, and `blake3` as a store build-dependency;
   - `AppError::DatabaseClosed` (Decision 6).
 
 ## Decisions settled here
@@ -68,14 +69,14 @@ Users see nothing broken, and no list or search opens faster after the move. The
    - only async-sqlite 0.7.0 follows 0.41.
 
    A wrapper brings back the wait for someone else's release. The pool here is small and the store's own (Structure).
-3. **Our own migrator, keeping `_sqlx_migrations` in sqlx's format.** Same DDL, SHA-384 over each file's bytes, the same rows (`execution_time` -1 inside the migration's transaction, the real time after commit) and the same refusals:
+3. **Our own migrator, keeping `_sqlx_migrations` in sqlx's format.** Same DDL, the same rows (`execution_time` -1 inside the migration's transaction, the real time after commit) and the same refusals:
    - a dirty version;
    - an applied file whose checksum changed;
    - an applied version this build doesn't know.
 
    That needs no bridging step on first launch. It keeps "a shipped migration is never edited" enforced, and it leaves downgrade behaviour exactly as it is. rusqlite_migration tracks state with `user_version` and keeps no checksums; refinery keeps its own table. Both would need a one-time bridge, and both lag rusqlite releases.
 
-   - The checksums are computed in `build.rs`, as `sqlx::migrate!` computes them at compile time, so `sha2` is a build-dependency and the binary hashes nothing at boot.
+   - The checksums are computed in `build.rs`, as `sqlx::migrate!` computes them at compile time, so the binary hashes nothing at boot. The 14 migrations sqlx applied keep the SHA-384 their rows record, pinned beside the blake3 of each file as shipped, and every later one records blake3 (Phase 3.5). An older release refuses a version it doesn't know before it compares any checksum, so it never reads a blake3 row.
    - Each file runs through `execute_batch` inside its transaction, on the writer connection, so the pragmas the frozen migrations ran under (`foreign_keys` among them) stay in force.
 4. **Row mapping lives in the store, by column name.**
    - `melodia-core`'s entities become plain data. The store's own `FromRow` trait maps them by name, as sqlx's derive did, so `queries::track::columns`' "the order carries nothing" stays true.
@@ -121,7 +122,7 @@ Everything is in `crates/melodia-store/src/database/` unless noted.
 | `pool/lane.rs` | One lane: semaphore, idle stack with last-used times, run-on-blocking-pool (permit and connection moving into the closure together), the reaper (ticking every `IDLE_TIMEOUT` from the lane's creation, as sqlx's does and `heap_trim` assumes, and closing on the blocking pool, since the last close checkpoints the WAL) | Concurrency and idle-close semantics |
 | `pool/open.rs` | Opening a connection per role (writer, reader, in-memory test): flags, pragmas as `init_database` sets them (writer: WAL, `foreign_keys`, `synchronous=NORMAL`, `cache_size`, `temp_store`, `mmap_size`; readers the same without `synchronous`; test: `foreign_keys`, `synchronous`, `temp_store`), `busy_timeout`, collation, statement-cache capacity | Connection configuration |
 | `migrate.rs` | Comparing checksums, validation against `_sqlx_migrations`, applying pending migrations, the pending check the backup asks | Migration semantics |
-| `crates/melodia-store/build.rs` | Embedding the workspace root's `migrations/*.sql` (`../../migrations`, the path `sqlx::migrate!` reads) in version order with their SHA-384 checksums, `rerun-if-changed` on that directory, the sqlx-style description, refusing anything there but `<version>_<description>.sql` files (dotfiles skipped), a `-- no-transaction` header, `.up`/`.down` names, a version below 1 and a duplicate version | The migrations directory's shape |
+| `crates/melodia-store/build.rs` | Embedding the workspace root's `migrations/*.sql` (`../../migrations`, the path `sqlx::migrate!` reads) in version order with their checksums (the 14 sqlx applied pinned, blake3 after), `rerun-if-changed` on that directory, the sqlx-style description, refusing a shipped file changed, renamed or missing, anything there but `<version>_<description>.sql` files (dotfiles skipped), a `-- no-transaction` header, `.up`/`.down` names, a version below 1 and a duplicate version | The migrations directory's shape |
 | `sql.rs` | `Sql` (text plus `Param`s), `push` / `push_trusted` / `push_bind` / `bind`, and the execution vocabulary (`fetch_all`, `fetch_optional`, `fetch_one`, `execute`) for static and built SQL; a single column reads as a 1-tuple until `rows/` | How SQL is assembled and run |
 | `rows/mod.rs` | The store's `FromRow` trait and tuple impls | Row decoding |
 | `rows/{track,library,radio,duplicates}.rs` | Entity impls, grouped as `melodia-core/src/entities/` groups them | An entity's columns |
@@ -228,6 +229,28 @@ No production code outside the store calls `db.read()` or `db.write()`.
     2. On the dev library, a launch scanned a new 26-file folder through the bulk insert, and watcher create, rename, retag and delete, a command-line import and repeated plays each left the rows they should. Nothing logged an error or warning, and the tray quit was clean.
     3. No clicks were driven, the view code being unchanged: the UI reaches these paths through the same store calls.
 - **Docs:** `sqlx.md`'s `AssertSqlSafe`, `QueryBuilder::push_values` and `.persistent(false)` bullets name the builder, and its `VACUUM INTO` "Takes no bind parameter" goes.
+
+## Phase 3.5: blake3 for the migration checksums
+
+The store's `build.rs` is the last user of `sha2` 0.11, kept for the SHA-384 sqlx records. The 14 rows sqlx wrote keep that SHA-384, so an older build still reads them; every later migration records blake3.
+
+- `build.rs` pins the 14 migrations sqlx applied, keyed by file name: the SHA-384 each history row records and the blake3 of the file as shipped, both in the lowercase hex `sha384sum` and `b3sum` print.
+  - A pinned file must hash to its pinned blake3, and its checksum is then its pinned SHA-384. A pinned name with no file fails too, so an edited, renamed or deleted shipped migration stops the build, not each boot of a database that applied it.
+  - Any other file records the blake3 of its bytes. It keeps today's boot-time `Edited` check; the table never grows.
+  - Keyed by name, the table matches `sha384sum migrations/*.sql` line for line and writes no 14-digit version, which `unreadable_literal` would refuse in `build.rs`.
+  - The pinned table's doc carries why the split is safe.
+- `migrate.rs`: `Migration::checksum` becomes `&'static [u8]` and `RECORD` binds it as is. `compare` is unchanged, the column being a BLOB compared byte for byte.
+- `blake3.workspace = true` replaces `sha2` as the store's build-dependency, as `melodia-net` declares it. The workspace `sha2` line and its comment go.
+- **Downgrades.** sqlx 0.8.6 (v0.4.2 to v0.7.0) and 0.9.0 (v0.8.0 to v0.22.0) refuse an applied version they don't know (`validate_applied_migrations`, `VersionMissing`) before comparing any checksum, and compare only versions they know. No release sets `ignore_missing`, so an older build refuses a blake3 row at its version, as it refuses any newer version today.
+- **Lock.** `sha2` 0.11.1, `digest` 0.11.3, `block-buffer` 0.12.1, `crypto-common` 0.2.2 and `hybrid-array` 0.4.13 leave. blake3 is already `melodia-net`'s build-dependency with the same features, so nothing new builds. `sha2` 0.10.9, `digest` 0.10.7, `generic-array` and `typenum` leave with sqlx in Phase 4.
+- Lands before a 15th migration is written, so no database records a SHA-384 for a version the table doesn't pin.
+- **Hand test:**
+  1. `$OUT_DIR/migrations.rs` before and after holds the same 14 checksums, byte for byte.
+  2. The dev library boots with nothing pending and nothing mismatched; history and `backups/` are unchanged across a boot and a tray quit.
+  3. A fresh data folder's 14 rows match a sqlx-applied database's in version, description, success and checksum, compared with `/usr/bin/sqlite3`.
+  4. A byte appended to a shipped migration, and a shipped one renamed, each fail the build (restored after).
+  5. A scratch 15th migration, never committed, records a 32-byte checksum, and a second boot finds nothing pending.
+- **Docs:** `build.rs`'s `//!` and `Migration::checksum`'s doc stop naming SHA-384 for every file.
 
 ## Phase 4: The cutover (one commit)
 
