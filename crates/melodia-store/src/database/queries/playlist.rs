@@ -162,16 +162,16 @@ pub async fn update_playlist(
     description: Option<String>,
     clear_thumbnail: bool,
 ) -> Result<playlist::Playlist, AppError> {
-    // custom_thumbnail = TRUE records the cleared cover as the user's choice, so a later add,
-    // removal or reorder leaves the placeholder rather than filling it from the first track.
-    const CLEARING_COVER: &str = "UPDATE playlists SET name = ?, description = ?,
-                thumbnail_path = NULL,
+    let statement = if clear_thumbnail {
+        // custom_thumbnail = TRUE records the cleared cover as the user's choice, so a later add,
+        // removal or reorder leaves the placeholder rather than filling it from the first track.
+        "UPDATE playlists SET name = ?, description = ?, thumbnail_path = NULL,
                 custom_thumbnail = TRUE, updated_at = ?, search_name = ?
-            WHERE id = ? RETURNING *";
-    const KEEPING_COVER: &str = "UPDATE playlists SET name = ?, description = ?, updated_at = ?, search_name = ? \
-         WHERE id = ? RETURNING *";
-
-    let statement = if clear_thumbnail { CLEARING_COVER } else { KEEPING_COVER };
+         WHERE id = ? RETURNING *"
+    } else {
+        "UPDATE playlists SET name = ?, description = ?, updated_at = ?, search_name = ?
+         WHERE id = ? RETURNING *"
+    };
     let now = melodia_core::utils::now_rfc3339();
     let search_name = search_name::pack(&[&name]);
     db.write(move |conn| {

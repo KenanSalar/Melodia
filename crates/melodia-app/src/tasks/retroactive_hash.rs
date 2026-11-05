@@ -68,7 +68,7 @@ async fn hash_unhashed_tracks(db: &DbPool) -> AppResult<()> {
 
     log::info!("Retroactive hashing complete: {} files hashed, writing to database", updates.len());
 
-    queries::track::batch_update_hashes(db, &updates).await?;
+    queries::track::batch_update_hashes(db, updates).await?;
 
     log::info!("Retroactive hash database update complete");
     Ok(())

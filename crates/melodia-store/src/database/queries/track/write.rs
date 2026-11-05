@@ -151,37 +151,34 @@ pub async fn mark_every_track_stale(db: &DbPool) -> Result<u64, AppError> {
 /// transaction, so a backfill over a large library pays one commit.
 pub async fn batch_update_hashes(
     db: &DbPool,
+    updates: Vec<(i64, String, Option<String>)>,
+) -> Result<(), AppError> {
+    if updates.is_empty() {
+        return Ok(());
+    }
+    db.transaction(move |tx| set_hashes(tx, &updates)).await
+}
+
+fn set_hashes(
+    tx: &Transaction<'_>,
     updates: &[(i64, String, Option<String>)],
 ) -> Result<(), AppError> {
     const COLS_PER_ROW: usize = 3;
     const CHUNK_SIZE: usize = crate::database::MAX_BINDS_PER_STATEMENT / COLS_PER_ROW;
 
-    if updates.is_empty() {
-        return Ok(());
-    }
-
-    let statements: Vec<Sql> = updates
-        .chunks(CHUNK_SIZE)
-        .map(|chunk| {
-            let rows = values_placeholders(chunk.len(), COLS_PER_ROW);
-            let mut sql = Sql::trusted(format!(
-                "WITH v(id, h, m) AS (VALUES {rows})
-                 UPDATE tracks
-                    SET file_hash = (SELECT h FROM v WHERE v.id = tracks.id),
-                        date_modified = (SELECT m FROM v WHERE v.id = tracks.id)
-                  WHERE id IN (SELECT id FROM v)"
-            ));
-            for (id, hash, mtime) in chunk {
-                sql.bind(*id).bind(hash.as_str()).bind(mtime.as_deref());
-            }
-            sql
-        })
-        .collect();
-    db.transaction(move |tx| {
-        for sql in statements {
-            sql.execute(tx)?;
+    for chunk in updates.chunks(CHUNK_SIZE) {
+        let rows = values_placeholders(chunk.len(), COLS_PER_ROW);
+        let mut sql = Sql::trusted(format!(
+            "WITH v(id, h, m) AS (VALUES {rows})
+             UPDATE tracks
+                SET file_hash = (SELECT h FROM v WHERE v.id = tracks.id),
+                    date_modified = (SELECT m FROM v WHERE v.id = tracks.id)
+              WHERE id IN (SELECT id FROM v)"
+        ));
+        for (id, hash, mtime) in chunk {
+            sql.bind(*id).bind(hash.as_str()).bind(mtime.as_deref());
         }
-        Ok(())
-    })
-    .await
+        sql.execute(tx)?;
+    }
+    Ok(())
 }

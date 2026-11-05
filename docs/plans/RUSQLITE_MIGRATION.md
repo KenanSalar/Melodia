@@ -322,8 +322,8 @@ The store and core move to rusqlite together, over sub-phases 4a to 4d, and 4e r
   - **A transaction's body** longer than a few lines is a sync `fn` on `&Transaction<'_>` that the closure calls (`watch_batch::apply_changes`, `retag::refresh_rows`), so its comments keep their lines.
   - **What a closure needs off a borrowed input** is read before it, into locals or a small struct (`retag::EditFacts`), rather than a clone of the whole input.
   - **Inputs (step 10, as 4c applied it):**
-    - A value read only to build an `Sql` stays borrowed, the statement built before the closure: the needles, `&SmartCriteria`, the chunk loops' slices, `batch_update_hashes` and `absorb_folders`.
-    - A value the closure needs is taken owned where the direct caller holds one it is done with.
+    - A value read only to build an `Sql` stays borrowed, the statement built before the closure: the needles, `&SmartCriteria`, the chunk loops' slices and `absorb_folders`.
+    - A value the closure needs is taken owned where the direct caller holds one it is done with. So is a library-sized input whose chunks would otherwise all be built before the closure, holding a second copy of it: `batch_update_hashes` builds each chunk inside its transaction.
     - Where the direct caller only borrows the value or keeps it, the store borrows and copies in (`ids.to_vec()`): the tag editor's five reads, `entity_ids`, `entity_labels`, `missing_ids`, the radio logo calls.
     - A `melodia-app` pass-through takes what its store function takes (`library::keyset`'s `*_by_ids`), so a views caller done with its ids moves them in.
   - **Folds:** `sql::fetch_each(conn, SQL, params, |row| …)` inside one read closure, the accumulator moved in and handed back (`fold_folder_tracks`). `fold_duplicate_keys` takes the same.
