@@ -101,9 +101,9 @@ Users see nothing broken, and no list or search opens faster after the move. The
    - **The permit and the connection travel together.** Both move into the blocking closure and go back to the lane only when it ends. A dropped future then never frees a permit while its connection still works, so the writer lane can't open a second writer.
    - **After `close()`, `read` and `write` fail at once**, as sqlx's `PoolClosed` does. `play_count_flusher_tests.rs:151` stages its failed write that way.
    - **That failure, and a blocking task cancelled at runtime shutdown, return `AppError::DatabaseClosed`.** A `SQLITE_ABORT` made up for it would carry no real cause, where failures are told apart by variant. `melodia-views`' `radio/callbacks/kept.rs:199` takes it beside `Database`, or its `_` arm reports "not audio".
-7. **The cutover lands as one PR in five commits, after the phases that shrink it.**
+7. **The cutover lands as one PR in four commits, after the phases that shrink it.**
    - A half-converted store can't run: a transaction can't span drivers, and an in-memory test database can't be shared between them. So the swap is validated only once it is whole.
-   - It lands as sub-phases 4a to 4e, a commit each. The workspace builds again only at 4d's, and 4e touches only `docs/adr/`. `main` takes PRs as merge commits, so its first-parent history stays buildable, and `git bisect --first-parent` never visits 4a to 4c.
+   - It lands as sub-phases 4a to 4d, a commit each, and the workspace builds again only at 4d's. `main` takes PRs as merge commits, so its first-parent history stays buildable, and `git bisect --first-parent` never visits 4a to 4c.
    - Phases 1 to 3 and 3.6 take out of it everything that can land and be validated under sqlx: the cross-crate tests, the migrator, the dynamic SQL and the visitors' fold shape.
    - Running both drivers side by side was rejected. It needs a file-backed test pool, two error variants and two collation registrations, and it brings `SQLITE_BUSY` between two writers into the hand tests. All of that is machinery built to be deleted.
 8. **The cutover keeps the engine Phase 0 lands, and Phase 5 moves it.**
@@ -285,9 +285,9 @@ The cutover runs each read in a `'static` closure on the blocking pool, which a 
     2. `library::duplicates::find` on a snapshot of the dev library, under `a7d94dc5` and under this phase, printed byte-identical output: 14 groups and 28 copies, over 51,012 tracks.
 - **Docs:** none beyond the two functions' own.
 
-## Phase 4: The cutover (one PR, five commits)
+## Phase 4: The cutover (one PR, four commits)
 
-The store and core move to rusqlite together, over sub-phases 4a to 4d, and 4e records the decision in `docs/adr/`. Each is a commit Kenan makes at its end.
+The store and core move to rusqlite together, over sub-phases 4a to 4d, each a commit Kenan makes at its end. The ADRs wait for Phase 5's measurement, which decides whether the move stays.
 
 - **Builds.** 4d's commit is the first whose every target builds, 4c's building all but the tests. 4a to 4c's messages say the workspace builds again at 4d, so a plain `git bisect` knows to skip them.
 - **Checks.** A sub-phase ends when the compiler reports no error in the files it converted. The gates run once after 4d, and what they or the hand test find lands as its own commits after it.
@@ -299,7 +299,6 @@ The store and core move to rusqlite together, over sub-phases 4a to 4d, and 4e r
 - [x] **4b Scan:** step 8's scan cluster, its fold (step 9) among it, with step 10 for each function it converts. Its first converted module is the template the other clusters copy, named under "Where it stands" once it lands.
 - [x] **4c The other clusters:** step 8's clusters 2 to 6, the duplicates fold, and step 10 for theirs. Done when no error is left outside the test targets, `melodia-app`'s callers included, which the compiler reaches only once the store builds.
 - [ ] **4d Tests and comments:** steps 11 and 12, and the docs. Done when the three gates pass.
-- [ ] **4e The ADRs:** step 13. Done when the new ADR is in the index and ADR 4 points to it.
 - [ ] **Hand test**, below.
 
 **Where it stands:** 4a, 4b and 4c have landed, and 4d starts at step 11.
@@ -348,7 +347,7 @@ The store and core move to rusqlite together, over sub-phases 4a to 4d, and 4e r
 - **Done early:**
   - step 5's `keyset.rs` line: `unpack_ids` builds `FromSqlConversionFailure`;
   - step 12's `IDLE_TIMEOUT` doc (rewritten as it moved into `pool/lane.rs`), its manifest comments (core's rewritten, the store's `futures-util` line gone) and `track_links.rs`' doc.
-- **The packing's stated reason went with sqlx.** `track_ids`' doc and `ranked_ids`' named sqlx's per-row hop, and both lines are gone; Phase 5's step 2 decides whether the packing stays.
+- **The packing's stated reason went with sqlx.** `track_ids`' doc and `ranked_ids`' named sqlx's per-row hop, and both lines are gone; Phase 5's step 3 decides whether the packing stays.
 - **Moved:** step 6's `backup_tests` converts with step 11.
 
 **Steps,** in working order:
@@ -398,29 +397,6 @@ The store and core move to rusqlite together, over sub-phases 4a to 4d, and 4e r
     - the "deliberately not `start_paused`" reasoning in `play_count_flusher_tests.rs:210-213` (with `:229`) and `rating_writeback_tests.rs:179-181`, whose premise (sqlx's idle and lifetime timers on the test pool) no longer holds (step 2);
     - `heap_trim.rs:1-3` and `:21-22` and `shutdown.rs:95-100`, re-read against the new reaper and `close()`;
     - `scripts/measure-footprint.py:129-132`, which names the reaper.
-13. **The ADRs,** under `docs/adr/README.md`'s rules: a decision that reverses gets a new ADR, and an accepted one is never edited to reverse itself.
-    - **A new ADR, the next free number (41 today), records the move:** SQLite through rusqlite, the pool and the migrator the store's own. Its status is `Accepted, 2026-11-04`, the day the survey settled it, and it is written in the README's shape:
-      - **Context:** what forced it, in the symptom's terms. The bundled SQLite waited on a sqlx release, and every statement and row crossed a worker thread, which the store already worked around.
-      - **Decision:**
-        - rusqlite;
-        - one writer and a band of readers as lanes on the runtime's blocking pool (ADR 5);
-        - a migrator of its own over sqlx's history table and row format, so an older build still refuses a database a newer one migrated.
-      - **Alternatives:** staying on sqlx, Diesel, SeaORM, Turso, libsql, an async wrapper or pool crate over rusqlite, and rusqlite_migration or refinery for the history. Decision 1 and 2 carry why each lost.
-      - **Trade:** what it costs as well as what it buys:
-        - a pool and a migrator to maintain;
-        - a dropped call running to its end;
-        - a blocking pool whose thread count the lanes don't bound (ADR 30);
-        - a history table keeping a name and a format for a driver no longer in the tree;
-        - the statements rusqlite refuses where sqlx let them through.
-      - **What ADR 4 argued that still holds:** a migration is irreversible once applied, the backup before it is fatal if it fails, and a development build has its own data root. ADR 13 and ADR 27 link ADR 4 for exactly these, so the new one states them.
-      - **Its evidence:** it names the test holding the history format, if step 11 or Phase 6 leaves one.
-      - **What it never names:** this plan doc, which is deleted, or a dependency version, which goes stale on a bump.
-    - **ADR 4** takes `Superseded by` the new ADR, as a link, for its status, and is otherwise left exactly as written.
-    - **The index** (`docs/adr/README.md`): ADR 4's status, and the new ADR's row under Foundation.
-    - **ADR 35** takes a dated `**Amendment:**`. A pool on the engine's side would now pin it to rusqlite rather than sqlx, and its decision stands unchanged. The code comment beside it, `actions.rs:80-81`, is step 12's.
-    - **Left as written:**
-      - ADR 1's "sqlx rather than rusqlite" is its example of a choice with no file to sit beside, and still is one.
-      - ADR 13 and ADR 27 link ADR 4 for facts the new ADR carries forward, and the link reaches it through the superseded status.
 
 **Hand test:** the whole app on the dev library:
 - a boot with nothing pending;
@@ -440,9 +416,9 @@ The store and core move to rusqlite together, over sub-phases 4a to 4d, and 4e r
 - The rusqlite mechanics the code can't hold go in the new rule: cached versus uncached by SQL type, by-name `get` cost, owned inputs, lanes bounding concurrency under the blocking cap.
 - `CLAUDE.md`'s rules table, `library-data.md:19` and `:38-42` (the collapsed helper names), and `README.md:443` and `:509` change to match.
 
-## Phase 5: Measure, tune, take the latest rusqlite
+## Phase 5: Measure, keep it or not, tune, take the latest rusqlite
 
-Each measurement step waits for Kenan's go.
+Each measurement step waits for Kenan's go. Step 1's numbers decide whether the move stays, and only a move that stays is recorded in the ADRs (step 2).
 
 1. **Measure the driver.** Fresh release builds of the commit before 4a and of Phase 4's last, each in its own detached worktree, `cmp`'d first. On the dev library measure:
    - a full scan's wall time;
@@ -451,11 +427,37 @@ Each measurement step waits for Kenan's go.
    - idle Anonymous and a heaptrack diff;
    - the 150 s settle, to see connections close;
    - peak threads, the blocking pool having spawned beyond the five lanes under bursts in the benchmark (Cross-cutting).
-2. **Tune from what that shows:**
+2. **Keep it or not, then the ADRs.**
+   - **The move stays if step 1 shows it faster and lighter** than the commit before 4a: the scan, Songs open and search no slower, idle Anonymous and the heaptrack diff no larger.
+   - **If it doesn't, whether it stays is Kenan's call then**, and the ADRs are left as they are.
+   - **If it stays, the ADRs record it**, under `docs/adr/README.md`'s rules: a decision that reverses gets a new ADR, and an accepted one is never edited to reverse itself.
+     - **A new ADR, the next free number (41 today), records the move:** SQLite through rusqlite, the pool and the migrator the store's own. Its status carries the date step 1 confirmed it, and it is written in the README's shape:
+       - **Context:** what forced it, in the symptom's terms. The bundled SQLite waited on a sqlx release, and every statement and row crossed a worker thread, which the store already worked around.
+       - **Decision:**
+         - rusqlite;
+         - one writer and a band of readers as lanes on the runtime's blocking pool (ADR 5);
+         - a migrator of its own over sqlx's history table and row format, so an older build still refuses a database a newer one migrated.
+       - **Alternatives:** staying on sqlx, Diesel, SeaORM, Turso, libsql, an async wrapper or pool crate over rusqlite, and rusqlite_migration or refinery for the history. Decision 1 and 2 carry why each lost.
+       - **Trade:** what it costs as well as what it buys, step 1's result being why it stayed:
+         - a pool and a migrator to maintain;
+         - a dropped call running to its end;
+         - a blocking pool whose thread count the lanes don't bound (ADR 30);
+         - a history table keeping a name and a format for a driver no longer in the tree;
+         - the statements rusqlite refuses where sqlx let them through.
+       - **What ADR 4 argued that still holds:** a migration is irreversible once applied, the backup before it is fatal if it fails, and a development build has its own data root. ADR 13 and ADR 27 link ADR 4 for exactly these, so the new one states them.
+       - **Its evidence:** it names the test holding the history format, if Phase 4's step 11 leaves one.
+       - **What it never names:** this plan doc, which is deleted, or a dependency version, which goes stale on a bump.
+     - **ADR 4** takes `Superseded by` the new ADR, as a link, for its status, and is otherwise left exactly as written.
+     - **The index** (`docs/adr/README.md`): ADR 4's status, and the new ADR's row under Foundation.
+     - **ADR 35** takes a dated `**Amendment:**`. A pool on the engine's side would now pin it to rusqlite rather than sqlx, and its decision stands unchanged. The code comment beside it, `actions.rs:80-81`, is Phase 4's step 12.
+     - **Left as written:**
+       - ADR 1's "sqlx rather than rusqlite" is its example of a choice with no file to sit beside, and still is one.
+       - ADR 13 and ADR 27 link ADR 4 for facts the new ADR carries forward, and the link reaches it through the superseded status.
+3. **Tune from what that shows:**
    - the statement-cache capacity, memory against re-prepares;
    - dropping `fetch_packed_ids`' `group_concat` packing and `unpack_ids`, whose stated reason is sqlx's per-row hop. Under rusqlite a row per id measured no slower than the packed row ([Evidence](#evidence-2026-11-04)); the dev library confirms it before the packing goes;
    - by-index mapping for a wide projection, only if a profile shows column lookup.
-3. **Bump rusqlite** to the latest release (0.41.x at the time of writing, SQLite 3.54), adapting to the API changes Decision 8 lists, and re-measure the scan and the list open.
+4. **Bump rusqlite** to the latest release (0.41.x at the time of writing, SQLite 3.54), adapting to the API changes Decision 8 lists, and re-measure the scan and the list open.
 - **Docs:**
   - `rusqlite.md` takes what tuning settled.
   - The README footprint tables are retaken by their protocol only if a column moves beyond run-to-run noise.
