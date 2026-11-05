@@ -1,7 +1,7 @@
 //! What the duplicate finder hands the UI: groups of tracks that look like one song, each labelled
 //! with how sure the match is. The rule that builds them is `library::duplicates::matcher`'s.
 
-use sqlx::FromRow;
+use rusqlite::types::{FromSql, FromSqlResult, ValueRef};
 
 use crate::entities::audio_quality::AudioFormat;
 
@@ -33,8 +33,7 @@ pub enum ReviewReason {
 }
 
 /// Copies the user marked Not Duplicates together.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, sqlx::Type)]
-#[sqlx(transparent)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct DismissalSet(i64);
 
 /// The set's id as the store binds it. Only a read builds a set, so there is no way back.
@@ -44,8 +43,14 @@ impl From<DismissalSet> for i64 {
     }
 }
 
+impl FromSql for DismissalSet {
+    fn column_result(value: ValueRef<'_>) -> FromSqlResult<Self> {
+        i64::column_result(value).map(Self)
+    }
+}
+
 /// One copy in a group: what the matcher compares, and what the dialog shows.
-#[derive(Clone, Debug, FromRow)]
+#[derive(Clone, Debug)]
 pub struct DuplicateCopy {
     pub id: i64,
     pub file_path: String,
@@ -62,7 +67,6 @@ pub struct DuplicateCopy {
     pub musicbrainz_release_id: Option<String>,
     pub duration_ms: i64,
     pub date_added: String,
-    #[sqlx(flatten)]
     pub format: AudioFormat,
     pub dismissal: Option<DismissalSet>,
     pub play_count: i64,
@@ -90,7 +94,7 @@ pub struct GroupRemoval {
 }
 
 /// A removed copy's file, which scans leave out until it is brought back.
-#[derive(Clone, Debug, FromRow)]
+#[derive(Clone, Debug)]
 pub struct KeptOutFile {
     pub id: i64,
     pub path: String,

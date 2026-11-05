@@ -1,5 +1,3 @@
-use sqlx::FromRow;
-
 use crate::entities::track::TrackListRow;
 
 #[derive(Clone, Debug)]
@@ -10,10 +8,9 @@ pub struct BrowseFolder {
 
 /// A library track directly inside a browsed directory, with the path Browse matches it to its
 /// file on disk by.
-#[derive(Debug, FromRow)]
+#[derive(Debug)]
 pub struct DirectoryTrack {
     pub file_path: String,
-    #[sqlx(flatten)]
     pub row: TrackListRow,
 }
 

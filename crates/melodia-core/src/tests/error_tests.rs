@@ -5,7 +5,7 @@ use super::*;
 /// The two `Display` shapes in this tree, which is what makes `describe` reachable without knowing
 /// which one is in hand. `Network` names an operation and leaves the cause on `.source()`, so the
 /// walk is the whole point; `Io` is `#[error("IO error: {0}")]` over the field `#[from]` also
-/// makes the source, so an unconditional walk would print it twice — and sqlx nests that shape.
+/// makes the source, so an unconditional walk would print it twice, and rusqlite nests that shape.
 #[test]
 fn a_cause_is_appended_once_and_never_repeated() {
     let denied = || std::io::Error::from(std::io::ErrorKind::PermissionDenied);
@@ -48,21 +48,21 @@ fn every_level_of_a_cause_chain_is_appended_in_order() {
     );
 }
 
-/// sqlx's shape one level down: a cause whose `Display` already prints its own source. The skip
+/// A message-less rusqlite failure one level down, its `Display` printing its own source. The skip
 /// compares against everything written so far, not against the level directly above.
 #[test]
 fn a_cause_printed_further_up_the_chain_is_not_repeated() {
     let error = layer(
         "Failed to save the playlist",
         Some(layer(
-            "error returned from database: UNIQUE constraint failed",
-            Some(layer("UNIQUE constraint failed", None)),
+            "Database error: Error code 5: database is locked",
+            Some(layer("Error code 5: database is locked", None)),
         )),
     );
 
     assert_eq!(
         describe(&error),
-        "Failed to save the playlist: error returned from database: UNIQUE constraint failed"
+        "Failed to save the playlist: Database error: Error code 5: database is locked"
     );
 }
 
@@ -160,7 +160,7 @@ fn wrapping_constructors_preserve_source_chain() {
 
 #[test]
 fn display_database() {
-    let err = AppError::Database(sqlx::Error::RowNotFound);
+    let err = AppError::Database(rusqlite::Error::QueryReturnedNoRows);
     let msg = format!("{err}");
     assert!(msg.starts_with("Database error:"), "got: {msg}");
 }
@@ -173,8 +173,8 @@ fn from_io_error() {
 }
 
 #[test]
-fn from_sqlx_error() {
-    let err: AppError = sqlx::Error::RowNotFound.into();
+fn from_rusqlite_error() {
+    let err: AppError = rusqlite::Error::QueryReturnedNoRows.into();
     assert!(matches!(err, AppError::Database(_)));
 }
 

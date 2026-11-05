@@ -1,6 +1,6 @@
 # Plan: Move the library database from sqlx to rusqlite
 
-Status: **Phase 3.6 complete** · Owner: Kenan · Created: 2026-11-04
+Status: **Phase 4a complete** · Owner: Kenan · Created: 2026-11-04
 
 > **Validated 2026-11-04** against `8fe1eb93` (`chore/deps-and-fixes`) with three read-only inventories:
 >
@@ -110,7 +110,7 @@ Users see nothing broken, and no list or search opens faster after the move. The
    - The cutover pins rusqlite 0.39.x, whose libsqlite3-sys 0.37 is the 3.51.3 Phase 0 resolves. Phase 5's before/after measurement then isolates the driver.
    - The bump to the latest rusqlite (0.41.x, SQLite 3.54) follows as its own step. What it moves:
      - libsqlite3-sys 0.39 drops `-DSQLITE_ENABLE_MEMORY_MANAGEMENT` from the bundled build (rusqlite #1900; `build.rs` diffed between 0.37.0 and 0.39.1). The flag only gives `sqlite3_release_memory` and the soft heap limit something to free, and the tree calls neither.
-     - In 0.41, `Statement::column_names` and `columns` return iterators, and `pragma_update` takes the schema as `Option<&str>` and checks the name against `pragma_list`.
+     - In 0.41, `Statement::column_names` and `columns` return iterators, and `pragma_update` checks the name against `pragma_list`. Its schema is already `Option<&str>` in 0.39.0 (`pragma.rs:224`).
      - The soundness fixes between (vtab, `array`'s `Rc` values, savepoint names, `trace_v2` and `busy_handler`) touch nothing this store calls, so 0.39 is safe for the one step.
 
 ## Structure (who owns what afterwards)
@@ -119,13 +119,13 @@ Everything is in `crates/melodia-store/src/database/` unless noted.
 
 | File | Owns | Single reason to change |
 |---|---|---|
-| `pool/mod.rs` | `DbPool` (cheap `Clone` over an `Arc`), `read(work)` / `write(work)` (`pub(crate)`), `close()`, `test_pool()`, `IDLE_CONNECTIONS_CLOSED_WITHIN` | How the store hands out connections |
+| `pool/mod.rs` | `DbPool` (cheap `Clone` over an `Arc`), `read(work)` / `write(work)` / `transaction(work)` (`pub(crate)`, the last committing on `Ok`), `close()`, `test_pool()`, `IDLE_CONNECTIONS_CLOSED_WITHIN` | How the store hands out connections |
 | `pool/lane.rs` | One lane: semaphore, idle stack with last-used times, run-on-blocking-pool (permit and connection moving into the closure together), the reaper (ticking every `IDLE_TIMEOUT` from the lane's creation, as sqlx's does and `heap_trim` assumes, and closing on the blocking pool, since the last close checkpoints the WAL) | Concurrency and idle-close semantics |
 | `pool/open.rs` | Opening a connection per role (writer, reader, in-memory test): flags, pragmas as `init_database` sets them (writer: WAL, `foreign_keys`, `synchronous=NORMAL`, `cache_size`, `temp_store`, `mmap_size`; readers the same without `synchronous`; test: `foreign_keys`, `synchronous`, `temp_store`), `busy_timeout`, collation, statement-cache capacity | Connection configuration |
 | `migrate.rs` | Comparing checksums, validation against `_sqlx_migrations`, applying pending migrations, the pending check the backup asks | Migration semantics |
 | `crates/melodia-store/build.rs` | Embedding the workspace root's `migrations/*.sql` (`../../migrations`, the path `sqlx::migrate!` reads) in version order with their checksums (the 14 sqlx applied pinned, blake3 after), `rerun-if-changed` on that directory, the sqlx-style description, refusing a shipped file changed, renamed or missing, anything there but `<version>_<description>.sql` files (dotfiles skipped), a `-- no-transaction` header, `.up`/`.down` names, a version below 1 and a duplicate version | The migrations directory's shape |
-| `sql.rs` | `Sql` (text plus `Param`s), `push` / `push_trusted` / `push_bind` / `bind`, and the execution vocabulary (`fetch_all`, `fetch_optional`, `fetch_one`, `execute`) for static and built SQL; a single column reads as a 1-tuple until `rows/` | How SQL is assembled and run |
-| `rows/mod.rs` | The store's `FromRow` trait and tuple impls | Row decoding |
+| `sql.rs` | `Sql` (text plus `Param`s), `push` / `push_trusted` / `push_bind` / `bind`, and the execution vocabulary (`fetch_all`, `fetch_optional`, `fetch_one`, `execute`): free functions over a `&'static str` and rusqlite params, and `Sql`'s methods for built text | How SQL is assembled and run |
+| `rows/mod.rs` | The store's `FromRow` trait, its lone-column and tuple impls, and `by_name!` | Row decoding |
 | `rows/{track,library,radio,duplicates}.rs` | Entity impls, grouped as `melodia-core/src/entities/` groups them | An entity's columns |
 | `mod.rs` | Bind budget, placeholder text (`placeholders`, `values_placeholders`, `values_list`, `case_by_id`) and chunk helpers (`chunked_in_query`, `chunked_in_execute_on`, `select_in_id_order`, `set_where_id_in`, `backfill_folded`), `init_database` | Bulk-statement shape |
 | `collation.rs`, `backup.rs` | Unchanged roles, on rusqlite | |
@@ -295,13 +295,34 @@ The store and core move to rusqlite together, over sub-phases 4a to 4d, each a c
 
 **Progress.** Each session ends by ticking what landed and rewriting "Where it stands"; the next one starts there.
 
-- [ ] **4a Foundation:** steps 1 to 7. Done when no error is left outside `queries/`.
+- [x] **4a Foundation:** steps 1 to 7. Done when no error is left outside `queries/`.
 - [ ] **4b Scan:** step 8's scan cluster, its fold (step 9) among it, with step 10 for each function it converts. Its first converted module is the template the other clusters copy, named under "Where it stands" once it lands.
 - [ ] **4c The other clusters:** step 8's clusters 2 to 6, the duplicates fold, and step 10 for theirs. Done when no error is left outside the test targets, `melodia-app`'s callers included, which the compiler reaches only once the store builds.
 - [ ] **4d Tests and comments:** steps 11 and 12, and the docs. Done when the three gates pass.
 - [ ] **Hand test**, below.
 
-**Where it stands:** not started.
+**Where it stands:** 4a has landed, and 4b starts at the scan cluster.
+
+- **Checked so far:**
+  - `cargo clippy --workspace --all-targets --keep-going` finds core clean, lib and tests.
+  - Every store error is in `queries/` or a store test file.
+  - Those errors are resolution errors, which stop rustc before it type-checks a body. So the 4a files were also checked in a scratch crate outside the repo: symlinked in, `queries/` left out. There they type-check, and clippy finds nothing but dead code.
+- **Lock:** sqlx's tree left, `sha2` 0.10.9, `digest` 0.10.7, `generic-array` and `typenum` among it. rusqlite, `fallible-iterator` and `fallible-streaming-iterator` entered, plus `sqlite-wasm-rs` and `rsqlite-vfs`, which rusqlite takes only on wasm32 and which never build here. libsqlite3-sys stays at 0.37.0.
+- **What the clusters copy:**
+  - **Pool calls:** `db.read(move |conn| …)`, `db.write(move |conn| …)` and `db.transaction(move |tx| …)`, each closure `Send + 'static` and returning `Result<T, AppError>`.
+  - **Static text:** `sql::{execute, fetch_one, fetch_optional, fetch_all}(conn, CONST, (a, b))`, cached. The params are a rusqlite tuple or `()`, and a `DismissalSet` binds as `i64::from(set)`.
+  - **Built text:** `Sql` as before, its four methods taking the connection.
+  - **Rows:**
+    - an entity decodes through `rows/`;
+    - a store-private row takes `by_name!(Row { field, nested: Inner })` beside its struct;
+    - a lone column reads as its scalar (`fetch_one::<i64>`), and a tuple from width 2;
+    - a missing scalar type or tuple width is a line in `rows/mod.rs`.
+  - **Helpers:** `chunked_in_query(conn, …)` (the `_on` form is gone), `chunked_in_execute_on(&tx, …)`, and `select_in_id_order(conn, …)` inside the caller's closure. `backfill_folded(db, target)` takes the `FoldedColumn` by value.
+- **Watch for:**
+  - rusqlite's by-name `get` takes the first column of a name, matched case-insensitively, where sqlx's took the last, so a by-name projection naming a column twice now reads the other one.
+  - rusqlite decodes by the value's storage class: an `i64` refuses a REAL, a `String` an INTEGER, and an `i32` an integer out of its range.
+- **Done early:** step 12's `IDLE_TIMEOUT` doc (rewritten as it moved into `pool/lane.rs`) and its manifest comments (core's rewritten, the store's `futures-util` line gone).
+- **Moved:** step 5's `keyset.rs` line converts with the tracks cluster, and step 6's `backup_tests` with step 11.
 
 **Steps,** in working order:
 
@@ -319,15 +340,15 @@ The store and core move to rusqlite together, over sub-phases 4a to 4d, each a c
    - **`test_pool()`:** one in-memory connection serving both lanes, with no reaper, since closing it would drop the database. It runs no timer at all, and tokio holds a paused current-thread clock still while a `spawn_blocking` task runs (`runtime/blocking/schedule.rs`), so a `start_paused` test no longer races the database.
    - **Statement-cache capacity:** a named constant starting at sqlx's 100, so memory and speed compare like for like. Phase 5 tunes it.
    - **A failed blocking task:** a panic is resumed, so a test reports it; a cancellation at runtime shutdown returns `AppError::DatabaseClosed`.
-3. **`rows/`.** The trait, tuple impls and the 24 core entity impls (`StoredLogoAnswer` among them), plus the store's own four rows: `CopyFacts`, `DuplicateKeyRow`, `search_name::Inputs`, `search_text::Unfilled`. `#[sqlx(flatten)]` becomes a nested `from_row`. Phase 1's `Readback` folds in here rather than keeping a second set of tuple impls: its tuples become these, and its column impls sit beside them for the seam's scalar reads.
+3. **`rows/`.** The trait, tuple impls and the 24 core entity impls (`StoredLogoAnswer` among them), plus the store's own five rows: `CopyFacts`, `DuplicateKeyRow`, `search_name::Inputs`, `search_text::Unfilled`, `migrate::Applied`. `#[sqlx(flatten)]` becomes a nested `from_row`. Phase 1's `Readback` folds in here rather than keeping a second set of tuple impls: its tuples become these, and its column impls sit beside them for the seam's scalar reads.
 4. **`sql.rs`** executes on `&Connection`: static SQL cached, built SQL uncached.
 5. **Core.**
    - The `FromRow` derives and the three `#[sqlx(...)]` attributes go.
    - `DismissalSet` gets `FromSql`.
    - `AppError::Database` holds `rusqlite::Error`, and `describe`'s doc (`error.rs:163`, "sqlx print theirs in `Display`") names rusqlite.
    - `error_tests` constructs `QueryReturnedNoRows` (`:163`, `:176-178`), and `:51-65` stop copying sqlx's message shape.
-   - `track/keyset.rs:73`'s hand-built `sqlx::Error::Decode` becomes `FromSqlConversionFailure`.
-6. **The migrator's and the backup's SQL** run on rusqlite. `backup_tests` reopens the copy read-only through `Connection::open_with_flags`.
+   - `queries/track/keyset.rs:69`'s hand-built `sqlx::Error::Decode` becomes `FromSqlConversionFailure`, with the tracks cluster (step 8).
+6. **The migrator's and the backup's SQL** run on rusqlite. `backup_tests` reopens the copy read-only through `Connection::open_with_flags`, with the store's tests (step 11).
 7. **`database/mod.rs`'s helpers** run on `&Connection` (Structure's collapse). A loop that writes per chunk or page outside a transaction takes one write closure per iteration, so a waiting writer still waits for one chunk rather than the table: `backfill_folded`, and the chunk loops at `track/write.rs:56,88,117` and `artist.rs:51`.
 8. **Query modules.**
    - Each `pub async fn` stays `async` with its result type and runs its body in one read or write closure, the chunk loops of step 7 and `search_all` below excepted.
@@ -349,10 +370,8 @@ The store and core move to rusqlite together, over sub-phases 4a to 4d, each a c
     - `melodia-engine/.../actions.rs:80-81`;
     - `melodia-views/src/ui/track_links.rs:106`;
     - the "deliberately not `start_paused`" reasoning in `play_count_flusher_tests.rs:210-213` (with `:229`) and `rating_writeback_tests.rs:179-181`, whose premise (sqlx's idle and lifetime timers on the test pool) no longer holds (step 2);
-    - `IDLE_TIMEOUT`'s doc ("sqlx's reaper checks once per this period");
     - `heap_trim.rs:1-3` and `:21-22` and `shutdown.rs:95-100`, re-read against the new reaper and `close()`;
-    - `scripts/measure-footprint.py:129-132`, which names the reaper;
-    - the manifest comments in the workspace, core and store.
+    - `scripts/measure-footprint.py:129-132`, which names the reaper.
 
 **Hand test:** the whole app on the dev library:
 - a boot with nothing pending;

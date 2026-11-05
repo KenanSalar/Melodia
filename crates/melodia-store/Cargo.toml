@@ -19,9 +19,7 @@ melodia-artwork = { path = "../melodia-artwork" }
 # this crate has into the audio stack, and it points at its bottom tier.
 melodia-audio = { path = "../melodia-audio" }
 
-sqlx.workspace = true
-# `TryStreamExt`, to read a folder's rows one at a time.
-futures-util.workspace = true
+rusqlite.workspace = true
 tokio.workspace = true
 lofty.workspace = true
 walkdir.workspace = true

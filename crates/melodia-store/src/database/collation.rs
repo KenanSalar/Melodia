@@ -8,15 +8,15 @@
 
 use std::cmp::Ordering;
 
-use sqlx::sqlite::SqliteConnectOptions;
+use rusqlite::Connection;
 
 /// Spelled in a query as `COLLATE UNICODE_LOWER`.
 pub(crate) const UNICODE_LOWER: &str = "UNICODE_LOWER";
 
-/// Registers every collation the queries name, on every pool's options: a connection without one
-/// fails any statement that names it.
-pub(crate) fn register(options: SqliteConnectOptions) -> SqliteConnectOptions {
-    options.collation(UNICODE_LOWER, compare_lowercase)
+/// Registers every collation the queries name, on every connection the pool opens: a connection
+/// without one fails any statement that names it.
+pub(crate) fn register(conn: &Connection) -> rusqlite::Result<()> {
+    conn.create_collation(UNICODE_LOWER, compare_lowercase)
 }
 
 /// `a.to_lowercase().cmp(&b.to_lowercase())`, without allocating when both sides are ASCII, where

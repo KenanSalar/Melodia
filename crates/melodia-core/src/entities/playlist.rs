@@ -1,6 +1,4 @@
-use sqlx::FromRow;
-
-#[derive(Clone, Debug, PartialEq, FromRow)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct Playlist {
     pub id: i64,
     pub name: String,
@@ -14,7 +12,7 @@ pub struct Playlist {
 }
 
 /// View-backed struct with computed stats (from `playlist_stats` view)
-#[derive(Clone, Debug, PartialEq, FromRow)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct PlaylistStats {
     pub id: i64,
     pub name: String,

@@ -1,5 +1,3 @@
-use sqlx::FromRow;
-
 /// One name in a credit, plus the text that joins it to the next one.
 ///
 /// The phrase *follows* its name and the last one's is empty, so a list renders by plain
@@ -164,7 +162,7 @@ fn with_default_phrases(names: &[String]) -> Vec<CreditedArtist> {
         .collect()
 }
 
-#[derive(Clone, Debug, PartialEq, FromRow)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct Artist {
     pub id: i64,
     pub name: String,
@@ -174,7 +172,7 @@ pub struct Artist {
 }
 
 /// View-backed struct with computed stats (from `artist_stats` view)
-#[derive(Clone, Debug, PartialEq, FromRow)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct ArtistStats {
     pub id: i64,
     pub name: String,
@@ -191,7 +189,7 @@ pub struct ArtistStats {
 /// `Hash` is what the Favorites grid compares against its last applied set —
 /// derived rather than hand-listed so a new field can't silently drop out of
 /// the comparison and leave a card stale.
-#[derive(Clone, Debug, PartialEq, Hash, FromRow)]
+#[derive(Clone, Debug, PartialEq, Hash)]
 pub struct FavoriteArtist {
     pub id: i64,
     pub name: String,

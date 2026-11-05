@@ -4,10 +4,15 @@ type BoxedSource = Box<dyn std::error::Error + Send + Sync>;
 #[derive(Debug, thiserror::Error)]
 pub enum AppError {
     #[error("Database error: {0}")]
-    Database(#[from] sqlx::Error),
+    Database(#[from] rusqlite::Error),
 
     #[error("Migration error: {0}")]
     Migration(#[from] MigrationError),
+
+    /// The pool was closed, or the runtime shut down under a call, before the call reached a
+    /// connection.
+    #[error("Database closed")]
+    DatabaseClosed,
 
     #[error("IO error: {0}")]
     Io(#[from] std::io::Error),
@@ -103,7 +108,7 @@ pub enum MigrationError {
     Apply {
         version: i64,
         #[source]
-        source: sqlx::Error,
+        source: rusqlite::Error,
     },
 }
 
@@ -181,8 +186,9 @@ pub type AppResult<T> = Result<T, AppError>;
 
 /// Flattens an error and its causes onto one line, for every `log::` call taking an error
 /// (`crates/melodia/tests/logged_errors.rs`). A cause the message already ends in is skipped: the
-/// `#[from]` variants and sqlx print theirs in `Display`, so a plain walk would repeat it, and the
-/// skip is what makes this safe whichever variant a caller holds.
+/// `#[from]` variants print theirs in `Display`, and so does a rusqlite failure with no message of
+/// its own, so a plain walk would repeat it, and the skip is what makes this safe whichever
+/// variant a caller holds.
 pub fn describe(error: &dyn std::error::Error) -> String {
     let mut text = error.to_string();
     let mut cause = error.source();

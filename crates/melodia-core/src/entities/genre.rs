@@ -1,5 +1,3 @@
-use sqlx::FromRow;
-
 /// A track's genres as the line displays and the FTS index read, and as the ordered names the
 /// `track_genres` rows are built on. Private fields for [`super::artist::ArtistCredit`]'s
 /// invariant: `line` is always [`Self::names`] rendered, `None` exactly when there are none.
@@ -69,7 +67,7 @@ impl GenreList {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, FromRow)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct GenreStats {
     pub id: i64,
     pub name: String,

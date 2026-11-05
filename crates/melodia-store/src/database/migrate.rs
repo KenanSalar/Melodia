@@ -2,11 +2,13 @@
 //! stays sqlx's `_sqlx_migrations`, in sqlx's row format, so an older build migrating through sqlx
 //! still reads it and refuses a newer database as before.
 
-use sqlx::Connection as _;
-use sqlx::sqlite::SqliteConnection;
+use rusqlite::Connection;
 use std::time::Instant;
 
 use melodia_core::error::{AppError, MigrationError};
+
+use super::rows::by_name;
+use super::sql;
 
 /// One file of `migrations/`, as `build.rs` embeds it.
 struct Migration {
@@ -45,12 +47,13 @@ const RECORD: &str = "\
 
 const RECORD_TIME: &str = "UPDATE _sqlx_migrations SET execution_time = ?1 WHERE version = ?2";
 
-#[derive(sqlx::FromRow)]
 struct Applied {
     version: i64,
     success: bool,
     checksum: Vec<u8>,
 }
+
+by_name!(Applied { version, success, checksum });
 
 /// The migrations a boot would apply, and the version the history stands at before them.
 pub(super) struct Pending {
@@ -71,13 +74,10 @@ impl Pending {
 
 /// What [`apply`] would run on `conn`'s database, or the [`MigrationError`] refusing its history.
 /// It only reads, so a backup can be taken between the two.
-pub(super) async fn pending(conn: &mut SqliteConnection) -> Result<Pending, AppError> {
-    let history_exists: bool = sqlx::query_scalar(HISTORY_EXISTS).fetch_one(&mut *conn).await?;
-    let history: Vec<Applied> = if history_exists {
-        sqlx::query_as(READ_HISTORY).fetch_all(&mut *conn).await?
-    } else {
-        Vec::new()
-    };
+pub(super) fn pending(conn: &Connection) -> Result<Pending, AppError> {
+    let history_exists: bool = sql::fetch_one(conn, HISTORY_EXISTS, ())?;
+    let history: Vec<Applied> =
+        if history_exists { sql::fetch_all(conn, READ_HISTORY, ())? } else { Vec::new() };
     Ok(compare(MIGRATIONS, &history)?)
 }
 
@@ -110,40 +110,32 @@ fn compare(known: &'static [Migration], history: &[Applied]) -> Result<Pending, 
 
 /// Runs each pending migration in its own transaction, recording it as sqlx does. A failing one
 /// rolls back with its history row, and the ones before it stay applied.
-pub(super) async fn apply(conn: &mut SqliteConnection, pending: Pending) -> Result<(), AppError> {
-    sqlx::query(CREATE_HISTORY).execute(&mut *conn).await?;
+pub(super) fn apply(conn: &mut Connection, pending: Pending) -> Result<(), AppError> {
+    sql::execute(conn, CREATE_HISTORY, ())?;
     for migration in pending.migrations {
-        apply_one(conn, migration).await?;
+        apply_one(conn, migration)?;
     }
     Ok(())
 }
 
-async fn apply_one(
-    conn: &mut SqliteConnection,
-    migration: &'static Migration,
-) -> Result<(), AppError> {
+fn apply_one(conn: &mut Connection, migration: &'static Migration) -> Result<(), AppError> {
     let started = Instant::now();
     run_and_record(conn, migration)
-        .await
         .map_err(|source| MigrationError::Apply { version: migration.version, source })?;
 
     let elapsed_nanos = i64::try_from(started.elapsed().as_nanos()).unwrap_or(i64::MAX);
-    sqlx::query(RECORD_TIME).bind(elapsed_nanos).bind(migration.version).execute(conn).await?;
+    sql::execute(conn, RECORD_TIME, (elapsed_nanos, migration.version))?;
     Ok(())
 }
 
 /// Any failure here leaves the migration unapplied, so the caller names its version.
-async fn run_and_record(
-    conn: &mut SqliteConnection,
-    migration: &Migration,
-) -> Result<(), sqlx::Error> {
-    let mut tx = conn.begin().await?;
-    sqlx::raw_sql(migration.sql).execute(&mut *tx).await?;
-    sqlx::query(RECORD)
-        .bind(migration.version)
-        .bind(migration.description)
-        .bind(migration.checksum)
-        .execute(&mut *tx)
-        .await?;
-    tx.commit().await
+fn run_and_record(conn: &mut Connection, migration: &Migration) -> rusqlite::Result<()> {
+    let tx = conn.transaction()?;
+    tx.execute_batch(migration.sql)?;
+    tx.prepare_cached(RECORD)?.execute((
+        migration.version,
+        migration.description,
+        migration.checksum,
+    ))?;
+    tx.commit()
 }

@@ -1,17 +1,56 @@
-//! SQL assembled at runtime: text from literals and vouched-for structure, every value bound.
+//! Running SQL on a connection: static text, or text assembled at runtime from literals and
+//! vouched-for structure, every value bound.
 //!
-//! **Caching follows the text.** A statement still holding the `&'static str` it was made from
-//! stays prepared on its connection; one with anything pushed onto it is prepared per run, so the
-//! placeholder list each chunk size spells can't crowd out the statements worth keeping.
+//! **Caching follows the text's type.** A `&'static str`, or an [`Sql`] still holding the one it
+//! was made from, stays prepared on its connection; one with anything pushed onto it is prepared
+//! per run, so the placeholder list each chunk size spells can't crowd out the statements worth
+//! keeping.
 
 use std::borrow::Cow;
+use std::ops::{Deref, DerefMut};
 
-use sqlx::query::{Query, QueryAs};
-use sqlx::sqlite::{Sqlite, SqliteArguments, SqliteRow};
-use sqlx::{Arguments, AssertSqlSafe, FromRow};
+use rusqlite::types::{ToSqlOutput, ValueRef};
+use rusqlite::{
+    CachedStatement, Connection, OptionalExtension, Params, Statement, ToSql, params_from_iter,
+};
 
 use melodia_core::entities::duplicates::DismissalSet;
 use melodia_core::error::AppError;
+
+use super::rows::FromRow;
+
+/// Runs a statement that returns no rows, answering how many it changed.
+pub(crate) fn execute(
+    conn: &Connection,
+    sql: &'static str,
+    params: impl Params,
+) -> Result<u64, AppError> {
+    changed_rows(&mut *conn.prepare_cached(sql)?, params)
+}
+
+pub(crate) fn fetch_all<T: FromRow>(
+    conn: &Connection,
+    sql: &'static str,
+    params: impl Params,
+) -> Result<Vec<T>, AppError> {
+    all_rows(&mut *conn.prepare_cached(sql)?, params)
+}
+
+pub(crate) fn fetch_one<T: FromRow>(
+    conn: &Connection,
+    sql: &'static str,
+    params: impl Params,
+) -> Result<T, AppError> {
+    one_row(&mut *conn.prepare_cached(sql)?, params)
+}
+
+pub(crate) fn fetch_optional<T: FromRow>(
+    conn: &Connection,
+    sql: &'static str,
+    params: impl Params,
+) -> Result<Option<T>, AppError> {
+    optional_row(&mut *conn.prepare_cached(sql)?, params)
+}
 
 /// A statement and the values bound to its `?`s, in order.
 pub(crate) struct Sql {
@@ -61,54 +100,30 @@ impl Sql {
     }
 
     /// Runs a statement that returns no rows, answering how many it changed.
-    pub(crate) async fn execute<'e, E>(self, executor: E) -> Result<u64, AppError>
-    where
-        E: sqlx::Executor<'e, Database = Sqlite>,
-    {
-        Ok(self.query()?.execute(executor).await?.rows_affected())
+    pub(crate) fn execute(self, conn: &Connection) -> Result<u64, AppError> {
+        changed_rows(&mut *self.prepare(conn)?, params_from_iter(&self.params))
     }
 
-    pub(crate) async fn fetch_all<'e, T, E>(self, executor: E) -> Result<Vec<T>, AppError>
-    where
-        T: for<'r> FromRow<'r, SqliteRow> + Send + Unpin,
-        E: sqlx::Executor<'e, Database = Sqlite>,
-    {
-        Ok(self.query_as()?.fetch_all(executor).await?)
+    pub(crate) fn fetch_all<T: FromRow>(self, conn: &Connection) -> Result<Vec<T>, AppError> {
+        all_rows(&mut *self.prepare(conn)?, params_from_iter(&self.params))
     }
 
-    pub(crate) async fn fetch_one<'e, T, E>(self, executor: E) -> Result<T, AppError>
-    where
-        T: for<'r> FromRow<'r, SqliteRow> + Send + Unpin,
-        E: sqlx::Executor<'e, Database = Sqlite>,
-    {
-        Ok(self.query_as()?.fetch_one(executor).await?)
+    pub(crate) fn fetch_one<T: FromRow>(self, conn: &Connection) -> Result<T, AppError> {
+        one_row(&mut *self.prepare(conn)?, params_from_iter(&self.params))
     }
 
-    pub(crate) async fn fetch_optional<'e, T, E>(self, executor: E) -> Result<Option<T>, AppError>
-    where
-        T: for<'r> FromRow<'r, SqliteRow> + Send + Unpin,
-        E: sqlx::Executor<'e, Database = Sqlite>,
-    {
-        Ok(self.query_as()?.fetch_optional(executor).await?)
+    pub(crate) fn fetch_optional<T: FromRow>(
+        self,
+        conn: &Connection,
+    ) -> Result<Option<T>, AppError> {
+        optional_row(&mut *self.prepare(conn)?, params_from_iter(&self.params))
     }
 
-    fn query(self) -> Result<Query<'static, Sqlite, SqliteArguments>, sqlx::Error> {
-        let cached = self.is_static();
-        let arguments = arguments(self.params)?;
-        Ok(sqlx::query_with(AssertSqlSafe(self.text), arguments).persistent(cached))
-    }
-
-    fn query_as<T>(self) -> Result<QueryAs<'static, Sqlite, T, SqliteArguments>, sqlx::Error>
-    where
-        T: for<'r> FromRow<'r, SqliteRow>,
-    {
-        let cached = self.is_static();
-        let arguments = arguments(self.params)?;
-        Ok(sqlx::query_as_with(AssertSqlSafe(self.text), arguments).persistent(cached))
-    }
-
-    fn is_static(&self) -> bool {
-        matches!(self.text, Cow::Borrowed(_))
+    fn prepare<'conn>(&self, conn: &'conn Connection) -> rusqlite::Result<Prepared<'conn>> {
+        Ok(match &self.text {
+            Cow::Borrowed(text) => Prepared::Cached(conn.prepare_cached(text)?),
+            Cow::Owned(text) => Prepared::Once(conn.prepare(text)?),
+        })
     }
 
     #[cfg(test)]
@@ -117,18 +132,65 @@ impl Sql {
     }
 }
 
-fn arguments(params: Vec<Param>) -> Result<SqliteArguments, sqlx::Error> {
-    let mut arguments = SqliteArguments::default();
-    for param in params {
-        let added = match param {
-            Param::Null => Arguments::add(&mut arguments, None::<i64>),
-            Param::Integer(value) => Arguments::add(&mut arguments, value),
-            Param::Real(value) => Arguments::add(&mut arguments, value),
-            Param::Text(value) => Arguments::add(&mut arguments, value),
-        };
-        added.map_err(sqlx::Error::Encode)?;
+/// A statement from the connection's cache, or one prepared for a single run.
+enum Prepared<'conn> {
+    Cached(CachedStatement<'conn>),
+    Once(Statement<'conn>),
+}
+
+impl<'conn> Deref for Prepared<'conn> {
+    type Target = Statement<'conn>;
+
+    fn deref(&self) -> &Self::Target {
+        match self {
+            Self::Cached(statement) => statement,
+            Self::Once(statement) => statement,
+        }
     }
-    Ok(arguments)
+}
+
+impl DerefMut for Prepared<'_> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        match self {
+            Self::Cached(statement) => statement,
+            Self::Once(statement) => statement,
+        }
+    }
+}
+
+fn changed_rows(statement: &mut Statement<'_>, params: impl Params) -> Result<u64, AppError> {
+    let changed = statement.execute(params)?;
+    Ok(u64::try_from(changed).unwrap_or(u64::MAX))
+}
+
+fn all_rows<T: FromRow>(
+    statement: &mut Statement<'_>,
+    params: impl Params,
+) -> Result<Vec<T>, AppError> {
+    let rows = statement.query_map(params, T::from_row)?;
+    Ok(rows.collect::<rusqlite::Result<_>>()?)
+}
+
+fn one_row<T: FromRow>(statement: &mut Statement<'_>, params: impl Params) -> Result<T, AppError> {
+    Ok(statement.query_row(params, T::from_row)?)
+}
+
+fn optional_row<T: FromRow>(
+    statement: &mut Statement<'_>,
+    params: impl Params,
+) -> Result<Option<T>, AppError> {
+    Ok(statement.query_row(params, T::from_row).optional()?)
+}
+
+impl ToSql for Param {
+    fn to_sql(&self) -> rusqlite::Result<ToSqlOutput<'_>> {
+        Ok(match self {
+            Self::Null => ToSqlOutput::Borrowed(ValueRef::Null),
+            Self::Integer(value) => ToSqlOutput::from(*value),
+            Self::Real(value) => ToSqlOutput::from(*value),
+            Self::Text(value) => ToSqlOutput::from(value.as_str()),
+        })
+    }
 }
 
 macro_rules! param_from {

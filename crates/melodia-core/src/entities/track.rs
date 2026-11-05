@@ -14,11 +14,9 @@
 //!
 //! A library-sized list holds no projection per track, only ids (`ui::paged_rows`).
 
-use sqlx::FromRow;
-
 /// What the player and the bar render, cloned into every published view model, so it carries
 /// playback identity and nothing a list draws.
-#[derive(Clone, Debug, PartialEq, FromRow)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct TrackSummary {
     pub id: i64,
     pub file_path: String,
@@ -101,7 +99,7 @@ impl From<&Track> for TrackSummary {
 
 /// Every track list's row. The FK ids let a row navigate without a second fetch; no list draws
 /// the path, so Browse, which matches rows to files on disk, fetches it beside.
-#[derive(Clone, Debug, PartialEq, FromRow)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct TrackListRow {
     pub id: i64,
     pub title: String,
@@ -125,7 +123,7 @@ pub struct TrackListRow {
 
 /// One Extended-M3U8 line. `file_hash` is `None` before the retroactive hash, and the writer then
 /// omits that line.
-#[derive(Clone, Debug, PartialEq, FromRow)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct PlaylistExportRow {
     pub file_path: String,
     pub file_hash: Option<String>,
@@ -135,7 +133,7 @@ pub struct PlaylistExportRow {
 }
 
 /// Now Playing's technical chips.
-#[derive(Clone, Debug, PartialEq, FromRow)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct TrackMeta {
     pub id: i64,
     pub codec: Option<String>,
@@ -150,7 +148,7 @@ pub struct TrackMeta {
 /// The Edit Track Information dialog, native columns only. The multi-valued fields are rows it
 /// reads apart, an editor fed from a rendered line splitting `Chanson, Francaise` in two and the
 /// save making it permanent.
-#[derive(Clone, Debug, PartialEq, FromRow)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct TagEditRow {
     pub id: i64,
     pub file_path: String,
@@ -191,7 +189,7 @@ pub struct TagEditRow {
 }
 
 /// What a scrobble needs, native columns only; `ScrobbleTrack::from_row` converts it.
-#[derive(Clone, Debug, PartialEq, FromRow)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct ScrobbleRow {
     pub id: i64,
     pub title: String,
@@ -206,7 +204,7 @@ pub struct ScrobbleRow {
 
 /// The FK ids for a surface rendering from [`TrackSummary`], a struct so a swapped album and
 /// artist can't compile.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, FromRow)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct TrackLinks {
     pub id: i64,
     pub album_id: Option<i64>,
@@ -215,7 +213,7 @@ pub struct TrackLinks {
 }
 
 /// Every column, for the few callers needing the whole row.
-#[derive(Clone, Debug, PartialEq, FromRow)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct Track {
     pub id: i64,
     pub file_path: String,
@@ -314,7 +312,7 @@ pub struct FavoriteStats {
 
 /// A Most Played card, on both curated pages: what the card draws and nothing else, the filter
 /// matching `tracks.search_text` in SQL.
-#[derive(Clone, Debug, PartialEq, FromRow)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct MostPlayedFavorite {
     pub id: i64,
     pub title: String,

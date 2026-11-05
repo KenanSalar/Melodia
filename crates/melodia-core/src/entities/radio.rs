@@ -1,11 +1,10 @@
 use std::borrow::Cow;
 
 use serde::{Deserialize, Serialize};
-use sqlx::FromRow;
 
 /// A stored station. Favorites, hand-typed URLs and history are one row at different points in
 /// its life, told apart by its flags.
-#[derive(Clone, Debug, PartialEq, FromRow)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct RadioStation {
     pub id: i64,
     /// radio-browser.info's id, or `None` for a station the user typed in.
@@ -301,7 +300,7 @@ pub struct StationEdit {
 }
 
 /// What an earlier session's attempt at one logo URL left behind.
-#[derive(Debug, Clone, sqlx::FromRow)]
+#[derive(Debug, Clone)]
 pub struct StoredLogoAnswer {
     pub favicon_url: String,
     /// The stored file, or `None` where the URL answered with nothing.
