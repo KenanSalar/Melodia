@@ -46,18 +46,18 @@ pub(super) async fn forget_missing(
 ) -> Result<Option<RestoreNotice>, AppError> {
     let MissingReferences { relocated, gone } = missing_references(db, paths).await?;
     if !relocated.is_empty() {
-        let repointed = queries::artwork::repoint_all(db, &relocated).await?;
+        let repointed = queries::artwork::repoint_all(db, relocated).await?;
         log::info!("Re-pointed {repointed} artwork reference(s) at the current data directory");
     }
     if gone.is_empty() {
         return Ok(None);
     }
 
-    let cleared = queries::artwork::forget_paths(db, &gone).await?;
+    let missing = gone.len();
+    let cleared = queries::artwork::forget_paths(db, gone).await?;
 
     log::info!(
-        "Artwork store is missing {} file(s); cleared {cleared} reference(s) to restore",
-        gone.len()
+        "Artwork store is missing {missing} file(s); cleared {cleared} reference(s) to restore"
     );
     Ok(Some(RestoreNotice::raise(restoring)))
 }

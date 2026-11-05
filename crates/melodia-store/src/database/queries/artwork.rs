@@ -1,7 +1,9 @@
 use std::collections::HashSet;
 use std::path::Path;
 
-use crate::database::sql::Sql;
+use rusqlite::Transaction;
+
+use crate::database::sql::{self, Sql};
 use crate::database::{
     DbPool, MAX_BINDS_PER_STATEMENT, chunked_in_execute_on, queries, values_placeholders,
 };
@@ -68,12 +70,12 @@ pub async fn referenced_filenames(db: &DbPool) -> Result<HashSet<String>, AppErr
 
 /// The same set as whole paths, for the renormalize pass, which opens each file.
 pub async fn referenced_paths(db: &DbPool) -> Result<Vec<String>, AppError> {
-    Ok(sqlx::query_scalar(REFERENCED_PATHS).fetch_all(db.read()).await?)
+    db.read(|conn| sql::fetch_all(conn, REFERENCED_PATHS, ())).await
 }
 
 /// The paths a library scan can put back if their file goes missing.
 pub async fn referenced_library_paths(db: &DbPool) -> Result<Vec<String>, AppError> {
-    Ok(sqlx::query_scalar(LIBRARY_REFERENCED_PATHS).fetch_all(db.read()).await?)
+    db.read(|conn| sql::fetch_all(conn, LIBRARY_REFERENCED_PATHS, ())).await
 }
 
 /// Clears every library reference to `missing`, returning rows touched.
@@ -83,7 +85,7 @@ pub async fn referenced_library_paths(db: &DbPool) -> Result<Vec<String>, AppErr
 /// loses its `date_modified`, `tasks::tag_backfill`'s lever, so the next scan re-extracts its
 /// cover. The roll-ups run in the same transaction, so a cover a sibling track holds is back
 /// before that scan starts.
-pub async fn forget_paths(db: &DbPool, missing: &[String]) -> Result<u64, AppError> {
+pub async fn forget_paths(db: &DbPool, missing: Vec<String>) -> Result<u64, AppError> {
     const FORGETS: [(&str, &str, &str); 4] = [
         ("tracks", "artwork_path", "artwork_path = NULL, date_modified = NULL"),
         ("albums", "artwork_path", "artwork_path = NULL"),
@@ -91,17 +93,17 @@ pub async fn forget_paths(db: &DbPool, missing: &[String]) -> Result<u64, AppErr
         ("playlists", "thumbnail_path", "thumbnail_path = NULL, custom_thumbnail = FALSE"),
     ];
 
-    let mut tx = db.write().begin().await?;
-    let mut touched = 0;
-    for (table, column, cleared) in FORGETS {
-        touched += chunked_in_execute_on(&mut tx, missing, |list| {
-            format!("UPDATE {table} SET {cleared} WHERE {column} IN ({list})")
-        })
-        .await?;
-    }
-    queries::scan::roll_up_covers(&mut tx).await?;
-    tx.commit().await?;
-    Ok(touched)
+    db.transaction(move |tx| {
+        let mut touched = 0;
+        for (table, column, cleared) in FORGETS {
+            touched += chunked_in_execute_on(tx, &missing, |list| {
+                format!("UPDATE {table} SET {cleared} WHERE {column} IN ({list})")
+            })?;
+        }
+        queries::scan::roll_up_covers(tx)?;
+        Ok(touched)
+    })
+    .await
 }
 
 /// Re-points every artwork column across `moves`, returning rows touched.
@@ -109,15 +111,17 @@ pub async fn forget_paths(db: &DbPool, missing: &[String]) -> Result<u64, AppErr
 /// One transaction, so an interruption leaves no row naming a file the sweep is about to retire,
 /// and a statement per column per chunk, the caller sharing the one write connection with a boot
 /// scan. `custom_thumbnail` stays: a re-encoded thumbnail is still the user's choice.
-pub async fn repoint_all(db: &DbPool, moves: &[(String, String)]) -> Result<u64, AppError> {
-    /// The old and new path each row binds.
-    const COLS_PER_ROW: usize = 2;
-
+pub async fn repoint_all(db: &DbPool, moves: Vec<(String, String)>) -> Result<u64, AppError> {
     if moves.is_empty() {
         return Ok(0);
     }
+    db.transaction(move |tx| repoint_on(tx, &moves)).await
+}
 
-    let mut tx = db.write().begin().await?;
+fn repoint_on(tx: &Transaction<'_>, moves: &[(String, String)]) -> Result<u64, AppError> {
+    /// The old and new path each row binds.
+    const COLS_PER_ROW: usize = 2;
+
     let mut touched = 0;
     for chunk in moves.chunks(MAX_BINDS_PER_STATEMENT / COLS_PER_ROW) {
         let rows = values_placeholders(chunk.len(), COLS_PER_ROW);
@@ -131,10 +135,9 @@ pub async fn repoint_all(db: &DbPool, moves: &[(String, String)]) -> Result<u64,
             for (from, to) in chunk {
                 sql.bind(from.as_str()).bind(to.as_str());
             }
-            touched += sql.execute(&mut *tx).await?;
+            touched += sql.execute(tx)?;
         }
     }
-    tx.commit().await?;
     Ok(touched)
 }
 

@@ -30,7 +30,7 @@ pub async fn ids(db: &DbPool) -> Result<Vec<i64>, AppError> {
 }
 
 /// The files behind `ids` as they read now, for the rows on screen.
-pub async fn files(db: &DbPool, ids: &[i64]) -> Result<Vec<KeptOutFile>, AppError> {
+pub async fn files(db: &DbPool, ids: Vec<i64>) -> Result<Vec<KeptOutFile>, AppError> {
     queries::excluded_files::files(db, ids).await
 }
 

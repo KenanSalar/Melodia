@@ -1,5 +1,7 @@
+use rusqlite::Transaction;
+
 use crate::database::DbPool;
-use crate::database::sql::Sql;
+use crate::database::sql::{self, Sql};
 use melodia_core::entities::folder;
 use melodia_core::error::AppError;
 
@@ -89,22 +91,16 @@ pub async fn absorb_folders(db: &DbPool, parent_id: i64, ids: &[i64]) -> Result<
 
 /// Finds or creates a folder by path, returning its id. A created one is disabled, so it is neither
 /// watched nor listed as a library folder; an existing one is left as it is.
-pub(crate) async fn upsert_folder(
-    tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
-    path: &str,
-) -> Result<i64, AppError> {
+pub(crate) fn upsert_folder(tx: &Transaction<'_>, path: &str) -> Result<i64, AppError> {
     let now = melodia_core::utils::now_rfc3339();
-    let id = sqlx::query_scalar::<_, i64>(
+    sql::fetch_one(
+        tx,
         "INSERT INTO folders (path, is_enabled, added_at)
          VALUES (?, FALSE, ?)
          ON CONFLICT(path) DO UPDATE SET path = excluded.path
          RETURNING id",
+        (path, now),
     )
-    .bind(path)
-    .bind(&now)
-    .fetch_one(&mut **tx)
-    .await?;
-    Ok(id)
 }
 
 pub async fn update_folder_last_scanned(

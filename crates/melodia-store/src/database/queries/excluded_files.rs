@@ -10,13 +10,11 @@
 use std::collections::{HashMap, HashSet};
 use std::path::Path;
 
-use sqlx::sqlite::SqliteConnection;
-use sqlx::{Sqlite, Transaction};
+use rusqlite::{Connection, Transaction};
 
-use crate::database::sql::Sql;
+use crate::database::sql::{self, Sql};
 use crate::database::{
-    DbPool, MAX_BINDS_PER_STATEMENT, chunked_in_execute_on, chunked_in_query, chunked_in_query_on,
-    values_placeholders,
+    DbPool, MAX_BINDS_PER_STATEMENT, chunked_in_execute_on, chunked_in_query, values_placeholders,
 };
 use melodia_core::entities::duplicates::KeptOutFile;
 use melodia_core::entities::scan::{ExtractedMetadata, FileStamp};
@@ -31,10 +29,7 @@ pub(crate) struct NewExclusion<'a> {
     pub(crate) folder_id: i64,
 }
 
-pub(crate) async fn exclude_on(
-    tx: &mut Transaction<'_, Sqlite>,
-    files: &[NewExclusion<'_>],
-) -> Result<(), AppError> {
+pub(crate) fn exclude_on(tx: &Transaction<'_>, files: &[NewExclusion<'_>]) -> Result<(), AppError> {
     const COLS_PER_ROW: usize = 6;
     let excluded_at = melodia_core::utils::now_rfc3339();
     for chunk in files.chunks(MAX_BINDS_PER_STATEMENT / COLS_PER_ROW) {
@@ -51,15 +46,15 @@ pub(crate) async fn exclude_on(
                 .bind(file.folder_id)
                 .bind(excluded_at.as_str());
         }
-        sql.execute(&mut **tx).await?;
+        sql.execute(tx)?;
     }
     Ok(())
 }
 
 /// Gives the kept-out files at `files` the hash and stamp they were just read with, so each is
 /// followed by its bytes as they now are.
-pub(crate) async fn restamp_on(
-    tx: &mut Transaction<'_, Sqlite>,
+pub(crate) fn restamp_on(
+    tx: &Transaction<'_>,
     files: &[(&Path, &ExtractedMetadata)],
 ) -> Result<(), AppError> {
     const COLS_PER_ROW: usize = 4;
@@ -77,69 +72,63 @@ pub(crate) async fn restamp_on(
                 .bind(meta.file_size)
                 .bind(meta.date_modified.as_deref());
         }
-        sql.execute(&mut **tx).await?;
+        sql.execute(tx)?;
     }
     Ok(())
 }
 
 pub async fn count(db: &DbPool) -> Result<i64, AppError> {
-    let count = sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM excluded_files")
-        .fetch_one(db.read())
-        .await?;
-    Ok(count)
+    db.read(|conn| sql::fetch_one(conn, "SELECT COUNT(*) FROM excluded_files", ())).await
 }
 
 /// Every kept-out file's id, in path order: the kept-out list's keyset.
 pub async fn ids(db: &DbPool) -> Result<Vec<i64>, AppError> {
-    let ids = sqlx::query_scalar::<_, i64>("SELECT id FROM excluded_files ORDER BY path")
-        .fetch_all(db.read())
-        .await?;
-    Ok(ids)
+    db.read(|conn| sql::fetch_all(conn, "SELECT id FROM excluded_files ORDER BY path", ())).await
 }
 
 /// The kept-out files behind `ids`, in no particular order. An id lifted since has no row.
-pub async fn files(db: &DbPool, ids: &[i64]) -> Result<Vec<KeptOutFile>, AppError> {
-    chunked_in_query(db.read(), ids, |placeholders| {
-        format!("SELECT id, path, excluded_at FROM excluded_files WHERE id IN ({placeholders})")
+pub async fn files(db: &DbPool, ids: Vec<i64>) -> Result<Vec<KeptOutFile>, AppError> {
+    db.read(move |conn| {
+        chunked_in_query(conn, &ids, |placeholders| {
+            format!("SELECT id, path, excluded_at FROM excluded_files WHERE id IN ({placeholders})")
+        })
     })
     .await
 }
 
 /// Every kept-out path, in path order.
 pub async fn paths(db: &DbPool) -> Result<Vec<String>, AppError> {
-    let paths = sqlx::query_scalar::<_, String>("SELECT path FROM excluded_files ORDER BY path")
-        .fetch_all(db.read())
-        .await?;
-    Ok(paths)
+    db.read(|conn| sql::fetch_all(conn, "SELECT path FROM excluded_files ORDER BY path", ())).await
 }
 
 /// The kept-out paths among `paths`, off the read pool.
-pub async fn among(db: &DbPool, paths: &[&str]) -> Result<HashSet<String>, AppError> {
-    let rows: Vec<(String,)> = chunked_in_query(db.read(), paths, select_among).await?;
-    Ok(rows.into_iter().map(|(path,)| path).collect())
+pub async fn among(db: &DbPool, paths: Vec<String>) -> Result<HashSet<String>, AppError> {
+    db.read(move |conn| {
+        let paths: Vec<&str> = paths.iter().map(String::as_str).collect();
+        among_on(conn, &paths)
+    })
+    .await
 }
 
 /// [`among`] on a connection the caller holds, inside the transaction that would insert them.
-pub(crate) async fn among_on(
-    conn: &mut SqliteConnection,
-    paths: &[&str],
-) -> Result<HashSet<String>, AppError> {
-    let rows: Vec<(String,)> = chunked_in_query_on(conn, paths, select_among).await?;
-    Ok(rows.into_iter().map(|(path,)| path).collect())
-}
-
-fn select_among(placeholders: &str) -> String {
-    format!("SELECT path FROM excluded_files WHERE path IN ({placeholders})")
+pub(crate) fn among_on(conn: &Connection, paths: &[&str]) -> Result<HashSet<String>, AppError> {
+    let rows: Vec<String> = chunked_in_query(conn, paths, |placeholders| {
+        format!("SELECT path FROM excluded_files WHERE path IN ({placeholders})")
+    })?;
+    Ok(rows.into_iter().collect())
 }
 
 /// The kept-out files filed under `folder_id`, each with its stamp.
 pub async fn in_folder(db: &DbPool, folder_id: i64) -> Result<Vec<(String, FileStamp)>, AppError> {
-    let rows = sqlx::query_as::<_, (String, Option<i64>, Option<String>)>(
-        "SELECT path, file_size, date_modified FROM excluded_files WHERE folder_id = ?",
-    )
-    .bind(folder_id)
-    .fetch_all(db.read())
-    .await?;
+    let rows: Vec<(String, Option<i64>, Option<String>)> = db
+        .read(move |conn| {
+            sql::fetch_all(
+                conn,
+                "SELECT path, file_size, date_modified FROM excluded_files WHERE folder_id = ?",
+                (folder_id,),
+            )
+        })
+        .await?;
     let files = rows
         .into_iter()
         .map(|(path, file_size, date_modified)| (path, FileStamp { file_size, date_modified }))
@@ -149,18 +138,17 @@ pub async fn in_folder(db: &DbPool, folder_id: i64) -> Result<Vec<(String, FileS
 
 /// `file_hash → [(id, path)]` of the kept-out files carrying each of `hashes`, the ones a new path
 /// with those bytes may have moved from.
-pub(crate) async fn by_hash_on(
-    conn: &mut SqliteConnection,
+pub(crate) fn by_hash_on(
+    conn: &Connection,
     hashes: &[&str],
 ) -> Result<HashMap<String, Vec<(i64, String)>>, AppError> {
     let unique: Vec<&str> = hashes.iter().copied().collect::<HashSet<_>>().into_iter().collect();
-    let rows: Vec<(String, i64, String)> = chunked_in_query_on(conn, &unique, |placeholders| {
+    let rows: Vec<(String, i64, String)> = chunked_in_query(conn, &unique, |placeholders| {
         format!(
             "SELECT file_hash, id, path FROM excluded_files WHERE file_hash IN ({placeholders}) \
              ORDER BY id"
         )
-    })
-    .await?;
+    })?;
     let mut by_hash: HashMap<String, Vec<(i64, String)>> = HashMap::new();
     for (hash, id, path) in rows {
         by_hash.entry(hash).or_default().push((id, path));
@@ -168,41 +156,29 @@ pub(crate) async fn by_hash_on(
     Ok(by_hash)
 }
 
-pub(crate) async fn id_at_on(
-    conn: &mut SqliteConnection,
-    path: &str,
-) -> Result<Option<i64>, AppError> {
-    let id = sqlx::query_scalar::<_, i64>("SELECT id FROM excluded_files WHERE path = ?")
-        .bind(path)
-        .fetch_optional(&mut *conn)
-        .await?;
-    Ok(id)
+pub(crate) fn id_at_on(conn: &Connection, path: &str) -> Result<Option<i64>, AppError> {
+    sql::fetch_optional(conn, "SELECT id FROM excluded_files WHERE path = ?", (path,))
 }
 
 /// Moves an exclusion with its file. `OR REPLACE` because a kept-out file renamed over another
 /// takes its path, and the file that path named is gone.
-pub(crate) async fn repoint_on(
-    tx: &mut Transaction<'_, Sqlite>,
+pub(crate) fn repoint_on(
+    tx: &Transaction<'_>,
     id: i64,
     path: &str,
     folder_id: i64,
 ) -> Result<(), AppError> {
-    sqlx::query("UPDATE OR REPLACE excluded_files SET path = ?, folder_id = ? WHERE id = ?")
-        .bind(path)
-        .bind(folder_id)
-        .bind(id)
-        .execute(&mut **tx)
-        .await?;
+    sql::execute(
+        tx,
+        "UPDATE OR REPLACE excluded_files SET path = ?, folder_id = ? WHERE id = ?",
+        (path, folder_id, id),
+    )?;
     Ok(())
 }
 
 /// Lets the files at `paths` back into the library's reach, returning how many were kept out.
-pub(crate) async fn lift_on(
-    tx: &mut Transaction<'_, Sqlite>,
-    paths: &[&str],
-) -> Result<u64, AppError> {
+pub(crate) fn lift_on(tx: &Transaction<'_>, paths: &[&str]) -> Result<u64, AppError> {
     chunked_in_execute_on(tx, paths, |placeholders| {
         format!("DELETE FROM excluded_files WHERE path IN ({placeholders})")
     })
-    .await
 }

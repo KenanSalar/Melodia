@@ -3,7 +3,9 @@
 use std::collections::HashMap;
 use std::sync::LazyLock;
 
-use crate::database::sql::Sql;
+use rusqlite::Transaction;
+
+use crate::database::sql::{self, Sql};
 use crate::database::{MAX_BINDS_PER_STATEMENT, chunked_in_execute_on, placeholders, values_list};
 use melodia_core::entities::scan::ExtractedMetadata;
 use melodia_core::entities::track_search::SearchFields;
@@ -163,8 +165,8 @@ static INSERT_TRACK: LazyLock<String> = LazyLock::new(|| {
 
 /// Inserts a track and returns its id. `now` is computed once per batch, so a batch shares one
 /// `date_added`.
-pub(crate) async fn insert_track(
-    tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
+pub(crate) fn insert_track(
+    tx: &Transaction<'_>,
     file_path: &str,
     file_name: &str,
     meta: &melodia_core::entities::scan::ExtractedMetadata,
@@ -180,8 +182,8 @@ pub(crate) async fn insert_track(
     };
     let mut sql = Sql::new(INSERT_TRACK.as_str());
     bind_new_track(&mut sql, &row, now);
-    let (track_id,): (i64,) = sql.fetch_one(&mut **tx).await?;
-    insert_track_joins(tx, track_id, meta, ids, names).await?;
+    let track_id: i64 = sql.fetch_one(tx)?;
+    insert_track_joins(tx, track_id, meta, ids, names)?;
     Ok(track_id)
 }
 
@@ -200,8 +202,8 @@ pub const INSERT_CHUNK_ROWS: usize =
 /// [`insert_track`] for the ingest hot path, one statement per [`INSERT_CHUNK_ROWS`] rows. Returns
 /// the ids **in `rows` order**, which the drag-and-drop import queues by: `RETURNING`'s order is
 /// unspecified, so each id is matched back by its `file_path`.
-pub(crate) async fn insert_tracks_batch(
-    tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
+pub(crate) fn insert_tracks_batch(
+    tx: &Transaction<'_>,
     rows: &[NewTrackRow<'_>],
     now: &str,
     names: &mut NameCache,
@@ -216,7 +218,7 @@ pub(crate) async fn insert_tracks_batch(
             bind_new_track(&mut sql, row, now);
         }
 
-        let returned: Vec<(i64, String)> = sql.fetch_all(&mut **tx).await?;
+        let returned: Vec<(i64, String)> = sql.fetch_all(tx)?;
         let mut by_path: HashMap<String, i64> =
             returned.into_iter().map(|(id, path)| (path, id)).collect();
         for row in chunk {
@@ -227,7 +229,7 @@ pub(crate) async fn insert_tracks_batch(
                     row.file_path
                 )));
             };
-            insert_track_joins(tx, id, row.meta, &row.ids, names).await?;
+            insert_track_joins(tx, id, row.meta, &row.ids, names)?;
             out.push(id);
         }
     }
@@ -236,26 +238,21 @@ pub(crate) async fn insert_tracks_batch(
 
 /// Re-points a moved or renamed track, keeping its playback state. `false` where the row is gone,
 /// which a caller holding an id resolved before the transaction opened takes as a cue to insert.
-pub(crate) async fn update_track_location(
-    tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
+pub(crate) fn update_track_location(
+    tx: &Transaction<'_>,
     track_id: i64,
     new_path: &str,
     new_file_name: &str,
     new_folder_id: i64,
     date_modified: Option<&str>,
 ) -> Result<bool, AppError> {
-    let result = sqlx::query(
+    let updated = sql::execute(
+        tx,
         "UPDATE tracks SET file_path = ?, file_name = ?, folder_id = ?, date_modified = ?
          WHERE id = ?",
-    )
-    .bind(new_path)
-    .bind(new_file_name)
-    .bind(new_folder_id)
-    .bind(date_modified)
-    .bind(track_id)
-    .execute(&mut **tx)
-    .await?;
-    Ok(result.rows_affected() > 0)
+        (new_path, new_file_name, new_folder_id, date_modified, track_id),
+    )?;
+    Ok(updated > 0)
 }
 
 /// Rewrites every tag-backed column of a track that changed on disk, keeping its playback state.
@@ -265,8 +262,8 @@ pub(crate) async fn update_track_location(
 /// tag wins whenever it says something, and silence leaves the row alone. So with the write-back
 /// off, a star set here gives way to one another player wrote, and a cleared one comes back while
 /// the file still carries it, the column having no way to say "the user meant zero".
-pub(crate) async fn update_track_metadata(
-    tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
+pub(crate) fn update_track_metadata(
+    tx: &Transaction<'_>,
     file_path: &str,
     meta: &melodia_core::entities::scan::ExtractedMetadata,
     ids: &ResolvedIds,
@@ -297,12 +294,12 @@ pub(crate) async fn update_track_metadata(
     bind_track_columns(&mut sql, meta, ids);
     let tag_rating = meta.rating.unwrap_or(0);
     sql.bind(tag_rating).bind(tag_rating).bind(file_path);
-    let updated: Option<(i64,)> = sql.fetch_optional(&mut **tx).await?;
+    let updated: Option<i64> = sql.fetch_optional(tx)?;
 
     // Here rather than at the callers: an artist column refreshed without its credit rows displays
     // one thing and files under another.
-    if let Some((track_id,)) = updated {
-        replace_track_joins(tx, track_id, meta, ids, names).await?;
+    if let Some(track_id) = updated {
+        replace_track_joins(tx, track_id, meta, ids, names)?;
     }
     Ok(())
 }
@@ -312,10 +309,9 @@ pub(crate) async fn update_track_metadata(
 /// Driven from the albums, so the cost follows the albums still missing a cover, each one
 /// `idx_tracks_album_id` seek in `id` order. Not a window over `tracks`: `SQLite` scans a
 /// materialized CTE once per album written, and a first scan writes nearly every album.
-pub(crate) async fn update_album_artwork_from_tracks(
-    tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
-) -> Result<(), AppError> {
-    sqlx::query(
+pub(crate) fn update_album_artwork_from_tracks(tx: &Transaction<'_>) -> Result<(), AppError> {
+    sql::execute(
+        tx,
         "WITH first_art AS (
             SELECT albums.id AS album_id,
                    (SELECT tracks.artwork_path FROM tracks
@@ -330,9 +326,8 @@ pub(crate) async fn update_album_artwork_from_tracks(
         FROM first_art
         WHERE first_art.album_id = albums.id
           AND first_art.artwork_path IS NOT NULL",
-    )
-    .execute(&mut **tx)
-    .await?;
+        (),
+    )?;
     Ok(())
 }
 
@@ -342,11 +337,9 @@ pub(crate) async fn update_album_artwork_from_tracks(
 /// One call for a pass that can change which cover a playlisted track holds: refreshing only the
 /// albums leaves a playlist naming a cover none of its tracks hold, which keeps the file
 /// referenced and out of the artwork sweep's reach.
-pub(crate) async fn roll_up_covers(
-    tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
-) -> Result<(), AppError> {
-    update_album_artwork_from_tracks(tx).await?;
-    crate::database::queries::playlist::refresh_automatic_thumbnails(tx).await
+pub(crate) fn roll_up_covers(tx: &Transaction<'_>) -> Result<(), AppError> {
+    update_album_artwork_from_tracks(tx)?;
+    crate::database::queries::playlist::refresh_automatic_thumbnails(tx)
 }
 
 /// Deletes the albums, artists and genres no track reaches any more, which the stats triggers only
@@ -357,17 +350,16 @@ pub(crate) async fn roll_up_covers(
 /// and are all that keeps a featured-only one, so a predicate over the two FKs alone would delete
 /// exactly the artists they exist to surface. **Deletes only**: every caller has the stats triggers
 /// live or `stats::recalculate_all_stats` behind it, so a recompute here would be done twice.
-pub(crate) async fn prune_orphans(
-    tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
-) -> Result<(), AppError> {
-    sqlx::query(
+pub(crate) fn prune_orphans(tx: &Transaction<'_>) -> Result<(), AppError> {
+    sql::execute(
+        tx,
         "DELETE FROM albums \
          WHERE NOT EXISTS (SELECT 1 FROM tracks WHERE tracks.album_id = albums.id)",
-    )
-    .execute(&mut **tx)
-    .await?;
+        (),
+    )?;
 
-    sqlx::query(
+    sql::execute(
+        tx,
         "DELETE FROM artists \
          WHERE id <> ? \
            AND NOT EXISTS (SELECT 1 FROM tracks WHERE tracks.artist_id = artists.id) \
@@ -375,40 +367,34 @@ pub(crate) async fn prune_orphans(
            AND NOT EXISTS (SELECT 1 FROM track_artists WHERE track_artists.artist_id = artists.id) \
            AND NOT EXISTS (SELECT 1 FROM album_artists WHERE album_artists.artist_id = artists.id) \
            AND NOT EXISTS (SELECT 1 FROM track_credits WHERE track_credits.artist_id = artists.id)",
-    )
-    .bind(crate::database::queries::artist::UNKNOWN_ARTIST_ID)
-    .execute(&mut **tx)
-    .await?;
+        (crate::database::queries::artist::UNKNOWN_ARTIST_ID,),
+    )?;
 
-    sqlx::query(
+    sql::execute(
+        tx,
         "DELETE FROM genres \
          WHERE NOT EXISTS (SELECT 1 FROM tracks WHERE tracks.genre_id = genres.id) \
            AND NOT EXISTS (SELECT 1 FROM track_genres WHERE track_genres.genre_id = genres.id)",
-    )
-    .execute(&mut **tx)
-    .await?;
+        (),
+    )?;
 
     Ok(())
 }
 
-pub(crate) async fn delete_track_by_path(
-    tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
+pub(crate) fn delete_track_by_path(
+    tx: &Transaction<'_>,
     file_path: &str,
 ) -> Result<bool, AppError> {
-    let result = sqlx::query("DELETE FROM tracks WHERE file_path = ?")
-        .bind(file_path)
-        .execute(&mut **tx)
-        .await?;
-    Ok(result.rows_affected() > 0)
+    let deleted = sql::execute(tx, "DELETE FROM tracks WHERE file_path = ?", (file_path,))?;
+    Ok(deleted > 0)
 }
 
 /// Deletes the tracks at `file_paths`, returning how many went.
-pub(crate) async fn delete_tracks_by_paths_batch(
-    tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
+pub(crate) fn delete_tracks_by_paths_batch(
+    tx: &Transaction<'_>,
     file_paths: &[String],
 ) -> Result<u64, AppError> {
     chunked_in_execute_on(tx, file_paths, |placeholders| {
         format!("DELETE FROM tracks WHERE file_path IN ({placeholders})")
     })
-    .await
 }

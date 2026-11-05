@@ -49,8 +49,7 @@ async fn kept_out_renamed(db: &DbPool, events: &[FileEvent]) -> HashSet<String> 
             _ => None,
         })
         .collect();
-    let paths: Vec<&str> = paths.iter().map(String::as_str).collect();
-    queries::excluded_files::among(db, &paths).await.unwrap_or_else(|e| {
+    queries::excluded_files::among(db, paths).await.unwrap_or_else(|e| {
         log::warn!("Kept-out check skipped for this batch: {}", describe(&e));
         HashSet::new()
     })

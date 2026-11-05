@@ -6,6 +6,8 @@
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 
+use rusqlite::Transaction;
+
 use super::{
     MoveCandidates, NameCache, delete_track_by_path, find_folder_for_path, get_track_id_by_path,
     insert_track, prune_orphans, resolve_track_context, roll_up_covers, track_exists_by_path,
@@ -75,45 +77,41 @@ pub async fn apply_watch_batch(
         names: NameCache::for_chunk(changes.len()),
     };
     changes.sort_by_key(|change| matches!(change, WatchedChange::Removed { .. }));
+    db.transaction(move |tx| apply_changes(tx, &changes, &mut batch)).await
+}
 
+fn apply_changes(
+    tx: &Transaction<'_>,
+    changes: &[WatchedChange],
+    batch: &mut Batch,
+) -> Result<(), AppError> {
     let is_bulk = changes.len() > BULK_THRESHOLD;
-    let mut tx = db.write().begin().await?;
-
     if is_bulk {
-        stats::disable_stats_triggers(&mut tx).await?;
+        stats::disable_stats_triggers(tx)?;
     }
 
     // Gates the sweeps below, which a batch of events for untracked files mustn't pay for.
     let mut changed: usize = 0;
 
-    for change in &changes {
+    for change in changes {
         match change {
-            WatchedChange::Created { path, meta } => {
-                match handle_created(&mut tx, path, meta, &mut batch).await {
-                    Ok(wrote) => changed += usize::from(wrote),
-                    Err(e) => log::warn!(
-                        "Failed to process created file {}: {}",
-                        path.display(),
-                        describe(&e)
-                    ),
-                }
-            }
-            WatchedChange::Removed { path, .. } => match handle_removed(&mut tx, path).await {
+            WatchedChange::Created { path, meta } => match handle_created(tx, path, meta, batch) {
+                Ok(wrote) => changed += usize::from(wrote),
+                Err(e) => log::warn!(
+                    "Failed to process created file {}: {}",
+                    path.display(),
+                    describe(&e)
+                ),
+            },
+            WatchedChange::Removed { path, .. } => match handle_removed(tx, path) {
                 Ok(wrote) => changed += usize::from(wrote),
                 Err(e) => {
                     log::warn!("Failed to remove track {}: {}", path.display(), describe(&e));
                 }
             },
             WatchedChange::Renamed { from, to, meta, date_modified } => {
-                let renamed = handle_renamed(
-                    &mut tx,
-                    from,
-                    to,
-                    meta.as_ref(),
-                    date_modified.as_deref(),
-                    &mut batch,
-                )
-                .await;
+                let renamed =
+                    handle_renamed(tx, from, to, meta.as_ref(), date_modified.as_deref(), batch);
                 match renamed {
                     Ok(wrote) => changed += usize::from(wrote),
                     Err(e) => log::warn!(
@@ -125,7 +123,7 @@ pub async fn apply_watch_batch(
                 }
             }
             WatchedChange::Modified { path, meta } => {
-                match handle_modified(&mut tx, path, meta, &mut batch).await {
+                match handle_modified(tx, path, meta, batch) {
                     Ok(wrote) => changed += usize::from(wrote),
                     Err(e) => log::warn!(
                         "Failed to process modified file {}: {}",
@@ -136,22 +134,20 @@ pub async fn apply_watch_batch(
             }
         }
     }
-    lift_gone(&mut tx, &changes).await;
+    lift_gone(tx, changes);
 
     if is_bulk {
         // With nothing changed the counts are still right, and only the re-enable is owed.
         if changed > 0 {
-            stats::recalculate_all_stats(&mut tx).await?;
+            stats::recalculate_all_stats(tx)?;
         }
-        stats::enable_stats_triggers(&mut tx).await?;
+        stats::enable_stats_triggers(tx)?;
     }
 
     if changed > 0 {
-        roll_up_covers(&mut tx).await?;
-        prune_orphans(&mut tx).await?;
+        roll_up_covers(tx)?;
+        prune_orphans(tx)?;
     }
-    tx.commit().await?;
-
     Ok(())
 }
 
@@ -159,10 +155,10 @@ pub async fn apply_watch_batch(
 /// from disk: moved, not duplicated. Read before the write transaction opens; a failed lookup
 /// costs the batch its move detection and nothing else.
 async fn moved_candidates(db: &DbPool, changes: &[WatchedChange]) -> MoveCandidates {
-    let hashes: Vec<&str> = changes
+    let hashes: Vec<String> = changes
         .iter()
         .filter_map(|change| match change {
-            WatchedChange::Created { meta, .. } => Some(meta.file_hash.as_str()),
+            WatchedChange::Created { meta, .. } => Some(meta.file_hash.clone()),
             _ => None,
         })
         .collect();
@@ -170,7 +166,7 @@ async fn moved_candidates(db: &DbPool, changes: &[WatchedChange]) -> MoveCandida
         return MoveCandidates::default();
     }
 
-    let mut candidates = match read_candidates(db, &hashes).await {
+    let mut candidates = match read_candidates(db, hashes).await {
         Ok(candidates) => candidates,
         Err(e) => {
             log::warn!("Move detection skipped for this batch: {}", describe(&e));
@@ -187,9 +183,12 @@ async fn moved_candidates(db: &DbPool, changes: &[WatchedChange]) -> MoveCandida
     .unwrap_or_default()
 }
 
-async fn read_candidates(db: &DbPool, hashes: &[&str]) -> Result<MoveCandidates, AppError> {
-    let mut conn = db.read().acquire().await?;
-    MoveCandidates::read_on(&mut conn, hashes).await
+async fn read_candidates(db: &DbPool, hashes: Vec<String>) -> Result<MoveCandidates, AppError> {
+    db.read(move |conn| {
+        let hashes: Vec<&str> = hashes.iter().map(String::as_str).collect();
+        MoveCandidates::read_on(conn, &hashes)
+    })
+    .await
 }
 
 fn file_name_owned(path: &Path) -> String {
@@ -198,26 +197,26 @@ fn file_name_owned(path: &Path) -> String {
 
 /// Whether a row was written, by an insert or a re-point. A kept-out file writes none: it is
 /// restamped, or its exclusion follows it where it moved.
-async fn handle_created(
-    tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
+fn handle_created(
+    tx: &Transaction<'_>,
     path: &Path,
     meta: &ExtractedMetadata,
     batch: &mut Batch,
 ) -> Result<bool, AppError> {
     let path_str = path.to_string_lossy().into_owned();
 
-    if track_exists_by_path(tx, &path_str).await? {
+    if track_exists_by_path(tx, &path_str)? {
         return Ok(false);
     }
-    if excluded_files::id_at_on(tx, &path_str).await?.is_some() {
-        excluded_files::restamp_on(tx, &[(path, meta)]).await?;
+    if excluded_files::id_at_on(tx, &path_str)?.is_some() {
+        excluded_files::restamp_on(tx, &[(path, meta)])?;
         log::debug!("Kept out of the library, restamped: {}", path.display());
         return Ok(false);
     }
 
     // A failed folder lookup leaves the entry for a later same-hash event.
     if let Some((existing_id, old_path)) = batch.moved.tracks.get(&meta.file_hash).cloned() {
-        let Some(folder_id) = find_folder_for_path(tx, &path_str).await? else {
+        let Some(folder_id) = find_folder_for_path(tx, &path_str)? else {
             log::debug!("Moved file not in any library folder, skipping: {}", path.display());
             return Ok(false);
         };
@@ -229,8 +228,7 @@ async fn handle_created(
             &file_name,
             folder_id,
             meta.date_modified.as_deref(),
-        )
-        .await?;
+        )?;
         if repointed {
             batch.moved.tracks.remove(&meta.file_hash);
             log::info!("Detected moved file: {old_path} -> {path_str}");
@@ -241,30 +239,26 @@ async fn handle_created(
     }
 
     if let Some((exclusion_id, old_path)) = batch.moved.take_exclusion(&meta.file_hash) {
-        carry_kept_out(tx, exclusion_id, &old_path, &path_str).await?;
+        carry_kept_out(tx, exclusion_id, &old_path, &path_str)?;
         return Ok(false);
     }
 
-    let Some(folder_id) = library_folder(tx, path, &path_str, "Created").await? else {
+    let Some(folder_id) = library_folder(tx, path, &path_str, "Created")? else {
         return Ok(false);
     };
-    let ids = resolve_track_context(tx, folder_id, meta, &mut batch.names).await?;
+    let ids = resolve_track_context(tx, folder_id, meta, &mut batch.names)?;
 
     let file_name = file_name_owned(path);
     let now = melodia_core::utils::now_rfc3339();
-    let _new_id =
-        insert_track(tx, &path_str, &file_name, meta, &ids, &now, &mut batch.names).await?;
+    let _new_id = insert_track(tx, &path_str, &file_name, meta, &ids, &now, &mut batch.names)?;
     log::info!("Added new track: {path_str}");
 
     Ok(true)
 }
 
 /// Whether a row was deleted.
-async fn handle_removed(
-    tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
-    path: &Path,
-) -> Result<bool, AppError> {
-    let deleted = delete_track_by_path(tx, &path.to_string_lossy()).await?;
+fn handle_removed(tx: &Transaction<'_>, path: &Path) -> Result<bool, AppError> {
+    let deleted = delete_track_by_path(tx, &path.to_string_lossy())?;
     if deleted {
         log::info!("Removed track: {}", path.display());
     } else {
@@ -275,7 +269,7 @@ async fn handle_removed(
 
 /// Lifts the exclusions whose file is gone. It runs after the events, so a `Created` has carried
 /// any that moved, and takes them together, deleting a folder being an event per file.
-async fn lift_gone(tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>, changes: &[WatchedChange]) {
+fn lift_gone(tx: &Transaction<'_>, changes: &[WatchedChange]) {
     let paths: Vec<_> = changes
         .iter()
         .filter_map(|change| match change {
@@ -284,7 +278,7 @@ async fn lift_gone(tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>, changes: &[Watc
         })
         .collect();
     let paths: Vec<&str> = paths.iter().map(AsRef::as_ref).collect();
-    match excluded_files::lift_on(tx, &paths).await {
+    match excluded_files::lift_on(tx, &paths) {
         Ok(0) => {}
         Ok(lifted) => log::info!("Forgot {lifted} kept-out files gone from disk"),
         Err(e) => log::warn!("Failed to lift kept-out files: {}", describe(&e)),
@@ -293,8 +287,8 @@ async fn lift_gone(tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>, changes: &[Watc
 
 /// Whether a row was written. A rename onto a kept-out path from outside the library, a tagger's
 /// save through a temp file, is a `Created` there and stays out.
-async fn handle_renamed(
-    tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
+fn handle_renamed(
+    tx: &Transaction<'_>,
     from: &Path,
     to: &Path,
     meta: Option<&ExtractedMetadata>,
@@ -304,8 +298,8 @@ async fn handle_renamed(
     let from_str = from.to_string_lossy().into_owned();
     let to_str = to.to_string_lossy().into_owned();
 
-    if let Some(track_id) = get_track_id_by_path(tx, &from_str).await? {
-        let Some(folder_id) = find_folder_for_path(tx, &to_str).await? else {
+    if let Some(track_id) = get_track_id_by_path(tx, &from_str)? {
+        let Some(folder_id) = find_folder_for_path(tx, &to_str)? else {
             log::debug!("Renamed file not in any library folder, skipping: {}", to.display());
             return Ok(false);
         };
@@ -313,19 +307,18 @@ async fn handle_renamed(
         let file_name = file_name_owned(to);
         // Resolved inside this transaction, so the row is there.
         let _repointed =
-            update_track_location(tx, track_id, &to_str, &file_name, folder_id, date_modified)
-                .await?;
+            update_track_location(tx, track_id, &to_str, &file_name, folder_id, date_modified)?;
         // The row's file now sits where the kept-out one did.
-        excluded_files::lift_on(tx, &[to_str.as_str()]).await?;
+        excluded_files::lift_on(tx, &[to_str.as_str()])?;
         log::info!("Renamed track: {from_str} -> {to_str}");
         return Ok(true);
     }
-    if let Some(exclusion_id) = excluded_files::id_at_on(tx, &from_str).await? {
-        carry_kept_out(tx, exclusion_id, &from_str, &to_str).await?;
+    if let Some(exclusion_id) = excluded_files::id_at_on(tx, &from_str)? {
+        carry_kept_out(tx, exclusion_id, &from_str, &to_str)?;
         return Ok(false);
     }
     if let Some(meta) = meta {
-        return handle_created(tx, to, meta, batch).await;
+        return handle_created(tx, to, meta, batch);
     }
 
     Ok(false)
@@ -334,48 +327,45 @@ async fn handle_renamed(
 /// Carries a kept-out file's exclusion to where it was renamed or moved. It lifts instead where the
 /// new path is outside every library folder, or is a track's, the row keeping its history over the
 /// file written onto it.
-async fn carry_kept_out(
-    tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
+fn carry_kept_out(
+    tx: &Transaction<'_>,
     exclusion_id: i64,
     from: &str,
     to: &str,
 ) -> Result<(), AppError> {
-    let folder_id = if track_exists_by_path(tx, to).await? {
-        None
-    } else {
-        find_folder_for_path(tx, to).await?
-    };
+    let folder_id =
+        if track_exists_by_path(tx, to)? { None } else { find_folder_for_path(tx, to)? };
     match folder_id {
         Some(folder_id) => {
-            excluded_files::repoint_on(tx, exclusion_id, to, folder_id).await?;
+            excluded_files::repoint_on(tx, exclusion_id, to, folder_id)?;
             log::info!("Kept-out file moved: {from} -> {to}");
         }
         None => {
-            excluded_files::lift_on(tx, &[from]).await?;
+            excluded_files::lift_on(tx, &[from])?;
         }
     }
     Ok(())
 }
 
 /// Whether a row was written.
-async fn handle_modified(
-    tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
+fn handle_modified(
+    tx: &Transaction<'_>,
     path: &Path,
     meta: &ExtractedMetadata,
     batch: &mut Batch,
 ) -> Result<bool, AppError> {
     let path_str = path.to_string_lossy().into_owned();
 
-    if !track_exists_by_path(tx, &path_str).await? {
-        return handle_created(tx, path, meta, batch).await;
+    if !track_exists_by_path(tx, &path_str)? {
+        return handle_created(tx, path, meta, batch);
     }
 
-    let Some(folder_id) = library_folder(tx, path, &path_str, "Modified").await? else {
+    let Some(folder_id) = library_folder(tx, path, &path_str, "Modified")? else {
         return Ok(false);
     };
-    let ids = resolve_track_context(tx, folder_id, meta, &mut batch.names).await?;
+    let ids = resolve_track_context(tx, folder_id, meta, &mut batch.names)?;
 
-    update_track_metadata(tx, &path_str, meta, &ids, &mut batch.names).await?;
+    update_track_metadata(tx, &path_str, meta, &ids, &mut batch.names)?;
     log::info!("Updated metadata for: {path_str}");
 
     Ok(true)
@@ -383,13 +373,13 @@ async fn handle_modified(
 
 /// The library folder holding a watched `path`, or `None`, logged under `context`, outside every
 /// one.
-async fn library_folder(
-    tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
+fn library_folder(
+    tx: &Transaction<'_>,
     path: &Path,
     path_str: &str,
     context: &str,
 ) -> Result<Option<i64>, AppError> {
-    let folder_id = find_folder_for_path(tx, path_str).await?;
+    let folder_id = find_folder_for_path(tx, path_str)?;
     if folder_id.is_none() {
         log::debug!("{context} file not in any library folder, skipping: {}", path.display());
     }

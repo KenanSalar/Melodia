@@ -1,5 +1,7 @@
 //! Writes to track rows: counters, the per-row flags, artwork and hashes.
 
+use rusqlite::Transaction;
+
 use crate::database::sql::Sql;
 use crate::database::{
     DbPool, IDS_PER_SET, chunked_in_query_on, set_where_id_in, values_placeholders,
@@ -119,15 +121,13 @@ pub async fn set_rating(db: &DbPool, ids: &[i64], rating: i32) -> Result<(), App
 
 /// Overwrites `artwork_path` inside the tag edit's transaction, so `None` nulls it as
 /// `update_track_metadata`'s `COALESCE` can't.
-pub(crate) async fn set_track_artwork(
-    tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
+pub(crate) fn set_track_artwork(
+    tx: &Transaction<'_>,
     ids: &[i64],
     artwork_path: Option<&str>,
 ) -> Result<(), AppError> {
     for chunk in ids.chunks(IDS_PER_SET) {
-        set_where_id_in("UPDATE tracks SET artwork_path = ?", artwork_path, chunk)
-            .execute(&mut **tx)
-            .await?;
+        set_where_id_in("UPDATE tracks SET artwork_path = ?", artwork_path, chunk).execute(tx)?;
     }
     Ok(())
 }

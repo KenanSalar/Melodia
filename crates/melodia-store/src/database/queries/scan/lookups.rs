@@ -1,18 +1,18 @@
 //! The reads the scan and the watcher batch make.
 
-use futures_util::TryStreamExt;
+use rusqlite::Transaction;
 
+use crate::database::DbPool;
+use crate::database::sql;
 use melodia_core::entities::scan::FileStamp;
 use melodia_core::error::AppError;
 
-pub(crate) async fn track_exists_by_path(
-    tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
+pub(crate) fn track_exists_by_path(
+    tx: &Transaction<'_>,
     file_path: &str,
 ) -> Result<bool, AppError> {
-    let exists = sqlx::query_scalar::<_, i64>("SELECT 1 FROM tracks WHERE file_path = ? LIMIT 1")
-        .bind(file_path)
-        .fetch_optional(&mut **tx)
-        .await?;
+    let exists: Option<i64> =
+        sql::fetch_optional(tx, "SELECT 1 FROM tracks WHERE file_path = ? LIMIT 1", (file_path,))?;
     Ok(exists.is_some())
 }
 
@@ -26,51 +26,46 @@ pub(crate) async fn track_exists_by_path(
 /// separator is asked, so three shapes still miss: a path spelled with `/` throughout against a
 /// `\` folder, a root folder already ending in a separator, and a case difference, `SQLite`
 /// comparing bytes.
-pub(crate) async fn find_folder_for_path(
-    tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
+pub(crate) fn find_folder_for_path(
+    tx: &Transaction<'_>,
     file_path: &str,
 ) -> Result<Option<i64>, AppError> {
-    let id = sqlx::query_scalar::<_, i64>(
+    sql::fetch_optional(
+        tx,
         "SELECT id FROM folders WHERE is_enabled \
          AND SUBSTR(?, 1, LENGTH(path) + 1) IN (path || '/', path || ?) \
          ORDER BY LENGTH(path) DESC LIMIT 1",
+        (file_path, std::path::MAIN_SEPARATOR_STR),
     )
-    .bind(file_path)
-    .bind(std::path::MAIN_SEPARATOR_STR)
-    .fetch_optional(&mut **tx)
-    .await?;
-    Ok(id)
 }
 
 /// Folds each of a folder's rows into `init` through `step`, with the columns the incremental-scan
 /// filter needs, one row at a time, so the folder's paths are never all held at once. Read through
 /// the read pool, before the scan's writer transaction opens.
 pub async fn fold_folder_tracks<A: Send + 'static>(
-    db: &crate::database::DbPool,
+    db: &DbPool,
     folder_id: i64,
     init: A,
     mut step: impl FnMut(&mut A, String, FileStamp) + Send + 'static,
 ) -> Result<A, AppError> {
-    let mut rows = sqlx::query_as::<_, (String, Option<i64>, Option<String>)>(
-        "SELECT file_path, file_size, date_modified FROM tracks WHERE folder_id = ?",
-    )
-    .bind(folder_id)
-    .fetch(db.read());
-
-    let mut acc = init;
-    while let Some((path, file_size, date_modified)) = rows.try_next().await? {
-        step(&mut acc, path, FileStamp { file_size, date_modified });
-    }
-    Ok(acc)
+    db.read(move |conn| {
+        let mut acc = init;
+        sql::fetch_each(
+            conn,
+            "SELECT file_path, file_size, date_modified FROM tracks WHERE folder_id = ?",
+            (folder_id,),
+            |(path, file_size, date_modified): (String, Option<i64>, Option<String>)| {
+                step(&mut acc, path, FileStamp { file_size, date_modified });
+            },
+        )?;
+        Ok(acc)
+    })
+    .await
 }
 
-pub(crate) async fn get_track_id_by_path(
-    tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
+pub(crate) fn get_track_id_by_path(
+    tx: &Transaction<'_>,
     file_path: &str,
 ) -> Result<Option<i64>, AppError> {
-    let id = sqlx::query_scalar::<_, i64>("SELECT id FROM tracks WHERE file_path = ? LIMIT 1")
-        .bind(file_path)
-        .fetch_optional(&mut **tx)
-        .await?;
-    Ok(id)
+    sql::fetch_optional(tx, "SELECT id FROM tracks WHERE file_path = ? LIMIT 1", (file_path,))
 }

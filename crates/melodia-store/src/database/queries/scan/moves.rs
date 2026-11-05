@@ -2,7 +2,7 @@
 
 use std::collections::{HashMap, HashSet};
 
-use sqlx::sqlite::SqliteConnection;
+use rusqlite::Connection;
 
 use crate::database::queries::{excluded_files, track};
 use melodia_core::error::AppError;
@@ -17,13 +17,10 @@ pub(crate) struct MoveCandidates {
 
 impl MoveCandidates {
     /// Every row and kept-out file carrying one of `hashes`, whether or not its file is still there.
-    pub(crate) async fn read_on(
-        conn: &mut SqliteConnection,
-        hashes: &[&str],
-    ) -> Result<Self, AppError> {
+    pub(crate) fn read_on(conn: &Connection, hashes: &[&str]) -> Result<Self, AppError> {
         Ok(Self {
-            tracks: track::lowest_id_by_hash_on(conn, hashes).await?,
-            exclusions: excluded_files::by_hash_on(conn, hashes).await?,
+            tracks: track::lowest_id_by_hash_on(conn, hashes)?,
+            exclusions: excluded_files::by_hash_on(conn, hashes)?,
         })
     }
 

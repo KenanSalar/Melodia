@@ -205,10 +205,10 @@ async fn scan_one(
 
         let result = queries::ingest::commit_scan_chunk(
             &state.db,
-            &scanned_files,
+            scanned_files,
             folder.id,
-            &scan_timestamp,
-            &pool,
+            scan_timestamp.clone(),
+            pool.clone(),
             &ingested,
         )
         .await?;
@@ -219,17 +219,18 @@ async fn scan_one(
     // --- Stage 2. `queries::scan::commit_scan` argues what a stopped scan still owes.
     if !run.try_begin_finishing() {
         if ingested.any() {
-            queries::scan::commit_scan(&state.db, &folder, &Unwalked::default(), &ingested).await?;
+            queries::scan::commit_scan(&state.db, &folder, Unwalked::default(), &ingested).await?;
             state.library_changed.bump();
         }
         return Ok(ScanOutcome::Stopped { rewrote_existing: ingested.rewrote_existing() });
     }
-    queries::scan::commit_scan(&state.db, &folder, &unwalked, &ingested).await?;
+    let found_unwalked = !unwalked.is_empty();
+    queries::scan::commit_scan(&state.db, &folder, unwalked, &ingested).await?;
     finish::absorb_nested(&state.db, &folder, &scope.nested).await?;
     finish::after_completed(state, folder.id).await?;
     // Only for a change: every list showing the library re-fetches on a bump, and a launch scans
     // every folder. The folder's new `last_scanned` reaches Settings when the run ends instead.
-    if ingested.any() || !unwalked.is_empty() || !scope.nested.is_empty() {
+    if ingested.any() || found_unwalked || !scope.nested.is_empty() {
         state.library_changed.bump();
     }
 

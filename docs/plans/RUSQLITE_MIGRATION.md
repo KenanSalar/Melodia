@@ -1,6 +1,6 @@
 # Plan: Move the library database from sqlx to rusqlite
 
-Status: **Phase 4a complete** · Owner: Kenan · Created: 2026-11-04
+Status: **Phase 4b complete** · Owner: Kenan · Created: 2026-11-04
 
 > **Validated 2026-11-04** against `8fe1eb93` (`chore/deps-and-fixes`) with three read-only inventories:
 >
@@ -124,7 +124,7 @@ Everything is in `crates/melodia-store/src/database/` unless noted.
 | `pool/open.rs` | Opening a connection per role (writer, reader, in-memory test): flags, pragmas as `init_database` sets them (writer: WAL, `foreign_keys`, `synchronous=NORMAL`, `cache_size`, `temp_store`, `mmap_size`; readers the same without `synchronous`; test: `foreign_keys`, `synchronous`, `temp_store`), `busy_timeout`, collation, statement-cache capacity | Connection configuration |
 | `migrate.rs` | Comparing checksums, validation against `_sqlx_migrations`, applying pending migrations, the pending check the backup asks | Migration semantics |
 | `crates/melodia-store/build.rs` | Embedding the workspace root's `migrations/*.sql` (`../../migrations`, the path `sqlx::migrate!` reads) in version order with their checksums (the 14 sqlx applied pinned, blake3 after), `rerun-if-changed` on that directory, the sqlx-style description, refusing a shipped file changed, renamed or missing, anything there but `<version>_<description>.sql` files (dotfiles skipped), a `-- no-transaction` header, `.up`/`.down` names, a version below 1 and a duplicate version | The migrations directory's shape |
-| `sql.rs` | `Sql` (text plus `Param`s), `push` / `push_trusted` / `push_bind` / `bind`, and the execution vocabulary (`fetch_all`, `fetch_optional`, `fetch_one`, `execute`): free functions over a `&'static str` and rusqlite params, and `Sql`'s methods for built text | How SQL is assembled and run |
+| `sql.rs` | `Sql` (text plus `Param`s), `push` / `push_trusted` / `push_bind` / `bind`, and the execution vocabulary (`fetch_all`, `fetch_optional`, `fetch_one`, `execute`): free functions over a `&'static str` and rusqlite params, plus `fetch_each` for the two folds, and `Sql`'s methods for built text | How SQL is assembled and run |
 | `rows/mod.rs` | The store's `FromRow` trait, its lone-column and tuple impls, and `by_name!` | Row decoding |
 | `rows/{track,library,radio,duplicates}.rs` | Entity impls, grouped as `melodia-core/src/entities/` groups them | An entity's columns |
 | `mod.rs` | Bind budget, placeholder text (`placeholders`, `values_placeholders`, `values_list`, `case_by_id`) and chunk helpers (`chunked_in_query`, `chunked_in_execute_on`, `select_in_id_order`, `set_where_id_in`, `backfill_folded`), `init_database` | Bulk-statement shape |
@@ -296,20 +296,29 @@ The store and core move to rusqlite together, over sub-phases 4a to 4d, each a c
 **Progress.** Each session ends by ticking what landed and rewriting "Where it stands"; the next one starts there.
 
 - [x] **4a Foundation:** steps 1 to 7. Done when no error is left outside `queries/`.
-- [ ] **4b Scan:** step 8's scan cluster, its fold (step 9) among it, with step 10 for each function it converts. Its first converted module is the template the other clusters copy, named under "Where it stands" once it lands.
+- [x] **4b Scan:** step 8's scan cluster, its fold (step 9) among it, with step 10 for each function it converts. Its first converted module is the template the other clusters copy, named under "Where it stands" once it lands.
 - [ ] **4c The other clusters:** step 8's clusters 2 to 6, the duplicates fold, and step 10 for theirs. Done when no error is left outside the test targets, `melodia-app`'s callers included, which the compiler reaches only once the store builds.
 - [ ] **4d Tests and comments:** steps 11 and 12, and the docs. Done when the three gates pass.
 - [ ] **Hand test**, below.
 
-**Where it stands:** 4a has landed, and 4b starts at the scan cluster.
+**Where it stands:** 4a and 4b have landed, and 4c starts at the playlists cluster.
 
 - **Checked so far:**
-  - `cargo clippy --workspace --all-targets --keep-going` finds core clean, lib and tests.
-  - Every store error is in `queries/` or a store test file.
-  - Those errors are resolution errors, which stop rustc before it type-checks a body. So the 4a files were also checked in a scratch crate outside the repo: symlinked in, `queries/` left out. There they type-check, and clippy finds nothing but dead code.
+  - `cargo clippy --workspace --all-targets --keep-going` finds core clean, lib and tests, and no error in the scan cluster's 14 files, `sql.rs` or the six helpers converted ahead (below).
+  - Every store error left is in `queries/` or a store test file.
+  - Those errors are resolution errors, which stop rustc before it type-checks a body. So each sub-phase's files are also checked in a scratch crate outside the repo, symlinked in with the unconverted modules left out. 4b's crate stubs the six helpers with verbatim copies extracted from their files. There they type-check, and clippy finds nothing but dead code.
 - **Lock:** sqlx's tree left, `sha2` 0.10.9, `digest` 0.10.7, `generic-array` and `typenum` among it. rusqlite, `fallible-iterator` and `fallible-streaming-iterator` entered, plus `sqlite-wasm-rs` and `rsqlite-vfs`, which rusqlite takes only on wasm32 and which never build here. libsqlite3-sys stays at 0.37.0.
+- **The template:** `queries/excluded_files.rs`. It holds every shape a cluster meets:
+  - static reads in a read closure (`count`, `ids`, `paths`);
+  - owned input moved into one (`files`, `among`);
+  - a tuple decode (`in_folder`);
+  - `&Connection` reads (the `*_on` lookups);
+  - `&Transaction<'_>` writes over `Sql` and the chunk helpers.
 - **What the clusters copy:**
   - **Pool calls:** `db.read(move |conn| …)`, `db.write(move |conn| …)` and `db.transaction(move |tx| …)`, each closure `Send + 'static` and returning `Result<T, AppError>`.
+  - **A transaction's body** longer than a few lines is a sync `fn` on `&Transaction<'_>` that the closure calls (`watch_batch::apply_changes`, `retag::refresh_rows`), so its comments keep their lines.
+  - **What a closure needs off a borrowed input** is read before it, into locals or a small struct (`retag::EditFacts`), rather than a clone of the whole input.
+  - **Folds:** `sql::fetch_each(conn, SQL, params, |row| …)` inside one read closure, the accumulator moved in and handed back (`fold_folder_tracks`). `fold_duplicate_keys` takes the same.
   - **Static text:** `sql::{execute, fetch_one, fetch_optional, fetch_all}(conn, CONST, (a, b))`, cached. The params are a rusqlite tuple or `()`, and a `DismissalSet` binds as `i64::from(set)`.
   - **Built text:** `Sql` as before, its four methods taking the connection.
   - **Rows:**
@@ -321,6 +330,18 @@ The store and core move to rusqlite together, over sub-phases 4a to 4d, each a c
 - **Watch for:**
   - rusqlite's by-name `get` takes the first column of a name, matched case-insensitively, where sqlx's took the last, so a by-name projection naming a column twice now reads the other one.
   - rusqlite decodes by the value's storage class: an `i64` refuses a REAL, a `String` an INTEGER, and an `i32` an integer out of its range.
+- **Converted ahead of their clusters:** the six helpers scan's transactions call:
+  - `folder::upsert_folder`;
+  - `track::lowest_id_by_hash_on`, which takes `&Connection`;
+  - `track::set_track_artwork`;
+  - `album::set_album_artwork` and `album::clear_release_tags`;
+  - `playlist::refresh_automatic_thumbnails`.
+
+  The rest of each file is 4c's. So are the callers *into* the scan cluster from other clusters: `duplicate_merge`'s stats, exclusion and sweep calls, `folder.rs`'s `prune_orphans` and the other `search_name::refill` users.
+- **Unchecked until 4c's compile:** the callers of 4b's owned signatures, edited by hand:
+  - `melodia-app`'s `library/scan/mod.rs`, `library/scan/repair.rs`, `library/import.rs`, `library/tags.rs` and `library/duplicates/kept_out.rs`;
+  - `tasks/artwork_renormalize.rs` and `tasks/file_event_processor/reconcile.rs`;
+  - `melodia-views`' `ui/duplicates/kept_out.rs`.
 - **Done early:** step 12's `IDLE_TIMEOUT` doc (rewritten as it moved into `pool/lane.rs`) and its manifest comments (core's rewritten, the store's `futures-util` line gone).
 - **Moved:** step 5's `keyset.rs` line converts with the tracks cluster, and step 6's `backup_tests` with step 11.
 

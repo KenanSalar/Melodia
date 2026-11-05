@@ -75,7 +75,7 @@ async fn renormalize(db: &DbPool, paths: &Paths) -> AppResult<()> {
     }
 
     // One transaction, so no row ever names a file the sweep below may retire.
-    queries::artwork::repoint_all(db, &moves).await?;
+    queries::artwork::repoint_all(db, moves).await?;
     log::info!(
         "Normalized {} stored cover(s), {} KiB smaller ({} left alone)",
         outcome.shrunk,

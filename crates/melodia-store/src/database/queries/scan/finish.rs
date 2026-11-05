@@ -32,38 +32,42 @@ impl Unwalked {
 pub async fn commit_scan(
     db: &DbPool,
     folder: &Folder,
-    unwalked: &Unwalked,
+    unwalked: Unwalked,
     ingested: &Ingested,
 ) -> Result<(), AppError> {
-    let mut tx = db.write().begin().await?;
-    // On the bulk path the recalc below covers the purge, so its deletes skip the triggers.
     let is_bulk = ingested.is_bulk();
-    let bulk_orphan_purge = is_bulk && !unwalked.tracks.is_empty();
-    if bulk_orphan_purge {
-        stats::disable_stats_triggers(&mut tx).await?;
-    }
-    // A row this scan re-pointed as moved has left its orphaned path, so only the delete counts.
-    let removed = delete_tracks_by_paths_batch(&mut tx, &unwalked.tracks).await?;
-    let exclusions: Vec<&str> = unwalked.exclusions.iter().map(String::as_str).collect();
-    let forgotten = excluded_files::lift_on(&mut tx, &exclusions).await?;
+    let ingested_any = ingested.any();
+    let (removed, forgotten) = db
+        .transaction(move |tx| {
+            // On the bulk path the recalc below covers the purge, so its deletes skip the triggers.
+            let bulk_orphan_purge = is_bulk && !unwalked.tracks.is_empty();
+            if bulk_orphan_purge {
+                stats::disable_stats_triggers(tx)?;
+            }
+            // A row re-pointed as moved has left its orphaned path, so only the delete counts.
+            let removed = delete_tracks_by_paths_batch(tx, &unwalked.tracks)?;
+            let exclusions: Vec<&str> = unwalked.exclusions.iter().map(String::as_str).collect();
+            let forgotten = excluded_files::lift_on(tx, &exclusions)?;
 
-    // A rescan that changed nothing skips the sweeps, which would only rewrite the same values.
-    let any_changes = ingested.any() || removed > 0;
+            // A rescan that changed nothing skips the sweeps, which would rewrite the same values.
+            let any_changes = ingested_any || removed > 0;
 
-    if any_changes {
-        roll_up_covers(&mut tx).await?;
-        prune_orphans(&mut tx).await?;
-    }
-    // A small delta kept its triggers, so its counts are already right.
-    if is_bulk {
-        if any_changes {
-            stats::recalculate_all_stats(&mut tx).await?;
-        }
-        if bulk_orphan_purge {
-            stats::enable_stats_triggers(&mut tx).await?;
-        }
-    }
-    tx.commit().await?;
+            if any_changes {
+                roll_up_covers(tx)?;
+                prune_orphans(tx)?;
+            }
+            // A small delta kept its triggers, so its counts are already right.
+            if is_bulk {
+                if any_changes {
+                    stats::recalculate_all_stats(tx)?;
+                }
+                if bulk_orphan_purge {
+                    stats::enable_stats_triggers(tx)?;
+                }
+            }
+            Ok((removed, forgotten))
+        })
+        .await?;
 
     if removed > 0 {
         log::info!("Removed {removed} orphaned tracks from folder {}", folder.path);

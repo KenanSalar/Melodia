@@ -1,3 +1,5 @@
+use rusqlite::Transaction;
+
 use crate::database::sql::Sql;
 use crate::database::{DbPool, select_in_id_order};
 use melodia_core::entities::{album, tags};
@@ -96,15 +98,14 @@ pub async fn get_albums_by_artist(
 
 /// Overwrites the albums' `artwork_path` inside the tag edit's transaction, where
 /// `update_album_artwork_from_tracks` only fills empty ones.
-pub(crate) async fn set_album_artwork(
-    tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
+pub(crate) fn set_album_artwork(
+    tx: &Transaction<'_>,
     album_ids: &[i64],
     artwork_path: Option<&str>,
 ) -> Result<(), AppError> {
     for chunk in album_ids.chunks(crate::database::IDS_PER_SET) {
         crate::database::set_where_id_in("UPDATE albums SET artwork_path = ?", artwork_path, chunk)
-            .execute(&mut **tx)
-            .await?;
+            .execute(tx)?;
     }
     Ok(())
 }
@@ -114,8 +115,8 @@ pub(crate) async fn set_album_artwork(
 ///
 /// A flag per column rather than assembled `SET` clauses, so the names stay literals and a `false`
 /// flag leaves its column as it was.
-pub(crate) async fn clear_release_tags(
-    tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
+pub(crate) fn clear_release_tags(
+    tx: &Transaction<'_>,
     album_ids: &[i64],
     cleared: tags::ClearedReleaseTags,
 ) -> Result<(), AppError> {
@@ -146,7 +147,7 @@ pub(crate) async fn clear_release_tags(
         for &id in chunk {
             sql.bind(id);
         }
-        sql.execute(&mut **tx).await?;
+        sql.execute(tx)?;
     }
     Ok(())
 }

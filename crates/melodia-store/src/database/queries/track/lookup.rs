@@ -4,6 +4,7 @@
 use std::collections::{HashMap, HashSet};
 use std::sync::LazyLock;
 
+use rusqlite::Connection;
 use sqlx::{Sqlite, SqliteConnection};
 
 use super::membership::Membership;
@@ -237,22 +238,21 @@ pub async fn get_track_ids_by_hashes(
 ///
 /// On a connection rather than the pool so the scan's ingest can ask inside its transaction and
 /// the watcher's batch off the read pool, ahead of its own.
-pub(crate) async fn lowest_id_by_hash_on(
-    conn: &mut SqliteConnection,
+pub(crate) fn lowest_id_by_hash_on(
+    conn: &Connection,
     hashes: &[&str],
 ) -> Result<HashMap<String, (i64, String)>, AppError> {
     let unique: HashSet<&str> = hashes.iter().copied().collect();
     let unique: Vec<&str> = unique.into_iter().collect();
 
     // `ORDER BY id` plus `or_insert` is what keeps the lowest id.
-    let rows: Vec<(String, i64, String)> = chunked_in_query_on(conn, &unique, |placeholders| {
+    let rows: Vec<(String, i64, String)> = chunked_in_query(conn, &unique, |placeholders| {
         format!(
             "SELECT file_hash, id, file_path FROM tracks
              WHERE file_hash IN ({placeholders})
              ORDER BY id ASC"
         )
-    })
-    .await?;
+    })?;
     let mut out: HashMap<String, (i64, String)> = HashMap::new();
     for (hash, id, path) in rows {
         out.entry(hash).or_insert((id, path));

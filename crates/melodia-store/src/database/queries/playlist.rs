@@ -1,9 +1,11 @@
 use std::collections::{HashMap, HashSet};
 use std::sync::LazyLock;
 
+use rusqlite::Transaction;
+
 use crate::database::queries::search_name;
 use crate::database::queries::track::{columns, missing_ids_on};
-use crate::database::sql::Sql;
+use crate::database::sql::{self, Sql};
 use crate::database::{DbPool, select_in_id_order, values_placeholders};
 use melodia_core::entities::playlist::{CutItem, PlaylistIdentity, PlaylistItemsCut};
 use melodia_core::entities::undo::{UNDO_HOLD_CAP, UndoCapture};
@@ -641,17 +643,17 @@ pub(crate) async fn update_playlist_thumbnail_and_timestamp_tx(
 ///
 /// For what reaches a playlist without an edit to it: a track deleted out from under it, or a
 /// cover cleared because its file went missing. `updated_at` stays put: the user changed nothing.
-pub(crate) async fn refresh_automatic_thumbnails(
-    tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
-) -> Result<(), AppError> {
-    sqlx::query(concat!(
-        "UPDATE playlists SET thumbnail_path = ",
-        first_track_cover!(),
-        " WHERE custom_thumbnail = FALSE AND thumbnail_path IS NOT ",
-        first_track_cover!()
-    ))
-    .execute(&mut **tx)
-    .await?;
+pub(crate) fn refresh_automatic_thumbnails(tx: &Transaction<'_>) -> Result<(), AppError> {
+    sql::execute(
+        tx,
+        concat!(
+            "UPDATE playlists SET thumbnail_path = ",
+            first_track_cover!(),
+            " WHERE custom_thumbnail = FALSE AND thumbnail_path IS NOT ",
+            first_track_cover!()
+        ),
+        (),
+    )?;
     Ok(())
 }
 

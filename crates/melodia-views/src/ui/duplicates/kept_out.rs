@@ -257,7 +257,7 @@ fn fetcher(list: Weak<KeptOutList>) -> impl Fn(RowRequest<KeptOutRow>) + 'static
         };
         let ids = request.ids().to_vec();
         let db = list.state.db.clone();
-        let files = async move { kept_out::files(&db, &ids).await };
+        let files = async move { kept_out::files(&db, ids).await };
         list.fetch_rows(request, files, |_, _, files: Vec<KeptOutFile>| {
             files.iter().map(|file| (file.id, row(file))).collect()
         });

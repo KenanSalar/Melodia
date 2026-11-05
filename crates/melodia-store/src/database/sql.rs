@@ -52,6 +52,21 @@ pub(crate) fn fetch_optional<T: FromRow>(
     optional_row(&mut *conn.prepare_cached(sql)?, params)
 }
 
+/// Hands each row to `each` as it is read, so a library-sized result is never held whole.
+pub(crate) fn fetch_each<T: FromRow>(
+    conn: &Connection,
+    sql: &'static str,
+    params: impl Params,
+    mut each: impl FnMut(T),
+) -> Result<(), AppError> {
+    let mut statement = conn.prepare_cached(sql)?;
+    let mut rows = statement.query(params)?;
+    while let Some(row) = rows.next()? {
+        each(T::from_row(row)?);
+    }
+    Ok(())
+}
+
 /// A statement and the values bound to its `?`s, in order.
 pub(crate) struct Sql {
     text: Cow<'static, str>,

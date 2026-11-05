@@ -3,21 +3,23 @@
 
 use std::collections::HashMap;
 
+use rusqlite::Transaction;
+
 use super::{
     NameCache, ResolvedIds, prune_orphans, resolve_track_context, update_album_artwork_from_tracks,
     update_track_metadata,
 };
 use crate::database::queries::{album, playlist, track};
-use crate::database::{DbPool, chunked_in_query_on};
+use crate::database::{DbPool, chunked_in_query};
 use melodia_core::entities::scan::ExtractedMetadata;
-use melodia_core::entities::tags::{ArtworkEdit, TagEdit};
+use melodia_core::entities::tags::{ArtworkEdit, ClearedReleaseTags, TagEdit};
 use melodia_core::error::AppError;
 
 /// A file whose tags were rewritten, with what reading it back found.
-pub struct RetaggedFile<'a> {
+pub struct RetaggedFile {
     pub id: i64,
-    pub path: &'a str,
-    pub meta: &'a ExtractedMetadata,
+    pub path: String,
+    pub meta: ExtractedMetadata,
 }
 
 /// What became of one [`RetaggedFile`]'s row.
@@ -40,11 +42,32 @@ type ResolveKey = (i64, String, String, String, Option<i32>, String);
 /// UPDATE can't express, answering in `files`' order.
 pub async fn commit_retag(
     db: &DbPool,
-    files: &[RetaggedFile<'_>],
+    files: Vec<RetaggedFile>,
     edit: &TagEdit,
-    cached_artwork: Option<&str>,
+    cached_artwork: Option<String>,
 ) -> Result<Vec<Retag>, AppError> {
-    let mut tx = db.write().begin().await?;
+    let edit = EditFacts {
+        artwork: edit.artwork.clone(),
+        cleared_release: edit.cleared_release_tags(),
+        moves_between_parents: edit.moves_between_parents(),
+        cached_artwork,
+    };
+    db.transaction(move |tx| refresh_rows(tx, &files, &edit)).await
+}
+
+/// What the commit reads off its [`TagEdit`], taken ahead so the transaction owns it.
+struct EditFacts {
+    artwork: ArtworkEdit,
+    cleared_release: ClearedReleaseTags,
+    moves_between_parents: bool,
+    cached_artwork: Option<String>,
+}
+
+fn refresh_rows(
+    tx: &Transaction<'_>,
+    files: &[RetaggedFile],
+    edit: &EditFacts,
+) -> Result<Vec<Retag>, AppError> {
     let mut outcomes: Vec<Retag> = Vec::with_capacity(files.len());
     let mut updated_ids: Vec<i64> = Vec::new();
     let mut album_ids: Vec<i64> = Vec::new();
@@ -55,9 +78,9 @@ pub async fn commit_retag(
     // Remove's ids left with no cover at all, nulled in one statement after the loop.
     let mut remove_null_ids: Vec<i64> = Vec::new();
     // The release fields `upsert_album` can't empty, and the albums owed the statement that can.
-    let cleared_release = edit.cleared_release_tags();
+    let cleared_release = edit.cleared_release;
     let mut cleared_album_ids: Vec<i64> = Vec::new();
-    let folder_of = folder_ids(&mut tx, files).await?;
+    let folder_of = folder_ids(tx, files)?;
 
     for file in files {
         // A tag edit moves no file, so the row stays under its folder, an import's included.
@@ -65,7 +88,7 @@ pub async fn commit_retag(
             outcomes.push(Retag::Gone);
             continue;
         };
-        let meta = file.meta;
+        let meta = &file.meta;
         // The **first** credited names, as `resolve_track_context` reads them, or a hit answers
         // with ids it would never produce.
         let key: ResolveKey = (
@@ -79,12 +102,12 @@ pub async fn commit_retag(
         let rids = if let Some(cached) = resolve_cache.get(&key) {
             *cached
         } else {
-            let resolved = resolve_track_context(&mut tx, folder_id, meta, &mut names).await?;
+            let resolved = resolve_track_context(tx, folder_id, meta, &mut names)?;
             resolve_cache.insert(key, resolved);
             resolved
         };
 
-        update_track_metadata(&mut tx, file.path, meta, &rids, &mut names).await?;
+        update_track_metadata(tx, &file.path, meta, &rids, &mut names)?;
         updated_ids.push(file.id);
         outcomes.push(Retag::Updated);
 
@@ -116,53 +139,49 @@ pub async fn commit_retag(
 
     match edit.artwork {
         ArtworkEdit::Replace => {
-            apply_replace_artwork(&mut tx, &updated_ids, &mut album_ids, cached_artwork).await?;
-            playlist::refresh_automatic_thumbnails(&mut tx).await?;
+            let cached_artwork = edit.cached_artwork.as_deref();
+            apply_replace_artwork(tx, &updated_ids, &mut album_ids, cached_artwork)?;
+            playlist::refresh_automatic_thumbnails(tx)?;
         }
         ArtworkEdit::Remove => {
             if !remove_null_ids.is_empty() {
-                track::set_track_artwork(&mut tx, &remove_null_ids, None).await?;
+                track::set_track_artwork(tx, &remove_null_ids, None)?;
             }
-            playlist::refresh_automatic_thumbnails(&mut tx).await?;
+            playlist::refresh_automatic_thumbnails(tx)?;
         }
         ArtworkEdit::Keep => {}
     }
 
     // After every `upsert_album` above, which is what it exists to undo.
-    album::clear_release_tags(&mut tx, &cleared_album_ids, cleared_release).await?;
+    album::clear_release_tags(tx, &cleared_album_ids, cleared_release)?;
 
     // Both passes answer to a track that changed parents and sweep whole tables, which a rating
     // click shouldn't pay for. The residue: a file whose tags had drifted from its row can be
     // re-homed by the re-extract, stranding its old parent and leaving the new one coverless until
     // the next scan or watcher batch that writes.
-    if edit.moves_between_parents() {
+    if edit.moves_between_parents {
         // Null-only: a track retagged into another album hands it its cover.
-        update_album_artwork_from_tracks(&mut tx).await?;
-        prune_orphans(&mut tx).await?;
+        update_album_artwork_from_tracks(tx)?;
+        prune_orphans(tx)?;
     }
 
-    tx.commit().await?;
     Ok(outcomes)
 }
 
 /// `track id → folder_id` of the rows behind `files`. A row deleted since the edit began has none.
-async fn folder_ids(
-    tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
-    files: &[RetaggedFile<'_>],
-) -> Result<HashMap<i64, i64>, AppError> {
+fn folder_ids(tx: &Transaction<'_>, files: &[RetaggedFile]) -> Result<HashMap<i64, i64>, AppError> {
     let ids: Vec<i64> = files.iter().map(|file| file.id).collect();
-    let rows: Vec<(i64, i64)> = chunked_in_query_on(tx, &ids, |placeholders| {
+    let rows: Vec<(i64, i64)> = chunked_in_query(tx, &ids, |placeholders| {
         format!("SELECT id, folder_id FROM tracks WHERE id IN ({placeholders})")
-    })
-    .await?;
+    })?;
     Ok(rows.into_iter().collect())
 }
 
 /// Overwrites every updated track's and album's cover with the one just cached, the roll-up only
 /// filling empty ones. Does nothing where the cache write failed: keeping the old cover beats
 /// nulling one that can't be re-pointed.
-async fn apply_replace_artwork(
-    tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
+fn apply_replace_artwork(
+    tx: &Transaction<'_>,
     updated_ids: &[i64],
     album_ids: &mut Vec<i64>,
     cached_artwork: Option<&str>,
@@ -173,9 +192,9 @@ async fn apply_replace_artwork(
     let Some(cached) = cached_artwork else {
         return Ok(());
     };
-    track::set_track_artwork(tx, updated_ids, Some(cached)).await?;
+    track::set_track_artwork(tx, updated_ids, Some(cached))?;
     album_ids.sort_unstable();
     album_ids.dedup();
-    album::set_album_artwork(tx, album_ids, Some(cached)).await?;
+    album::set_album_artwork(tx, album_ids, Some(cached))?;
     Ok(())
 }

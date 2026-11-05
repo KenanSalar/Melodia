@@ -42,8 +42,8 @@ pub struct ResolvedIds {
 
 /// Resolves a track's artist, album and genre rows, upserting what's missing, beside the folder it
 /// is filed under.
-pub(crate) async fn resolve_track_context(
-    tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
+pub(crate) fn resolve_track_context(
+    tx: &rusqlite::Transaction<'_>,
     folder_id: i64,
     meta: &melodia_core::entities::scan::ExtractedMetadata,
     names: &mut NameCache,
@@ -54,18 +54,17 @@ pub(crate) async fn resolve_track_context(
     // The first genre too, the rest reaching the library through `track_genres`.
     let genre_name = meta.genres.primary().unwrap_or("");
 
-    let artist_id = names.artist(tx, artist_name, 1).await?;
+    let artist_id = names.artist(tx, artist_name, 1)?;
     // The album groups by its album artist, so a per-track featured credit doesn't split it.
     let album_artist_name = album_artist_name_for(meta);
     let album_artist_id = if album_artist_name == artist_name {
         artist_id
     } else {
-        names.artist(tx, album_artist_name, 1).await?
+        names.artist(tx, album_artist_name, 1)?
     };
     let album_credit = album_credit_for(meta);
-    let album_id =
-        upsert_album(tx, album_name, album_artist_id, &album_credit, meta, names).await?;
-    let genre_id = names.genre(tx, genre_name).await?;
+    let album_id = upsert_album(tx, album_name, album_artist_id, &album_credit, meta, names)?;
+    let genre_id = names.genre(tx, genre_name)?;
 
     Ok(ResolvedIds { artist_id, album_id, genre_id, folder_id })
 }

@@ -1,4 +1,6 @@
-use crate::database::sql::Sql;
+use rusqlite::Transaction;
+
+use crate::database::sql::{self, Sql};
 use melodia_core::error::AppError;
 
 // Must match the stats triggers `migrations/20260910000000_tag_vocabulary.sql` creates: the three
@@ -233,58 +235,52 @@ const STATS_TRIGGERS: [(&str, &str); 9] = [
 ///
 /// **`tracks_credits_cleanup` and `albums_credits_cleanup` stay**: they stand in for the
 /// `ON DELETE CASCADE` the credit tables lack, so dropping them would make a track undeletable.
-pub(crate) async fn disable_stats_triggers(
-    tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
-) -> Result<(), AppError> {
+pub(crate) fn disable_stats_triggers(tx: &Transaction<'_>) -> Result<(), AppError> {
     for (name, _) in STATS_TRIGGERS {
         let mut drop = Sql::new("DROP TRIGGER IF EXISTS ");
         drop.push(name);
-        drop.execute(&mut **tx).await?;
+        drop.execute(tx)?;
     }
     Ok(())
 }
 
 /// Recreates what [`disable_stats_triggers`] dropped.
-pub(crate) async fn enable_stats_triggers(
-    tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
-) -> Result<(), AppError> {
-    for (_, sql) in STATS_TRIGGERS {
-        sqlx::query(sql).execute(&mut **tx).await?;
+pub(crate) fn enable_stats_triggers(tx: &Transaction<'_>) -> Result<(), AppError> {
+    for (_, create) in STATS_TRIGGERS {
+        sql::execute(tx, create, ())?;
     }
     Ok(())
 }
 
 /// Recalculates every denormalized count and duration from scratch, after a bulk ingest with the
 /// triggers off.
-pub(crate) async fn recalculate_all_stats(
-    tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
-) -> Result<(), AppError> {
+pub(crate) fn recalculate_all_stats(tx: &Transaction<'_>) -> Result<(), AppError> {
     // Artists: all three off the credit tables.
-    sqlx::query(
+    sql::execute(
+        tx,
         "UPDATE artists SET
             track_count = COALESCE((SELECT COUNT(*) FROM track_artists WHERE artist_id = artists.id), 0),
             total_duration_ms = COALESCE((SELECT SUM(t.duration_ms) FROM track_artists ta JOIN tracks t ON t.id = ta.track_id WHERE ta.artist_id = artists.id), 0),
-            album_count = COALESCE((SELECT COUNT(*) FROM album_artists WHERE artist_id = artists.id), 0)"
-    )
-    .execute(&mut **tx)
-    .await?;
+            album_count = COALESCE((SELECT COUNT(*) FROM album_artists WHERE artist_id = artists.id), 0)",
+        (),
+    )?;
 
-    sqlx::query(
+    sql::execute(
+        tx,
         "UPDATE albums SET
             track_count = COALESCE((SELECT COUNT(*) FROM tracks WHERE album_id = albums.id), 0),
-            total_duration_ms = COALESCE((SELECT SUM(duration_ms) FROM tracks WHERE album_id = albums.id), 0)"
-    )
-    .execute(&mut **tx)
-    .await?;
+            total_duration_ms = COALESCE((SELECT SUM(duration_ms) FROM tracks WHERE album_id = albums.id), 0)",
+        (),
+    )?;
 
     // Genres: both off `track_genres`.
-    sqlx::query(
+    sql::execute(
+        tx,
         "UPDATE genres SET
             track_count = COALESCE((SELECT COUNT(*) FROM track_genres WHERE genre_id = genres.id), 0),
-            total_duration_ms = COALESCE((SELECT SUM(t.duration_ms) FROM track_genres tg JOIN tracks t ON t.id = tg.track_id WHERE tg.genre_id = genres.id), 0)"
-    )
-    .execute(&mut **tx)
-    .await?;
+            total_duration_ms = COALESCE((SELECT SUM(t.duration_ms) FROM track_genres tg JOIN tracks t ON t.id = tg.track_id WHERE tg.genre_id = genres.id), 0)",
+        (),
+    )?;
 
     Ok(())
 }

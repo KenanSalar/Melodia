@@ -83,8 +83,7 @@ pub(crate) async fn import_files(
         if !scanned_files.is_empty() {
             let scan_timestamp = melodia_core::utils::now_rfc3339();
             let result =
-                queries::ingest::commit_import(db, &scanned_files, &scan_timestamp, &pool).await?;
-            drop(pool);
+                queries::ingest::commit_import(db, scanned_files, scan_timestamp, pool).await?;
 
             imported_count = result.inserted_count;
 

@@ -4,6 +4,7 @@ use std::ffi::OsString;
 use std::path::{Path, PathBuf};
 
 use rayon::prelude::*;
+use rusqlite::Transaction;
 
 use crate::database::queries;
 use crate::database::queries::artist::UNKNOWN_ARTIST_ID;
@@ -89,29 +90,30 @@ impl Ingested {
 /// them.
 pub async fn commit_scan_chunk(
     db: &DbPool,
-    scanned_files: &[ScannedFile],
+    scanned_files: Vec<ScannedFile>,
     folder_id: i64,
-    scan_timestamp: &str,
-    pool: &ScanPool,
+    scan_timestamp: String,
+    pool: ScanPool,
     ingested: &Ingested,
 ) -> Result<IngestResult, AppError> {
-    let mut tx = db.write().begin().await?;
-    if ingested.is_bulk() {
-        queries::stats::disable_stats_triggers(&mut tx).await?;
-    }
-    let result = ingest_scanned_files(
-        &mut tx,
-        scanned_files,
-        &IngestSource::FolderScan(folder_id),
-        scan_timestamp,
-        pool,
-    )
-    .await?;
-    if ingested.is_bulk() {
-        queries::stats::enable_stats_triggers(&mut tx).await?;
-    }
-    tx.commit().await?;
-    Ok(result)
+    let is_bulk = ingested.is_bulk();
+    db.transaction(move |tx| {
+        if is_bulk {
+            queries::stats::disable_stats_triggers(tx)?;
+        }
+        let result = ingest_scanned_files(
+            tx,
+            &scanned_files,
+            &IngestSource::FolderScan(folder_id),
+            &scan_timestamp,
+            &pool,
+        )?;
+        if is_bulk {
+            queries::stats::enable_stats_triggers(tx)?;
+        }
+        Ok(result)
+    })
+    .await
 }
 
 /// Files dropped onto a playlist or the queue, filed as [`IngestSource::Import`] says, in one
@@ -119,23 +121,29 @@ pub async fn commit_scan_chunk(
 /// back, the user having named it.
 pub async fn commit_import(
     db: &DbPool,
-    scanned_files: &[ScannedFile],
-    scan_timestamp: &str,
-    pool: &ScanPool,
+    scanned_files: Vec<ScannedFile>,
+    scan_timestamp: String,
+    pool: ScanPool,
 ) -> Result<IngestResult, AppError> {
-    let mut tx = db.write().begin().await?;
-    let paths: Vec<Cow<'_, str>> = scanned_files.iter().map(|f| f.path.to_string_lossy()).collect();
-    let paths: Vec<&str> = paths.iter().map(AsRef::as_ref).collect();
-    queries::excluded_files::lift_on(&mut tx, &paths).await?;
-    queries::stats::disable_stats_triggers(&mut tx).await?;
-    let result =
-        ingest_scanned_files(&mut tx, scanned_files, &IngestSource::Import, scan_timestamp, pool)
-            .await?;
-    queries::scan::update_album_artwork_from_tracks(&mut tx).await?;
-    queries::stats::recalculate_all_stats(&mut tx).await?;
-    queries::stats::enable_stats_triggers(&mut tx).await?;
-    tx.commit().await?;
-    Ok(result)
+    db.transaction(move |tx| {
+        let paths: Vec<Cow<'_, str>> =
+            scanned_files.iter().map(|f| f.path.to_string_lossy()).collect();
+        let paths: Vec<&str> = paths.iter().map(AsRef::as_ref).collect();
+        queries::excluded_files::lift_on(tx, &paths)?;
+        queries::stats::disable_stats_triggers(tx)?;
+        let result = ingest_scanned_files(
+            tx,
+            &scanned_files,
+            &IngestSource::Import,
+            &scan_timestamp,
+            &pool,
+        )?;
+        queries::scan::update_album_artwork_from_tracks(tx)?;
+        queries::stats::recalculate_all_stats(tx)?;
+        queries::stats::enable_stats_triggers(tx)?;
+        Ok(result)
+    })
+    .await
 }
 
 /// The caches [`resolve_ids`] reuses within one ingest transaction. Artist and genre are in
@@ -163,17 +171,17 @@ impl ResolveCaches {
 /// passes a kept-out file by, restamping it with what it read, and re-points the exclusion of one
 /// that moved, but only once no row claims the bytes: a moved keeper beside its kept-out twin must
 /// get its own row back.
-pub(crate) async fn ingest_scanned_files(
-    tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
+pub(crate) fn ingest_scanned_files(
+    tx: &Transaction<'_>,
     scanned_files: &[ScannedFile],
     source: &IngestSource,
     scan_timestamp: &str,
     pool: &ScanPool,
 ) -> Result<IngestResult, AppError> {
     let mut caches = ResolveCaches::with_capacity_for(scanned_files.len());
-    let existing_tracks = load_existing(tx, scanned_files).await?;
-    let kept_out = kept_out(tx, source, scanned_files).await?;
-    let mut moved_from = resolve_move_candidates(tx, scanned_files, &existing_tracks, pool).await?;
+    let existing_tracks = load_existing(tx, scanned_files)?;
+    let kept_out = kept_out(tx, source, scanned_files)?;
+    let mut moved_from = resolve_move_candidates(tx, scanned_files, &existing_tracks, pool)?;
     let mut inserts = InsertBuffer::new(scanned_files.len(), scan_timestamp);
     let mut moved_count: u32 = 0;
     let mut updated_count: u32 = 0;
@@ -196,7 +204,7 @@ pub(crate) async fn ingest_scanned_files(
                         .push(file_path_str.to_owned());
                 }
             } else if let Some(ids) =
-                resolve_ids(tx, meta, source, file, file_path_str, &mut caches).await?
+                resolve_ids(tx, meta, source, file, file_path_str, &mut caches)?
             {
                 queries::scan::update_track_metadata(
                     tx,
@@ -204,8 +212,7 @@ pub(crate) async fn ingest_scanned_files(
                     meta,
                     &ids,
                     &mut caches.names,
-                )
-                .await?;
+                )?;
                 updated_count += 1;
             }
             continue;
@@ -222,7 +229,7 @@ pub(crate) async fn ingest_scanned_files(
             moved_from.tracks.get(meta.file_hash.as_str()).cloned()
         {
             let Some(folder_id) =
-                resolve_folder_id(tx, source, file, file_path_str, &mut caches.folder).await?
+                resolve_folder_id(tx, source, file, file_path_str, &mut caches.folder)?
             else {
                 continue;
             };
@@ -235,8 +242,7 @@ pub(crate) async fn ingest_scanned_files(
                 &file_name_of(file),
                 folder_id,
                 meta.date_modified.as_deref(),
-            )
-            .await?;
+            )?;
             moved_from.tracks.remove(meta.file_hash.as_str());
             log::info!("Detected moved file: {old_path} -> {file_path_str}");
             moved_count += 1;
@@ -246,15 +252,14 @@ pub(crate) async fn ingest_scanned_files(
         if source.keeps_out_excluded()
             && let Some((exclusion_id, old_path)) = moved_from.take_exclusion(&meta.file_hash)
             && let Some(folder_id) =
-                resolve_folder_id(tx, source, file, file_path_str, &mut caches.folder).await?
+                resolve_folder_id(tx, source, file, file_path_str, &mut caches.folder)?
         {
-            queries::excluded_files::repoint_on(tx, exclusion_id, file_path_str, folder_id).await?;
+            queries::excluded_files::repoint_on(tx, exclusion_id, file_path_str, folder_id)?;
             log::info!("Kept-out file moved: {old_path} -> {file_path_str}");
             continue;
         }
 
-        let Some(ids) = resolve_ids(tx, meta, source, file, file_path_str, &mut caches).await?
-        else {
+        let Some(ids) = resolve_ids(tx, meta, source, file, file_path_str, &mut caches)? else {
             continue;
         };
         let row = queries::scan::NewTrackRow {
@@ -263,12 +268,12 @@ pub(crate) async fn ingest_scanned_files(
             meta,
             ids,
         };
-        inserts.push(tx, row, &mut caches.names).await?;
+        inserts.push(tx, row, &mut caches.names)?;
     }
 
-    inserts.flush(tx, &mut caches.names).await?;
-    flush_artwork_backfill(tx, artwork_backfill).await?;
-    queries::excluded_files::restamp_on(tx, &kept_out_read).await?;
+    inserts.flush(tx, &mut caches.names)?;
+    flush_artwork_backfill(tx, artwork_backfill)?;
+    queries::excluded_files::restamp_on(tx, &kept_out_read)?;
 
     let inserted_track_ids = inserts.inserted_ids;
     Ok(IngestResult {
@@ -283,8 +288,8 @@ pub(crate) async fn ingest_scanned_files(
 ///
 /// Chunked over `scanned_files` itself, so a chunk's binds drop at its end rather than a `String`
 /// per scanned path living for the whole ingest.
-async fn load_existing(
-    tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
+fn load_existing(
+    tx: &Transaction<'_>,
     scanned_files: &[ScannedFile],
 ) -> Result<HashMap<String, FileStamp>, AppError> {
     let mut existing_tracks = HashMap::with_capacity(scanned_files.len());
@@ -296,7 +301,7 @@ async fn load_existing(
         for file in chunk {
             sql.bind(file.path.to_string_lossy().into_owned());
         }
-        let rows: Vec<(String, Option<i64>, Option<String>)> = sql.fetch_all(&mut **tx).await?;
+        let rows: Vec<(String, Option<i64>, Option<String>)> = sql.fetch_all(tx)?;
         for (path, file_size, date_modified) in rows {
             existing_tracks.insert(path, FileStamp { file_size, date_modified });
         }
@@ -305,8 +310,8 @@ async fn load_existing(
 }
 
 /// The scanned paths a folder scan keeps out, asked inside the transaction that would insert them.
-async fn kept_out(
-    tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
+fn kept_out(
+    tx: &Transaction<'_>,
     source: &IngestSource,
     scanned_files: &[ScannedFile],
 ) -> Result<HashSet<String>, AppError> {
@@ -315,7 +320,7 @@ async fn kept_out(
     }
     let paths: Vec<Cow<'_, str>> = scanned_files.iter().map(|f| f.path.to_string_lossy()).collect();
     let paths: Vec<&str> = paths.iter().map(AsRef::as_ref).collect();
-    queries::excluded_files::among_on(tx, &paths).await
+    queries::excluded_files::among_on(tx, &paths)
 }
 
 /// The rows and kept-out files a new path may have moved from, by hash: those whose own path is
@@ -323,8 +328,8 @@ async fn kept_out(
 ///
 /// The stat runs with the writer transaction open: moving it ahead would change how a concurrent
 /// delete races it.
-async fn resolve_move_candidates(
-    tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
+fn resolve_move_candidates(
+    tx: &Transaction<'_>,
     scanned_files: &[ScannedFile],
     existing_tracks: &HashMap<String, FileStamp>,
     pool: &ScanPool,
@@ -334,8 +339,8 @@ async fn resolve_move_candidates(
         .filter(|f| !existing_tracks.contains_key(f.path.to_string_lossy().as_ref()))
         .map(|f| f.metadata.file_hash.as_str())
         .collect();
-    let mut candidates = MoveCandidates::read_on(tx, &new_path_hashes).await?;
-    let still_present = batch_still_on_disk(candidates.old_paths(), pool).await;
+    let mut candidates = MoveCandidates::read_on(tx, &new_path_hashes)?;
+    let still_present = batch_still_on_disk(candidates.old_paths(), pool);
     candidates.retain_gone(&still_present);
     Ok(candidates)
 }
@@ -362,29 +367,25 @@ impl<'a> InsertBuffer<'a> {
         }
     }
 
-    async fn push(
+    fn push(
         &mut self,
-        tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
+        tx: &Transaction<'_>,
         row: queries::scan::NewTrackRow<'a>,
         names: &mut NameCache,
     ) -> Result<(), AppError> {
         self.pending.push(row);
         if self.pending.len() >= queries::scan::INSERT_CHUNK_ROWS {
-            self.flush(tx, names).await?;
+            self.flush(tx, names)?;
         }
         Ok(())
     }
 
-    async fn flush(
-        &mut self,
-        tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
-        names: &mut NameCache,
-    ) -> Result<(), AppError> {
+    fn flush(&mut self, tx: &Transaction<'_>, names: &mut NameCache) -> Result<(), AppError> {
         if self.pending.is_empty() {
             return Ok(());
         }
-        let ids = queries::scan::insert_tracks_batch(tx, &self.pending, self.scan_timestamp, names)
-            .await?;
+        let ids =
+            queries::scan::insert_tracks_batch(tx, &self.pending, self.scan_timestamp, names)?;
         self.inserted_ids.extend(ids);
         self.pending.clear();
         Ok(())
@@ -396,28 +397,23 @@ impl<'a> InsertBuffer<'a> {
 const STAT_PAR_THRESHOLD: usize = 32;
 
 /// The subset of `paths` still on disk under their own spelling, a batch past
-/// [`STAT_PAR_THRESHOLD`] stat'ed on the scan pool from a blocking thread.
+/// [`STAT_PAR_THRESHOLD`] stat'ed on the scan pool.
 ///
 /// **Under their own spelling** because a case-insensitive or normalizing filesystem answers
 /// `exists()` for a spelling no entry carries, and a rename that changed only case or normalization
 /// is a move. Only the file name is asked: the folder root above it is spelled as the user added
 /// it, so a directory renamed by case alone still reads as a copy.
-async fn batch_still_on_disk(paths: Vec<String>, pool: &ScanPool) -> HashSet<String> {
+fn batch_still_on_disk(paths: Vec<String>, pool: &ScanPool) -> HashSet<String> {
     if paths.is_empty() {
         return HashSet::new();
     }
     if paths.len() < STAT_PAR_THRESHOLD {
         return listed_as_spelled(paths.into_iter().filter(|p| Path::new(p).exists()).collect());
     }
-    let pool = pool.clone();
-    tokio::task::spawn_blocking(move || {
-        let existing = pool.install(|| {
-            paths.par_iter().filter(|p| Path::new(p).exists()).cloned().collect::<HashSet<String>>()
-        });
-        listed_as_spelled(existing)
-    })
-    .await
-    .unwrap_or_default()
+    let existing = pool.install(|| {
+        paths.par_iter().filter(|p| Path::new(p).exists()).cloned().collect::<HashSet<String>>()
+    });
+    listed_as_spelled(existing)
 }
 
 /// Keeps the paths their directory lists under exactly that name, reading each directory once. A
@@ -447,8 +443,8 @@ fn entry_names(dir: &Path) -> Option<HashSet<OsString>> {
 
 /// Applies the queued artwork backfills as one `WITH v AS (VALUES …)` UPDATE per chunk of
 /// `(file_path, artwork_path)` pairs, `batch_update_hashes`' shape.
-async fn flush_artwork_backfill(
-    tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
+fn flush_artwork_backfill(
+    tx: &Transaction<'_>,
     by_artwork: HashMap<String, Vec<String>>,
 ) -> Result<(), AppError> {
     const COLS_PER_ROW: usize = 2;
@@ -477,14 +473,14 @@ async fn flush_artwork_backfill(
         for (path, art) in chunk {
             sql.bind(path.as_str()).bind(art.as_str());
         }
-        sql.execute(&mut **tx).await?;
+        sql.execute(tx)?;
     }
     Ok(())
 }
 
 /// The file's `folder_id`, or `None` for a file with no parent directory, which is skipped.
-async fn resolve_folder_id(
-    tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
+fn resolve_folder_id(
+    tx: &Transaction<'_>,
     source: &IngestSource,
     file: &ScannedFile,
     file_path_str: &str,
@@ -504,9 +500,9 @@ async fn resolve_folder_id(
             }
             // A file inside a library folder is that folder's, so its scans pair the file with its
             // row and removing the folder takes the track along.
-            let id = match queries::scan::find_folder_for_path(tx, file_path_str).await? {
+            let id = match queries::scan::find_folder_for_path(tx, file_path_str)? {
                 Some(id) => id,
-                None => queries::folder::upsert_folder(tx, &parent_dir).await?,
+                None => queries::folder::upsert_folder(tx, &parent_dir)?,
             };
             folder_cache.insert(parent_dir, id);
             Ok(Some(id))
@@ -515,16 +511,15 @@ async fn resolve_folder_id(
 }
 
 /// A track's artist, album, genre and folder ids, or `None` where the file is skipped.
-async fn resolve_ids(
-    tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
+fn resolve_ids(
+    tx: &Transaction<'_>,
     meta: &ExtractedMetadata,
     source: &IngestSource,
     file: &ScannedFile,
     file_path_str: &str,
     caches: &mut ResolveCaches,
 ) -> Result<Option<queries::ResolvedIds>, AppError> {
-    let Some(folder_id) =
-        resolve_folder_id(tx, source, file, file_path_str, &mut caches.folder).await?
+    let Some(folder_id) = resolve_folder_id(tx, source, file, file_path_str, &mut caches.folder)?
     else {
         return Ok(None);
     };
@@ -535,14 +530,14 @@ async fn resolve_ids(
     let album_name = meta.album.as_deref().unwrap_or("");
     let genre_name = meta.genres.primary().unwrap_or("");
 
-    let artist_id = caches.names.artist(tx, artist_name, UNKNOWN_ARTIST_ID).await?;
+    let artist_id = caches.names.artist(tx, artist_name, UNKNOWN_ARTIST_ID)?;
 
     // The album groups by its album artist, so a per-track featured credit doesn't split it.
     let album_artist_name = queries::scan::album_artist_name_for(meta);
     let album_artist_id = if album_artist_name == artist_name {
         artist_id
     } else {
-        caches.names.artist(tx, album_artist_name, UNKNOWN_ARTIST_ID).await?
+        caches.names.artist(tx, album_artist_name, UNKNOWN_ARTIST_ID)?
     };
 
     let album_id = if let Some(&id) =
@@ -560,13 +555,12 @@ async fn resolve_ids(
             &album_credit,
             meta,
             &mut caches.names,
-        )
-        .await?;
+        )?;
         caches.album.entry(album_name.to_owned()).or_default().insert(album_artist_id, id);
         id
     };
 
-    let genre_id = caches.names.genre(tx, genre_name).await?;
+    let genre_id = caches.names.genre(tx, genre_name)?;
 
     Ok(Some(queries::ResolvedIds { artist_id, album_id, genre_id, folder_id }))
 }
