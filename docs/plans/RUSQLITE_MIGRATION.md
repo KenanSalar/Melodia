@@ -375,6 +375,7 @@ The store and core move to rusqlite together, over sub-phases 4a to 4d, each a c
 
 **Hand test:** the whole app on the dev library:
 - a boot with nothing pending;
+- a fresh data folder applies all 14, its `sqlite_master` and `_sqlx_migrations` rows (version, description, success, checksum) equal to a sqlx-applied database's, compared with `/usr/bin/sqlite3`. Phase 2 proved it under sqlx's `raw_sql`; `execute_batch` steps each statement once, which every one of the 14 finishes in;
 - a boot from an older backup, so the backup-then-migrate path runs;
 - a first scan, a rescan and watcher moves and renames;
 - search, and every list and grid sort and filter;
@@ -382,7 +383,8 @@ The store and core move to rusqlite together, over sub-phases 4a to 4d, each a c
 - radio favourites and logos;
 - the duplicate finder and Keep Out;
 - tag editing;
-- quit, after which the WAL folds and no `-wal` stays behind.
+- quit, after which the WAL folds and no `-wal` stays behind;
+- quit while a search or scan is running, which closes within `flush_tasks_and_db`'s budget: the log says "All background tasks completed" rather than the 3 s warning, and no `-wal` stays behind. A dropped read and a scan's call in flight both run to completion (Cross-cutting), and `close()` waits for them before the writer folds the WAL.
 
 **Docs:**
 - `.claude/rules/sqlx.md` becomes `rusqlite.md` with the same `paths:` globs (`rules_globs.rs` holds them). The SQLite-generic sections stay; the sqlx-specific ones go. Its in-memory `VACUUM INTO` note is re-checked under rusqlite before it is kept.

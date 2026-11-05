@@ -14,7 +14,7 @@ pub(super) enum Role {
     Reader,
 }
 
-/// Lets the one writer wait out the WAL checkpointer rather than fail with `SQLITE_BUSY`.
+/// How long any connection waits on a lock, the checkpointer's among them, before `SQLITE_BUSY`.
 const BUSY_TIMEOUT: Duration = Duration::from_secs(5);
 
 /// Prepared statements each connection keeps, the least recently used evicted first.
