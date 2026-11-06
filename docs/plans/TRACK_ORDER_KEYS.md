@@ -1,6 +1,6 @@
 # Plan: Indexed Songs orders: stored keys for artist, album and genre, expression indexes for year and length
 
-Status: **Phases 1, 2 and 2b implemented, gated and measured; the hand test and Phase 4 wait on Kenan's go** · Owner: Kenan · Created: 2026-11-05
+Status: **Phases 1, 2 and 2b implemented, gated and measured, Phase 3's hand test passed; Phase 4 waits on Kenan's go** · Owner: Kenan · Created: 2026-11-05
 
 Working doc. Delete when every phase has shipped, Tests included.
 
@@ -92,7 +92,7 @@ Working doc. Delete when every phase has shipped, Tests included.
   - **Full scan, three runs each:** 15.43 s median against 15.24, every after run behind every base one; CPU 55.0 against 54.4 s on 641 against 632 G instructions; peak threads level; peak Anonymous 498 to 686 MiB against 489 to 1,096, the spread unsettled as before. Both builds scanned slower than in Phase 3, the session's drift, so only the interleaved difference reads.
   - **Heaptrack boot:** 19.81 against 19.79 MB at 185 s, peak 32.10 against 32.03, 1.68 against 1.69 million allocation calls. The upgrade boots idled at 34.3 against 35.9 MiB Anonymous on 1.78 against 1.80 s of CPU.
 
-## Phase 3: Measure and hand test (on Kenan's go)
+## Phase 3: Measure and hand test ✅
 
 1. **Plans:** `EXPLAIN QUERY PLAN` for every Songs order on the dev library, unfiltered and filtered, under the built binary's engine: a walk only where Decision 6 allows one.
 2. **Store bench**, Phase 5's harness from `RUSQLITE_MIGRATION.md`, interleaved against the commit before Phase 1: Songs open in every order, a filter keystroke in artist and title order, search, the grids. Every result identical.
@@ -100,7 +100,7 @@ Working doc. Delete when every phase has shipped, Tests included.
 4. **Footprint:** idle Anonymous and a heaptrack boot against the commit before Phase 1, and the database's size before and after.
 5. **Hand test:** every Songs order both ways, unfiltered and filtered, in My Library and Favorites; a detail page in each order; a rescan and a tag edit, after which the edited track sits where its new artist puts it.
 
-- **Result (2026-11-06),** steps 1 to 4: run unattended on Kenan's go, `db4a5312` (before) against the working tree with Phases 1 and 2 (after), fresh release builds in detached worktrees (`../Melodia-m-bump`, `../Melodia-m-keys`) whose binaries differ, on the scripts of `RUSQLITE_MIGRATION.md`'s Phase 5. The after build's runs started from the dev folder its upgrade boot migrated. Every run quit through the tray with "All background tasks completed" and left no `-wal`, and the dev folder was restored to its pre-migration backup and checked against its manifest. Step 5 has not run.
+- **Result (2026-11-06),** steps 1 to 4: run unattended on Kenan's go, `db4a5312` (before) against the working tree with Phases 1 and 2 (after), fresh release builds in detached worktrees (`../Melodia-m-bump`, `../Melodia-m-keys`) whose binaries differ, on the scripts of `RUSQLITE_MIGRATION.md`'s Phase 5. The after build's runs started from the dev folder its upgrade boot migrated. Every run quit through the tray with "All background tasks completed" and left no `-wal`, and the dev folder was restored to its pre-migration backup and checked against its manifest. Step 5 ran later (below).
   - **Plans:** Phase 2's check stands.
   - **Store calls,** five interleaved rounds, medians per call, every result identical between builds:
     - Songs open (keyset, first window and count) in artist order 25.58 to 2.23 ms, album 30.80 to 2.29, genre 28.57 to 2.28, artist descending 28.63 to 2.27, title 9.10 to 2.23, each round within a hundredth of the median ratio. Year order is level (16.90 against 17.16 ms).
@@ -127,6 +127,11 @@ Working doc. Delete when every phase has shipped, Tests included.
   - **Heaptrack:** a boot holds 19.73 against 19.76 MB at 185 s, peaks at 31.98 against 32.00 and makes 1.73 million allocation calls in both. Into Songs in artist order, 20.05 against 20.02 MB, peak 32.29 against 32.26, 1.77 against 1.80 million calls. That pair is the re-run: the first one redrew the window throughout, 5.6 million extra calls in Slint's property bindings and none in the store.
   - **The database:** the file grew from 68.9 to 76.0 MB, the free pages taken first, and the pages in use by about 12 MB, the new indexes' statistics among them. The upgrade's pre-migration backup is 61.8 MB, as every migration's is.
   - **Full scan, three runs each:** 14.86 s median against 14.59, every after run behind every before one; CPU 48.6 against 48.5 s on 625 against 618 G instructions; peak threads level; peak Anonymous 332 to 480 MiB against 337 to 637, the spread step 1 of `RUSQLITE_MIGRATION.md`'s Phase 5 already found. The keys' three indexes cost the scan about 0.3 s, more than the 0.09 s the tmpfs harness put on them.
+- **Hand test (2026-11-06),** step 5: all pass, run unattended on Kenan's go with his debug build of `63d0ee2d` on the migrated dev library. Headers were clicked, filters typed and menus opened through a virtual pointer and keyboard; each list was captured, read back by OCR and held row for row to an oracle of `ui::track_sort`'s rules computed from the raw fields, not the keys. Audio went to a null sink, the network was blocked, and the dev folder and the three retagged files were restored afterwards and checked.
+  - **Songs**, every header both ways: My Library unfiltered and under "night" (1,627 rows) and "199" (9,615, the year arm), the first 18 rows of each; Favorites (24) unfiltered and under "narvent", "memory" and "2024". A filter keeps the viewport where it was scrolled, `track_rows::load` seeding the window around it.
+  - **Detail pages**, every header the page shows, both ways, unfiltered and filtered: an album over two discs (18 tracks), an artist across 21 albums (99), a genre (596), a manual playlist (25) and a smart one (32), the two playlists returning to their own order on the third click.
+  - **Edits:** the tag editor set one track's artist to "0 Hand Test", writing `artist_key` "0 hand test". The track sat first on its album page and in a filtered Songs list in artist order, and at index 218 of the unfiltered one, after the 218 tracks with no artist and before "24kGoldn feat. iann dior". Two more files retagged offline, one taken by the launch rescan (1 of 50,500 re-parsed) and one by the watcher, sat at 219 and 220 in key order. A folder Rescan from Settings found every file current and left the keys alone.
+  - **After:** every quit went through the tray with "All background tasks completed" and left no `-wal`; nothing logged a warning but the blocked network's artist-image lookups. The database passed `integrity_check`, `foreign_key_check` and FTS5's integrity check, with no NULL key.
 
 ## Phase 4: Tests
 
