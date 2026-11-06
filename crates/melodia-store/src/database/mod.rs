@@ -298,6 +298,11 @@ pub async fn init_database(paths: &Paths) -> Result<DbPool, AppError> {
         return Err(e);
     }
 
+    let filled = queries::track::order_keys::fill_missing(&db).await?;
+    if filled > 0 {
+        log::info!("Filled the order keys of {filled} tracks");
+    }
+
     // Existing rows only, new writes going through `canonicalize_path`: Browse's path-keyed map
     // has to match `read_dir`.
     if cfg!(target_os = "windows") {

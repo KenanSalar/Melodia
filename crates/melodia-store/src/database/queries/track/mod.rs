@@ -12,6 +12,7 @@ mod keyset;
 mod list;
 mod lookup;
 mod membership;
+pub(crate) mod order_keys;
 mod ranking;
 mod scope_facts;
 mod search_text;

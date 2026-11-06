@@ -27,6 +27,10 @@ const SONGS_LENGTH_CAP_MS: i32 = i32::MAX;
 /// The scan's natural-order key, folded the way `to_ascii_lowercase` folds it.
 const NATURAL: &str = "COALESCE(t.sort_key, '') COLLATE NOCASE";
 
+/// [`NATURAL`] named bare, so a walked list reads `idx_tracks_sort_key` in order. The same order,
+/// every track write filling `sort_key`.
+const NATURAL_WALKED: &str = "t.sort_key COLLATE NOCASE";
+
 /// The ids of every track in `scope` that `needle` matches, in `order`.
 ///
 /// The order is the subquery's, not the aggregate's own `ORDER BY`, which sorts slower wherever an
@@ -48,7 +52,7 @@ pub async fn track_ids(
             push_needle(&mut sql, &needle);
         }
         sql.push(" ORDER BY ")
-            .push_trusted(&order_by(Page::of(&membership), order, membership.position()))
+            .push_trusted(&order_by(Page::of(&membership, &needle), order, membership.position()))
             .push(")");
         fetch_packed_ids(conn, sql)
     })
@@ -120,37 +124,64 @@ enum Page {
     /// My Library's and Favorites' Songs tabs. A missing year sorts as `0` beside an explicit one
     /// rather than ahead of every year, and the length is clamped to what an `i32` of milliseconds
     /// holds, the values a Songs row displays.
-    Songs,
+    Songs(Keys),
     /// The album, artist, genre and playlist pages, whose rows read as stored, ties going to the
     /// title.
     Detail,
 }
 
+/// How an order reads the stored keys an index carries in that order.
+#[derive(Clone, Copy)]
+enum Keys {
+    /// Named bare, so the whole library, unfiltered, comes off the key's index already in order.
+    Walked,
+    /// Behind `+` or `COALESCE`, so `SQLite` finds a filter's or a scope's rows first and sorts
+    /// those, where walking the index would look up every row the filter then drops.
+    Sorted,
+}
+
 impl Page {
-    fn of(membership: &Membership) -> Self {
+    fn of(membership: &Membership, needle: &Needle) -> Self {
         match membership {
-            Membership::Library | Membership::Favorites => Self::Songs,
+            Membership::Library if needle.is_empty() => Self::Songs(Keys::Walked),
+            Membership::Library | Membership::Favorites => Self::Songs(Keys::Sorted),
             _ => Self::Detail,
+        }
+    }
+
+    fn natural(self) -> &'static str {
+        match self {
+            Self::Songs(Keys::Walked) => NATURAL_WALKED,
+            Self::Songs(Keys::Sorted) | Self::Detail => NATURAL,
+        }
+    }
+
+    /// The stored order key `column` names (`queries::track::order_keys`), `ui::track_sort`'s
+    /// lowercase of its field.
+    fn key(self, column: &str) -> String {
+        match self {
+            Self::Songs(Keys::Walked) => format!("t.{column}"),
+            Self::Songs(Keys::Sorted) | Self::Detail => format!("+t.{column}"),
         }
     }
 
     fn tie_break(self) -> String {
         match self {
-            Self::Songs => NATURAL.to_owned(),
+            Self::Songs(_) => self.natural().to_owned(),
             Self::Detail => format!("t.title COLLATE {UNICODE_LOWER}"),
         }
     }
 
     fn year(self) -> &'static str {
         match self {
-            Self::Songs => "COALESCE(t.year, 0)",
+            Self::Songs(_) => "COALESCE(t.year, 0)",
             Self::Detail => "t.year",
         }
     }
 
     fn length(self) -> String {
         match self {
-            Self::Songs => format!("MIN(MAX(t.duration_ms, 0), {SONGS_LENGTH_CAP_MS})"),
+            Self::Songs(_) => format!("MIN(MAX(t.duration_ms, 0), {SONGS_LENGTH_CAP_MS})"),
             Self::Detail => "t.duration_ms".to_owned(),
         }
     }
@@ -169,15 +200,15 @@ fn order_by(page: Page, order: TrackOrder, position: Option<&str>) -> String {
              COALESCE(NULLIF(t.track_number, 0), {UNTAGGED_TRACK_LAST}) {dir}, \
              {tie} ASC, t.id ASC"
         ),
-        (TrackSortField::Artist, _) => then_tie(&lowered("t.artist")),
-        (TrackSortField::Album, _) => then_tie(&lowered("t.album")),
-        (TrackSortField::Genre, _) => then_tie(&lowered("t.genre")),
+        (TrackSortField::Artist, _) => then_tie(&page.key("artist_key")),
+        (TrackSortField::Album, _) => then_tie(&page.key("album_key")),
+        (TrackSortField::Genre, _) => then_tie(&page.key("genre_key")),
         (TrackSortField::Year, _) => then_tie(page.year()),
         (TrackSortField::Length, _) => then_tie(&page.length()),
         (TrackSortField::Position, Some(position)) => format!("{position} {dir}, t.id {dir}"),
         // On the Songs tabs the natural key is the tie-break too, so it is compared once.
         (TrackSortField::Title | TrackSortField::Position, _) => match page {
-            Page::Songs => format!("{NATURAL} {dir}, t.id {dir}"),
+            Page::Songs(_) => format!("{} {dir}, t.id {dir}", page.natural()),
             Page::Detail => then_tie(NATURAL),
         },
     }
@@ -188,10 +219,4 @@ pub(crate) fn sql_direction(dir: SortDir) -> &'static str {
         SortDir::Asc => "ASC",
         SortDir::Desc => "DESC",
     }
-}
-
-/// A nullable text column read the way `ui::track_sort` reads it: missing as `""`, which a bare
-/// NULL would sort ahead of, then folded through `to_lowercase()`.
-fn lowered(column: &str) -> String {
-    format!("COALESCE({column}, '') COLLATE {UNICODE_LOWER}")
 }

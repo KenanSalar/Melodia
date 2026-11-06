@@ -1,10 +1,10 @@
-//! The collation the track lists order their text columns by.
+//! The collation a detail page's title tie-break and the card grids order their text by.
 //!
-//! `ui::track_sort` orders artist, album, genre and a detail's title tie-break by
-//! `str::to_lowercase()`, a Unicode fold, where `SQLite`'s `NOCASE` folds ASCII alone, so an
-//! `ORDER BY` reproducing those arms needs Rust's own lowercase. **Never name it in schema**: an
-//! index, view or trigger using it leaves the table unreadable to any connection without it, the
-//! `sqlite3` CLI included.
+//! `ui::track_sort` orders by `str::to_lowercase()`, a Unicode fold, where `SQLite`'s `NOCASE`
+//! folds ASCII alone, so an `ORDER BY` reproducing it needs Rust's own lowercase. The track lists'
+//! artist, album and genre orders read that fold stored instead (`queries::track::order_keys`),
+//! which an index can carry. **Never name it in schema**: an index, view or trigger using it leaves
+//! the table unreadable to any connection without it, the `sqlite3` CLI included.
 
 use std::cmp::Ordering;
 

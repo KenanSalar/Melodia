@@ -43,8 +43,9 @@ paths:
 - **Nothing outside the FTS migrations and `search_tests` names a shadow table**
   (`tracks_fts_{data,idx,docsize,config}`), fts5's private storage.
 - **A statement writing title, artist, album artist, album or genre writes `search_text` beside
-  it**, as `bind_track_columns` does (`DerivedColumns`). The backfill fills blanks only, so a miss
-  leaves every library-sized filter matching the old name.
+  it, and artist, album or genre its order key**, as `bind_track_columns` does (`DerivedColumns`).
+  The backfill fills blanks only, so a miss leaves every library-sized filter matching the old
+  name, and the key fill only NULLs, so a missed key sorts the row by the old name.
 - **A card's name and its `search_name` are written together** (`queries::search_name`), the folded
   copy each of `albums`, `artists`, `genres` and `playlists` keeps for its grid's filter.
 - **`UNICODE_LOWER` is query-side and never schema** (`database::collation`): the place to break it

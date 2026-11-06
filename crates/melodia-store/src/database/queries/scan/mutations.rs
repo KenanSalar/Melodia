@@ -5,6 +5,7 @@ use std::sync::LazyLock;
 
 use rusqlite::Transaction;
 
+use crate::database::queries::track::order_keys::OrderKeys;
 use crate::database::sql::{self, Sql};
 use crate::database::{MAX_BINDS_PER_STATEMENT, chunked_in_execute_on, placeholders, values_list};
 use melodia_core::entities::scan::ExtractedMetadata;
@@ -30,7 +31,7 @@ const TRACK_INSERT_COLUMNS: &str = "file_path, file_name,
     duration_ms, file_size, codec, bitrate, channels, sample_rate, bit_depth,
     artwork_path,
     album_id, artist_id, genre_id, folder_id,
-    date_modified, sort_key, search_text,
+    date_modified, sort_key, search_text, artist_key, album_key, genre_key,
     play_count, skip_count, rating, is_favorite, last_played, last_position,
     date_added";
 
@@ -76,7 +77,7 @@ fn bind_new_track(sql: &mut Sql, row: &NewTrackRow<'_>, now: &str) {
 }
 
 /// Binds the block every track write shares: the metadata from `file_hash` to `artwork_path`, the
-/// four foreign keys, `date_modified` and the two [`DerivedColumns`]. The one place their order is
+/// four foreign keys, `date_modified` and the [`DerivedColumns`]. The one place their order is
 /// written, where a second copy could swap two same-typed nullable columns silently.
 fn bind_track_columns(sql: &mut Sql, meta: &ExtractedMetadata, ids: &ResolvedIds) {
     let derived = DerivedColumns::of(meta);
@@ -130,15 +131,19 @@ fn bind_track_columns(sql: &mut Sql, meta: &ExtractedMetadata, ids: &ResolvedIds
         .bind(ids.folder_id)
         .bind(meta.date_modified.as_deref())
         .bind(derived.sort_key)
-        .bind(derived.search_text);
+        .bind(derived.search_text)
+        .bind(derived.order.artist)
+        .bind(derived.order.album)
+        .bind(derived.order.genre);
 }
 
-/// The two columns computed from a file's tags rather than read off them, one rule for every
-/// write: a row sorting or filtering differently from its neighbours is invisible until a list is
-/// read top to bottom.
+/// The columns computed from a file's tags rather than read off them, one rule for every write: a
+/// row sorting or filtering differently from its neighbours is invisible until a list is read top
+/// to bottom.
 struct DerivedColumns {
     sort_key: String,
     search_text: String,
+    order: OrderKeys,
 }
 
 impl DerivedColumns {
@@ -152,7 +157,8 @@ impl DerivedColumns {
             genre: meta.genres.line().unwrap_or_default(),
         }
         .pack();
-        Self { sort_key: to_natural_sort_key(sort_source), search_text }
+        let order = OrderKeys::of(meta.artist.line(), meta.album.as_deref(), meta.genres.line());
+        Self { sort_key: to_natural_sort_key(sort_source), search_text, order }
     }
 }
 
@@ -288,6 +294,7 @@ pub(crate) fn update_track_metadata(
             artwork_path = COALESCE(?, artwork_path),
             album_id = ?, artist_id = ?, genre_id = ?, folder_id = ?,
             date_modified = ?, sort_key = ?, search_text = ?,
+            artist_key = ?, album_key = ?, genre_key = ?,
             rating = CASE WHEN ? = 0 THEN rating ELSE ? END
          WHERE file_path = ? RETURNING id",
     );
