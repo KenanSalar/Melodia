@@ -45,15 +45,17 @@ pub fn store(bytes: &[u8], extension: &str, dir: &Path) -> Option<StoredLogo> {
     if width < MIN_LOGO_DIM || height < MIN_LOGO_DIM {
         return None;
     }
-    // Held to the end: `compose` flattens at full resolution, and the store decodes again to bound
-    // an oversized source. The download's byte cap bounds only the compressed size, which a flat
-    // icon stays under at any dimension.
-    let _oversized = image_decode::large_decode_guard(u64::from(width) * u64::from(height));
     // `None` stores the source's own bytes: already fine, or its tile wouldn't encode.
-    let tile = match tile_for(bytes) {
-        Tile::Composed(tile) => encoded_png(tile),
-        Tile::SourceIsFine => None,
-        Tile::Undrawable => return None,
+    let tile = {
+        // `compose` flattens at full resolution, and the download's byte cap bounds only the
+        // compressed size, which a flat icon stays under at any dimension. Released before the
+        // store, which takes the gate for its own decode.
+        let _oversized = image_decode::large_decode_guard(u64::from(width) * u64::from(height));
+        match tile_for(bytes) {
+            Tile::Composed(tile) => encoded_png(tile),
+            Tile::SourceIsFine => None,
+            Tile::Undrawable => return None,
+        }
     };
 
     let path = match tile.as_deref() {

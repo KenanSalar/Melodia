@@ -144,7 +144,7 @@ pub fn cancel(state: &AppState) {
 
 /// Files parsed and ingested per write transaction: large enough that begin, commit and the trigger
 /// DDL are noise, small enough that interactive writes get the single writer every few seconds on
-/// a slow disk. Also the scan's memory peak, one chunk's tags being resident at a time.
+/// a slow disk. Also bounds the parsed tags held at once to one chunk's.
 const TX_CHUNK_FILES: usize = 2_000;
 
 async fn scan_one(

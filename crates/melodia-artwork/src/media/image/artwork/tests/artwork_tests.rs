@@ -230,7 +230,7 @@ fn find_external_cover_cache_hit() -> Result<(), AppError> {
     let _ = find_external_cover(&track_path, &cache);
 
     // Only one directory entry cached
-    assert_eq!(cache.dir_to_cover.lock().len(), 1);
+    assert_eq!(cache.dir_to_cover.state.lock().entries.len(), 1);
     Ok(())
 }
 
@@ -329,7 +329,7 @@ fn find_and_cache_artwork_memoizes_per_cover() -> Result<(), AppError> {
         .ok_or_else(|| AppError::validation_msg("expected cached artwork path"))?;
 
     assert_eq!(first, second);
-    assert_eq!(cache.cover_to_cached.lock().len(), 1);
+    assert_eq!(cache.cover_to_cached.state.lock().entries.len(), 1);
     Ok(())
 }
 

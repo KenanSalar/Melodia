@@ -9,6 +9,8 @@
 //! ([`sweep`]), and only over names [`is_stored_name`] recognises, the directory holding whatever
 //! else a user put there.
 
+use std::collections::HashSet;
+use std::hash::Hash;
 use std::io::{self, Write};
 use std::num::NonZeroUsize;
 use std::path::{Path, PathBuf};
@@ -18,7 +20,7 @@ use lofty::picture::MimeType;
 use lofty::tag::Tag;
 use lru::LruCache;
 use melodia_core::error::describe;
-use parking_lot::Mutex;
+use parking_lot::{Condvar, Mutex};
 
 use crate::media::image::image_decode::{self, FilterType, MAX_SOURCE_DIM, resize_rgb8};
 
@@ -58,50 +60,94 @@ const COVER_CACHE_CAP: NonZeroUsize = match NonZeroUsize::new(2_000) {
     None => panic!("COVER_CACHE_CAP > 0"),
 };
 
-/// Memos for artwork ingest, read through [`memoized_path`], so an album's cover is probed, read
-/// and hashed once rather than once per track. An embedded picture is keyed by its hash, having no
-/// file path to key on.
+/// Memos for artwork ingest, read through [`Memo::get_or_compute`], so an album's cover is probed,
+/// read and hashed once rather than once per track. An embedded picture is keyed by its hash,
+/// having no file path to key on.
 pub struct CoverCaches {
-    dir_to_cover: Mutex<LruCache<PathBuf, Option<PathBuf>>>,
-    cover_to_cached: Mutex<LruCache<PathBuf, Option<String>>>,
-    source_to_stored: Mutex<LruCache<String, Option<String>>>,
+    dir_to_cover: Memo<PathBuf, PathBuf>,
+    cover_to_cached: Memo<PathBuf, String>,
+    source_to_stored: Memo<String, String>,
 }
 
 pub type CoverCache = Arc<CoverCaches>;
 
 pub fn new_cover_cache() -> CoverCache {
     Arc::new(CoverCaches {
-        dir_to_cover: Mutex::new(LruCache::new(COVER_CACHE_CAP)),
-        cover_to_cached: Mutex::new(LruCache::new(COVER_CACHE_CAP)),
-        source_to_stored: Mutex::new(LruCache::new(COVER_CACHE_CAP)),
+        dir_to_cover: Memo::new(),
+        cover_to_cached: Memo::new(),
+        source_to_stored: Memo::new(),
     })
 }
 
-/// One memo's get-or-compute, unlocked around `compute`: two workers racing on a key duplicate the
-/// work once rather than queueing behind each other's I/O.
-///
-/// **A hit naming a file that is gone is a miss**, the sweep having retired it since; one `stat`
-/// is cheaper than a row naming a missing file until the next scan's repair. A memoized `None`
-/// stays a hit, being a settled answer.
-fn memoized_path<K, P>(
-    tier: &Mutex<LruCache<K, Option<P>>>,
-    key: K,
-    compute: impl FnOnce(&K) -> Option<P>,
-) -> Option<P>
+/// One ingest memo, where a miss on a key another worker is computing waits for its answer. A
+/// large cover's decode outlasts the tracks around it, so without the wait every scan worker
+/// reaching that album would decode it at once.
+struct Memo<K, P> {
+    state: Mutex<MemoState<K, P>>,
+    settled: Condvar,
+}
+
+struct MemoState<K, P> {
+    entries: LruCache<K, Option<P>>,
+    computing: HashSet<K>,
+}
+
+enum Claim<P> {
+    Settled(Option<P>),
+    /// Nobody holds an answer, and this worker now owes it.
+    Owed,
+}
+
+impl<K, P> Memo<K, P>
 where
-    K: std::hash::Hash + Eq,
+    K: Hash + Eq + Clone,
     P: AsRef<Path> + Clone,
 {
-    let hit = tier.lock().get(&key).cloned();
-    if let Some(stored) = hit
-        && stored.as_ref().is_none_or(|path| path.as_ref().exists())
-    {
-        return stored;
+    fn new() -> Self {
+        let state =
+            MemoState { entries: LruCache::new(COVER_CACHE_CAP), computing: HashSet::new() };
+        Self { state: Mutex::new(state), settled: Condvar::new() }
     }
 
-    let computed = compute(&key);
-    tier.lock().put(key, computed.clone());
-    computed
+    /// `key`'s answer, computed here unless another worker already is.
+    ///
+    /// **A hit naming a file that is gone is a miss**, the sweep having retired it since; one `stat`
+    /// is cheaper than a row naming a missing file until the next scan's repair. A memoized `None`
+    /// stays a hit, being a settled answer.
+    fn get_or_compute(&self, key: K, compute: impl FnOnce(&K) -> Option<P>) -> Option<P> {
+        if let Claim::Settled(stored) = self.claim(&key) {
+            return stored;
+        }
+        let computed = compute(&key);
+        let mut state = self.state.lock();
+        state.computing.remove(&key);
+        state.entries.put(key, computed.clone());
+        drop(state);
+        self.settled.notify_all();
+        computed
+    }
+
+    /// The hit's `stat` runs unlocked, so a stale one is dropped and the key claimed afresh rather
+    /// than checked while every other worker's lookup waits.
+    fn claim(&self, key: &K) -> Claim<P> {
+        loop {
+            let stored = {
+                let mut state = self.state.lock();
+                while state.computing.contains(key) {
+                    self.settled.wait(&mut state);
+                }
+                let Some(stored) = state.entries.get(key).cloned() else {
+                    state.computing.insert(key.clone());
+                    return Claim::Owed;
+                };
+                stored
+            };
+            if stored.as_ref().is_none_or(|path| path.as_ref().exists()) {
+                return Claim::Settled(stored);
+            }
+            self.state.lock().entries.pop(key);
+        }
+    }
 }
 
 const COVER_FILENAMES: &[&str] = &[
@@ -187,7 +233,7 @@ fn compute_hash(data: &[u8]) -> String {
 /// The first [`COVER_FILENAMES`] entry in the audio file's own directory, memoized per directory.
 fn find_external_cover(file_path: &Path, cover_cache: &CoverCache) -> Option<PathBuf> {
     let dir = file_path.parent()?.to_path_buf();
-    memoized_path(&cover_cache.dir_to_cover, dir, |dir| {
+    cover_cache.dir_to_cover.get_or_compute(dir, |dir| {
         COVER_FILENAMES.iter().map(|name| dir.join(name)).find(|path| path.exists())
     })
 }
@@ -240,6 +286,7 @@ pub fn store_image(bytes: &[u8], ext: &str, dir: &Path) -> Option<String> {
 /// **Never larger than the source**, so a cap set a little low can waste CPU but never grow the
 /// store. A source over only the byte bound keeps its dimensions and is re-encoded in place.
 fn normalized_bytes(bytes: &[u8], width: u32, height: u32) -> Option<Vec<u8>> {
+    let _oversized = image_decode::large_decode_guard(u64::from(width) * u64::from(height));
     let decoded = image_decode::decode_memory_capped(bytes, MAX_SOURCE_DIM)?;
     let (target_w, target_h) =
         image_decode::fit_within(width, height, STORE_MAX_DIM, STORE_MAX_DIM);
@@ -284,7 +331,7 @@ pub fn extract_and_cache_artwork(
         _ => "jpg",
     };
 
-    memoized_path(&cover_cache.source_to_stored, compute_hash(picture.data()), |_| {
+    cover_cache.source_to_stored.get_or_compute(compute_hash(picture.data()), |_| {
         store_image(picture.data(), ext, artwork_dir)
     })
 }
@@ -297,9 +344,9 @@ pub fn find_and_cache_artwork(
     cover_cache: &CoverCache,
 ) -> Option<String> {
     if let Some(cover_path) = find_external_cover(file_path, cover_cache) {
-        let cached = memoized_path(&cover_cache.cover_to_cached, cover_path, |path| {
-            cache_image_file(path, artwork_dir)
-        });
+        let cached = cover_cache
+            .cover_to_cached
+            .get_or_compute(cover_path, |path| cache_image_file(path, artwork_dir));
         if cached.is_some() {
             return cached;
         }

@@ -221,7 +221,9 @@ static LARGE_DECODE_GATE: parking_lot::Mutex<()> = parking_lot::Mutex::new(());
 
 /// `None` where `pixels` needs no gate. Take it from the header read before the decode
 /// ([`source_pixels`], [`memory_dimensions`]) and hold it while any full-resolution buffer lives,
-/// the flatten and re-encode included.
+/// the flatten and re-encode included. **Not reentrant**: release it before
+/// [`store_image`](crate::media::image::artwork::store_image), which takes it to bound an
+/// oversized source.
 #[must_use]
 pub fn large_decode_guard(pixels: u64) -> Option<parking_lot::MutexGuard<'static, ()>> {
     (pixels > LARGE_SOURCE_PIXELS).then(|| LARGE_DECODE_GATE.lock())
