@@ -20,7 +20,7 @@ chronological and the groups are not, so a low number can sit anywhere.
 | [1. Record architecture decisions here, and argue everything else at its anchor](0001-record-architecture-decisions.md) | Accepted, 2026-09-04 |
 | [2. A native Rust desktop app, after the Tauri version](0002-native-rust-desktop-app.md) | Accepted, 2026-05-25 |
 | [3. Slint for the UI, and FemtoVG under it](0003-slint-and-femtovg.md) | Accepted, 2026-05-25 |
-| [4. SQLite through sqlx, one writer and a pool of readers](0004-sqlite-through-sqlx.md) | Accepted, 2026-05-25 |
+| [4. SQLite through sqlx, one writer and a pool of readers](0004-sqlite-through-sqlx.md) | Superseded by [ADR 41](0041-sqlite-through-rusqlite.md), 2026-11-06 |
 | [5. One tokio runtime, direct calls, and no IPC](0005-one-runtime-no-ipc.md) | Accepted, 2026-05-25 |
 | [6. AGPL-3.0-or-later, and what every artifact then owes](0006-agpl-and-what-artifacts-owe.md) | Accepted, 2026-05-25 |
 | [28. No `unsafe` outside platform FFI, and no `unwrap` anywhere](0028-no-unsafe-outside-ffi-no-unwrap-anywhere.md) | Accepted, 2026-05-25 |
@@ -28,6 +28,7 @@ chronological and the groups are not, so a low number can sit anywhere.
 | [34. Performance is held by profiling and by shape, not by a benchmark suite](0034-performance-is-profiled-not-benchmarked.md) | Accepted, 2026-09-04 |
 | [36. Architecture is held by tests that read the source](0036-architecture-held-by-corpus-walks.md) | Accepted, 2026-08-03 |
 | [37. One workspace-wide error type, and a failure is never carried as a `String`](0037-one-error-type-never-a-string.md) | Accepted, 2026-05-25 |
+| [41. SQLite through rusqlite, with the pool and the migrator our own](0041-sqlite-through-rusqlite.md) | Accepted, 2026-11-06 |
 
 ### Audio
 
@@ -117,7 +118,9 @@ broke, and without the symptom the decision reads as arbitrary.
   rejected. A rejected ADR keeps its number and its status.
 - **The status carries the date the decision was made**, not the date the file was written. A
   bare `Accepted` cannot be told apart from a current one.
-- **The statuses are `Proposed`, `Accepted`, `Superseded by ADR N`.**
+- **The statuses are `Proposed`, `Accepted`, `Superseded by ADR N`.** A superseded ADR keeps the
+  date it was accepted next to the date it was replaced, so you can still tell when it was in
+  force, and the ADR that replaces it names the one it supersedes in its own status line.
 - **An accepted ADR is never edited to reverse itself.** A fact that moved while the decision
   still stands gets a dated `**Amendment:**` paragraph at the end. A decision that reverses gets
   a new ADR, and the old one gets `Superseded by ADR N` and is otherwise left exactly as written.
@@ -127,8 +130,9 @@ broke, and without the symptom the decision reads as arbitrary.
   the most common way a collection like this goes bad.
 - **The alternatives were really on the table.** A loser invented so the winner looks better is
   worse than no alternatives at all.
-- **One page.** A decision that genuinely needs a survey or a diagram is a working doc under
-  `docs/plans/`, and the ADR links to it and stays short. Nothing else holds the length down.
+- **One page.** When a decision genuinely needs a survey or a diagram, that work happens in a
+  working doc under `docs/plans/` and the ADR keeps only the conclusion. It doesn't link to the
+  working doc, which is deleted once its feature ships. Nothing else holds the length down.
 - **A reference to another ADR is a link**, so the collection can be read by following it rather
   than by opening the directory again. Prose stays prose: a list is for something that is genuinely
   a list of three, in full sentences, never as licence to write fragments.

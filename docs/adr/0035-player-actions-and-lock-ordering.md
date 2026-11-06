@@ -42,3 +42,8 @@ layer directly.
 This ADR was written in September 2026. The action list dates from the repository's first commit;
 the execution lock that serializes the pair arrived on 2026-07-08, and the function that holds both
 halves argues its own mechanism at its definition.
+
+**Amendment, 2026-11-06:** the store now talks to SQLite through rusqlite instead of sqlx
+([ADR 41](0041-sqlite-through-rusqlite.md)). The reasoning above doesn't depend on the driver: a
+database pool on the engine's side would tie the engine to whichever driver the store uses, so
+persistence stays off the action list.

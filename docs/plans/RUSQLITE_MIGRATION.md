@@ -1,6 +1,6 @@
 # Plan: Move the library database from sqlx to rusqlite
 
-Status: **Phase 5 step 1 measured; whether the move stays is Kenan's call. Step 4's bump has landed and is re-measured** · Owner: Kenan · Created: 2026-11-04
+Status: **Phase 5: steps 1, 2 and 4 done, the move kept and recorded (ADR 41); step 3's tuning, step 4's hand test and Phase 6 remain** · Owner: Kenan · Created: 2026-11-04
 
 > **Validated 2026-11-04** against `8fe1eb93` (`chore/deps-and-fixes`) with three read-only inventories:
 >
@@ -301,7 +301,7 @@ The store and core move to rusqlite together, over sub-phases 4a to 4d, each a c
 - [x] **4d Tests and comments:** steps 11 and 12, and the docs. Done when the three gates pass.
 - [x] **Hand test**, below.
 
-**Where it stands:** 4a to 4d have landed and the hand test passed (below). Its one finding, the history table's DDL whitespace, landed as its own commit, `0535bc9a`. Phase 5's step 1 has run, step 2 waits on Kenan's keep decision, and step 4's bump has landed ahead of it.
+**Where it stands:** 4a to 4d have landed and the hand test passed (below). Its one finding, the history table's DDL whitespace, landed as its own commit, `0535bc9a`. Phase 5's step 1 has run, step 2 kept the move and wrote it into ADR 41, and step 4's bump has landed ahead of step 3.
 
 - **Gates (2026-11-05):** `cargo fmt --all --check`, `cargo clippy --all-targets --locked --workspace -- -D warnings` and `cargo test --locked --workspace` pass, 4,429 tests and none failed. That was the first run of 4a to 4c's SQL, and it exposed no production defect, so nothing from the gates lands after 4d.
 - **4d's tests:**
@@ -488,6 +488,7 @@ Each measurement step waits for Kenan's go. Step 1's numbers decide whether the 
      - **Left as written:**
        - ADR 1's "sqlx rather than rusqlite" is its example of a choice with no file to sit beside, and still is one.
        - ADR 13 and ADR 27 link ADR 4 for facts the new ADR carries forward, and the link reaches it through the superseded status.
+   - **Decided (2026-11-06): the move stays,** Kenan's call on step 1's result: the speed, SQLite moving with rusqlite rather than with sqlx's releases, fewer allocations, memory level at idle and slightly lower while the boot's connections are open, the scan's peak unsettled, and a smaller tree (808 packages to 793 in `Cargo.lock`). Recorded as written above: ADR 41, ADR 4 superseded, the index updated, ADR 35 amended. No test yet holds the history format, so ADR 41 names none.
 3. **Tune from what that shows:**
    - the statement-cache capacity, memory against re-prepares;
    - dropping `fetch_packed_ids`' `group_concat` packing and `unpack_ids`, whose stated reason is sqlx's per-row hop. Under rusqlite a row per id measured no slower than the packed row ([Evidence](#evidence-2026-11-04)); the dev library confirms it before the packing goes;

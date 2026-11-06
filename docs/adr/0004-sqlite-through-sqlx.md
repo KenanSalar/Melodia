@@ -1,6 +1,6 @@
 # ADR 4: SQLite through sqlx, one writer and a pool of readers
 
-**Status:** Accepted, 2026-05-25
+**Status:** Accepted, 2026-05-25; superseded by [ADR 41](0041-sqlite-through-rusqlite.md) on 2026-11-06
 
 A music library is one person's data on one machine, and it has to answer a search on every
 keystroke across tens of thousands of tracks while a scan is still writing rows behind it. That
