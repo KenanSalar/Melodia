@@ -1,3 +1,4 @@
+use std::borrow::Cow;
 use std::ops::Range;
 use std::path::{Path, PathBuf};
 
@@ -5,7 +6,7 @@ use rayon::prelude::*;
 use walkdir::{DirEntry, WalkDir};
 
 use crate::media::ingest::metadata::extract_or_filename_row;
-use melodia_core::entities::scan::{FileStamp, ScannedFile};
+use melodia_core::entities::scan::{FileStamp, FileStampRef, ScannedFile};
 use melodia_core::utils::audio_ext::is_audio_extension;
 use melodia_core::utils::trash_dir::is_trash_dir;
 
@@ -34,16 +35,88 @@ impl ScanObserver for Unobserved {
 
 /// The audio files under one folder, and what the walk couldn't vouch for.
 pub struct MediaWalk {
-    pub files: Vec<PathBuf>,
+    pub files: WalkedPaths,
     /// Paths the walk failed to read, a directory or now and then a single entry. Nothing under
     /// one is known to be gone, so a row there can't be taken for an orphan.
     pub unreadable: Vec<PathBuf>,
 }
 
+/// A walk's paths in a few large blocks, which glibc maps on their own, rather than one allocation
+/// each: those, alive through the reconcile, can share an arena with the boot's long-lived ones and
+/// leave them spread across the heap they grew. A path that isn't UTF-8 keeps its `PathBuf` intact.
+#[derive(Default)]
+pub struct WalkedPaths {
+    text: String,
+    entries: Vec<WalkedPath>,
+    foreign: Vec<PathBuf>,
+}
+
+#[derive(Clone, Copy)]
+enum WalkedPath {
+    Text { start: usize, end: usize },
+    Foreign(usize),
+}
+
+impl WalkedPaths {
+    fn push(&mut self, path: &Path) {
+        let entry = if let Some(text) = path.to_str() {
+            let start = self.text.len();
+            self.text.push_str(text);
+            WalkedPath::Text { start, end: self.text.len() }
+        } else {
+            self.foreign.push(path.to_path_buf());
+            WalkedPath::Foreign(self.foreign.len() - 1)
+        };
+        self.entries.push(entry);
+    }
+
+    pub fn len(&self) -> usize {
+        self.entries.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.entries.is_empty()
+    }
+
+    fn path_at(&self, index: usize) -> &Path {
+        self.path(self.entries[index])
+    }
+
+    fn path(&self, entry: WalkedPath) -> &Path {
+        match entry {
+            WalkedPath::Text { start, end } => Path::new(&self.text[start..end]),
+            WalkedPath::Foreign(slot) => &self.foreign[slot],
+        }
+    }
+
+    /// The lossy string a row stores for the path, borrowed wherever the path is UTF-8.
+    fn spelling(&self, entry: WalkedPath) -> Cow<'_, str> {
+        match entry {
+            WalkedPath::Text { start, end } => Cow::Borrowed(&self.text[start..end]),
+            WalkedPath::Foreign(slot) => self.foreign[slot].to_string_lossy(),
+        }
+    }
+
+    /// Orders the paths by [`Self::spelling`] on the current rayon pool.
+    fn sort(&mut self) {
+        let mut entries = std::mem::take(&mut self.entries);
+        entries.par_sort_unstable_by(|&a, &b| self.spelling(a).cmp(&self.spelling(b)));
+        self.entries = entries;
+    }
+
+    /// The indices of the paths spelled `path`, once sorted.
+    fn spelled(&self, path: &str) -> Range<usize> {
+        let start = self.entries.partition_point(|&entry| self.spelling(entry).as_ref() < path);
+        let matching =
+            self.entries[start..].partition_point(|&entry| self.spelling(entry).as_ref() == path);
+        start..start + matching
+    }
+}
+
 /// Walks `dir` for audio files, or answers `None` once `observer` cancels: a partial list is
 /// one a caller could mistake for the whole tree.
 pub fn collect_media_files(dir: &Path, observer: &dyn ScanObserver) -> Option<MediaWalk> {
-    let mut files = Vec::with_capacity(256);
+    let mut files = WalkedPaths::default();
     let mut unreadable = Vec::new();
 
     let walk = WalkDir::new(dir).follow_links(false).into_iter();
@@ -74,7 +147,7 @@ pub fn collect_media_files(dir: &Path, observer: &dyn ScanObserver) -> Option<Me
         };
 
         if is_audio_extension(ext) {
-            files.push(path.to_path_buf());
+            files.push(path);
             observer.found(u32::try_from(files.len()).unwrap_or(u32::MAX));
         }
     }
@@ -137,19 +210,28 @@ pub fn scan_files_parallel(
 /// the rows the **whole** walk didn't find, never those of the files left to parse, which would
 /// read a no-change rescan's entire library as gone.
 pub struct WalkIndex {
-    files: Vec<PathBuf>,
-    stamps: Vec<Option<FileStamp>>,
+    files: WalkedPaths,
+    stamps: Vec<Option<PackedStamp>>,
+    /// Every stamp's mtime end to end, packed for the reason [`WalkedPaths`] packs its paths.
+    stamp_text: String,
     unreadable: Vec<PathBuf>,
     orphans: Vec<String>,
+}
+
+/// A [`FileStamp`] whose mtime is a span of [`WalkIndex::stamp_text`].
+#[derive(Clone, Copy)]
+struct PackedStamp {
+    file_size: Option<i64>,
+    date_modified: Option<(usize, usize)>,
 }
 
 impl WalkIndex {
     /// Sorts `walk` on the current rayon pool.
     pub fn new(walk: MediaWalk) -> Self {
         let MediaWalk { mut files, unreadable } = walk;
-        files.par_sort_unstable_by(|a, b| a.to_string_lossy().cmp(&b.to_string_lossy()));
+        files.sort();
         let stamps = vec![None; files.len()];
-        Self { files, stamps, unreadable, orphans: Vec::new() }
+        Self { files, stamps, stamp_text: String::new(), unreadable, orphans: Vec::new() }
     }
 
     /// How many audio files the walk found.
@@ -166,7 +248,7 @@ impl WalkIndex {
     /// none. A row under a path the walk couldn't read is spared: its file is as likely there as
     /// gone, and purging it takes the track's rating and play count with it.
     pub fn add_row(&mut self, path: String, stamp: FileStamp) {
-        let found = self.files_at(&path);
+        let found = self.files.spelled(&path);
         if found.is_empty() {
             if !self.under_unreadable(&path) {
                 self.orphans.push(path);
@@ -179,7 +261,7 @@ impl WalkIndex {
     /// Pairs a kept-out file's stamp with the files at its path, so one is read again only once it
     /// has changed. One the walk didn't find is [`Self::unwalked`]'s.
     pub fn add_kept_out(&mut self, path: &str, stamp: FileStamp) {
-        let found = self.files_at(path);
+        let found = self.files.spelled(path);
         self.stamp_files(found, stamp);
     }
 
@@ -187,13 +269,15 @@ impl WalkIndex {
     /// since. Runs on the current rayon pool, a `stat` per stamped file. Every launch with watching
     /// on re-scans each folder to find almost nothing, so this is the scan's common case.
     pub fn changed(&self, keep: impl Fn(&Path) -> bool + Sync) -> Vec<PathBuf> {
-        self.files
-            .par_iter()
-            .zip(&self.stamps)
-            .filter(|(file, stamp)| {
-                keep(file) && !stamp.as_ref().is_some_and(|stamp| file_is_current(file, stamp))
+        (0..self.files.len())
+            .into_par_iter()
+            .filter_map(|index| {
+                let file = self.files.path_at(index);
+                let read_again = keep(file)
+                    && !self.stamps[index]
+                        .is_some_and(|stamp| file_is_current(file, self.unpack(stamp)));
+                read_again.then(|| file.to_path_buf())
             })
-            .map(|(file, _)| file.clone())
             .collect()
     }
 
@@ -207,26 +291,28 @@ impl WalkIndex {
     pub fn unwalked(&self, paths: impl IntoIterator<Item = String>) -> Vec<String> {
         paths
             .into_iter()
-            .filter(|path| self.files_at(path).is_empty() && !self.under_unreadable(path))
+            .filter(|path| self.files.spelled(path).is_empty() && !self.under_unreadable(path))
             .collect()
     }
 
     fn stamp_files(&mut self, found: Range<usize>, stamp: FileStamp) {
-        // More than one only for paths that aren't valid UTF-8 and read back alike.
-        if let Some((last, others)) = self.stamps[found].split_last_mut() {
-            for slot in others {
-                *slot = Some(stamp.clone());
-            }
-            *last = Some(stamp);
+        if found.is_empty() {
+            return;
         }
+        let date_modified = stamp.date_modified.map(|text| {
+            let start = self.stamp_text.len();
+            self.stamp_text.push_str(&text);
+            (start, self.stamp_text.len())
+        });
+        // More than one only for paths that aren't valid UTF-8 and read back alike.
+        self.stamps[found].fill(Some(PackedStamp { file_size: stamp.file_size, date_modified }));
     }
 
-    /// The indices of the walked files spelled `path`.
-    fn files_at(&self, path: &str) -> Range<usize> {
-        let start = self.files.partition_point(|file| file.to_string_lossy().as_ref() < path);
-        let matching =
-            self.files[start..].partition_point(|file| file.to_string_lossy().as_ref() == path);
-        start..start + matching
+    fn unpack(&self, stamp: PackedStamp) -> FileStampRef<'_> {
+        FileStampRef {
+            file_size: stamp.file_size,
+            date_modified: stamp.date_modified.map(|(start, end)| &self.stamp_text[start..end]),
+        }
     }
 
     fn under_unreadable(&self, path: &str) -> bool {
@@ -236,7 +322,7 @@ impl WalkIndex {
 
 /// Whether `path` still matches `stamp`, so the parse can skip it. A heuristic rather than a byte
 /// identity, but any normal write bumps the mtime; a file that can't be stat'ed isn't current.
-pub fn file_is_current(path: &Path, stamp: &FileStamp) -> bool {
+pub fn file_is_current(path: &Path, stamp: FileStampRef<'_>) -> bool {
     let Ok(meta) = std::fs::metadata(path) else {
         return false;
     };

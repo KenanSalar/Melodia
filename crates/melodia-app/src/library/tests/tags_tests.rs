@@ -389,7 +389,7 @@ async fn a_tag_edit_leaves_the_row_describing_the_file_it_wrote() -> Result<(), 
     // And so the incremental filter agrees the row is current, which is exactly what makes any
     // one of the three being stale permanent rather than self-correcting.
     let row = FileStamp { file_size: Some(size), date_modified: Some(mtime) };
-    assert!(file_is_current(&path, &row), "the next scan must have nothing left to do");
+    assert!(file_is_current(&path, row.borrowed()), "the next scan must have nothing left to do");
     Ok(())
 }
 

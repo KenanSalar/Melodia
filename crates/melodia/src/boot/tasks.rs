@@ -1,9 +1,8 @@
 //! The backend half of boot: background tasks, the restored queue, and what a launch plays.
 
 use std::sync::Arc;
-use std::time::Duration;
 
-use slint::{ComponentHandle, Timer};
+use slint::ComponentHandle;
 
 use melodia_app::state::{AppState, StartupChannels};
 use melodia_app::{library, services, tasks};
@@ -127,22 +126,12 @@ pub fn serve_file_opens(
     });
 }
 
-/// Lets the boot's long-lived allocations, the UI's and its tasks', land before the launch reconcile
-/// walks the library. Run beside them, the walk can share glibc's main arena and leave them spread
-/// across the heap it grew.
-const RESUME_AFTER_SHOW: Duration = Duration::from_millis(1500);
-
-/// Restarts folder watching and runs the launch reconcile [`RESUME_AFTER_SHOW`] after the call,
-/// tracked so shutdown awaits its writes. Called once the window is shown; a quit inside the delay
-/// leaves the reconcile to the next launch.
-pub fn resume_watching_after_show(spawner: &tasks::TaskSpawner, state: &AppState) {
-    let spawner = spawner.clone();
-    let state = state.clone();
-    Timer::single_shot(RESUME_AFTER_SHOW, move || {
-        spawner.spawn(async move {
-            if let Err(e) = tasks::resume_watching::run(&state).await {
-                log::warn!("Resuming folder watching failed: {}", describe(&e));
-            }
-        });
+/// Restarts folder watching and runs the launch reconcile, tracked so shutdown awaits its writes.
+pub fn spawn_resume_watching(spawner: &tasks::TaskSpawner, state: &AppState) {
+    let state_for_init = state.clone();
+    spawner.spawn(async move {
+        if let Err(e) = tasks::resume_watching::run(&state_for_init).await {
+            log::warn!("Resuming folder watching failed: {}", describe(&e));
+        }
     });
 }
