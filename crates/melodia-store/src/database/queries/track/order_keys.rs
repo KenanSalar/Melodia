@@ -54,18 +54,26 @@ by_name!(Unfilled { id, artist, album, genre });
 /// One transaction, read a page at a time: the pages come in title-key order, scattered over the
 /// table and three indexes, so a commit per page would pay a WAL checkpoint nearly every time.
 /// Nothing else writes while the store opens, and an interrupted fill rolls back to be redone.
+///
+/// A fill leaves the writer's page cache full, which only the reaper's close of the idle writer
+/// would free; released after the commit, the boot's first heap trim returns it.
 pub(crate) async fn fill_missing(db: &DbPool) -> Result<u64, AppError> {
-    db.transaction(|tx| {
-        let mut written = 0;
-        loop {
-            let filled = fill_page(tx)?;
-            if filled == 0 {
-                return Ok(written);
+    let written = db
+        .transaction(|tx| {
+            let mut written = 0;
+            loop {
+                let filled = fill_page(tx)?;
+                if filled == 0 {
+                    return Ok(written);
+                }
+                written += filled;
             }
-            written += filled;
-        }
-    })
-    .await
+        })
+        .await?;
+    if written > 0 {
+        db.write(|conn| Ok(conn.release_memory()?)).await?;
+    }
+    Ok(written)
 }
 
 fn fill_page(tx: &Transaction<'_>) -> Result<u64, AppError> {

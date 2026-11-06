@@ -40,6 +40,9 @@ paths:
   discarded
 - The lanes bound database concurrency, not threads: a permit freed inside a closure lets the next
   call spawn before that thread is idle, so the blocking-pool cap (`tokio.md`) is the bound
+- A one-off bulk write leaves its connection's page cache full, `cache_size` of heap, until the
+  reaper closes it. `Connection::release_memory` after the commit frees it at once, as
+  `order_keys::fill_missing` does; it leaves the connection's map, statements and schema open
 
 ## Pragmas & Configuration
 
