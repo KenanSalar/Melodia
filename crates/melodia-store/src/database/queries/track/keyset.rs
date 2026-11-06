@@ -22,7 +22,13 @@ use melodia_core::utils::needle::Needle;
 const UNTAGGED_TRACK_LAST: i32 = i32::MAX;
 
 /// The longest a Songs row's length reads, the most milliseconds the `i32` it displays holds.
+/// `idx_tracks_length_order` carries it written out, so another cap still sorts right and walks
+/// nothing.
 const SONGS_LENGTH_CAP_MS: i32 = i32::MAX;
+
+/// A Songs row's year, a missing one as `0`. `idx_tracks_year_order` carries this spelling, the
+/// only one an index on an expression serves.
+const SONGS_YEAR: &str = "COALESCE(t.year, 0)";
 
 /// The scan's natural-order key, folded the way `to_ascii_lowercase` folds it.
 const NATURAL: &str = "COALESCE(t.sort_key, '') COLLATE NOCASE";
@@ -124,16 +130,16 @@ enum Page {
     /// My Library's and Favorites' Songs tabs. A missing year sorts as `0` beside an explicit one
     /// rather than ahead of every year, and the length is clamped to what an `i32` of milliseconds
     /// holds, the values a Songs row displays.
-    Songs(Keys),
+    Songs(IndexUse),
     /// The album, artist, genre and playlist pages, whose rows read as stored, ties going to the
     /// title.
     Detail,
 }
 
-/// How an order reads the stored keys an index carries in that order.
+/// How an order names a term an index carries in that order.
 #[derive(Clone, Copy)]
-enum Keys {
-    /// Named bare, so the whole library, unfiltered, comes off the key's index already in order.
+enum IndexUse {
+    /// Named bare, so the whole library, unfiltered, comes off the term's index already in order.
     Walked,
     /// Behind `+` or `COALESCE`, so `SQLite` finds a filter's or a scope's rows first and sorts
     /// those, where walking the index would look up every row the filter then drops.
@@ -143,26 +149,30 @@ enum Keys {
 impl Page {
     fn of(membership: &Membership, needle: &Needle) -> Self {
         match membership {
-            Membership::Library if needle.is_empty() => Self::Songs(Keys::Walked),
-            Membership::Library | Membership::Favorites => Self::Songs(Keys::Sorted),
+            Membership::Library if needle.is_empty() => Self::Songs(IndexUse::Walked),
+            Membership::Library | Membership::Favorites => Self::Songs(IndexUse::Sorted),
             _ => Self::Detail,
         }
     }
 
     fn natural(self) -> &'static str {
         match self {
-            Self::Songs(Keys::Walked) => NATURAL_WALKED,
-            Self::Songs(Keys::Sorted) | Self::Detail => NATURAL,
+            Self::Songs(IndexUse::Walked) => NATURAL_WALKED,
+            Self::Songs(IndexUse::Sorted) | Self::Detail => NATURAL,
+        }
+    }
+
+    fn indexed(self, term: &str) -> String {
+        match self {
+            Self::Songs(IndexUse::Walked) => term.to_owned(),
+            Self::Songs(IndexUse::Sorted) | Self::Detail => format!("+{term}"),
         }
     }
 
     /// The stored order key `column` names (`queries::track::order_keys`), `ui::track_sort`'s
     /// lowercase of its field.
     fn key(self, column: &str) -> String {
-        match self {
-            Self::Songs(Keys::Walked) => format!("t.{column}"),
-            Self::Songs(Keys::Sorted) | Self::Detail => format!("+t.{column}"),
-        }
+        self.indexed(&format!("t.{column}"))
     }
 
     fn tie_break(self) -> String {
@@ -172,16 +182,18 @@ impl Page {
         }
     }
 
-    fn year(self) -> &'static str {
+    fn year(self) -> String {
         match self {
-            Self::Songs(_) => "COALESCE(t.year, 0)",
-            Self::Detail => "t.year",
+            Self::Songs(_) => self.indexed(SONGS_YEAR),
+            Self::Detail => "t.year".to_owned(),
         }
     }
 
     fn length(self) -> String {
         match self {
-            Self::Songs(_) => format!("MIN(MAX(t.duration_ms, 0), {SONGS_LENGTH_CAP_MS})"),
+            Self::Songs(_) => {
+                self.indexed(&format!("MIN(MAX(t.duration_ms, 0), {SONGS_LENGTH_CAP_MS})"))
+            }
             Self::Detail => "t.duration_ms".to_owned(),
         }
     }
@@ -203,7 +215,7 @@ fn order_by(page: Page, order: TrackOrder, position: Option<&str>) -> String {
         (TrackSortField::Artist, _) => then_tie(&page.key("artist_key")),
         (TrackSortField::Album, _) => then_tie(&page.key("album_key")),
         (TrackSortField::Genre, _) => then_tie(&page.key("genre_key")),
-        (TrackSortField::Year, _) => then_tie(page.year()),
+        (TrackSortField::Year, _) => then_tie(&page.year()),
         (TrackSortField::Length, _) => then_tie(&page.length()),
         (TrackSortField::Position, Some(position)) => format!("{position} {dir}, t.id {dir}"),
         // On the Songs tabs the natural key is the tie-break too, so it is compared once.

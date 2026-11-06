@@ -14,3 +14,11 @@ ALTER TABLE tracks ADD COLUMN genre_key TEXT;
 CREATE INDEX IF NOT EXISTS idx_tracks_artist_key ON tracks (artist_key, sort_key COLLATE NOCASE);
 CREATE INDEX IF NOT EXISTS idx_tracks_album_key ON tracks (album_key, sort_key COLLATE NOCASE);
 CREATE INDEX IF NOT EXISTS idx_tracks_genre_key ON tracks (genre_key, sort_key COLLATE NOCASE);
+
+-- The year and length orders sort by plain SQL, a missing year as 0 and the length clamped to
+-- what a Songs row displays, so each indexes its expression rather than a stored key. An index on
+-- an expression serves only that expression spelled the same, as the Songs keyset spells it.
+CREATE INDEX IF NOT EXISTS idx_tracks_year_order
+    ON tracks (COALESCE(year, 0), sort_key COLLATE NOCASE);
+CREATE INDEX IF NOT EXISTS idx_tracks_length_order
+    ON tracks (MIN(MAX(duration_ms, 0), 2147483647), sort_key COLLATE NOCASE);

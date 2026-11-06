@@ -141,12 +141,13 @@ paths:
 - Read `EXPLAIN QUERY PLAN` before and after a change: `SCAN` with no index is a full pass, and
   `USE TEMP B-TREE FOR ORDER BY` a sort on every run
 - An index answers an `ORDER BY` only on the bare column in the index's own collation: another
-  `COLLATE`, or an expression such as `COALESCE(col, '')`, sorts in a temp B-tree. No index
-  carries `UNICODE_LOWER` (`library-data.md`), so every sort through it is a full sort, and the
+  `COLLATE`, or an expression such as `COALESCE(col, '')`, sorts in a temp B-tree unless an index
+  carries that expression spelled the same, as `idx_tracks_year_order` does. A respelling sorts
+  right and walks nothing, silently. No index carries `UNICODE_LOWER` (`library-data.md`), so the
   track lists' artist, album and genre orders read stored keys instead (`queries::track::order_keys`)
-- A list whose rows a filter or a scope narrows names its order's indexed column behind `+` or
+- A list whose rows a filter or a scope narrows names its order's indexed term behind `+` or
   `COALESCE`: named bare, `SQLite` walks the index and looks up every row the filter then drops
-  (`keyset::Keys`)
+  (`keyset::IndexUse`)
 - `SELECT *` reads a whole entity by name from a stats view or a small table. A list names its
   columns (`queries::track::columns`), `SELECT * FROM tracks` serving test fixtures only
   (`track/full_rows.rs`)
