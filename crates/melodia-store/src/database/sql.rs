@@ -60,9 +60,10 @@ pub(crate) fn fetch_each<T: FromRow>(
     mut each: impl FnMut(T),
 ) -> Result<(), AppError> {
     let mut statement = conn.prepare_cached(sql)?;
+    let columns = T::columns(&statement)?;
     let mut rows = statement.query(params)?;
     while let Some(row) = rows.next()? {
-        each(T::from_row(row)?);
+        each(T::from_row(row, &columns)?);
     }
     Ok(())
 }
@@ -182,19 +183,22 @@ fn all_rows<T: FromRow>(
     statement: &mut Statement<'_>,
     params: impl Params,
 ) -> Result<Vec<T>, AppError> {
-    let rows = statement.query_map(params, T::from_row)?;
+    let columns = T::columns(statement)?;
+    let rows = statement.query_map(params, |row| T::from_row(row, &columns))?;
     Ok(rows.collect::<rusqlite::Result<_>>()?)
 }
 
 fn one_row<T: FromRow>(statement: &mut Statement<'_>, params: impl Params) -> Result<T, AppError> {
-    Ok(statement.query_row(params, T::from_row)?)
+    let columns = T::columns(statement)?;
+    Ok(statement.query_row(params, |row| T::from_row(row, &columns))?)
 }
 
 fn optional_row<T: FromRow>(
     statement: &mut Statement<'_>,
     params: impl Params,
 ) -> Result<Option<T>, AppError> {
-    Ok(statement.query_row(params, T::from_row).optional()?)
+    let columns = T::columns(statement)?;
+    Ok(statement.query_row(params, |row| T::from_row(row, &columns)).optional()?)
 }
 
 impl ToSql for Param {

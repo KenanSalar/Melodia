@@ -93,8 +93,6 @@ fn main() -> AppResult<()> {
         boot::tasks::open_startup_files(&runtime, &state, &startup_files);
     }
 
-    boot::tasks::spawn_resume_watching(&spawner, &state);
-
     let app = open_window(startup_settings.as_ref())?;
     boot::ui_setup::install_ui(
         &app,
@@ -107,6 +105,7 @@ fn main() -> AppResult<()> {
 
     // Not `app.run()`, whose loop ends once the last window is hidden, which close-to-tray does.
     app.show().map_err(|e| AppError::io("show window", e))?;
+    boot::tasks::resume_watching_after_show(&spawner, &state);
     slint::run_event_loop_until_quit().map_err(|e| AppError::io("event loop", e))?;
 
     log::info!("Melodia shutting down — flushing player state");
