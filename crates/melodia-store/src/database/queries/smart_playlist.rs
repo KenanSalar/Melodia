@@ -9,7 +9,7 @@ use std::hash::{BuildHasher, BuildHasherDefault, DefaultHasher};
 use rusqlite::{Connection, Transaction};
 
 use crate::database::DbPool;
-use crate::database::queries::track::{columns, fetch_packed_ids};
+use crate::database::queries::track::columns;
 use crate::database::sql::Sql;
 use melodia_core::entities::smart_criteria::{
     Draw, LimitOrder, MatchMode, Rule, RuleField, RuleOp, RuleValue, SmartCriteria, SmartLimit,
@@ -114,9 +114,9 @@ pub(crate) fn pick_random(
     count: u32,
     draw: Draw,
 ) -> Result<Vec<i64>, AppError> {
-    let mut sql = Sql::new("SELECT group_concat(id, ',') FROM tracks");
+    let mut sql = Sql::new("SELECT id FROM tracks");
     push_where(&mut sql, criteria);
-    let matches = fetch_packed_ids(conn, sql)?;
+    let matches = sql.fetch_all(conn)?;
     Ok(pick(matches, count, draw))
 }
 

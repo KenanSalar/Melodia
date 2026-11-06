@@ -1295,7 +1295,6 @@ async fn a_row_without_search_text_matches_every_needle() -> Result<(), AppError
     Ok(())
 }
 
-/// The aggregate the ids are packed into is NULL over no rows at all.
 #[tokio::test]
 async fn a_keyset_with_no_track_in_it_is_empty() -> Result<(), AppError> {
     let db = seed_db().await?;

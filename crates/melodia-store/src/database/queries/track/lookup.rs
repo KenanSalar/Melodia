@@ -7,7 +7,7 @@ use std::sync::LazyLock;
 use rusqlite::Connection;
 
 use super::membership::Membership;
-use super::{columns, fetch_packed_ids, json_array};
+use super::{columns, json_array};
 use crate::database::rows::FromRow;
 use crate::database::sql::{self, Sql};
 use crate::database::{DbPool, chunked_in_query, select_in_id_order};
@@ -184,11 +184,11 @@ fn ids_outside(
     if ids.is_empty() {
         return Ok(HashSet::new());
     }
-    let mut sql = Sql::new("SELECT group_concat(j.value, ',') FROM json_each(");
+    let mut sql = Sql::new("SELECT j.value FROM json_each(");
     sql.push_bind(json_array(ids)).push(") j WHERE j.value NOT IN (SELECT t.id FROM ");
     membership.push_members(&mut sql);
     sql.push(")");
-    Ok(fetch_packed_ids(conn, sql)?.into_iter().collect())
+    Ok(sql.fetch_all::<i64>(conn)?.into_iter().collect())
 }
 
 /// `file_path → id` for each of `paths` that has a row.

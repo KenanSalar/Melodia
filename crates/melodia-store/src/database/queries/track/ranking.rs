@@ -3,7 +3,7 @@
 
 use std::sync::LazyLock;
 
-use super::keyset::{fetch_packed_ids, push_needle};
+use super::keyset::push_needle;
 use super::scope_facts::facts_on;
 use crate::database::DbPool;
 use crate::database::sql::{self, Sql};
@@ -79,14 +79,14 @@ async fn ranked_ids(
     membership: &'static str,
     needle: &Needle,
 ) -> Result<Vec<i64>, AppError> {
-    let mut sql = Sql::new("SELECT group_concat(id, ',') FROM (SELECT id FROM tracks WHERE ");
+    let mut sql = Sql::new("SELECT id FROM tracks WHERE ");
     sql.push(membership);
     if !needle.is_empty() {
         sql.push(" AND ");
         push_needle(&mut sql, needle);
     }
-    sql.push(" ORDER BY ").push(MOST_PLAYED_ORDER).push(")");
-    db.read(move |conn| fetch_packed_ids(conn, sql)).await
+    sql.push(" ORDER BY ").push(MOST_PLAYED_ORDER);
+    db.read(move |conn| sql.fetch_all(conn)).await
 }
 
 /// What the library-wide Most Played tab adds up to, whatever its filter shows: the band states

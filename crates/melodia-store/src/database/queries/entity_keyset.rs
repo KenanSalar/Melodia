@@ -1,11 +1,11 @@
 //! The ordered ids behind every card grid, filtered and sorted in SQL.
 //!
 //! A grid keeps only these and fetches the cards near its viewport by id, as the track lists do
-//! (`track::track_ids`, whose packed read-back these share). A lowercased name compares through
+//! (`track::track_ids`). A lowercased name compares through
 //! `UNICODE_LOWER`, a missing album year reads as `0`, and every arm ends in the id, so the order
 //! is total and descending reverses every key.
 
-use super::track::{fetch_packed_ids, push_folded_match, sql_direction};
+use super::track::{push_folded_match, sql_direction};
 use crate::database::DbPool;
 use crate::database::collation::UNICODE_LOWER;
 use crate::database::sql::{self, Sql};
@@ -185,7 +185,7 @@ async fn ids(
     keys: &[String],
     dir: SortDir,
 ) -> Result<Vec<i64>, AppError> {
-    let mut sql = Sql::new("SELECT group_concat(id, ',') FROM (SELECT ");
+    let mut sql = Sql::new("SELECT ");
     sql.push(grid.id).push(" AS id FROM ").push(grid.from);
     if let Some(member) = grid.member {
         sql.push(" WHERE ").push(member);
@@ -197,8 +197,8 @@ async fn ids(
     if let Some(group_by) = grid.group_by {
         sql.push(" GROUP BY ").push(group_by);
     }
-    sql.push(" ORDER BY ").push_trusted(&order_by(keys, grid.id, dir)).push(")");
-    db.read(move |conn| fetch_packed_ids(conn, sql)).await
+    sql.push(" ORDER BY ").push_trusted(&order_by(keys, grid.id, dir));
+    db.read(move |conn| sql.fetch_all(conn)).await
 }
 
 fn order_by(keys: &[String], id: &str, dir: SortDir) -> String {
