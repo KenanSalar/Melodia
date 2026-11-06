@@ -27,7 +27,7 @@ and rusqlite was faster or level on every workload we timed. A full scan and the
 startup finished sooner on less CPU, writes and reads running alongside each other gained the most,
 startup made noticeably fewer allocations, and the app ran on fewer threads. Memory is the same once
 the app is idle and at its peak during startup, and slightly lower until the connections opened at
-startup close for being idle. The dependency tree shrank from 808 packages to 793: sqlx and
+startup close for being idle. The dependency tree shrank from 824 packages to 793: sqlx and
 everything it pulled in are gone, and the desktop builds gained only rusqlite and two small helper
 crates. And SQLite upgrades now arrive with rusqlite's releases, which come from the same project
 that maintains the low-level SQLite bindings, so a new SQLite lands there first.
@@ -53,10 +53,6 @@ the statement runs, so only a test that reaches it finds it before a user does. 
 settled whether a full scan now peaks higher in memory: rusqlite's samples came out higher than
 sqlx's, but the runs overlapped and varied too much to show a difference or rule one out.
 
-What [ADR 4](0004-sqlite-through-sqlx.md) argued for SQLite itself still holds. WAL lets the read
-connections keep reading while a scan writes, a single writer with a busy timeout turns a lock
-conflict into a short wait rather than an error, and FTS5 provides the search. So does its argument
-about migrations. A migration can't be undone once it has been applied, so the backup taken before
-one is required rather than best-effort, and a launch whose backup fails stops there. A development
-build keeps its data in a folder of its own, so a migration that exists only on a branch never
-touches an installed library.
+What [ADR 4](0004-sqlite-through-sqlx.md) argued for SQLite itself still holds: WAL, one writer
+behind a busy timeout, and FTS5 for the search. So does its argument for the required backup before
+every migration.

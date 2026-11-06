@@ -94,8 +94,7 @@ impl DbPool {
     /// and drops the tombstone every track delete leaves, a smaller index for each pre-migration
     /// `VACUUM INTO` to copy. The merge is what can outgrow `flush_tasks_and_db`'s budget, and an
     /// unfinished one is rolled back on the next open, the index correct and merely un-compacted.
-    /// Both **log** rather than discard, a mistyped fts5 command having no other symptom. The
-    /// readers close first, so the writer is the last connection and folds the WAL into the file.
+    /// The readers close first, so the last connection, the writer, folds the WAL into the file.
     pub async fn close(&self) {
         let optimized = self
             .write(|conn| {

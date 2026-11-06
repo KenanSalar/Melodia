@@ -1,6 +1,6 @@
 //! Brings the schema up to this build's, refusing a history it can't stand behind. The history
 //! stays sqlx's `_sqlx_migrations`, in sqlx's row format, so an older build migrating through sqlx
-//! still reads it and refuses a newer database as before.
+//! still reads it and refuses a newer database.
 
 use rusqlite::Connection;
 use std::time::Instant;

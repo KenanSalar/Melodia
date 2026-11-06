@@ -143,8 +143,7 @@ paths:
 - An index answers an `ORDER BY` only on the bare column in the index's own collation: another
   `COLLATE`, or an expression such as `COALESCE(col, '')`, sorts in a temp B-tree unless an index
   carries that expression spelled the same, as `idx_tracks_year_order` does. A respelling sorts
-  right and walks nothing, silently. No index carries `UNICODE_LOWER` (`library-data.md`), so the
-  track lists' artist, album and genre orders read stored keys instead (`queries::track::order_keys`)
+  right and walks nothing, silently
 - A list whose rows a filter or a scope narrows names its order's indexed term behind `+` or
   `COALESCE`: named bare, `SQLite` walks the index and looks up every row the filter then drops
   (`keyset::IndexUse`)
@@ -152,8 +151,8 @@ paths:
   columns (`queries::track::columns`), `SELECT * FROM tracks` serving test fixtures only
   (`track/full_rows.rs`)
 - Use covering indexes for frequently accessed column combinations
-- A set read across tables is one `DISTINCT` over their `UNION ALL`, never a `UNION`, which sorts
-  every arm before merging them (`queries::artwork`'s `REFERENCED_PATHS` argues it)
+- A set read across tables is one `DISTINCT` over their `UNION ALL`, never a `UNION`
+  (`queries::artwork`'s `REFERENCED_PATHS` argues it)
 - Nothing runs a plain `VACUUM`, which rewrites the whole file: a delete's pages go to the
   freelist for later writes, and each pre-migration backup's `VACUUM INTO` writes a compacted copy
 - `VACUUM INTO ?1` is the safe way to copy a *live* database — it runs through the open
