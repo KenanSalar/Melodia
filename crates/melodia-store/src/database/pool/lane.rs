@@ -201,3 +201,7 @@ async fn close_all(runtime: &Handle, conns: Vec<Connection>) {
         log::warn!("db close: {}", describe(&e));
     }
 }
+
+#[cfg(test)]
+#[path = "tests/lane_tests.rs"]
+mod tests;

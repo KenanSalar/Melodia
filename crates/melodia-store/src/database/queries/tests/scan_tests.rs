@@ -835,6 +835,66 @@ async fn a_re_ingest_refolds_the_search_text() -> Result<(), AppError> {
     Ok(())
 }
 
+async fn order_keys_of(db: &DbPool, id: i64) -> Result<(String, String, String), AppError> {
+    db.read(move |conn| {
+        sql::fetch_one(
+            conn,
+            "SELECT artist_key, album_key, genre_key FROM tracks WHERE id = ?",
+            (id,),
+        )
+    })
+    .await
+}
+
+/// **A new row sorts by its own keys from the moment it lands**: a NULL key sorts first until the
+/// next launch's fill reaches it.
+#[tokio::test]
+async fn an_inserted_track_carries_its_lowercase_order_keys() -> Result<(), AppError> {
+    let db = DbPool::test_pool().await?;
+    queries::folder::insert_folder(&db, "/music", true).await?;
+    let mut meta = make_test_metadata("Jóga");
+    meta.artist = ArtistCredit::from_name("Björk");
+    meta.album = None;
+    meta.genres = GenreList::from_name("Électronique");
+    let path = Path::new("/music").join("joga.flac");
+
+    let id = insert_tagged_track(&db, &path.to_string_lossy(), &meta).await?;
+
+    let keys = ("björk".to_owned(), String::new(), "électronique".to_owned());
+    assert_eq!(order_keys_of(&db, id).await?, keys);
+    Ok(())
+}
+
+/// **A re-ingest rekeys the row**, which is what moves a tag edit to where its new artist sorts:
+/// the keys are already filled, so the fill would never look at it again.
+#[tokio::test]
+async fn a_re_ingest_rekeys_the_row() -> Result<(), AppError> {
+    let db = DbPool::test_pool().await?;
+    queries::folder::insert_folder(&db, "/music", true).await?;
+    let path = Path::new("/music").join("1.mp3").to_string_lossy().into_owned();
+    let id = insert_tagged_track(&db, &path, &make_test_metadata("Before")).await?;
+
+    let mut after = make_test_metadata("After");
+    after.artist = ArtistCredit::from_name("ΟΔΟΣ");
+    after.album = Some("Homogenic".to_owned());
+    after.genres = GenreList::default();
+    db.transaction(move |tx| {
+        let mut names = queries::scan::NameCache::default();
+        let ids = queries::ResolvedIds {
+            artist_id: names.artist(tx, "ΟΔΟΣ", 1)?,
+            album_id: None,
+            genre_id: None,
+            folder_id: 1,
+        };
+        queries::scan::update_track_metadata(tx, &path, &after, &ids, &mut names)
+    })
+    .await?;
+
+    let keys = ("οδος".to_owned(), "homogenic".to_owned(), String::new());
+    assert_eq!(order_keys_of(&db, id).await?, keys);
+    Ok(())
+}
+
 // === Where an album files itself ===
 
 /// **The whole track credit is the wrong key.** A guest on one track is not an album artist, so

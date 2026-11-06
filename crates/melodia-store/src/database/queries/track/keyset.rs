@@ -209,3 +209,7 @@ pub(crate) fn sql_direction(dir: SortDir) -> &'static str {
         SortDir::Desc => "DESC",
     }
 }
+
+#[cfg(test)]
+#[path = "../tests/keyset_tests.rs"]
+mod tests;

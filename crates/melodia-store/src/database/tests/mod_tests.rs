@@ -1,9 +1,10 @@
 use crate::database::queries;
-use crate::database::queries::fixtures::insert_test_track;
+use crate::database::queries::fixtures::{execute, insert_test_track};
 use crate::database::{
-    DbPool, MAX_BINDS_PER_STATEMENT, chunked_in_execute_on, chunked_in_query, sql,
+    DbPool, MAX_BINDS_PER_STATEMENT, chunked_in_execute_on, chunked_in_query, init_database, sql,
 };
-use melodia_core::error::AppError;
+use melodia_core::config::Paths;
+use melodia_core::error::{AppError, MigrationError};
 
 use super::strip_windows_verbatim_paths;
 
@@ -162,6 +163,39 @@ async fn chunked_in_query_all_missing() -> Result<(), AppError> {
     let db = DbPool::test_pool().await?;
     let result = ids_found(&db, vec![9999_i64, 8888, 7777]).await?;
     assert!(result.is_empty());
+    Ok(())
+}
+
+const NEWER_BUILDS_MIGRATION: i64 = 99_991_231_000_000;
+
+/// **An older build refuses a database a newer one migrated**: opening it would run this build's
+/// queries over a schema it has never seen.
+#[tokio::test]
+async fn a_database_a_newer_build_migrated_refuses_to_open() -> Result<(), AppError> {
+    let tmp = tempfile::tempdir()?;
+    let paths = Paths::rooted_at(tmp.path().to_path_buf());
+    paths.create_dirs()?;
+    let db = init_database(&paths).await?;
+    execute(
+        &db,
+        &format!(
+            "INSERT INTO _sqlx_migrations (version, description, success, checksum, execution_time) \
+             VALUES ({NEWER_BUILDS_MIGRATION}, 'from a newer build', TRUE, x'00', 1)"
+        ),
+    )
+    .await?;
+    db.close().await;
+
+    let reopened = init_database(&paths).await;
+
+    assert!(
+        matches!(
+            reopened,
+            Err(AppError::Migration(MigrationError::Unknown(NEWER_BUILDS_MIGRATION)))
+        ),
+        "{:?}",
+        reopened.err()
+    );
     Ok(())
 }
 

@@ -139,3 +139,7 @@ fn run_and_record(conn: &mut Connection, migration: &Migration) -> rusqlite::Res
     ))?;
     tx.commit()
 }
+
+#[cfg(test)]
+#[path = "tests/migrate_tests.rs"]
+mod tests;

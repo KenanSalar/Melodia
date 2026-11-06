@@ -18,7 +18,9 @@ pub(super) enum Role {
 /// How long any connection waits on a lock, the checkpointer's among them, before `SQLITE_BUSY`.
 const BUSY_TIMEOUT: Duration = Duration::from_secs(5);
 
-/// Prepared statements each connection keeps, the least recently used evicted first.
+/// Prepared statements each connection keeps, the least recently used evicted first. Sized with
+/// headroom over a scan's working set, the largest a connection cycles through: an LRU smaller
+/// than a loop's statements evicts each before its next use, so the loop re-prepares every one.
 const STATEMENT_CACHE_CAPACITY: usize = 100;
 
 /// Small for both file roles: a desktop library's working set fits, and [`MMAP_SIZE`] keeps cold

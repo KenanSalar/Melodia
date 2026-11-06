@@ -415,6 +415,31 @@ fn a_file_whose_row_matches_its_size_and_mtime_is_left_unread() -> Result<(), Ap
     Ok(())
 }
 
+/// Every stamp's mtime is a span of one shared buffer, so a span pointing anywhere but at its own
+/// row's text reads an unchanged file as edited, or an edited one as current.
+#[test]
+fn each_file_is_held_to_its_own_rows_mtime() -> Result<(), AppError> {
+    use std::time::{Duration, SystemTime};
+
+    let tmp = TempDir::new()?;
+    let (older, newer) = (tmp.path().join("a.wav"), tmp.path().join("b.wav"));
+    create_minimal_wav(&older)?;
+    create_minimal_wav(&newer)?;
+    let written = SystemTime::UNIX_EPOCH + Duration::from_secs(1_600_000_000);
+    fs::File::options().write(true).open(&older)?.set_modified(written)?;
+    let mut index = WalkIndex::new(MediaWalk {
+        files: walked_paths(&[older.clone(), newer.clone()]),
+        unreadable: Vec::new(),
+    });
+    index.add_row(stored(&older), row_for(&older)?);
+    index.add_row(stored(&newer), row_for(&newer)?);
+
+    let changed = index.changed(|_| true);
+
+    assert_eq!(changed, Vec::<PathBuf>::new());
+    Ok(())
+}
+
 /// The walk is sorted and searched by the stored string, `/` and `\` among its bytes, where a
 /// path compares component by component. The two orders put these files the other way round, so
 /// a sort by path leaves the search missing a row that is there and purging it.

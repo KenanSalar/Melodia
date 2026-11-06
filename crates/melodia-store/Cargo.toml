@@ -41,6 +41,9 @@ blake3.workspace = true
 melodia-testkit = { path = "../melodia-testkit" }
 # The scan and watcher suites build a library under a throwaway root.
 tempfile.workspace = true
+# The pool's reaper is walked on a paused clock, which only `test-util` supplies, and
+# `cargo test -p melodia-store` unifies no feature from another member.
+tokio = { workspace = true, features = ["test-util"] }
 
 [lints]
 workspace = true

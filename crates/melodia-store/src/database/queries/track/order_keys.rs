@@ -85,3 +85,7 @@ fn fill_page(tx: &Transaction<'_>) -> Result<u64, AppError> {
     }
     Ok(filled)
 }
+
+#[cfg(test)]
+#[path = "../tests/order_keys_tests.rs"]
+mod tests;

@@ -88,10 +88,10 @@ paths:
 - A field added to an entity is a column every projection decoding it has to select. The compiler
   holds the `rows/` impl to the struct, but a projection missing the column fails only when it
   runs (`InvalidColumnName`)
-- By-name `get` takes the first column of a name, matched case-insensitively, so a projection
+- A by-name lookup takes the first column of a name, matched case-insensitively, so a projection
   names each column once
-- By-name lookup scans the statement's columns on every call; move a wide projection to
-  by-index only where a profile shows that scan
+- An entity reads its columns by index, found once per statement (`rows::FromRow::columns`): a new
+  row type takes `by_name!`, never a by-name `get` on each row
 - `get_ref` borrows a column's value where `get` copies it out, for text read only to parse it
 - Decoding follows the value's storage class: an `i64` refuses a REAL, a `String` an INTEGER, an
   `i32` an integer outside its range. `bool` reads an INTEGER, and `Option<T>` reads NULL as `None`
