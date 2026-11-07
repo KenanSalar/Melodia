@@ -4,8 +4,8 @@
 //! however many tracks carry it; hashing the source would make every writer's `exists()` guard
 //! answer about bytes nobody wrote. **Atomically written**, so a name existing means a complete
 //! file: a truncated one would never be rewritten, and `CoverThumbs` caches its failed decode.
-//! **Bounded on ingest** at the largest tier's decode size, every tier decoding the stored file
-//! whole, though [`normalized_bytes`] never inflates a source. **Swept, not refcounted**
+//! **Bounded on ingest** at the largest tier's decode size ([`normalized_bytes`]), every tier
+//! decoding the stored file whole. **Swept, not refcounted**
 //! ([`sweep`]), and only over names [`is_stored_name`] recognises, the directory holding whatever
 //! else a user put there.
 
@@ -267,8 +267,8 @@ pub fn store_image(bytes: &[u8], ext: &str, dir: &Path) -> Option<String> {
         width > STORE_MAX_DIM || height > STORE_MAX_DIM || bytes.len() > STORE_MAX_BYTES;
     let normalized = over_bounds.then(|| normalized_bytes(bytes, width, height)).flatten();
 
-    let (stored, ext) = match normalized.as_deref() {
-        Some(jpeg) => (jpeg, "jpg"),
+    let (stored, ext) = match &normalized {
+        Some((encoded, encoded_ext)) => (encoded.as_slice(), *encoded_ext),
         None => (bytes, ext),
     };
     let file_path = dir.join(stored_name(&compute_hash(stored), ext));
@@ -281,19 +281,31 @@ pub fn store_image(bytes: &[u8], ext: &str, dir: &Path) -> Option<String> {
     Some(file_path.to_string_lossy().into_owned())
 }
 
-/// `bytes` re-encoded inside the store's bounds, or `None` where that wouldn't pay.
+/// `bytes` re-encoded inside the store's bounds with the extension they're stored under, or `None`
+/// where the source stays as it is.
 ///
-/// **Never larger than the source**, so a cap set a little low can waste CPU but never grow the
-/// store. A source over only the byte bound keeps its dimensions and is re-encoded in place.
-fn normalized_bytes(bytes: &[u8], width: u32, height: u32) -> Option<Vec<u8>> {
+/// **The dimension cap always holds**, every draw decoding the stored file whole, even where that
+/// grows the file. A source already smaller than its JPEG at the cap is tried as a PNG too, which
+/// holds flat art in fewer bytes. A source over only the byte bound keeps its dimensions and is
+/// re-encoded only where that shrinks it.
+fn normalized_bytes(bytes: &[u8], width: u32, height: u32) -> Option<(Vec<u8>, &'static str)> {
     let _oversized = image_decode::large_decode_guard(u64::from(width) * u64::from(height));
     let decoded = image_decode::decode_memory_capped(bytes, MAX_SOURCE_DIM)?;
     let (target_w, target_h) =
         image_decode::fit_within(width, height, STORE_MAX_DIM, STORE_MAX_DIM);
     let resized = resize_rgb8(&decoded, target_w, target_h, STORE_FILTER)?;
-    let encoded = image_decode::encode_jpeg(resized, STORE_JPEG_QUALITY).ok()?;
-
-    (encoded.len() < bytes.len()).then_some(encoded)
+    let jpeg = image_decode::encode_jpeg(&resized, STORE_JPEG_QUALITY).ok()?;
+    if jpeg.len() < bytes.len() {
+        return Some((jpeg, "jpg"));
+    }
+    let within_dimensions = (target_w, target_h) == (width, height);
+    if within_dimensions {
+        return None;
+    }
+    match image_decode::encode_png(&resized) {
+        Ok(png) if png.len() < jpeg.len() => Some((png, "png")),
+        _ => Some((jpeg, "jpg")),
+    }
 }
 
 pub fn cache_image_file(source_path: &Path, artwork_dir: &Path) -> Option<String> {

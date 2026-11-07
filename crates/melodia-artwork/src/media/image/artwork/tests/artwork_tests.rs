@@ -1,3 +1,4 @@
+use image::ImageEncoder;
 use melodia_core::error::AppError;
 
 use super::*;
@@ -144,13 +145,11 @@ fn an_oversized_source_is_shrunk_and_named_after_what_was_written() -> Result<()
     Ok(())
 }
 
-/// The rule that makes the cap forgiving, and the real mechanism behind it: a source encoded
-/// cheaply is only a little over the cap in pixels but far under it in bytes, so re-encoding it
-/// at a *fixed* quality 90 costs more than the downscale saves. A cap chosen slightly too low can
-/// therefore waste CPU here but can never grow the store. Live machinery rather than a
-/// theoretical guard — it fires on 6 of the reference library's 83 over-cap files.
+/// A source encoded cheaply is only a little over the cap in pixels but far under it in bytes, so
+/// re-encoding it at a *fixed* quality 90 costs more than the downscale saves. It is bounded anyway:
+/// every draw decodes the stored file whole, and a kept source puts its full size behind each one.
 #[test]
-fn a_source_that_would_grow_under_re_encode_is_left_alone() -> Result<(), AppError> {
+fn a_source_over_the_cap_is_bounded_even_where_that_grows_it() -> Result<(), AppError> {
     let tmp = tempfile::tempdir()?;
 
     // Just past the cap, and encoded far below the quality the normalizer would use.
@@ -165,11 +164,52 @@ fn a_source_that_would_grow_under_re_encode_is_left_alone() -> Result<(), AppErr
 
     let stored = store_image(&cheap, "jpg", tmp.path())
         .ok_or_else(|| AppError::validation_msg("store_image returned None"))?;
+    let written = std::fs::read(&stored)?;
 
+    let (width, height) = image_decode::memory_dimensions(&written, MAX_SOURCE_DIM)
+        .ok_or_else(|| AppError::validation_msg("stored file will not decode"))?;
     assert_eq!(
-        std::fs::read(&stored)?,
-        cheap,
-        "the re-encode came out larger than the source, so the source is what must be kept"
+        (width, height),
+        (STORE_MAX_DIM, STORE_MAX_DIM),
+        "a re-encode larger than the source must still land inside the cap"
+    );
+    Ok(())
+}
+
+/// Flat art, which a PNG holds in a few kilobytes, so a source compressed that well is smaller than
+/// its JPEG at the cap. It lands as a PNG, and the name has to say so.
+#[test]
+fn a_source_smaller_than_its_jpeg_is_bounded_as_a_png_named_after_what_was_written()
+-> Result<(), AppError> {
+    let tmp = tempfile::tempdir()?;
+    // Few, large blocks: many edges would ring under the resize and cost the PNG its advantage.
+    let checkerboard = image::RgbImage::from_fn(1024, 1024, |x, y| {
+        if (x / 256 + y / 256) % 2 == 0 {
+            image::Rgb([0, 0, 0])
+        } else {
+            image::Rgb([255, 255, 255])
+        }
+    });
+    let mut source = Vec::new();
+    image::codecs::png::PngEncoder::new_with_quality(
+        &mut source,
+        image::codecs::png::CompressionType::Best,
+        image::codecs::png::FilterType::Adaptive,
+    )
+    .write_image(checkerboard.as_raw(), 1024, 1024, image::ExtendedColorType::Rgb8)
+    .map_err(|e| AppError::validation("encode checkerboard", e))?;
+
+    let stored = store_image(&source, "png", tmp.path())
+        .ok_or_else(|| AppError::validation_msg("store_image returned None"))?;
+    let written = std::fs::read(&stored)?;
+
+    let dimensions = image_decode::memory_dimensions(&written, MAX_SOURCE_DIM);
+    assert_eq!(dimensions, Some((STORE_MAX_DIM, STORE_MAX_DIM)), "the cap holds for flat art too");
+    let name = Path::new(&stored).file_name().and_then(|n| n.to_str());
+    assert_eq!(
+        name,
+        Some(stored_name(&compute_hash(&written), "png").as_str()),
+        "a PNG named as anything else is a file its own name misdescribes"
     );
     Ok(())
 }

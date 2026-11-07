@@ -10,6 +10,7 @@ use std::path::Path;
 use tempfile::TempDir;
 
 use super::*;
+use melodia_artwork::media::image::image_decode::{self, MAX_SOURCE_DIM};
 use melodia_store::database::queries::fixtures::{fetch_one, insert_test_track, set_test_artwork};
 
 type TestResult = Result<(), Box<dyn std::error::Error>>;
@@ -61,10 +62,9 @@ fn store_contents(dir: &Path) -> Result<Vec<String>, AppError> {
 #[tokio::test]
 async fn an_oversized_cover_is_re_pointed_and_its_original_left_where_it_was() -> TestResult {
     let library = Library::new().await?;
-    // Past `STORE_MAX_DIM`, and a gradient rather than a fill so the re-encode genuinely comes
-    // out smaller and the never-inflate rule does not spare it. Copied in raw rather than stored
-    // through `store_image`, which is the point: this is the shape a build with no bounds left
-    // behind, and today's writer would have shrunk it on the way in.
+    // Past `STORE_MAX_DIM`, and copied in raw rather than stored through `store_image`, which is
+    // the point: this is the shape a build with no bounds left behind, and today's writer would
+    // have bounded it on the way in.
     let (_source_dir, source) = melodia_testkit::write_test_jpeg_sized(1024, 1024)?;
     let original = library.paths.artwork_dir.join("33fb807d1f1b7cbb.jpg");
     std::fs::copy(&source, &original)?;
@@ -74,9 +74,11 @@ async fn an_oversized_cover_is_re_pointed_and_its_original_left_where_it_was() -
 
     let repointed = library.artwork_path().await?.ok_or("the row lost its artwork entirely")?;
     assert_ne!(repointed, original.to_string_lossy(), "an oversized cover must be re-encoded");
-    assert!(
-        std::fs::metadata(&repointed)?.len() < std::fs::metadata(&original)?.len(),
-        "a re-point onto a file no smaller than the source is the pass doing nothing loudly"
+    let dimensions = image_decode::memory_dimensions(&std::fs::read(&repointed)?, MAX_SOURCE_DIM);
+    assert_eq!(
+        dimensions,
+        Some((artwork::STORE_MAX_DIM, artwork::STORE_MAX_DIM)),
+        "a re-point onto a file still past the cap is the pass doing nothing loudly"
     );
     assert!(original.exists(), "the original is the sweep's to retire, not this pass's to unlink");
     Ok(())

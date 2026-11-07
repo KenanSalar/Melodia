@@ -84,7 +84,7 @@ fn embeddable_jpeg(decoded: &image::DynamicImage, source: &Path) -> Result<Vec<u
             AppError::metadata_msg(format!("Cover {} could not be resized", source.display()))
         })?;
 
-    image_decode::encode_jpeg(resized, EMBED_JPEG_QUALITY).map_err(|e| {
+    image_decode::encode_jpeg(&resized, EMBED_JPEG_QUALITY).map_err(|e| {
         AppError::metadata(format!("Failed to re-encode cover {} to JPEG", source.display()), e)
     })
 }
