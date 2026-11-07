@@ -153,8 +153,9 @@ paths:
 - Use covering indexes for frequently accessed column combinations
 - A set read across tables is one `DISTINCT` over their `UNION ALL`, never a `UNION`
   (`queries::artwork`'s `REFERENCED_PATHS` argues it)
-- Nothing runs a plain `VACUUM`, which rewrites the whole file: a delete's pages go to the
-  freelist for later writes, and each pre-migration backup's `VACUUM INTO` writes a compacted copy
+- A plain `VACUUM` runs only as `DbPool::compact`, once at the end of every boot that applied a
+  migration, its doc arguing why: a new migration owes none of its own, and nothing else runs one,
+  a delete's pages going to the freelist for later writes
 - `VACUUM INTO ?1` is the safe way to copy a *live* database — it runs through the open
   connection, so WAL content is folded in and the output needs no `-wal`/`-shm` beside it. The
   path binds like any value. A test of the copy builds a **file-backed** pool, an in-memory one

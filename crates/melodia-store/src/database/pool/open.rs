@@ -32,6 +32,10 @@ const CACHE_SIZE_KIB: i64 = -16000;
 /// too: a bulk scan's stats recalc walks every track.
 const MMAP_SIZE: i64 = 268_435_456;
 
+/// Every role's temporary store, which [`DbPool::compact`](super::DbPool::compact) steps off for
+/// its VACUUM.
+pub(super) const TEMP_STORE: &str = "MEMORY";
+
 pub(super) fn open(path: &Path, role: Role) -> rusqlite::Result<Connection> {
     let flags = match role {
         Role::Writer => {
@@ -49,7 +53,7 @@ pub(super) fn open(path: &Path, role: Role) -> rusqlite::Result<Connection> {
         conn.pragma_update(None, "synchronous", "NORMAL")?;
     }
     conn.pragma_update(None, "cache_size", CACHE_SIZE_KIB)?;
-    conn.pragma_update(None, "temp_store", "MEMORY")?;
+    conn.pragma_update(None, "temp_store", TEMP_STORE)?;
     conn.pragma_update(None, "mmap_size", MMAP_SIZE)?;
     Ok(conn)
 }
@@ -60,7 +64,7 @@ pub(super) fn open_in_memory() -> rusqlite::Result<Connection> {
     configure(&conn)?;
     conn.pragma_update(None, "foreign_keys", "ON")?;
     conn.pragma_update(None, "synchronous", "NORMAL")?;
-    conn.pragma_update(None, "temp_store", "MEMORY")?;
+    conn.pragma_update(None, "temp_store", TEMP_STORE)?;
     Ok(conn)
 }
 

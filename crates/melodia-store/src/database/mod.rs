@@ -9,7 +9,7 @@ mod sql;
 use rusqlite::{Connection, Transaction};
 
 use melodia_core::config::Paths;
-use melodia_core::error::AppError;
+use melodia_core::error::{AppError, describe};
 
 pub use pool::{DbPool, IDLE_CONNECTIONS_CLOSED_WITHIN};
 use rows::FromRow;
@@ -277,10 +277,11 @@ pub async fn init_database(paths: &Paths) -> Result<DbPool, AppError> {
     let db = DbPool::open(db_path, read_conns)?;
 
     let pending = db.write(|conn| migrate::pending(conn)).await?;
+    let migrating = !pending.is_empty();
 
     // Fatal on failure: a migration that runs without a recovery point is worse
     // than a boot that stops and says why.
-    let backup_path = if !pending.is_empty() && db_existed {
+    let backup_path = if migrating && db_existed {
         Some(backup::create(&db, &paths.backups_dir, pending.applied_version()).await?)
     } else {
         None
@@ -307,6 +308,14 @@ pub async fn init_database(paths: &Paths) -> Result<DbPool, AppError> {
     // has to match `read_dir`.
     if cfg!(target_os = "windows") {
         db.transaction(strip_windows_verbatim_paths).await?;
+    }
+
+    if migrating {
+        let started = std::time::Instant::now();
+        match db.compact().await {
+            Ok(()) => log::info!("Compacted the database in {} ms", started.elapsed().as_millis()),
+            Err(e) => log::warn!("Compacting the database after migrating: {}", describe(&e)),
+        }
     }
 
     log::info!("Database initialized successfully (read pool: {read_conns} connections)");

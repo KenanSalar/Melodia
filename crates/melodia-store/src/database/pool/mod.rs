@@ -17,7 +17,7 @@ use tokio::runtime::Handle;
 use melodia_core::error::{AppError, describe};
 
 use super::migrate;
-use lane::{IDLE_TIMEOUT, Lane};
+use lane::{IDLE_TIMEOUT, Lane, REAP_RETRY};
 use open::Role;
 
 /// The planner-statistics refresh [`DbPool::close`] issues: the default `0xfffe`, plus `0x10000`
@@ -33,10 +33,9 @@ const STATS_OPTIMIZE: &str = "PRAGMA optimize=0x1fffe";
 /// no-op where a page budget only spreads the work across more shutdowns.
 const FTS_OPTIMIZE: &str = "INSERT INTO tracks_fts(tracks_fts) VALUES('optimize')";
 
-/// By when the pool has closed a connection left idle since launch: [`IDLE_TIMEOUT`] twice, the
-/// reaper's first check finding it not yet idle long enough.
-pub const IDLE_CONNECTIONS_CLOSED_WITHIN: Duration =
-    Duration::from_secs(IDLE_TIMEOUT.as_secs() * 2);
+/// By when the pool has closed a connection after its last call: [`IDLE_TIMEOUT`], plus the
+/// [`REAP_RETRY`] the reaper can wake late by.
+pub const IDLE_CONNECTIONS_CLOSED_WITHIN: Duration = IDLE_TIMEOUT.saturating_add(REAP_RETRY);
 
 #[derive(Clone)]
 pub struct DbPool {
@@ -83,6 +82,22 @@ impl DbPool {
             let value = work(&tx)?;
             tx.commit()?;
             Ok(value)
+        })
+        .await
+    }
+
+    /// Rewrites the database file with each table and index contiguous, after a boot's migrations.
+    ///
+    /// A read maps its pages with their neighbours, so a table a migration's fill scattered among
+    /// the indexes maps most of the file on every library-sized read. The copy goes to a file, not
+    /// the heap [`open::TEMP_STORE`] keeps it on, and the TRUNCATE empties the WAL it went through.
+    pub(crate) async fn compact(&self) -> Result<(), AppError> {
+        self.write(|conn| {
+            conn.pragma_update(None, "temp_store", "FILE")?;
+            let compacted = conn.execute_batch("VACUUM; PRAGMA wal_checkpoint(TRUNCATE)");
+            conn.pragma_update(None, "temp_store", open::TEMP_STORE)?;
+            compacted?;
+            Ok(conn.release_memory()?)
         })
         .await
     }

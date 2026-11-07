@@ -12,17 +12,20 @@ use std::time::Duration;
 
 use rusqlite::Connection;
 use tokio::runtime::Handle;
-use tokio::sync::{OwnedSemaphorePermit, Semaphore};
-use tokio::time::{Instant, MissedTickBehavior};
+use tokio::sync::{Notify, OwnedSemaphorePermit, Semaphore};
+use tokio::time::Instant;
 
 use melodia_core::error::{AppError, describe};
 
 use super::open::{self, Role};
 
-/// How long a connection sits idle before the reaper may close it, taking its page cache with it.
-/// The reaper checks once per this period, so one can stay open up to twice as long, which
-/// `scripts/measure-footprint.py` sizes both its settles past.
+/// How long a connection sits idle before the reaper closes it, taking its map of the file and its
+/// page cache with it. `scripts/measure-footprint.py` sizes both its settles past it.
 pub(super) const IDLE_TIMEOUT: Duration = Duration::from_mins(1);
+
+/// The shortest the reaper sleeps, so an expired connection it can't close yet, every permit being
+/// out with a call, is retried rather than spun on.
+pub(super) const REAP_RETRY: Duration = Duration::from_secs(1);
 
 pub(super) struct Lane {
     capacity: u32,
@@ -32,6 +35,9 @@ pub(super) struct Lane {
     source: Source,
     runtime: Handle,
     closing: AtomicBool,
+    /// Wakes the reaper ahead of its deadline: when the idle stack gains its first connection, and
+    /// when the lane closes or drops.
+    reaper_wake: Arc<Notify>,
 }
 
 struct Idle {
@@ -51,7 +57,7 @@ enum Source {
 }
 
 impl Lane {
-    /// Up to `capacity` connections to `path`, opened on first use and closed once idle past
+    /// Up to `capacity` connections to `path`, opened on first use and closed once idle for
     /// [`IDLE_TIMEOUT`], so neither a scan's cached pages nor a boot's prefetch burst outlive the
     /// work. A cold reopen costs nothing at this scale.
     pub(super) fn file(path: PathBuf, role: Role, capacity: u32, runtime: Handle) -> Arc<Self> {
@@ -74,6 +80,7 @@ impl Lane {
             source,
             runtime,
             closing: AtomicBool::new(false),
+            reaper_wake: Arc::new(Notify::new()),
         }
     }
 
@@ -107,10 +114,22 @@ impl Lane {
     ) -> Result<T, AppError> {
         let mut conn = self.checkout()?;
         let result = work(&mut conn);
-        self.idle().push(Idle { conn, since: Instant::now() });
+        self.check_in(conn);
         // Only now, so the next caller finds the connection rather than opening another.
         drop(permit);
         result
+    }
+
+    /// Returns `conn` to the idle stack, waking the reaper if the stack was empty, the one time it
+    /// sleeps with no deadline.
+    fn check_in(&self, conn: Connection) {
+        let mut idle = self.idle();
+        let was_empty = idle.is_empty();
+        idle.push(Idle { conn, since: Instant::now() });
+        drop(idle);
+        if was_empty {
+            self.reaper_wake.notify_one();
+        }
     }
 
     fn checkout(&self) -> Result<Connection, AppError> {
@@ -127,6 +146,7 @@ impl Lane {
     /// connection.
     pub(super) async fn close(&self) {
         self.closing.store(true, Ordering::Release);
+        self.reaper_wake.notify_one();
         if let Ok(running) = self.permits.acquire_many(self.capacity).await {
             running.forget();
         }
@@ -141,13 +161,13 @@ impl Lane {
         drop(permits);
     }
 
-    /// The connections idle past [`IDLE_TIMEOUT`], each with a permit held until it has closed so
+    /// The connections idle for [`IDLE_TIMEOUT`], each with a permit held until it has closed so
     /// the lane never holds more connections than permits.
     fn take_expired(&self) -> (Vec<Connection>, Vec<OwnedSemaphorePermit>) {
         let mut idle = self.idle();
         let mut permits = Vec::new();
         for entry in idle.iter() {
-            if entry.since.elapsed() <= IDLE_TIMEOUT {
+            if entry.since.elapsed() < IDLE_TIMEOUT {
                 break;
             }
             let Ok(permit) = Arc::clone(&self.permits).try_acquire_owned() else {
@@ -159,27 +179,51 @@ impl Lane {
         (expired, permits)
     }
 
+    /// When the longest-idle connection reaches [`IDLE_TIMEOUT`], or `None` while none is idle.
+    fn next_expiry(&self) -> Option<Instant> {
+        self.idle().first().map(|entry| entry.since + IDLE_TIMEOUT)
+    }
+
     fn idle(&self) -> MutexGuard<'_, Vec<Idle>> {
         self.idle.lock().unwrap_or_else(PoisonError::into_inner)
     }
 }
 
-/// Checks the lane once per [`IDLE_TIMEOUT`] from its creation, the first check at once, until it
-/// closes or drops.
+impl Drop for Lane {
+    // Lets a reaper waiting with no deadline find the lane gone rather than wait for a check-in.
+    fn drop(&mut self) {
+        self.reaper_wake.notify_one();
+    }
+}
+
+/// Closes each connection once idle for [`IDLE_TIMEOUT`]: sleeps until the longest-idle one gets
+/// there or, with none idle, until one is, and ends when the lane closes or drops.
 fn spawn_reaper(lane: &Arc<Lane>) {
     let lane_ref = Arc::downgrade(lane);
+    let wake = Arc::clone(&lane.reaper_wake);
     lane.runtime.spawn(async move {
-        let mut checks = tokio::time::interval(IDLE_TIMEOUT);
-        checks.set_missed_tick_behavior(MissedTickBehavior::Delay);
         loop {
-            checks.tick().await;
-            let Some(lane) = lane_ref.upgrade() else {
-                return;
+            // Strong only for the pass, so a pool dropped while the reaper sleeps drops its lane.
+            let expiry = {
+                let Some(lane) = lane_ref.upgrade() else {
+                    return;
+                };
+                if lane.closing.load(Ordering::Acquire) {
+                    return;
+                }
+                lane.reap().await;
+                lane.next_expiry()
             };
-            if lane.closing.load(Ordering::Acquire) {
-                return;
+            match expiry {
+                Some(deadline) => {
+                    let deadline = deadline.max(Instant::now() + REAP_RETRY);
+                    tokio::select! {
+                        () = tokio::time::sleep_until(deadline) => {}
+                        () = wake.notified() => {}
+                    }
+                }
+                None => wake.notified().await,
             }
-            lane.reap().await;
         }
     });
 }
