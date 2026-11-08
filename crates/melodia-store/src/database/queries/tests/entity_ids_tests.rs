@@ -390,3 +390,86 @@ async fn a_folder_plays_without_a_sibling_spelled_in_another_case() -> Result<()
     assert_eq!(titles_of(&db, &ids).await?, ["Own"]);
     Ok(())
 }
+
+/// A folder renamed by case alone keeps its rows under the old spelling until a scan, and its card
+/// asks in the new one. Only a filesystem that folds case can land there, which the default
+/// Windows and macOS ones do.
+#[cfg(any(target_os = "windows", target_os = "macos"))]
+#[tokio::test]
+async fn a_folder_renamed_by_case_alone_plays_its_rows() -> Result<(), AppError> {
+    for (stored, asked) in [("abba", "ABBA"), ("müller", "MÜLLER")] {
+        let db = empty_library().await?;
+        let inside = Path::new(LIBRARY_ROOT).join(stored).join("sub").join("in.mp3");
+        insert_tagged_track(&db, &inside.to_string_lossy(), &make_test_metadata("Inside")).await?;
+        let renamed = Path::new(LIBRARY_ROOT).join(asked);
+
+        let ids =
+            queries::track::track_ids_under_directory(&db, &renamed.to_string_lossy()).await?;
+
+        assert_eq!(titles_of(&db, &ids).await?, ["Inside"], "asked {asked:?}");
+    }
+    Ok(())
+}
+
+/// Folding case must not widen the folder, so the rows of
+/// `a_folder_plays_nothing_past_either_end_of_its_range` asked for in another spelling.
+#[cfg(any(target_os = "windows", target_os = "macos"))]
+#[tokio::test]
+async fn a_renamed_folder_plays_nothing_past_either_end_of_its_range() -> Result<(), AppError> {
+    use std::path::MAIN_SEPARATOR_STR as SEP;
+
+    let db = empty_library().await?;
+    let stored = format!("{LIBRARY_ROOT}{SEP}abba");
+    let rows_around_the_range = [
+        (format!("{stored}.mp3"), "Below"),
+        (format!("{stored} Live{SEP}x.mp3"), "Spaced"),
+        (format!("{stored}{SEP}sub{SEP}in.mp3"), "Inside"),
+        (format!("{stored}{AFTER_SEPARATOR}"), "On the end"),
+        (format!("{stored}{AFTER_SEPARATOR}{SEP}y.mp3"), "Past"),
+    ];
+    for (path, title) in &rows_around_the_range {
+        insert_tagged_track(&db, path, &make_test_metadata(title)).await?;
+    }
+    let asked = format!("{LIBRARY_ROOT}{SEP}ABBA");
+
+    let ids = queries::track::track_ids_under_directory(&db, &asked).await?;
+
+    assert_eq!(titles_of(&db, &ids).await?, ["Inside"]);
+    Ok(())
+}
+
+/// The retry owes Browse the order the range does.
+#[cfg(any(target_os = "windows", target_os = "macos"))]
+#[tokio::test]
+async fn a_renamed_folder_queues_in_the_order_browse_lists_it() -> Result<(), AppError> {
+    let db = empty_library().await?;
+    let stored = Path::new(LIBRARY_ROOT).join("abba");
+    for title in ["Zebra", "apple"] {
+        let meta = numbered(title, "Whatever", Some(1), Some(1));
+        insert_tagged_track(&db, &stored.join(format!("{title}.mp3")).to_string_lossy(), &meta)
+            .await?;
+    }
+    let renamed = Path::new(LIBRARY_ROOT).join("ABBA");
+
+    let ids = queries::track::track_ids_under_directory(&db, &renamed.to_string_lossy()).await?;
+
+    assert_eq!(titles_of(&db, &ids).await?, ["apple", "Zebra"]);
+    Ok(())
+}
+
+/// On a disk that keeps case apart `abba` and `ABBA` are two folders, so neither plays the other's
+/// rows.
+#[cfg(not(any(target_os = "windows", target_os = "macos")))]
+#[tokio::test]
+async fn a_folder_plays_nothing_under_another_spelling_where_the_disk_keeps_case()
+-> Result<(), AppError> {
+    let db = empty_library().await?;
+    let stored = Path::new(LIBRARY_ROOT).join("abba").join("in.mp3");
+    insert_tagged_track(&db, &stored.to_string_lossy(), &make_test_metadata("Elsewhere")).await?;
+    let asked = Path::new(LIBRARY_ROOT).join("ABBA");
+
+    let ids = queries::track::track_ids_under_directory(&db, &asked.to_string_lossy()).await?;
+
+    assert!(ids.is_empty(), "another spelling is another folder here, got {ids:?}");
+    Ok(())
+}

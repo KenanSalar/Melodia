@@ -103,6 +103,26 @@ async fn a_backup_survives_an_apostrophe_in_its_own_path() -> Result<(), AppErro
     Ok(())
 }
 
+/// A Windows profile folder can hold any letter, and the data folder sits under it. There the path
+/// is converted to UTF-16 on its way to the file, where Linux hands over its bytes, and a failed
+/// backup stops the launch.
+#[tokio::test]
+async fn a_backup_survives_a_non_ascii_letter_in_its_own_path() -> Result<(), AppError> {
+    let tmp = tempfile::tempdir()?;
+    let root = tmp.path().join("Müller 音楽 𝄞");
+    std::fs::create_dir_all(&root)?;
+
+    let (paths, db) = open_db(&root).await?;
+    queries::folder::insert_folder(&db, "/test", true).await?;
+    insert_test_track(&db, "/test/song.mp3", "Song", "Art", "Alb", "Pop").await?;
+
+    let path = create(&db, &paths.backups_dir, 20_261_108_000_000).await?;
+    db.close().await;
+
+    assert_eq!(tracks_in(&path)?, 1);
+    Ok(())
+}
+
 /// The writer's open creates the database file, so the existence check runs before it, or every
 /// first launch backs up an empty schema.
 #[tokio::test]
