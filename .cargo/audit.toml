@@ -39,4 +39,10 @@ ignore = [
     "RUSTSEC-2026-0370",
     "RUSTSEC-2026-0371",
     "RUSTSEC-2026-0372",
+
+    # pin-utils 0.1.0 unmaintained: via spin_on 0.1.1 under Slint 1.18.1's macros and build crate,
+    # with no fixed release and Slint's main branch still on spin_on. One `pin_mut!`, run at compile
+    # time only, so none of it ships. Leaves once Slint drops spin_on.
+    # revisit: 2026-12-11
+    "RUSTSEC-2026-0441",
 ]
