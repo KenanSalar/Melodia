@@ -1,4 +1,5 @@
-//! The collation a detail page's title tie-break and the card grids order their text by.
+//! The collation a detail page's title tie-break and the card grids order their text by, and a
+//! folder's path range falls back on where the disk ignores case.
 //!
 //! `ui::track_sort` orders by `str::to_lowercase()`, a Unicode fold, where `SQLite`'s `NOCASE`
 //! folds ASCII alone, so an `ORDER BY` reproducing it needs Rust's own lowercase. The track lists'

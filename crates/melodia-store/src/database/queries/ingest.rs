@@ -334,7 +334,8 @@ fn kept_out(
 }
 
 /// The rows and kept-out files a new path may have moved from, by hash: those whose own path is
-/// gone from disk, one whose path is still there being a duplicate the new file sits beside.
+/// gone from disk or only respelled by a new path, one still there otherwise being a duplicate the
+/// new file sits beside.
 ///
 /// The stat runs with the writer transaction open: moving it ahead would change how a concurrent
 /// delete races it.
@@ -344,15 +345,27 @@ fn resolve_move_candidates(
     existing_tracks: &HashMap<String, FileStamp>,
     pool: &ScanPool,
 ) -> Result<MoveCandidates, AppError> {
-    let new_path_hashes: Vec<&str> = scanned_files
+    let new_files: Vec<&ScannedFile> = scanned_files
         .iter()
         .filter(|f| !existing_tracks.contains_key(f.path.to_string_lossy().as_ref()))
-        .map(|f| f.metadata.file_hash.as_str())
         .collect();
+    let new_path_hashes: Vec<&str> =
+        new_files.iter().map(|f| f.metadata.file_hash.as_str()).collect();
     let mut candidates = MoveCandidates::read_on(tx, &new_path_hashes)?;
-    let still_present = batch_still_on_disk(candidates.old_paths(), pool);
+    let mut still_present = batch_still_on_disk(candidates.old_paths(), pool);
+    if queries::DISK_IGNORES_CASE {
+        forget_respelled(&mut still_present, &new_files);
+    }
     candidates.retain_gone(&still_present);
     Ok(candidates)
+}
+
+/// Drops the old paths a new file only respells: where the disk ignores case, two paths folding
+/// alike are one file, so the new one can't be a copy sitting beside it.
+fn forget_respelled(still_present: &mut HashSet<String>, new_files: &[&ScannedFile]) {
+    let new_paths: HashSet<String> =
+        new_files.iter().map(|f| f.path.to_string_lossy().to_lowercase()).collect();
+    still_present.retain(|old_path| !new_paths.contains(&old_path.to_lowercase()));
 }
 
 fn file_name_of(file: &ScannedFile) -> String {
@@ -411,8 +424,8 @@ const STAT_PAR_THRESHOLD: usize = 32;
 ///
 /// **Under their own spelling** because a case-insensitive or normalizing filesystem answers
 /// `exists()` for a spelling no entry carries, and a rename that changed only case or normalization
-/// is a move. Only the file name is asked: the folder root above it is spelled as the user added
-/// it, so a directory renamed by case alone still reads as a copy.
+/// is a move. Only the file name is asked, the folder root above it being spelled as the user added
+/// it, which leaves a directory renamed by case alone to [`forget_respelled`].
 fn batch_still_on_disk(paths: Vec<String>, pool: &ScanPool) -> HashSet<String> {
     if paths.is_empty() {
         return HashSet::new();

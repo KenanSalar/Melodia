@@ -24,8 +24,8 @@ pub(crate) fn track_exists_by_path(
 /// answers `None` for every file there, which callers read as outside the library. `/` is
 /// compared too, Win32 accepting it and playlists and URIs carrying it. A root folder already ends
 /// in a separator, so it is trimmed before one is compared. Only the boundary separator is asked,
-/// so two shapes still miss: a path spelled with `/` throughout against a `\` folder, and a case
-/// difference, `SQLite` comparing bytes.
+/// so two shapes still miss: a path spelled with `/` throughout against a `\` folder below a root,
+/// and a case difference, `SQLite` comparing bytes.
 pub(crate) fn find_folder_for_path(
     tx: &Transaction<'_>,
     file_path: &str,

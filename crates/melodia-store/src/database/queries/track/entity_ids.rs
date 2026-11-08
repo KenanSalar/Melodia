@@ -9,6 +9,7 @@ use std::sync::LazyLock;
 
 use super::keyset::detail_order;
 use crate::database::collation::UNICODE_LOWER;
+use crate::database::queries::DISK_IGNORES_CASE;
 use crate::database::{DbPool, chunked_in_query, sql};
 use melodia_core::entities::track_list::TrackSortField;
 use melodia_core::error::AppError;
@@ -98,8 +99,6 @@ pub async fn track_ids_by_playlists(
     })
     .await
 }
-
-const DISK_IGNORES_CASE: bool = cfg!(any(target_os = "windows", target_os = "macos"));
 
 const IDS_IN_SUBTREE: &str = "SELECT id FROM tracks WHERE file_path >= ?1 AND file_path < ?2 \
      ORDER BY file_path COLLATE NOCASE ASC";

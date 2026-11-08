@@ -677,6 +677,62 @@ async fn a_case_only_rename_keeps_the_tracks_rating() -> Result<(), AppError> {
     Ok(())
 }
 
+/// The old spelling of a folder renamed by case still resolves and still lists its file, so only
+/// folding the two paths tells the rename from a copy. Read as a copy, the row would be purged
+/// with its rating.
+#[cfg(any(target_os = "windows", target_os = "macos"))]
+#[tokio::test]
+async fn a_folder_renamed_by_case_alone_keeps_its_tracks_rating() -> Result<(), AppError> {
+    for (old_folder, renamed_folder) in [("abba", "ABBA"), ("müller", "MÜLLER")] {
+        let tmp = tempfile::tempdir()?;
+        let db = DbPool::test_pool().await?;
+        queries::folder::insert_folder(&db, &tmp.path().to_string_lossy(), true).await?;
+        std::fs::create_dir(tmp.path().join(renamed_folder))?;
+        let renamed = tmp.path().join(renamed_folder).join("song.flac");
+        std::fs::write(&renamed, b"audio")?;
+        let old = tmp.path().join(old_folder).join("song.flac");
+        let id =
+            insert_test_track(&db, &old.to_string_lossy(), "Song", "Art", "Alb", "Rock").await?;
+        queries::track::set_rating(&db, &[id], 5).await?;
+        let file = ScannedFile { path: renamed.clone(), metadata: make_test_metadata("Song") };
+
+        folder_scan(&db, vec![file]).await?;
+
+        let track = queries::track::get_track_by_id(&db, id).await?;
+        let renamed = renamed.to_string_lossy();
+        assert_eq!(
+            (track.file_path.as_str(), track.rating),
+            (renamed.as_ref(), 5),
+            "renamed to {renamed_folder:?}"
+        );
+    }
+    Ok(())
+}
+
+/// On a disk that keeps case apart `abba` and `ABBA` are two folders, so the same bytes in the
+/// second are a copy and the first keeps its row.
+#[cfg(not(any(target_os = "windows", target_os = "macos")))]
+#[tokio::test]
+async fn the_same_bytes_under_another_spelling_are_a_copy_where_the_disk_keeps_case()
+-> Result<(), AppError> {
+    let tmp = tempfile::tempdir()?;
+    let db = DbPool::test_pool().await?;
+    queries::folder::insert_folder(&db, &tmp.path().to_string_lossy(), true).await?;
+    let original = tmp.path().join("abba").join("song.flac");
+    let copy = tmp.path().join("ABBA").join("song.flac");
+    std::fs::create_dir_all(tmp.path().join("abba"))?;
+    std::fs::create_dir_all(tmp.path().join("ABBA"))?;
+    std::fs::write(&original, b"audio")?;
+    std::fs::write(&copy, b"audio")?;
+    insert_test_track(&db, &original.to_string_lossy(), "Song", "Art", "Alb", "Rock").await?;
+    let file = ScannedFile { path: copy, metadata: make_test_metadata("Song") };
+
+    let result = folder_scan(&db, vec![file]).await?;
+
+    assert_eq!((result.inserted_count, result.moved_count), (1, 0), "(inserted, moved)");
+    Ok(())
+}
+
 // === Files the duplicate finder kept out ===
 
 const SCAN_TIMESTAMP: &str = "2024-01-01T00:00:00Z";
@@ -795,6 +851,27 @@ async fn a_moved_keeper_beside_its_kept_out_twin_takes_its_own_row_back() -> Res
 
     let track = queries::track::get_track_by_id(&db, keeper).await?;
     assert_eq!(track.file_path, "/music/new/song.mp3");
+    Ok(())
+}
+
+/// Left at the old spelling, the exclusion stops matching and the duplicate the user removed comes
+/// back as a track.
+#[cfg(any(target_os = "windows", target_os = "macos"))]
+#[tokio::test]
+async fn a_kept_out_file_stays_out_of_a_folder_renamed_by_case_alone() -> Result<(), AppError> {
+    let tmp = tempfile::tempdir()?;
+    let db = DbPool::test_pool().await?;
+    queries::folder::insert_folder(&db, &tmp.path().to_string_lossy(), true).await?;
+    std::fs::create_dir(tmp.path().join("ABBA"))?;
+    let renamed = tmp.path().join("ABBA").join("spare.flac");
+    std::fs::write(&renamed, b"audio")?;
+    let old = tmp.path().join("abba").join("spare.flac");
+    let file = ScannedFile { path: renamed.clone(), metadata: make_test_metadata("Spare") };
+    keep_out(&db, &old.to_string_lossy(), &file.metadata.file_hash).await?;
+
+    folder_scan(&db, vec![file]).await?;
+
+    assert_eq!(kept_out_paths(&db).await?, [renamed.to_string_lossy().into_owned()]);
     Ok(())
 }
 
