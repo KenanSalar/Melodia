@@ -48,6 +48,8 @@ folding reaches today. Browse's own list already drops those rows.
 - `queries/track/list.rs` owns the one helper giving a directory's `file_path` bounds.
 - `get_tracks_in_directory` and `track_ids_under_directory` read through it.
 - `directory_like_prefix`, `LIKE_SEPARATOR` and all escaping go, a range having no wildcards.
+- `track_ids_under_directory` retries ignoring case when its range is empty, on Windows and macOS
+  only: a folder renamed by case alone keeps its old spelling in `file_path` until a scan.
 
 ### Phase 2: Smart rules ✅
 
@@ -103,6 +105,9 @@ counts with before; add to, remove from and reorder a playlist, then return to t
 file and check its album and artist counts. A file opened from the command line stood in for an OS
 drop, both reaching `commit_import`.
 
-Still owed, neither runnable on Linux. On Windows: browse and play a library folder at a drive root.
-On Windows and macOS, whose disks ignore case by default: rename a folder in case only, then play
-its card.
+✅ Windows, 2026-11-08, in a scratch data folder: browse and play a library folder at a drive root,
+on a mounted ISO; rename a folder in case only and play its card, with the app running and after a
+relaunch.
+
+Still owed, not runnable on Windows. On macOS, whose disks ignore case by default: rename a folder
+in case only, then play its card.

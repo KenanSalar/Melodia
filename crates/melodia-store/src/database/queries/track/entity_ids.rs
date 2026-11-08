@@ -5,7 +5,10 @@
 //! caller.** `chunked_in_query` splits on the entity ids, so each entity's rows share a chunk and
 //! its `ORDER BY`; the entities' own order is the caller's to restore.
 
+use std::sync::LazyLock;
+
 use super::keyset::detail_order;
+use crate::database::collation::UNICODE_LOWER;
 use crate::database::{DbPool, chunked_in_query, sql};
 use melodia_core::entities::track_list::TrackSortField;
 use melodia_core::error::AppError;
@@ -96,6 +99,19 @@ pub async fn track_ids_by_playlists(
     .await
 }
 
+const DISK_IGNORES_CASE: bool = cfg!(any(target_os = "windows", target_os = "macos"));
+
+const IDS_IN_SUBTREE: &str = "SELECT id FROM tracks WHERE file_path >= ?1 AND file_path < ?2 \
+     ORDER BY file_path COLLATE NOCASE ASC";
+
+static IDS_IN_SUBTREE_ANY_CASE: LazyLock<String> = LazyLock::new(|| {
+    format!(
+        "SELECT id FROM tracks \
+         WHERE file_path COLLATE {UNICODE_LOWER} >= ?1 AND file_path COLLATE {UNICODE_LOWER} < ?2 \
+         ORDER BY file_path COLLATE NOCASE ASC"
+    )
+});
+
 /// Every track under `dir_path`, subdirectories included, in path order: what "play this folder"
 /// means for a card, where [`super::get_tracks_in_directory`] is the one level Browse lists. An
 /// artist folder of album folders would otherwise play nothing.
@@ -103,15 +119,18 @@ pub async fn track_ids_by_playlists(
 /// `COLLATE NOCASE` because Browse lists through `to_lowercase()`, and BINARY would play
 /// `Zebra.flac` before `apple.flac`. ASCII against a Unicode fold, and a subtree against one level,
 /// so **case is the whole of the agreement**.
+///
+/// An empty range retries ignoring case where the disk does, non-ASCII letters included: a folder
+/// renamed by case alone keeps its rows under the old spelling until a scan, the watcher passing
+/// only audio paths.
 pub async fn track_ids_under_directory(db: &DbPool, dir_path: &str) -> Result<Vec<i64>, AppError> {
     let (from, before) = super::list::subtree_bounds(dir_path);
     db.read(move |conn| {
-        sql::fetch_all(
-            conn,
-            "SELECT id FROM tracks WHERE file_path >= ? AND file_path < ? \
-             ORDER BY file_path COLLATE NOCASE ASC",
-            (from, before),
-        )
+        let ids = sql::fetch_all(conn, IDS_IN_SUBTREE, (&from, &before))?;
+        if ids.is_empty() && DISK_IGNORES_CASE {
+            return sql::fetch_all(conn, IDS_IN_SUBTREE_ANY_CASE.as_str(), (from, before));
+        }
+        Ok(ids)
     })
     .await
 }
