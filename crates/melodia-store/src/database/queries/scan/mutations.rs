@@ -1,13 +1,14 @@
 //! The track rows' write side, and the cover roll-ups and orphan prune at the tail of a batch.
 
 use std::collections::HashMap;
+use std::path::Path;
 use std::sync::LazyLock;
 
 use rusqlite::Transaction;
 
 use crate::database::queries::track::order_keys::OrderKeys;
 use crate::database::sql::{self, Sql};
-use crate::database::{MAX_BINDS_PER_STATEMENT, chunked_in_execute_on, placeholders, values_list};
+use crate::database::{MAX_BINDS_PER_STATEMENT, chunked_in_execute, placeholders, values_list};
 use melodia_core::entities::scan::ExtractedMetadata;
 use melodia_core::entities::track_search::SearchFields;
 use melodia_core::error::AppError;
@@ -175,7 +176,7 @@ pub(crate) fn insert_track(
     tx: &Transaction<'_>,
     file_path: &str,
     file_name: &str,
-    meta: &melodia_core::entities::scan::ExtractedMetadata,
+    meta: &ExtractedMetadata,
     ids: &ResolvedIds,
     now: &str,
     names: &mut NameCache,
@@ -191,6 +192,11 @@ pub(crate) fn insert_track(
     let track_id: i64 = sql.fetch_one(tx)?;
     insert_track_joins(tx, track_id, meta, ids, names)?;
     Ok(track_id)
+}
+
+/// What a track row's `file_name` column holds for `path`.
+pub(crate) fn file_name_of(path: &Path) -> String {
+    path.file_name().and_then(|f| f.to_str()).unwrap_or("").to_owned()
 }
 
 /// One new track's row, for [`insert_track`] or [`insert_tracks_batch`].
@@ -271,7 +277,7 @@ pub(crate) fn update_track_location(
 pub(crate) fn update_track_metadata(
     tx: &Transaction<'_>,
     file_path: &str,
-    meta: &melodia_core::entities::scan::ExtractedMetadata,
+    meta: &ExtractedMetadata,
     ids: &ResolvedIds,
     names: &mut NameCache,
 ) -> Result<(), AppError> {
@@ -401,7 +407,7 @@ pub(crate) fn delete_tracks_by_paths_batch(
     tx: &Transaction<'_>,
     file_paths: &[String],
 ) -> Result<u64, AppError> {
-    chunked_in_execute_on(tx, file_paths, |placeholders| {
+    chunked_in_execute(tx, file_paths, |placeholders| {
         format!("DELETE FROM tracks WHERE file_path IN ({placeholders})")
     })
 }

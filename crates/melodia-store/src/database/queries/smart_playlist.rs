@@ -10,7 +10,7 @@ use rusqlite::{Connection, Transaction};
 
 use crate::database::DbPool;
 use crate::database::queries::track::columns;
-use crate::database::sql::Sql;
+use crate::database::sql::{Sql, escape_like};
 use melodia_core::entities::smart_criteria::{
     Draw, LimitOrder, MatchMode, Rule, RuleField, RuleOp, RuleValue, SmartCriteria, SmartLimit,
     ValueType, ops_for,
@@ -522,18 +522,6 @@ fn order_by_fragment(limit: Option<&SmartLimit>) -> &'static str {
         Some(LimitOrder::Random) => " ORDER BY RANDOM()",
         None => " ORDER BY sort_key COLLATE NOCASE ASC, id ASC",
     }
-}
-
-/// Escapes `%`, `_` and `\` for a `LIKE ? ESCAPE '\'` pattern.
-fn escape_like(s: &str) -> String {
-    let mut out = String::with_capacity(s.len() + 2);
-    for ch in s.chars() {
-        if matches!(ch, '\\' | '%' | '_') {
-            out.push('\\');
-        }
-        out.push(ch);
-    }
-    out
 }
 
 /// The most days a relative-date rule reaches back, so `TimeDelta::try_days` can't overflow.

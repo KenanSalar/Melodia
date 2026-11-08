@@ -4,7 +4,8 @@ use rusqlite::Transaction;
 
 use crate::database::sql::{self, Sql};
 use crate::database::{
-    DbPool, IDS_PER_SET, chunked_in_query, set_where_id_in, values_placeholders,
+    CASE_BINDS_PER_ROW, DbPool, MAX_BINDS_PER_STATEMENT, case_by_id, chunked_in_query,
+    chunked_in_statements, placeholders, values_placeholders,
 };
 use melodia_core::error::AppError;
 
@@ -53,15 +54,15 @@ async fn add_counts(
     last_played: Option<&str>,
 ) -> Result<(), AppError> {
     // The stamp is the one bind that is not part of a row.
-    let max_rows = (crate::database::MAX_BINDS_PER_STATEMENT - usize::from(last_played.is_some()))
-        / crate::database::CASE_BINDS_PER_ROW;
+    let max_rows =
+        (MAX_BINDS_PER_STATEMENT - usize::from(last_played.is_some())) / CASE_BINDS_PER_ROW;
     let stamp = if last_played.is_some() { ", last_played = ?" } else { "" };
 
     for chunk in increments.chunks(max_rows) {
         let mut sql = Sql::trusted(format!(
             "UPDATE tracks SET {column} = {column} + {}{stamp} WHERE id IN ({})",
-            crate::database::case_by_id(chunk.len()),
-            crate::database::placeholders(chunk.len()),
+            case_by_id(chunk.len()),
+            placeholders(chunk.len()),
         ));
         for &(id, n) in chunk {
             sql.bind(id).bind(i64::from(n));
@@ -86,8 +87,10 @@ pub async fn update_last_position(db: &DbPool, id: i64, position_ms: i64) -> Res
 }
 
 pub async fn set_favorite(db: &DbPool, ids: &[i64], favorite: bool) -> Result<(), AppError> {
-    for chunk in ids.chunks(IDS_PER_SET) {
-        let sql = set_where_id_in("UPDATE tracks SET is_favorite = ?", favorite, chunk);
+    let updates = chunked_in_statements(favorite, ids, |placeholders| {
+        format!("UPDATE tracks SET is_favorite = ? WHERE id IN ({placeholders})")
+    });
+    for sql in updates {
         db.write(move |conn| sql.execute(conn)).await?;
     }
     Ok(())
@@ -113,8 +116,10 @@ pub async fn unfavorite(db: &DbPool, ids: Vec<i64>) -> Result<Vec<i64>, AppError
 
 /// Sets the star `rating`, which `library::ratings::set_rating` has already clamped.
 pub async fn set_rating(db: &DbPool, ids: &[i64], rating: i32) -> Result<(), AppError> {
-    for chunk in ids.chunks(IDS_PER_SET) {
-        let sql = set_where_id_in("UPDATE tracks SET rating = ?", rating, chunk);
+    let updates = chunked_in_statements(rating, ids, |placeholders| {
+        format!("UPDATE tracks SET rating = ? WHERE id IN ({placeholders})")
+    });
+    for sql in updates {
         db.write(move |conn| sql.execute(conn)).await?;
     }
     Ok(())
@@ -127,8 +132,11 @@ pub(crate) fn set_track_artwork(
     ids: &[i64],
     artwork_path: Option<&str>,
 ) -> Result<(), AppError> {
-    for chunk in ids.chunks(IDS_PER_SET) {
-        set_where_id_in("UPDATE tracks SET artwork_path = ?", artwork_path, chunk).execute(tx)?;
+    let updates = chunked_in_statements(artwork_path, ids, |placeholders| {
+        format!("UPDATE tracks SET artwork_path = ? WHERE id IN ({placeholders})")
+    });
+    for update in updates {
+        update.execute(tx)?;
     }
     Ok(())
 }
@@ -164,7 +172,7 @@ fn set_hashes(
     updates: &[(i64, String, Option<String>)],
 ) -> Result<(), AppError> {
     const COLS_PER_ROW: usize = 3;
-    const CHUNK_SIZE: usize = crate::database::MAX_BINDS_PER_STATEMENT / COLS_PER_ROW;
+    const CHUNK_SIZE: usize = MAX_BINDS_PER_STATEMENT / COLS_PER_ROW;
 
     for chunk in updates.chunks(CHUNK_SIZE) {
         let rows = values_placeholders(chunk.len(), COLS_PER_ROW);

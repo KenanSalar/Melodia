@@ -8,9 +8,9 @@ use rusqlite::Transaction;
 
 use crate::database::queries;
 use crate::database::queries::artist::UNKNOWN_ARTIST_ID;
-use crate::database::queries::scan::{MoveCandidates, NameCache};
+use crate::database::queries::scan::{MoveCandidates, NameCache, file_name_of};
 use crate::database::sql::Sql;
-use crate::database::{DbPool, MAX_BINDS_PER_STATEMENT, values_placeholders};
+use crate::database::{DbPool, MAX_BINDS_PER_STATEMENT, placeholders, values_placeholders};
 use crate::media::ingest::scan_pool::ScanPool;
 use melodia_core::entities::scan::{ExtractedMetadata, FileStamp, ScannedFile};
 use melodia_core::error::AppError;
@@ -252,7 +252,7 @@ pub(crate) fn ingest_scanned_files(
                 tx,
                 existing_id,
                 file_path_str,
-                &file_name_of(file),
+                &file_name_of(&file.path),
                 folder_id,
                 meta.date_modified.as_deref(),
             )?;
@@ -276,7 +276,7 @@ pub(crate) fn ingest_scanned_files(
         };
         let row = queries::scan::NewTrackRow {
             file_path: file_path_str.to_owned(),
-            file_name: file_name_of(file),
+            file_name: file_name_of(&file.path),
             meta,
             ids,
         };
@@ -306,9 +306,9 @@ fn load_existing(
 ) -> Result<HashMap<String, FileStamp>, AppError> {
     let mut existing_tracks = HashMap::with_capacity(scanned_files.len());
     for chunk in scanned_files.chunks(MAX_BINDS_PER_STATEMENT) {
-        let placeholders = crate::database::placeholders(chunk.len());
+        let path_list = placeholders(chunk.len());
         let mut sql = Sql::trusted(format!(
-            "SELECT file_path, file_size, date_modified FROM tracks WHERE file_path IN ({placeholders})"
+            "SELECT file_path, file_size, date_modified FROM tracks WHERE file_path IN ({path_list})"
         ));
         for file in chunk {
             sql.bind(file.path.to_string_lossy().into_owned());
@@ -375,10 +375,6 @@ fn forget_respelled(still_present: &mut HashSet<String>, new_files: &[&ScannedFi
     still_present.retain(|old_path| {
         spelling_by_fold.get(&old_path.to_lowercase()).is_none_or(|new_path| new_path == old_path)
     });
-}
-
-fn file_name_of(file: &ScannedFile) -> String {
-    file.path.file_name().and_then(|f| f.to_str()).unwrap_or("").to_string()
 }
 
 /// New-file inserts, flushed as multi-row statements a chunk at a time. Safe to defer: nothing

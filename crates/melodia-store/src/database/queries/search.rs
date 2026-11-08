@@ -41,20 +41,6 @@ pub(crate) fn build_fts_query(query: &str) -> String {
     fts_query
 }
 
-/// `s` wrapped in `%…%`, with `\`, `%` and `_` escaped for `LIKE … ESCAPE '\'`.
-fn like_pattern_escape(s: &str) -> String {
-    let mut out = String::with_capacity(s.len() + 4);
-    out.push('%');
-    for ch in s.chars() {
-        if matches!(ch, '\\' | '%' | '_') {
-            out.push('\\');
-        }
-        out.push(ch);
-    }
-    out.push('%');
-    out
-}
-
 /// `tracks_fts MATCH`, never the alias: fts5 names the match column after the table, so
 /// `fts MATCH` fails to prepare. `rank` is bm25 under the weights the newest `tracks_fts` rebuild
 /// pins, which pick the 50 rows that survive the `LIMIT`, not only their order.
@@ -82,7 +68,7 @@ pub async fn search_all(db: &DbPool, query: &str) -> Result<SearchResults, AppEr
     let fts_query = build_fts_query(trimmed);
 
     // `LIKE` over the `*_stats` views: small tables, no index to gain.
-    let pattern = like_pattern_escape(trimmed);
+    let pattern = format!("%{}%", sql::escape_like(trimmed));
 
     let tracks_fut = db.read({
         let fts_query = fts_query.clone();

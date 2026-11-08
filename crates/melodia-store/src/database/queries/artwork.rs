@@ -5,7 +5,7 @@ use rusqlite::Transaction;
 
 use crate::database::sql::{self, Sql};
 use crate::database::{
-    DbPool, MAX_BINDS_PER_STATEMENT, chunked_in_execute_on, queries, values_placeholders,
+    DbPool, MAX_BINDS_PER_STATEMENT, chunked_in_execute, queries, values_placeholders,
 };
 use melodia_core::error::AppError;
 
@@ -99,7 +99,7 @@ pub async fn forget_paths(db: &DbPool, missing: Vec<String>) -> Result<u64, AppE
     db.transaction(move |tx| {
         let mut touched = 0;
         for (table, column, cleared) in FORGETS {
-            touched += chunked_in_execute_on(tx, &missing, |list| {
+            touched += chunked_in_execute(tx, &missing, |list| {
                 format!("UPDATE {table} SET {cleared} WHERE {column} IN ({list})")
             })?;
         }

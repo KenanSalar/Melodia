@@ -1,4 +1,6 @@
+mod backfill;
 mod backup;
+mod bulk;
 mod collation;
 mod migrate;
 mod pool;
@@ -6,222 +8,18 @@ pub mod queries;
 mod rows;
 mod sql;
 
-use rusqlite::{Connection, Transaction};
+use rusqlite::Transaction;
 
 use melodia_core::config::Paths;
 use melodia_core::error::{AppError, describe};
 
+pub(crate) use backfill::{FoldedColumn, FoldedInputs, backfill_folded};
+pub(crate) use bulk::{
+    CASE_BINDS_PER_ROW, MAX_BINDS_PER_STATEMENT, case_by_id, chunked_in_execute, chunked_in_query,
+    chunked_in_statements, in_id_order, placeholders, select_in_id_order, values_list,
+    values_placeholders,
+};
 pub use pool::{DbPool, IDLE_CONNECTIONS_CLOSED_WITHIN};
-use rows::FromRow;
-use sql::{Param, Sql};
-
-/// Bind-variable budget for one statement, divided by a query's binds per row to size its chunks.
-///
-/// Chosen rather than the engine's: the bundled `SQLite` allows 32766, and 999 is the older default
-/// this kept. Moving it trades both ways, a larger chunk buying fewer prepares (every bulk statement
-/// is assembled, so prepared per run) for a larger parameter array resident per statement, so move
-/// it against a profile of a first scan on a large library.
-pub const MAX_BINDS_PER_STATEMENT: usize = 999;
-
-/// `n` comma-separated `?`s for an `IN (…)` clause.
-pub(crate) fn placeholders(n: usize) -> String {
-    let mut s = String::with_capacity(n * 3);
-    for i in 0..n {
-        if i > 0 {
-            s.push_str(", ");
-        }
-        s.push('?');
-    }
-    s
-}
-
-/// `rows` comma-separated tuples of `width` `?`s each, for a `VALUES` list.
-pub(crate) fn values_placeholders(rows: usize, width: usize) -> String {
-    values_list(&format!("({})", placeholders(width)), rows)
-}
-
-/// The `VALUES` tuple `row` repeated `rows` times, comma-separated.
-pub(crate) fn values_list(row: &str, rows: usize) -> String {
-    let mut s = String::with_capacity(rows * (row.len() + 2));
-    for i in 0..rows {
-        if i > 0 {
-            s.push_str(", ");
-        }
-        s.push_str(row);
-    }
-    s
-}
-
-/// What one row spends in an `UPDATE … SET col = CASE id WHEN ? THEN ? … END WHERE id IN (…)`: the
-/// `WHEN ? THEN ?` pair, then its id again in the `IN` list.
-pub(crate) const CASE_BINDS_PER_ROW: usize = 3;
-
-/// `CASE id WHEN ? THEN ? … END` over `rows` pairs, each bound id first.
-pub(crate) fn case_by_id(rows: usize) -> String {
-    const WHEN_THEN: &str = " WHEN ? THEN ?";
-    let mut s = String::with_capacity("CASE id END".len() + rows * WHEN_THEN.len());
-    s.push_str("CASE id");
-    for _ in 0..rows {
-        s.push_str(WHEN_THEN);
-    }
-    s.push_str(" END");
-    s
-}
-
-/// A folded copy of other columns, filled at write time, that a per-launch pass fills on the rows
-/// written before it existed.
-#[derive(Clone, Copy)]
-pub(crate) struct FoldedColumn {
-    pub table: &'static str,
-    pub column: &'static str,
-    /// The SELECT reading what each row packs, its source aliased `x`.
-    pub inputs: &'static str,
-}
-
-/// A row [`backfill_folded`] reads, and the value it packs from it.
-pub(crate) trait FoldedInputs: FromRow + Send + 'static {
-    fn id(&self) -> i64;
-    fn packed(&self) -> String;
-}
-
-/// Rows per backfill page, so that one page is one `UPDATE` inside the bind budget.
-const BACKFILL_PAGE_ROWS: usize = MAX_BINDS_PER_STATEMENT / CASE_BINDS_PER_ROW;
-
-/// Fills `target` on every row still holding `''`, a page at a time, and returns how many it wrote.
-///
-/// Cheap on every launch, a filled table answering from an empty partial index. Each page is its
-/// own write so a waiting writer waits for a page rather than the table, and the `UPDATE` asks
-/// again that the column is empty, so a row a writer filled in between keeps the writer's value.
-pub(crate) async fn backfill_folded<R: FoldedInputs>(
-    db: &DbPool,
-    target: FoldedColumn,
-) -> Result<u64, AppError> {
-    let page_limit = i64::try_from(BACKFILL_PAGE_ROWS).unwrap_or(i64::MAX);
-    let page_select = format!(
-        "{} WHERE x.{column} = '' AND x.id > ? ORDER BY x.id LIMIT ?",
-        target.inputs,
-        column = target.column,
-    );
-    let mut after_id = 0_i64;
-    let mut written = 0;
-    loop {
-        let mut select = Sql::trusted(page_select.clone());
-        select.bind(after_id).bind(page_limit);
-        let page: Vec<R> = db.read(move |conn| select.fetch_all(conn)).await?;
-        let Some(last) = page.last() else {
-            return Ok(written);
-        };
-        after_id = last.id();
-        written += db.write(move |conn| fill_folded_page(conn, target, &page)).await?;
-    }
-}
-
-fn fill_folded_page<R: FoldedInputs>(
-    conn: &Connection,
-    target: FoldedColumn,
-    page: &[R],
-) -> Result<u64, AppError> {
-    let mut update = Sql::trusted(format!(
-        "UPDATE {table} SET {column} = {case} WHERE id IN ({ids}) AND {column} = ''",
-        table = target.table,
-        column = target.column,
-        case = case_by_id(page.len()),
-        ids = placeholders(page.len()),
-    ));
-    for row in page {
-        update.bind(row.id()).bind(row.packed());
-    }
-    for row in page {
-        update.bind(row.id());
-    }
-    update.execute(conn)
-}
-
-/// Runs a single-column `IN (…)` query in chunks inside [`MAX_BINDS_PER_STATEMENT`], concatenating
-/// the results, on any connection, a transaction's included. One bind per item, so **not** for a
-/// tuple-IN clause.
-pub(crate) fn chunked_in_query<T, B>(
-    conn: &Connection,
-    items: &[B],
-    build_sql: impl Fn(&str) -> String,
-) -> Result<Vec<T>, AppError>
-where
-    T: FromRow,
-    B: Clone + Into<Param>,
-{
-    let mut all_results: Vec<T> = Vec::new();
-    for chunk in items.chunks(MAX_BINDS_PER_STATEMENT) {
-        let mut sql = Sql::trusted(build_sql(&placeholders(chunk.len())));
-        for item in chunk {
-            sql.bind(item.clone());
-        }
-        all_results.extend(sql.fetch_all::<T>(conn)?);
-    }
-    Ok(all_results)
-}
-
-/// [`chunked_in_query`] for a statement that returns no rows, answering how many it touched. It
-/// takes a transaction, so a write spanning chunks lands whole.
-pub(crate) fn chunked_in_execute_on<B>(
-    tx: &Transaction<'_>,
-    items: &[B],
-    build_sql: impl Fn(&str) -> String,
-) -> Result<u64, AppError>
-where
-    B: Clone + Into<Param>,
-{
-    let mut touched = 0;
-    for chunk in items.chunks(MAX_BINDS_PER_STATEMENT) {
-        let mut sql = Sql::trusted(build_sql(&placeholders(chunk.len())));
-        for item in chunk {
-            sql.bind(item.clone());
-        }
-        touched += sql.execute(tx)?;
-    }
-    Ok(touched)
-}
-
-/// `rows`, fetched by an `IN (…)` over `ids`, put back in the order `ids` asked for. A row the
-/// fetch didn't return, deleted since the ids were read, is skipped, and so is a second ask for
-/// one id.
-pub(crate) fn in_id_order<T>(rows: Vec<T>, ids: &[i64], id_of: impl Fn(&T) -> i64) -> Vec<T> {
-    let mut by_id: std::collections::HashMap<i64, T> =
-        std::collections::HashMap::with_capacity(rows.len());
-    by_id.extend(rows.into_iter().map(|row| (id_of(&row), row)));
-    ids.iter().filter_map(|id| by_id.remove(id)).collect()
-}
-
-/// The rows `select` reads for `ids`, in the order `ids` asked for ([`in_id_order`]). `select` is
-/// the statement up to its `WHERE`, over a source with an `id` column.
-pub(crate) fn select_in_id_order<T: FromRow>(
-    conn: &Connection,
-    select: &str,
-    ids: &[i64],
-    id_of: impl Fn(&T) -> i64,
-) -> Result<Vec<T>, AppError> {
-    let rows = chunked_in_query(conn, ids, |placeholders| {
-        format!("{select} WHERE id IN ({placeholders})")
-    })?;
-    Ok(in_id_order(rows, ids, id_of))
-}
-
-/// Ids per statement that binds one value ahead of its id list, as [`set_where_id_in`]'s does.
-pub(crate) const IDS_PER_SET: usize = MAX_BINDS_PER_STATEMENT - 1;
-
-/// One chunk of an `UPDATE … SET col = ? WHERE id IN (…)`, `value` bound first. The caller chunks
-/// at [`IDS_PER_SET`] and picks the connection, some holding a transaction.
-pub(crate) fn set_where_id_in(
-    update_set: &'static str,
-    value: impl Into<Param>,
-    ids: &[i64],
-) -> Sql {
-    let mut sql = Sql::new(update_set);
-    sql.bind(value).push(" WHERE id IN (").push_trusted(&placeholders(ids.len())).push(")");
-    for id in ids {
-        sql.bind(*id);
-    }
-    sql
-}
 
 /// Strips the Windows verbatim prefixes older versions stored by calling `std::fs::canonicalize`;
 /// a second boot matches nothing. `\\?\<drive>:\…` loses 4 characters and `\\?\UNC\…` swaps 8 for

@@ -14,7 +14,7 @@ use rusqlite::{Connection, Transaction};
 
 use crate::database::sql::{self, Sql};
 use crate::database::{
-    DbPool, MAX_BINDS_PER_STATEMENT, chunked_in_execute_on, chunked_in_query, values_placeholders,
+    DbPool, MAX_BINDS_PER_STATEMENT, chunked_in_execute, chunked_in_query, values_placeholders,
 };
 use melodia_core::entities::duplicates::KeptOutFile;
 use melodia_core::entities::scan::{ExtractedMetadata, FileStamp};
@@ -178,7 +178,7 @@ pub(crate) fn repoint_on(
 
 /// Lets the files at `paths` back into the library's reach, returning how many were kept out.
 pub(crate) fn lift_on(tx: &Transaction<'_>, paths: &[&str]) -> Result<u64, AppError> {
-    chunked_in_execute_on(tx, paths, |placeholders| {
+    chunked_in_execute(tx, paths, |placeholders| {
         format!("DELETE FROM excluded_files WHERE path IN ({placeholders})")
     })
 }

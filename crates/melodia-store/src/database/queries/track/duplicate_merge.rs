@@ -15,7 +15,7 @@ use crate::database::queries::{scan, stats};
 use crate::database::rows::by_name;
 use crate::database::sql::Sql;
 use crate::database::{
-    DbPool, MAX_BINDS_PER_STATEMENT, chunked_in_execute_on, chunked_in_query, values_placeholders,
+    DbPool, MAX_BINDS_PER_STATEMENT, chunked_in_execute, chunked_in_query, values_placeholders,
 };
 use melodia_core::entities::duplicates::GroupRemoval;
 use melodia_core::error::AppError;
@@ -103,7 +103,7 @@ fn merge(tx: &Transaction<'_>, removals: &[GroupRemoval]) -> Result<RemovedDupli
         plan.spares.iter().map(|spare| spare.exclusion()).collect();
     excluded_files::exclude_on(tx, &exclusions)?;
     let spare_ids: Vec<i64> = plan.spares.iter().map(|spare| spare.id).collect();
-    chunked_in_execute_on(tx, &spare_ids, |placeholders| {
+    chunked_in_execute(tx, &spare_ids, |placeholders| {
         format!("DELETE FROM tracks WHERE id IN ({placeholders})")
     })?;
     for playlist_id in touched {

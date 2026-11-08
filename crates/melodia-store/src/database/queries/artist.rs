@@ -1,5 +1,5 @@
 use crate::database::{
-    DbPool, IDS_PER_SET, chunked_in_query, in_id_order, select_in_id_order, set_where_id_in, sql,
+    DbPool, chunked_in_query, chunked_in_statements, in_id_order, select_in_id_order, sql,
 };
 use melodia_core::entities::artist;
 use melodia_core::error::AppError;
@@ -49,8 +49,10 @@ pub async fn get_artists_without_images(
 
 /// Records that the image search for each of `ids` found nothing, at `at` (Unix seconds).
 pub async fn mark_image_search_missed(db: &DbPool, ids: &[i64], at: i64) -> Result<(), AppError> {
-    for chunk in ids.chunks(IDS_PER_SET) {
-        let sql = set_where_id_in("UPDATE artists SET image_search_missed_at = ?", at, chunk);
+    let updates = chunked_in_statements(at, ids, |placeholders| {
+        format!("UPDATE artists SET image_search_missed_at = ? WHERE id IN ({placeholders})")
+    });
+    for sql in updates {
         db.write(move |conn| sql.execute(conn)).await?;
     }
     Ok(())

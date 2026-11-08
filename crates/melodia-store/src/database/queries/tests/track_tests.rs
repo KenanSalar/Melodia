@@ -1,9 +1,10 @@
 use std::collections::HashSet;
 
+use crate::database::DbPool;
+use crate::database::bulk::IDS_PER_SET;
 use crate::database::queries;
 use crate::database::queries::fixtures::*;
 use crate::database::sql::{self, Sql};
-use crate::database::{DbPool, IDS_PER_SET};
 use melodia_core::entities::smart_criteria::Draw;
 use melodia_core::entities::track::TrackMeta;
 use melodia_core::entities::track_list::{

@@ -4,7 +4,7 @@
 use rusqlite::{Transaction, params};
 
 use super::radio::kept_station_matching;
-use crate::database::{DbPool, chunked_in_execute_on, chunked_in_query, sql};
+use crate::database::{DbPool, chunked_in_execute, chunked_in_query, sql};
 use melodia_core::entities::radio::{KeptList, RadioStation, StationCut};
 use melodia_core::error::AppError;
 
@@ -48,12 +48,10 @@ fn cut_stations(
         KeptList::Favorites => "is_favorite = FALSE",
         KeptList::Recent => "last_played = NULL, play_count = 0",
     };
-    chunked_in_execute_on(tx, &kept, |ids| {
+    chunked_in_execute(tx, &kept, |ids| {
         format!("UPDATE radio_stations SET {take} WHERE id IN ({ids})")
     })?;
-    chunked_in_execute_on(tx, &gone, |ids| {
-        format!("DELETE FROM radio_stations WHERE id IN ({ids})")
-    })?;
+    chunked_in_execute(tx, &gone, |ids| format!("DELETE FROM radio_stations WHERE id IN ({ids})"))?;
     Ok(cuts)
 }
 

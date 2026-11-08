@@ -9,9 +9,9 @@ use std::path::{Path, PathBuf};
 use rusqlite::Transaction;
 
 use super::{
-    MoveCandidates, NameCache, delete_track_by_path, find_folder_for_path, get_track_id_by_path,
-    insert_track, prune_orphans, resolve_track_context, roll_up_covers, track_exists_by_path,
-    update_track_location, update_track_metadata,
+    MoveCandidates, NameCache, delete_track_by_path, file_name_of, find_folder_for_path,
+    get_track_id_by_path, insert_track, prune_orphans, resolve_track_context, roll_up_covers,
+    track_exists_by_path, update_track_location, update_track_metadata,
 };
 use crate::database::DbPool;
 use crate::database::queries::ingest;
@@ -94,44 +94,9 @@ fn apply_changes(
     let mut changed: usize = 0;
 
     for change in changes {
-        match change {
-            WatchedChange::Created { path, meta } => match handle_created(tx, path, meta, batch) {
-                Ok(wrote) => changed += usize::from(wrote),
-                Err(e) => log::warn!(
-                    "Failed to process created file {}: {}",
-                    path.display(),
-                    describe(&e)
-                ),
-            },
-            WatchedChange::Removed { path, .. } => match handle_removed(tx, path) {
-                Ok(wrote) => changed += usize::from(wrote),
-                Err(e) => {
-                    log::warn!("Failed to remove track {}: {}", path.display(), describe(&e));
-                }
-            },
-            WatchedChange::Renamed { from, to, meta, date_modified } => {
-                let renamed =
-                    handle_renamed(tx, from, to, meta.as_ref(), date_modified.as_deref(), batch);
-                match renamed {
-                    Ok(wrote) => changed += usize::from(wrote),
-                    Err(e) => log::warn!(
-                        "Failed to process rename {} -> {}: {}",
-                        from.display(),
-                        to.display(),
-                        describe(&e)
-                    ),
-                }
-            }
-            WatchedChange::Modified { path, meta } => {
-                match handle_modified(tx, path, meta, batch) {
-                    Ok(wrote) => changed += usize::from(wrote),
-                    Err(e) => log::warn!(
-                        "Failed to process modified file {}: {}",
-                        path.display(),
-                        describe(&e)
-                    ),
-                }
-            }
+        match apply_change(tx, change, batch) {
+            Ok(wrote) => changed += usize::from(wrote),
+            Err(e) => log_failed(change, &e),
         }
     }
     lift_gone(tx, changes);
@@ -149,6 +114,44 @@ fn apply_changes(
         prune_orphans(tx)?;
     }
     Ok(())
+}
+
+/// Whether a row was written.
+fn apply_change(
+    tx: &Transaction<'_>,
+    change: &WatchedChange,
+    batch: &mut Batch,
+) -> Result<bool, AppError> {
+    match change {
+        WatchedChange::Created { path, meta } => handle_created(tx, path, meta, batch),
+        WatchedChange::Removed { path, .. } => handle_removed(tx, path),
+        WatchedChange::Renamed { from, to, meta, date_modified } => {
+            handle_renamed(tx, from, to, meta.as_ref(), date_modified.as_deref(), batch)
+        }
+        WatchedChange::Modified { path, meta } => handle_modified(tx, path, meta, batch),
+    }
+}
+
+fn log_failed(change: &WatchedChange, e: &AppError) {
+    match change {
+        WatchedChange::Created { path, .. } => {
+            log::warn!("Failed to process created file {}: {}", path.display(), describe(e));
+        }
+        WatchedChange::Removed { path, .. } => {
+            log::warn!("Failed to remove track {}: {}", path.display(), describe(e));
+        }
+        WatchedChange::Renamed { from, to, .. } => {
+            log::warn!(
+                "Failed to process rename {} -> {}: {}",
+                from.display(),
+                to.display(),
+                describe(e)
+            );
+        }
+        WatchedChange::Modified { path, .. } => {
+            log::warn!("Failed to process modified file {}: {}", path.display(), describe(e));
+        }
+    }
 }
 
 /// The rows and kept-out files carrying a created file's hash whose own file is gone from disk:
@@ -191,10 +194,6 @@ async fn read_candidates(db: &DbPool, hashes: Vec<String>) -> Result<MoveCandida
     .await
 }
 
-fn file_name_owned(path: &Path) -> String {
-    path.file_name().and_then(|f| f.to_str()).unwrap_or("").to_owned()
-}
-
 /// Whether a row was written, by an insert or a re-point. A kept-out file writes none: it is
 /// restamped, or its exclusion follows it where it moved.
 fn handle_created(
@@ -216,11 +215,10 @@ fn handle_created(
 
     // A failed folder lookup leaves the entry for a later same-hash event.
     if let Some((existing_id, old_path)) = batch.moved.track_for(&meta.file_hash, path) {
-        let Some(folder_id) = find_folder_for_path(tx, &path_str)? else {
-            log::debug!("Moved file not in any library folder, skipping: {}", path.display());
+        let Some(folder_id) = library_folder(tx, path, &path_str, "Moved")? else {
             return Ok(false);
         };
-        let file_name = file_name_owned(path);
+        let file_name = file_name_of(path);
         let repointed = update_track_location(
             tx,
             existing_id,
@@ -229,13 +227,12 @@ fn handle_created(
             folder_id,
             meta.date_modified.as_deref(),
         )?;
+        batch.moved.spend_track(&meta.file_hash, existing_id);
         if repointed {
-            batch.moved.spend_track(&meta.file_hash, existing_id);
             log::info!("Detected moved file: {old_path} -> {path_str}");
             return Ok(true);
         }
         // Deletes apply last, so a scan removed the row after the candidates were read.
-        batch.moved.spend_track(&meta.file_hash, existing_id);
     }
 
     if let Some((exclusion_id, old_path)) = batch.moved.take_exclusion(&meta.file_hash) {
@@ -248,7 +245,7 @@ fn handle_created(
     };
     let ids = resolve_track_context(tx, folder_id, meta, &mut batch.names)?;
 
-    let file_name = file_name_owned(path);
+    let file_name = file_name_of(path);
     let now = melodia_core::utils::now_rfc3339();
     let _new_id = insert_track(tx, &path_str, &file_name, meta, &ids, &now, &mut batch.names)?;
     log::info!("Added new track: {path_str}");
@@ -299,12 +296,11 @@ fn handle_renamed(
     let to_str = to.to_string_lossy().into_owned();
 
     if let Some(track_id) = get_track_id_by_path(tx, &from_str)? {
-        let Some(folder_id) = find_folder_for_path(tx, &to_str)? else {
-            log::debug!("Renamed file not in any library folder, skipping: {}", to.display());
+        let Some(folder_id) = library_folder(tx, to, &to_str, "Renamed")? else {
             return Ok(false);
         };
 
-        let file_name = file_name_owned(to);
+        let file_name = file_name_of(to);
         // Resolved inside this transaction, so the row is there.
         let _repointed =
             update_track_location(tx, track_id, &to_str, &file_name, folder_id, date_modified)?;

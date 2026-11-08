@@ -6,7 +6,10 @@ use rusqlite::{Connection, Transaction};
 use crate::database::queries::search_name;
 use crate::database::queries::track::{columns, missing_ids_on};
 use crate::database::sql::{self, Sql};
-use crate::database::{DbPool, chunked_in_query, select_in_id_order, values_placeholders};
+use crate::database::{
+    CASE_BINDS_PER_ROW, DbPool, MAX_BINDS_PER_STATEMENT, case_by_id, chunked_in_query,
+    chunked_in_statements, placeholders, select_in_id_order, values_placeholders,
+};
 use melodia_core::entities::playlist::{CutItem, PlaylistIdentity, PlaylistItemsCut};
 use melodia_core::entities::undo::{UNDO_HOLD_CAP, UndoCapture};
 use melodia_core::entities::{playlist, track};
@@ -293,7 +296,7 @@ pub(crate) fn insert_items_tx(
     items: &[NewItem<'_>],
 ) -> Result<Vec<i64>, AppError> {
     const COLS_PER_ROW: usize = 4;
-    const CHUNK_SIZE: usize = crate::database::MAX_BINDS_PER_STATEMENT / COLS_PER_ROW;
+    const CHUNK_SIZE: usize = MAX_BINDS_PER_STATEMENT / COLS_PER_ROW;
 
     let mut landed = Vec::with_capacity(items.len());
     for chunk in items.chunks(CHUNK_SIZE) {
@@ -388,19 +391,15 @@ fn cut_rows_tx(
     track_ids: &[i64],
 ) -> Result<Vec<CutItem>, AppError> {
     let mut rows = Vec::with_capacity(track_ids.len());
-    // One bind of each statement is the `playlist_id`.
-    for chunk in track_ids.chunks(crate::database::MAX_BINDS_PER_STATEMENT - 1) {
-        let placeholders = crate::database::placeholders(chunk.len());
-        let mut sql = Sql::trusted(format!(
+    let statements = chunked_in_statements(playlist_id, track_ids, |placeholders| {
+        format!(
             "SELECT track_id, row, added_at FROM (
                 SELECT track_id, added_at, ROW_NUMBER() OVER (ORDER BY position, id) - 1 AS row
                 FROM playlist_items WHERE playlist_id = ?
             ) WHERE track_id IN ({placeholders})"
-        ));
-        sql.bind(playlist_id);
-        for &id in chunk {
-            sql.bind(id);
-        }
+        )
+    });
+    for sql in statements {
         let found: Vec<(i64, i64, String)> = sql.fetch_all(tx)?;
         for (track_id, row, added_at) in found {
             let row = usize::try_from(row).unwrap_or(usize::MAX);
@@ -417,17 +416,11 @@ fn delete_items_tx(
     playlist_id: i64,
     track_ids: &[i64],
 ) -> Result<usize, AppError> {
+    let statements = chunked_in_statements(playlist_id, track_ids, |placeholders| {
+        format!("DELETE FROM playlist_items WHERE playlist_id = ? AND track_id IN ({placeholders})")
+    });
     let mut removed: u64 = 0;
-    // One bind of each statement is the `playlist_id`.
-    for chunk in track_ids.chunks(crate::database::MAX_BINDS_PER_STATEMENT - 1) {
-        let placeholders = crate::database::placeholders(chunk.len());
-        let mut sql = Sql::trusted(format!(
-            "DELETE FROM playlist_items WHERE playlist_id = ? AND track_id IN ({placeholders})"
-        ));
-        sql.bind(playlist_id);
-        for &id in chunk {
-            sql.bind(id);
-        }
+    for sql in statements {
         removed += sql.execute(tx)?;
     }
     Ok(usize::try_from(removed).unwrap_or(usize::MAX))
@@ -519,8 +512,7 @@ pub(crate) fn batch_update_positions_pairs(
     tx: &Transaction<'_>,
     pairs: &[(i64, i32)],
 ) -> Result<(), AppError> {
-    const CHUNK_SIZE: usize =
-        crate::database::MAX_BINDS_PER_STATEMENT / crate::database::CASE_BINDS_PER_ROW;
+    const CHUNK_SIZE: usize = MAX_BINDS_PER_STATEMENT / CASE_BINDS_PER_ROW;
 
     if pairs.is_empty() {
         return Ok(());
@@ -529,8 +521,8 @@ pub(crate) fn batch_update_positions_pairs(
     for chunk in pairs.chunks(CHUNK_SIZE) {
         let mut sql = Sql::trusted(format!(
             "UPDATE playlist_items SET position = {} WHERE id IN ({})",
-            crate::database::case_by_id(chunk.len()),
-            crate::database::placeholders(chunk.len()),
+            case_by_id(chunk.len()),
+            placeholders(chunk.len()),
         ));
         for &(id, pos) in chunk {
             sql.bind(id).bind(pos);

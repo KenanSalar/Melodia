@@ -1,8 +1,7 @@
 use rusqlite::{Connection, Transaction};
 
-use crate::database::DbPool;
 use crate::database::queries::{playlist, scan};
-use crate::database::sql::{self, Sql};
+use crate::database::{DbPool, chunked_in_execute, chunked_in_statements, sql};
 use melodia_core::entities::folder;
 use melodia_core::error::AppError;
 
@@ -65,31 +64,19 @@ pub async fn absorb_folders(db: &DbPool, parent_id: i64, ids: &[i64]) -> Result<
     if ids.is_empty() {
         return Ok(());
     }
-    let mut statements = Vec::new();
-    // One bind of each budget goes to the parent's id.
-    for chunk in ids.chunks(crate::database::MAX_BINDS_PER_STATEMENT - 1) {
-        let placeholders = crate::database::placeholders(chunk.len());
-        for table in ["tracks", "excluded_files"] {
-            let mut repoint = Sql::trusted(format!(
-                "UPDATE {table} SET folder_id = ? WHERE folder_id IN ({placeholders})"
-            ));
-            repoint.bind(parent_id);
-            for &id in chunk {
-                repoint.bind(id);
-            }
-            statements.push(repoint);
-        }
-
-        let mut delete = Sql::trusted(format!("DELETE FROM folders WHERE id IN ({placeholders})"));
-        for &id in chunk {
-            delete.bind(id);
-        }
-        statements.push(delete);
-    }
+    let ids = ids.to_vec();
     db.transaction(move |tx| {
-        for statement in statements {
-            statement.execute(tx)?;
+        for table in ["tracks", "excluded_files"] {
+            let repoints = chunked_in_statements(parent_id, &ids, |placeholders| {
+                format!("UPDATE {table} SET folder_id = ? WHERE folder_id IN ({placeholders})")
+            });
+            for repoint in repoints {
+                repoint.execute(tx)?;
+            }
         }
+        chunked_in_execute(tx, &ids, |placeholders| {
+            format!("DELETE FROM folders WHERE id IN ({placeholders})")
+        })?;
         Ok(())
     })
     .await

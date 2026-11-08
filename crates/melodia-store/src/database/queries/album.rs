@@ -4,7 +4,10 @@ use rusqlite::Transaction;
 
 use crate::database::rows::by_name;
 use crate::database::sql::{self, Sql};
-use crate::database::{DbPool, chunked_in_query, select_in_id_order};
+use crate::database::{
+    DbPool, MAX_BINDS_PER_STATEMENT, chunked_in_query, chunked_in_statements, placeholders,
+    select_in_id_order,
+};
 use melodia_core::entities::{album, tags};
 use melodia_core::error::AppError;
 
@@ -90,9 +93,11 @@ pub(crate) fn set_album_artwork(
     album_ids: &[i64],
     artwork_path: Option<&str>,
 ) -> Result<(), AppError> {
-    for chunk in album_ids.chunks(crate::database::IDS_PER_SET) {
-        crate::database::set_where_id_in("UPDATE albums SET artwork_path = ?", artwork_path, chunk)
-            .execute(tx)?;
+    let updates = chunked_in_statements(artwork_path, album_ids, |placeholders| {
+        format!("UPDATE albums SET artwork_path = ? WHERE id IN ({placeholders})")
+    });
+    for update in updates {
+        update.execute(tx)?;
     }
     Ok(())
 }
@@ -111,8 +116,8 @@ pub(crate) fn clear_release_tags(
         return Ok(());
     }
     // Reserve the seven flag binds.
-    for chunk in album_ids.chunks(crate::database::MAX_BINDS_PER_STATEMENT - 7) {
-        let placeholders = crate::database::placeholders(chunk.len());
+    for chunk in album_ids.chunks(MAX_BINDS_PER_STATEMENT - 7) {
+        let id_list = placeholders(chunk.len());
         let mut sql = Sql::trusted(format!(
             "UPDATE albums SET
                  label = CASE WHEN ? THEN NULL ELSE label END,
@@ -122,7 +127,7 @@ pub(crate) fn clear_release_tags(
                  release_type = CASE WHEN ? THEN NULL ELSE release_type END,
                  release_country = CASE WHEN ? THEN NULL ELSE release_country END,
                  is_compilation = CASE WHEN ? THEN FALSE ELSE is_compilation END
-             WHERE id IN ({placeholders})"
+             WHERE id IN ({id_list})"
         ));
         sql.bind(cleared.label)
             .bind(cleared.catalog_number)

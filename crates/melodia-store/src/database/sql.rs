@@ -68,6 +68,18 @@ pub(crate) fn fetch_each<T: FromRow>(
     Ok(())
 }
 
+/// Escapes `%`, `_` and `\` for a `LIKE ? ESCAPE '\'` pattern.
+pub(crate) fn escape_like(s: &str) -> String {
+    let mut out = String::with_capacity(s.len() + 2);
+    for ch in s.chars() {
+        if matches!(ch, '\\' | '%' | '_') {
+            out.push('\\');
+        }
+        out.push(ch);
+    }
+    out
+}
+
 /// A statement and the values bound to its `?`s, in order.
 pub(crate) struct Sql {
     text: Cow<'static, str>,

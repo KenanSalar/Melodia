@@ -35,11 +35,11 @@ paths:
 
 ## Query shape
 
-- **`database::placeholders(n)` builds every IN list**, paired with `chunked_in_query`, and
-  `chunked_in_execute_on` for a statement that returns no rows; never re-roll `repeat_n("?", n)`,
-  or the chunk loop for a statement binding only its list (`ingest::load_existing` excepted, its
-  doc says why). A per-row UPDATE is one chunked CTE statement per batch, its `VALUES` list from
-  `values_placeholders`.
+- **`database::placeholders(n)` builds every IN list**, paired with `chunked_in_query`,
+  `chunked_in_execute` for a statement that returns no rows, and `chunked_in_statements` for one
+  binding a value ahead of its list; never re-roll `repeat_n("?", n)`, or the chunk loop for any of
+  those three shapes (`ingest::load_existing` excepted, its doc says why). A per-row UPDATE is one
+  chunked CTE statement per batch, its `VALUES` list from `values_placeholders`.
 - **Nothing outside the FTS migrations and `search_tests` names a shadow table**
   (`tracks_fts_{data,idx,docsize,config}`), fts5's private storage.
 - **A statement writing title, artist, album artist, album or genre writes `search_text` beside

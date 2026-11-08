@@ -3,8 +3,7 @@
 
 use rusqlite::Transaction;
 
-use crate::database::sql::{self, Sql};
-use crate::database::{DbPool, IDS_PER_SET, placeholders};
+use crate::database::{DbPool, chunked_in_statements, sql};
 use melodia_core::entities::duplicates::DismissalSet;
 use melodia_core::error::AppError;
 
@@ -19,17 +18,14 @@ fn insert_set(tx: &Transaction<'_>, track_ids: &[i64]) -> Result<DismissalSet, A
     let set: DismissalSet =
         sql::fetch_one(tx, "SELECT COALESCE(MAX(set_id), 0) + 1 FROM duplicate_dismissals", ())?;
 
-    for chunk in track_ids.chunks(IDS_PER_SET) {
-        let mut sql = Sql::trusted(format!(
+    let inserts = chunked_in_statements(set, track_ids, |placeholders| {
+        format!(
             "INSERT OR REPLACE INTO duplicate_dismissals (track_id, set_id) \
-             SELECT id, ? FROM tracks WHERE id IN ({})",
-            placeholders(chunk.len())
-        ));
-        sql.bind(set);
-        for &id in chunk {
-            sql.bind(id);
-        }
-        sql.execute(tx)?;
+             SELECT id, ? FROM tracks WHERE id IN ({placeholders})"
+        )
+    });
+    for insert in inserts {
+        insert.execute(tx)?;
     }
     Ok(set)
 }
