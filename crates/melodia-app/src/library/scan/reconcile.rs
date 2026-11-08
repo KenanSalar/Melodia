@@ -42,11 +42,18 @@ static PASS: Mutex<PassState> = Mutex::new(PassState::Idle);
 
 enum PassState {
     Idle,
-    Running {
-        /// A library-wide pass asked for while this one ran. A narrower round doesn't read the
-        /// folders that request is for, so it runs one next rather than dropping it.
-        library_owed: bool,
-    },
+    Running(Owed),
+}
+
+/// What the requests that merged into a running pass are still waiting for.
+#[derive(Default, Clone, Copy)]
+struct Owed {
+    /// A library-wide pass asked for while this one ran. A narrower round doesn't read the folders
+    /// that request is for, so it runs one next rather than dropping it.
+    library: bool,
+    /// A directory moved while this one ran. A walk already past it never sees the move, so even a
+    /// full round is followed by one that starts after it.
+    rewalk: bool,
 }
 
 /// This task's hold on a pass lock, let go on any way out, a panic included.
@@ -58,21 +65,33 @@ struct PassClaim<'a> {
 impl<'a> PassClaim<'a> {
     /// Claims `pass`, or merges `reach` into the pass holding it.
     fn take(pass: &'a Mutex<PassState>, reach: Reach) -> Option<Self> {
+        Self::claim_or_merge(pass, |owed| owed.library |= reach == Reach::Library)
+    }
+
+    /// Claims `pass`, or leaves the pass holding it owing a round that starts after this call.
+    fn take_for_rewalk(pass: &'a Mutex<PassState>) -> Option<Self> {
+        Self::claim_or_merge(pass, |owed| owed.rewalk = true)
+    }
+
+    fn claim_or_merge(pass: &'a Mutex<PassState>, merge: impl FnOnce(&mut Owed)) -> Option<Self> {
         let mut state = pass.lock();
-        if let PassState::Running { library_owed } = &mut *state {
-            *library_owed |= reach == Reach::Library;
+        if let PassState::Running(owed) = &mut *state {
+            merge(owed);
             return None;
         }
-        *state = PassState::Running { library_owed: false };
+        *state = PassState::Running(Owed::default());
         Some(Self { pass, held: true })
     }
 
     /// The round owed after one over `finished`, letting go under the same lock when none is.
     fn next_round(&mut self, finished: Reach) -> Option<Reach> {
         let mut state = self.pass.lock();
-        let owed = matches!(*state, PassState::Running { library_owed: true });
-        if owed && finished != Reach::Library {
-            *state = PassState::Running { library_owed: false };
+        let owed = match *state {
+            PassState::Running(owed) => owed,
+            PassState::Idle => Owed::default(),
+        };
+        if owed.rewalk || (owed.library && finished != Reach::Library) {
+            *state = PassState::Running(Owed::default());
             return Some(Reach::Library);
         }
         *state = PassState::Idle;
@@ -95,11 +114,20 @@ impl Drop for PassClaim<'_> {
 /// Sequential per folder, `SQLite` having one writer and the scan progress one `watch` slot. One
 /// token for the whole pass, so a cancel stops the folders still to come too.
 ///
-/// A call while a pass runs merges into it. A full pass still reads the latest files, but its
-/// artwork repair ran at its start, so a cover gone since waits for the next scan entry; a narrower
-/// pass runs again over the whole library once it ends.
+/// A call while a pass runs merges into it. A full pass answers with what it has yet to walk, and
+/// its artwork repair ran at its start, so a cover gone since waits for the next scan entry; a
+/// narrower pass runs again over the whole library once it ends.
 pub fn reconcile_watched_folders(state: &AppState) {
     start(state, Reach::Library, None);
+}
+
+/// [`reconcile_watched_folders`] for a directory the watcher saw move: the event is all there is of
+/// the change, so a running pass owes a round that starts after this call, whatever its reach.
+pub fn reconcile_after_directory_rename(state: &AppState) {
+    match PassClaim::take_for_rewalk(&PASS) {
+        Some(claim) => run_pass(state, claim, Reach::Library, None),
+        None => log::debug!("reconcile_after_directory_rename: already in flight, owed a round"),
+    }
 }
 
 /// Finishes the imports a quit cut short: the launch's pass when watching is off.
@@ -110,10 +138,19 @@ pub fn finish_interrupted_imports(state: &AppState) {
 /// Starts a pass over the folders `reach` covers, holding up a restore notice a scan has already
 /// raised until it ends.
 pub(super) fn start(state: &AppState, reach: Reach, restoring: Option<RestoreNotice>) {
-    let Some(mut claim) = PassClaim::take(&PASS, reach) else {
+    let Some(claim) = PassClaim::take(&PASS, reach) else {
         log::debug!("reconcile_watched_folders: already in flight, merging into it");
         return;
     };
+    run_pass(state, claim, reach, restoring);
+}
+
+fn run_pass(
+    state: &AppState,
+    mut claim: PassClaim<'static>,
+    reach: Reach,
+    restoring: Option<RestoreNotice>,
+) {
     let spawner = TaskSpawner::from_state(state);
     let state = state.clone();
     let cancel = state.scan.token();

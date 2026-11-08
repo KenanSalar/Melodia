@@ -84,6 +84,37 @@ fn a_round_widened_to_the_library_settles_what_it_was_owed() -> Result<(), AppEr
     Ok(())
 }
 
+/// A walk already past the directory never sees it move, and the watcher reports the move once.
+#[test]
+fn a_directory_rename_during_a_full_round_is_owed_another() -> Result<(), AppError> {
+    let pass = idle();
+    let mut running = claim(&pass, Reach::Library)?;
+    let _merged = PassClaim::take_for_rewalk(&pass);
+
+    assert_eq!(running.next_round(Reach::Library), Some(Reach::Library));
+    Ok(())
+}
+
+/// One round starting after every rename that merged answers them all.
+#[test]
+fn the_round_after_a_directory_rename_settles_it() -> Result<(), AppError> {
+    let pass = idle();
+    let mut running = claim(&pass, Reach::Library)?;
+    let _first = PassClaim::take_for_rewalk(&pass);
+    let _second = PassClaim::take_for_rewalk(&pass);
+    running.next_round(Reach::Library);
+
+    assert_eq!(running.next_round(Reach::Library), None);
+    Ok(())
+}
+
+#[test]
+fn a_directory_rename_with_no_pass_running_starts_one() {
+    let pass = idle();
+
+    assert!(PassClaim::take_for_rewalk(&pass).is_some());
+}
+
 /// The owed round runs under the same claim, so a request arriving during it merges rather than
 /// starting a pass beside it.
 #[test]

@@ -192,6 +192,9 @@ pub(crate) fn ingest_scanned_files(
     let existing_tracks = load_existing(tx, scanned_files)?;
     let kept_out = kept_out(tx, source, scanned_files)?;
     let mut moved_from = resolve_move_candidates(tx, scanned_files, &existing_tracks, pool)?;
+    if !source.keeps_out_excluded() {
+        moved_from.forget_exclusions();
+    }
     let mut inserts = InsertBuffer::new(scanned_files.len(), scan_timestamp);
     let mut moved_count: u32 = 0;
     let mut updated_count: u32 = 0;
@@ -259,8 +262,7 @@ pub(crate) fn ingest_scanned_files(
             continue;
         }
 
-        if source.keeps_out_excluded()
-            && let Some((exclusion_id, old_path)) = moved_from.take_exclusion(&meta.file_hash)
+        if let Some((exclusion_id, old_path)) = moved_from.take_exclusion(&meta.file_hash)
             && let Some(folder_id) =
                 resolve_folder_id(tx, source, file, file_path_str, &mut caches.folder)?
         {

@@ -66,6 +66,14 @@ async fn track_count(db: &DbPool) -> Result<i64, AppError> {
     db.read(|conn| sql::fetch_one(conn, "SELECT COUNT(*) FROM tracks", ())).await
 }
 
+async fn rating_at(db: &DbPool, path: &Path) -> Result<i32, AppError> {
+    let path = path.to_string_lossy().into_owned();
+    db.read(move |conn| {
+        sql::fetch_one(conn, "SELECT rating FROM tracks WHERE file_path = ?", (path,))
+    })
+    .await
+}
+
 /// A batch whose one move candidate is the row `id`, last seen at `vanished`.
 fn batch_with_candidate(hash: &str, id: i64, vanished: &Path) -> Batch {
     let candidate = (id, vanished.to_string_lossy().into_owned());
@@ -199,6 +207,40 @@ async fn a_created_file_matching_a_vanished_row_repoints_it_once() -> Result<(),
     assert!(batch.moved.tracks.is_empty(), "a consumed candidate must not re-point a second file");
     assert_eq!(track_id_at(&db, &moved).await?, Some(id), "the move keeps the original row");
     assert_eq!(track_count(&db).await?, 2, "the twin is a new file, not the same one again");
+    Ok(())
+}
+
+/// Met in reverse id order, so each file has to find its own row, and spending one has to leave
+/// the other. The rating proves it, a fresh insert having none.
+#[tokio::test]
+async fn each_twin_in_a_batch_takes_the_row_with_its_name() -> Result<(), AppError> {
+    let tmp = TempDir::new()?;
+    let db = seed_folder(tmp.path()).await?;
+    let (old_a, old_b) =
+        (tmp.path().join("old").join("a.mp3"), tmp.path().join("old").join("b.mp3"));
+    let (old_a, old_b) =
+        (old_a.to_string_lossy().into_owned(), old_b.to_string_lossy().into_owned());
+    let first = insert_test_track(&db, &old_a, "Twin", "Artist A", "Album One", "Rock").await?;
+    let second = insert_test_track(&db, &old_b, "Twin", "Artist A", "Album One", "Rock").await?;
+    queries::track::set_rating(&db, &[first], 3).await?;
+    queries::track::set_rating(&db, &[second], 5).await?;
+    let meta = make_test_metadata("Twin");
+    let mut moved = MoveCandidates::default();
+    moved.tracks.insert(meta.file_hash.clone(), vec![(first, old_a), (second, old_b)]);
+    let mut batch = Batch { moved, ..Batch::default() };
+    let (new_a, new_b) = (tmp.path().join("a.mp3"), tmp.path().join("b.mp3"));
+
+    db.transaction({
+        let (new_a, new_b) = (new_a.clone(), new_b.clone());
+        move |tx| {
+            handle_created(tx, &new_b, &meta, &mut batch)?;
+            handle_created(tx, &new_a, &meta, &mut batch)
+        }
+    })
+    .await?;
+
+    let ratings = (rating_at(&db, &new_a).await?, rating_at(&db, &new_b).await?);
+    assert_eq!(ratings, (3, 5), "(a, b)");
     Ok(())
 }
 

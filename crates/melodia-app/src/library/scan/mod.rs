@@ -15,7 +15,9 @@ mod reconcile;
 mod repair;
 mod run;
 
-pub use reconcile::{finish_interrupted_imports, reconcile_watched_folders};
+pub use reconcile::{
+    finish_interrupted_imports, reconcile_after_directory_rename, reconcile_watched_folders,
+};
 pub use repair::restore_missing_artwork;
 
 use std::path::{Path, PathBuf};

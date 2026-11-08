@@ -854,6 +854,156 @@ async fn a_moved_keeper_beside_its_kept_out_twin_takes_its_own_row_back() -> Res
     Ok(())
 }
 
+/// The kept-out name is met first, and the lowest id handed to it would leave the keeper kept out.
+#[tokio::test]
+async fn a_kept_out_twin_moved_with_its_keeper_stays_the_one_kept_out() -> Result<(), AppError> {
+    let db = music_library().await?;
+    let keeper =
+        insert_test_track(&db, "/music/old/keep.mp3", "Song", "Art", "Alb", "Rock").await?;
+    queries::track::set_rating(&db, &[keeper], 5).await?;
+    let bytes = make_test_metadata("Song").file_hash;
+    keep_out(&db, "/music/old/dup.mp3", &bytes).await?;
+    let moved = vec![
+        make_scanned_file_with_hash("/music/new/dup.mp3", "Song", &bytes),
+        make_scanned_file_with_hash("/music/new/keep.mp3", "Song", &bytes),
+    ];
+
+    folder_scan(&db, moved).await?;
+
+    assert_eq!(rating_at(&db, "/music/new/keep.mp3").await?, 5);
+    assert_eq!(kept_out_paths(&db).await?, ["/music/new/dup.mp3"]);
+    Ok(())
+}
+
+/// The kept-out file is scanned at its own spelling, which is no respelling, so its exclusion
+/// isn't there for the new copy to take.
+#[cfg(any(target_os = "windows", target_os = "macos"))]
+#[tokio::test]
+async fn a_new_copy_beside_a_kept_out_file_leaves_its_exclusion_alone() -> Result<(), AppError> {
+    let tmp = tempfile::tempdir()?;
+    let db = DbPool::test_pool().await?;
+    queries::folder::insert_folder(&db, &tmp.path().to_string_lossy(), true).await?;
+    let (spare, copy) = (tmp.path().join("spare.flac"), tmp.path().join("copy.flac"));
+    std::fs::write(&spare, b"audio")?;
+    std::fs::write(&copy, b"audio")?;
+    let bytes = make_test_metadata("Song").file_hash;
+    keep_out(&db, &spare.to_string_lossy(), &bytes).await?;
+    let files = vec![
+        ScannedFile { path: copy, metadata: make_test_metadata("Song") },
+        ScannedFile { path: spare.clone(), metadata: make_test_metadata("Song") },
+    ];
+
+    let result = folder_scan(&db, files).await?;
+
+    assert_eq!(result.inserted_count, 1, "the copy is a track of its own");
+    assert_eq!(kept_out_paths(&db).await?, [spare.to_string_lossy().into_owned()]);
+    Ok(())
+}
+
+// === Rows sharing a file's bytes ===
+
+async fn rating_at(db: &DbPool, path: &str) -> Result<i32, AppError> {
+    let path = path.to_owned();
+    db.read(move |conn| {
+        sql::fetch_one(conn, "SELECT rating FROM tracks WHERE file_path = ?", (path,))
+    })
+    .await
+}
+
+/// Met in reverse id order, so handing out the lowest id gives each twin the other's history.
+#[tokio::test]
+async fn twins_moved_together_each_keep_their_own_history() -> Result<(), AppError> {
+    let db = music_library().await?;
+    let first = insert_test_track(&db, "/music/old/a.mp3", "Song", "Art", "Alb", "Rock").await?;
+    let second = insert_test_track(&db, "/music/old/b.mp3", "Song", "Art", "Alb", "Rock").await?;
+    queries::track::set_rating(&db, &[first], 3).await?;
+    queries::track::set_rating(&db, &[second], 5).await?;
+    let bytes = make_test_metadata("Song").file_hash;
+    let moved = vec![
+        make_scanned_file_with_hash("/music/new/b.mp3", "Song", &bytes),
+        make_scanned_file_with_hash("/music/new/a.mp3", "Song", &bytes),
+    ];
+
+    folder_scan(&db, moved).await?;
+
+    let a = rating_at(&db, "/music/new/a.mp3").await?;
+    let b = rating_at(&db, "/music/new/b.mp3").await?;
+    assert_eq!((a, b), (3, 5), "(a, b)");
+    Ok(())
+}
+
+/// The lowest id belongs to the twin left behind, so only a look at every row finds the one that
+/// moved.
+#[tokio::test]
+async fn a_twin_that_moved_takes_its_row_from_beside_one_that_stayed() -> Result<(), AppError> {
+    let tmp = tempfile::tempdir()?;
+    let db = DbPool::test_pool().await?;
+    queries::folder::insert_folder(&db, &tmp.path().to_string_lossy(), true).await?;
+    let (stayed, vanished) = (tmp.path().join("stayed.flac"), tmp.path().join("gone.flac"));
+    let arrived = tmp.path().join("arrived.flac");
+    std::fs::write(&stayed, b"audio")?;
+    std::fs::write(&arrived, b"audio")?;
+    insert_test_track(&db, &stayed.to_string_lossy(), "Song", "Art", "Alb", "Rock").await?;
+    let moved =
+        insert_test_track(&db, &vanished.to_string_lossy(), "Song", "Art", "Alb", "Rock").await?;
+    queries::track::set_rating(&db, &[moved], 5).await?;
+    let file = ScannedFile { path: arrived.clone(), metadata: make_test_metadata("Song") };
+
+    folder_scan(&db, vec![file]).await?;
+
+    assert_eq!(rating_at(&db, &arrived.to_string_lossy()).await?, 5);
+    Ok(())
+}
+
+/// A drive gone offline moved nothing, and handing its row to a copy of the twin still on disk
+/// would leave the drive's own file with no history once it returns.
+#[tokio::test]
+async fn a_copy_of_a_present_twin_leaves_the_row_on_an_offline_folder_alone() -> Result<(), AppError>
+{
+    let tmp = tempfile::tempdir()?;
+    let db = DbPool::test_pool().await?;
+    let (local, offline) = (tmp.path().join("local"), tmp.path().join("offline"));
+    queries::folder::insert_folder(&db, &local.to_string_lossy(), true).await?;
+    queries::folder::insert_folder(&db, &offline.to_string_lossy(), true).await?;
+    std::fs::create_dir(&local)?;
+    let (present, copy) = (local.join("song.flac"), local.join("copy.flac"));
+    std::fs::write(&present, b"audio")?;
+    std::fs::write(&copy, b"audio")?;
+    insert_test_track(&db, &present.to_string_lossy(), "Song", "Art", "Alb", "Rock").await?;
+    let on_offline = offline.join("song.flac").to_string_lossy().into_owned();
+    let row = insert_test_track(&db, &on_offline, "Song", "Art", "Alb", "Rock").await?;
+    let file = ScannedFile { path: copy, metadata: make_test_metadata("Song") };
+
+    let result = folder_scan(&db, vec![file]).await?;
+
+    assert_eq!((result.inserted_count, result.moved_count), (1, 0), "(inserted, moved)");
+    assert_eq!(path_of(&db, row).await?, on_offline);
+    Ok(())
+}
+
+/// With no twin on disk a missing folder reads as moved, which is what lets a library folder moved
+/// on disk and added back keep its history.
+#[tokio::test]
+async fn a_library_folder_moved_and_added_back_keeps_its_history() -> Result<(), AppError> {
+    let tmp = tempfile::tempdir()?;
+    let db = DbPool::test_pool().await?;
+    let (added_back, moved_away) = (tmp.path().join("new"), tmp.path().join("old"));
+    queries::folder::insert_folder(&db, &added_back.to_string_lossy(), true).await?;
+    queries::folder::insert_folder(&db, &moved_away.to_string_lossy(), true).await?;
+    std::fs::create_dir(&added_back)?;
+    let arrived = added_back.join("song.flac");
+    std::fs::write(&arrived, b"audio")?;
+    let old = moved_away.join("song.flac").to_string_lossy().into_owned();
+    let row = insert_test_track(&db, &old, "Song", "Art", "Alb", "Rock").await?;
+    queries::track::set_rating(&db, &[row], 5).await?;
+    let file = ScannedFile { path: arrived.clone(), metadata: make_test_metadata("Song") };
+
+    folder_scan(&db, vec![file]).await?;
+
+    assert_eq!(rating_at(&db, &arrived.to_string_lossy()).await?, 5);
+    Ok(())
+}
+
 /// Left at the old spelling, the exclusion stops matching and the duplicate the user removed comes
 /// back as a track.
 #[cfg(any(target_os = "windows", target_os = "macos"))]

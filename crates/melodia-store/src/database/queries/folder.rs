@@ -1,4 +1,4 @@
-use rusqlite::Transaction;
+use rusqlite::{Connection, Transaction};
 
 use crate::database::DbPool;
 use crate::database::queries::{playlist, scan};
@@ -27,6 +27,10 @@ pub async fn insert_folder(
 
 pub async fn get_all_folders(db: &DbPool) -> Result<Vec<folder::Folder>, AppError> {
     db.read(|conn| sql::fetch_all(conn, "SELECT * FROM folders", ())).await
+}
+
+pub(crate) fn paths_on(conn: &Connection) -> Result<Vec<String>, AppError> {
+    sql::fetch_all(conn, "SELECT path FROM folders", ())
 }
 
 pub async fn get_folder_by_id(db: &DbPool, id: i64) -> Result<folder::Folder, AppError> {

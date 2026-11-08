@@ -98,7 +98,7 @@ pub fn spawn(spawner: &TaskSpawner, state: &AppState, mut rx: mpsc::Receiver<Fil
                 }
                 BatchPlan::Reconcile => {
                     log::info!("A directory holding audio was renamed, reconciling the library");
-                    crate::library::scan::reconcile_watched_folders(&state);
+                    crate::library::scan::reconcile_after_directory_rename(&state);
                 }
                 BatchPlan::Process(batch) => {
                     log::info!("Processing batch of {} file events", batch.len());
