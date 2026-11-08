@@ -112,7 +112,7 @@ where
 }
 
 /// Ids per statement that binds one value ahead of its id list.
-pub(crate) const IDS_PER_SET: usize = MAX_BINDS_PER_STATEMENT - 1;
+pub(crate) const IDS_AFTER_HEAD: usize = MAX_BINDS_PER_STATEMENT - 1;
 
 /// For a statement that binds nothing ahead of its list, the head's type being arbitrary.
 const NO_HEAD: Option<i64> = None;
@@ -126,7 +126,7 @@ where
     H: Copy + Into<Param>,
     B: Clone + Into<Param>,
 {
-    let per_statement = if head.is_some() { IDS_PER_SET } else { MAX_BINDS_PER_STATEMENT };
+    let per_statement = if head.is_some() { IDS_AFTER_HEAD } else { MAX_BINDS_PER_STATEMENT };
     items.chunks(per_statement).map(move |chunk| {
         let mut sql = Sql::trusted(build_sql(&placeholders(chunk.len())));
         if let Some(head) = head {

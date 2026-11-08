@@ -1,7 +1,7 @@
 use std::collections::HashSet;
 
 use crate::database::DbPool;
-use crate::database::bulk::IDS_PER_SET;
+use crate::database::bulk::IDS_AFTER_HEAD;
 use crate::database::queries;
 use crate::database::queries::fixtures::*;
 use crate::database::sql::{self, Sql};
@@ -507,7 +507,7 @@ async fn set_rating_empty_ids_is_noop() -> Result<(), AppError> {
 /// loop that ran only its first would leave the last track unrated.
 #[tokio::test]
 async fn set_rating_rates_every_id_past_one_statements_budget() -> Result<(), AppError> {
-    let tracks = IDS_PER_SET + 1;
+    let tracks = IDS_AFTER_HEAD + 1;
     let (db, ids) = numbered_library(tracks).await?;
 
     queries::track::set_rating(&db, &ids, 4).await?;
