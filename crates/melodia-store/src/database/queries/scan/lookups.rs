@@ -22,19 +22,20 @@ pub(crate) fn track_exists_by_path(
 ///
 /// **The separator is bound, never spelled**: a Windows folder is `C:\Music`, and a hardcoded `/`
 /// answers `None` for every file there, which callers read as outside the library. `/` is
-/// compared too, Win32 accepting it and playlists and URIs carrying it. Only the boundary
-/// separator is asked, so three shapes still miss: a path spelled with `/` throughout against a
-/// `\` folder, a root folder already ending in a separator, and a case difference, `SQLite`
-/// comparing bytes.
+/// compared too, Win32 accepting it and playlists and URIs carrying it. A root folder already ends
+/// in a separator, so it is trimmed before one is compared. Only the boundary separator is asked,
+/// so two shapes still miss: a path spelled with `/` throughout against a `\` folder, and a case
+/// difference, `SQLite` comparing bytes.
 pub(crate) fn find_folder_for_path(
     tx: &Transaction<'_>,
     file_path: &str,
 ) -> Result<Option<i64>, AppError> {
     sql::fetch_optional(
         tx,
-        "SELECT id FROM folders WHERE is_enabled \
-         AND SUBSTR(?, 1, LENGTH(path) + 1) IN (path || '/', path || ?) \
-         ORDER BY LENGTH(path) DESC LIMIT 1",
+        "WITH enabled AS (SELECT id, RTRIM(path, '/' || ?2) AS dir FROM folders WHERE is_enabled) \
+         SELECT id FROM enabled \
+         WHERE SUBSTR(?1, 1, LENGTH(dir) + 1) IN (dir || '/', dir || ?2) \
+         ORDER BY LENGTH(dir) DESC LIMIT 1",
         (file_path, std::path::MAIN_SEPARATOR_STR),
     )
 }

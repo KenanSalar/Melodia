@@ -466,6 +466,61 @@ async fn find_folder_for_path_matches_a_native_separator() -> Result<(), AppErro
     Ok(())
 }
 
+/// A root folder's path already ends in the separator, and one more matched nothing, so the
+/// watcher skipped every file in that library and an import filed itself as a new folder.
+#[tokio::test]
+async fn find_folder_for_path_matches_a_file_under_a_root() -> Result<(), AppError> {
+    use std::path::MAIN_SEPARATOR_STR as SEP;
+
+    let cases = [
+        (format!("E:{SEP}"), format!("E:{SEP}song.mp3")),
+        (format!("E:{SEP}"), format!("E:{SEP}sub{SEP}song.mp3")),
+        (SEP.to_owned(), format!("{SEP}sub{SEP}song.mp3")),
+    ];
+    for (root, file) in cases {
+        let db = DbPool::test_pool().await?;
+        let folder = queries::folder::insert_folder(&db, &root, true).await?;
+        let asked = file.clone();
+
+        let found =
+            db.transaction(move |tx| queries::scan::find_folder_for_path(tx, &asked)).await?;
+
+        assert_eq!(found, Some(folder.id), "{file:?} under {root:?}");
+    }
+    Ok(())
+}
+
+/// A root's prefix is every file on its drive, so a library folder inside it has to win. The root
+/// is seeded first, so a read in table order finds the wrong one.
+#[tokio::test]
+async fn find_folder_for_path_prefers_a_folder_inside_a_root() -> Result<(), AppError> {
+    use std::path::MAIN_SEPARATOR_STR as SEP;
+
+    let db = DbPool::test_pool().await?;
+    queries::folder::insert_folder(&db, &format!("E:{SEP}"), true).await?;
+    let inner = queries::folder::insert_folder(&db, &format!("E:{SEP}Music"), true).await?;
+    let song = format!("E:{SEP}Music{SEP}song.mp3");
+
+    let found = db.transaction(move |tx| queries::scan::find_folder_for_path(tx, &song)).await?;
+
+    assert_eq!(found, Some(inner.id));
+    Ok(())
+}
+
+#[tokio::test]
+async fn find_folder_for_path_keeps_a_root_to_its_own_drive() -> Result<(), AppError> {
+    use std::path::MAIN_SEPARATOR_STR as SEP;
+
+    let db = DbPool::test_pool().await?;
+    queries::folder::insert_folder(&db, &format!("E:{SEP}"), true).await?;
+    let song = format!("F:{SEP}song.mp3");
+
+    let found = db.transaction(move |tx| queries::scan::find_folder_for_path(tx, &song)).await?;
+
+    assert_eq!(found, None);
+    Ok(())
+}
+
 #[tokio::test]
 async fn find_folder_for_path_matches_nested() -> Result<(), AppError> {
     let db = DbPool::test_pool().await?;
