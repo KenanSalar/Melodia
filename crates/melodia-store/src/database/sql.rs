@@ -101,7 +101,7 @@ impl Sql {
 
     /// Text built at runtime that the caller vouches holds structure only: placeholder lists,
     /// column projections, order clauses. A value goes through [`Self::bind`] instead.
-    pub(crate) fn trusted(text: String) -> Self {
+    pub(crate) fn vouched(text: String) -> Self {
         Self { text: Cow::Owned(text), params: Vec::new() }
     }
 
@@ -110,8 +110,8 @@ impl Sql {
         self
     }
 
-    /// [`Self::trusted`] for a fragment.
-    pub(crate) fn push_trusted(&mut self, text: &str) -> &mut Self {
+    /// [`Self::vouched`] for a fragment.
+    pub(crate) fn push_vouched(&mut self, text: &str) -> &mut Self {
         self.text.to_mut().push_str(text);
         self
     }

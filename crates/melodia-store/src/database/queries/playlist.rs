@@ -300,7 +300,7 @@ pub(crate) fn insert_items_tx(
 
     let mut landed = Vec::with_capacity(items.len());
     for chunk in items.chunks(CHUNK_SIZE) {
-        let mut sql = Sql::trusted(format!(
+        let mut sql = Sql::vouched(format!(
             "INSERT OR IGNORE INTO playlist_items (playlist_id, track_id, position, added_at) \
              VALUES {} RETURNING track_id",
             values_placeholders(chunk.len(), COLS_PER_ROW)
@@ -519,7 +519,7 @@ pub(crate) fn batch_update_positions_pairs(
     }
 
     for chunk in pairs.chunks(CHUNK_SIZE) {
-        let mut sql = Sql::trusted(format!(
+        let mut sql = Sql::vouched(format!(
             "UPDATE playlist_items SET position = {} WHERE id IN ({})",
             case_by_id(chunk.len()),
             placeholders(chunk.len()),

@@ -223,7 +223,7 @@ fn write_keepers(tx: &Transaction<'_>, keepers: &[(i64, History)]) -> Result<(),
     const COLS_PER_ROW: usize = 7;
     for chunk in keepers.chunks(MAX_BINDS_PER_STATEMENT / COLS_PER_ROW) {
         let rows = values_placeholders(chunk.len(), COLS_PER_ROW);
-        let mut sql = Sql::trusted(format!(
+        let mut sql = Sql::vouched(format!(
             "WITH v(id, is_favorite, rating, play_count, skip_count, last_played, date_added) \
                  AS (VALUES {rows}) \
              UPDATE tracks SET is_favorite = v.is_favorite, rating = v.rating, \

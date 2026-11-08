@@ -44,7 +44,7 @@ pub(crate) async fn backfill_folded<R: FoldedInputs>(
     let mut after_id = 0_i64;
     let mut written = 0;
     loop {
-        let mut select = Sql::trusted(page_select.clone());
+        let mut select = Sql::vouched(page_select.clone());
         select.bind(after_id).bind(page_limit);
         let page: Vec<R> = db.read(move |conn| select.fetch_all(conn)).await?;
         let Some(last) = page.last() else {
@@ -60,7 +60,7 @@ fn fill_folded_page<R: FoldedInputs>(
     target: FoldedColumn,
     page: &[R],
 ) -> Result<u64, AppError> {
-    let mut update = Sql::trusted(format!(
+    let mut update = Sql::vouched(format!(
         "UPDATE {table} SET {column} = {case} WHERE id IN ({ids}) AND {column} = ''",
         table = target.table,
         column = target.column,

@@ -197,7 +197,7 @@ async fn ids(
     if let Some(group_by) = grid.group_by {
         sql.push(" GROUP BY ").push(group_by);
     }
-    sql.push(" ORDER BY ").push_trusted(&order_by(keys, grid.id, dir));
+    sql.push(" ORDER BY ").push_vouched(&order_by(keys, grid.id, dir));
     db.read(move |conn| sql.fetch_all(conn)).await
 }
 

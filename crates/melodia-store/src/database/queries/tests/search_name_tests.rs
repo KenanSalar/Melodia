@@ -74,7 +74,7 @@ async fn search_names(db: &DbPool) -> Result<Vec<(String, i64, String)>, AppErro
 async fn blank_every_search_name(db: &DbPool) -> Result<(), AppError> {
     db.write(|conn| {
         for table in ["albums", "artists", "genres", "playlists"] {
-            Sql::trusted(format!("UPDATE {table} SET search_name = ''")).execute(conn)?;
+            Sql::vouched(format!("UPDATE {table} SET search_name = ''")).execute(conn)?;
         }
         Ok(())
     })

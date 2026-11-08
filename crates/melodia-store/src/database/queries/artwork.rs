@@ -129,7 +129,7 @@ fn repoint_on(tx: &Transaction<'_>, moves: &[(String, String)]) -> Result<u64, A
     for chunk in moves.chunks(MAX_BINDS_PER_STATEMENT / COLS_PER_ROW) {
         let rows = values_placeholders(chunk.len(), COLS_PER_ROW);
         for (table, column) in ARTWORK_COLUMNS {
-            let mut sql = Sql::trusted(format!(
+            let mut sql = Sql::vouched(format!(
                 "WITH m(old_path, new_path) AS (VALUES {rows})
                  UPDATE {table}
                     SET {column} = (SELECT new_path FROM m WHERE m.old_path = {table}.{column})

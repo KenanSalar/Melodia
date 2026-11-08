@@ -14,7 +14,7 @@ fn library_plan(conn: &Connection, order: TrackOrder) -> Result<Vec<String>, App
     let library = Membership::Library;
     let mut sql = Sql::new("EXPLAIN QUERY PLAN SELECT t.id FROM ");
     library.push_source(&mut sql);
-    sql.push(" ORDER BY ").push_trusted(&order_by(
+    sql.push(" ORDER BY ").push_vouched(&order_by(
         Page::of(&library, &Needle::default()),
         order,
         library.position(),

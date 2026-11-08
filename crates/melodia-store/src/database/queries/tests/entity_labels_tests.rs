@@ -19,7 +19,7 @@ async fn library() -> Result<DbPool, AppError> {
 }
 
 async fn id_named(db: &DbPool, table: &str, name: &str) -> Result<i64, AppError> {
-    let mut select = Sql::trusted(format!("SELECT id FROM {table} WHERE name = ?"));
+    let mut select = Sql::vouched(format!("SELECT id FROM {table} WHERE name = ?"));
     select.bind(name);
     db.read(move |conn| select.fetch_one(conn)).await
 }

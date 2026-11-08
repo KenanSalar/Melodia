@@ -102,7 +102,7 @@ async fn point_columns_at(
 ) -> Result<(), AppError> {
     db.transaction(move |tx| {
         for (table, column) in columns {
-            let mut update = Sql::trusted(format!("UPDATE {table} SET {column} = ?"));
+            let mut update = Sql::vouched(format!("UPDATE {table} SET {column} = ?"));
             update.bind(path);
             update.execute(tx)?;
         }
@@ -117,7 +117,7 @@ async fn rows_naming(
     path: &'static str,
 ) -> Result<i64, AppError> {
     db.read(move |conn| {
-        let mut count = Sql::trusted(format!("SELECT COUNT(*) FROM {table} WHERE {column} = ?"));
+        let mut count = Sql::vouched(format!("SELECT COUNT(*) FROM {table} WHERE {column} = ?"));
         count.bind(path);
         count.fetch_one(conn)
     })

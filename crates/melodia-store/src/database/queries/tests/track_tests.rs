@@ -1159,7 +1159,7 @@ async fn seeded_ids(db: &DbPool) -> Result<Vec<i64>, AppError> {
 
 /// How many rows hold exactly `count` in the counter `column`.
 async fn rows_counted(db: &DbPool, column: &str, count: i64) -> Result<i64, AppError> {
-    let mut sql = Sql::trusted(format!("SELECT COUNT(*) FROM tracks WHERE {column} = ?"));
+    let mut sql = Sql::vouched(format!("SELECT COUNT(*) FROM tracks WHERE {column} = ?"));
     sql.bind(count);
     db.read(move |conn| sql.fetch_one(conn)).await
 }

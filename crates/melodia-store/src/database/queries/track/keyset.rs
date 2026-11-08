@@ -50,7 +50,7 @@ pub async fn track_ids(
             membership.push_and(&mut sql);
             push_needle(&mut sql, &needle);
         }
-        sql.push(" ORDER BY ").push_trusted(&order_by(
+        sql.push(" ORDER BY ").push_vouched(&order_by(
             Page::of(&membership, &needle),
             order,
             membership.position(),

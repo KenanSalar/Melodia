@@ -307,7 +307,7 @@ fn load_existing(
     let mut existing_tracks = HashMap::with_capacity(scanned_files.len());
     for chunk in scanned_files.chunks(MAX_BINDS_PER_STATEMENT) {
         let path_list = placeholders(chunk.len());
-        let mut sql = Sql::trusted(format!(
+        let mut sql = Sql::vouched(format!(
             "SELECT file_path, file_size, date_modified FROM tracks WHERE file_path IN ({path_list})"
         ));
         for file in chunk {
@@ -491,7 +491,7 @@ fn flush_artwork_backfill(
 
     for chunk in pairs.chunks(chunk_size) {
         let rows = values_placeholders(chunk.len(), COLS_PER_ROW);
-        let mut sql = Sql::trusted(format!(
+        let mut sql = Sql::vouched(format!(
             "WITH v(path, art) AS (VALUES {rows})
              UPDATE tracks
                 SET artwork_path = (SELECT art FROM v WHERE v.path = tracks.file_path)

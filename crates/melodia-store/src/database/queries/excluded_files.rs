@@ -33,7 +33,7 @@ pub(crate) fn exclude_on(tx: &Transaction<'_>, files: &[NewExclusion<'_>]) -> Re
     const COLS_PER_ROW: usize = 6;
     let excluded_at = melodia_core::utils::now_rfc3339();
     for chunk in files.chunks(MAX_BINDS_PER_STATEMENT / COLS_PER_ROW) {
-        let mut sql = Sql::trusted(format!(
+        let mut sql = Sql::vouched(format!(
             "INSERT INTO excluded_files \
              (path, file_hash, file_size, date_modified, folder_id, excluded_at) VALUES {}",
             values_placeholders(chunk.len(), COLS_PER_ROW)
@@ -60,7 +60,7 @@ pub(crate) fn restamp_on(
     const COLS_PER_ROW: usize = 4;
     for chunk in files.chunks(MAX_BINDS_PER_STATEMENT / COLS_PER_ROW) {
         let rows = values_placeholders(chunk.len(), COLS_PER_ROW);
-        let mut sql = Sql::trusted(format!(
+        let mut sql = Sql::vouched(format!(
             "WITH v(path, file_hash, file_size, date_modified) AS (VALUES {rows}) \
              UPDATE excluded_files SET file_hash = v.file_hash, file_size = v.file_size, \
                     date_modified = v.date_modified \

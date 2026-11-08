@@ -128,7 +128,7 @@ where
 {
     let per_statement = if head.is_some() { IDS_AFTER_HEAD } else { MAX_BINDS_PER_STATEMENT };
     items.chunks(per_statement).map(move |chunk| {
-        let mut sql = Sql::trusted(build_sql(&placeholders(chunk.len())));
+        let mut sql = Sql::vouched(build_sql(&placeholders(chunk.len())));
         if let Some(head) = head {
             sql.bind(head);
         }

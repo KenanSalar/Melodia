@@ -118,7 +118,7 @@ pub(crate) fn clear_release_tags(
     // Reserve the seven flag binds.
     for chunk in album_ids.chunks(MAX_BINDS_PER_STATEMENT - 7) {
         let id_list = placeholders(chunk.len());
-        let mut sql = Sql::trusted(format!(
+        let mut sql = Sql::vouched(format!(
             "UPDATE albums SET
                  label = CASE WHEN ? THEN NULL ELSE label END,
                  catalog_number = CASE WHEN ? THEN NULL ELSE catalog_number END,

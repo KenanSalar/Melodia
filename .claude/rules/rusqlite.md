@@ -62,8 +62,8 @@ paths:
 ## Queries
 
 - Static text runs through `sql::{execute, fetch_one, fetch_optional, fetch_all, fetch_each}`.
-  **A statement assembled at runtime is a `database::sql::Sql`**, whose `trusted` and
-  `push_trusted` are the explicit no-injection marker: values go in through `bind` / `push_bind`,
+  **A statement assembled at runtime is a `database::sql::Sql`**, whose `vouched` and
+  `push_vouched` are the explicit no-injection marker: values go in through `bind` / `push_bind`,
   and the text holds only SQL *structure* (placeholder lists, column projections). Text fixed for
   the whole run is interned as a `&'static str` (a `LazyLock<String>`) instead, so it stays cached
 - Caching follows the text's type (`database::sql`'s `//!`)

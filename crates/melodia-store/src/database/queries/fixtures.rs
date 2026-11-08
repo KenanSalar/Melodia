@@ -266,7 +266,7 @@ pub async fn execute(db: &DbPool, sql: &str) -> Result<(), AppError> {
 
 /// The one row `sql` answers, read on a reader.
 pub async fn fetch_one<T: FromRow + Send + 'static>(db: &DbPool, sql: &str) -> Result<T, AppError> {
-    let sql = Sql::trusted(sql.to_owned());
+    let sql = Sql::vouched(sql.to_owned());
     db.read(move |conn| sql.fetch_one(conn)).await
 }
 
@@ -275,7 +275,7 @@ pub async fn fetch_optional<T: FromRow + Send + 'static>(
     db: &DbPool,
     sql: &str,
 ) -> Result<Option<T>, AppError> {
-    let sql = Sql::trusted(sql.to_owned());
+    let sql = Sql::vouched(sql.to_owned());
     db.read(move |conn| sql.fetch_optional(conn)).await
 }
 
@@ -284,7 +284,7 @@ pub async fn fetch_all<T: FromRow + Send + 'static>(
     db: &DbPool,
     sql: &str,
 ) -> Result<Vec<T>, AppError> {
-    let sql = Sql::trusted(sql.to_owned());
+    let sql = Sql::vouched(sql.to_owned());
     db.read(move |conn| sql.fetch_all(conn)).await
 }
 

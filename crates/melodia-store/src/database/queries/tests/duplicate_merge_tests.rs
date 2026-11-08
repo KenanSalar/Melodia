@@ -22,7 +22,7 @@ async fn keeper_and_two_spares() -> Result<(DbPool, i64, [i64; 2]), AppError> {
 }
 
 async fn set(db: &DbPool, id: i64, assignments: &str) -> Result<(), AppError> {
-    let mut update = Sql::trusted(format!("UPDATE tracks SET {assignments} WHERE id = ?"));
+    let mut update = Sql::vouched(format!("UPDATE tracks SET {assignments} WHERE id = ?"));
     update.bind(id);
     db.write(move |conn| update.execute(conn)).await?;
     Ok(())
@@ -32,7 +32,7 @@ async fn column<T>(db: &DbPool, id: i64, name: &str) -> Result<T, AppError>
 where
     T: FromRow + Send + 'static,
 {
-    let mut select = Sql::trusted(format!("SELECT {name} FROM tracks WHERE id = ?"));
+    let mut select = Sql::vouched(format!("SELECT {name} FROM tracks WHERE id = ?"));
     select.bind(id);
     db.read(move |conn| select.fetch_one(conn)).await
 }

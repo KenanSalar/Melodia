@@ -50,7 +50,7 @@ async fn names(db: &DbPool, table: &str, ids: &[i64]) -> Result<Vec<String>, App
     db.read(move |conn| {
         ids.iter()
             .map(|&id| {
-                let mut name = Sql::trusted(text.clone());
+                let mut name = Sql::vouched(text.clone());
                 name.bind(id);
                 name.fetch_one(conn)
             })

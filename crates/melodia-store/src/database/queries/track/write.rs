@@ -59,7 +59,7 @@ async fn add_counts(
     let stamp = if last_played.is_some() { ", last_played = ?" } else { "" };
 
     for chunk in increments.chunks(max_rows) {
-        let mut sql = Sql::trusted(format!(
+        let mut sql = Sql::vouched(format!(
             "UPDATE tracks SET {column} = {column} + {}{stamp} WHERE id IN ({})",
             case_by_id(chunk.len()),
             placeholders(chunk.len()),
@@ -176,7 +176,7 @@ fn set_hashes(
 
     for chunk in updates.chunks(CHUNK_SIZE) {
         let rows = values_placeholders(chunk.len(), COLS_PER_ROW);
-        let mut sql = Sql::trusted(format!(
+        let mut sql = Sql::vouched(format!(
             "WITH v(id, h, m) AS (VALUES {rows})
              UPDATE tracks
                 SET file_hash = (SELECT h FROM v WHERE v.id = tracks.id),

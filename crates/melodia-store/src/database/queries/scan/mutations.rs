@@ -222,7 +222,7 @@ pub(crate) fn insert_tracks_batch(
 ) -> Result<Vec<i64>, AppError> {
     let mut out = Vec::with_capacity(rows.len());
     for chunk in rows.chunks(INSERT_CHUNK_ROWS) {
-        let mut sql = Sql::trusted(format!(
+        let mut sql = Sql::vouched(format!(
             "INSERT INTO tracks ({TRACK_INSERT_COLUMNS}) VALUES {} RETURNING id, file_path",
             values_list(&TRACK_ROW, chunk.len())
         ));
