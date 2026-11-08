@@ -70,7 +70,7 @@ async fn track_count(db: &DbPool) -> Result<i64, AppError> {
 fn batch_with_candidate(hash: &str, id: i64, vanished: &Path) -> Batch {
     let candidate = (id, vanished.to_string_lossy().into_owned());
     let mut moved = MoveCandidates::default();
-    moved.tracks.insert(hash.to_owned(), candidate);
+    moved.tracks.insert(hash.to_owned(), vec![candidate]);
     Batch { moved, ..Batch::default() }
 }
 

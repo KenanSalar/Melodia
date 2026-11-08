@@ -189,11 +189,11 @@ fn suppress_can_empty_the_batch() {
 
 // ---- the order the two filters are applied in ----
 
-/// The events a plan would apply, or `None` for the two arms that apply none.
+/// The events a plan would apply, or `None` for the arms that apply none.
 fn planned(plan: BatchPlan) -> Option<Vec<FileEvent>> {
     match plan {
         BatchPlan::Process(batch) => Some(batch),
-        BatchPlan::Nothing | BatchPlan::Rescan => None,
+        BatchPlan::Nothing | BatchPlan::Rescan | BatchPlan::Reconcile => None,
     }
 }
 

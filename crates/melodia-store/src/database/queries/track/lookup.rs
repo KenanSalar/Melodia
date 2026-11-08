@@ -232,19 +232,18 @@ pub async fn get_track_ids_by_hashes(
     Ok(map)
 }
 
-/// `file_hash → (id, file_path)` of the lowest-id row carrying each of `hashes`: the row a moved
-/// file re-points rather than duplicates. Hashes with no row are absent.
+/// `file_hash → [(id, file_path)]` of the rows carrying each of `hashes`, lowest id first: the ones
+/// a moved file may re-point rather than duplicate. Hashes with no row are absent.
 ///
 /// On a connection rather than the pool so the scan's ingest can ask inside its transaction and
 /// the watcher's batch off the read pool, ahead of its own.
-pub(crate) fn lowest_id_by_hash_on(
+pub(crate) fn rows_by_hash_on(
     conn: &Connection,
     hashes: &[&str],
-) -> Result<HashMap<String, (i64, String)>, AppError> {
+) -> Result<HashMap<String, Vec<(i64, String)>>, AppError> {
     let unique: HashSet<&str> = hashes.iter().copied().collect();
     let unique: Vec<&str> = unique.into_iter().collect();
 
-    // `ORDER BY id` plus `or_insert` is what keeps the lowest id.
     let rows: Vec<(String, i64, String)> = chunked_in_query(conn, &unique, |placeholders| {
         format!(
             "SELECT file_hash, id, file_path FROM tracks
@@ -252,11 +251,11 @@ pub(crate) fn lowest_id_by_hash_on(
              ORDER BY id ASC"
         )
     })?;
-    let mut out: HashMap<String, (i64, String)> = HashMap::new();
+    let mut by_hash: HashMap<String, Vec<(i64, String)>> = HashMap::new();
     for (hash, id, path) in rows {
-        out.entry(hash).or_insert((id, path));
+        by_hash.entry(hash).or_default().push((id, path));
     }
-    Ok(out)
+    Ok(by_hash)
 }
 
 /// The tracks with no `file_hash` yet, for the retroactive hash.

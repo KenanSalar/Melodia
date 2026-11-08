@@ -151,9 +151,9 @@ fn apply_changes(
     Ok(())
 }
 
-/// The lowest-id row, and the kept-out files, for each created file's hash whose own file is gone
-/// from disk: moved, not duplicated. Read before the write transaction opens; a failed lookup
-/// costs the batch its move detection and nothing else.
+/// The rows and kept-out files carrying a created file's hash whose own file is gone from disk:
+/// moved, not duplicated. Read before the write transaction opens; a failed lookup costs the batch
+/// its move detection and nothing else.
 async fn moved_candidates(db: &DbPool, changes: &[WatchedChange]) -> MoveCandidates {
     let hashes: Vec<String> = changes
         .iter()
@@ -215,7 +215,7 @@ fn handle_created(
     }
 
     // A failed folder lookup leaves the entry for a later same-hash event.
-    if let Some((existing_id, old_path)) = batch.moved.tracks.get(&meta.file_hash).cloned() {
+    if let Some((existing_id, old_path)) = batch.moved.track_for(&meta.file_hash, path) {
         let Some(folder_id) = find_folder_for_path(tx, &path_str)? else {
             log::debug!("Moved file not in any library folder, skipping: {}", path.display());
             return Ok(false);
@@ -230,12 +230,12 @@ fn handle_created(
             meta.date_modified.as_deref(),
         )?;
         if repointed {
-            batch.moved.tracks.remove(&meta.file_hash);
+            batch.moved.spend_track(&meta.file_hash, existing_id);
             log::info!("Detected moved file: {old_path} -> {path_str}");
             return Ok(true);
         }
         // Deletes apply last, so a scan removed the row after the candidates were read.
-        batch.moved.tracks.remove(&meta.file_hash);
+        batch.moved.spend_track(&meta.file_hash, existing_id);
     }
 
     if let Some((exclusion_id, old_path)) = batch.moved.take_exclusion(&meta.file_hash) {

@@ -36,12 +36,14 @@ enum BatchPlan {
     Nothing,
     /// The watcher overflowed, so its per-file stream is truncated and untrustworthy.
     Rescan,
+    /// A directory was renamed, which the per-file stream says nothing about.
+    Reconcile,
     /// Apply these, the echo of our own tag writes already dropped.
     Process(Vec<FileEvent>),
 }
 
-/// The `any` makes this correct for an undeduplicated batch too, since `process_batch`
-/// `unreachable!()`s on a `RescanNeeded`.
+/// The `any`s make this correct for an undeduplicated batch too, since `process_batch`
+/// `unreachable!()`s on a `RescanNeeded` or a `DirectoryRenamed`.
 ///
 /// The rescan is answered *before* the suppression because `take_recent` consumes: spending a mark
 /// on a batch discarded for a full reconcile would leave the real echo unsuppressed inside its TTL.
@@ -52,6 +54,9 @@ fn plan_batch(mut batch: Vec<FileEvent>, self_writes: &SelfWrites) -> BatchPlan 
     }
     if batch.iter().any(|e| matches!(e, FileEvent::RescanNeeded)) {
         return BatchPlan::Rescan;
+    }
+    if batch.iter().any(|e| matches!(e, FileEvent::DirectoryRenamed)) {
+        return BatchPlan::Reconcile;
     }
 
     let before = batch.len();
@@ -90,6 +95,10 @@ pub fn spawn(spawner: &TaskSpawner, state: &AppState, mut rx: mpsc::Receiver<Fil
                     log::warn!("Rescan requested via watcher overflow flag");
                     crate::library::scan::reconcile_watched_folders(&state);
                     state.rescan_notice.bump();
+                }
+                BatchPlan::Reconcile => {
+                    log::info!("A directory holding audio was renamed, reconciling the library");
+                    crate::library::scan::reconcile_watched_folders(&state);
                 }
                 BatchPlan::Process(batch) => {
                     log::info!("Processing batch of {} file events", batch.len());

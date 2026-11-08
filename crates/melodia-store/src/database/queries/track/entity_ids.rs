@@ -120,8 +120,7 @@ static IDS_IN_SUBTREE_ANY_CASE: LazyLock<String> = LazyLock::new(|| {
 /// so **case is the whole of the agreement**.
 ///
 /// An empty range retries ignoring case where the disk does, non-ASCII letters included: a folder
-/// renamed by case alone keeps its rows under the old spelling until a scan, the watcher passing
-/// only audio paths.
+/// renamed by case alone keeps its rows under the old spelling until a scan.
 pub async fn track_ids_under_directory(db: &DbPool, dir_path: &str) -> Result<Vec<i64>, AppError> {
     let (from, before) = super::list::subtree_bounds(dir_path);
     db.read(move |conn| {

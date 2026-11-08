@@ -233,10 +233,10 @@ pub(crate) fn ingest_scanned_files(
             continue;
         }
 
-        // Consumed once re-pointed, so a second same-hash file inserts rather than stealing the
-        // row; a failed folder resolution leaves it for a later one.
+        // Spent once re-pointed, so a second same-hash file can't claim the same row; a failed
+        // folder resolution leaves it for a later one.
         if let Some((existing_id, old_path)) =
-            moved_from.tracks.get(meta.file_hash.as_str()).cloned()
+            moved_from.track_for(meta.file_hash.as_str(), &file.path)
         {
             let Some(folder_id) =
                 resolve_folder_id(tx, source, file, file_path_str, &mut caches.folder)?
@@ -253,7 +253,7 @@ pub(crate) fn ingest_scanned_files(
                 folder_id,
                 meta.date_modified.as_deref(),
             )?;
-            moved_from.tracks.remove(meta.file_hash.as_str());
+            moved_from.spend_track(meta.file_hash.as_str(), existing_id);
             log::info!("Detected moved file: {old_path} -> {file_path_str}");
             moved_count += 1;
             continue;
@@ -363,9 +363,16 @@ fn resolve_move_candidates(
 /// Drops the old paths a new file only respells: where the disk ignores case, two paths folding
 /// alike are one file, so the new one can't be a copy sitting beside it.
 fn forget_respelled(still_present: &mut HashSet<String>, new_files: &[&ScannedFile]) {
-    let new_paths: HashSet<String> =
-        new_files.iter().map(|f| f.path.to_string_lossy().to_lowercase()).collect();
-    still_present.retain(|old_path| !new_paths.contains(&old_path.to_lowercase()));
+    let spelling_by_fold: HashMap<String, Cow<'_, str>> = new_files
+        .iter()
+        .map(|f| {
+            let spelling = f.path.to_string_lossy();
+            (spelling.to_lowercase(), spelling)
+        })
+        .collect();
+    still_present.retain(|old_path| {
+        spelling_by_fold.get(&old_path.to_lowercase()).is_none_or(|new_path| new_path == old_path)
+    });
 }
 
 fn file_name_of(file: &ScannedFile) -> String {

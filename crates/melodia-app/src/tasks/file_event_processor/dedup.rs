@@ -20,6 +20,10 @@ pub(super) fn deduplicate_events(events: Vec<FileEvent>) -> Vec<FileEvent> {
     if events.iter().any(|e| matches!(e, FileEvent::RescanNeeded)) {
         return vec![FileEvent::RescanNeeded];
     }
+    // The reconcile re-reads whatever else the batch names.
+    if events.iter().any(|e| matches!(e, FileEvent::DirectoryRenamed)) {
+        return vec![FileEvent::DirectoryRenamed];
+    }
 
     let mut state: HashMap<PathBuf, DedupKind> = HashMap::with_capacity(events.len());
 
@@ -51,8 +55,8 @@ pub(super) fn deduplicate_events(events: Vec<FileEvent>) -> Vec<FileEvent> {
                 state.remove(&to);
                 state.insert(to, DedupKind::Renamed { from });
             }
-            // Filtered above; deduplicate_events early-returns on RescanNeeded.
-            FileEvent::RescanNeeded => unreachable!(),
+            // Filtered above; deduplicate_events early-returns on both.
+            FileEvent::RescanNeeded | FileEvent::DirectoryRenamed => unreachable!(),
         }
     }
 

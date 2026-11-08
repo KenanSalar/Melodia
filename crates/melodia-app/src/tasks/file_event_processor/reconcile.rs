@@ -26,8 +26,8 @@ fn paths_to_extract(events: &[FileEvent], kept_out_renamed: &HashSet<String>) ->
             FileEvent::Created(path) | FileEvent::Modified(path) => Some(path),
             FileEvent::Renamed { from, to } => (!is_kept_out(from)).then_some(to),
             FileEvent::Removed(_) => None,
-            // Caller short-circuits on RescanNeeded before reaching here.
-            FileEvent::RescanNeeded => unreachable!(),
+            // Caller short-circuits on both before reaching here.
+            FileEvent::RescanNeeded | FileEvent::DirectoryRenamed => unreachable!(),
         };
         if let Some(path) = wanted
             && path.exists()
@@ -148,8 +148,8 @@ fn watched_changes(
                 let gone = !path.exists();
                 Some(WatchedChange::Removed { path, gone })
             }
-            // Caller short-circuits on RescanNeeded before reaching here.
-            FileEvent::RescanNeeded => unreachable!(),
+            // Caller short-circuits on both before reaching here.
+            FileEvent::RescanNeeded | FileEvent::DirectoryRenamed => unreachable!(),
         })
         .collect()
 }
