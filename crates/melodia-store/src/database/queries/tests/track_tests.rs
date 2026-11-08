@@ -279,9 +279,8 @@ async fn update_last_position() -> Result<(), AppError> {
 #[tokio::test]
 async fn get_tracks_in_directory_direct_only() -> Result<(), AppError> {
     let db = DbPool::test_pool().await?;
-    // Use the platform's native separator — `get_tracks_in_directory`
-    // builds its LIKE pattern with `MAIN_SEPARATOR`, so Unix-style `/`
-    // hardcoded test paths wouldn't match on Windows.
+    // `get_tracks_in_directory` bounds its range with the native separator, so a hardcoded `/`
+    // wouldn't match on Windows.
     let sep = std::path::MAIN_SEPARATOR_STR;
     let dir = format!("{sep}music");
     let direct = format!("{dir}{sep}song.mp3");
@@ -988,10 +987,10 @@ async fn a_rated_track_is_off_the_import_work_list() -> Result<(), AppError> {
     Ok(())
 }
 
-/// A folder is named by the user and `_` is `LIKE`'s single-character wildcard, so an unescaped
-/// one reaches into the siblings either side of it. Built from [`MAIN_SEPARATOR_STR`] rather than
-/// a spelled `/`, since the pattern this query builds is the native separator and a hand-written
-/// one only ever fails on the platform nobody ran it on.
+/// A folder is named by the user and `_` is a pattern's single-character wildcard, so matching by
+/// pattern reaches into the siblings either side of it. Built from [`MAIN_SEPARATOR_STR`] rather
+/// than a spelled `/`, since this query's bounds end in the native separator and a hand-written one
+/// only ever fails on the platform nobody ran it on.
 #[tokio::test]
 async fn a_folder_named_with_an_underscore_does_not_reach_its_siblings() -> Result<(), AppError> {
     use std::path::MAIN_SEPARATOR_STR as SEP;
@@ -1023,6 +1022,74 @@ async fn a_folder_named_with_a_percent_does_not_reach_its_siblings() -> Result<(
     let sibling = format!("{root}{SEP}100 Proof Live");
     insert_test_track(&db, &format!("{asked}{SEP}a.mp3"), "A", "Artist", "Album", "Rock").await?;
     insert_test_track(&db, &format!("{sibling}{SEP}b.mp3"), "B", "Artist", "Album", "Rock").await?;
+
+    let rows = queries::track::get_tracks_in_directory(&db, &asked).await?;
+
+    assert_eq!(rows.iter().map(|r| r.row.title.as_str()).collect::<Vec<_>>(), ["A"]);
+    Ok(())
+}
+
+/// A library folder can be a drive root, whose path already ends in the separator. Doubled, it
+/// matched no row, and Browse drew every file there as outside the library.
+#[tokio::test]
+async fn a_directory_at_a_root_lists_its_own_files() -> Result<(), AppError> {
+    use std::path::MAIN_SEPARATOR_STR as SEP;
+
+    for root in [format!("E:{SEP}"), SEP.to_owned()] {
+        let db = DbPool::test_pool().await?;
+        queries::folder::insert_folder(&db, &root, true).await?;
+        insert_test_track(&db, &format!("{root}a.mp3"), "A", "Artist", "Album", "Rock").await?;
+        let nested = format!("{root}sub{SEP}b.mp3");
+        insert_test_track(&db, &nested, "B", "Artist", "Album", "Rock").await?;
+
+        let rows = queries::track::get_tracks_in_directory(&db, &root).await?;
+
+        let titles: Vec<&str> = rows.iter().map(|r| r.row.title.as_str()).collect();
+        assert_eq!(titles, ["A"], "root {root:?}");
+    }
+    Ok(())
+}
+
+/// One row either side of each end of the range. `.` and a space sort below the separator, so a
+/// sibling sharing the folder's name starts under it, and the end is exclusive.
+#[tokio::test]
+async fn a_directory_lists_nothing_past_either_end_of_its_range() -> Result<(), AppError> {
+    use std::path::MAIN_SEPARATOR_STR as SEP;
+
+    let db = DbPool::test_pool().await?;
+    let root = format!("{SEP}music");
+    queries::folder::insert_folder(&db, &root, true).await?;
+    let asked = format!("{root}{SEP}Abba");
+    let rows_around_the_range = [
+        (format!("{asked}.mp3"), "Below"),
+        (format!("{asked} Live{SEP}x.mp3"), "Spaced"),
+        (format!("{asked}{SEP}in.mp3"), "Inside"),
+        (format!("{asked}{AFTER_SEPARATOR}"), "On the end"),
+        (format!("{asked}{AFTER_SEPARATOR}{SEP}y.mp3"), "Past"),
+    ];
+    for (path, title) in &rows_around_the_range {
+        insert_test_track(&db, path, title, "Artist", "Album", "Rock").await?;
+    }
+
+    let rows = queries::track::get_tracks_in_directory(&db, &asked).await?;
+
+    assert_eq!(rows.iter().map(|r| r.row.title.as_str()).collect::<Vec<_>>(), ["Inside"]);
+    Ok(())
+}
+
+/// `length` and `substr` count characters. A name wider in bytes is where counting anything else
+/// cuts the remainder past its separator and reads a subfolder's file as this folder's own.
+#[tokio::test]
+async fn a_directory_with_a_non_ascii_name_lists_only_its_own_level() -> Result<(), AppError> {
+    use std::path::MAIN_SEPARATOR_STR as SEP;
+
+    let db = DbPool::test_pool().await?;
+    let root = format!("{SEP}music");
+    queries::folder::insert_folder(&db, &root, true).await?;
+    let asked = format!("{root}{SEP}موسيقى");
+    insert_test_track(&db, &format!("{asked}{SEP}a.mp3"), "A", "Artist", "Album", "Rock").await?;
+    let nested = format!("{asked}{SEP}sub{SEP}b.mp3");
+    insert_test_track(&db, &nested, "B", "Artist", "Album", "Rock").await?;
 
     let rows = queries::track::get_tracks_in_directory(&db, &asked).await?;
 
@@ -1168,29 +1235,6 @@ async fn a_skip_batch_one_row_past_a_statement_counts_every_track() -> Result<()
 
     assert_eq!(rows_counted(&db, "skip_count", 1).await?, 334);
     Ok(())
-}
-
-/// A folder is named by the user and `_` is `LIKE`'s single-character wildcard, so an unescaped
-/// one makes "play this folder" reach a sibling. The replace order is the other half: escaping the
-/// backslash last would re-escape the ones the `%` and `_` arms just introduced.
-#[test]
-fn a_folder_name_cannot_smuggle_a_like_wildcard() {
-    use super::list::{LIKE_SEPARATOR, directory_like_prefix};
-
-    let cases = [
-        ("plain", "plain"),
-        ("50% off", "50\\% off"),
-        ("track_01", "track\\_01"),
-        ("back\\slash", "back\\\\slash"),
-        ("_%\\", "\\_\\%\\\\"),
-    ];
-    for (dir, escaped) in cases {
-        assert_eq!(
-            directory_like_prefix(dir),
-            format!("{escaped}{LIKE_SEPARATOR}"),
-            "folder {dir:?}"
-        );
-    }
 }
 
 async fn still_dated(db: &DbPool) -> Result<i64, AppError> {

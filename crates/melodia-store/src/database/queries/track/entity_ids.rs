@@ -104,13 +104,13 @@ pub async fn track_ids_by_playlists(
 /// `Zebra.flac` before `apple.flac`. ASCII against a Unicode fold, and a subtree against one level,
 /// so **case is the whole of the agreement**.
 pub async fn track_ids_under_directory(db: &DbPool, dir_path: &str) -> Result<Vec<i64>, AppError> {
-    let pattern = format!("{}%", super::list::directory_like_prefix(dir_path));
+    let (from, before) = super::list::subtree_bounds(dir_path);
     db.read(move |conn| {
         sql::fetch_all(
             conn,
-            "SELECT id FROM tracks WHERE file_path LIKE ? ESCAPE '\\' \
+            "SELECT id FROM tracks WHERE file_path >= ? AND file_path < ? \
              ORDER BY file_path COLLATE NOCASE ASC",
-            (pattern,),
+            (from, before),
         )
     })
     .await

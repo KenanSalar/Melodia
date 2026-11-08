@@ -645,6 +645,29 @@ async fn a_reorder_closes_the_gap_a_deleted_track_left() -> Result<(), AppError>
     Ok(())
 }
 
+/// How many rows closing each gap moves in a three-track playlist: an add renumbers with no gap to
+/// close, and rewriting the whole playlist for it is what this guards against.
+#[tokio::test]
+async fn a_renumber_writes_only_the_rows_that_move() -> Result<(), AppError> {
+    let cases: [(&[usize], u64); 4] = [(&[], 0), (&[0], 2), (&[1], 1), (&[2], 0)];
+    for (deleted, moved) in cases {
+        let (db, playlist, ids) = seeded_playlist().await?;
+        for &index in deleted {
+            delete_track(&db, ids[index]).await?;
+        }
+
+        let written = db
+            .transaction(move |tx| {
+                super::renumber_playlist_positions_tx(tx, playlist)?;
+                Ok(tx.changes())
+            })
+            .await?;
+
+        assert_eq!(written, moved, "tracks deleted at {deleted:?}");
+    }
+    Ok(())
+}
+
 #[tokio::test]
 async fn a_reorder_leaves_every_other_playlist_alone() -> Result<(), AppError> {
     let (db, playlist, ids) = seeded_playlist().await?;

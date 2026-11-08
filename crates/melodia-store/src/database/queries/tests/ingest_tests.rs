@@ -5,7 +5,7 @@ use super::listed_as_spelled;
 use crate::database::queries;
 use crate::database::queries::fixtures::{insert_test_track, keep_out, make_test_metadata};
 use crate::database::queries::ingest::{
-    IngestResult, IngestSource, commit_import, ingest_scanned_files,
+    BULK_THRESHOLD, IngestResult, IngestSource, commit_import, ingest_scanned_files,
 };
 use crate::database::{DbPool, sql};
 use crate::media::ingest::scan_pool::ScanPool;
@@ -859,5 +859,133 @@ async fn records_that_a_move_two_gone_rows_share_takes_back_the_lower_id() -> Re
 
     let track = queries::track::get_track_by_id(&db, older).await?;
     assert_eq!(track.file_path, "/music/c/song.mp3");
+    Ok(())
+}
+
+/// Files past [`BULK_THRESHOLD`], so the import runs with the stats triggers dropped.
+const BULK_IMPORT: usize = 21;
+
+fn numbered_files(count: usize) -> Vec<ScannedFile> {
+    (0..count)
+        .map(|index| make_scanned_file(&format!("/music/{index}.mp3"), &format!("Track {index}")))
+        .collect()
+}
+
+async fn schema_version(db: &DbPool) -> Result<i64, AppError> {
+    db.read(|conn| sql::fetch_one(conn, "SELECT schema_version FROM pragma_schema_version", ()))
+        .await
+}
+
+/// `(track_count, album_count, total_duration_ms)` as the artist's row stores them.
+async fn stored_artist(db: &DbPool, name: &'static str) -> Result<(i64, i64, i64), AppError> {
+    db.read(move |conn| {
+        sql::fetch_one(
+            conn,
+            "SELECT track_count, album_count, total_duration_ms FROM artists WHERE name = ?",
+            (name,),
+        )
+    })
+    .await
+}
+
+/// `(track_count, total_duration_ms)` as the album's row stores them.
+async fn stored_album(db: &DbPool, name: &'static str) -> Result<(i64, i64), AppError> {
+    db.read(move |conn| {
+        sql::fetch_one(
+            conn,
+            "SELECT track_count, total_duration_ms FROM albums WHERE name = ?",
+            (name,),
+        )
+    })
+    .await
+}
+
+/// `(track_count, total_duration_ms)` as the genre's row stores them.
+async fn stored_genre(db: &DbPool, name: &'static str) -> Result<(i64, i64), AppError> {
+    db.read(move |conn| {
+        sql::fetch_one(
+            conn,
+            "SELECT track_count, total_duration_ms FROM genres WHERE name = ?",
+            (name,),
+        )
+    })
+    .await
+}
+
+/// Dropping a trigger moves the schema version and sends every connection back to re-parse its
+/// statements, which one dropped file must not cost.
+#[tokio::test]
+async fn an_import_changes_the_schema_only_past_the_bulk_threshold() -> Result<(), AppError> {
+    let cases = [(1, false), (BULK_THRESHOLD, false), (BULK_THRESHOLD + 1, true)];
+    for (files, rebuilds_triggers) in cases {
+        let db = music_library().await?;
+        let before = schema_version(&db).await?;
+
+        import(&db, numbered_files(files)).await?;
+
+        let after = schema_version(&db).await?;
+        assert_eq!(after != before, rebuilds_triggers, "{files} file(s)");
+    }
+    Ok(())
+}
+
+/// The triggers keep the counts on one side of the threshold and the recalc on the other. Every
+/// fixture track runs 180 s and shares one artist, album and genre.
+#[tokio::test]
+async fn an_import_leaves_the_stored_counts_right_either_side_of_the_threshold()
+-> Result<(), AppError> {
+    let cases = [(1, 1, 180_000), (BULK_IMPORT, 21, 3_780_000)];
+    for (files, tracks, total_ms) in cases {
+        let db = music_library().await?;
+
+        import(&db, numbered_files(files)).await?;
+
+        assert_eq!(stored_artist(&db, "Test Artist").await?, (tracks, 1, total_ms), "artist");
+        assert_eq!(stored_album(&db, "Test Album").await?, (tracks, total_ms), "album");
+        assert_eq!(stored_genre(&db, "Rock").await?, (tracks, total_ms), "genre");
+    }
+    Ok(())
+}
+
+#[tokio::test]
+async fn an_import_onto_a_held_album_adds_to_it() -> Result<(), AppError> {
+    let db = music_library().await?;
+    folder_scan(&db, vec![make_scanned_file("/music/held.mp3", "Held")]).await?;
+
+    import(&db, vec![make_scanned_file("/music/new.mp3", "New")]).await?;
+
+    assert_eq!(stored_artist(&db, "Test Artist").await?, (2, 1, 360_000), "artist");
+    assert_eq!(stored_album(&db, "Test Album").await?, (2, 360_000), "album");
+    Ok(())
+}
+
+/// A small import recalculates nothing, so moving a rewritten row's counts is the triggers' job.
+#[tokio::test]
+async fn an_import_rewriting_a_row_moves_its_counts_to_the_new_album() -> Result<(), AppError> {
+    let db = music_library().await?;
+    let mut original = make_scanned_file("/music/a.mp3", "A");
+    original.metadata.album = Some("Old Album".to_owned());
+    folder_scan(&db, vec![original]).await?;
+    let mut rewritten = make_scanned_file("/music/a.mp3", "A");
+    rewritten.metadata.album = Some("New Album".to_owned());
+    rewritten.metadata.file_size = 6_000_000;
+
+    import(&db, vec![rewritten]).await?;
+
+    assert_eq!(stored_album(&db, "Old Album").await?, (0, 0), "the album it left");
+    assert_eq!(stored_album(&db, "New Album").await?, (1, 180_000), "the album it joined");
+    Ok(())
+}
+
+/// Every later writer relies on the triggers a bulk import drops for its own inserts.
+#[tokio::test]
+async fn a_bulk_import_leaves_the_stats_triggers_live() -> Result<(), AppError> {
+    let db = music_library().await?;
+    import(&db, numbered_files(BULK_IMPORT)).await?;
+    let (after_import, _, _) = stored_artist(&db, "Test Artist").await?;
+
+    insert_test_track(&db, "/music/added.mp3", "Added", "Test Artist", "Album", "Rock").await?;
+
+    assert_eq!(stored_artist(&db, "Test Artist").await?.0, after_import + 1);
     Ok(())
 }

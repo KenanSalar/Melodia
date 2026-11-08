@@ -9,7 +9,7 @@ use std::collections::{BTreeSet, HashMap};
 use rusqlite::Transaction;
 
 use crate::database::queries::excluded_files::{self, NewExclusion};
-use crate::database::queries::ingest::BULK_THRESHOLD;
+use crate::database::queries::ingest::is_bulk;
 use crate::database::queries::playlist::{self, NewItem};
 use crate::database::queries::{scan, stats};
 use crate::database::rows::by_name;
@@ -93,7 +93,7 @@ fn merge(tx: &Transaction<'_>, removals: &[GroupRemoval]) -> Result<RemovedDupli
     }
 
     // On the bulk path one recalc at the end beats the triggers' per-row cost.
-    let bulk = plan.spares.len() > BULK_THRESHOLD;
+    let bulk = is_bulk(plan.spares.len());
     if bulk {
         stats::disable_stats_triggers(tx)?;
     }

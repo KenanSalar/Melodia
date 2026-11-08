@@ -324,7 +324,7 @@ async fn clear_album(db: &DbPool, id: i64) -> Result<(), AppError> {
 /// Every existing test of those forms uses a *single* rule, which is exactly the shape the
 /// parens cannot matter in. Needs a null column to see, hence the staging.
 ///
-/// **Over a column-backed field on purpose.** The set-valued ones render `NOT EXISTS`, which
+/// **Over a column-backed field on purpose.** The set-valued ones render a negated subquery, which
 /// carries no bare `OR` and so cannot reach this at all; staged over one of those the test goes
 /// green while pinning nothing.
 #[tokio::test]
@@ -495,7 +495,7 @@ async fn an_incoherent_rule_is_dropped_rather_than_matching_nothing() -> Result<
 /// `"0"`, so a degraded rule is an equality rather than a search through real SQL.
 fn rendered_predicate(rule: &Rule) -> String {
     let mut sql = Sql::new("");
-    super::push_rule(&mut sql, rule);
+    super::push_rule(&mut sql, rule, super::MemberTest::Materialized);
     sql.text().to_owned()
 }
 
@@ -583,9 +583,8 @@ fn role(role: CreditRole, name: &str) -> RoleCredit {
     RoleCredit { role, name: name.to_owned(), detail: String::new() }
 }
 
-/// **The correlation is the whole rule.** These fields render as `EXISTS (SELECT 1 FROM …)`, and a
-/// fragment that leaves out the `WHERE track_id = tracks.id` half asks whether the join table
-/// holds any row at all — true for every track, so the playlist quietly becomes the library.
+/// **The tie to the track is the whole rule.** A fragment that loses it asks whether the join table
+/// holds any row at all, true for every track, so the playlist quietly becomes the library.
 #[tokio::test]
 async fn a_genre_rule_admits_only_the_tracks_that_carry_it() -> Result<(), AppError> {
     let s = multi_seed().await?;
@@ -629,8 +628,8 @@ async fn a_prefix_rule_reaches_a_name_that_is_not_first() -> Result<(), AppError
     Ok(())
 }
 
-/// The negated arm renders `NOT EXISTS`, which is true for a track with no rows of that kind at
-/// all — the honest reading, since a track credits nobody rather than crediting the empty string.
+/// A negated rule is true for a track with no rows of that kind at all, the honest reading, since a
+/// track credits nobody rather than crediting the empty string.
 #[tokio::test]
 async fn a_negated_rule_excludes_only_the_carriers_and_keeps_the_untagged() -> Result<(), AppError>
 {
@@ -641,8 +640,8 @@ async fn a_negated_rule_excludes_only_the_carriers_and_keeps_the_untagged() -> R
     Ok(())
 }
 
-/// A set-valued fragment and a column-backed one have to compose, and `Any` is where an
-/// uncorrelated `EXISTS` would be loudest — one arm true for everything widens the whole rule.
+/// A set-valued fragment and a column-backed one have to compose, and `Any` is where one that lost
+/// its tie to the track would be loudest: one arm true for everything widens the whole rule.
 #[tokio::test]
 async fn a_set_valued_rule_composes_with_a_column_rule() -> Result<(), AppError> {
     let s = multi_seed().await?;
@@ -667,6 +666,151 @@ async fn a_set_valued_rule_composes_with_a_column_rule() -> Result<(), AppError>
 
     let any = SmartCriteria { match_mode: MatchMode::Any, ..all };
     assert_eq!(ids(&resolve(&s.db, &any).await?), HashSet::from([s.both, s.rock]));
+    Ok(())
+}
+
+/// Each operator a set-valued field offers and the [`multi_seed`] tracks it holds, sorted by title.
+/// `One` is Rock and Metal, composed by Alice and produced by Bob; `Two` is Rock, composed by
+/// Carol; `Three` is Pop and credits nobody.
+const SET_VALUED_CASES: [(RuleField, RuleOp, Option<&str>, &[&str]); 12] = [
+    (RuleField::Genre, RuleOp::Is, Some("Rock"), &["One", "Two"]),
+    (RuleField::Genre, RuleOp::IsNot, Some("Rock"), &["Three"]),
+    (RuleField::Genre, RuleOp::Contains, Some("eta"), &["One"]),
+    (RuleField::Genre, RuleOp::NotContains, Some("Met"), &["Three", "Two"]),
+    (RuleField::Genre, RuleOp::StartsWith, Some("Po"), &["Three"]),
+    (RuleField::Genre, RuleOp::EndsWith, Some("tal"), &["One"]),
+    (RuleField::Genre, RuleOp::IsSet, None, &["One", "Three", "Two"]),
+    (RuleField::Genre, RuleOp::IsNotSet, None, &[]),
+    (RuleField::Credits, RuleOp::Contains, Some("aro"), &["Two"]),
+    (RuleField::Credits, RuleOp::NotContains, Some("Alice"), &["Three", "Two"]),
+    (RuleField::Credits, RuleOp::IsSet, None, &["One", "Two"]),
+    (RuleField::Credits, RuleOp::IsNotSet, None, &["Three"]),
+];
+
+async fn assert_set_valued_cases(limit: Option<SmartLimit>) -> Result<(), AppError> {
+    let s = multi_seed().await?;
+    for (field, op, text, expected) in SET_VALUED_CASES {
+        let value = text.map(|text| RuleValue::Text(text.to_owned()));
+        let c = SmartCriteria { limit: limit.clone(), ..one(field, op, value) };
+
+        let mut titles: Vec<String> =
+            resolve(&s.db, &c).await?.into_iter().map(|row| row.title).collect();
+        titles.sort();
+
+        assert_eq!(titles, expected, "{field:?} {op:?}");
+    }
+    Ok(())
+}
+
+#[tokio::test]
+async fn every_set_valued_operator_holds_its_tracks_uncapped() -> Result<(), AppError> {
+    assert_set_valued_cases(None).await
+}
+
+/// A cap no match reaches, so all that differs from the uncapped run is the form the rule takes.
+#[tokio::test]
+async fn every_set_valued_operator_holds_its_tracks_under_a_cap() -> Result<(), AppError> {
+    assert_set_valued_cases(Some(SmartLimit { count: 100, order: LimitOrder::PlayCountDesc })).await
+}
+
+/// A card's count is a statement of its own, and the fixture's tracks run 180 s each.
+#[tokio::test]
+async fn a_set_valued_rule_counts_what_it_lists_capped_or_not() -> Result<(), AppError> {
+    let s = multi_seed().await?;
+    let rock = one(RuleField::Genre, RuleOp::Is, Some(RuleValue::Text("Rock".to_owned())));
+    let capped_at = |count| SmartCriteria {
+        limit: Some(SmartLimit { count, order: LimitOrder::PlayCountDesc }),
+        ..rock.clone()
+    };
+
+    // A cap of 3 is out of the rule's reach, where only the rule can hold the count to 2.
+    let cases = [(capped_at(3), (2, 360_000)), (capped_at(1), (1, 180_000)), (rock, (2, 360_000))];
+    for (criteria, expected) in cases {
+        let counted = queries::smart_playlist::count_smart_playlist(&s.db, &criteria).await?;
+
+        assert_eq!(counted, expected, "limit {:?}", criteria.limit.map(|limit| limit.count));
+    }
+    Ok(())
+}
+
+/// What `EXPLAIN QUERY PLAN` says `sql` does, a step to an entry.
+async fn plan_steps(db: &DbPool, sql: Sql) -> Result<Vec<String>, AppError> {
+    let steps: Vec<(i64, i64, i64, String)> = db.read(move |conn| sql.fetch_all(conn)).await?;
+    Ok(steps.into_iter().map(|(_, _, _, detail)| detail).collect())
+}
+
+fn has_step(plan: &[String], needle: &str) -> bool {
+    plan.iter().any(|step| step.contains(needle))
+}
+
+fn rock_rule() -> SmartCriteria {
+    one(RuleField::Genre, RuleOp::Contains, Some(RuleValue::Text("Rock".to_owned())))
+}
+
+/// Both forms return the same tracks, so only the plan shows which one ran.
+#[tokio::test]
+async fn an_uncapped_set_valued_rule_tests_each_name_once() -> Result<(), AppError> {
+    let db = DbPool::test_pool().await?;
+    let c = rock_rule();
+    let mut sql = Sql::new("EXPLAIN QUERY PLAN SELECT id");
+    super::push_membership(&mut sql, &c);
+
+    let plan = plan_steps(&db, sql).await?;
+
+    assert!(has_step(&plan, "LIST SUBQUERY"), "{plan:?}");
+    assert!(!has_step(&plan, "CORRELATED"), "a per-track test repeats the name match: {plan:?}");
+    Ok(())
+}
+
+/// An `IN` finds every match before the cap can stop anything, where the walk stops at the cap.
+#[tokio::test]
+async fn a_capped_set_valued_rule_walks_its_order() -> Result<(), AppError> {
+    let db = DbPool::test_pool().await?;
+    let c = SmartCriteria {
+        limit: Some(SmartLimit { count: 50, order: LimitOrder::DateAddedDesc }),
+        ..rock_rule()
+    };
+    let mut sql = Sql::new("EXPLAIN QUERY PLAN SELECT id");
+    super::push_membership(&mut sql, &c);
+
+    let plan = plan_steps(&db, sql).await?;
+
+    assert!(has_step(&plan, "idx_tracks_date_added"), "{plan:?}");
+    assert!(!has_step(&plan, "TEMP B-TREE"), "a sort reads every match first: {plan:?}");
+    Ok(())
+}
+
+/// Spelled as `first_cover` spells it. The first hit ends the walk, which an `IN` would pay for
+/// with every match.
+#[tokio::test]
+async fn a_cover_lookup_walks_the_natural_order() -> Result<(), AppError> {
+    let db = DbPool::test_pool().await?;
+    let mut sql = Sql::new(
+        "EXPLAIN QUERY PLAN SELECT artwork_path FROM tracks \
+         WHERE artwork_path IS NOT NULL AND artwork_path != ''",
+    );
+    super::push_and_rules(&mut sql, &rock_rule());
+    sql.push(super::order_by_fragment(None)).push(" LIMIT 1");
+
+    let plan = plan_steps(&db, sql).await?;
+
+    assert!(has_step(&plan, "idx_tracks_sort_key"), "{plan:?}");
+    assert!(!has_step(&plan, "TEMP B-TREE"), "a sort reads every match first: {plan:?}");
+    Ok(())
+}
+
+/// `= 1` matches the same rows through a table scan, so the results can't tell the two apart.
+#[tokio::test]
+async fn a_favorite_rule_reaches_its_partial_index() -> Result<(), AppError> {
+    let db = DbPool::test_pool().await?;
+    let c = one(RuleField::Favorite, RuleOp::IsTrue, None);
+    let mut sql =
+        Sql::new("EXPLAIN QUERY PLAN SELECT COUNT(*), COALESCE(SUM(duration_ms), 0) FROM tracks");
+    super::push_where(&mut sql, &c, super::MemberTest::for_reading(&c));
+
+    let plan = plan_steps(&db, sql).await?;
+
+    assert_eq!(plan, ["SEARCH tracks USING INDEX idx_tracks_is_favorite (is_favorite=?)"]);
     Ok(())
 }
 
@@ -712,8 +856,8 @@ async fn the_export_holds_to_a_limit_and_its_order() -> Result<(), AppError> {
     Ok(())
 }
 
-/// The export names its columns against `tracks` so the correlated `EXISTS` a set-valued rule
-/// renders can't make one ambiguous.
+/// The export names its columns against `tracks` so the subquery a set-valued rule renders can't
+/// make one ambiguous.
 #[tokio::test]
 async fn the_export_resolves_a_set_valued_rule() -> Result<(), AppError> {
     let s = multi_seed().await?;

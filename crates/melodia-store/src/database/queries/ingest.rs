@@ -44,10 +44,14 @@ pub struct IngestResult {
     pub inserted_track_ids: Vec<i64>,
 }
 
-/// Rows a scan or watcher batch writes above which the stats triggers are dropped and the counts
-/// rebuilt by one `recalculate_all_stats` at the end; for a handful of writes the triggers are
-/// cheaper than that recalc.
+/// Rows a batch writes above which the stats triggers are dropped and the counts rebuilt by one
+/// `recalculate_all_stats` at the end; for a handful of writes the triggers are cheaper than that
+/// recalc.
 pub(crate) const BULK_THRESHOLD: usize = 20;
+
+pub(crate) fn is_bulk(rows: usize) -> bool {
+    rows > BULK_THRESHOLD
+}
 
 /// What a scan's chunks wrote, summed across them, and how.
 #[derive(Clone, Copy)]
@@ -62,7 +66,7 @@ pub struct Ingested {
 impl Ingested {
     /// A scan that will write `rows`, its parsed files and its orphans together.
     pub fn for_delta(rows: usize) -> Self {
-        Self { bulk: rows > BULK_THRESHOLD, inserted: 0, moved: 0, updated: 0 }
+        Self { bulk: is_bulk(rows), inserted: 0, moved: 0, updated: 0 }
     }
 
     pub(crate) fn is_bulk(&self) -> bool {
@@ -126,12 +130,15 @@ pub async fn commit_import(
     scan_timestamp: String,
     pool: ScanPool,
 ) -> Result<IngestResult, AppError> {
+    let bulk = is_bulk(scanned_files.len());
     db.transaction(move |tx| {
         let paths: Vec<Cow<'_, str>> =
             scanned_files.iter().map(|f| f.path.to_string_lossy()).collect();
         let paths: Vec<&str> = paths.iter().map(AsRef::as_ref).collect();
         queries::excluded_files::lift_on(tx, &paths)?;
-        queries::stats::disable_stats_triggers(tx)?;
+        if bulk {
+            queries::stats::disable_stats_triggers(tx)?;
+        }
         let result = ingest_scanned_files(
             tx,
             &scanned_files,
@@ -140,8 +147,10 @@ pub async fn commit_import(
             &pool,
         )?;
         queries::scan::update_album_artwork_from_tracks(tx)?;
-        queries::stats::recalculate_all_stats(tx)?;
-        queries::stats::enable_stats_triggers(tx)?;
+        if bulk {
+            queries::stats::recalculate_all_stats(tx)?;
+            queries::stats::enable_stats_triggers(tx)?;
+        }
         Ok(result)
     })
     .await

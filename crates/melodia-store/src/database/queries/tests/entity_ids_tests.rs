@@ -329,3 +329,64 @@ async fn a_folder_queues_in_the_order_browse_lists_it() -> Result<(), AppError> 
     assert_eq!(titles_of(&db, &ids).await?, ["apple", "Zebra"]);
     Ok(())
 }
+
+/// A drive root's path already ends in the separator, and doubled it matched nothing, so Play on
+/// that folder queued nothing.
+#[tokio::test]
+async fn a_folder_at_a_root_plays_its_whole_subtree() -> Result<(), AppError> {
+    use std::path::MAIN_SEPARATOR_STR as SEP;
+
+    for root in [format!("E:{SEP}"), SEP.to_owned()] {
+        let db = empty_library().await?;
+        let nested = format!("{root}sub{SEP}deep.mp3");
+        insert_tagged_track(&db, &format!("{root}a.mp3"), &make_test_metadata("Top")).await?;
+        insert_tagged_track(&db, &nested, &make_test_metadata("Deep")).await?;
+
+        let ids = queries::track::track_ids_under_directory(&db, &root).await?;
+
+        assert_eq!(titles_of(&db, &ids).await?, ["Top", "Deep"], "root {root:?}");
+    }
+    Ok(())
+}
+
+/// One row either side of each end of the range. `.` and a space sort below the separator, so a
+/// sibling sharing the folder's name starts under it, and the end is exclusive.
+#[tokio::test]
+async fn a_folder_plays_nothing_past_either_end_of_its_range() -> Result<(), AppError> {
+    use std::path::MAIN_SEPARATOR_STR as SEP;
+
+    let db = empty_library().await?;
+    let asked = format!("{LIBRARY_ROOT}{SEP}Abba");
+    let rows_around_the_range = [
+        (format!("{asked}.mp3"), "Below"),
+        (format!("{asked} Live{SEP}x.mp3"), "Spaced"),
+        (format!("{asked}{SEP}sub{SEP}in.mp3"), "Inside"),
+        (format!("{asked}{AFTER_SEPARATOR}"), "On the end"),
+        (format!("{asked}{AFTER_SEPARATOR}{SEP}y.mp3"), "Past"),
+    ];
+    for (path, title) in &rows_around_the_range {
+        insert_tagged_track(&db, path, &make_test_metadata(title)).await?;
+    }
+
+    let ids = queries::track::track_ids_under_directory(&db, &asked).await?;
+
+    assert_eq!(titles_of(&db, &ids).await?, ["Inside"]);
+    Ok(())
+}
+
+/// Two folders a case-sensitive disk keeps apart are two folders: playing one plays its own files.
+#[tokio::test]
+async fn a_folder_plays_without_a_sibling_spelled_in_another_case() -> Result<(), AppError> {
+    let db = empty_library().await?;
+    let asked = Path::new(LIBRARY_ROOT).join("Abba");
+    let sibling = Path::new(LIBRARY_ROOT).join("ABBA");
+    let own = asked.join("own.mp3");
+    let other = sibling.join("other.mp3");
+    insert_tagged_track(&db, &own.to_string_lossy(), &make_test_metadata("Own")).await?;
+    insert_tagged_track(&db, &other.to_string_lossy(), &make_test_metadata("Other")).await?;
+
+    let ids = queries::track::track_ids_under_directory(&db, &asked.to_string_lossy()).await?;
+
+    assert_eq!(titles_of(&db, &ids).await?, ["Own"]);
+    Ok(())
+}

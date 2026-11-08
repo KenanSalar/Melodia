@@ -84,8 +84,8 @@ pub fn reload_grid(ui: &AppWindow, state: &AppState, playlists_ui: &Arc<Playlist
 }
 
 /// Refresh what a playlist write moves: the count every row menu's Add to Playlist reads, whatever
-/// tab is up, and the grid where it is on screen. Every write, the smart ones included, comes
-/// through here. Any thread.
+/// tab is up, and the grid where it is on screen, or on the close of a detail covering it. Every
+/// write, the smart ones included, comes through here. Any thread.
 pub fn refresh_after_write(
     state: &AppState,
     playlists_ui: &Arc<PlaylistsUi>,
@@ -98,7 +98,14 @@ pub fn refresh_after_write(
     }
     let s = state.clone();
     let pu = Arc::clone(playlists_ui);
-    let _ = weak.upgrade_in_event_loop(move |ui| reload_grid(&ui, &s, &pu));
+    let _ = weak.upgrade_in_event_loop(move |ui| {
+        // On the UI thread, or a close landing between these two strands what this owes.
+        if pu.detail_open() {
+            pu.section.owe_grid();
+            return;
+        }
+        reload_grid(&ui, &s, &pu);
+    });
 }
 
 /// Write how many playlists there are into `Playlists.count`. Any thread.

@@ -73,7 +73,7 @@ pub(crate) fn push_positioned_membership(sql: &mut Sql, criteria: &SmartCriteria
 /// uncapped set sorts every match. A cap keeps its order, that being what picks the ids it keeps.
 pub(crate) fn push_member_ids(sql: &mut Sql, criteria: &SmartCriteria) {
     sql.push("SELECT id FROM tracks");
-    push_where(sql, criteria);
+    push_where(sql, criteria, MemberTest::for_reading(criteria));
     if let Some(limit) = &criteria.limit {
         push_order_and_limit(sql, limit);
     }
@@ -115,7 +115,7 @@ pub(crate) fn pick_random(
     draw: Draw,
 ) -> Result<Vec<i64>, AppError> {
     let mut sql = Sql::new("SELECT id FROM tracks");
-    push_where(&mut sql, criteria);
+    push_where(&mut sql, criteria, MemberTest::Materialized);
     let matches = sql.fetch_all(conn)?;
     Ok(pick(matches, count, draw))
 }
@@ -137,7 +137,7 @@ fn pick(matches: Vec<i64>, count: u32, draw: Draw) -> Vec<i64> {
 /// `FROM tracks` plus the criteria's `WHERE`, order and cap.
 fn push_membership(sql: &mut Sql, criteria: &SmartCriteria) {
     sql.push(" FROM tracks");
-    push_where(sql, criteria);
+    push_where(sql, criteria, MemberTest::for_reading(criteria));
     if let Some(limit) = &criteria.limit {
         push_order_and_limit(sql, limit);
     } else {
@@ -159,7 +159,7 @@ pub async fn count_smart_playlist(
     } else {
         Sql::new("SELECT COUNT(*), COALESCE(SUM(duration_ms), 0) FROM tracks")
     };
-    push_where(&mut sql, criteria);
+    push_where(&mut sql, criteria, MemberTest::for_reading(criteria));
     if let Some(limit) = &criteria.limit {
         // A deterministic order picks which rows are counted; a random one would sort the whole
         // match set to sum a slice that is random anyway.
@@ -174,24 +174,25 @@ pub async fn count_smart_playlist(
 
 /// Appends `WHERE (rule) AND|OR (rule) …`, skipping incoherent rules; with none left it matches
 /// the whole library.
-fn push_where(sql: &mut Sql, criteria: &SmartCriteria) {
+fn push_where(sql: &mut Sql, criteria: &SmartCriteria, test: MemberTest) {
     let rules = renderable_rules(criteria);
     if rules.is_empty() {
         return;
     }
     sql.push(" WHERE ");
-    push_rules(sql, &rules, criteria.match_mode);
+    push_rules(sql, &rules, criteria.match_mode, test);
 }
 
-/// [`push_where`]'s rules as ` AND (…)`, after a `WHERE` holding a condition of its own. Grouped
-/// whole, or an `Any` set's `OR` would bind that condition to its first rule alone.
+/// [`push_where`]'s rules as ` AND (…)`, after a `WHERE` holding a condition of its own, for a
+/// query that stops at its first hit. Grouped whole, or an `Any` set's `OR` would bind that
+/// condition to its first rule alone.
 fn push_and_rules(sql: &mut Sql, criteria: &SmartCriteria) {
     let rules = renderable_rules(criteria);
     if rules.is_empty() {
         return;
     }
     sql.push(" AND (");
-    push_rules(sql, &rules, criteria.match_mode);
+    push_rules(sql, &rules, criteria.match_mode, MemberTest::Correlated);
     sql.push(")");
 }
 
@@ -199,7 +200,7 @@ fn renderable_rules(criteria: &SmartCriteria) -> Vec<&Rule> {
     criteria.rules.iter().filter(|r| rule_is_renderable(r)).collect()
 }
 
-fn push_rules(sql: &mut Sql, rules: &[&Rule], match_mode: MatchMode) {
+fn push_rules(sql: &mut Sql, rules: &[&Rule], match_mode: MatchMode, test: MemberTest) {
     let sep = match match_mode {
         MatchMode::All => " AND ",
         MatchMode::Any => " OR ",
@@ -209,7 +210,7 @@ fn push_rules(sql: &mut Sql, rules: &[&Rule], match_mode: MatchMode) {
             sql.push(sep);
         }
         sql.push("(");
-        push_rule(sql, rule);
+        push_rule(sql, rule, test);
         sql.push(")");
     }
 }
@@ -236,10 +237,10 @@ fn rule_is_renderable(rule: &Rule) -> bool {
 }
 
 /// One rule's predicate, which the caller parenthesizes.
-fn push_rule(sql: &mut Sql, rule: &Rule) {
+fn push_rule(sql: &mut Sql, rule: &Rule, test: MemberTest) {
     let value = rule.value.as_ref();
     let col = match field_source(rule.field) {
-        FieldSource::Members(rows) => return push_member_predicate(sql, rows, rule.op, value),
+        FieldSource::Members(rows) => return push_member_predicate(sql, rows, rule, test),
         FieldSource::Column(col) => col,
     };
     match rule.field.value_type() {
@@ -250,33 +251,56 @@ fn push_rule(sql: &mut Sql, rule: &Rule) {
     }
 }
 
-/// A text predicate over a set-valued field's *rows*, as `(NOT) EXISTS` correlated on `tracks.id`.
-/// The negation is spelled once here, so a set matches when *any* member does.
-fn push_member_predicate(sql: &mut Sql, rows: MemberRows, op: RuleOp, value: Option<&RuleValue>) {
-    let (negated, op) = match op {
+/// How a set-valued rule asks whether a track belongs.
+#[derive(Clone, Copy)]
+enum MemberTest {
+    /// `IN` over the matching rows, each name tested once, for a query reading every match.
+    Materialized,
+    /// A correlated `EXISTS`, asked of one track at a time, so a plan walking an order index can
+    /// stop at its cap or first hit, where an `IN` would find every match first.
+    Correlated,
+}
+
+impl MemberTest {
+    fn for_reading(criteria: &SmartCriteria) -> Self {
+        if criteria.limit.is_some() { Self::Correlated } else { Self::Materialized }
+    }
+}
+
+/// A text predicate over a set-valued field's *rows*, in the form `test` picks. The negation is
+/// spelled once here, so a set matches when *any* member does.
+fn push_member_predicate(sql: &mut Sql, rows: MemberRows, rule: &Rule, test: MemberTest) {
+    let value = rule.value.as_ref();
+    let (negated, op) = match rule.op {
         RuleOp::NotContains => (true, RuleOp::Contains),
         RuleOp::IsNot => (true, RuleOp::Is),
         RuleOp::IsNotSet => (true, RuleOp::IsSet),
         op => (false, op),
     };
     // Ahead of the wrapper, not inside it: a value-shape mismatch owes an always-false term, and
-    // one placed under `NOT EXISTS` is an always-true one.
+    // one placed under a negation is an always-true one.
     if op != RuleOp::IsSet && !matches!(value, Some(RuleValue::Text(_))) {
         return push_false(sql);
     }
 
-    if negated {
-        sql.push("NOT ");
-    }
-    sql.push("EXISTS (SELECT 1 FROM ");
-    sql.push(rows.from);
-    sql.push(" WHERE ");
-    sql.push(rows.correlate);
-    // `IsSet` is the row existing, so the correlation already is the whole predicate.
+    let name_clause = match test {
+        MemberTest::Materialized => {
+            // `track_id` is `NOT NULL`, so a `NOT IN` can't turn unknown over a NULL.
+            sql.push(if negated { "tracks.id NOT IN (SELECT " } else { "tracks.id IN (SELECT " });
+            sql.push(rows.track_id).push(" FROM ").push(rows.from);
+            " WHERE ("
+        }
+        MemberTest::Correlated => {
+            sql.push(if negated { "NOT EXISTS (SELECT 1 FROM " } else { "EXISTS (SELECT 1 FROM " });
+            sql.push(rows.from).push(" WHERE ").push(rows.track_id).push(" = tracks.id");
+            " AND ("
+        }
+    };
+    // `IsSet` is the row existing, so what's already written is the whole predicate.
     if op != RuleOp::IsSet {
         // Parenthesized: two of `push_text_predicate`'s arms spell a bare `OR`, and one reaching
         // here would bind the correlation to its left half and leave the `EXISTS` uncorrelated.
-        sql.push(" AND (");
+        sql.push(name_clause);
         push_text_predicate(sql, rows.name, op, value);
         sql.push(")");
     }
@@ -380,11 +404,12 @@ fn push_numeric_predicate(
 
 fn push_bool_predicate(sql: &mut Sql, col: &'static str, op: RuleOp) {
     match op {
+        // Spelled as `idx_tracks_is_favorite`'s own `WHERE`: `= 1` doesn't reach a partial index.
         RuleOp::IsTrue => {
-            sql.push(col).push(" = 1");
+            sql.push(col).push(" = TRUE");
         }
         RuleOp::IsFalse => {
-            sql.push(col).push(" = 0");
+            sql.push(col).push(" = FALSE");
         }
         _ => push_false(sql),
     }
@@ -414,18 +439,18 @@ fn push_date_predicate(sql: &mut Sql, col: &'static str, op: RuleOp, value: Opti
 enum FieldSource {
     /// A column on `tracks` holding the whole value.
     Column(&'static str),
-    /// Rows in a join table, reached through a correlated `EXISTS`.
+    /// Rows in a join table, reached as a [`MemberTest`] says.
     Members(MemberRows),
 }
 
-/// The three fragments a correlated `EXISTS` over a join table needs, split so a fourth set of rows
-/// can't leave out the correlation, which would match the whole library rather than fail.
+/// The three fragments either [`MemberTest`] is built from, split so a fourth set of rows can't
+/// leave out the tie to its track, which would match the whole library rather than fail.
 #[derive(Clone, Copy)]
 struct MemberRows {
     /// The `FROM` text: the join table and whatever it reaches for a name.
     from: &'static str,
-    /// The term tying one of its rows to the track under test.
-    correlate: &'static str,
+    /// The column tying one of its rows to a track.
+    track_id: &'static str,
     /// The name column a predicate compares.
     name: &'static str,
 }
@@ -440,12 +465,12 @@ fn field_source(field: RuleField) -> FieldSource {
     match field {
         RuleField::Genre => FieldSource::Members(MemberRows {
             from: "track_genres tg JOIN genres g ON g.id = tg.genre_id",
-            correlate: "tg.track_id = tracks.id",
+            track_id: "tg.track_id",
             name: "g.name",
         }),
         RuleField::Credits => FieldSource::Members(MemberRows {
             from: "track_credits tc JOIN artists a ON a.id = tc.artist_id",
-            correlate: "tc.track_id = tracks.id",
+            track_id: "tc.track_id",
             name: "a.name",
         }),
         RuleField::Title => FieldSource::Column("title"),

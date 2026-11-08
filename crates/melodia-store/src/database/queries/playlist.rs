@@ -494,7 +494,7 @@ fn move_items(
     update_playlist_thumbnail_and_timestamp_tx(tx, playlist_id, &now)
 }
 
-/// Closes the gaps in a playlist's positions.
+/// Closes the gaps in a playlist's positions, writing only the rows that move.
 pub(crate) fn renumber_playlist_positions_tx(
     tx: &Transaction<'_>,
     playlist_id: i64,
@@ -503,11 +503,11 @@ pub(crate) fn renumber_playlist_positions_tx(
         tx,
         "WITH numbered AS (
             SELECT id, ROW_NUMBER() OVER (ORDER BY position, id) - 1 AS new_pos
-            FROM playlist_items WHERE playlist_id = ?1
+            FROM playlist_items WHERE playlist_id = ?
         )
-        UPDATE playlist_items SET position = (
-            SELECT new_pos FROM numbered WHERE numbered.id = playlist_items.id
-        ) WHERE playlist_id = ?1",
+        UPDATE playlist_items SET position = numbered.new_pos
+        FROM numbered
+        WHERE numbered.id = playlist_items.id AND playlist_items.position <> numbered.new_pos",
         (playlist_id,),
     )?;
     Ok(())

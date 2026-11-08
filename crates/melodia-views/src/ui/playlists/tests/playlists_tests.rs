@@ -2,7 +2,7 @@
 //! which any other pin can see go missing.
 
 use super::detail::{DetailPage, POSITION_FIELD, is_manual_order};
-use melodia_testkit::code_tokens;
+use melodia_testkit::{block_after, code_tokens};
 
 const TRACK_LIST: &str =
     include_str!("../../../../../melodia-ui/ui/components/track-list/track-list.slint");
@@ -13,6 +13,26 @@ const DETAIL_VIEW: &str =
 const SHARED_DETAIL_WIRING: &str = include_str!("../../callbacks/track_detail.rs");
 const DETAIL: &str = include_str!("../detail.rs");
 const DETAIL_CALLBACKS: &str = include_str!("../callbacks/detail.rs");
+const GRID: &str = include_str!("../grid.rs");
+
+/// A write owes a covered grid one reload, decided on the UI thread where closes run: checked before
+/// the hop, a close in the gap collects the debt first and the grid stays stale. Only the source can
+/// hold this, a test needing a close to land inside that gap.
+#[test]
+fn a_playlist_write_settles_the_open_detail_on_the_ui_thread() {
+    let src = code_tokens(GRID);
+    let body = block_after(&src, "fn refresh_after_write(");
+    let (before_hop, on_ui_thread) = body.split_once("upgrade_in_event_loop").unwrap_or_default();
+
+    assert!(!on_ui_thread.is_empty(), "the hop is no longer where this pin reads it");
+    assert!(!before_hop.contains("detail_open"), "the check has to sit past the hop");
+    assert!(
+        on_ui_thread.contains(
+            "if pu.detail_open() { pu.section.owe_grid(); return; } reload_grid(&ui, &s, &pu);"
+        ),
+        "a covered grid is owed its reload, and only an uncovered one takes it now"
+    );
+}
 
 /// A list's drag and its own drag-pan are one gesture, and whichever element owns
 /// it the other gets nothing. The list around the rows opts out, and so does the

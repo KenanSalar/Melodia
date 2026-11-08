@@ -14,7 +14,7 @@ use super::{
     update_track_location, update_track_metadata,
 };
 use crate::database::DbPool;
-use crate::database::queries::ingest::BULK_THRESHOLD;
+use crate::database::queries::ingest;
 use crate::database::queries::{excluded_files, stats};
 use melodia_core::entities::scan::ExtractedMetadata;
 use melodia_core::error::{AppError, describe};
@@ -85,7 +85,7 @@ fn apply_changes(
     changes: &[WatchedChange],
     batch: &mut Batch,
 ) -> Result<(), AppError> {
-    let is_bulk = changes.len() > BULK_THRESHOLD;
+    let is_bulk = ingest::is_bulk(changes.len());
     if is_bulk {
         stats::disable_stats_triggers(tx)?;
     }

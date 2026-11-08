@@ -84,6 +84,13 @@ pub fn make_test_metadata(title: &str) -> ExtractedMetadata {
     }
 }
 
+/// The byte after the native path separator, read off the ASCII table: where a directory's
+/// `file_path` range stops.
+#[cfg(all(test, windows))]
+pub(crate) const AFTER_SEPARATOR: &str = "]";
+#[cfg(all(test, not(windows)))]
+pub(crate) const AFTER_SEPARATOR: &str = "0";
+
 /// Inserts a test track through the scan's own upserts, returning its id.
 pub async fn insert_test_track(
     db: &DbPool,

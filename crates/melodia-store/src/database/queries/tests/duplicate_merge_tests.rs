@@ -5,6 +5,7 @@
 
 use super::*;
 use crate::database::queries::fixtures::{insert_test_track, make_test_metadata, numbered_library};
+use crate::database::queries::ingest::BULK_THRESHOLD;
 use crate::database::rows::FromRow;
 use crate::database::sql::{self, Sql};
 
