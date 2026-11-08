@@ -1,10 +1,15 @@
 use std::collections::{HashMap, HashSet};
+use std::sync::LazyLock;
 
-use sqlx::AssertSqlSafe;
+use rusqlite::{Connection, Transaction};
 
 use crate::database::queries::search_name;
 use crate::database::queries::track::{columns, missing_ids_on};
-use crate::database::{DbPool, select_in_id_order};
+use crate::database::sql::{self, Sql};
+use crate::database::{
+    CASE_BINDS_PER_ROW, DbPool, MAX_BINDS_PER_STATEMENT, case_by_id, chunked_in_query,
+    chunked_in_statements, placeholders, select_in_id_order, values_placeholders,
+};
 use melodia_core::entities::playlist::{CutItem, PlaylistIdentity, PlaylistItemsCut};
 use melodia_core::entities::undo::{UNDO_HOLD_CAP, UndoCapture};
 use melodia_core::entities::{playlist, track};
@@ -16,34 +21,26 @@ pub async fn create_playlist(
     name: &str,
     description: Option<&str>,
 ) -> Result<playlist::Playlist, AppError> {
-    create_playlist_on(db.write(), name, description).await
+    let name = name.to_owned();
+    let description = description.map(str::to_owned);
+    db.write(move |conn| create_playlist_on(conn, &name, description.as_deref())).await
 }
 
-/// [`create_playlist`] against any executor, so [`create_playlist_with_tracks`] can run it inside
-/// its transaction without a second copy of the statement.
-async fn create_playlist_on<'e, E>(
-    executor: E,
+/// [`create_playlist`] on a connection the caller holds, so [`create_playlist_with_tracks`] can run
+/// it inside its transaction without a second copy of the statement.
+fn create_playlist_on(
+    conn: &Connection,
     name: &str,
     description: Option<&str>,
-) -> Result<playlist::Playlist, AppError>
-where
-    E: sqlx::Executor<'e, Database = sqlx::Sqlite>,
-{
+) -> Result<playlist::Playlist, AppError> {
     let now = melodia_core::utils::now_rfc3339();
-
-    let result = sqlx::query_as::<_, playlist::Playlist>(
+    sql::fetch_one(
+        conn,
         "INSERT INTO playlists (name, description, thumbnail_path, is_smart, smart_criteria, created_at, updated_at, search_name)
          VALUES (?, ?, NULL, FALSE, NULL, ?, ?, ?)
-         RETURNING *"
+         RETURNING *",
+        (name, description, &now, &now, search_name::pack(&[name])),
     )
-    .bind(name)
-    .bind(description)
-    .bind(&now)
-    .bind(&now)
-    .bind(search_name::pack(&[name]))
-    .fetch_one(executor)
-    .await?;
-    Ok(result)
 }
 
 /// Creates a playlist already holding `track_ids` in order, less any the library lost since they
@@ -52,96 +49,96 @@ where
 /// One transaction, so an insert that fails leaves no empty playlist behind.
 pub async fn create_playlist_with_tracks(
     db: &DbPool,
-    name: &str,
-    description: Option<&str>,
-    track_ids: &[i64],
+    name: String,
+    description: Option<String>,
+    track_ids: Vec<i64>,
 ) -> Result<i64, AppError> {
-    let mut tx = db.write().begin().await?;
-    let present = present_in_order(&mut tx, track_ids).await?;
-    let playlist_id = create_playlist_on(&mut *tx, name, description).await?.id;
+    db.transaction(move |tx| {
+        let present = present_in_order(tx, &track_ids)?;
+        let playlist_id = create_playlist_on(tx, &name, description.as_deref())?.id;
 
-    let now = melodia_core::utils::now_rfc3339();
-    let landed = insert_items_tx(&mut tx, playlist_id, &contiguous(&present, 0, &now)?).await?;
-    // Only a repeated track leaves a gap: the unique index keeps its first slot and drops the rest.
-    if landed.len() < present.len() {
-        renumber_playlist_positions_tx(&mut tx, playlist_id).await?;
-    }
-    update_playlist_thumbnail_and_timestamp_tx(&mut tx, playlist_id, &now).await?;
-
-    tx.commit().await?;
-    Ok(playlist_id)
+        let now = melodia_core::utils::now_rfc3339();
+        let landed = insert_items_tx(tx, playlist_id, &contiguous(&present, 0, &now)?)?;
+        // Only a repeated track leaves a gap, the unique index keeping its first slot.
+        if landed.len() < present.len() {
+            renumber_playlist_positions_tx(tx, playlist_id)?;
+        }
+        update_playlist_thumbnail_and_timestamp_tx(tx, playlist_id, &now)?;
+        Ok(playlist_id)
+    })
+    .await
 }
 
 /// Creates a smart playlist, whose membership [`crate::database::queries::smart_playlist`] resolves
 /// live from `criteria_json` rather than from `playlist_items`.
 pub async fn create_smart_playlist(
     db: &DbPool,
-    name: &str,
-    description: Option<&str>,
-    criteria_json: &str,
+    name: String,
+    description: Option<String>,
+    criteria_json: String,
 ) -> Result<playlist::Playlist, AppError> {
     let now = melodia_core::utils::now_rfc3339();
-
-    let result = sqlx::query_as::<_, playlist::Playlist>(
-        "INSERT INTO playlists (name, description, thumbnail_path, is_smart, smart_criteria, created_at, updated_at, search_name)
-         VALUES (?, ?, NULL, TRUE, ?, ?, ?, ?)
-         RETURNING *"
-    )
-    .bind(name)
-    .bind(description)
-    .bind(criteria_json)
-    .bind(&now)
-    .bind(&now)
-    .bind(search_name::pack(&[name]))
-    .fetch_one(db.write())
-    .await?;
-    Ok(result)
+    let search_name = search_name::pack(&[&name]);
+    db.write(move |conn| {
+        sql::fetch_one(
+            conn,
+            "INSERT INTO playlists (name, description, thumbnail_path, is_smart, smart_criteria, created_at, updated_at, search_name)
+             VALUES (?, ?, NULL, TRUE, ?, ?, ?, ?)
+             RETURNING *",
+            (name, description, criteria_json, &now, &now, search_name),
+        )
+    })
+    .await
 }
 
 /// Replaces a smart playlist's rule set; its name and description go through [`update_playlist`].
 pub async fn update_smart_criteria(
     db: &DbPool,
     id: i64,
-    criteria_json: &str,
+    criteria_json: String,
 ) -> Result<playlist::Playlist, AppError> {
     let now = melodia_core::utils::now_rfc3339();
-
-    sqlx::query_as::<_, playlist::Playlist>(
-        "UPDATE playlists SET smart_criteria = ?, updated_at = ? WHERE id = ? RETURNING *",
-    )
-    .bind(criteria_json)
-    .bind(&now)
-    .bind(id)
-    .fetch_optional(db.write())
+    db.write(move |conn| {
+        sql::fetch_optional(
+            conn,
+            "UPDATE playlists SET smart_criteria = ?, updated_at = ? WHERE id = ? RETURNING *",
+            (criteria_json, now, id),
+        )
+    })
     .await?
     .ok_or_else(|| AppError::not_found("Playlist", id))
 }
 
 pub async fn get_all_playlists(db: &DbPool) -> Result<Vec<playlist::PlaylistStats>, AppError> {
-    let playlists = sqlx::query_as::<_, playlist::PlaylistStats>(
-        "SELECT * FROM playlist_stats ORDER BY updated_at DESC",
-    )
-    .fetch_all(db.read())
-    .await?;
-    Ok(playlists)
+    db.read(|conn| {
+        sql::fetch_all(conn, "SELECT * FROM playlist_stats ORDER BY updated_at DESC", ())
+    })
+    .await
 }
 
 /// The Playlists grid's cards for `ids`, in the order asked for. A smart playlist's count is the
 /// stored `0`, which the caller replaces with its live one.
 pub async fn get_playlists_by_ids(
     db: &DbPool,
-    ids: &[i64],
+    ids: Vec<i64>,
 ) -> Result<Vec<playlist::PlaylistStats>, AppError> {
-    select_in_id_order(db, "SELECT * FROM playlist_stats", ids, |p: &playlist::PlaylistStats| p.id)
-        .await
+    db.read(move |conn| {
+        select_in_id_order(
+            conn,
+            "SELECT * FROM playlist_stats",
+            &ids,
+            |p: &playlist::PlaylistStats| p.id,
+        )
+    })
+    .await
 }
 
 pub async fn get_playlist_by_id(db: &DbPool, id: i64) -> Result<playlist::PlaylistStats, AppError> {
-    sqlx::query_as::<_, playlist::PlaylistStats>("SELECT * FROM playlist_stats WHERE id = ?")
-        .bind(id)
-        .fetch_optional(db.read())
-        .await?
-        .ok_or_else(|| AppError::not_found("Playlist", id))
+    db.read(move |conn| {
+        sql::fetch_optional(conn, "SELECT * FROM playlist_stats WHERE id = ?", (id,))
+    })
+    .await?
+    .ok_or_else(|| AppError::not_found("Playlist", id))
 }
 
 /// `(id, is_smart, smart_criteria)` for each of `ids` still there, off the base table rather than
@@ -150,8 +147,13 @@ pub async fn smart_criteria_for_playlists(
     db: &DbPool,
     ids: &[i64],
 ) -> Result<Vec<(i64, bool, Option<String>)>, AppError> {
-    crate::database::chunked_in_query(db.read(), ids, |placeholders| {
-        format!("SELECT id, is_smart, smart_criteria FROM playlists WHERE id IN ({placeholders})")
+    let ids = ids.to_vec();
+    db.read(move |conn| {
+        chunked_in_query(conn, &ids, |placeholders| {
+            format!(
+                "SELECT id, is_smart, smart_criteria FROM playlists WHERE id IN ({placeholders})"
+            )
+        })
     })
     .await
 }
@@ -159,45 +161,27 @@ pub async fn smart_criteria_for_playlists(
 pub async fn update_playlist(
     db: &DbPool,
     id: i64,
-    name: &str,
-    description: Option<&str>,
+    name: String,
+    description: Option<String>,
     clear_thumbnail: bool,
 ) -> Result<playlist::Playlist, AppError> {
-    let now = melodia_core::utils::now_rfc3339();
-
-    if clear_thumbnail {
+    let statement = if clear_thumbnail {
         // custom_thumbnail = TRUE records the cleared cover as the user's choice, so a later add,
         // removal or reorder leaves the placeholder rather than filling it from the first track.
-        let result = sqlx::query_as::<_, playlist::Playlist>(
-            "UPDATE playlists SET name = ?, description = ?,
-                thumbnail_path = NULL,
+        "UPDATE playlists SET name = ?, description = ?, thumbnail_path = NULL,
                 custom_thumbnail = TRUE, updated_at = ?, search_name = ?
-            WHERE id = ? RETURNING *",
-        )
-        .bind(name)
-        .bind(description)
-        .bind(&now)
-        .bind(search_name::pack(&[name]))
-        .bind(id)
-        .fetch_optional(db.write())
-        .await?
-        .ok_or_else(|| AppError::not_found("Playlist", id))?;
-        Ok(result)
+         WHERE id = ? RETURNING *"
     } else {
-        let result = sqlx::query_as::<_, playlist::Playlist>(
-            "UPDATE playlists SET name = ?, description = ?, updated_at = ?, search_name = ? \
-             WHERE id = ? RETURNING *",
-        )
-        .bind(name)
-        .bind(description)
-        .bind(&now)
-        .bind(search_name::pack(&[name]))
-        .bind(id)
-        .fetch_optional(db.write())
-        .await?
-        .ok_or_else(|| AppError::not_found("Playlist", id))?;
-        Ok(result)
-    }
+        "UPDATE playlists SET name = ?, description = ?, updated_at = ?, search_name = ?
+         WHERE id = ? RETURNING *"
+    };
+    let now = melodia_core::utils::now_rfc3339();
+    let search_name = search_name::pack(&[&name]);
+    db.write(move |conn| {
+        sql::fetch_optional(conn, statement, (name, description, now, search_name, id))
+    })
+    .await?
+    .ok_or_else(|| AppError::not_found("Playlist", id))
 }
 
 #[cfg(test)]
@@ -205,35 +189,35 @@ pub async fn get_playlist_tracks(
     db: &DbPool,
     playlist_id: i64,
 ) -> Result<Vec<track::Track>, AppError> {
-    let tracks = sqlx::query_as::<_, track::Track>(
-        "SELECT t.* FROM tracks t
-         JOIN playlist_items pi ON pi.track_id = t.id
-         WHERE pi.playlist_id = ?
-         ORDER BY pi.position ASC",
-    )
-    .bind(playlist_id)
-    .fetch_all(db.read())
-    .await?;
-    Ok(tracks)
+    db.read(move |conn| {
+        sql::fetch_all(
+            conn,
+            "SELECT t.* FROM tracks t
+             JOIN playlist_items pi ON pi.track_id = t.id
+             WHERE pi.playlist_id = ?
+             ORDER BY pi.position ASC",
+            (playlist_id,),
+        )
+    })
+    .await
 }
+
+static EXPORT_ROWS: LazyLock<String> = LazyLock::new(|| {
+    format!(
+        "SELECT {} FROM tracks t \
+         JOIN playlist_items pi ON pi.track_id = t.id \
+         WHERE pi.playlist_id = ? \
+         ORDER BY pi.position ASC",
+        columns::PLAYLIST_EXPORT.prefixed("t")
+    )
+});
 
 /// A playlist's M3U export rows, in playlist order.
 pub async fn get_playlist_tracks_for_export(
     db: &DbPool,
     playlist_id: i64,
 ) -> Result<Vec<track::PlaylistExportRow>, AppError> {
-    let cols = columns::PLAYLIST_EXPORT.prefixed("t");
-    let sql = format!(
-        "SELECT {cols} FROM tracks t \
-         JOIN playlist_items pi ON pi.track_id = t.id \
-         WHERE pi.playlist_id = ? \
-         ORDER BY pi.position ASC"
-    );
-    let tracks = sqlx::query_as::<_, track::PlaylistExportRow>(AssertSqlSafe(sql))
-        .bind(playlist_id)
-        .fetch_all(db.read())
-        .await?;
-    Ok(tracks)
+    db.read(move |conn| sql::fetch_all(conn, EXPORT_ROWS.as_str(), (playlist_id,))).await
 }
 
 /// Appends `track_ids` to a playlist, skipping any it already holds or the library lost since they
@@ -241,36 +225,38 @@ pub async fn get_playlist_tracks_for_export(
 pub async fn add_tracks_to_playlist(
     db: &DbPool,
     playlist_id: i64,
-    track_ids: &[i64],
+    track_ids: Vec<i64>,
 ) -> Result<Vec<i64>, AppError> {
     if track_ids.is_empty() {
         return Ok(Vec::new());
     }
+    db.transaction(move |tx| append_items(tx, playlist_id, &track_ids)).await
+}
 
-    let mut tx = db.write().begin().await?;
-    let present = present_in_order(&mut tx, track_ids).await?;
+fn append_items(
+    tx: &Transaction<'_>,
+    playlist_id: i64,
+    track_ids: &[i64],
+) -> Result<Vec<i64>, AppError> {
+    let present = present_in_order(tx, track_ids)?;
 
-    let max_pos: Option<i32> = sqlx::query_scalar::<_, Option<i32>>(
+    let max_pos: Option<i32> = sql::fetch_one(
+        tx,
         "SELECT MAX(position) FROM playlist_items WHERE playlist_id = ?",
-    )
-    .bind(playlist_id)
-    .fetch_one(&mut *tx)
-    .await?;
+        (playlist_id,),
+    )?;
 
     let start_position = max_pos.unwrap_or(-1) + 1;
     let now = melodia_core::utils::now_rfc3339();
-    let landed =
-        insert_items_tx(&mut tx, playlist_id, &contiguous(&present, start_position, &now)?).await?;
+    let landed = insert_items_tx(tx, playlist_id, &contiguous(&present, start_position, &now)?)?;
     // A playlist that took nothing keeps its `updated_at`, so its card keeps its place.
     if landed.is_empty() {
         return Ok(landed);
     }
 
     // Closes the gaps ignored duplicates leave.
-    renumber_playlist_positions_tx(&mut tx, playlist_id).await?;
-    update_playlist_thumbnail_and_timestamp_tx(&mut tx, playlist_id, &now).await?;
-
-    tx.commit().await?;
+    renumber_playlist_positions_tx(tx, playlist_id)?;
+    update_playlist_thumbnail_and_timestamp_tx(tx, playlist_id, &now)?;
     Ok(landed)
 }
 
@@ -304,39 +290,32 @@ pub(crate) fn contiguous<'a>(
 /// landed, in no set order. Each item names a track present inside `tx`: a scan hard-deletes a
 /// track whose file went, and an insert naming one fails its foreign key, which `OR IGNORE`
 /// doesn't cover. Ids read before `tx` opened go through [`missing_ids_on`] first.
-pub(crate) async fn insert_items_tx(
-    tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
+pub(crate) fn insert_items_tx(
+    tx: &Transaction<'_>,
     playlist_id: i64,
     items: &[NewItem<'_>],
 ) -> Result<Vec<i64>, AppError> {
     const COLS_PER_ROW: usize = 4;
-    const CHUNK_SIZE: usize = crate::database::MAX_BINDS_PER_STATEMENT / COLS_PER_ROW;
+    const CHUNK_SIZE: usize = MAX_BINDS_PER_STATEMENT / COLS_PER_ROW;
 
     let mut landed = Vec::with_capacity(items.len());
     for chunk in items.chunks(CHUNK_SIZE) {
-        let mut query_builder = sqlx::QueryBuilder::new(
-            "INSERT OR IGNORE INTO playlist_items (playlist_id, track_id, position, added_at) ",
-        );
-        query_builder.push_values(chunk, |mut b, item| {
-            b.push_bind(playlist_id)
-                .push_bind(item.track_id)
-                .push_bind(item.position)
-                .push_bind(item.added_at);
-        });
-        query_builder.push(" RETURNING track_id");
-        let chunk_landed: Vec<i64> =
-            query_builder.build_query_scalar().persistent(false).fetch_all(&mut **tx).await?;
-        landed.extend(chunk_landed);
+        let mut sql = Sql::vouched(format!(
+            "INSERT OR IGNORE INTO playlist_items (playlist_id, track_id, position, added_at) \
+             VALUES {} RETURNING track_id",
+            values_placeholders(chunk.len(), COLS_PER_ROW)
+        ));
+        for item in chunk {
+            sql.bind(playlist_id).bind(item.track_id).bind(item.position).bind(item.added_at);
+        }
+        landed.extend(sql.fetch_all::<i64>(tx)?);
     }
     Ok(landed)
 }
 
 /// `track_ids` in their order, less any the library no longer holds.
-async fn present_in_order(
-    tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
-    track_ids: &[i64],
-) -> Result<Vec<i64>, AppError> {
-    let missing = missing_ids_on(tx, track_ids).await?;
+fn present_in_order(tx: &Transaction<'_>, track_ids: &[i64]) -> Result<Vec<i64>, AppError> {
+    let missing = missing_ids_on(tx, track_ids)?;
     Ok(track_ids.iter().copied().filter(|id| !missing.contains(id)).collect())
 }
 
@@ -345,7 +324,7 @@ async fn present_in_order(
 pub async fn remove_tracks_from_playlist_batch(
     db: &DbPool,
     playlist_id: i64,
-    track_ids: &[i64],
+    track_ids: Vec<i64>,
 ) -> Result<UndoCapture<PlaylistItemsCut>, AppError> {
     if track_ids.is_empty() {
         return Ok(UndoCapture::Nothing);
@@ -354,23 +333,28 @@ pub async fn remove_tracks_from_playlist_batch(
         let rows = remove_tracks_from_playlist_for_good(db, playlist_id, track_ids).await?;
         return Ok(if rows == 0 { UndoCapture::Nothing } else { UndoCapture::OverCap { rows } });
     }
+    db.transaction(move |tx| cut_items(tx, playlist_id, &track_ids)).await
+}
 
-    let mut tx = db.write().begin().await?;
-    let rows = cut_rows_tx(&mut tx, playlist_id, track_ids).await?;
+fn cut_items(
+    tx: &Transaction<'_>,
+    playlist_id: i64,
+    track_ids: &[i64],
+) -> Result<UndoCapture<PlaylistItemsCut>, AppError> {
+    let rows = cut_rows_tx(tx, playlist_id, track_ids)?;
     if rows.is_empty() {
         return Ok(UndoCapture::Nothing);
     }
-    let (created_at, updated_before): (String, String) =
-        sqlx::query_as("SELECT created_at, updated_at FROM playlists WHERE id = ?")
-            .bind(playlist_id)
-            .fetch_one(&mut *tx)
-            .await?;
+    let (created_at, updated_before): (String, String) = sql::fetch_one(
+        tx,
+        "SELECT created_at, updated_at FROM playlists WHERE id = ?",
+        (playlist_id,),
+    )?;
 
-    delete_items_tx(&mut tx, playlist_id, track_ids).await?;
-    renumber_playlist_positions_tx(&mut tx, playlist_id).await?;
+    delete_items_tx(tx, playlist_id, track_ids)?;
+    renumber_playlist_positions_tx(tx, playlist_id)?;
     let stamped_at = melodia_core::utils::now_rfc3339();
-    update_playlist_thumbnail_and_timestamp_tx(&mut tx, playlist_id, &stamped_at).await?;
-    tx.commit().await?;
+    update_playlist_thumbnail_and_timestamp_tx(tx, playlist_id, &stamped_at)?;
 
     let playlist = PlaylistIdentity { id: playlist_id, created_at };
     Ok(UndoCapture::Held(PlaylistItemsCut { playlist, rows, updated_before, stamped_at }))
@@ -381,47 +365,43 @@ pub async fn remove_tracks_from_playlist_batch(
 pub async fn remove_tracks_from_playlist_for_good(
     db: &DbPool,
     playlist_id: i64,
-    track_ids: &[i64],
+    track_ids: Vec<i64>,
 ) -> Result<usize, AppError> {
     if track_ids.is_empty() {
         return Ok(0);
     }
-    let mut tx = db.write().begin().await?;
-    let removed = delete_items_tx(&mut tx, playlist_id, track_ids).await?;
-    if removed == 0 {
-        return Ok(0);
-    }
-    renumber_playlist_positions_tx(&mut tx, playlist_id).await?;
-    let now = melodia_core::utils::now_rfc3339();
-    update_playlist_thumbnail_and_timestamp_tx(&mut tx, playlist_id, &now).await?;
-    tx.commit().await?;
-    Ok(removed)
+    db.transaction(move |tx| {
+        let removed = delete_items_tx(tx, playlist_id, &track_ids)?;
+        if removed == 0 {
+            return Ok(0);
+        }
+        renumber_playlist_positions_tx(tx, playlist_id)?;
+        let now = melodia_core::utils::now_rfc3339();
+        update_playlist_thumbnail_and_timestamp_tx(tx, playlist_id, &now)?;
+        Ok(removed)
+    })
+    .await
 }
 
 /// The rows `track_ids` hold in the playlist, ascending, each with its index in the playlist's
 /// order: the positions themselves can carry gaps under a hard-deleted track.
-async fn cut_rows_tx(
-    tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
+fn cut_rows_tx(
+    tx: &Transaction<'_>,
     playlist_id: i64,
     track_ids: &[i64],
 ) -> Result<Vec<CutItem>, AppError> {
     let mut rows = Vec::with_capacity(track_ids.len());
-    // One bind of each statement is the `playlist_id`.
-    for chunk in track_ids.chunks(crate::database::MAX_BINDS_PER_STATEMENT - 1) {
-        let placeholders = crate::database::placeholders(chunk.len());
-        let sql = format!(
+    let statements = chunked_in_statements(playlist_id, track_ids, |placeholders| {
+        format!(
             "SELECT track_id, row, added_at FROM (
                 SELECT track_id, added_at, ROW_NUMBER() OVER (ORDER BY position, id) - 1 AS row
                 FROM playlist_items WHERE playlist_id = ?
             ) WHERE track_id IN ({placeholders})"
-        );
-        let mut query = sqlx::query_as::<_, (i64, i64, String)>(AssertSqlSafe(sql))
-            .persistent(false)
-            .bind(playlist_id);
-        for &id in chunk {
-            query = query.bind(id);
-        }
-        for (track_id, row, added_at) in query.fetch_all(&mut **tx).await? {
+        )
+    });
+    for sql in statements {
+        let found: Vec<(i64, i64, String)> = sql.fetch_all(tx)?;
+        for (track_id, row, added_at) in found {
             let row = usize::try_from(row).unwrap_or(usize::MAX);
             rows.push(CutItem { track_id, row, added_at });
         }
@@ -431,23 +411,17 @@ async fn cut_rows_tx(
 }
 
 /// Deletes `track_ids`' rows from a playlist and returns how many went.
-async fn delete_items_tx(
-    tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
+fn delete_items_tx(
+    tx: &Transaction<'_>,
     playlist_id: i64,
     track_ids: &[i64],
 ) -> Result<usize, AppError> {
+    let statements = chunked_in_statements(playlist_id, track_ids, |placeholders| {
+        format!("DELETE FROM playlist_items WHERE playlist_id = ? AND track_id IN ({placeholders})")
+    });
     let mut removed: u64 = 0;
-    // One bind of each statement is the `playlist_id`.
-    for chunk in track_ids.chunks(crate::database::MAX_BINDS_PER_STATEMENT - 1) {
-        let placeholders = crate::database::placeholders(chunk.len());
-        let sql = format!(
-            "DELETE FROM playlist_items WHERE playlist_id = ? AND track_id IN ({placeholders})"
-        );
-        let mut query = sqlx::query(AssertSqlSafe(sql)).persistent(false).bind(playlist_id);
-        for &id in chunk {
-            query = query.bind(id);
-        }
-        removed += query.execute(&mut **tx).await?.rows_affected();
+    for sql in statements {
+        removed += sql.execute(tx)?;
     }
     Ok(usize::try_from(removed).unwrap_or(usize::MAX))
 }
@@ -461,18 +435,24 @@ async fn delete_items_tx(
 pub async fn move_playlist_tracks(
     db: &DbPool,
     playlist_id: i64,
+    track_ids: Vec<i64>,
+    to: usize,
+) -> Result<(), AppError> {
+    db.transaction(move |tx| move_items(tx, playlist_id, &track_ids, to)).await
+}
+
+fn move_items(
+    tx: &Transaction<'_>,
+    playlist_id: i64,
     track_ids: &[i64],
     to: usize,
 ) -> Result<(), AppError> {
-    let mut tx = db.write().begin().await?;
-
-    let mut items: Vec<(i64, i64, i32)> = sqlx::query_as(
+    let mut items: Vec<(i64, i64, i32)> = sql::fetch_all(
+        tx,
         "SELECT id, track_id, position FROM playlist_items WHERE playlist_id = ?
          ORDER BY position, id",
-    )
-    .bind(playlist_id)
-    .fetch_all(&mut *tx)
-    .await?;
+        (playlist_id,),
+    )?;
 
     let moving: HashSet<i64> = track_ids.iter().copied().collect();
     let rows: Vec<usize> = items
@@ -502,62 +482,55 @@ pub async fn move_playlist_tracks(
             (position != index).then_some((id, index))
         })
         .collect();
-    batch_update_positions_pairs(&mut tx, &changed).await?;
+    batch_update_positions_pairs(tx, &changed)?;
     let now = melodia_core::utils::now_rfc3339();
-    update_playlist_thumbnail_and_timestamp_tx(&mut tx, playlist_id, &now).await?;
-
-    tx.commit().await?;
-    Ok(())
+    update_playlist_thumbnail_and_timestamp_tx(tx, playlist_id, &now)
 }
 
-/// Closes the gaps in a playlist's positions.
-pub(crate) async fn renumber_playlist_positions_tx(
-    tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
+/// Closes the gaps in a playlist's positions, writing only the rows that move.
+pub(crate) fn renumber_playlist_positions_tx(
+    tx: &Transaction<'_>,
     playlist_id: i64,
 ) -> Result<(), AppError> {
-    sqlx::query(
+    sql::execute(
+        tx,
         "WITH numbered AS (
             SELECT id, ROW_NUMBER() OVER (ORDER BY position, id) - 1 AS new_pos
-            FROM playlist_items WHERE playlist_id = ?1
+            FROM playlist_items WHERE playlist_id = ?
         )
-        UPDATE playlist_items SET position = (
-            SELECT new_pos FROM numbered WHERE numbered.id = playlist_items.id
-        ) WHERE playlist_id = ?1",
-    )
-    .bind(playlist_id)
-    .execute(&mut **tx)
-    .await?;
+        UPDATE playlist_items SET position = numbered.new_pos
+        FROM numbered
+        WHERE numbered.id = playlist_items.id AND playlist_items.position <> numbered.new_pos",
+        (playlist_id,),
+    )?;
     Ok(())
 }
 
 /// Writes `(id, position)` pairs in chunks, which is safe because the positions are absolute and
 /// each chunk touches its own ids.
-pub(crate) async fn batch_update_positions_pairs(
-    tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
+pub(crate) fn batch_update_positions_pairs(
+    tx: &Transaction<'_>,
     pairs: &[(i64, i32)],
 ) -> Result<(), AppError> {
-    const CHUNK_SIZE: usize =
-        crate::database::MAX_BINDS_PER_STATEMENT / crate::database::CASE_BINDS_PER_ROW;
+    const CHUNK_SIZE: usize = MAX_BINDS_PER_STATEMENT / CASE_BINDS_PER_ROW;
 
     if pairs.is_empty() {
         return Ok(());
     }
 
     for chunk in pairs.chunks(CHUNK_SIZE) {
-        let sql = format!(
+        let mut sql = Sql::vouched(format!(
             "UPDATE playlist_items SET position = {} WHERE id IN ({})",
-            crate::database::case_by_id(chunk.len()),
-            crate::database::placeholders(chunk.len()),
-        );
-
-        let mut query = sqlx::query(AssertSqlSafe(sql));
+            case_by_id(chunk.len()),
+            placeholders(chunk.len()),
+        ));
         for &(id, pos) in chunk {
-            query = query.bind(id).bind(pos);
+            sql.bind(id).bind(pos);
         }
         for &(id, _) in chunk {
-            query = query.bind(id);
+            sql.bind(id);
         }
-        query.persistent(false).execute(&mut **tx).await?;
+        sql.execute(tx)?;
     }
     Ok(())
 }
@@ -566,19 +539,21 @@ pub(crate) async fn batch_update_positions_pairs(
 /// rows and "2 of 4 already added" badges. Summed across chunks, a playlist turning up in several.
 pub async fn count_tracks_in_playlists_for_selection(
     db: &DbPool,
-    track_ids: &[i64],
+    track_ids: Vec<i64>,
 ) -> Result<HashMap<i64, i64>, AppError> {
     if track_ids.is_empty() {
         return Ok(HashMap::new());
     }
 
-    let rows: Vec<(i64, i64)> =
-        crate::database::chunked_in_query(db.read(), track_ids, |placeholders| {
-            format!(
-                "SELECT playlist_id, COUNT(*) FROM playlist_items \
-                 WHERE track_id IN ({placeholders}) \
-                 GROUP BY playlist_id"
-            )
+    let rows: Vec<(i64, i64)> = db
+        .read(move |conn| {
+            chunked_in_query(conn, &track_ids, |placeholders| {
+                format!(
+                    "SELECT playlist_id, COUNT(*) FROM playlist_items \
+                     WHERE track_id IN ({placeholders}) \
+                     GROUP BY playlist_id"
+                )
+            })
         })
         .await?;
 
@@ -592,18 +567,17 @@ pub async fn count_tracks_in_playlists_for_selection(
 pub async fn set_playlist_custom_thumbnail(
     db: &DbPool,
     playlist_id: i64,
-    path: &str,
+    path: String,
 ) -> Result<playlist::Playlist, AppError> {
     let now = melodia_core::utils::now_rfc3339();
-
-    sqlx::query_as::<_, playlist::Playlist>(
-        "UPDATE playlists SET thumbnail_path = ?, custom_thumbnail = TRUE, updated_at = ?
-         WHERE id = ? RETURNING *",
-    )
-    .bind(path)
-    .bind(&now)
-    .bind(playlist_id)
-    .fetch_optional(db.write())
+    db.write(move |conn| {
+        sql::fetch_optional(
+            conn,
+            "UPDATE playlists SET thumbnail_path = ?, custom_thumbnail = TRUE, updated_at = ?
+             WHERE id = ? RETURNING *",
+            (path, now, playlist_id),
+        )
+    })
     .await?
     .ok_or_else(|| AppError::not_found("Playlist", playlist_id))
 }
@@ -622,21 +596,20 @@ macro_rules! first_track_cover {
 /// with one. A cover the user picked or cleared stays, but the edit still lifts the playlist in the
 /// grid. The stamp is the caller's, so a removal can record the one it wrote and an undo can put
 /// the older one back.
-pub(crate) async fn update_playlist_thumbnail_and_timestamp_tx(
-    tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
+pub(crate) fn update_playlist_thumbnail_and_timestamp_tx(
+    tx: &Transaction<'_>,
     playlist_id: i64,
     stamp: &str,
 ) -> Result<(), AppError> {
-    sqlx::query(concat!(
-        "UPDATE playlists SET thumbnail_path = CASE WHEN custom_thumbnail = FALSE THEN ",
-        first_track_cover!(),
-        " ELSE thumbnail_path END, updated_at = ? WHERE id = ?"
-    ))
-    .bind(stamp)
-    .bind(playlist_id)
-    .execute(&mut **tx)
-    .await?;
-
+    sql::execute(
+        tx,
+        concat!(
+            "UPDATE playlists SET thumbnail_path = CASE WHEN custom_thumbnail = FALSE THEN ",
+            first_track_cover!(),
+            " ELSE thumbnail_path END, updated_at = ? WHERE id = ?"
+        ),
+        (stamp, playlist_id),
+    )?;
     Ok(())
 }
 
@@ -644,17 +617,17 @@ pub(crate) async fn update_playlist_thumbnail_and_timestamp_tx(
 ///
 /// For what reaches a playlist without an edit to it: a track deleted out from under it, or a
 /// cover cleared because its file went missing. `updated_at` stays put: the user changed nothing.
-pub(crate) async fn refresh_automatic_thumbnails(
-    tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
-) -> Result<(), AppError> {
-    sqlx::query(concat!(
-        "UPDATE playlists SET thumbnail_path = ",
-        first_track_cover!(),
-        " WHERE custom_thumbnail = FALSE AND thumbnail_path IS NOT ",
-        first_track_cover!()
-    ))
-    .execute(&mut **tx)
-    .await?;
+pub(crate) fn refresh_automatic_thumbnails(tx: &Transaction<'_>) -> Result<(), AppError> {
+    sql::execute(
+        tx,
+        concat!(
+            "UPDATE playlists SET thumbnail_path = ",
+            first_track_cover!(),
+            " WHERE custom_thumbnail = FALSE AND thumbnail_path IS NOT ",
+            first_track_cover!()
+        ),
+        (),
+    )?;
     Ok(())
 }
 

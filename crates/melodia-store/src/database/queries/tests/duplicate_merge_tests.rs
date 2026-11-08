@@ -3,10 +3,11 @@
 //! The history columns are the one record of a user's listening that no rescan rebuilds, so each
 //! merge rule is pinned on its own.
 
-use sqlx::AssertSqlSafe;
-
 use super::*;
 use crate::database::queries::fixtures::{insert_test_track, make_test_metadata, numbered_library};
+use crate::database::queries::ingest::BULK_THRESHOLD;
+use crate::database::rows::FromRow;
+use crate::database::sql::{self, Sql};
 
 /// Spares past [`BULK_THRESHOLD`], so the merge runs with the stats triggers dropped.
 const BULK_SPARES: usize = BULK_THRESHOLD + 1;
@@ -21,27 +22,23 @@ async fn keeper_and_two_spares() -> Result<(DbPool, i64, [i64; 2]), AppError> {
 }
 
 async fn set(db: &DbPool, id: i64, assignments: &str) -> Result<(), AppError> {
-    sqlx::query(AssertSqlSafe(format!("UPDATE tracks SET {assignments} WHERE id = ?")))
-        .bind(id)
-        .execute(db.write())
-        .await?;
+    let mut update = Sql::vouched(format!("UPDATE tracks SET {assignments} WHERE id = ?"));
+    update.bind(id);
+    db.write(move |conn| update.execute(conn)).await?;
     Ok(())
 }
 
 async fn column<T>(db: &DbPool, id: i64, name: &str) -> Result<T, AppError>
 where
-    T: Send + Unpin + for<'r> sqlx::Decode<'r, sqlx::Sqlite> + sqlx::Type<sqlx::Sqlite>,
+    T: FromRow + Send + 'static,
 {
-    let value =
-        sqlx::query_scalar(AssertSqlSafe(format!("SELECT {name} FROM tracks WHERE id = ?")))
-            .bind(id)
-            .fetch_one(db.read())
-            .await?;
-    Ok(value)
+    let mut select = Sql::vouched(format!("SELECT {name} FROM tracks WHERE id = ?"));
+    select.bind(id);
+    db.read(move |conn| select.fetch_one(conn)).await
 }
 
 async fn remove(db: &DbPool, keeper: i64, spares: &[i64]) -> Result<RemovedDuplicates, AppError> {
-    remove_duplicates(db, &[GroupRemoval { keeper, spares: spares.to_vec() }]).await
+    remove_duplicates(db, vec![GroupRemoval { keeper, spares: spares.to_vec() }]).await
 }
 
 async fn playlist_order(db: &DbPool, playlist_id: i64) -> Result<Vec<i64>, AppError> {
@@ -51,13 +48,12 @@ async fn playlist_order(db: &DbPool, playlist_id: i64) -> Result<Vec<i64>, AppEr
 
 /// A row gone since the finder read it: a watcher batch or a scan took it.
 async fn delete(db: &DbPool, id: i64) -> Result<(), AppError> {
-    sqlx::query("DELETE FROM tracks WHERE id = ?").bind(id).execute(db.write()).await?;
+    db.write(move |conn| sql::execute(conn, "DELETE FROM tracks WHERE id = ?", (id,))).await?;
     Ok(())
 }
 
 async fn track_count(db: &DbPool) -> Result<i64, AppError> {
-    let count = sqlx::query_scalar("SELECT COUNT(*) FROM tracks").fetch_one(db.read()).await?;
-    Ok(count)
+    db.read(|conn| sql::fetch_one(conn, "SELECT COUNT(*) FROM tracks", ())).await
 }
 
 #[tokio::test]
@@ -147,9 +143,9 @@ async fn a_spares_playlist_place_passes_to_the_keeper_at_its_position() -> Resul
     let (keeper, spare, before, after) = (ids[0], ids[1], ids[2], ids[3]);
     let playlist = crate::database::queries::playlist::create_playlist_with_tracks(
         &db,
-        "Mix",
+        "Mix".to_owned(),
         None,
-        &[before, spare, after],
+        vec![before, spare, after],
     )
     .await?;
 
@@ -167,20 +163,24 @@ async fn a_spare_in_a_playlist_the_keeper_is_already_in_leaves_only_the_keepers_
     let (keeper, spare, other) = (ids[0], ids[1], ids[2]);
     let playlist = crate::database::queries::playlist::create_playlist_with_tracks(
         &db,
-        "Mix",
+        "Mix".to_owned(),
         None,
-        &[keeper, spare, other],
+        vec![keeper, spare, other],
     )
     .await?;
 
     remove(&db, keeper, &[spare]).await?;
 
-    let places: Vec<(i64, i64)> = sqlx::query_as(
-        "SELECT track_id, position FROM playlist_items WHERE playlist_id = ? ORDER BY position",
-    )
-    .bind(playlist)
-    .fetch_all(db.read())
-    .await?;
+    let places: Vec<(i64, i64)> = db
+        .read(move |conn| {
+            sql::fetch_all(
+                conn,
+                "SELECT track_id, position FROM playlist_items WHERE playlist_id = ? \
+                 ORDER BY position",
+                (playlist,),
+            )
+        })
+        .await?;
     assert_eq!(places, [(keeper, 0), (other, 1)]);
     Ok(())
 }
@@ -193,9 +193,9 @@ async fn a_keeper_with_two_spares_in_one_playlist_takes_the_earlier_place() -> R
     let (keeper, lower_spare, higher_spare, other) = (ids[0], ids[1], ids[2], ids[3]);
     let playlist = crate::database::queries::playlist::create_playlist_with_tracks(
         &db,
-        "Mix",
+        "Mix".to_owned(),
         None,
-        &[higher_spare, other, lower_spare],
+        vec![higher_spare, other, lower_spare],
     )
     .await?;
 
@@ -212,9 +212,9 @@ async fn a_keeper_takes_the_added_date_of_the_earlier_place() -> Result<(), AppE
     let (keeper, lower_spare, higher_spare) = (ids[0], ids[1], ids[2]);
     let playlist = crate::database::queries::playlist::create_playlist_with_tracks(
         &db,
-        "Mix",
+        "Mix".to_owned(),
         None,
-        &[higher_spare, lower_spare],
+        vec![higher_spare, lower_spare],
     )
     .await?;
     set_added_at(&db, playlist, higher_spare, "2024-02-01T00:00:00+00:00").await?;
@@ -222,13 +222,15 @@ async fn a_keeper_takes_the_added_date_of_the_earlier_place() -> Result<(), AppE
 
     remove(&db, keeper, &[lower_spare, higher_spare]).await?;
 
-    let added: String = sqlx::query_scalar(
-        "SELECT added_at FROM playlist_items WHERE playlist_id = ? AND track_id = ?",
-    )
-    .bind(playlist)
-    .bind(keeper)
-    .fetch_one(db.read())
-    .await?;
+    let added: String = db
+        .read(move |conn| {
+            sql::fetch_one(
+                conn,
+                "SELECT added_at FROM playlist_items WHERE playlist_id = ? AND track_id = ?",
+                (playlist, keeper),
+            )
+        })
+        .await?;
     assert_eq!(added, "2024-02-01T00:00:00+00:00");
     Ok(())
 }
@@ -237,14 +239,16 @@ async fn set_added_at(
     db: &DbPool,
     playlist_id: i64,
     track_id: i64,
-    added_at: &str,
+    added_at: &'static str,
 ) -> Result<(), AppError> {
-    sqlx::query("UPDATE playlist_items SET added_at = ? WHERE playlist_id = ? AND track_id = ?")
-        .bind(added_at)
-        .bind(playlist_id)
-        .bind(track_id)
-        .execute(db.write())
-        .await?;
+    db.write(move |conn| {
+        sql::execute(
+            conn,
+            "UPDATE playlist_items SET added_at = ? WHERE playlist_id = ? AND track_id = ?",
+            (added_at, playlist_id, track_id),
+        )
+    })
+    .await?;
     Ok(())
 }
 
@@ -266,11 +270,15 @@ async fn a_removed_spares_file_is_kept_out_with_its_hash_and_stamp() -> Result<(
 
     remove(&db, keeper, &[first]).await?;
 
-    let kept_out: Vec<Exclusion> = sqlx::query_as(
-        "SELECT path, file_hash, file_size, date_modified, folder_id FROM excluded_files",
-    )
-    .fetch_all(db.read())
-    .await?;
+    let kept_out: Vec<Exclusion> = db
+        .read(|conn| {
+            sql::fetch_all(
+                conn,
+                "SELECT path, file_hash, file_size, date_modified, folder_id FROM excluded_files",
+                (),
+            )
+        })
+        .await?;
     let spare = make_test_metadata("Track 0001");
     assert_eq!(
         kept_out,
@@ -292,10 +300,11 @@ async fn a_spare_without_a_hash_is_kept_out_unstamped() -> Result<(), AppError> 
 
     remove(&db, keeper, &[first]).await?;
 
-    let stamp: Vec<(Option<i64>, Option<String>)> =
-        sqlx::query_as("SELECT file_size, date_modified FROM excluded_files")
-            .fetch_all(db.read())
-            .await?;
+    let stamp: Vec<(Option<i64>, Option<String>)> = db
+        .read(|conn| {
+            sql::fetch_all(conn, "SELECT file_size, date_modified FROM excluded_files", ())
+        })
+        .await?;
     assert_eq!(stamp, [(None, None)]);
     Ok(())
 }
@@ -351,8 +360,8 @@ async fn a_bulk_removal_leaves_the_counts_a_recount_gives() -> Result<(), AppErr
 }
 
 async fn artist_track_count(db: &DbPool) -> Result<i64, AppError> {
-    let count = sqlx::query_scalar("SELECT track_count FROM artists WHERE name = 'Artist'")
-        .fetch_one(db.read())
-        .await?;
-    Ok(count)
+    db.read(|conn| {
+        sql::fetch_one(conn, "SELECT track_count FROM artists WHERE name = 'Artist'", ())
+    })
+    .await
 }

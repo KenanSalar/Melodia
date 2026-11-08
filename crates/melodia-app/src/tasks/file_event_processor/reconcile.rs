@@ -26,8 +26,8 @@ fn paths_to_extract(events: &[FileEvent], kept_out_renamed: &HashSet<String>) ->
             FileEvent::Created(path) | FileEvent::Modified(path) => Some(path),
             FileEvent::Renamed { from, to } => (!is_kept_out(from)).then_some(to),
             FileEvent::Removed(_) => None,
-            // Caller short-circuits on RescanNeeded before reaching here.
-            FileEvent::RescanNeeded => unreachable!(),
+            // Caller short-circuits on both before reaching here.
+            FileEvent::RescanNeeded | FileEvent::DirectoryRenamed => unreachable!(),
         };
         if let Some(path) = wanted
             && path.exists()
@@ -49,8 +49,7 @@ async fn kept_out_renamed(db: &DbPool, events: &[FileEvent]) -> HashSet<String> 
             _ => None,
         })
         .collect();
-    let paths: Vec<&str> = paths.iter().map(String::as_str).collect();
-    queries::excluded_files::among(db, &paths).await.unwrap_or_else(|e| {
+    queries::excluded_files::among(db, paths).await.unwrap_or_else(|e| {
         log::warn!("Kept-out check skipped for this batch: {}", describe(&e));
         HashSet::new()
     })
@@ -149,8 +148,8 @@ fn watched_changes(
                 let gone = !path.exists();
                 Some(WatchedChange::Removed { path, gone })
             }
-            // Caller short-circuits on RescanNeeded before reaching here.
-            FileEvent::RescanNeeded => unreachable!(),
+            // Caller short-circuits on both before reaching here.
+            FileEvent::RescanNeeded | FileEvent::DirectoryRenamed => unreachable!(),
         })
         .collect()
 }

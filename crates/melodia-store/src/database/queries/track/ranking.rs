@@ -1,10 +1,12 @@
 //! The play-count rankings: the Favorites hero and its Most Played tab, and the library-wide Most
 //! Played tab.
 
-use sqlx::{AssertSqlSafe, QueryBuilder, Sqlite};
+use std::sync::LazyLock;
 
-use super::keyset::{fetch_packed_ids, push_needle};
+use super::keyset::push_needle;
+use super::scope_facts::facts_on;
 use crate::database::DbPool;
+use crate::database::sql::{self, Sql};
 use melodia_core::entities::track;
 use melodia_core::entities::track_list::{MostPlayedTotals, TrackListScope};
 use melodia_core::error::AppError;
@@ -17,16 +19,12 @@ use melodia_core::utils::needle::Needle;
 /// first, then the newest added, then the id. RFC 3339 `last_played` sorts as text, NULL last.
 const MOST_PLAYED_ORDER: &str = "play_count DESC, last_played DESC, date_added DESC, id ASC";
 
-/// Aggregate stats for the Favorites hero header: count, total duration, the artist and album
-/// spread, up to 4 artwork paths.
-pub async fn get_favorite_stats(db: &DbPool) -> Result<track::FavoriteStats, AppError> {
-    let facts = super::scope_facts(db, TrackListScope::Favorites).await?;
-
-    // The collage is the head of the Most Played tab, each cover at its best slot, rather than a
-    // second ranking to keep in step. Ranked over every favourite so unplayed ones fill it once
-    // the played covers run out, and never padded with repeats: `compose_cover` lays out one to
-    // four.
-    let artwork_paths: Vec<String> = sqlx::query_scalar(AssertSqlSafe(format!(
+/// The Favorites hero's collage: the head of the Most Played tab, each cover at its best slot,
+/// rather than a second ranking to keep in step. Ranked over every favourite so unplayed ones fill
+/// it once the played covers run out, and never padded with repeats: `compose_cover` lays out one
+/// to four.
+static FAVORITE_COVERS: LazyLock<String> = LazyLock::new(|| {
+    format!(
         "SELECT artwork_path FROM ( \
             SELECT artwork_path, \
                    ROW_NUMBER() OVER (ORDER BY {MOST_PLAYED_ORDER}) AS pos \
@@ -36,9 +34,19 @@ pub async fn get_favorite_stats(db: &DbPool) -> Result<track::FavoriteStats, App
          GROUP BY artwork_path \
          ORDER BY MIN(pos) \
          LIMIT 4"
-    )))
-    .fetch_all(db.read())
-    .await?;
+    )
+});
+
+/// Aggregate stats for the Favorites hero header: count, total duration, the artist and album
+/// spread, up to 4 artwork paths.
+pub async fn get_favorite_stats(db: &DbPool) -> Result<track::FavoriteStats, AppError> {
+    let (facts, artwork_paths) = db
+        .read(|conn| {
+            let facts = facts_on(conn, TrackListScope::Favorites)?;
+            let artwork_paths: Vec<String> = sql::fetch_all(conn, FAVORITE_COVERS.as_str(), ())?;
+            Ok((facts, artwork_paths))
+        })
+        .await?;
 
     Ok(track::FavoriteStats {
         count: facts.tracks,
@@ -66,22 +74,19 @@ pub async fn most_played_favorite_ids(db: &DbPool, needle: &Needle) -> Result<Ve
     ranked_ids(db, PLAYED_FAVORITES, needle).await
 }
 
-/// Read back packed, as `track_ids` argues: a played set can be most of a library.
 async fn ranked_ids(
     db: &DbPool,
     membership: &'static str,
     needle: &Needle,
 ) -> Result<Vec<i64>, AppError> {
-    let mut qb = QueryBuilder::<Sqlite>::new(
-        "SELECT group_concat(id, ',') FROM (SELECT id FROM tracks WHERE ",
-    );
-    qb.push(membership);
+    let mut sql = Sql::new("SELECT id FROM tracks WHERE ");
+    sql.push(membership);
     if !needle.is_empty() {
-        qb.push(" AND ");
-        push_needle(&mut qb, needle);
+        sql.push(" AND ");
+        push_needle(&mut sql, needle);
     }
-    qb.push(" ORDER BY ").push(MOST_PLAYED_ORDER).push(")");
-    fetch_packed_ids(db.read(), qb).await
+    sql.push(" ORDER BY ").push(MOST_PLAYED_ORDER);
+    db.read(move |conn| sql.fetch_all(conn)).await
 }
 
 /// What the library-wide Most Played tab adds up to, whatever its filter shows: the band states
@@ -99,12 +104,13 @@ async fn ranked_totals(
     db: &DbPool,
     membership: &'static str,
 ) -> Result<MostPlayedTotals, AppError> {
-    let (tracks, duration_ms, plays): (i64, i64, i64) = sqlx::query_as(AssertSqlSafe(format!(
+    let mut sql = Sql::new(
         "SELECT COUNT(*), COALESCE(SUM(duration_ms), 0), COALESCE(SUM(play_count), 0) \
-           FROM tracks WHERE {membership}"
-    )))
-    .fetch_one(db.read())
-    .await?;
+           FROM tracks WHERE ",
+    );
+    sql.push(membership);
+    let (tracks, duration_ms, plays): (i64, i64, i64) =
+        db.read(move |conn| sql.fetch_one(conn)).await?;
     Ok(MostPlayedTotals {
         tracks: i32::try_from(tracks).unwrap_or(i32::MAX),
         duration_ms,

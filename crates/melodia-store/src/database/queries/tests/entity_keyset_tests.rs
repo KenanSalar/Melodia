@@ -4,12 +4,11 @@
 
 use std::path::Path;
 
-use sqlx::AssertSqlSafe;
-
 use crate::database::DbPool;
 use crate::database::queries;
 use crate::database::queries::entity_keyset;
 use crate::database::queries::fixtures::{insert_tagged_track, make_test_metadata};
+use crate::database::sql::{self, Sql};
 use melodia_core::entities::artist::ArtistCredit;
 use melodia_core::entities::genre::GenreList;
 use melodia_core::entities::grid_order::{AlbumSort, ArtistSort, FavoriteArtistSort, GenreSort};
@@ -46,13 +45,18 @@ async fn add(db: &DbPool, meta: &ExtractedMetadata) -> Result<i64, AppError> {
 /// The name behind each of `ids`, in order, read off `table` itself. A card fetch would drop an id
 /// it has no card for, hiding exactly the id a grid should never have listed.
 async fn names(db: &DbPool, table: &str, ids: &[i64]) -> Result<Vec<String>, AppError> {
-    let sql = format!("SELECT name FROM {table} WHERE id = ?");
-    let mut names = Vec::with_capacity(ids.len());
-    for &id in ids {
-        let name = sqlx::query_scalar(AssertSqlSafe(sql.as_str())).bind(id).fetch_one(db.read());
-        names.push(name.await?);
-    }
-    Ok(names)
+    let text = format!("SELECT name FROM {table} WHERE id = ?");
+    let ids = ids.to_vec();
+    db.read(move |conn| {
+        ids.iter()
+            .map(|&id| {
+                let mut name = Sql::vouched(text.clone());
+                name.bind(id);
+                name.fetch_one(conn)
+            })
+            .collect()
+    })
+    .await
 }
 
 // === Albums ===
@@ -273,7 +277,7 @@ async fn favorites_library() -> Result<DbPool, AppError> {
     zed_one.sort.artist = Some("Omega, Zed".to_owned());
     let mut zed_two = track("F5", "Zed", "Album");
     zed_two.sort.artist = Some("Omega, Zed".to_owned());
-    let staged = [
+    let staged = vec![
         (track("F1", "alpha", "Album"), true),
         (featuring, true),
         (track("F3", "alpha", "Album"), false),
@@ -351,11 +355,10 @@ async fn the_playlists_grid_lists_the_newest_change_first() -> Result<(), AppErr
     ];
     for (name, updated_at) in changed {
         let id = queries::playlist::create_playlist(&db, name, None).await?.id;
-        sqlx::query("UPDATE playlists SET updated_at = ? WHERE id = ?")
-            .bind(updated_at)
-            .bind(id)
-            .execute(db.write())
-            .await?;
+        db.write(move |conn| {
+            sql::execute(conn, "UPDATE playlists SET updated_at = ? WHERE id = ?", (updated_at, id))
+        })
+        .await?;
     }
 
     let ids = entity_keyset::playlist_ids(&db, &Needle::default()).await?;

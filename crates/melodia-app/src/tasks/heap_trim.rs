@@ -18,8 +18,8 @@ use melodia_store::database::IDLE_CONNECTIONS_CLOSED_WITHIN;
 /// How long to let the startup churn settle before the first trim.
 const AFTER_STARTUP: Duration = Duration::from_secs(10);
 
-/// How long past the pool closing the boot's connections the second trim waits, the reaper's tick
-/// being counted from the pool's creation rather than from this task's.
+/// How long past the boot's connections closing the second trim waits, each closing within
+/// [`IDLE_CONNECTIONS_CLOSED_WITHIN`] of a last call that may come after this task starts.
 const AFTER_POOL_CLOSES: Duration = Duration::from_secs(15);
 
 const TRIMS: [Duration; 2] =

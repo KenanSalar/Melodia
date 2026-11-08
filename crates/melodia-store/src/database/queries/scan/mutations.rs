@@ -1,10 +1,14 @@
 //! The track rows' write side, and the cover roll-ups and orphan prune at the tail of a batch.
 
 use std::collections::HashMap;
+use std::path::Path;
+use std::sync::LazyLock;
 
-use sqlx::{AssertSqlSafe, Row};
+use rusqlite::Transaction;
 
-use crate::database::{MAX_BINDS_PER_STATEMENT, chunked_in_execute_on, placeholders};
+use crate::database::queries::track::order_keys::OrderKeys;
+use crate::database::sql::{self, Sql};
+use crate::database::{MAX_BINDS_PER_STATEMENT, chunked_in_execute, placeholders, values_list};
 use melodia_core::entities::scan::ExtractedMetadata;
 use melodia_core::entities::track_search::SearchFields;
 use melodia_core::error::AppError;
@@ -28,17 +32,17 @@ const TRACK_INSERT_COLUMNS: &str = "file_path, file_name,
     duration_ms, file_size, codec, bitrate, channels, sample_rate, bit_depth,
     artwork_path,
     album_id, artist_id, genre_id, folder_id,
-    date_modified, sort_key, search_text,
+    date_modified, sort_key, search_text, artist_key, album_key, genre_key,
     play_count, skip_count, rating, is_favorite, last_played, last_position,
     date_added";
 
-/// How many names a comma-separated column list holds, at compile time.
-const fn column_count(list: &str) -> usize {
-    let bytes = list.as_bytes();
-    let mut count = 1;
+/// How many times `byte` occurs in `text`, at compile time.
+const fn count_byte(text: &str, byte: u8) -> usize {
+    let bytes = text.as_bytes();
+    let mut count = 0;
     let mut i = 0;
     while i < bytes.len() {
-        if bytes[i] == b',' {
+        if bytes[i] == byte {
             count += 1;
         }
         i += 1;
@@ -46,111 +50,101 @@ const fn column_count(list: &str) -> usize {
     count
 }
 
+/// How many names a comma-separated column list holds, at compile time.
+const fn column_count(list: &str) -> usize {
+    count_byte(list, b',') + 1
+}
+
 const TRACK_INSERT_COLUMN_COUNT: usize = column_count(TRACK_INSERT_COLUMNS);
 
-/// The playback defaults pushed as SQL literals: `play_count`, `skip_count`, `is_favorite`,
-/// `last_played`, `last_position`. The rating beside them binds, carrying the file's tag.
-const LITERAL_DEFAULTS: usize = 5;
+/// `play_count` through `date_added` as a new row starts them, the file's rating and `date_added`
+/// bound among the literals.
+const PLAYBACK_TAIL: &str = "0, 0, ?, 0, NULL, 0, ?";
 
-/// Somewhere a track's columns can be bound, in order: `Query::bind` and `Separated::push_bind`,
-/// which sqlx shares no trait between. One trait keeps [`bind_track_columns`] the only place the
-/// order is written, where a second copy could swap two same-typed nullable columns silently.
-trait TrackBinder<'q> {
-    fn bind_col<T: sqlx::Encode<'q, sqlx::Sqlite> + sqlx::Type<sqlx::Sqlite>>(
-        self,
-        value: T,
-    ) -> Self;
-}
+/// The literals in [`PLAYBACK_TAIL`], which spend no bind.
+const LITERAL_DEFAULTS: usize = column_count(PLAYBACK_TAIL) - count_byte(PLAYBACK_TAIL, b'?');
 
-impl<'q> TrackBinder<'q> for sqlx::query::Query<'q, sqlx::Sqlite, sqlx::sqlite::SqliteArguments> {
-    fn bind_col<T: sqlx::Encode<'q, sqlx::Sqlite> + sqlx::Type<sqlx::Sqlite>>(
-        self,
-        value: T,
-    ) -> Self {
-        self.bind(value)
-    }
-}
+/// One `VALUES` tuple of [`TRACK_INSERT_COLUMNS`], as [`bind_new_track`] binds it.
+static TRACK_ROW: LazyLock<String> = LazyLock::new(|| {
+    let bound = TRACK_INSERT_COLUMN_COUNT - column_count(PLAYBACK_TAIL);
+    format!("({}, {PLAYBACK_TAIL})", placeholders(bound))
+});
 
-impl<'q, Sep: std::fmt::Display> TrackBinder<'q>
-    for &mut sqlx::query_builder::Separated<'_, sqlx::Sqlite, Sep>
-{
-    fn bind_col<T: sqlx::Encode<'q, sqlx::Sqlite> + sqlx::Type<sqlx::Sqlite>>(
-        self,
-        value: T,
-    ) -> Self {
-        self.push_bind(value);
-        self
-    }
+/// Binds one [`TRACK_ROW`].
+fn bind_new_track(sql: &mut Sql, row: &NewTrackRow<'_>, now: &str) {
+    sql.bind(row.file_path.as_str()).bind(row.file_name.as_str());
+    bind_track_columns(sql, row.meta, &row.ids);
+    sql.bind(row.meta.rating.unwrap_or(0)).bind(now);
 }
 
 /// Binds the block every track write shares: the metadata from `file_hash` to `artwork_path`, the
-/// four foreign keys, `date_modified` and the two [`DerivedColumns`].
-fn bind_track_columns<'q, B: TrackBinder<'q>>(
-    binder: B,
-    meta: &'q melodia_core::entities::scan::ExtractedMetadata,
-    ids: &'q ResolvedIds,
-    derived: &'q DerivedColumns,
-) -> B {
-    binder
-        .bind_col(&meta.file_hash)
-        .bind_col(&meta.title)
-        .bind_col(meta.artist.line())
-        .bind_col(meta.album_artist.line())
-        .bind_col(&meta.album)
-        .bind_col(meta.genres.line())
-        .bind_col(meta.credits.line())
-        .bind_col(meta.track_number)
-        .bind_col(meta.track_total)
-        .bind_col(meta.disc_number)
-        .bind_col(meta.disc_total)
-        .bind_col(&meta.disc_subtitle)
-        .bind_col(&meta.subtitle)
-        .bind_col(&meta.release_date)
-        .bind_col(meta.year)
-        .bind_col(&meta.original_date)
-        .bind_col(meta.original_year)
-        .bind_col(&meta.comment)
-        .bind_col(meta.bpm)
-        .bind_col(&meta.initial_key)
-        .bind_col(&meta.mood)
-        .bind_col(&meta.grouping)
-        .bind_col(&meta.work)
-        .bind_col(&meta.movement)
-        .bind_col(meta.movement_number)
-        .bind_col(meta.movement_total)
-        .bind_col(&meta.language)
-        .bind_col(&meta.copyright)
-        .bind_col(&meta.isrc)
-        .bind_col(&meta.musicbrainz_track_id)
-        .bind_col(&meta.musicbrainz_release_id)
-        .bind_col(&meta.musicbrainz_release_track_id)
-        .bind_col(meta.replaygain_track_gain)
-        .bind_col(meta.replaygain_track_peak)
-        .bind_col(meta.replaygain_album_gain)
-        .bind_col(meta.replaygain_album_peak)
-        .bind_col(meta.duration_ms)
-        .bind_col(Some(meta.file_size))
-        .bind_col(&meta.codec)
-        .bind_col(meta.bitrate)
-        .bind_col(meta.channels)
-        .bind_col(meta.sample_rate)
-        .bind_col(meta.bit_depth)
-        .bind_col(&meta.artwork_path)
-        .bind_col(ids.album_id)
-        .bind_col(ids.artist_id)
-        .bind_col(ids.genre_id)
-        .bind_col(ids.folder_id)
-        .bind_col(&meta.date_modified)
-        .bind_col(&derived.sort_key)
-        .bind_col(&derived.search_text)
+/// four foreign keys, `date_modified` and the [`DerivedColumns`]. The one place their order is
+/// written, where a second copy could swap two same-typed nullable columns silently.
+fn bind_track_columns(sql: &mut Sql, meta: &ExtractedMetadata, ids: &ResolvedIds) {
+    let derived = DerivedColumns::of(meta);
+    sql.bind(meta.file_hash.as_str())
+        .bind(meta.title.as_str())
+        .bind(meta.artist.line())
+        .bind(meta.album_artist.line())
+        .bind(meta.album.as_deref())
+        .bind(meta.genres.line())
+        .bind(meta.credits.line())
+        .bind(meta.track_number)
+        .bind(meta.track_total)
+        .bind(meta.disc_number)
+        .bind(meta.disc_total)
+        .bind(meta.disc_subtitle.as_deref())
+        .bind(meta.subtitle.as_deref())
+        .bind(meta.release_date.as_deref())
+        .bind(meta.year)
+        .bind(meta.original_date.as_deref())
+        .bind(meta.original_year)
+        .bind(meta.comment.as_deref())
+        .bind(meta.bpm)
+        .bind(meta.initial_key.as_deref())
+        .bind(meta.mood.as_deref())
+        .bind(meta.grouping.as_deref())
+        .bind(meta.work.as_deref())
+        .bind(meta.movement.as_deref())
+        .bind(meta.movement_number)
+        .bind(meta.movement_total)
+        .bind(meta.language.as_deref())
+        .bind(meta.copyright.as_deref())
+        .bind(meta.isrc.as_deref())
+        .bind(meta.musicbrainz_track_id.as_deref())
+        .bind(meta.musicbrainz_release_id.as_deref())
+        .bind(meta.musicbrainz_release_track_id.as_deref())
+        .bind(meta.replaygain_track_gain)
+        .bind(meta.replaygain_track_peak)
+        .bind(meta.replaygain_album_gain)
+        .bind(meta.replaygain_album_peak)
+        .bind(meta.duration_ms)
+        .bind(meta.file_size)
+        .bind(meta.codec.as_deref())
+        .bind(meta.bitrate)
+        .bind(meta.channels)
+        .bind(meta.sample_rate)
+        .bind(meta.bit_depth)
+        .bind(meta.artwork_path.as_deref())
+        .bind(ids.album_id)
+        .bind(ids.artist_id)
+        .bind(ids.genre_id)
+        .bind(ids.folder_id)
+        .bind(meta.date_modified.as_deref())
+        .bind(derived.sort_key)
+        .bind(derived.search_text)
+        .bind(derived.order.artist)
+        .bind(derived.order.album)
+        .bind(derived.order.genre);
 }
 
-/// The two columns computed from a file's tags rather than read off them, one rule for every
-/// write: a row sorting or filtering differently from its neighbours is invisible until a list is
-/// read top to bottom.
+/// The columns computed from a file's tags rather than read off them, one rule for every write: a
+/// row sorting or filtering differently from its neighbours is invisible until a list is read top
+/// to bottom.
 struct DerivedColumns {
     sort_key: String,
     search_text: String,
+    order: OrderKeys,
 }
 
 impl DerivedColumns {
@@ -164,47 +158,48 @@ impl DerivedColumns {
             genre: meta.genres.line().unwrap_or_default(),
         }
         .pack();
-        Self { sort_key: to_natural_sort_key(sort_source), search_text }
+        let order = OrderKeys::of(meta.artist.line(), meta.album.as_deref(), meta.genres.line());
+        Self { sort_key: to_natural_sort_key(sort_source), search_text, order }
     }
 }
 
+static INSERT_TRACK: LazyLock<String> = LazyLock::new(|| {
+    format!(
+        "INSERT INTO tracks ({TRACK_INSERT_COLUMNS}) VALUES {} RETURNING id",
+        TRACK_ROW.as_str()
+    )
+});
+
 /// Inserts a track and returns its id. `now` is computed once per batch, so a batch shares one
 /// `date_added`.
-pub(crate) async fn insert_track(
-    tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
+pub(crate) fn insert_track(
+    tx: &Transaction<'_>,
     file_path: &str,
     file_name: &str,
-    meta: &melodia_core::entities::scan::ExtractedMetadata,
+    meta: &ExtractedMetadata,
     ids: &ResolvedIds,
     now: &str,
     names: &mut NameCache,
 ) -> Result<i64, AppError> {
-    let derived = DerivedColumns::of(meta);
-
-    let sql = format!(
-        "INSERT INTO tracks ({TRACK_INSERT_COLUMNS}) VALUES ({})",
-        placeholders(TRACK_INSERT_COLUMN_COUNT)
-    );
-    let q = sqlx::query(AssertSqlSafe(sql)).bind(file_path).bind(file_name);
-
-    let q = bind_track_columns(q, meta, ids, &derived);
-
-    let result = q
-        .bind(0i32) // play_count
-        .bind(0i32) // skip_count
-        .bind(meta.rating.unwrap_or(0)) // rating — seeded from the file's own tag
-        .bind(false) // is_favorite
-        .bind(None::<String>) // last_played
-        .bind(0i64) // last_position
-        .bind(now) // date_added
-        .execute(&mut **tx)
-        .await?;
-    let track_id = result.last_insert_rowid();
-    insert_track_joins(tx, track_id, meta, ids, names).await?;
+    let row = NewTrackRow {
+        file_path: file_path.to_owned(),
+        file_name: file_name.to_owned(),
+        meta,
+        ids: *ids,
+    };
+    let mut sql = Sql::new(INSERT_TRACK.as_str());
+    bind_new_track(&mut sql, &row, now);
+    let track_id: i64 = sql.fetch_one(tx)?;
+    insert_track_joins(tx, track_id, meta, ids, names)?;
     Ok(track_id)
 }
 
-/// One buffered row for [`insert_tracks_batch`].
+/// What a track row's `file_name` column holds for `path`.
+pub(crate) fn file_name_of(path: &Path) -> String {
+    path.file_name().and_then(|f| f.to_str()).unwrap_or("").to_owned()
+}
+
+/// One new track's row, for [`insert_track`] or [`insert_tracks_batch`].
 pub struct NewTrackRow<'a> {
     pub file_path: String,
     pub file_name: String,
@@ -219,37 +214,23 @@ pub const INSERT_CHUNK_ROWS: usize =
 /// [`insert_track`] for the ingest hot path, one statement per [`INSERT_CHUNK_ROWS`] rows. Returns
 /// the ids **in `rows` order**, which the drag-and-drop import queues by: `RETURNING`'s order is
 /// unspecified, so each id is matched back by its `file_path`.
-pub(crate) async fn insert_tracks_batch(
-    tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
+pub(crate) fn insert_tracks_batch(
+    tx: &Transaction<'_>,
     rows: &[NewTrackRow<'_>],
     now: &str,
     names: &mut NameCache,
 ) -> Result<Vec<i64>, AppError> {
     let mut out = Vec::with_capacity(rows.len());
     for chunk in rows.chunks(INSERT_CHUNK_ROWS) {
-        let derived: Vec<DerivedColumns> =
-            chunk.iter().map(|r| DerivedColumns::of(r.meta)).collect();
-
-        let mut qb = sqlx::QueryBuilder::<sqlx::Sqlite>::new(format!(
-            "INSERT INTO tracks ({TRACK_INSERT_COLUMNS}) "
+        let mut sql = Sql::vouched(format!(
+            "INSERT INTO tracks ({TRACK_INSERT_COLUMNS}) VALUES {} RETURNING id, file_path",
+            values_list(&TRACK_ROW, chunk.len())
         ));
-        qb.push_values(chunk.iter().zip(derived.iter()), |mut b, (row, derived)| {
-            let meta = row.meta;
-            b.push_bind(&row.file_path).push_bind(&row.file_name);
-            bind_track_columns(&mut b, meta, &row.ids, derived);
-            // The `LITERAL_DEFAULTS` in column order, the rating and `date_added` bound among them.
-            b.push("0")
-                .push("0")
-                .push_bind(meta.rating.unwrap_or(0))
-                .push("0")
-                .push("NULL")
-                .push("0")
-                .push_bind(now);
-        });
-        qb.push(" RETURNING id, file_path");
+        for row in chunk {
+            bind_new_track(&mut sql, row, now);
+        }
 
-        let returned: Vec<(i64, String)> =
-            qb.build_query_as().persistent(false).fetch_all(&mut **tx).await?;
+        let returned: Vec<(i64, String)> = sql.fetch_all(tx)?;
         let mut by_path: HashMap<String, i64> =
             returned.into_iter().map(|(id, path)| (path, id)).collect();
         for row in chunk {
@@ -260,7 +241,7 @@ pub(crate) async fn insert_tracks_batch(
                     row.file_path
                 )));
             };
-            insert_track_joins(tx, id, row.meta, &row.ids, names).await?;
+            insert_track_joins(tx, id, row.meta, &row.ids, names)?;
             out.push(id);
         }
     }
@@ -269,26 +250,21 @@ pub(crate) async fn insert_tracks_batch(
 
 /// Re-points a moved or renamed track, keeping its playback state. `false` where the row is gone,
 /// which a caller holding an id resolved before the transaction opened takes as a cue to insert.
-pub(crate) async fn update_track_location(
-    tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
+pub(crate) fn update_track_location(
+    tx: &Transaction<'_>,
     track_id: i64,
     new_path: &str,
     new_file_name: &str,
     new_folder_id: i64,
     date_modified: Option<&str>,
 ) -> Result<bool, AppError> {
-    let result = sqlx::query(
+    let updated = sql::execute(
+        tx,
         "UPDATE tracks SET file_path = ?, file_name = ?, folder_id = ?, date_modified = ?
          WHERE id = ?",
-    )
-    .bind(new_path)
-    .bind(new_file_name)
-    .bind(new_folder_id)
-    .bind(date_modified)
-    .bind(track_id)
-    .execute(&mut **tx)
-    .await?;
-    Ok(result.rows_affected() > 0)
+        (new_path, new_file_name, new_folder_id, date_modified, track_id),
+    )?;
+    Ok(updated > 0)
 }
 
 /// Rewrites every tag-backed column of a track that changed on disk, keeping its playback state.
@@ -298,15 +274,14 @@ pub(crate) async fn update_track_location(
 /// tag wins whenever it says something, and silence leaves the row alone. So with the write-back
 /// off, a star set here gives way to one another player wrote, and a cleared one comes back while
 /// the file still carries it, the column having no way to say "the user meant zero".
-pub(crate) async fn update_track_metadata(
-    tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
+pub(crate) fn update_track_metadata(
+    tx: &Transaction<'_>,
     file_path: &str,
-    meta: &melodia_core::entities::scan::ExtractedMetadata,
+    meta: &ExtractedMetadata,
     ids: &ResolvedIds,
     names: &mut NameCache,
 ) -> Result<(), AppError> {
-    let derived = DerivedColumns::of(meta);
-    let q = sqlx::query(
+    let mut sql = Sql::new(
         "UPDATE tracks SET
             file_hash = ?, title = ?, artist = ?, album_artist = ?, album = ?,
             genre = ?, credits = ?,
@@ -325,19 +300,19 @@ pub(crate) async fn update_track_metadata(
             artwork_path = COALESCE(?, artwork_path),
             album_id = ?, artist_id = ?, genre_id = ?, folder_id = ?,
             date_modified = ?, sort_key = ?, search_text = ?,
+            artist_key = ?, album_key = ?, genre_key = ?,
             rating = CASE WHEN ? = 0 THEN rating ELSE ? END
          WHERE file_path = ? RETURNING id",
     );
-    let q = bind_track_columns(q, meta, ids, &derived);
+    bind_track_columns(&mut sql, meta, ids);
     let tag_rating = meta.rating.unwrap_or(0);
-    let updated =
-        q.bind(tag_rating).bind(tag_rating).bind(file_path).fetch_optional(&mut **tx).await?;
+    sql.bind(tag_rating).bind(tag_rating).bind(file_path);
+    let updated: Option<i64> = sql.fetch_optional(tx)?;
 
     // Here rather than at the callers: an artist column refreshed without its credit rows displays
     // one thing and files under another.
-    if let Some(row) = updated {
-        let track_id: i64 = row.try_get("id")?;
-        replace_track_joins(tx, track_id, meta, ids, names).await?;
+    if let Some(track_id) = updated {
+        replace_track_joins(tx, track_id, meta, ids, names)?;
     }
     Ok(())
 }
@@ -347,10 +322,9 @@ pub(crate) async fn update_track_metadata(
 /// Driven from the albums, so the cost follows the albums still missing a cover, each one
 /// `idx_tracks_album_id` seek in `id` order. Not a window over `tracks`: `SQLite` scans a
 /// materialized CTE once per album written, and a first scan writes nearly every album.
-pub(crate) async fn update_album_artwork_from_tracks(
-    tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
-) -> Result<(), AppError> {
-    sqlx::query(
+pub(crate) fn update_album_artwork_from_tracks(tx: &Transaction<'_>) -> Result<(), AppError> {
+    sql::execute(
+        tx,
         "WITH first_art AS (
             SELECT albums.id AS album_id,
                    (SELECT tracks.artwork_path FROM tracks
@@ -365,9 +339,8 @@ pub(crate) async fn update_album_artwork_from_tracks(
         FROM first_art
         WHERE first_art.album_id = albums.id
           AND first_art.artwork_path IS NOT NULL",
-    )
-    .execute(&mut **tx)
-    .await?;
+        (),
+    )?;
     Ok(())
 }
 
@@ -377,11 +350,9 @@ pub(crate) async fn update_album_artwork_from_tracks(
 /// One call for a pass that can change which cover a playlisted track holds: refreshing only the
 /// albums leaves a playlist naming a cover none of its tracks hold, which keeps the file
 /// referenced and out of the artwork sweep's reach.
-pub(crate) async fn roll_up_covers(
-    tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
-) -> Result<(), AppError> {
-    update_album_artwork_from_tracks(tx).await?;
-    crate::database::queries::playlist::refresh_automatic_thumbnails(tx).await
+pub(crate) fn roll_up_covers(tx: &Transaction<'_>) -> Result<(), AppError> {
+    update_album_artwork_from_tracks(tx)?;
+    crate::database::queries::playlist::refresh_automatic_thumbnails(tx)
 }
 
 /// Deletes the albums, artists and genres no track reaches any more, which the stats triggers only
@@ -392,17 +363,16 @@ pub(crate) async fn roll_up_covers(
 /// and are all that keeps a featured-only one, so a predicate over the two FKs alone would delete
 /// exactly the artists they exist to surface. **Deletes only**: every caller has the stats triggers
 /// live or `stats::recalculate_all_stats` behind it, so a recompute here would be done twice.
-pub(crate) async fn prune_orphans(
-    tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
-) -> Result<(), AppError> {
-    sqlx::query(
+pub(crate) fn prune_orphans(tx: &Transaction<'_>) -> Result<(), AppError> {
+    sql::execute(
+        tx,
         "DELETE FROM albums \
          WHERE NOT EXISTS (SELECT 1 FROM tracks WHERE tracks.album_id = albums.id)",
-    )
-    .execute(&mut **tx)
-    .await?;
+        (),
+    )?;
 
-    sqlx::query(
+    sql::execute(
+        tx,
         "DELETE FROM artists \
          WHERE id <> ? \
            AND NOT EXISTS (SELECT 1 FROM tracks WHERE tracks.artist_id = artists.id) \
@@ -410,40 +380,34 @@ pub(crate) async fn prune_orphans(
            AND NOT EXISTS (SELECT 1 FROM track_artists WHERE track_artists.artist_id = artists.id) \
            AND NOT EXISTS (SELECT 1 FROM album_artists WHERE album_artists.artist_id = artists.id) \
            AND NOT EXISTS (SELECT 1 FROM track_credits WHERE track_credits.artist_id = artists.id)",
-    )
-    .bind(crate::database::queries::artist::UNKNOWN_ARTIST_ID)
-    .execute(&mut **tx)
-    .await?;
+        (crate::database::queries::artist::UNKNOWN_ARTIST_ID,),
+    )?;
 
-    sqlx::query(
+    sql::execute(
+        tx,
         "DELETE FROM genres \
          WHERE NOT EXISTS (SELECT 1 FROM tracks WHERE tracks.genre_id = genres.id) \
            AND NOT EXISTS (SELECT 1 FROM track_genres WHERE track_genres.genre_id = genres.id)",
-    )
-    .execute(&mut **tx)
-    .await?;
+        (),
+    )?;
 
     Ok(())
 }
 
-pub(crate) async fn delete_track_by_path(
-    tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
+pub(crate) fn delete_track_by_path(
+    tx: &Transaction<'_>,
     file_path: &str,
 ) -> Result<bool, AppError> {
-    let result = sqlx::query("DELETE FROM tracks WHERE file_path = ?")
-        .bind(file_path)
-        .execute(&mut **tx)
-        .await?;
-    Ok(result.rows_affected() > 0)
+    let deleted = sql::execute(tx, "DELETE FROM tracks WHERE file_path = ?", (file_path,))?;
+    Ok(deleted > 0)
 }
 
 /// Deletes the tracks at `file_paths`, returning how many went.
-pub(crate) async fn delete_tracks_by_paths_batch(
-    tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
+pub(crate) fn delete_tracks_by_paths_batch(
+    tx: &Transaction<'_>,
     file_paths: &[String],
 ) -> Result<u64, AppError> {
-    chunked_in_execute_on(tx, file_paths, |placeholders| {
+    chunked_in_execute(tx, file_paths, |placeholders| {
         format!("DELETE FROM tracks WHERE file_path IN ({placeholders})")
     })
-    .await
 }

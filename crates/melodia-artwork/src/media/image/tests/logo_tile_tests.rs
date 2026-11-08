@@ -101,6 +101,34 @@ fn a_composed_tile_is_stored_as_png_whatever_the_source_was() -> TestResult {
         "a wordmark is stored as the tile it became, not the JPEG it arrived as: {}",
         stored.path
     );
+    assert_eq!(
+        image::guess_format(&std::fs::read(&stored.path)?).ok(),
+        Some(image::ImageFormat::Png),
+        "the extension is the caller's to name, so only the bytes say what was encoded"
+    );
+    Ok(())
+}
+
+/// The store takes the large-decode gate for an oversized source's own decode, and the gate isn't
+/// reentrant, so a logo still holding it across the store deadlocks on itself. Run apart so the
+/// deadlock reads as a failure rather than a suite that never finishes this test.
+#[test]
+fn an_opaque_logo_past_the_large_decode_gate_is_stored_without_waiting_on_itself() -> TestResult {
+    const PAST_THE_GATE: u32 = 2048;
+    let dir = tempfile::tempdir()?;
+    let source = png(PAST_THE_GATE)?;
+    let store_dir = dir.path().to_path_buf();
+    let (done, stored) = std::sync::mpsc::channel();
+
+    std::thread::spawn(move || done.send(store(&source, "png", &store_dir)));
+    let stored = stored.recv_timeout(std::time::Duration::from_secs(30))?;
+
+    let Some(stored) = stored else {
+        return Err("an opaque square logo is stored as it is, not refused".into());
+    };
+    let written = std::fs::read(&stored.path)?;
+    let dimensions = image_decode::memory_dimensions(&written, image_decode::MAX_SOURCE_DIM);
+    assert_eq!(dimensions, Some((STORE_MAX_DIM, STORE_MAX_DIM)), "stored inside the cap");
     Ok(())
 }
 

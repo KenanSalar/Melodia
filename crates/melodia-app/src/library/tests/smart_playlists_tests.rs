@@ -39,8 +39,16 @@ async fn stage(db: &DbPool, title: &str, genre: &str) -> Result<i64, AppError> {
 
 /// A new Rock playlist's row, as the store reads it.
 async fn rock_row(db: &DbPool) -> Result<PlaylistStats, AppError> {
-    let rock = queries::playlist::create_smart_playlist(db, "Rock", None, ROCK_ONLY).await?;
-    playlists::get_playlist_detail(db, rock.id).await
+    let rock = rock_only(db, "Rock").await?;
+    playlists::get_playlist_detail(db, rock).await
+}
+
+/// A new smart playlist named `name` holding the library's Rock tracks.
+async fn rock_only(db: &DbPool, name: &str) -> Result<i64, AppError> {
+    let created =
+        queries::playlist::create_smart_playlist(db, name.to_owned(), None, ROCK_ONLY.to_owned())
+            .await?;
+    Ok(created.id)
 }
 
 /// What a manual playlist's automatic thumbnail is too: the first track it reaches that has a
@@ -61,17 +69,17 @@ async fn a_smart_playlist_takes_the_first_cover_its_rules_reach() -> Result<(), 
 #[tokio::test]
 async fn a_smart_playlists_own_artwork_choice_is_left_alone() -> Result<(), AppError> {
     let lib = library().await?;
-    let picked =
-        queries::playlist::create_smart_playlist(&lib.db, "Picked", None, ROCK_ONLY).await?;
-    queries::playlist::set_playlist_custom_thumbnail(&lib.db, picked.id, "/artwork/mosaic.jpg")
-        .await?;
-    let cleared =
-        queries::playlist::create_smart_playlist(&lib.db, "Cleared", None, ROCK_ONLY).await?;
-    playlists::update_playlist(&lib.db, cleared.id, "Cleared".to_owned(), None, Some(true)).await?;
-    let cases = [
-        (picked.id, Some("/artwork/mosaic.jpg"), "a picked mosaic"),
-        (cleared.id, None, "a Clear"),
-    ];
+    let picked = rock_only(&lib.db, "Picked").await?;
+    queries::playlist::set_playlist_custom_thumbnail(
+        &lib.db,
+        picked,
+        "/artwork/mosaic.jpg".to_owned(),
+    )
+    .await?;
+    let cleared = rock_only(&lib.db, "Cleared").await?;
+    playlists::update_playlist(&lib.db, cleared, "Cleared".to_owned(), None, Some(true)).await?;
+    let cases =
+        [(picked, Some("/artwork/mosaic.jpg"), "a picked mosaic"), (cleared, None, "a Clear")];
     for (id, kept, case) in cases {
         let mut row = playlists::get_playlist_detail(&lib.db, id).await?;
 
@@ -114,8 +122,13 @@ async fn a_card_converted_from_its_menu_keeps_the_cover_it_showed() -> Result<()
 #[tokio::test]
 async fn a_manual_row_is_left_as_read() -> Result<(), AppError> {
     let lib = library().await?;
-    let mix =
-        queries::playlist::create_playlist_with_tracks(&lib.db, "Mix", None, &[lib.alpha]).await?;
+    let mix = queries::playlist::create_playlist_with_tracks(
+        &lib.db,
+        "Mix".to_owned(),
+        None,
+        vec![lib.alpha],
+    )
+    .await?;
     let as_read = playlists::get_playlist_detail(&lib.db, mix).await?;
     let mut rows = [as_read.clone()];
 

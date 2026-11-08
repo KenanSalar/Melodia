@@ -19,9 +19,7 @@ melodia-artwork = { path = "../melodia-artwork" }
 # this crate has into the audio stack, and it points at its bottom tier.
 melodia-audio = { path = "../melodia-audio" }
 
-sqlx.workspace = true
-# `TryStreamExt`, to read a folder's rows one at a time.
-futures-util.workspace = true
+rusqlite.workspace = true
 tokio.workspace = true
 lofty.workspace = true
 walkdir.workspace = true
@@ -36,10 +34,16 @@ log.workspace = true
 [target.'cfg(target_os = "windows")'.dependencies]
 dunce.workspace = true
 
+[build-dependencies]
+blake3.workspace = true
+
 [dev-dependencies]
 melodia-testkit = { path = "../melodia-testkit" }
 # The scan and watcher suites build a library under a throwaway root.
 tempfile.workspace = true
+# The pool's reaper is walked on a paused clock, which only `test-util` supplies, and
+# `cargo test -p melodia-store` unifies no feature from another member.
+tokio = { workspace = true, features = ["test-util"] }
 
 [lints]
 workspace = true

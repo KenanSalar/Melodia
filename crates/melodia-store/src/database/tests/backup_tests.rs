@@ -1,12 +1,11 @@
 use std::path::Path;
-use std::str::FromStr;
 
-use sqlx::sqlite::{SqliteConnectOptions, SqlitePoolOptions};
+use rusqlite::{Connection, OpenFlags};
 
 use super::{MAX_BACKUPS, create, file_name, maintain, prune};
-use crate::database::DbPool;
 use crate::database::queries;
 use crate::database::queries::fixtures::insert_test_track;
+use crate::database::{DbPool, sql};
 use melodia_core::config::Paths;
 use melodia_core::error::AppError;
 
@@ -34,16 +33,20 @@ fn entry_names(dir: &Path) -> Result<Vec<String>, AppError> {
     Ok(names)
 }
 
-/// A real, file-backed, migrated database in `dir`.
+/// A real, file-backed, migrated database in `dir`, opened as a launch opens it.
 ///
-/// Deliberately not `DbPool::test_pool()`: that one is `sqlite::memory:`, and
-/// `VACUUM INTO` from an in-memory database through sqlx returns `Ok` while
-/// writing no file at all. Every test that exercises the copy has to run against
-/// a pool shaped like the one production backs up.
+/// Deliberately not `DbPool::test_pool()`: production backs up a WAL database, and
+/// an in-memory one has no `-wal` sidecar for the copy to fold in.
 async fn open_db(dir: &Path) -> Result<(Paths, DbPool), AppError> {
     let paths = paths_in(dir);
     let db = crate::database::init_database(&paths).await?;
     Ok((paths, db))
+}
+
+/// How many tracks the backup at `path` holds, opened read-only as a restore would find it.
+fn tracks_in(path: &Path) -> Result<i64, AppError> {
+    let restored = Connection::open_with_flags(path, OpenFlags::SQLITE_OPEN_READ_ONLY)?;
+    sql::fetch_one(&restored, "SELECT COUNT(*) FROM tracks", ())
 }
 
 /// The question the whole module exists to answer: is the file it leaves behind
@@ -67,25 +70,17 @@ async fn a_backup_round_trips_as_an_openable_database() -> Result<(), AppError> 
     let wal = std::fs::metadata(tmp.path().join("melodia.db-wal"))?.len();
     assert!(wal > 32, "nothing was left in the WAL for the backup to fold in");
 
-    let path = create(db.write(), &paths.backups_dir, 20_260_514_000_000).await?;
+    let path = create(&db, &paths.backups_dir, 20_260_514_000_000).await?;
     assert_eq!(entry_names(&paths.backups_dir)?, ["melodia-v20260514000000.db"],);
     db.close().await;
 
-    let opts =
-        SqliteConnectOptions::from_str(&format!("sqlite:{}", path.display()))?.read_only(true);
-    let restored = SqlitePoolOptions::new().max_connections(1).connect_with(opts).await?;
-    let (tracks,): (i64,) =
-        sqlx::query_as("SELECT COUNT(*) FROM tracks").fetch_one(&restored).await?;
-    restored.close().await;
-
-    assert_eq!(tracks, 1);
+    assert_eq!(tracks_in(&path)?, 1);
     Ok(())
 }
 
-/// `VACUUM INTO` takes no bind parameter, so the staging path is interpolated and every `'` in
-/// it has to be doubled. Undoubled, the first one closes the literal early and `SQLite` refuses
-/// the statement — which `main` treats as fatal, so the user cannot launch at all once a
-/// migration is pending.
+/// The staging path reaches `VACUUM INTO` bound, so a `'` in it is only text. Spliced into the
+/// statement, the first one would close the literal early and `SQLite` refuse the statement,
+/// which `main` treats as fatal: no launch at all once a migration is pending.
 ///
 /// Not a hypothetical directory: `MELODIA_DATA_DIR` makes the root the user's choice, and an
 /// apostrophe in a home folder name is ordinary on Windows and macOS. Every other test here
@@ -100,25 +95,36 @@ async fn a_backup_survives_an_apostrophe_in_its_own_path() -> Result<(), AppErro
     queries::folder::insert_folder(&db, "/test", true).await?;
     insert_test_track(&db, "/test/song.mp3", "Song", "Art", "Alb", "Pop").await?;
 
-    let path = create(db.write(), &paths.backups_dir, 20_260_906_000_000).await?;
+    let path = create(&db, &paths.backups_dir, 20_260_906_000_000).await?;
     db.close().await;
 
     // Opening it is what separates a statement the engine ran from one it merely accepted.
-    let opts =
-        SqliteConnectOptions::from_str(&format!("sqlite:{}", path.display()))?.read_only(true);
-    let restored = SqlitePoolOptions::new().max_connections(1).connect_with(opts).await?;
-    let (tracks,): (i64,) =
-        sqlx::query_as("SELECT COUNT(*) FROM tracks").fetch_one(&restored).await?;
-    restored.close().await;
-
-    assert_eq!(tracks, 1);
+    assert_eq!(tracks_in(&path)?, 1);
     Ok(())
 }
 
-/// The write pool's `create_if_missing` makes the database file exist before the
-/// backup is reached, so the existence check has to happen earlier than the
-/// backup itself. Get that wrong and every first launch leaves a snapshot of an
-/// empty schema behind permanently.
+/// A Windows profile folder can hold any letter, and the data folder sits under it. There the path
+/// is converted to UTF-16 on its way to the file, where Linux hands over its bytes, and a failed
+/// backup stops the launch.
+#[tokio::test]
+async fn a_backup_survives_a_non_ascii_letter_in_its_own_path() -> Result<(), AppError> {
+    let tmp = tempfile::tempdir()?;
+    let root = tmp.path().join("Müller 音楽 𝄞");
+    std::fs::create_dir_all(&root)?;
+
+    let (paths, db) = open_db(&root).await?;
+    queries::folder::insert_folder(&db, "/test", true).await?;
+    insert_test_track(&db, "/test/song.mp3", "Song", "Art", "Alb", "Pop").await?;
+
+    let path = create(&db, &paths.backups_dir, 20_261_108_000_000).await?;
+    db.close().await;
+
+    assert_eq!(tracks_in(&path)?, 1);
+    Ok(())
+}
+
+/// The writer's open creates the database file, so the existence check runs before it, or every
+/// first launch backs up an empty schema.
 #[tokio::test]
 async fn a_fresh_database_is_not_backed_up() -> Result<(), AppError> {
     let tmp = tempfile::tempdir()?;
@@ -263,7 +269,7 @@ async fn an_interrupted_backup_leaves_nothing_to_restore_from() -> Result<(), Ap
     std::fs::write(&retried, b"not a database")?;
     std::fs::write(&abandoned, b"not a database")?;
 
-    create(db.write(), &paths.backups_dir, 7).await?;
+    create(&db, &paths.backups_dir, 7).await?;
     db.close().await;
     assert!(!retried.exists(), "create wrote around the staged copy");
 
@@ -285,7 +291,7 @@ async fn create_skips_a_version_it_already_has() -> Result<(), AppError> {
     let existing = paths.backups_dir.join(file_name(3));
     std::fs::write(&existing, b"the earlier attempt")?;
 
-    create(db.write(), &paths.backups_dir, 3).await?;
+    create(&db, &paths.backups_dir, 3).await?;
     db.close().await;
 
     assert_eq!(std::fs::read(&existing)?, b"the earlier attempt");

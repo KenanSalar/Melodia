@@ -16,7 +16,7 @@ paths:
 
 # The library: what spans the store
 
-`sqlx.md`, `lofty.md`, `blake3.md` and `rayon.md` hold the per-crate mechanics.
+`rusqlite.md`, `lofty.md`, `blake3.md` and `rayon.md` hold the per-crate mechanics.
 
 ## Scan and artwork
 
@@ -35,16 +35,17 @@ paths:
 
 ## Query shape
 
-- **`database::placeholders(n)` builds every IN list**, paired with `chunked_in_query`, or
-  `chunked_in_query_on` on a connection or transaction already held, and `chunked_in_execute_on`
-  for a statement that returns no rows; never re-roll `repeat_n("?", n)`, or the chunk loop for a
-  statement binding only its list (`ingest::load_existing` excepted, its doc says why). A per-row
-  UPDATE is one chunked CTE statement per batch, its `VALUES` list from `values_placeholders`.
+- **`database::placeholders(n)` builds every IN list**, paired with `chunked_in_query`,
+  `chunked_in_execute` for a statement that returns no rows, and `chunked_in_statements` for one
+  binding a value ahead of its list; never re-roll `repeat_n("?", n)`, or the chunk loop for any of
+  those three shapes (`ingest::load_existing` excepted, its doc says why). A per-row UPDATE is one
+  chunked CTE statement per batch, its `VALUES` list from `values_placeholders`.
 - **Nothing outside the FTS migrations and `search_tests` names a shadow table**
   (`tracks_fts_{data,idx,docsize,config}`), fts5's private storage.
 - **A statement writing title, artist, album artist, album or genre writes `search_text` beside
-  it**, as `bind_track_columns` does (`DerivedColumns`). The backfill fills blanks only, so a miss
-  leaves every library-sized filter matching the old name.
+  it, and artist, album or genre its order key**, as `bind_track_columns` does (`DerivedColumns`).
+  The backfill fills blanks only, so a miss leaves every library-sized filter matching the old
+  name, and the key fill only NULLs, so a missed key sorts the row by the old name.
 - **A card's name and its `search_name` are written together** (`queries::search_name`), the folded
   copy each of `albums`, `artists`, `genres` and `playlists` keeps for its grid's filter.
 - **`UNICODE_LOWER` is query-side and never schema** (`database::collation`): the place to break it

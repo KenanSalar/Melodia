@@ -43,11 +43,11 @@ pub async fn remove_stations(
     from: KeptList,
 ) -> Result<UndoCapture<RemovedStations>, AppError> {
     if ids.len() > UNDO_HOLD_CAP {
-        let rows = remove_stations_for_good(db, &ids, from).await?;
+        let rows = remove_stations_for_good(db, ids, from).await?;
         return Ok(if rows == 0 { UndoCapture::Nothing } else { UndoCapture::OverCap { rows } });
     }
     let logos = ArtworkHold::new(queries::radio_removal::station_artwork(db, &ids).await?);
-    let cuts = queries::radio_removal::remove_stations(db, &ids, from).await?;
+    let cuts = queries::radio_removal::remove_stations(db, ids, from).await?;
     Ok(if cuts.is_empty() {
         UndoCapture::Nothing
     } else {
@@ -58,7 +58,7 @@ pub async fn remove_stations(
 /// Drops stations out of `from` keeping nothing to undo it, and answers how many went.
 pub async fn remove_stations_for_good(
     db: &DbPool,
-    ids: &[i64],
+    ids: Vec<i64>,
     from: KeptList,
 ) -> Result<usize, AppError> {
     Ok(queries::radio_removal::remove_stations(db, ids, from).await?.len())
@@ -67,7 +67,7 @@ pub async fn remove_stations_for_good(
 /// Undoes a removal. The logos stay held until the rows naming them are back.
 pub async fn restore_stations(db: &DbPool, removed: RemovedStations) -> Result<(), AppError> {
     let RemovedStations { cuts, logos, .. } = removed;
-    queries::radio_removal::restore_stations(db, &cuts).await?;
+    queries::radio_removal::restore_stations(db, cuts).await?;
     drop(logos);
     Ok(())
 }

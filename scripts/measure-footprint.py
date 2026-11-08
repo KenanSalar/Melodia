@@ -128,10 +128,11 @@ SCENARIO_SETUP = {
 DEFAULT_SCENARIOS = list(SCENARIO_SETUP)
 # Both past the database pool's reap, the first counted from the launch and the second from each
 # prompt, so neither startup's reads nor a switch's reach a window. Every connection maps
-# melodia.db, and the reaper, looking once a minute for ones idle over a minute, closes one up to
-# two minutes after its last query (IDLE_TIMEOUT in crates/melodia-store/src/database/mod.rs).
-DEFAULT_SETTLE_SECONDS = "150"
-DEFAULT_SWITCH_SETTLE_SECONDS = DEFAULT_SETTLE_SECONDS
+# melodia.db, and the reaper closes one a minute after its last query (IDLE_TIMEOUT in
+# melodia-store's database/pool/lane.rs). The launch's also clears the heap trim that follows the
+# boot's closes (AFTER_POOL_CLOSES in melodia-app's tasks/heap_trim.rs), which no switch triggers.
+DEFAULT_SETTLE_SECONDS = "90"
+DEFAULT_SWITCH_SETTLE_SECONDS = "70"
 DEFAULT_DURATION_SECONDS = "60"
 DEFAULT_INTERVAL_SECONDS = "1"
 MAX_WAIT_SECONDS = 3600

@@ -71,7 +71,7 @@ pub async fn player_play_tracks(
         .filter_map(|slot| queued.get(slot).copied())
         .collect();
     let records =
-        queries::track::get_track_summaries_by_ids(&ctx.db, &near).await?.into_iter().map(Arc::new);
+        queries::track::get_track_summaries_by_ids(&ctx.db, near).await?.into_iter().map(Arc::new);
     let mut replaced = None;
     ctx.emit_and_execute(|s| {
         replaced = s.replace_queue(&queued, start);

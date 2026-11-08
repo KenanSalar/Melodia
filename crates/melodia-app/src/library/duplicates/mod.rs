@@ -16,8 +16,10 @@ use melodia_store::database::{DbPool, queries};
 
 /// Every group in the library, dismissed ones included and flagged, in list order.
 pub async fn find(db: &DbPool) -> Result<Vec<DuplicateGroup>, AppError> {
-    let mut keys = Vec::new();
-    queries::track::visit_duplicate_keys(db, |row| keys.push(matcher::SongKey::of(&row))).await?;
+    let keys = queries::track::fold_duplicate_keys(db, Vec::new(), |keys, row| {
+        keys.push(matcher::SongKey::of(&row));
+    })
+    .await?;
     let candidates = matcher::candidate_ids(keys);
     let copies = queries::track::duplicate_copies(db, &candidates).await?;
     Ok(matcher::group(copies))

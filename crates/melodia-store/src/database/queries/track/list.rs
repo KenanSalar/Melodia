@@ -1,9 +1,10 @@
 //! The `TrackListRow` fetches every track list renders from.
 
-use sqlx::AssertSqlSafe;
+use std::path::{MAIN_SEPARATOR, MAIN_SEPARATOR_STR};
+use std::sync::LazyLock;
 
 use super::columns;
-use crate::database::DbPool;
+use crate::database::{DbPool, sql};
 use melodia_core::entities::browse::DirectoryTrack;
 use melodia_core::entities::track;
 use melodia_core::error::AppError;
@@ -16,56 +17,61 @@ use melodia_core::error::AppError;
 /// scan of `idx_tracks_sort_key` rather than a sort.
 pub(super) const TRACK_LIST_ORDER: &str = "sort_key COLLATE NOCASE ASC";
 
+static ALL_TRACK_LIST_ROWS: LazyLock<String> = LazyLock::new(|| {
+    format!("SELECT {} FROM tracks ORDER BY {TRACK_LIST_ORDER}", columns::TRACK_LIST.joined())
+});
+
 /// Every track as a list row, in [`TRACK_LIST_ORDER`], for the checks that hold an id query
 /// against them; a list fetches its rows by id.
 pub async fn get_all_tracks_for_list(db: &DbPool) -> Result<Vec<track::TrackListRow>, AppError> {
-    let cols = columns::TRACK_LIST.joined();
-    let sql = format!("SELECT {cols} FROM tracks ORDER BY {TRACK_LIST_ORDER}");
-    let tracks =
-        sqlx::query_as::<_, track::TrackListRow>(AssertSqlSafe(sql)).fetch_all(db.read()).await?;
-    Ok(tracks)
+    db.read(|conn| sql::fetch_all(conn, ALL_TRACK_LIST_ROWS.as_str(), ())).await
 }
 
-/// The native path separator as it must appear *inside* a LIKE pattern. `\` is the ESCAPE
-/// character, so on Windows a literal backslash is doubled.
-#[cfg(windows)]
-pub(super) const LIKE_SEPARATOR: &str = "\\\\";
-#[cfg(not(windows))]
-pub(super) const LIKE_SEPARATOR: &str = "/";
+/// The byte after the native separator: a directory ended with it sorts past everything under it.
+const AFTER_SEPARATOR: char = (MAIN_SEPARATOR as u8 + 1) as char;
 
-/// `dir_path` escaped for `LIKE … ESCAPE '\'` and ended with [`LIKE_SEPARATOR`], the prefix every
-/// "files under this directory" pattern starts from: a user's folder name can hold `_` or `%`.
-pub(super) fn directory_like_prefix(dir_path: &str) -> String {
-    let escaped = dir_path.replace('\\', "\\\\").replace('%', "\\%").replace('_', "\\_");
-    format!("{escaped}{LIKE_SEPARATOR}")
+/// The half-open `file_path` range holding everything under `dir_path`, in the column's BINARY
+/// order. A range walks the column's index and has no wildcards to escape, where a `LIKE` folds
+/// case and so can't use a BINARY index.
+pub(super) fn subtree_bounds(dir_path: &str) -> (String, String) {
+    // A drive root's path already ends in the separator.
+    let dir = dir_path.trim_end_matches(MAIN_SEPARATOR);
+    (format!("{dir}{MAIN_SEPARATOR}"), format!("{dir}{AFTER_SEPARATOR}"))
 }
 
-/// The tracks directly inside `dir_path`, each with the path Browse matches its file by: `LIKE`
-/// folds ASCII case, so a sibling folder spelled in another case answers here too.
+static TRACKS_IN_DIRECTORY: LazyLock<String> = LazyLock::new(|| {
+    format!(
+        "SELECT file_path, {} FROM tracks \
+         WHERE file_path >= ?1 AND file_path < ?2 \
+           AND instr(substr(file_path, length(?1) + 1), ?3) = 0",
+        columns::TRACK_LIST.joined()
+    )
+});
+
+/// The tracks directly inside `dir_path`, each with the path Browse matches its file by.
 ///
 /// `file_path` holds the native separator, so `dir_path` comes in native form through
-/// `canonicalize_path`. The `ESCAPE` clause rules out `SQLite`'s prefix range scan, and a scan per
-/// navigation doesn't justify a generated `parent_dir` column and index slowing every insert.
+/// `canonicalize_path`.
 pub async fn get_tracks_in_directory(
     db: &DbPool,
     dir_path: &str,
 ) -> Result<Vec<DirectoryTrack>, AppError> {
-    let prefix = directory_like_prefix(dir_path);
-    let pattern = format!("{prefix}%");
-    let subdir_pattern = format!("{prefix}%{LIKE_SEPARATOR}%");
-
-    let cols = columns::TRACK_LIST.joined();
-    let sql = format!(
-        "SELECT file_path, {cols} FROM tracks WHERE file_path LIKE ? ESCAPE '\\' AND file_path NOT LIKE ? ESCAPE '\\'"
-    );
-    let tracks = sqlx::query_as::<_, DirectoryTrack>(AssertSqlSafe(sql))
-        .bind(&pattern)
-        .bind(&subdir_pattern)
-        .fetch_all(db.read())
-        .await?;
-
-    Ok(tracks)
+    let (from, before) = subtree_bounds(dir_path);
+    db.read(move |conn| {
+        sql::fetch_all(conn, TRACKS_IN_DIRECTORY.as_str(), (from, before, MAIN_SEPARATOR_STR))
+    })
+    .await
 }
+
+static RECENTLY_PLAYED: LazyLock<String> = LazyLock::new(|| {
+    format!(
+        "SELECT {} FROM tracks \
+         WHERE last_played IS NOT NULL \
+         ORDER BY last_played DESC, id DESC \
+         LIMIT ?",
+        columns::TRACK_LIST.joined()
+    )
+});
 
 /// The `limit` most recently played tracks, newest first, which the view re-sorts and filters in
 /// memory rather than re-querying.
@@ -77,16 +83,5 @@ pub async fn get_recently_played(
     db: &DbPool,
     limit: i64,
 ) -> Result<Vec<track::TrackListRow>, AppError> {
-    let cols = columns::TRACK_LIST.joined();
-    let sql = format!(
-        "SELECT {cols} FROM tracks \
-         WHERE last_played IS NOT NULL \
-         ORDER BY last_played DESC, id DESC \
-         LIMIT ?"
-    );
-    let rows = sqlx::query_as::<_, track::TrackListRow>(AssertSqlSafe(sql))
-        .bind(limit)
-        .fetch_all(db.read())
-        .await?;
-    Ok(rows)
+    db.read(move |conn| sql::fetch_all(conn, RECENTLY_PLAYED.as_str(), (limit,))).await
 }

@@ -131,7 +131,7 @@ pub fn fetch_by_id<R: PagedRow + Send>(
         let db = db.clone();
         let ids = request.ids().to_vec();
         let rows =
-            async move { library::keyset::rows_by_ids(&db, &ids).await.map(|rows| convert(&rows)) };
+            async move { library::keyset::rows_by_ids(&db, ids).await.map(|rows| convert(&rows)) };
         spawn_fetch(&runtime, request, rows, RowRequest::land, "track rows");
     }
 }
@@ -147,7 +147,7 @@ pub async fn load(
     let ids =
         library::keyset::track_ids(&state.db, query.scope, query.order, &query.needle).await?;
     // Asked once the ids are in, the latest the scroll position can be read before the seed.
-    let seed_ids = &ids[window(ids.len(), at.row())];
+    let seed_ids = ids[window(ids.len(), at.row())].to_vec();
     let seed = convert(&library::keyset::rows_by_ids(&state.db, seed_ids).await?);
     Ok(Keyset { ids: ids.into(), seed, read })
 }

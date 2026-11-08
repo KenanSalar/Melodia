@@ -6,8 +6,10 @@
 //! artist line is the one its card shows (`album_stats` reads `COALESCE(artist_credit, name)`),
 //! the unknown artist's seeded name included, whichever path wrote it.
 
-use sqlx::{AssertSqlSafe, SqliteConnection};
+use rusqlite::Connection;
 
+use crate::database::rows::by_name;
+use crate::database::sql::Sql;
 use crate::database::{DbPool, FoldedColumn, FoldedInputs, backfill_folded};
 use melodia_core::entities::track_search::FIELD_SEPARATOR;
 use melodia_core::error::AppError;
@@ -68,12 +70,13 @@ impl Named {
     }
 }
 
-#[derive(sqlx::FromRow)]
 struct Inputs {
     id: i64,
     name: String,
     extra: Option<String>,
 }
+
+by_name!(Inputs { id, name, extra });
 
 impl FoldedInputs for Inputs {
     fn id(&self) -> i64 {
@@ -90,19 +93,15 @@ impl FoldedInputs for Inputs {
 
 /// Writes `search_name` for the row `id` of `kind` from what that row holds now, for a writer
 /// that changed one of its inputs without holding all of them.
-pub(crate) async fn refill(
-    conn: &mut SqliteConnection,
-    kind: Named,
-    id: i64,
-) -> Result<(), AppError> {
-    let sql = format!("{} WHERE x.id = ?", kind.inputs());
-    let Some(row) =
-        sqlx::query_as::<_, Inputs>(AssertSqlSafe(sql)).bind(id).fetch_optional(&mut *conn).await?
-    else {
+pub(crate) fn refill(conn: &Connection, kind: Named, id: i64) -> Result<(), AppError> {
+    let mut select = Sql::new(kind.inputs());
+    select.push(" WHERE x.id = ?").bind(id);
+    let Some(row) = select.fetch_optional::<Inputs>(conn)? else {
         return Ok(());
     };
-    let sql = format!("UPDATE {} SET search_name = ? WHERE id = ?", kind.table());
-    sqlx::query(AssertSqlSafe(sql)).bind(row.packed()).bind(id).execute(&mut *conn).await?;
+    let mut update = Sql::new("UPDATE ");
+    update.push(kind.table()).push(" SET search_name = ? WHERE id = ?").bind(row.packed()).bind(id);
+    update.execute(conn)?;
     Ok(())
 }
 
@@ -111,7 +110,7 @@ pub(crate) async fn refill(
 pub async fn backfill_search_name(db: &DbPool) -> Result<u64, AppError> {
     let mut written = 0;
     for kind in Named::ALL {
-        written += backfill_folded::<Inputs>(db, &kind.folded()).await?;
+        written += backfill_folded::<Inputs>(db, kind.folded()).await?;
     }
     Ok(written)
 }

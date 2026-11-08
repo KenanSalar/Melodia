@@ -9,7 +9,7 @@ use melodia_testkit::http::{TestResponse, TestServer};
 
 use super::{
     ApiStation, FALLBACK_HOST, SERVERS_URL, cast_vote, cast_vote_at, count_click_at,
-    discover_mirror, fetch_facets_at, get_json, page_from, search_at, station_by_uuid,
+    discover_mirror, fetch_facets_at, get_json, is_reset, page_from, search_at, station_by_uuid,
     station_by_uuid_at, url_for,
 };
 use melodia_core::entities::radio::{DEFAULT_PAGE_LIMIT, FacetKind, StationSearch};
@@ -206,6 +206,105 @@ async fn a_vote_the_directory_counted_is_a_success() -> TestResult {
 
     assert!(cast_vote_at(&reqwest::Client::new(), &url).await.is_ok());
     Ok(())
+}
+
+// ---- a connection the directory resets ----
+
+#[test]
+fn a_reset_reads_as_one_bare_or_wrapped_as_the_tls_connector_wraps_it() {
+    use std::io::{Error, ErrorKind};
+
+    let cases = [
+        (Error::from(ErrorKind::ConnectionReset), true, "a bare reset"),
+        (Error::other(Error::from(ErrorKind::ConnectionReset)), true, "a wrapped reset"),
+        (Error::from(ErrorKind::ConnectionRefused), false, "a refused connection"),
+        (Error::other(Error::from(ErrorKind::TimedOut)), false, "a wrapped timeout"),
+        (Error::other("handshake failure"), false, "a wrapped message"),
+    ];
+
+    for (error, reset, what) in cases {
+        assert_eq!(is_reset(&error), reset, "{what}");
+    }
+}
+
+/// Staged on Linux, which answers a socket closed with the client's bytes still unread with a
+/// reset rather than a FIN.
+#[cfg(target_os = "linux")]
+mod resets {
+    use std::io::Read as _;
+    use std::net::{SocketAddr, TcpListener, TcpStream};
+    use std::sync::Arc;
+    use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+    use std::thread::JoinHandle;
+
+    use super::{TestResult, count_click_at};
+
+    struct ResettingListener {
+        addr: SocketAddr,
+        accepted: Arc<AtomicUsize>,
+        running: Arc<AtomicBool>,
+        worker: Option<JoinHandle<()>>,
+    }
+
+    impl ResettingListener {
+        fn start() -> std::io::Result<Self> {
+            let listener = TcpListener::bind(("127.0.0.1", 0))?;
+            let addr = listener.local_addr()?;
+            let accepted = Arc::new(AtomicUsize::new(0));
+            let running = Arc::new(AtomicBool::new(true));
+            let worker = {
+                let (accepted, running) = (Arc::clone(&accepted), Arc::clone(&running));
+                std::thread::Builder::new().name("test-reset".into()).spawn(move || {
+                    for stream in listener.incoming() {
+                        if !running.load(Ordering::SeqCst) {
+                            break;
+                        }
+                        let Ok(mut stream) = stream else { continue };
+                        accepted.fetch_add(1, Ordering::SeqCst);
+                        let _ = stream.read(&mut [0; 1]);
+                    }
+                })?
+            };
+            Ok(Self { addr, accepted, running, worker: Some(worker) })
+        }
+
+        fn connections(&self) -> usize {
+            self.accepted.load(Ordering::SeqCst)
+        }
+    }
+
+    impl Drop for ResettingListener {
+        fn drop(&mut self) {
+            self.running.store(false, Ordering::SeqCst);
+            // Unblocks the `accept`, as `TestServer`'s drop does.
+            let _ = TcpStream::connect(self.addr);
+            if let Some(worker) = self.worker.take() {
+                let _ = worker.join();
+            }
+        }
+    }
+
+    #[tokio::test]
+    async fn a_reset_handshake_is_sent_twice_more() -> TestResult {
+        let listener = ResettingListener::start()?;
+        let url = format!("https://{}/json/url/probe", listener.addr);
+
+        let _refused = count_click_at(&reqwest::Client::new(), &url).await;
+
+        assert_eq!(listener.connections(), 3);
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn a_reset_after_the_request_went_out_is_not_sent_again() -> TestResult {
+        let listener = ResettingListener::start()?;
+        let url = format!("http://{}/json/url/probe", listener.addr);
+
+        let _refused = count_click_at(&reqwest::Client::new(), &url).await;
+
+        assert_eq!(listener.connections(), 1);
+        Ok(())
+    }
 }
 
 // ---- a station the directory no longer serves ----

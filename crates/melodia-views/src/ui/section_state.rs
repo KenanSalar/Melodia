@@ -107,8 +107,8 @@ impl SectionState {
         self.dirty.swap(false, Ordering::AcqRel)
     }
 
-    /// A library change landed while a detail covered the grid. The grid draws nothing under it,
-    /// so it reloads once on the close rather than once per change.
+    /// A change landed while a detail covered the grid. The grid draws nothing under it, so it
+    /// reloads once on the close rather than once per change.
     pub fn owe_grid(&self) {
         self.grid_owed.store(true, Ordering::Release);
     }

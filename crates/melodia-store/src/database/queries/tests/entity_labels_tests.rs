@@ -3,9 +3,9 @@
 //! Each statement is built at run time, so a table or column spelled wrong compiles and fails only
 //! on the first copy of that kind. One test per kind is what reaches all four.
 
-use crate::database::DbPool;
-use crate::database::queries;
 use crate::database::queries::fixtures::*;
+use crate::database::sql::Sql;
+use crate::database::{DbPool, queries};
 use melodia_core::entities::artist::ArtistCredit;
 use melodia_core::error::AppError;
 
@@ -19,13 +19,9 @@ async fn library() -> Result<DbPool, AppError> {
 }
 
 async fn id_named(db: &DbPool, table: &str, name: &str) -> Result<i64, AppError> {
-    let id = sqlx::query_scalar::<_, i64>(sqlx::AssertSqlSafe(format!(
-        "SELECT id FROM {table} WHERE name = ?"
-    )))
-    .bind(name)
-    .fetch_one(db.read())
-    .await?;
-    Ok(id)
+    let mut select = Sql::vouched(format!("SELECT id FROM {table} WHERE name = ?"));
+    select.bind(name);
+    db.read(move |conn| select.fetch_one(conn)).await
 }
 
 /// A multi-name credit is the case that tells `album_stats` apart from the album's own artist

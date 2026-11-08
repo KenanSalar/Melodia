@@ -75,15 +75,7 @@ parking_lot = "0.12.5"
 futures-util = { version = "0.3.34", default-features = false, features = ["std"] }
 
 # Database
-# `macros` stays despite every query going through runtime `query_as`, because
-# `sqlx::migrate!` is re-exported only under `all(macros, migrate)`.
-sqlx = { version = "0.9.0", default-features = false, features = [
-    "runtime-tokio",
-    "sqlite",
-    "migrate",
-    "derive",
-    "macros",
-] }
+rusqlite = { version = "0.41.1", features = ["bundled", "collation"] }
 
 # Audio
 # The device stream `player::playback::output` opens, and the `ErrorKind`s

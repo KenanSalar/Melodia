@@ -47,7 +47,7 @@ impl FavoriteWrite {
     }
 
     /// Answers the ids it un-hearted, an empty answer having written nothing anywhere.
-    async fn unfavorite(&self, ids: &[i64]) -> Result<Vec<i64>, AppError> {
+    async fn unfavorite(&self, ids: Vec<i64>) -> Result<Vec<i64>, AppError> {
         let cleared = queries::track::unfavorite(&self.db, ids).await?;
         if !cleared.is_empty() {
             self.propagate(&cleared, false).await;
@@ -132,7 +132,7 @@ pub async fn set_favorite(state: &AppState, ids: Vec<i64>, favorite: bool) -> Re
 /// Takes the heart off those of `ids` that carry one, answering exactly those for an undo to
 /// re-heart through [`set_favorite`].
 pub async fn unfavorite(state: &AppState, ids: Vec<i64>) -> Result<Vec<i64>, AppError> {
-    FavoriteWrite::from_state(state).unfavorite(&ids).await
+    FavoriteWrite::from_state(state).unfavorite(ids).await
 }
 
 /// Toggle the playing track's favorite, answering `(id, new_fav)` so callers can mirror it into

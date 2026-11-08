@@ -4,11 +4,10 @@
 //! that unlinks live artwork, so both halves are pinned: that the SQL names every column, and that
 //! the ones reachable through no other column come back.
 
-use sqlx::AssertSqlSafe;
-
 use crate::database::DbPool;
 use crate::database::queries;
 use crate::database::queries::fixtures::{insert_test_track, set_test_artwork, setup_seeded_db};
+use crate::database::sql::{self, Sql};
 use melodia_core::entities::radio;
 use melodia_core::error::AppError;
 
@@ -53,8 +52,9 @@ fn the_reference_query_names_every_artwork_column() {
     }
     assert_eq!(
         REFERENCED_PATHS.matches("SELECT").count(),
-        EXPECTED_COLUMNS.len(),
-        "the query has an arm `EXPECTED_COLUMNS` doesn't name, or names one twice"
+        EXPECTED_COLUMNS.len() + 1,
+        "the query has an arm `EXPECTED_COLUMNS` doesn't name, or names one twice, beside the \
+         `SELECT DISTINCT` around them"
     );
 }
 
@@ -81,32 +81,47 @@ async fn repointing_moves_every_artwork_column_at_once() -> Result<(), AppError>
     )
     .await?;
 
-    let mut tx = db.write().begin().await?;
-    for (table, column) in EXPECTED_COLUMNS {
-        let sql = format!("UPDATE {table} SET {column} = ?");
-        sqlx::query(AssertSqlSafe(sql)).bind(OLD).execute(&mut *tx).await?;
-    }
-    tx.commit().await?;
+    point_columns_at(&db, &EXPECTED_COLUMNS, OLD).await?;
 
-    assert!(repoint_all(&db, &[(OLD.to_owned(), NEW.to_owned())]).await? > 0);
+    assert!(repoint_all(&db, vec![(OLD.to_owned(), NEW.to_owned())]).await? > 0);
 
     for (table, column) in EXPECTED_COLUMNS {
-        let stale: i64 = sqlx::query_scalar(AssertSqlSafe(format!(
-            "SELECT COUNT(*) FROM {table} WHERE {column} = ?"
-        )))
-        .bind(OLD)
-        .fetch_one(db.read())
-        .await?;
-        let moved: i64 = sqlx::query_scalar(AssertSqlSafe(format!(
-            "SELECT COUNT(*) FROM {table} WHERE {column} = ?"
-        )))
-        .bind(NEW)
-        .fetch_one(db.read())
-        .await?;
+        let stale = rows_naming(&db, (table, column), OLD).await?;
+        let moved = rows_naming(&db, (table, column), NEW).await?;
         assert_eq!(stale, 0, "nothing re-points {table}.{column}, so a renormalized cover dangles");
         assert!(moved > 0, "{table}.{column} lost its path instead of moving it");
     }
     Ok(())
+}
+
+/// Points each of `columns`, on every row, at `path`.
+async fn point_columns_at(
+    db: &DbPool,
+    columns: &'static [(&'static str, &'static str)],
+    path: &'static str,
+) -> Result<(), AppError> {
+    db.transaction(move |tx| {
+        for (table, column) in columns {
+            let mut update = Sql::vouched(format!("UPDATE {table} SET {column} = ?"));
+            update.bind(path);
+            update.execute(tx)?;
+        }
+        Ok(())
+    })
+    .await
+}
+
+async fn rows_naming(
+    db: &DbPool,
+    (table, column): (&'static str, &'static str),
+    path: &'static str,
+) -> Result<i64, AppError> {
+    db.read(move |conn| {
+        let mut count = Sql::vouched(format!("SELECT COUNT(*) FROM {table} WHERE {column} = ?"));
+        count.bind(path);
+        count.fetch_one(conn)
+    })
+    .await
 }
 
 /// A custom playlist mosaic is written by `compose_artwork` and pointed at by nothing else, so it
@@ -117,7 +132,8 @@ async fn a_composite_referenced_only_by_a_playlist_is_still_referenced() -> Resu
     let composite = "/data/artwork/33fb807d1f1b7cbb.jpg";
 
     let playlist = queries::playlist::create_playlist(&db, "Mosaic", None).await?;
-    queries::playlist::set_playlist_custom_thumbnail(&db, playlist.id, composite).await?;
+    queries::playlist::set_playlist_custom_thumbnail(&db, playlist.id, composite.to_owned())
+        .await?;
 
     let referenced = queries::artwork::referenced_filenames(&db).await?;
 
@@ -159,10 +175,9 @@ async fn paths_are_reduced_to_the_name_on_disk() -> Result<(), AppError> {
     let db = setup_seeded_db().await?;
     let track_id = insert_test_track(&db, "/music/a.mp3", "A", "Artist", "Album", "Rock").await?;
 
-    let mut tx = db.write().begin().await?;
     let stored = "/some/other/root/artwork/abcdef0123456789.png";
-    queries::track::set_track_artwork(&mut tx, &[track_id], Some(stored)).await?;
-    tx.commit().await?;
+    db.transaction(move |tx| queries::track::set_track_artwork(tx, &[track_id], Some(stored)))
+        .await?;
 
     let referenced = queries::artwork::referenced_filenames(&db).await?;
 
@@ -180,9 +195,7 @@ async fn blank_and_missing_paths_contribute_nothing() -> Result<(), AppError> {
     let db = setup_seeded_db().await?;
     let track_id = insert_test_track(&db, "/music/b.mp3", "B", "Artist", "Album", "Rock").await?;
 
-    let mut tx = db.write().begin().await?;
-    queries::track::set_track_artwork(&mut tx, &[track_id], Some("")).await?;
-    tx.commit().await?;
+    db.transaction(move |tx| queries::track::set_track_artwork(tx, &[track_id], Some(""))).await?;
 
     assert!(queries::artwork::referenced_filenames(&db).await?.is_empty());
     Ok(())
@@ -202,7 +215,7 @@ const MISSING: &str = "/data/artwork/33fb807d1f1b7cbb.jpg";
 const PRESENT: &str = "/data/artwork/4cccaf4d4b4cea11.jpg";
 
 async fn forget(db: &DbPool, missing: &str) -> Result<(), AppError> {
-    queries::artwork::forget_paths(db, &[missing.to_owned()]).await?;
+    queries::artwork::forget_paths(db, vec![missing.to_owned()]).await?;
     Ok(())
 }
 
@@ -212,22 +225,12 @@ async fn forget(db: &DbPool, missing: &str) -> Result<(), AppError> {
 async fn forgetting_a_path_clears_every_library_column_naming_it() -> Result<(), AppError> {
     let db = setup_seeded_db().await?;
     queries::playlist::create_playlist(&db, "Mosaic", None).await?;
-    let mut tx = db.write().begin().await?;
-    for (table, column) in LIBRARY_COLUMNS {
-        let sql = format!("UPDATE {table} SET {column} = ?");
-        sqlx::query(AssertSqlSafe(sql)).bind(MISSING).execute(&mut *tx).await?;
-    }
-    tx.commit().await?;
+    point_columns_at(&db, &LIBRARY_COLUMNS, MISSING).await?;
 
     forget(&db, MISSING).await?;
 
     for (table, column) in LIBRARY_COLUMNS {
-        let left: i64 = sqlx::query_scalar(AssertSqlSafe(format!(
-            "SELECT COUNT(*) FROM {table} WHERE {column} = ?"
-        )))
-        .bind(MISSING)
-        .fetch_one(db.read())
-        .await?;
+        let left = rows_naming(&db, (table, column), MISSING).await?;
         assert_eq!(left, 0, "{table}.{column} still names the gone file");
     }
     Ok(())
@@ -246,10 +249,9 @@ async fn a_track_whose_cover_is_forgotten_loses_its_mtime_too() -> Result<(), Ap
 
     forget(&db, MISSING).await?;
 
-    let stamps: Vec<Option<String>> =
-        sqlx::query_scalar("SELECT date_modified FROM tracks ORDER BY id")
-            .fetch_all(db.read())
-            .await?;
+    let stamps: Vec<Option<String>> = db
+        .read(|conn| sql::fetch_all(conn, "SELECT date_modified FROM tracks ORDER BY id", ()))
+        .await?;
     assert_eq!(stamps, [None, Some("2024-01-01T00:00:00+00:00".to_owned())]);
     Ok(())
 }
@@ -261,7 +263,7 @@ async fn a_forgotten_custom_playlist_image_falls_back_to_the_automatic_one() -> 
 {
     let db = setup_seeded_db().await?;
     let playlist = queries::playlist::create_playlist(&db, "Mosaic", None).await?;
-    queries::playlist::set_playlist_custom_thumbnail(&db, playlist.id, MISSING).await?;
+    queries::playlist::set_playlist_custom_thumbnail(&db, playlist.id, MISSING.to_owned()).await?;
 
     forget(&db, MISSING).await?;
 
@@ -286,7 +288,7 @@ async fn the_library_reference_set_leaves_the_radio_stores_out() -> Result<(), A
         "2026-08-24T00:00:00.000+00:00",
     )
     .await?;
-    sqlx::query("UPDATE tracks SET artwork_path = ?").bind(PRESENT).execute(db.write()).await?;
+    db.write(|conn| sql::execute(conn, "UPDATE tracks SET artwork_path = ?", (PRESENT,))).await?;
 
     let library = queries::artwork::referenced_library_paths(&db).await?;
 

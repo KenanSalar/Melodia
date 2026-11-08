@@ -1,10 +1,12 @@
 use std::path::Path;
 
+use rusqlite::Connection;
+
 use super::upserts;
-use crate::database::DbPool;
 use crate::database::queries;
 use crate::database::queries::fixtures::*;
 use crate::database::queries::scan::NameCache;
+use crate::database::{DbPool, sql};
 use melodia_core::entities::artist::ArtistCredit;
 use melodia_core::entities::credits::{CreditRole, RoleCredit, RoleCredits};
 use melodia_core::entities::genre::GenreList;
@@ -72,8 +74,8 @@ fn sort_key_preserves_ordering() {
 #[tokio::test]
 async fn track_exists_by_path_false_when_empty() -> Result<(), AppError> {
     let db = DbPool::test_pool().await?;
-    let mut tx = db.write().begin().await?;
-    let exists = queries::scan::track_exists_by_path(&mut tx, "/nonexistent.mp3").await?;
+    let exists =
+        db.transaction(|tx| queries::scan::track_exists_by_path(tx, "/nonexistent.mp3")).await?;
     assert!(!exists);
     Ok(())
 }
@@ -84,8 +86,8 @@ async fn track_exists_by_path_true_after_insert() -> Result<(), AppError> {
     queries::folder::insert_folder(&db, "/music", true).await?;
     insert_test_track(&db, "/music/song.mp3", "Song", "Artist", "Album", "Rock").await?;
 
-    let mut tx = db.write().begin().await?;
-    let exists = queries::scan::track_exists_by_path(&mut tx, "/music/song.mp3").await?;
+    let exists =
+        db.transaction(|tx| queries::scan::track_exists_by_path(tx, "/music/song.mp3")).await?;
     assert!(exists);
     Ok(())
 }
@@ -93,8 +95,7 @@ async fn track_exists_by_path_true_after_insert() -> Result<(), AppError> {
 #[tokio::test]
 async fn upsert_artist_new_returns_id() -> Result<(), AppError> {
     let db = DbPool::test_pool().await?;
-    let mut tx = db.write().begin().await?;
-    let id = upserts::upsert_artist(&mut tx, "New Artist", 1).await?;
+    let id = db.transaction(|tx| upserts::upsert_artist(tx, "New Artist", 1)).await?;
     assert!(id > 1); // 1 is the sentinel "Unknown Artist"
     Ok(())
 }
@@ -102,9 +103,13 @@ async fn upsert_artist_new_returns_id() -> Result<(), AppError> {
 #[tokio::test]
 async fn upsert_artist_duplicate_returns_same_id() -> Result<(), AppError> {
     let db = DbPool::test_pool().await?;
-    let mut tx = db.write().begin().await?;
-    let id1 = upserts::upsert_artist(&mut tx, "Duplicate", 1).await?;
-    let id2 = upserts::upsert_artist(&mut tx, "Duplicate", 1).await?;
+    let (id1, id2) = db
+        .transaction(|tx| {
+            let id1 = upserts::upsert_artist(tx, "Duplicate", 1)?;
+            let id2 = upserts::upsert_artist(tx, "Duplicate", 1)?;
+            Ok((id1, id2))
+        })
+        .await?;
     assert_eq!(id1, id2);
     Ok(())
 }
@@ -112,8 +117,7 @@ async fn upsert_artist_duplicate_returns_same_id() -> Result<(), AppError> {
 #[tokio::test]
 async fn upsert_artist_empty_returns_unknown() -> Result<(), AppError> {
     let db = DbPool::test_pool().await?;
-    let mut tx = db.write().begin().await?;
-    let id = upserts::upsert_artist(&mut tx, "", 1).await?;
+    let id = db.transaction(|tx| upserts::upsert_artist(tx, "", 1)).await?;
     assert_eq!(id, 1);
     Ok(())
 }
@@ -121,18 +125,20 @@ async fn upsert_artist_empty_returns_unknown() -> Result<(), AppError> {
 #[tokio::test]
 async fn upsert_album_new_returns_some() -> Result<(), AppError> {
     let db = DbPool::test_pool().await?;
-    let mut tx = db.write().begin().await?;
-    let credit = ArtistCredit::from_name("Artist");
-    let artist_id = upserts::upsert_artist(&mut tx, "Artist", 1).await?;
-    let album_id = queries::scan::upsert_album(
-        &mut tx,
-        "Album",
-        artist_id,
-        &credit,
-        &album_meta(Some(2024)),
-        &mut NameCache::default(),
-    )
-    .await?;
+    let album_id = db
+        .transaction(|tx| {
+            let credit = ArtistCredit::from_name("Artist");
+            let artist_id = upserts::upsert_artist(tx, "Artist", 1)?;
+            queries::scan::upsert_album(
+                tx,
+                "Album",
+                artist_id,
+                &credit,
+                &album_meta(Some(2024)),
+                &mut NameCache::default(),
+            )
+        })
+        .await?;
     assert!(album_id.is_some());
     Ok(())
 }
@@ -140,14 +146,18 @@ async fn upsert_album_new_returns_some() -> Result<(), AppError> {
 #[tokio::test]
 async fn upsert_album_duplicate_returns_same_id() -> Result<(), AppError> {
     let db = DbPool::test_pool().await?;
-    let mut tx = db.write().begin().await?;
-    let credit = ArtistCredit::from_name("Artist");
-    let artist_id = upserts::upsert_artist(&mut tx, "Artist", 1).await?;
-    let meta = album_meta(Some(2024));
-    let mut names = NameCache::default();
-    let id1 = queries::scan::upsert_album(&mut tx, "Album", artist_id, &credit, &meta, &mut names)
-        .await?;
-    let id2 = queries::scan::upsert_album(&mut tx, "Album", artist_id, &credit, &meta, &mut names)
+    let (id1, id2) = db
+        .transaction(|tx| {
+            let credit = ArtistCredit::from_name("Artist");
+            let artist_id = upserts::upsert_artist(tx, "Artist", 1)?;
+            let meta = album_meta(Some(2024));
+            let mut names = NameCache::default();
+            let id1 =
+                queries::scan::upsert_album(tx, "Album", artist_id, &credit, &meta, &mut names)?;
+            let id2 =
+                queries::scan::upsert_album(tx, "Album", artist_id, &credit, &meta, &mut names)?;
+            Ok((id1, id2))
+        })
         .await?;
     assert_eq!(id1, id2);
     Ok(())
@@ -156,17 +166,19 @@ async fn upsert_album_duplicate_returns_same_id() -> Result<(), AppError> {
 #[tokio::test]
 async fn upsert_album_empty_returns_none() -> Result<(), AppError> {
     let db = DbPool::test_pool().await?;
-    let mut tx = db.write().begin().await?;
-    let credit = ArtistCredit::default();
-    let result = queries::scan::upsert_album(
-        &mut tx,
-        "",
-        1,
-        &credit,
-        &album_meta(None),
-        &mut NameCache::default(),
-    )
-    .await?;
+    let result = db
+        .transaction(|tx| {
+            let credit = ArtistCredit::default();
+            queries::scan::upsert_album(
+                tx,
+                "",
+                1,
+                &credit,
+                &album_meta(None),
+                &mut NameCache::default(),
+            )
+        })
+        .await?;
     assert!(result.is_none());
     Ok(())
 }
@@ -174,62 +186,58 @@ async fn upsert_album_empty_returns_none() -> Result<(), AppError> {
 #[tokio::test]
 async fn upsert_album_updates_year_on_conflict() -> Result<(), AppError> {
     let db = DbPool::test_pool().await?;
-    let mut tx = db.write().begin().await?;
-    let credit = ArtistCredit::from_name("Artist");
-    let artist_id = upserts::upsert_artist(&mut tx, "Artist", 1).await?;
-    let mut names = NameCache::default();
-    let id = queries::scan::upsert_album(
-        &mut tx,
-        "Album",
-        artist_id,
-        &credit,
-        &album_meta(Some(2001)),
-        &mut names,
-    )
-    .await?;
+    let (id, same, updated, kept) = db
+        .transaction(|tx| {
+            let credit = ArtistCredit::from_name("Artist");
+            let artist_id = upserts::upsert_artist(tx, "Artist", 1)?;
+            let mut names = NameCache::default();
+            let id = queries::scan::upsert_album(
+                tx,
+                "Album",
+                artist_id,
+                &credit,
+                &album_meta(Some(2001)),
+                &mut names,
+            )?;
+            let album_id = id.ok_or_else(|| AppError::validation_msg("no album id"))?;
 
-    // Re-upsert of the same (name, artist_id) with a new year updates it (P2).
-    let same = queries::scan::upsert_album(
-        &mut tx,
-        "Album",
-        artist_id,
-        &credit,
-        &album_meta(Some(2010)),
-        &mut names,
-    )
-    .await?;
+            // Re-upsert of the same (name, artist_id) with a new year updates it.
+            let same = queries::scan::upsert_album(
+                tx,
+                "Album",
+                artist_id,
+                &credit,
+                &album_meta(Some(2010)),
+                &mut names,
+            )?;
+            let updated = album_year(tx, album_id)?;
+
+            // Re-upsert with a NULL year preserves the stored value (the COALESCE arm).
+            queries::scan::upsert_album(
+                tx,
+                "Album",
+                artist_id,
+                &credit,
+                &album_meta(None),
+                &mut names,
+            )?;
+            Ok((id, same, updated, album_year(tx, album_id)?))
+        })
+        .await?;
     assert_eq!(id, same);
-    let album_id = id.ok_or_else(|| AppError::validation_msg("no album id"))?;
-
-    let year: Option<i32> = sqlx::query_scalar("SELECT year FROM albums WHERE id = ?")
-        .bind(album_id)
-        .fetch_one(&mut *tx)
-        .await?;
-    assert_eq!(year, Some(2010));
-
-    // Re-upsert with a NULL year preserves the stored value (the COALESCE arm).
-    queries::scan::upsert_album(
-        &mut tx,
-        "Album",
-        artist_id,
-        &credit,
-        &album_meta(None),
-        &mut names,
-    )
-    .await?;
-    let year: Option<i32> = sqlx::query_scalar("SELECT year FROM albums WHERE id = ?")
-        .bind(album_id)
-        .fetch_one(&mut *tx)
-        .await?;
-    assert_eq!(year, Some(2010));
+    assert_eq!(updated, Some(2010));
+    assert_eq!(kept, Some(2010));
     Ok(())
+}
+
+fn album_year(conn: &Connection, album_id: i64) -> Result<Option<i32>, AppError> {
+    sql::fetch_one(conn, "SELECT year FROM albums WHERE id = ?", (album_id,))
 }
 
 #[tokio::test]
 async fn upsert_genre_new_returns_some() -> Result<(), AppError> {
     let db = DbPool::test_pool().await?;
-    let mut tx = db.write().begin().await?;
-    let genre_id = upserts::upsert_genre(&mut tx, "Rock").await?;
+    let genre_id = db.transaction(|tx| upserts::upsert_genre(tx, "Rock")).await?;
     assert!(genre_id.is_some());
     Ok(())
 }
@@ -237,9 +245,11 @@ async fn upsert_genre_new_returns_some() -> Result<(), AppError> {
 #[tokio::test]
 async fn upsert_genre_duplicate_returns_same_id() -> Result<(), AppError> {
     let db = DbPool::test_pool().await?;
-    let mut tx = db.write().begin().await?;
-    let id1 = upserts::upsert_genre(&mut tx, "Rock").await?;
-    let id2 = upserts::upsert_genre(&mut tx, "Rock").await?;
+    let (id1, id2) = db
+        .transaction(|tx| {
+            Ok((upserts::upsert_genre(tx, "Rock")?, upserts::upsert_genre(tx, "Rock")?))
+        })
+        .await?;
     assert_eq!(id1, id2);
     Ok(())
 }
@@ -247,8 +257,7 @@ async fn upsert_genre_duplicate_returns_same_id() -> Result<(), AppError> {
 #[tokio::test]
 async fn upsert_genre_empty_returns_none() -> Result<(), AppError> {
     let db = DbPool::test_pool().await?;
-    let mut tx = db.write().begin().await?;
-    let result = upserts::upsert_genre(&mut tx, "").await?;
+    let result = db.transaction(|tx| upserts::upsert_genre(tx, "")).await?;
     assert!(result.is_none());
     Ok(())
 }
@@ -258,27 +267,31 @@ async fn insert_track_stores_correct_fields() -> Result<(), AppError> {
     let db = DbPool::test_pool().await?;
     queries::folder::insert_folder(&db, "/music", true).await?;
 
-    let mut tx = db.write().begin().await?;
-    let credit = ArtistCredit::from_name("Test Artist");
-    let artist_id = upserts::upsert_artist(&mut tx, "Test Artist", 1).await?;
-    let meta = make_test_metadata("My Song");
-    let mut names = NameCache::default();
-    let album_id =
-        queries::scan::upsert_album(&mut tx, "Test Album", artist_id, &credit, &meta, &mut names)
-            .await?;
-    let genre_id = upserts::upsert_genre(&mut tx, "Rock").await?;
-    let ids = queries::ResolvedIds { artist_id, album_id, genre_id, folder_id: 1 };
     let now = "2024-01-01T00:00:00+00:00";
-    queries::scan::insert_track(&mut tx, "/music/my.mp3", "my.mp3", &meta, &ids, now, &mut names)
-        .await?;
-    tx.commit().await?;
+    db.transaction(move |tx| {
+        let credit = ArtistCredit::from_name("Test Artist");
+        let artist_id = upserts::upsert_artist(tx, "Test Artist", 1)?;
+        let meta = make_test_metadata("My Song");
+        let mut names = NameCache::default();
+        let album_id =
+            queries::scan::upsert_album(tx, "Test Album", artist_id, &credit, &meta, &mut names)?;
+        let genre_id = upserts::upsert_genre(tx, "Rock")?;
+        let ids = queries::ResolvedIds { artist_id, album_id, genre_id, folder_id: 1 };
+        queries::scan::insert_track(tx, "/music/my.mp3", "my.mp3", &meta, &ids, now, &mut names)
+    })
+    .await?;
 
     // Verify via raw query
-    let row: (String, i64, String) = sqlx::query_as(
-        "SELECT title, duration_ms, date_added FROM tracks WHERE file_path = '/music/my.mp3'",
-    )
-    .fetch_one(db.read())
-    .await?;
+    let row: (String, i64, String) = db
+        .read(|conn| {
+            sql::fetch_one(
+                conn,
+                "SELECT title, duration_ms, date_added FROM tracks \
+                 WHERE file_path = '/music/my.mp3'",
+                (),
+            )
+        })
+        .await?;
     assert_eq!(row.0, "My Song");
     assert_eq!(row.1, 180_000);
     assert_eq!(row.2, now);
@@ -292,29 +305,19 @@ async fn update_album_artwork_from_tracks_fills_missing() -> Result<(), AppError
     let id = insert_test_track(&db, "/music/song.mp3", "Song", "Artist", "Album", "Rock").await?;
     set_test_artwork(&db, id, "/art/cover.jpg").await?;
 
-    let mut tx = db.write().begin().await?;
-    queries::scan::update_album_artwork_from_tracks(&mut tx).await?;
-    tx.commit().await?;
+    roll_up_album_covers(&db).await?;
 
-    let artwork: Option<String> =
-        sqlx::query_scalar("SELECT artwork_path FROM albums WHERE name = 'Album'")
-            .fetch_one(db.read())
-            .await?;
-    assert_eq!(artwork.as_deref(), Some("/art/cover.jpg"));
+    assert_eq!(album_artwork(&db).await?.as_deref(), Some("/art/cover.jpg"));
     Ok(())
 }
 
 async fn album_artwork(db: &DbPool) -> Result<Option<String>, AppError> {
-    Ok(sqlx::query_scalar("SELECT artwork_path FROM albums WHERE name = 'Album'")
-        .fetch_one(db.read())
-        .await?)
+    db.read(|conn| sql::fetch_one(conn, "SELECT artwork_path FROM albums WHERE name = 'Album'", ()))
+        .await
 }
 
 async fn roll_up_album_covers(db: &DbPool) -> Result<(), AppError> {
-    let mut tx = db.write().begin().await?;
-    queries::scan::update_album_artwork_from_tracks(&mut tx).await?;
-    tx.commit().await?;
-    Ok(())
+    db.transaction(queries::scan::update_album_artwork_from_tracks).await
 }
 
 /// A track with no cover sits ahead of the ones that have one, so a lookup that took the album's
@@ -342,9 +345,14 @@ async fn an_album_cover_already_set_is_never_overwritten() -> Result<(), AppErro
     queries::folder::insert_folder(&db, "/music", true).await?;
     let id = insert_test_track(&db, "/music/1.mp3", "One", "Artist", "Album", "Rock").await?;
     set_test_artwork(&db, id, "/art/track.jpg").await?;
-    sqlx::query("UPDATE albums SET artwork_path = '/art/chosen.jpg' WHERE name = 'Album'")
-        .execute(db.write())
-        .await?;
+    db.write(|conn| {
+        sql::execute(
+            conn,
+            "UPDATE albums SET artwork_path = '/art/chosen.jpg' WHERE name = 'Album'",
+            (),
+        )
+    })
+    .await?;
 
     roll_up_album_covers(&db).await?;
 
@@ -362,12 +370,10 @@ async fn rolling_up_covers_moves_an_automatic_playlist_onto_its_first_tracks_cov
     let id = insert_test_track(&db, "/music/1.mp3", "One", "Artist", "Album", "Rock").await?;
     set_test_artwork(&db, id, "/art/old.jpg").await?;
     let playlist = queries::playlist::create_playlist(&db, "Mix", None).await?;
-    queries::playlist::add_tracks_to_playlist(&db, playlist.id, &[id]).await?;
+    queries::playlist::add_tracks_to_playlist(&db, playlist.id, vec![id]).await?;
     set_test_artwork(&db, id, "/art/rescanned.jpg").await?;
 
-    let mut tx = db.write().begin().await?;
-    queries::scan::roll_up_covers(&mut tx).await?;
-    tx.commit().await?;
+    db.transaction(queries::scan::roll_up_covers).await?;
 
     let shown = queries::playlist::get_playlist_by_id(&db, playlist.id).await?.thumbnail_path;
     assert_eq!(shown.as_deref(), Some("/art/rescanned.jpg"));
@@ -382,25 +388,27 @@ async fn delete_track_by_path_returns_true_when_exists() -> Result<(), AppError>
     queries::folder::insert_folder(&db, "/music", true).await?;
     insert_test_track(&db, "/music/song.mp3", "Song", "Artist", "Album", "Rock").await?;
 
-    let mut tx = db.write().begin().await?;
-    let deleted = queries::scan::delete_track_by_path(&mut tx, "/music/song.mp3").await?;
-    tx.commit().await?;
+    let deleted =
+        db.transaction(|tx| queries::scan::delete_track_by_path(tx, "/music/song.mp3")).await?;
 
     assert!(deleted);
 
     // Verify track is gone
-    let count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM tracks").fetch_one(db.read()).await?;
-    assert_eq!(count, 0);
+    assert_eq!(track_count(&db).await?, 0);
     Ok(())
 }
 
 #[tokio::test]
 async fn delete_track_by_path_returns_false_when_not_found() -> Result<(), AppError> {
     let db = DbPool::test_pool().await?;
-    let mut tx = db.write().begin().await?;
-    let deleted = queries::scan::delete_track_by_path(&mut tx, "/nonexistent.mp3").await?;
+    let deleted =
+        db.transaction(|tx| queries::scan::delete_track_by_path(tx, "/nonexistent.mp3")).await?;
     assert!(!deleted);
     Ok(())
+}
+
+async fn track_count(db: &DbPool) -> Result<i64, AppError> {
+    db.read(|conn| sql::fetch_one(conn, "SELECT COUNT(*) FROM tracks", ())).await
 }
 
 // === Tests for delete_tracks_by_paths_batch ===
@@ -410,22 +418,18 @@ async fn delete_tracks_batch_deletes_multiple() -> Result<(), AppError> {
     let db = setup_seeded_db().await?;
 
     let paths = vec!["/music/track1.mp3".to_owned(), "/music/track3.mp3".to_owned()];
-    let mut tx = db.write().begin().await?;
-    let deleted = queries::scan::delete_tracks_by_paths_batch(&mut tx, &paths).await?;
-    tx.commit().await?;
+    let deleted =
+        db.transaction(move |tx| queries::scan::delete_tracks_by_paths_batch(tx, &paths)).await?;
 
     assert_eq!(deleted, 2);
-
-    let count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM tracks").fetch_one(db.read()).await?;
-    assert_eq!(count, 1); // only track2 remains
+    assert_eq!(track_count(&db).await?, 1); // only track2 remains
     Ok(())
 }
 
 #[tokio::test]
 async fn delete_tracks_batch_empty_returns_zero() -> Result<(), AppError> {
     let db = DbPool::test_pool().await?;
-    let mut tx = db.write().begin().await?;
-    let deleted = queries::scan::delete_tracks_by_paths_batch(&mut tx, &[]).await?;
+    let deleted = db.transaction(|tx| queries::scan::delete_tracks_by_paths_batch(tx, &[])).await?;
     assert_eq!(deleted, 0);
     Ok(())
 }
@@ -437,8 +441,8 @@ async fn find_folder_for_path_matches_parent() -> Result<(), AppError> {
     let db = DbPool::test_pool().await?;
     queries::folder::insert_folder(&db, "/music", true).await?;
 
-    let mut tx = db.write().begin().await?;
-    let folder_id = queries::scan::find_folder_for_path(&mut tx, "/music/song.mp3").await?;
+    let folder_id =
+        db.transaction(|tx| queries::scan::find_folder_for_path(tx, "/music/song.mp3")).await?;
     assert!(folder_id.is_some());
     Ok(())
 }
@@ -455,10 +459,65 @@ async fn find_folder_for_path_matches_a_native_separator() -> Result<(), AppErro
     let folder = format!("{SEP}music");
     queries::folder::insert_folder(&db, &folder, true).await?;
 
-    let mut tx = db.write().begin().await?;
+    let song = format!("{folder}{SEP}song.mp3");
     let folder_id =
-        queries::scan::find_folder_for_path(&mut tx, &format!("{folder}{SEP}song.mp3")).await?;
+        db.transaction(move |tx| queries::scan::find_folder_for_path(tx, &song)).await?;
     assert!(folder_id.is_some(), "a path spelled the way the OS spells it must resolve");
+    Ok(())
+}
+
+/// A root folder's path already ends in the separator, and one more matched nothing, so the
+/// watcher skipped every file in that library and an import filed itself as a new folder.
+#[tokio::test]
+async fn find_folder_for_path_matches_a_file_under_a_root() -> Result<(), AppError> {
+    use std::path::MAIN_SEPARATOR_STR as SEP;
+
+    let cases = [
+        (format!("E:{SEP}"), format!("E:{SEP}song.mp3")),
+        (format!("E:{SEP}"), format!("E:{SEP}sub{SEP}song.mp3")),
+        (SEP.to_owned(), format!("{SEP}sub{SEP}song.mp3")),
+    ];
+    for (root, file) in cases {
+        let db = DbPool::test_pool().await?;
+        let folder = queries::folder::insert_folder(&db, &root, true).await?;
+        let asked = file.clone();
+
+        let found =
+            db.transaction(move |tx| queries::scan::find_folder_for_path(tx, &asked)).await?;
+
+        assert_eq!(found, Some(folder.id), "{file:?} under {root:?}");
+    }
+    Ok(())
+}
+
+/// A root's prefix is every file on its drive, so a library folder inside it has to win. The root
+/// is seeded first, so a read in table order finds the wrong one.
+#[tokio::test]
+async fn find_folder_for_path_prefers_a_folder_inside_a_root() -> Result<(), AppError> {
+    use std::path::MAIN_SEPARATOR_STR as SEP;
+
+    let db = DbPool::test_pool().await?;
+    queries::folder::insert_folder(&db, &format!("E:{SEP}"), true).await?;
+    let inner = queries::folder::insert_folder(&db, &format!("E:{SEP}Music"), true).await?;
+    let song = format!("E:{SEP}Music{SEP}song.mp3");
+
+    let found = db.transaction(move |tx| queries::scan::find_folder_for_path(tx, &song)).await?;
+
+    assert_eq!(found, Some(inner.id));
+    Ok(())
+}
+
+#[tokio::test]
+async fn find_folder_for_path_keeps_a_root_to_its_own_drive() -> Result<(), AppError> {
+    use std::path::MAIN_SEPARATOR_STR as SEP;
+
+    let db = DbPool::test_pool().await?;
+    queries::folder::insert_folder(&db, &format!("E:{SEP}"), true).await?;
+    let song = format!("F:{SEP}song.mp3");
+
+    let found = db.transaction(move |tx| queries::scan::find_folder_for_path(tx, &song)).await?;
+
+    assert_eq!(found, None);
     Ok(())
 }
 
@@ -468,14 +527,14 @@ async fn find_folder_for_path_matches_nested() -> Result<(), AppError> {
     queries::folder::insert_folder(&db, "/music", true).await?;
     queries::folder::insert_folder(&db, "/music/rock", true).await?;
 
-    // Get the ID of /music/rock folder before opening write tx
-    let rock_id: i64 = sqlx::query_scalar("SELECT id FROM folders WHERE path = '/music/rock'")
-        .fetch_one(db.read())
+    let rock_id: i64 = db
+        .read(|conn| sql::fetch_one(conn, "SELECT id FROM folders WHERE path = '/music/rock'", ()))
         .await?;
 
-    let mut tx = db.write().begin().await?;
     // Should match the longer prefix "/music/rock"
-    let folder_id = queries::scan::find_folder_for_path(&mut tx, "/music/rock/song.mp3").await?;
+    let folder_id = db
+        .transaction(|tx| queries::scan::find_folder_for_path(tx, "/music/rock/song.mp3"))
+        .await?;
     assert_eq!(folder_id, Some(rock_id));
     Ok(())
 }
@@ -485,20 +544,22 @@ async fn find_folder_for_path_returns_none_for_unknown() -> Result<(), AppError>
     let db = DbPool::test_pool().await?;
     queries::folder::insert_folder(&db, "/music", true).await?;
 
-    let mut tx = db.write().begin().await?;
-    let folder_id = queries::scan::find_folder_for_path(&mut tx, "/other/song.mp3").await?;
+    let folder_id =
+        db.transaction(|tx| queries::scan::find_folder_for_path(tx, "/other/song.mp3")).await?;
     assert!(folder_id.is_none());
     Ok(())
 }
 
-// === Tests for visit_folder_tracks ===
+// === Tests for fold_folder_tracks ===
 
 #[tokio::test]
-async fn visit_folder_tracks_hands_over_every_row_of_the_folder() -> Result<(), AppError> {
+async fn fold_folder_tracks_hands_over_every_row_of_the_folder() -> Result<(), AppError> {
     let db = setup_seeded_db().await?;
 
-    let mut paths = Vec::new();
-    queries::scan::visit_folder_tracks(&db, 1, |path, _row| paths.push(path)).await?;
+    let paths = queries::scan::fold_folder_tracks(&db, 1, Vec::new(), |paths, path, _stamp| {
+        paths.push(path);
+    })
+    .await?;
 
     assert_eq!(paths.len(), 3);
     assert!(paths.contains(&"/music/track1.mp3".to_owned()));
@@ -510,19 +571,24 @@ async fn visit_folder_tracks_hands_over_every_row_of_the_folder() -> Result<(), 
 /// The scan purges every row it is handed that its walk didn't find, so a row leaking in from
 /// another folder is deleted by it. The second folder's path starts with the first's.
 #[tokio::test]
-async fn visit_folder_tracks_hands_over_no_row_of_another_folder() -> Result<(), AppError> {
+async fn fold_folder_tracks_hands_over_no_row_of_another_folder() -> Result<(), AppError> {
     let db = setup_seeded_db().await?;
     let sibling = queries::folder::insert_folder(&db, "/music-extra", true).await?;
     let stray = "/music-extra/track4.mp3";
     insert_test_track(&db, stray, "Delta Song", "Artist C", "Album Three", "Jazz").await?;
-    sqlx::query("UPDATE tracks SET folder_id = ? WHERE file_path = ?")
-        .bind(sibling.id)
-        .bind(stray)
-        .execute(db.write())
-        .await?;
+    db.write(move |conn| {
+        sql::execute(
+            conn,
+            "UPDATE tracks SET folder_id = ? WHERE file_path = ?",
+            (sibling.id, stray),
+        )
+    })
+    .await?;
 
-    let mut paths = Vec::new();
-    queries::scan::visit_folder_tracks(&db, 1, |path, _row| paths.push(path)).await?;
+    let mut paths = queries::scan::fold_folder_tracks(&db, 1, Vec::new(), |paths, path, _stamp| {
+        paths.push(path);
+    })
+    .await?;
 
     paths.sort_unstable();
     assert_eq!(paths, ["/music/track1.mp3", "/music/track2.mp3", "/music/track3.mp3"]);
@@ -532,14 +598,13 @@ async fn visit_folder_tracks_hands_over_no_row_of_another_folder() -> Result<(),
 /// What the incremental filter compares a file against. Another column read in their place reads
 /// every file as changed, and a launch re-parses the whole library.
 #[tokio::test]
-async fn visit_folder_tracks_hands_each_row_its_stored_size_and_mtime() -> Result<(), AppError> {
+async fn fold_folder_tracks_hands_each_row_its_stored_size_and_mtime() -> Result<(), AppError> {
     let db = DbPool::test_pool().await?;
     queries::folder::insert_folder(&db, "/music", true).await?;
     insert_test_track(&db, "/music/a.mp3", "Song", "Artist", "Album", "Rock").await?;
 
-    let mut rows = Vec::new();
-    queries::scan::visit_folder_tracks(&db, 1, |_path, row| {
-        rows.push((row.file_size, row.date_modified));
+    let rows = queries::scan::fold_folder_tracks(&db, 1, Vec::new(), |rows, _path, stamp| {
+        rows.push((stamp.file_size, stamp.date_modified));
     })
     .await?;
 
@@ -549,11 +614,12 @@ async fn visit_folder_tracks_hands_each_row_its_stored_size_and_mtime() -> Resul
 }
 
 #[tokio::test]
-async fn visit_folder_tracks_visits_nothing_for_an_unknown_folder() -> Result<(), AppError> {
+async fn fold_folder_tracks_folds_nothing_for_an_unknown_folder() -> Result<(), AppError> {
     let db = DbPool::test_pool().await?;
-    let mut visited = 0;
-    queries::scan::visit_folder_tracks(&db, 999, |_path, _row| visited += 1).await?;
-    assert_eq!(visited, 0);
+    let folded =
+        queries::scan::fold_folder_tracks(&db, 999, 0, |folded, _path, _stamp| *folded += 1)
+            .await?;
+    assert_eq!(folded, 0);
     Ok(())
 }
 
@@ -566,8 +632,8 @@ async fn get_track_id_by_path_returns_id_when_exists() -> Result<(), AppError> {
     let expected_id =
         insert_test_track(&db, "/music/song.mp3", "Song", "Artist", "Album", "Rock").await?;
 
-    let mut tx = db.write().begin().await?;
-    let id = queries::scan::get_track_id_by_path(&mut tx, "/music/song.mp3").await?;
+    let id =
+        db.transaction(|tx| queries::scan::get_track_id_by_path(tx, "/music/song.mp3")).await?;
     assert_eq!(id, Some(expected_id));
     Ok(())
 }
@@ -575,8 +641,8 @@ async fn get_track_id_by_path_returns_id_when_exists() -> Result<(), AppError> {
 #[tokio::test]
 async fn get_track_id_by_path_returns_none_when_missing() -> Result<(), AppError> {
     let db = DbPool::test_pool().await?;
-    let mut tx = db.write().begin().await?;
-    let id = queries::scan::get_track_id_by_path(&mut tx, "/nonexistent.mp3").await?;
+    let id =
+        db.transaction(|tx| queries::scan::get_track_id_by_path(tx, "/nonexistent.mp3")).await?;
     assert!(id.is_none());
     Ok(())
 }
@@ -589,18 +655,20 @@ async fn update_track_location_repoints_existing_row() -> Result<(), AppError> {
     let folder = queries::folder::insert_folder(&db, "/music", true).await?;
     let id = insert_test_track(&db, "/music/old.mp3", "Song", "Artist", "Album", "Rock").await?;
 
-    let mut tx = db.write().begin().await?;
-    let repointed = queries::scan::update_track_location(
-        &mut tx,
-        id,
-        "/music/new.mp3",
-        "new.mp3",
-        folder.id,
-        None,
-    )
-    .await?;
+    let (repointed, moved) = db
+        .transaction(move |tx| {
+            let repointed = queries::scan::update_track_location(
+                tx,
+                id,
+                "/music/new.mp3",
+                "new.mp3",
+                folder.id,
+                None,
+            )?;
+            Ok((repointed, queries::scan::get_track_id_by_path(tx, "/music/new.mp3")?))
+        })
+        .await?;
     assert!(repointed);
-    let moved = queries::scan::get_track_id_by_path(&mut tx, "/music/new.mp3").await?;
     assert_eq!(moved, Some(id));
     Ok(())
 }
@@ -615,17 +683,21 @@ async fn update_track_location_false_when_row_deleted_in_tx() -> Result<(), AppE
     let folder = queries::folder::insert_folder(&db, "/music", true).await?;
     let id = insert_test_track(&db, "/music/old.mp3", "Song", "Artist", "Album", "Rock").await?;
 
-    let mut tx = db.write().begin().await?;
-    assert!(queries::scan::delete_track_by_path(&mut tx, "/music/old.mp3").await?);
-    let repointed = queries::scan::update_track_location(
-        &mut tx,
-        id,
-        "/music/new.mp3",
-        "new.mp3",
-        folder.id,
-        None,
-    )
-    .await?;
+    let (deleted, repointed) = db
+        .transaction(move |tx| {
+            let deleted = queries::scan::delete_track_by_path(tx, "/music/old.mp3")?;
+            let repointed = queries::scan::update_track_location(
+                tx,
+                id,
+                "/music/new.mp3",
+                "new.mp3",
+                folder.id,
+                None,
+            )?;
+            Ok((deleted, repointed))
+        })
+        .await?;
+    assert!(deleted);
     assert!(!repointed);
     Ok(())
 }
@@ -644,15 +716,16 @@ fn credited(title: &str, printed: &str, names: &[&str]) -> ExtractedMetadata {
 
 /// A track's artist join rows as (position, name, join phrase).
 async fn track_artists(db: &DbPool, track_id: i64) -> Result<Vec<(i64, String, String)>, AppError> {
-    let rows = sqlx::query_as::<_, (i64, String, String)>(
-        "SELECT ta.position, a.name, ta.join_phrase \
-         FROM track_artists ta JOIN artists a ON a.id = ta.artist_id \
-         WHERE ta.track_id = ? ORDER BY ta.position",
-    )
-    .bind(track_id)
-    .fetch_all(db.read())
-    .await?;
-    Ok(rows)
+    db.read(move |conn| {
+        sql::fetch_all(
+            conn,
+            "SELECT ta.position, a.name, ta.join_phrase \
+             FROM track_artists ta JOIN artists a ON a.id = ta.artist_id \
+             WHERE ta.track_id = ? ORDER BY ta.position",
+            (track_id,),
+        )
+    })
+    .await
 }
 
 /// **Position 0 is the row's own `tracks.artist_id`.** Album grouping and the sort indexes still
@@ -670,15 +743,18 @@ async fn a_credit_writes_one_row_per_name_with_the_primary_at_the_head() -> Resu
         vec![(0, "Alice".to_owned(), " feat. ".to_owned()), (1, "Bob".to_owned(), String::new()),]
     );
 
-    let head: (i64,) = sqlx::query_as(
-        "SELECT CASE WHEN t.artist_id = ta.artist_id THEN 1 ELSE 0 END \
-         FROM tracks t JOIN track_artists ta ON ta.track_id = t.id AND ta.position = 0 \
-         WHERE t.id = ?",
-    )
-    .bind(id)
-    .fetch_one(db.read())
-    .await?;
-    assert_eq!(head.0, 1, "position 0 has to be the row's own artist_id");
+    let head: i64 = db
+        .read(move |conn| {
+            sql::fetch_one(
+                conn,
+                "SELECT CASE WHEN t.artist_id = ta.artist_id THEN 1 ELSE 0 END \
+                 FROM tracks t JOIN track_artists ta ON ta.track_id = t.id AND ta.position = 0 \
+                 WHERE t.id = ?",
+                (id,),
+            )
+        })
+        .await?;
+    assert_eq!(head, 1, "position 0 has to be the row's own artist_id");
     Ok(())
 }
 
@@ -694,10 +770,10 @@ async fn a_name_spelled_twice_in_one_credit_is_joined_once() -> Result<(), AppEr
 
     assert_eq!(track_artists(&db, id).await?.len(), 1);
 
-    let bob: (i64,) = sqlx::query_as("SELECT track_count FROM artists WHERE name = 'Bob'")
-        .fetch_one(db.read())
+    let bob: i64 = db
+        .read(|conn| sql::fetch_one(conn, "SELECT track_count FROM artists WHERE name = 'Bob'", ()))
         .await?;
-    assert_eq!(bob.0, 1, "the join rows are what a count reads");
+    assert_eq!(bob, 1, "the join rows are what a count reads");
     // The printed line keeps both, being what the release spelled.
     assert_eq!(meta.artist.line(), Some("Bob & bob"));
     Ok(())
@@ -736,37 +812,36 @@ async fn re_ingesting_a_track_leaves_none_of_its_old_join_rows() -> Result<(), A
 
     let mut after = credited("One", "Alice", &[]);
     after.genres = GenreList::from_name("Rock");
-    let mut tx = db.write().begin().await?;
-    let mut names = queries::scan::NameCache::default();
-    let ids = queries::ResolvedIds {
-        artist_id: names.artist(&mut tx, "Alice", 1).await?,
-        album_id: None,
-        genre_id: names.genre(&mut tx, "Rock").await?,
-        folder_id: 1,
-    };
-    queries::scan::update_track_metadata(&mut tx, "/music/1.mp3", &after, &ids, &mut names).await?;
-    tx.commit().await?;
-
-    let counts: (i64, i64, i64) = sqlx::query_as(
-        "SELECT (SELECT COUNT(*) FROM track_artists WHERE track_id = ?), \
-                (SELECT COUNT(*) FROM track_genres WHERE track_id = ?), \
-                (SELECT COUNT(*) FROM track_credits WHERE track_id = ?)",
-    )
-    .bind(id)
-    .bind(id)
-    .bind(id)
-    .fetch_one(db.read())
+    db.transaction(move |tx| {
+        let mut names = queries::scan::NameCache::default();
+        let ids = queries::ResolvedIds {
+            artist_id: names.artist(tx, "Alice", 1)?,
+            album_id: None,
+            genre_id: names.genre(tx, "Rock")?,
+            folder_id: 1,
+        };
+        queries::scan::update_track_metadata(tx, "/music/1.mp3", &after, &ids, &mut names)
+    })
     .await?;
+
+    let counts: (i64, i64, i64) = db
+        .read(move |conn| {
+            sql::fetch_one(
+                conn,
+                "SELECT (SELECT COUNT(*) FROM track_artists WHERE track_id = ?), \
+                        (SELECT COUNT(*) FROM track_genres WHERE track_id = ?), \
+                        (SELECT COUNT(*) FROM track_credits WHERE track_id = ?)",
+                (id, id, id),
+            )
+        })
+        .await?;
     assert_eq!(counts, (1, 1, 0));
     Ok(())
 }
 
 async fn search_text_of(db: &DbPool, id: i64) -> Result<String, AppError> {
-    let text = sqlx::query_scalar("SELECT search_text FROM tracks WHERE id = ?")
-        .bind(id)
-        .fetch_one(db.read())
-        .await?;
-    Ok(text)
+    db.read(move |conn| sql::fetch_one(conn, "SELECT search_text FROM tracks WHERE id = ?", (id,)))
+        .await
 }
 
 /// **A new row is searchable the moment it lands**, its five fields folded into the column the
@@ -799,18 +874,79 @@ async fn a_re_ingest_refolds_the_search_text() -> Result<(), AppError> {
 
     let mut after = make_test_metadata("Après");
     after.artist = ArtistCredit::from_name("Alice");
-    let mut tx = db.write().begin().await?;
-    let mut names = queries::scan::NameCache::default();
-    let ids = queries::ResolvedIds {
-        artist_id: names.artist(&mut tx, "Alice", 1).await?,
-        album_id: None,
-        genre_id: names.genre(&mut tx, "Rock").await?,
-        folder_id: 1,
-    };
-    queries::scan::update_track_metadata(&mut tx, &path, &after, &ids, &mut names).await?;
-    tx.commit().await?;
+    db.transaction(move |tx| {
+        let mut names = queries::scan::NameCache::default();
+        let ids = queries::ResolvedIds {
+            artist_id: names.artist(tx, "Alice", 1)?,
+            album_id: None,
+            genre_id: names.genre(tx, "Rock")?,
+            folder_id: 1,
+        };
+        queries::scan::update_track_metadata(tx, &path, &after, &ids, &mut names)
+    })
+    .await?;
 
     assert_eq!(search_text_of(&db, id).await?, "apres\nalice\n\ntest album\nrock");
+    Ok(())
+}
+
+async fn order_keys_of(db: &DbPool, id: i64) -> Result<(String, String, String), AppError> {
+    db.read(move |conn| {
+        sql::fetch_one(
+            conn,
+            "SELECT artist_key, album_key, genre_key FROM tracks WHERE id = ?",
+            (id,),
+        )
+    })
+    .await
+}
+
+/// **A new row sorts by its own keys from the moment it lands**: a NULL key sorts first until the
+/// next launch's fill reaches it.
+#[tokio::test]
+async fn an_inserted_track_carries_its_lowercase_order_keys() -> Result<(), AppError> {
+    let db = DbPool::test_pool().await?;
+    queries::folder::insert_folder(&db, "/music", true).await?;
+    let mut meta = make_test_metadata("Jóga");
+    meta.artist = ArtistCredit::from_name("Björk");
+    meta.album = None;
+    meta.genres = GenreList::from_name("Électronique");
+    let path = Path::new("/music").join("joga.flac");
+
+    let id = insert_tagged_track(&db, &path.to_string_lossy(), &meta).await?;
+
+    let keys = ("björk".to_owned(), String::new(), "électronique".to_owned());
+    assert_eq!(order_keys_of(&db, id).await?, keys);
+    Ok(())
+}
+
+/// **A re-ingest rekeys the row**, which is what moves a tag edit to where its new artist sorts:
+/// the keys are already filled, so the fill would never look at it again.
+#[tokio::test]
+async fn a_re_ingest_rekeys_the_row() -> Result<(), AppError> {
+    let db = DbPool::test_pool().await?;
+    queries::folder::insert_folder(&db, "/music", true).await?;
+    let path = Path::new("/music").join("1.mp3").to_string_lossy().into_owned();
+    let id = insert_tagged_track(&db, &path, &make_test_metadata("Before")).await?;
+
+    let mut after = make_test_metadata("After");
+    after.artist = ArtistCredit::from_name("ΟΔΟΣ");
+    after.album = Some("Homogenic".to_owned());
+    after.genres = GenreList::default();
+    db.transaction(move |tx| {
+        let mut names = queries::scan::NameCache::default();
+        let ids = queries::ResolvedIds {
+            artist_id: names.artist(tx, "ΟΔΟΣ", 1)?,
+            album_id: None,
+            genre_id: None,
+            folder_id: 1,
+        };
+        queries::scan::update_track_metadata(tx, &path, &after, &ids, &mut names)
+    })
+    .await?;
+
+    let keys = ("οδος".to_owned(), "homogenic".to_owned(), String::new());
+    assert_eq!(order_keys_of(&db, id).await?, keys);
     Ok(())
 }
 
@@ -878,14 +1014,16 @@ async fn an_album_renders_only_a_credit_the_artist_row_cannot_state() -> Result<
 
 /// An album's filed-under artist and the credit it renders, if any.
 async fn album_credit(db: &DbPool, name: &str) -> Result<(String, Option<String>), AppError> {
-    let row = sqlx::query_as::<_, (String, Option<String>)>(
-        "SELECT a.name, al.artist_credit \
-         FROM albums al JOIN artists a ON a.id = al.artist_id WHERE al.name = ?",
-    )
-    .bind(name)
-    .fetch_one(db.read())
-    .await?;
-    Ok(row)
+    let name = name.to_owned();
+    db.read(move |conn| {
+        sql::fetch_one(
+            conn,
+            "SELECT a.name, al.artist_credit \
+             FROM albums al JOIN artists a ON a.id = al.artist_id WHERE al.name = ?",
+            (name,),
+        )
+    })
+    .await
 }
 
 // === The name cache ===
@@ -896,18 +1034,20 @@ async fn album_credit(db: &DbPool, name: &str) -> Result<(String, Option<String>
 #[tokio::test]
 async fn a_name_asked_for_twice_resolves_to_one_row() -> Result<(), AppError> {
     let db = DbPool::test_pool().await?;
-    let mut tx = db.write().begin().await?;
-    let mut names = queries::scan::NameCache::for_chunk(10);
-
-    let first = names.artist(&mut tx, "Alice", 1).await?;
-    let again = names.artist(&mut tx, "Alice", 1).await?;
-    tx.commit().await?;
+    let (first, again) = db
+        .transaction(|tx| {
+            let mut names = queries::scan::NameCache::for_chunk(10);
+            let first = names.artist(tx, "Alice", 1)?;
+            let again = names.artist(tx, "Alice", 1)?;
+            Ok((first, again))
+        })
+        .await?;
 
     assert_eq!(first, again);
-    let rows: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM artists WHERE name = 'Alice'")
-        .fetch_one(db.read())
+    let rows: i64 = db
+        .read(|conn| sql::fetch_one(conn, "SELECT COUNT(*) FROM artists WHERE name = 'Alice'", ()))
         .await?;
-    assert_eq!(rows.0, 1);
+    assert_eq!(rows, 1);
     Ok(())
 }
 
@@ -917,19 +1057,24 @@ async fn a_name_asked_for_twice_resolves_to_one_row() -> Result<(), AppError> {
 #[tokio::test]
 async fn a_spelling_seen_again_after_another_does_not_win_the_row_back() -> Result<(), AppError> {
     let db = DbPool::test_pool().await?;
-    let mut tx = db.write().begin().await?;
-    let mut names = queries::scan::NameCache::default();
-
-    names.artist(&mut tx, "Alice", 1).await?;
-    names.artist(&mut tx, "ALICE", 1).await?;
-    names.artist(&mut tx, "Alice", 1).await?;
-    tx.commit().await?;
-
-    let stored: (i64, String) = sqlx::query_as(
-        "SELECT COUNT(*), MAX(name) FROM artists WHERE name = 'alice' COLLATE NOCASE",
-    )
-    .fetch_one(db.read())
+    db.transaction(|tx| {
+        let mut names = queries::scan::NameCache::default();
+        names.artist(tx, "Alice", 1)?;
+        names.artist(tx, "ALICE", 1)?;
+        names.artist(tx, "Alice", 1)?;
+        Ok(())
+    })
     .await?;
+
+    let stored: (i64, String) = db
+        .read(|conn| {
+            sql::fetch_one(
+                conn,
+                "SELECT COUNT(*), MAX(name) FROM artists WHERE name = 'alice' COLLATE NOCASE",
+                (),
+            )
+        })
+        .await?;
     assert_eq!(stored, (1, "ALICE".to_owned()));
     Ok(())
 }
@@ -938,15 +1083,18 @@ async fn a_spelling_seen_again_after_another_does_not_win_the_row_back() -> Resu
 #[tokio::test]
 async fn a_name_with_nothing_in_it_resolves_to_the_sentinel() -> Result<(), AppError> {
     let db = DbPool::test_pool().await?;
-    let mut tx = db.write().begin().await?;
-    let mut names = queries::scan::NameCache::default();
+    let (artist, genre) = db
+        .transaction(|tx| {
+            let mut names = queries::scan::NameCache::default();
+            Ok((names.artist(tx, "", 1)?, names.genre(tx, "")?))
+        })
+        .await?;
 
-    assert_eq!(names.artist(&mut tx, "", 1).await?, 1);
-    assert_eq!(names.genre(&mut tx, "").await?, None);
-    tx.commit().await?;
-
-    let rows: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM artists").fetch_one(db.read()).await?;
-    assert_eq!(rows.0, 1, "only the schema's own sentinel row");
+    assert_eq!(artist, 1);
+    assert_eq!(genre, None);
+    let rows: i64 =
+        db.read(|conn| sql::fetch_one(conn, "SELECT COUNT(*) FROM artists", ())).await?;
+    assert_eq!(rows, 1, "only the schema's own sentinel row");
     Ok(())
 }
 
@@ -959,13 +1107,11 @@ async fn a_guest_who_is_nobodys_primary_artist_survives_the_prune() -> Result<()
     let meta = credited("One", "Alice feat. Bob", &["Alice", "Bob"]);
     insert_tagged_track(&db, "/music/1.mp3", &meta).await?;
 
-    let mut tx = db.write().begin().await?;
-    queries::scan::prune_orphans(&mut tx).await?;
-    tx.commit().await?;
+    db.transaction(queries::scan::prune_orphans).await?;
 
-    let bob: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM artists WHERE name = 'Bob'")
-        .fetch_one(db.read())
+    let bob: i64 = db
+        .read(|conn| sql::fetch_one(conn, "SELECT COUNT(*) FROM artists WHERE name = 'Bob'", ()))
         .await?;
-    assert_eq!(bob.0, 1);
+    assert_eq!(bob, 1);
     Ok(())
 }

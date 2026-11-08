@@ -2,7 +2,7 @@
 //! [`melodia_artwork::media::image::artwork::store_image`] bounds only what a scan writes, and
 //! `scanner::file_is_current` never re-derives an unchanged track's cover.
 //!
-//! **Not an `SQLx` migration.** It is a slow pass over a rebuildable cache, and a migration failure
+//! **Not a migration.** It is a slow pass over a rebuildable cache, and a migration failure
 //! is fatal at boot. Nothing is deleted here: a re-encoded cover lands under a new hash, and the
 //! file it replaces is left for the sweep.
 
@@ -19,11 +19,12 @@ use melodia_store::database::queries;
 /// What the pass did, for one log line at the end.
 #[derive(Default)]
 struct Outcome {
-    /// Files that came back smaller and had their rows re-pointed.
-    shrunk: u32,
-    /// Bytes the store lost.
-    saved: u64,
-    /// Inside both bounds, spared by the never-inflate rule, or unreadable.
+    /// Files re-stored inside the bounds, their rows re-pointed.
+    rewritten: u32,
+    /// What those files weighed and what replaced them, which bounding can make the larger.
+    bytes_before: u64,
+    bytes_after: u64,
+    /// Inside both bounds, over only the byte bound with nothing smaller to store, or unreadable.
     left_alone: u32,
 }
 
@@ -35,9 +36,9 @@ pub fn spawn(spawner: &TaskSpawner, state: &AppState) {
         state,
         one_shot::Sweep {
             label: "Artwork renormalize",
-            marker: "artwork_store_normalized",
-            done: |flags| flags.artwork_store_normalized,
-            mark: |flags| flags.artwork_store_normalized = true,
+            marker: "artwork_store_bounded",
+            done: |flags| flags.artwork_store_bounded,
+            mark: |flags| flags.artwork_store_bounded = true,
             on_failure: one_shot::OnFailure::Mark,
         },
         |state| async move { renormalize(&state.db, &state.paths).await },
@@ -62,10 +63,11 @@ async fn renormalize(db: &DbPool, paths: &Paths) -> AppResult<()> {
     for step in steps {
         match step {
             Step::Unchanged => outcome.left_alone += 1,
-            Step::Shrunk { from, to, saved } => {
+            Step::Rewritten { from, to, bytes_before, bytes_after } => {
                 moves.push((from, to));
-                outcome.shrunk += 1;
-                outcome.saved += saved;
+                outcome.rewritten += 1;
+                outcome.bytes_before += bytes_before;
+                outcome.bytes_after += bytes_after;
             }
         }
     }
@@ -75,11 +77,12 @@ async fn renormalize(db: &DbPool, paths: &Paths) -> AppResult<()> {
     }
 
     // One transaction, so no row ever names a file the sweep below may retire.
-    queries::artwork::repoint_all(db, &moves).await?;
+    queries::artwork::repoint_all(db, moves).await?;
     log::info!(
-        "Normalized {} stored cover(s), {} KiB smaller ({} left alone)",
-        outcome.shrunk,
-        outcome.saved / 1024,
+        "Normalized {} stored cover(s), {} KiB to {} KiB ({} left alone)",
+        outcome.rewritten,
+        outcome.bytes_before / 1024,
+        outcome.bytes_after / 1024,
         outcome.left_alone
     );
 
@@ -90,12 +93,13 @@ async fn renormalize(db: &DbPool, paths: &Paths) -> AppResult<()> {
 
 /// One file's verdict.
 enum Step {
-    /// Inside both bounds already, unreadable, or the re-encode would have grown it.
+    /// Inside both bounds, unreadable, or over only the byte bound with nothing smaller to store.
     Unchanged,
-    Shrunk {
+    Rewritten {
         from: String,
         to: String,
-        saved: u64,
+        bytes_before: u64,
+        bytes_after: u64,
     },
 }
 
@@ -123,10 +127,9 @@ fn restore_one(path: &Path) -> Step {
         return Step::Unchanged;
     }
 
-    let source_len = u64::try_from(bytes.len()).unwrap_or(u64::MAX);
-    let saved =
-        std::fs::metadata(&stored).ok().map_or(0, |meta| source_len.saturating_sub(meta.len()));
-    Step::Shrunk { from, to: stored, saved }
+    let bytes_before = u64::try_from(bytes.len()).unwrap_or(u64::MAX);
+    let bytes_after = std::fs::metadata(&stored).map_or(0, |meta| meta.len());
+    Step::Rewritten { from, to: stored, bytes_before, bytes_after }
 }
 
 #[cfg(test)]

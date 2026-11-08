@@ -22,7 +22,7 @@ use melodia_engine::player::engine::types::PlaybackSource;
 use melodia_integrations::services::integrations::scrobble::{
     ListenBrainzCredentials, LoveItem, ScrobbleQueue,
 };
-use melodia_store::database::queries::fixtures::insert_test_track;
+use melodia_store::database::queries::fixtures::{execute, fetch_one, insert_test_track};
 
 /// A `FavoriteWrite` over an in-memory library, with the scrobble service's files under a
 /// throwaway root.
@@ -64,11 +64,8 @@ impl Fixture {
     /// Give `id` the recording MBID `ListenBrainz` feedback keys on, so a love for it survives
     /// the provider's own gate.
     async fn tag(&self, id: i64) -> Result<(), AppError> {
-        sqlx::query("UPDATE tracks SET musicbrainz_track_id = 'rec-1' WHERE id = ?")
-            .bind(id)
-            .execute(self.write.db.write())
-            .await?;
-        Ok(())
+        let sql = format!("UPDATE tracks SET musicbrainz_track_id = 'rec-1' WHERE id = {id}");
+        execute(&self.write.db, &sql).await
     }
 
     async fn arm_listenbrainz(&self) -> Result<(), AppError> {
@@ -97,10 +94,9 @@ impl Fixture {
     }
 
     async fn row_favorite(&self, id: i64) -> Result<bool, AppError> {
-        let flag: i64 = sqlx::query_scalar("SELECT is_favorite FROM tracks WHERE id = ?")
-            .bind(id)
-            .fetch_one(self.write.db.read())
-            .await?;
+        let flag: i64 =
+            fetch_one(&self.write.db, &format!("SELECT is_favorite FROM tracks WHERE id = {id}"))
+                .await?;
         Ok(flag != 0)
     }
 

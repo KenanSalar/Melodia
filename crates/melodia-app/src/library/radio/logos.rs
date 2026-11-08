@@ -76,8 +76,8 @@ pub async fn prune_logo_answers(db: &DbPool) -> Result<u64, AppError> {
     let hit_cutoff = now - chrono::TimeDelta::try_days(LOGO_CACHE_MAX_AGE_DAYS).unwrap_or_default();
     queries::radio::prune_logo_answers(
         db,
-        &miss_cutoff.to_rfc3339(),
-        &hit_cutoff.to_rfc3339(),
+        miss_cutoff.to_rfc3339(),
+        hit_cutoff.to_rfc3339(),
         LOGO_CACHE_MAX_BYTES,
     )
     .await
@@ -180,7 +180,7 @@ pub enum LogoAnswer {
 ///
 /// **The heal pass is who wants it.** Each station settles against the table twice before the
 /// network, its row's URL then its site, and one URL at a time those are one-element batched
-/// queries that rebuild their SQL and prepare non-persistent.
+/// queries that rebuild their SQL and prepare it each run.
 #[derive(Default)]
 pub struct AnswerSeed(std::collections::HashMap<String, radio::StoredLogoAnswer>);
 

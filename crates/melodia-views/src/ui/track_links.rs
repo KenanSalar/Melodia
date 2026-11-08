@@ -103,10 +103,10 @@ fn playing_track_id(vm: Option<&PlayerViewModelLight>) -> Option<i64> {
     vm?.current_track.as_ref().map(|t| t.id)
 }
 
-/// Awaited inline, sqlx having a reactor under `Compat`. A failed read or a row
+/// Awaited inline, the pool running its read on the runtime it holds. A failed read or a row
 /// gone since is the same unlinked trio, which hides the entries.
 async fn read_links(state: &AppState, id: i64) -> RowLinks {
-    match library::tracks::get_track_links(&state.db, &[id]).await {
+    match library::tracks::get_track_links(&state.db, vec![id]).await {
         Ok(links) => links.into_iter().next().map(RowLinks::from).unwrap_or_default(),
         Err(e) => {
             log::warn!("ui::track_links get_track_links({id}): {}", describe(&e));

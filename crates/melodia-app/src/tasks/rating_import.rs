@@ -2,7 +2,7 @@
 //!
 //! `scanner::file_is_current` skips an unchanged file, so a library scanned before ratings were
 //! read stays unrated however often it is rescanned, every star another player wrote sitting
-//! unread. **Not an `SQLx` migration**, for [`super::artwork_renormalize`]'s reason. Only unrated
+//! unread. **Not a migration**, for [`super::artwork_renormalize`]'s reason. Only unrated
 //! rows are read, and only once, since `rating = 0` can't tell an untouched row from a cleared one.
 
 use std::collections::HashMap;

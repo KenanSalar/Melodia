@@ -175,10 +175,6 @@ async fn a_burst_refused_by_the_switch_is_not_kept_for_later() -> Result<(), App
 
 /// The quiet period is what turns the walk into one write. Nothing may reach the file while the
 /// clicking is still going.
-///
-/// Deliberately not `start_paused`: `test_pool` is a single connection onto `sqlite::memory:`, so
-/// the database lives in that connection, and a clock that auto-advances past sqlx's idle and
-/// lifetime timers has the pool reap it out from under the flush.
 #[tokio::test]
 async fn nothing_is_written_until_the_clicking_stops() -> Result<(), AppError> {
     let fixture = Fixture::new(true).await?;

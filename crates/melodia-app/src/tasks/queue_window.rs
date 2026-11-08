@@ -75,7 +75,7 @@ async fn fill_window(
     if wanted.is_empty() {
         return Ok(());
     }
-    let fresh = queries::track::get_track_summaries_by_ids(db, &wanted).await?;
+    let fresh = queries::track::get_track_summaries_by_ids(db, wanted).await?;
     seat_window_records(player_state, sinks, fresh);
     Ok(())
 }

@@ -8,6 +8,7 @@ use notify::{
 };
 use notify_debouncer_full::{DebounceEventResult, Debouncer, RecommendedCache, new_debouncer_opt};
 use tokio::sync::mpsc;
+use walkdir::WalkDir;
 
 use melodia_core::error::{AppError, describe};
 use melodia_core::utils::audio_ext::is_audio_extension;
@@ -26,6 +27,9 @@ pub enum FileEvent {
     /// The kernel's queue overflowed, so the batch's per-file events can't be trusted and the
     /// library is reconciled whole.
     RescanNeeded,
+    /// A directory holding audio was renamed or moved. The OS reports nothing for the files inside
+    /// it, so the library is reconciled rather than leave their rows on the old paths.
+    DirectoryRenamed,
 }
 
 /// The recommended watcher, minus the access events nothing here reads.
@@ -186,6 +190,10 @@ impl FolderWatcher {
 
 /// The `FileEvent`s a notify event means for audio files.
 fn classify_event(kind: EventKind, paths: &[PathBuf]) -> Vec<FileEvent> {
+    if relocates_an_audio_directory(kind, paths) {
+        return vec![FileEvent::DirectoryRenamed];
+    }
+
     let mut events = Vec::new();
 
     match kind {
@@ -236,6 +244,27 @@ fn classify_event(kind: EventKind, paths: &[PathBuf]) -> Vec<FileEvent> {
     }
 
     events
+}
+
+/// Whether `kind` puts a directory with audio under it at a new path, read off the side that still
+/// exists.
+///
+/// `Any` is a rename the debouncer couldn't pair, a case-only one on macOS, and `To` one from
+/// outside the watch on Linux. Windows reports a move between parents as a bare `Create(Any)`,
+/// which a folder copy shares, so a copy reconciles too. A directory with no audio is passed over,
+/// or a drive-root library would walk itself for every folder any app renames.
+fn relocates_an_audio_directory(kind: EventKind, paths: &[PathBuf]) -> bool {
+    let new_side = match kind {
+        EventKind::Modify(ModifyKind::Name(RenameMode::Both)) => paths.get(1),
+        EventKind::Modify(ModifyKind::Name(RenameMode::To | RenameMode::Any))
+        | EventKind::Create(CreateKind::Any) => paths.first(),
+        _ => None,
+    };
+    new_side.is_some_and(|dir| dir.is_dir() && holds_audio(dir))
+}
+
+fn holds_audio(dir: &Path) -> bool {
+    WalkDir::new(dir).into_iter().flatten().any(|entry| is_audio_file(entry.path()))
 }
 
 /// Audio outside every trash folder: a trashed file reads as removed, a restored one as created.

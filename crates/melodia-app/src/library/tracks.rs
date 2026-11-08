@@ -15,7 +15,10 @@ pub async fn get_track_meta(db: &DbPool, id: i64) -> Result<Option<track::TrackM
 
 /// In the order asked. Ids with no row are dropped, so a shorter result is a queue that outlived a
 /// delete rather than an error.
-pub async fn get_track_links(db: &DbPool, ids: &[i64]) -> Result<Vec<track::TrackLinks>, AppError> {
+pub async fn get_track_links(
+    db: &DbPool,
+    ids: Vec<i64>,
+) -> Result<Vec<track::TrackLinks>, AppError> {
     queries::track::get_track_links_by_ids(db, ids).await
 }
 

@@ -112,6 +112,25 @@ fn dedup_rescan_supersedes_everything_in_batch() {
 }
 
 #[test]
+fn dedup_directory_rename_supersedes_the_per_file_events() {
+    let events = vec![
+        FileEvent::Created(PathBuf::from("/music/a.mp3")),
+        FileEvent::DirectoryRenamed,
+        FileEvent::Removed(PathBuf::from("/music/c.mp3")),
+    ];
+    let result = deduplicate_events(events);
+    assert_eq!(result, vec![FileEvent::DirectoryRenamed]);
+}
+
+/// Only the overflow owes the user a notice, so it has to survive the merge.
+#[test]
+fn dedup_rescan_outranks_a_directory_rename() {
+    let events = vec![FileEvent::DirectoryRenamed, FileEvent::RescanNeeded];
+    let result = deduplicate_events(events);
+    assert_eq!(result, vec![FileEvent::RescanNeeded]);
+}
+
+#[test]
 fn suppress_drops_modified_events_for_paths_we_wrote() {
     let self_writes = SelfWrites::default();
     self_writes.mark(Path::new("/music/edited.mp3"));
@@ -189,11 +208,11 @@ fn suppress_can_empty_the_batch() {
 
 // ---- the order the two filters are applied in ----
 
-/// The events a plan would apply, or `None` for the two arms that apply none.
+/// The events a plan would apply, or `None` for the arms that apply none.
 fn planned(plan: BatchPlan) -> Option<Vec<FileEvent>> {
     match plan {
         BatchPlan::Process(batch) => Some(batch),
-        BatchPlan::Nothing | BatchPlan::Rescan => None,
+        BatchPlan::Nothing | BatchPlan::Rescan | BatchPlan::Reconcile => None,
     }
 }
 
@@ -234,6 +253,42 @@ fn a_rescan_does_not_spend_the_marks_it_never_needed() {
         self_writes.take_recent(Path::new("/music/edited.mp3")),
         "the mark has to survive to suppress the echo when it actually arrives"
     );
+}
+
+/// `process_batch` `unreachable!()`s on this one too, so it has to win from anywhere in a batch.
+#[test]
+fn a_directory_rename_wins_from_a_batch_it_does_not_have_to_itself() {
+    let self_writes = SelfWrites::default();
+
+    let batch = vec![
+        FileEvent::Modified(PathBuf::from("/music/a.mp3")),
+        FileEvent::DirectoryRenamed,
+        FileEvent::Created(PathBuf::from("/music/b.mp3")),
+    ];
+
+    assert!(matches!(plan_batch(batch, &self_writes), BatchPlan::Reconcile));
+}
+
+#[test]
+fn a_rescan_outranks_a_directory_rename_in_the_plan() {
+    let self_writes = SelfWrites::default();
+
+    let batch = vec![FileEvent::DirectoryRenamed, FileEvent::RescanNeeded];
+
+    assert!(matches!(plan_batch(batch, &self_writes), BatchPlan::Rescan));
+}
+
+/// A reconcile consults no marks either, so the write's real echo still needs its own.
+#[test]
+fn a_directory_rename_does_not_spend_the_marks_it_never_needed() {
+    let self_writes = SelfWrites::default();
+    self_writes.mark(Path::new("/music/edited.mp3"));
+
+    let batch =
+        vec![FileEvent::DirectoryRenamed, FileEvent::Modified(PathBuf::from("/music/edited.mp3"))];
+    assert!(matches!(plan_batch(batch, &self_writes), BatchPlan::Reconcile));
+
+    assert!(self_writes.take_recent(Path::new("/music/edited.mp3")));
 }
 
 /// Suppression runs before `process_batch`, not after, which is what keeps the re-hash, the

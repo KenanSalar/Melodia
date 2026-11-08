@@ -1,6 +1,8 @@
-use crate::database::DbPool;
+use rusqlite::Transaction;
+
 use crate::database::queries;
 use crate::database::queries::fixtures::*;
+use crate::database::{DbPool, sql};
 use melodia_core::entities::artist::{self, ArtistCredit};
 use melodia_core::entities::genre::{self, GenreList};
 use melodia_core::entities::scan::ExtractedMetadata;
@@ -14,9 +16,7 @@ async fn recalculate_stats_produces_correct_counts() -> Result<(), AppError> {
     queries::folder::insert_folder(&db, "/music", true).await?;
 
     // Disable triggers so inserts don't update stats
-    let mut tx = db.write().begin().await?;
-    queries::stats::disable_stats_triggers(&mut tx).await?;
-    tx.commit().await?;
+    db.transaction(queries::stats::disable_stats_triggers).await?;
 
     // Insert tracks — stats will remain at 0 since triggers are disabled
     insert_test_track(&db, "/music/t1.mp3", "Song A", "Artist X", "Album P", "Rock").await?;
@@ -24,51 +24,60 @@ async fn recalculate_stats_produces_correct_counts() -> Result<(), AppError> {
     insert_test_track(&db, "/music/t3.mp3", "Song C", "Artist Y", "Album Q", "Pop").await?;
 
     // Verify stats are 0 (triggers disabled)
-    let artist_x: (i64, i64, i64) = sqlx::query_as(
-        "SELECT track_count, total_duration_ms, album_count FROM artists WHERE name = 'Artist X'",
-    )
-    .fetch_one(db.read())
-    .await?;
+    let artist_x = artist_totals(&db, "Artist X").await?;
     assert_eq!(artist_x, (0, 0, 0), "stats should be zero with triggers disabled");
 
     // Recalculate
-    let mut tx = db.write().begin().await?;
-    queries::stats::recalculate_all_stats(&mut tx).await?;
-    tx.commit().await?;
+    db.transaction(queries::stats::recalculate_all_stats).await?;
 
     // Verify artist stats
-    let artist_x: (i64, i64, i64) = sqlx::query_as(
-        "SELECT track_count, total_duration_ms, album_count FROM artists WHERE name = 'Artist X'",
-    )
-    .fetch_one(db.read())
-    .await?;
+    let artist_x = artist_totals(&db, "Artist X").await?;
     assert_eq!(artist_x.0, 2, "Artist X should have 2 tracks");
     assert_eq!(artist_x.1, 360_000, "Artist X total_duration_ms = 2 * 180_000");
     assert_eq!(artist_x.2, 1, "Artist X should have 1 album");
 
-    let artist_y: (i64, i64, i64) = sqlx::query_as(
-        "SELECT track_count, total_duration_ms, album_count FROM artists WHERE name = 'Artist Y'",
-    )
-    .fetch_one(db.read())
-    .await?;
+    let artist_y = artist_totals(&db, "Artist Y").await?;
     assert_eq!(artist_y.0, 1);
     assert_eq!(artist_y.2, 1);
 
     // Verify album stats
-    let album_p: (i64, i64) =
-        sqlx::query_as("SELECT track_count, total_duration_ms FROM albums WHERE name = 'Album P'")
-            .fetch_one(db.read())
-            .await?;
+    let album_p: (i64, i64) = db
+        .read(|conn| {
+            sql::fetch_one(
+                conn,
+                "SELECT track_count, total_duration_ms FROM albums WHERE name = 'Album P'",
+                (),
+            )
+        })
+        .await?;
     assert_eq!(album_p.0, 2, "Album P should have 2 tracks");
     assert_eq!(album_p.1, 360_000);
 
     // Verify genre stats
-    let rock: (i64, i64) =
-        sqlx::query_as("SELECT track_count, total_duration_ms FROM genres WHERE name = 'Rock'")
-            .fetch_one(db.read())
-            .await?;
+    let rock: (i64, i64) = db
+        .read(|conn| {
+            sql::fetch_one(
+                conn,
+                "SELECT track_count, total_duration_ms FROM genres WHERE name = 'Rock'",
+                (),
+            )
+        })
+        .await?;
     assert_eq!(rock.0, 2, "Rock should have 2 tracks");
     Ok(())
+}
+
+/// An artist's track count, total duration and album count, as stored.
+async fn artist_totals(db: &DbPool, name: &str) -> Result<(i64, i64, i64), AppError> {
+    let name = name.to_owned();
+    db.read(move |conn| {
+        sql::fetch_one(
+            conn,
+            "SELECT track_count, total_duration_ms, album_count FROM artists WHERE name = ?",
+            (name,),
+        )
+    })
+    .await
 }
 
 #[tokio::test]
@@ -77,20 +86,14 @@ async fn triggers_work_after_re_enable() -> Result<(), AppError> {
     queries::folder::insert_folder(&db, "/music", true).await?;
 
     // Disable, then re-enable triggers
-    let mut tx = db.write().begin().await?;
-    queries::stats::disable_stats_triggers(&mut tx).await?;
-    queries::stats::enable_stats_triggers(&mut tx).await?;
-    tx.commit().await?;
+    db.transaction(drop_and_restore_triggers).await?;
 
     // Insert a track — trigger should fire and update stats
     insert_test_track(&db, "/music/t1.mp3", "Song A", "Artist X", "Album P", "Rock").await?;
 
-    let artist_x: (i64, i64) =
-        sqlx::query_as("SELECT track_count, album_count FROM artists WHERE name = 'Artist X'")
-            .fetch_one(db.read())
-            .await?;
-    assert_eq!(artist_x.0, 1, "trigger should increment track_count");
-    assert_eq!(artist_x.1, 1, "trigger should set album_count");
+    let (track_count, _, album_count) = artist_totals(&db, "Artist X").await?;
+    assert_eq!(track_count, 1, "trigger should increment track_count");
+    assert_eq!(album_count, 1, "trigger should set album_count");
     Ok(())
 }
 
@@ -100,32 +103,34 @@ async fn disable_enable_recalculate_full_cycle() -> Result<(), AppError> {
     queries::folder::insert_folder(&db, "/music", true).await?;
 
     // Full cycle: disable → bulk insert → recalculate → enable
-    let mut tx = db.write().begin().await?;
-    queries::stats::disable_stats_triggers(&mut tx).await?;
-    tx.commit().await?;
+    db.transaction(queries::stats::disable_stats_triggers).await?;
 
     insert_test_track(&db, "/music/t1.mp3", "S1", "Art", "Alb", "Genre").await?;
     insert_test_track(&db, "/music/t2.mp3", "S2", "Art", "Alb", "Genre").await?;
 
-    let mut tx = db.write().begin().await?;
-    queries::stats::recalculate_all_stats(&mut tx).await?;
-    queries::stats::enable_stats_triggers(&mut tx).await?;
-    tx.commit().await?;
+    db.transaction(|tx| {
+        queries::stats::recalculate_all_stats(tx)?;
+        queries::stats::enable_stats_triggers(tx)
+    })
+    .await?;
 
     // Stats should be correct from recalculate
-    let art: (i64,) = sqlx::query_as("SELECT track_count FROM artists WHERE name = 'Art'")
-        .fetch_one(db.read())
-        .await?;
-    assert_eq!(art.0, 2);
+    assert_eq!(artist_totals(&db, "Art").await?.0, 2);
 
     // Now insert one more track — trigger should fire normally
     insert_test_track(&db, "/music/t3.mp3", "S3", "Art", "Alb", "Genre").await?;
 
-    let art: (i64,) = sqlx::query_as("SELECT track_count FROM artists WHERE name = 'Art'")
-        .fetch_one(db.read())
-        .await?;
-    assert_eq!(art.0, 3, "trigger should increment from recalculated base");
+    assert_eq!(
+        artist_totals(&db, "Art").await?.0,
+        3,
+        "trigger should increment from recalculated base"
+    );
     Ok(())
+}
+
+fn drop_and_restore_triggers(tx: &Transaction<'_>) -> Result<(), AppError> {
+    queries::stats::disable_stats_triggers(tx)?;
+    queries::stats::enable_stats_triggers(tx)
 }
 
 // === The join tables the stats moved onto ===
@@ -164,11 +169,11 @@ async fn genre_named(db: &DbPool, name: &str) -> Result<genre::GenreStats, AppEr
 
 /// A genre's count straight off the table, for the rows `genre_stats` filters out at zero.
 async fn stored_genre_count(db: &DbPool, name: &str) -> Result<i64, AppError> {
-    let count: (i64,) = sqlx::query_as("SELECT track_count FROM genres WHERE name = ?")
-        .bind(name)
-        .fetch_one(db.read())
-        .await?;
-    Ok(count.0)
+    let name = name.to_owned();
+    db.read(move |conn| {
+        sql::fetch_one(conn, "SELECT track_count FROM genres WHERE name = ?", (name,))
+    })
+    .await
 }
 
 async fn artist_named(db: &DbPool, name: &str) -> Result<artist::ArtistStats, AppError> {
@@ -240,9 +245,7 @@ async fn the_recompute_reproduces_what_the_triggers_accumulated() -> Result<(), 
 
     let accumulated = every_stat(&db).await?;
 
-    let mut tx = db.write().begin().await?;
-    queries::stats::recalculate_all_stats(&mut tx).await?;
-    tx.commit().await?;
+    db.transaction(queries::stats::recalculate_all_stats).await?;
 
     assert_eq!(every_stat(&db).await?, accumulated);
     Ok(())
@@ -250,17 +253,19 @@ async fn the_recompute_reproduces_what_the_triggers_accumulated() -> Result<(), 
 
 /// Every maintained stat, ordered by name so the two reads are comparable.
 async fn every_stat(db: &DbPool) -> Result<Vec<(String, i64, i64, i64)>, AppError> {
-    let rows = sqlx::query_as::<_, (String, i64, i64, i64)>(
-        "SELECT 'artist:' || name, track_count, total_duration_ms, album_count FROM artists \
-         UNION ALL \
-         SELECT 'genre:' || name, track_count, total_duration_ms, 0 FROM genres \
-         UNION ALL \
-         SELECT 'album:' || name, track_count, total_duration_ms, 0 FROM albums \
-         ORDER BY 1",
-    )
-    .fetch_all(db.read())
-    .await?;
-    Ok(rows)
+    db.read(|conn| {
+        sql::fetch_all(
+            conn,
+            "SELECT 'artist:' || name, track_count, total_duration_ms, album_count FROM artists \
+             UNION ALL \
+             SELECT 'genre:' || name, track_count, total_duration_ms, 0 FROM genres \
+             UNION ALL \
+             SELECT 'album:' || name, track_count, total_duration_ms, 0 FROM albums \
+             ORDER BY 1",
+            (),
+        )
+    })
+    .await
 }
 
 /// The credit tables carry no `ON DELETE CASCADE` — a cascade fires after the parent row is gone,
@@ -276,9 +281,7 @@ async fn deleting_a_track_subtracts_its_credits_and_leaves_no_join_rows() -> Res
     let survivor = multi_tagged("Song B", &["Rock"], "Alice", &[]);
     insert_tagged_track(&db, "/music/t2.mp3", &survivor).await?;
 
-    let mut tx = db.write().begin().await?;
-    queries::scan::delete_track_by_path(&mut tx, "/music/t1.mp3").await?;
-    tx.commit().await?;
+    db.transaction(|tx| queries::scan::delete_track_by_path(tx, "/music/t1.mp3")).await?;
 
     assert_eq!(artist_named(&db, "Alice").await?.track_count, 1);
     assert_eq!(genre_named(&db, "Rock").await?.track_count, 1);
@@ -286,14 +289,16 @@ async fn deleting_a_track_subtracts_its_credits_and_leaves_no_join_rows() -> Res
     // through there would pass on a count the trigger never touched.
     assert_eq!(stored_genre_count(&db, "Metal").await?, 0);
 
-    let orphans: (i64, i64) = sqlx::query_as(
-        "SELECT (SELECT COUNT(*) FROM track_artists WHERE track_id = ?), \
-                (SELECT COUNT(*) FROM track_genres WHERE track_id = ?)",
-    )
-    .bind(doomed)
-    .bind(doomed)
-    .fetch_one(db.read())
-    .await?;
+    let orphans: (i64, i64) = db
+        .read(move |conn| {
+            sql::fetch_one(
+                conn,
+                "SELECT (SELECT COUNT(*) FROM track_artists WHERE track_id = ?), \
+                        (SELECT COUNT(*) FROM track_genres WHERE track_id = ?)",
+                (doomed, doomed),
+            )
+        })
+        .await?;
     assert_eq!(orphans, (0, 0));
     Ok(())
 }
@@ -309,10 +314,7 @@ async fn the_triggers_a_bulk_scan_restores_are_the_ones_the_migration_installed(
     let installed = trigger_sql(&db).await?;
     assert!(!installed.is_empty(), "the migration installs the stats triggers");
 
-    let mut tx = db.write().begin().await?;
-    queries::stats::disable_stats_triggers(&mut tx).await?;
-    queries::stats::enable_stats_triggers(&mut tx).await?;
-    tx.commit().await?;
+    db.transaction(drop_and_restore_triggers).await?;
 
     assert_eq!(trigger_sql(&db).await?, installed);
     Ok(())
@@ -320,11 +322,13 @@ async fn the_triggers_a_bulk_scan_restores_are_the_ones_the_migration_installed(
 
 /// Every stats trigger as `SQLite` stored it, by name.
 async fn trigger_sql(db: &DbPool) -> Result<Vec<(String, String)>, AppError> {
-    let rows = sqlx::query_as::<_, (String, String)>(
-        "SELECT name, sql FROM sqlite_master \
-         WHERE type = 'trigger' AND name LIKE '%_stats_%' ORDER BY name",
-    )
-    .fetch_all(db.read())
-    .await?;
-    Ok(rows)
+    db.read(|conn| {
+        sql::fetch_all(
+            conn,
+            "SELECT name, sql FROM sqlite_master \
+             WHERE type = 'trigger' AND name LIKE '%_stats_%' ORDER BY name",
+            (),
+        )
+    })
+    .await
 }

@@ -57,7 +57,7 @@ impl CardGrid for AlbumsGrid {
     }
 
     async fn rows(state: AppState, ids: Vec<i64>) -> AppResult<Vec<AlbumStats>> {
-        library::keyset::albums_by_ids(&state.db, &ids).await
+        library::keyset::albums_by_ids(&state.db, ids).await
     }
 
     fn card(_: &AppWindow, album: &AlbumStats) -> (i64, Card<Self>) {

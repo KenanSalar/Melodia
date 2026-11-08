@@ -11,9 +11,8 @@
 
 use std::path::Path;
 
-use crate::database::DbPool;
-use crate::database::queries;
 use crate::database::queries::fixtures::*;
+use crate::database::{DbPool, queries, sql};
 use melodia_core::entities::artist::ArtistCredit;
 use melodia_core::entities::genre::GenreList;
 use melodia_core::entities::scan::ExtractedMetadata;
@@ -48,42 +47,32 @@ fn numbered(title: &str, album: &str, disc: Option<i32>, track: Option<i32>) -> 
 }
 
 async fn album_id(db: &DbPool, name: &str) -> Result<i64, AppError> {
-    let id = sqlx::query_scalar::<_, i64>("SELECT id FROM albums WHERE name = ?")
-        .bind(name)
-        .fetch_one(db.read())
-        .await?;
-    Ok(id)
+    let name = name.to_owned();
+    db.read(move |conn| sql::fetch_one(conn, "SELECT id FROM albums WHERE name = ?", (name,))).await
 }
 
 async fn artist_id(db: &DbPool, name: &str) -> Result<i64, AppError> {
-    let id = sqlx::query_scalar::<_, i64>("SELECT id FROM artists WHERE name = ?")
-        .bind(name)
-        .fetch_one(db.read())
-        .await?;
-    Ok(id)
+    let name = name.to_owned();
+    db.read(move |conn| sql::fetch_one(conn, "SELECT id FROM artists WHERE name = ?", (name,)))
+        .await
 }
 
 async fn genre_id(db: &DbPool, name: &str) -> Result<i64, AppError> {
-    let id = sqlx::query_scalar::<_, i64>("SELECT id FROM genres WHERE name = ?")
-        .bind(name)
-        .fetch_one(db.read())
-        .await?;
-    Ok(id)
+    let name = name.to_owned();
+    db.read(move |conn| sql::fetch_one(conn, "SELECT id FROM genres WHERE name = ?", (name,))).await
 }
 
 /// Titles for the track ids a query answered with, so a failure names the tracks rather than
 /// whatever rowids the fixture happened to get.
 async fn titles_of(db: &DbPool, track_ids: &[i64]) -> Result<Vec<String>, AppError> {
-    let mut titles = Vec::with_capacity(track_ids.len());
-    for id in track_ids {
-        titles.push(
-            sqlx::query_scalar::<_, String>("SELECT title FROM tracks WHERE id = ?")
-                .bind(id)
-                .fetch_one(db.read())
-                .await?,
-        );
-    }
-    Ok(titles)
+    let track_ids = track_ids.to_vec();
+    db.read(move |conn| {
+        track_ids
+            .iter()
+            .map(|&id| sql::fetch_one(conn, "SELECT title FROM tracks WHERE id = ?", (id,)))
+            .collect()
+    })
+    .await
 }
 
 fn track_ids(pairs: &[(i64, i64)]) -> Vec<i64> {
@@ -224,9 +213,13 @@ async fn playlist_tracks_come_back_in_playlist_position() -> Result<(), AppError
     let third = stage(&db, &numbered("Gamma", "Ordered", Some(1), Some(3))).await?;
 
     // Neither rowid order nor any tag order.
-    let playlist =
-        queries::playlist::create_playlist_with_tracks(&db, "Mine", None, &[third, first, second])
-            .await?;
+    let playlist = queries::playlist::create_playlist_with_tracks(
+        &db,
+        "Mine".to_owned(),
+        None,
+        vec![third, first, second],
+    )
+    .await?;
 
     let pairs = queries::track::track_ids_by_playlists(&db, &[playlist]).await?;
 
@@ -240,7 +233,9 @@ async fn playlist_tracks_come_back_in_playlist_position() -> Result<(), AppError
 async fn a_smart_playlist_has_no_membership_rows() -> Result<(), AppError> {
     let db = empty_library().await?;
     stage(&db, &numbered("Alpha", "Ordered", Some(1), Some(1))).await?;
-    let smart = queries::playlist::create_smart_playlist(&db, "Rules", None, "{}").await?;
+    let smart =
+        queries::playlist::create_smart_playlist(&db, "Rules".to_owned(), None, "{}".to_owned())
+            .await?;
 
     let pairs = queries::track::track_ids_by_playlists(&db, &[smart.id]).await?;
 
@@ -332,5 +327,149 @@ async fn a_folder_queues_in_the_order_browse_lists_it() -> Result<(), AppError> 
     let ids = queries::track::track_ids_under_directory(&db, &dir.to_string_lossy()).await?;
 
     assert_eq!(titles_of(&db, &ids).await?, ["apple", "Zebra"]);
+    Ok(())
+}
+
+/// A drive root's path already ends in the separator, and doubled it matched nothing, so Play on
+/// that folder queued nothing.
+#[tokio::test]
+async fn a_folder_at_a_root_plays_its_whole_subtree() -> Result<(), AppError> {
+    use std::path::MAIN_SEPARATOR_STR as SEP;
+
+    for root in [format!("E:{SEP}"), SEP.to_owned()] {
+        let db = empty_library().await?;
+        let nested = format!("{root}sub{SEP}deep.mp3");
+        insert_tagged_track(&db, &format!("{root}a.mp3"), &make_test_metadata("Top")).await?;
+        insert_tagged_track(&db, &nested, &make_test_metadata("Deep")).await?;
+
+        let ids = queries::track::track_ids_under_directory(&db, &root).await?;
+
+        assert_eq!(titles_of(&db, &ids).await?, ["Top", "Deep"], "root {root:?}");
+    }
+    Ok(())
+}
+
+/// One row either side of each end of the range. `.` and a space sort below the separator, so a
+/// sibling sharing the folder's name starts under it, and the end is exclusive.
+#[tokio::test]
+async fn a_folder_plays_nothing_past_either_end_of_its_range() -> Result<(), AppError> {
+    use std::path::MAIN_SEPARATOR_STR as SEP;
+
+    let db = empty_library().await?;
+    let asked = format!("{LIBRARY_ROOT}{SEP}Abba");
+    let rows_around_the_range = [
+        (format!("{asked}.mp3"), "Below"),
+        (format!("{asked} Live{SEP}x.mp3"), "Spaced"),
+        (format!("{asked}{SEP}sub{SEP}in.mp3"), "Inside"),
+        (format!("{asked}{AFTER_SEPARATOR}"), "On the end"),
+        (format!("{asked}{AFTER_SEPARATOR}{SEP}y.mp3"), "Past"),
+    ];
+    for (path, title) in &rows_around_the_range {
+        insert_tagged_track(&db, path, &make_test_metadata(title)).await?;
+    }
+
+    let ids = queries::track::track_ids_under_directory(&db, &asked).await?;
+
+    assert_eq!(titles_of(&db, &ids).await?, ["Inside"]);
+    Ok(())
+}
+
+/// Two folders a case-sensitive disk keeps apart are two folders: playing one plays its own files.
+#[tokio::test]
+async fn a_folder_plays_without_a_sibling_spelled_in_another_case() -> Result<(), AppError> {
+    let db = empty_library().await?;
+    let asked = Path::new(LIBRARY_ROOT).join("Abba");
+    let sibling = Path::new(LIBRARY_ROOT).join("ABBA");
+    let own = asked.join("own.mp3");
+    let other = sibling.join("other.mp3");
+    insert_tagged_track(&db, &own.to_string_lossy(), &make_test_metadata("Own")).await?;
+    insert_tagged_track(&db, &other.to_string_lossy(), &make_test_metadata("Other")).await?;
+
+    let ids = queries::track::track_ids_under_directory(&db, &asked.to_string_lossy()).await?;
+
+    assert_eq!(titles_of(&db, &ids).await?, ["Own"]);
+    Ok(())
+}
+
+/// A folder renamed by case alone keeps its rows under the old spelling until a scan, and its card
+/// asks in the new one. Only a filesystem that folds case can land there, which the default
+/// Windows and macOS ones do.
+#[cfg(any(target_os = "windows", target_os = "macos"))]
+#[tokio::test]
+async fn a_folder_renamed_by_case_alone_plays_its_rows() -> Result<(), AppError> {
+    for (stored, asked) in [("abba", "ABBA"), ("müller", "MÜLLER")] {
+        let db = empty_library().await?;
+        let inside = Path::new(LIBRARY_ROOT).join(stored).join("sub").join("in.mp3");
+        insert_tagged_track(&db, &inside.to_string_lossy(), &make_test_metadata("Inside")).await?;
+        let renamed = Path::new(LIBRARY_ROOT).join(asked);
+
+        let ids =
+            queries::track::track_ids_under_directory(&db, &renamed.to_string_lossy()).await?;
+
+        assert_eq!(titles_of(&db, &ids).await?, ["Inside"], "asked {asked:?}");
+    }
+    Ok(())
+}
+
+/// Folding case must not widen the folder, so the rows of
+/// `a_folder_plays_nothing_past_either_end_of_its_range` asked for in another spelling.
+#[cfg(any(target_os = "windows", target_os = "macos"))]
+#[tokio::test]
+async fn a_renamed_folder_plays_nothing_past_either_end_of_its_range() -> Result<(), AppError> {
+    use std::path::MAIN_SEPARATOR_STR as SEP;
+
+    let db = empty_library().await?;
+    let stored = format!("{LIBRARY_ROOT}{SEP}abba");
+    let rows_around_the_range = [
+        (format!("{stored}.mp3"), "Below"),
+        (format!("{stored} Live{SEP}x.mp3"), "Spaced"),
+        (format!("{stored}{SEP}sub{SEP}in.mp3"), "Inside"),
+        (format!("{stored}{AFTER_SEPARATOR}"), "On the end"),
+        (format!("{stored}{AFTER_SEPARATOR}{SEP}y.mp3"), "Past"),
+    ];
+    for (path, title) in &rows_around_the_range {
+        insert_tagged_track(&db, path, &make_test_metadata(title)).await?;
+    }
+    let asked = format!("{LIBRARY_ROOT}{SEP}ABBA");
+
+    let ids = queries::track::track_ids_under_directory(&db, &asked).await?;
+
+    assert_eq!(titles_of(&db, &ids).await?, ["Inside"]);
+    Ok(())
+}
+
+/// The retry owes Browse the order the range does.
+#[cfg(any(target_os = "windows", target_os = "macos"))]
+#[tokio::test]
+async fn a_renamed_folder_queues_in_the_order_browse_lists_it() -> Result<(), AppError> {
+    let db = empty_library().await?;
+    let stored = Path::new(LIBRARY_ROOT).join("abba");
+    for title in ["Zebra", "apple"] {
+        let meta = numbered(title, "Whatever", Some(1), Some(1));
+        insert_tagged_track(&db, &stored.join(format!("{title}.mp3")).to_string_lossy(), &meta)
+            .await?;
+    }
+    let renamed = Path::new(LIBRARY_ROOT).join("ABBA");
+
+    let ids = queries::track::track_ids_under_directory(&db, &renamed.to_string_lossy()).await?;
+
+    assert_eq!(titles_of(&db, &ids).await?, ["apple", "Zebra"]);
+    Ok(())
+}
+
+/// On a disk that keeps case apart `abba` and `ABBA` are two folders, so neither plays the other's
+/// rows.
+#[cfg(not(any(target_os = "windows", target_os = "macos")))]
+#[tokio::test]
+async fn a_folder_plays_nothing_under_another_spelling_where_the_disk_keeps_case()
+-> Result<(), AppError> {
+    let db = empty_library().await?;
+    let stored = Path::new(LIBRARY_ROOT).join("abba").join("in.mp3");
+    insert_tagged_track(&db, &stored.to_string_lossy(), &make_test_metadata("Elsewhere")).await?;
+    let asked = Path::new(LIBRARY_ROOT).join("ABBA");
+
+    let ids = queries::track::track_ids_under_directory(&db, &asked.to_string_lossy()).await?;
+
+    assert!(ids.is_empty(), "another spelling is another folder here, got {ids:?}");
     Ok(())
 }

@@ -236,6 +236,74 @@ fn classify_create_inside_a_trash_skipped() {
     assert!(events.is_empty());
 }
 
+// === A directory arriving at a new path ===
+
+/// `<tmp>/album`, with `file_name` a level down so the walk has to descend to find it.
+fn album_holding(tmp: &TempDir, file_name: &str) -> Result<PathBuf, AppError> {
+    let album = tmp.path().join("album");
+    std::fs::create_dir_all(album.join("disc 1"))?;
+    std::fs::write(album.join("disc 1").join(file_name), b"bytes")?;
+    Ok(album)
+}
+
+fn renamed(mode: RenameMode) -> EventKind {
+    EventKind::Modify(ModifyKind::Name(mode))
+}
+
+/// The OS says nothing about the files inside a moved directory, so every way a backend reports
+/// the new path has to reach a reconcile. `Create(Any)` is Windows's for a move between parents.
+#[test]
+fn a_directory_with_audio_at_a_new_path_asks_for_a_reconcile() -> Result<(), AppError> {
+    let tmp = TempDir::new()?;
+    let album = album_holding(&tmp, "song.flac")?;
+    let cases = [
+        (renamed(RenameMode::Both), vec![tmp.path().join("old"), album.clone()]),
+        (renamed(RenameMode::To), vec![album.clone()]),
+        (renamed(RenameMode::Any), vec![album.clone()]),
+        (EventKind::Create(CreateKind::Any), vec![album]),
+    ];
+
+    for (kind, paths) in cases {
+        let events = super::classify_event(kind, &paths);
+        assert_eq!(events, [super::FileEvent::DirectoryRenamed], "{kind:?}");
+    }
+    Ok(())
+}
+
+/// Passed over, or a drive-root library walks itself for every folder any app renames.
+#[test]
+fn a_directory_without_audio_at_a_new_path_asks_for_nothing() -> Result<(), AppError> {
+    let tmp = TempDir::new()?;
+    let album = album_holding(&tmp, "cover.jpg")?;
+    let cases = [
+        (renamed(RenameMode::Both), vec![tmp.path().join("old"), album.clone()]),
+        (EventKind::Create(CreateKind::Any), vec![album]),
+    ];
+
+    for (kind, paths) in cases {
+        assert_eq!(super::classify_event(kind, &paths), [], "{kind:?}");
+    }
+    Ok(())
+}
+
+/// A `From` names the side that left, and inotify's `Create(Folder)` is a real mkdir whose files
+/// each raise their own event.
+#[test]
+fn a_directory_reported_any_other_way_asks_for_nothing() -> Result<(), AppError> {
+    let tmp = TempDir::new()?;
+    let album = album_holding(&tmp, "song.flac")?;
+    let kinds = [
+        renamed(RenameMode::From),
+        EventKind::Create(CreateKind::Folder),
+        EventKind::Remove(RemoveKind::Any),
+    ];
+
+    for kind in kinds {
+        assert_eq!(super::classify_event(kind, std::slice::from_ref(&album)), [], "{kind:?}");
+    }
+    Ok(())
+}
+
 // === Rescan flag contract ===
 //
 // The watcher's debouncer callback short-circuits on `event.need_rescan()`

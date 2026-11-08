@@ -3,12 +3,12 @@
 use std::path::PathBuf;
 
 use super::{Unwalked, commit_scan};
-use crate::database::DbPool;
 use crate::database::queries;
 use crate::database::queries::fixtures::{
     insert_test_track, keep_out, make_test_metadata, numbered_library, setup_seeded_db,
 };
 use crate::database::queries::ingest::{Ingested, commit_scan_chunk};
+use crate::database::{DbPool, sql};
 use crate::media::ingest::scan_pool::ScanPool;
 use melodia_core::entities::scan::ScannedFile;
 use melodia_core::error::AppError;
@@ -18,18 +18,16 @@ use melodia_core::error::AppError;
 const BULK_ORPHANS: usize = 21;
 
 async fn library_paths(db: &DbPool) -> Result<Vec<String>, AppError> {
-    let paths = sqlx::query_scalar("SELECT file_path FROM tracks ORDER BY file_path")
-        .fetch_all(db.read())
-        .await?;
-    Ok(paths)
+    db.read(|conn| sql::fetch_all(conn, "SELECT file_path FROM tracks ORDER BY file_path", ()))
+        .await
 }
 
 async fn stored_artist_count(db: &DbPool, name: &str) -> Result<i64, AppError> {
-    let count = sqlx::query_scalar("SELECT track_count FROM artists WHERE name = ?")
-        .bind(name)
-        .fetch_one(db.read())
-        .await?;
-    Ok(count)
+    let name = name.to_owned();
+    db.read(move |conn| {
+        sql::fetch_one(conn, "SELECT track_count FROM artists WHERE name = ?", (name,))
+    })
+    .await
 }
 
 /// `numbered_library`'s first [`BULK_ORPHANS`] paths, purged as a bulk scan purges them.
@@ -38,7 +36,7 @@ async fn purge_in_bulk(db: &DbPool) -> Result<(), AppError> {
     let orphans: Vec<String> =
         (0..BULK_ORPHANS).map(|index| format!("/music/{index:04}.mp3")).collect();
     let unwalked = Unwalked { tracks: orphans, ..Unwalked::default() };
-    commit_scan(db, &folder, &unwalked, &Ingested::for_delta(BULK_ORPHANS)).await
+    commit_scan(db, &folder, unwalked, &Ingested::for_delta(BULK_ORPHANS)).await
 }
 
 fn orphaned(path: &str) -> Unwalked {
@@ -52,7 +50,7 @@ async fn a_scan_commit_deletes_exactly_the_orphans_it_is_handed() -> Result<(), 
     let db = setup_seeded_db().await?;
     let folder = queries::folder::get_folder_by_id(&db, 1).await?;
 
-    commit_scan(&db, &folder, &orphaned("/music/track2.mp3"), &Ingested::for_delta(1)).await?;
+    commit_scan(&db, &folder, orphaned("/music/track2.mp3"), &Ingested::for_delta(1)).await?;
 
     assert_eq!(library_paths(&db).await?, ["/music/track1.mp3", "/music/track3.mp3"]);
     Ok(())
@@ -72,16 +70,16 @@ async fn an_orphan_whose_row_a_chunk_repointed_deletes_nothing() -> Result<(), A
     let mut ingested = Ingested::for_delta(2);
     let chunk = commit_scan_chunk(
         &db,
-        &[moved],
+        vec![moved],
         folder.id,
-        "2024-01-01T00:00:00Z",
-        &ScanPool::default(),
+        "2024-01-01T00:00:00Z".to_owned(),
+        ScanPool::default(),
         &ingested,
     )
     .await?;
     ingested.add(&chunk);
 
-    commit_scan(&db, &folder, &orphaned(old_path), &ingested).await?;
+    commit_scan(&db, &folder, orphaned(old_path), &ingested).await?;
 
     let track = queries::track::get_track_by_id(&db, id).await?;
     assert_eq!((track.file_path.as_str(), track.rating), (new_path, 5), "(path, rating)");
@@ -122,10 +120,12 @@ async fn an_orphan_only_purge_prunes_the_album_it_emptied() -> Result<(), AppErr
     let db = setup_seeded_db().await?;
     let folder = queries::folder::get_folder_by_id(&db, 1).await?;
 
-    commit_scan(&db, &folder, &orphaned("/music/track2.mp3"), &Ingested::for_delta(1)).await?;
+    commit_scan(&db, &folder, orphaned("/music/track2.mp3"), &Ingested::for_delta(1)).await?;
 
-    let albums: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM albums WHERE name = 'Album Two'")
-        .fetch_one(db.read())
+    let albums: i64 = db
+        .read(|conn| {
+            sql::fetch_one(conn, "SELECT COUNT(*) FROM albums WHERE name = 'Album Two'", ())
+        })
         .await?;
     assert_eq!(albums, 0);
     Ok(())
@@ -142,7 +142,7 @@ async fn a_scan_commit_forgets_exactly_the_exclusions_it_is_handed() -> Result<(
     let unwalked =
         Unwalked { exclusions: vec!["/music/deleted.mp3".to_owned()], ..Unwalked::default() };
 
-    commit_scan(&db, &folder, &unwalked, &Ingested::for_delta(0)).await?;
+    commit_scan(&db, &folder, unwalked, &Ingested::for_delta(0)).await?;
 
     assert_eq!(queries::excluded_files::paths(&db).await?, ["/music/still-there.mp3"]);
     Ok(())

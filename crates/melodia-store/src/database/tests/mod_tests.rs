@@ -1,250 +1,113 @@
+use std::path::Path;
+
 use crate::database::queries;
-use crate::database::queries::fixtures::insert_test_track;
-use crate::database::{
-    DbPool, MAX_BINDS_PER_STATEMENT, chunked_in_execute_on, chunked_in_query, init_database,
-};
+use crate::database::queries::fixtures::{execute, fetch_one, insert_test_track};
+use crate::database::{DbPool, init_database, sql};
 use melodia_core::config::Paths;
-use melodia_core::error::AppError;
+use melodia_core::error::{AppError, MigrationError};
 
-// Private to `database/mod.rs`; reachable from this child test module via `super::`.
-use super::{FTS_OPTIMIZE, strip_windows_verbatim_paths};
+use super::strip_windows_verbatim_paths;
 
-/// Strings `to_lowercase()` orders differently from `NOCASE`, which folds ASCII alone, and from a
-/// char-by-char lowercase, which misses the final sigma. Ties go to the raw bytes so the expected
-/// order is total.
-const UNICODE_LOWER_ORDER: &str = "\
-    WITH v(s) AS (VALUES ('Zebra'), ('b'), ('Ωmega'), ('apple'), ('Émile'), ('οδος'), ('éa'), \
-                         ('ΟΔΟΣ'), ('αlpha')) \
-    SELECT s FROM v ORDER BY s COLLATE UNICODE_LOWER, s";
+const NEWER_BUILDS_MIGRATION: i64 = 99_991_231_000_000;
 
-/// **Every connection a keyset query can run on knows `UNICODE_LOWER`**, the writer and the test
-/// pool included: one without it fails any statement naming it, and one that registered a looser
-/// fold would sort an artist list differently from the comparator it reproduces.
+/// **An older build refuses a database a newer one migrated**: opening it would run this build's
+/// queries over a schema it has never seen.
 #[tokio::test]
-async fn every_pool_orders_text_the_way_to_lowercase_does() -> Result<(), AppError> {
+async fn a_database_a_newer_build_migrated_refuses_to_open() -> Result<(), AppError> {
     let tmp = tempfile::tempdir()?;
     let paths = Paths::rooted_at(tmp.path().to_path_buf());
     paths.create_dirs()?;
     let db = init_database(&paths).await?;
-    let test_pool = DbPool::test_pool().await?;
-    let expected = ["apple", "b", "Zebra", "éa", "Émile", "αlpha", "ΟΔΟΣ", "οδος", "Ωmega"];
-
-    for (pool, name) in [(db.read(), "read"), (db.write(), "write"), (test_pool.read(), "test")] {
-        let order: Vec<String> = sqlx::query_scalar(UNICODE_LOWER_ORDER).fetch_all(pool).await?;
-        assert_eq!(order, expected, "the {name} pool");
-    }
-    Ok(())
-}
-
-#[test]
-fn max_binds_per_statement_is_999() {
-    assert_eq!(MAX_BINDS_PER_STATEMENT, 999);
-}
-
-#[tokio::test]
-async fn chunked_in_query_empty_input() -> Result<(), AppError> {
-    let db = DbPool::test_pool().await?;
-    let empty: Vec<i64> = Vec::new();
-    let result: Vec<(i64,)> = chunked_in_query(db.read(), &empty, |ph| {
-        format!("SELECT id FROM tracks WHERE id IN ({ph})")
-    })
+    execute(
+        &db,
+        &format!(
+            "INSERT INTO _sqlx_migrations (version, description, success, checksum, execution_time) \
+             VALUES ({NEWER_BUILDS_MIGRATION}, 'from a newer build', TRUE, x'00', 1)"
+        ),
+    )
     .await?;
-    assert!(result.is_empty());
-    Ok(())
-}
-
-#[tokio::test]
-async fn chunked_in_query_small_set() -> Result<(), AppError> {
-    let db = DbPool::test_pool().await?;
-
-    // Insert a folder + track so we have data to query
-    queries::folder::insert_folder(&db, "/test", true).await?;
-
-    let track_id =
-        insert_test_track(&db, "/test/song.mp3", "Test Song", "Test Artist", "Test Album", "Rock")
-            .await?;
-
-    let ids = vec![track_id, 99999]; // one real, one missing
-    let result: Vec<(i64,)> =
-        chunked_in_query(db.read(), &ids, |ph| format!("SELECT id FROM tracks WHERE id IN ({ph})"))
-            .await?;
-
-    assert_eq!(result.len(), 1);
-    assert_eq!(result[0].0, track_id);
-    Ok(())
-}
-
-#[tokio::test]
-async fn chunked_in_query_single_item() -> Result<(), AppError> {
-    let db = DbPool::test_pool().await?;
-    queries::folder::insert_folder(&db, "/test", true).await?;
-    let track_id = insert_test_track(&db, "/test/a.mp3", "A", "Art", "Alb", "Pop").await?;
-
-    let ids = vec![track_id];
-    let result: Vec<(i64,)> =
-        chunked_in_query(db.read(), &ids, |ph| format!("SELECT id FROM tracks WHERE id IN ({ph})"))
-            .await?;
-
-    assert_eq!(result.len(), 1);
-    assert_eq!(result[0].0, track_id);
-    Ok(())
-}
-
-#[tokio::test]
-async fn chunked_in_query_preserves_all_results() -> Result<(), AppError> {
-    let db = DbPool::test_pool().await?;
-    queries::folder::insert_folder(&db, "/test", true).await?;
-
-    let mut track_ids = Vec::new();
-    for i in 0..5 {
-        let id = insert_test_track(
-            &db,
-            &format!("/test/track_{i}.mp3"),
-            &format!("Track {i}"),
-            "Artist",
-            "Album",
-            "Rock",
-        )
-        .await?;
-        track_ids.push(id);
-    }
-
-    let result: Vec<(i64,)> = chunked_in_query(db.read(), &track_ids, |ph| {
-        format!("SELECT id FROM tracks WHERE id IN ({ph})")
-    })
-    .await?;
-
-    assert_eq!(result.len(), 5);
-    let result_ids: Vec<i64> = result.iter().map(|r| r.0).collect();
-    for id in &track_ids {
-        assert!(result_ids.contains(id), "missing track id {id}");
-    }
-    Ok(())
-}
-
-#[tokio::test]
-async fn chunked_in_query_large_set_splits_correctly() -> Result<(), AppError> {
-    let db = DbPool::test_pool().await?;
-    queries::folder::insert_folder(&db, "/test", true).await?;
-
-    // Insert more tracks than MAX_BINDS_PER_STATEMENT to test chunking
-    // Use a smaller number that still validates the chunking logic
-    let count = 50;
-    let mut track_ids = Vec::with_capacity(count);
-    for i in 0..count {
-        let id = insert_test_track(
-            &db,
-            &format!("/test/track_{i}.mp3"),
-            &format!("Track {i}"),
-            "Artist",
-            "Album",
-            "Rock",
-        )
-        .await?;
-        track_ids.push(id);
-    }
-
-    let result: Vec<(i64,)> = chunked_in_query(db.read(), &track_ids, |ph| {
-        format!("SELECT id FROM tracks WHERE id IN ({ph})")
-    })
-    .await?;
-
-    assert_eq!(result.len(), count);
-    Ok(())
-}
-
-/// One past the bind budget, so the statement runs as two. The count answered is every chunk's:
-/// a scan's purge decides from it whether anything changed.
-#[tokio::test]
-async fn chunked_in_execute_on_counts_every_row_across_its_chunks() -> Result<(), AppError> {
-    let db = DbPool::test_pool().await?;
-    let names: Vec<String> = (0..=MAX_BINDS_PER_STATEMENT).map(|n| format!("item {n}")).collect();
-    let mut tx = db.write().begin().await?;
-    sqlx::query("CREATE TEMP TABLE items (name TEXT)").execute(&mut *tx).await?;
-    for name in &names {
-        sqlx::query("INSERT INTO items (name) VALUES (?)").bind(name).execute(&mut *tx).await?;
-    }
-
-    let deleted = chunked_in_execute_on(&mut tx, &names, |placeholders| {
-        format!("DELETE FROM items WHERE name IN ({placeholders})")
-    })
-    .await?;
-
-    assert_eq!(Some(deleted), u64::try_from(names.len()).ok());
-    Ok(())
-}
-
-#[tokio::test]
-async fn chunked_in_query_with_string_binds() -> Result<(), AppError> {
-    let db = DbPool::test_pool().await?;
-    queries::folder::insert_folder(&db, "/test", true).await?;
-    insert_test_track(&db, "/test/song.mp3", "Song", "Art", "Alb", "Pop").await?;
-
-    let paths = vec!["/test/song.mp3".to_owned(), "/test/missing.mp3".to_owned()];
-    let result: Vec<(i64,)> = chunked_in_query(db.read(), &paths, |ph| {
-        format!("SELECT id FROM tracks WHERE file_path IN ({ph})")
-    })
-    .await?;
-
-    assert_eq!(result.len(), 1);
-    Ok(())
-}
-
-#[tokio::test]
-async fn db_pool_close_succeeds() -> Result<(), AppError> {
-    let db = DbPool::test_pool().await?;
-    // Ensure queries work before close
-    let _: Vec<(i64,)> = sqlx::query_as("SELECT 1").fetch_all(db.read()).await?;
     db.close().await;
-    // No panic means success
+
+    let reopened = init_database(&paths).await;
+
+    assert!(
+        matches!(
+            reopened,
+            Err(AppError::Migration(MigrationError::Unknown(NEWER_BUILDS_MIGRATION)))
+        ),
+        "{:?}",
+        reopened.err()
+    );
     Ok(())
 }
 
-/// `close` can only log this one, so nothing it does is visible to the test
-/// above — and fts5 rejects an unrecognised command at *step* time, not at
-/// prepare, so a typo would be a shutdown that quietly stopped compacting the
-/// index. Running the same const here is what turns that into a failure.
+/// A lone `CREATE INDEX IF NOT EXISTS`, so deleting its history row stages an upgrade that re-runs
+/// harmlessly. Shipped, so it stays that shape.
+const REPEATABLE_MIGRATION: i64 = 20_260_708_000_000;
+
+const LEAVE_FREE_PAGES: &str = "\
+    CREATE TABLE ballast (payload BLOB); \
+    INSERT INTO ballast VALUES (zeroblob(1048576)); \
+    DROP TABLE ballast;";
+
+const FREE_PAGES: &str = "PRAGMA freelist_count";
+
+/// A migrated database holding free pages, which only a VACUUM gives back.
+async fn database_with_free_pages(dir: &Path) -> Result<(Paths, DbPool), AppError> {
+    let paths = Paths::rooted_at(dir.to_path_buf());
+    paths.create_dirs()?;
+    let db = init_database(&paths).await?;
+    execute(&db, LEAVE_FREE_PAGES).await?;
+    Ok((paths, db))
+}
+
 #[tokio::test]
-async fn the_shutdown_fts_optimize_is_a_command_fts5_accepts() -> Result<(), AppError> {
-    let db = DbPool::test_pool().await?;
-    sqlx::query(FTS_OPTIMIZE).execute(db.write()).await?;
+async fn a_boot_that_applies_a_migration_compacts_the_file() -> Result<(), AppError> {
+    let tmp = tempfile::tempdir()?;
+    let (paths, db) = database_with_free_pages(tmp.path()).await?;
+    let rewind = format!("DELETE FROM _sqlx_migrations WHERE version = {REPEATABLE_MIGRATION}");
+    execute(&db, &rewind).await?;
+    db.close().await;
+
+    let upgraded = init_database(&paths).await?;
+
+    assert_eq!(fetch_one::<i64>(&upgraded, FREE_PAGES).await?, 0);
     Ok(())
 }
 
 #[tokio::test]
-async fn db_pool_read_write_accessors() -> Result<(), AppError> {
-    let db = DbPool::test_pool().await?;
-    // Verify both pools are functional
-    let _: (i64,) = sqlx::query_as("SELECT 42").fetch_one(db.read()).await?;
-    let _: (i64,) = sqlx::query_as("SELECT 42").fetch_one(db.write()).await?;
-    Ok(())
-}
+async fn a_boot_with_nothing_to_migrate_leaves_the_file_uncompacted() -> Result<(), AppError> {
+    let tmp = tempfile::tempdir()?;
+    let (paths, db) = database_with_free_pages(tmp.path()).await?;
+    db.close().await;
 
-#[tokio::test]
-async fn chunked_in_query_all_missing() -> Result<(), AppError> {
-    let db = DbPool::test_pool().await?;
-    let ids = vec![9999_i64, 8888, 7777];
-    let result: Vec<(i64,)> =
-        chunked_in_query(db.read(), &ids, |ph| format!("SELECT id FROM tracks WHERE id IN ({ph})"))
-            .await?;
-    assert!(result.is_empty());
+    let reopened = init_database(&paths).await?;
+
+    assert!(
+        fetch_one::<i64>(&reopened, FREE_PAGES).await? > 0,
+        "an ordinary launch rewrote the whole file"
+    );
     Ok(())
 }
 
 // ---- strip_windows_verbatim_paths -----------------------------------------
 
 async fn insert_folder_raw(db: &DbPool, path: &str) -> Result<(), AppError> {
-    sqlx::query("INSERT INTO folders (path, is_enabled, added_at) VALUES (?, 1, '2026-01-01T00:00:00+00:00')")
-        .bind(path)
-        .execute(db.write())
-        .await?;
+    let path = path.to_owned();
+    db.write(move |conn| {
+        sql::execute(
+            conn,
+            "INSERT INTO folders (path, is_enabled, added_at) \
+             VALUES (?, 1, '2026-01-01T00:00:00+00:00')",
+            (path,),
+        )
+    })
+    .await?;
     Ok(())
 }
 
 async fn folder_paths(db: &DbPool) -> Result<Vec<String>, AppError> {
-    let rows: Vec<(String,)> =
-        sqlx::query_as("SELECT path FROM folders ORDER BY id").fetch_all(db.read()).await?;
-    Ok(rows.into_iter().map(|(p,)| p).collect())
+    db.read(|conn| sql::fetch_all(conn, "SELECT path FROM folders ORDER BY id", ())).await
 }
 
 #[tokio::test]
@@ -252,7 +115,7 @@ async fn strip_verbatim_drive_form() -> Result<(), AppError> {
     let db = DbPool::test_pool().await?;
     insert_folder_raw(&db, r"\\?\C:\Music").await?;
     insert_folder_raw(&db, r"\\?\D:\Library\Albums").await?;
-    strip_windows_verbatim_paths(db.write()).await?;
+    db.transaction(strip_windows_verbatim_paths).await?;
     assert_eq!(folder_paths(&db).await?, vec![r"C:\Music", r"D:\Library\Albums"]);
     Ok(())
 }
@@ -262,7 +125,7 @@ async fn strip_verbatim_unc_form() -> Result<(), AppError> {
     let db = DbPool::test_pool().await?;
     insert_folder_raw(&db, r"\\?\UNC\nas\share\music").await?;
     insert_folder_raw(&db, r"\\?\UNC\server\public\Albums\Rock").await?;
-    strip_windows_verbatim_paths(db.write()).await?;
+    db.transaction(strip_windows_verbatim_paths).await?;
     assert_eq!(
         folder_paths(&db).await?,
         vec![r"\\nas\share\music", r"\\server\public\Albums\Rock"],
@@ -277,7 +140,7 @@ async fn strip_verbatim_leaves_clean_paths_untouched() -> Result<(), AppError> {
     insert_folder_raw(&db, r"\\server\share\plain").await?;
     insert_folder_raw(&db, "/posix/style/path").await?;
     let before = folder_paths(&db).await?;
-    strip_windows_verbatim_paths(db.write()).await?;
+    db.transaction(strip_windows_verbatim_paths).await?;
     assert_eq!(folder_paths(&db).await?, before);
     Ok(())
 }
@@ -295,7 +158,7 @@ async fn strip_verbatim_keeps_prefix_when_result_would_exceed_max_path() -> Resu
     insert_folder_raw(&db, &long_drive).await?;
     insert_folder_raw(&db, &long_unc).await?;
     let before = folder_paths(&db).await?;
-    strip_windows_verbatim_paths(db.write()).await?;
+    db.transaction(strip_windows_verbatim_paths).await?;
     assert_eq!(folder_paths(&db).await?, before);
     Ok(())
 }
@@ -305,9 +168,9 @@ async fn strip_verbatim_is_idempotent() -> Result<(), AppError> {
     let db = DbPool::test_pool().await?;
     insert_folder_raw(&db, r"\\?\C:\Music").await?;
     insert_folder_raw(&db, r"\\?\UNC\nas\share\music").await?;
-    strip_windows_verbatim_paths(db.write()).await?;
+    db.transaction(strip_windows_verbatim_paths).await?;
     let after_first = folder_paths(&db).await?;
-    strip_windows_verbatim_paths(db.write()).await?;
+    db.transaction(strip_windows_verbatim_paths).await?;
     assert_eq!(folder_paths(&db).await?, after_first);
     Ok(())
 }
@@ -322,11 +185,11 @@ async fn strip_verbatim_normalizes_track_file_paths() -> Result<(), AppError> {
     insert_test_track(&db, r"\\?\UNC\nas\share\unc.mp3", "UNC", "A", "Alb", "Pop").await?;
     insert_test_track(&db, r"D:\Already\Clean.mp3", "Clean", "A", "Alb", "Pop").await?;
 
-    strip_windows_verbatim_paths(db.write()).await?;
+    db.transaction(strip_windows_verbatim_paths).await?;
 
-    let rows: Vec<(String,)> =
-        sqlx::query_as("SELECT file_path FROM tracks ORDER BY id").fetch_all(db.read()).await?;
-    let paths: Vec<String> = rows.into_iter().map(|(p,)| p).collect();
+    let paths: Vec<String> = db
+        .read(|conn| sql::fetch_all(conn, "SELECT file_path FROM tracks ORDER BY id", ()))
+        .await?;
     assert_eq!(
         paths,
         vec![

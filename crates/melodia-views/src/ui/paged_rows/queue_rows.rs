@@ -292,8 +292,8 @@ pub fn fetcher(state: &AppState) -> impl Fn(RowRequest<QueueRow>) + 'static {
 /// it seats the current track rather than on placeholders.
 pub async fn seed(state: &AppState, ids: Arc<[i64]>, at: usize) -> AppResult<Keyset<QueueRow>> {
     let read = ReadStamp::now();
-    let seed =
-        convert(&library::keyset::rows_by_ids(&state.db, &ids[window(ids.len(), at)]).await?);
+    let seed_ids = ids[window(ids.len(), at)].to_vec();
+    let seed = convert(&library::keyset::rows_by_ids(&state.db, seed_ids).await?);
     Ok(Keyset { ids, seed, read })
 }
 

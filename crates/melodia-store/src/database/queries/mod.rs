@@ -28,3 +28,7 @@ pub mod track;
 // site documents which area of the schema it touches and renames stay local.
 pub use ingest::IngestResult;
 pub use scan::ResolvedIds;
+
+/// Whether two spellings of a path differing only in case name one file, by each platform's
+/// default: a case-sensitive APFS volume, or a vfat mount on Linux, answers wrongly.
+pub(crate) const DISK_IGNORES_CASE: bool = cfg!(any(target_os = "windows", target_os = "macos"));

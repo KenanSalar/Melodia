@@ -235,7 +235,7 @@ async fn seed_under(dir: &Path) -> Result<(DbPool, Vec<i64>), AppError> {
 
 async fn playlist_with_tracks(db: &DbPool, name: &str, ids: &[i64]) -> Result<i64, AppError> {
     let playlist = queries::playlist::create_playlist(db, name, None).await?;
-    queries::playlist::add_tracks_to_playlist(db, playlist.id, ids).await?;
+    queries::playlist::add_tracks_to_playlist(db, playlist.id, ids.to_vec()).await?;
     Ok(playlist.id)
 }
 
@@ -552,7 +552,8 @@ async fn a_smart_playlist_exports_the_tracks_its_rules_match() -> Result<(), App
         ..SmartCriteria::default()
     };
     let json = criteria.to_json().map_err(AppError::io_source)?;
-    let smart = queries::playlist::create_smart_playlist(&db, "No Beta", None, &json).await?;
+    let smart =
+        queries::playlist::create_smart_playlist(&db, "No Beta".to_owned(), None, json).await?;
     let out = tmp.path().join("No Beta.m3u8");
 
     export_playlist_to_file(&db, smart.id, &out).await?;

@@ -15,8 +15,9 @@ pub struct LibraryFlags {
     pub folder_watching_enabled: bool,
     /// Whether the artwork store has been brought inside its size bounds. The writer bounds new
     /// files only, `scanner::file_is_current` skipping unchanged ones, so the pass over the rest
-    /// is one-shot and marked here, the store having no cheap way to say it was swept.
-    pub artwork_store_normalized: bool,
+    /// is one-shot and marked here, the store having no cheap way to say it was swept. A change to
+    /// `store_image`'s bounds takes a new key, so every store is swept under it once.
+    pub artwork_store_bounded: bool,
     /// Whether a star set here is written into the file's tag too. A switch, since it makes a
     /// click rewrite the file.
     pub write_ratings_to_tags: bool,
@@ -32,7 +33,7 @@ impl Default for LibraryFlags {
     fn default() -> Self {
         Self {
             folder_watching_enabled: true,
-            artwork_store_normalized: false,
+            artwork_store_bounded: false,
             write_ratings_to_tags: true,
             ratings_imported_from_tags: false,
             tags_backfilled: false,

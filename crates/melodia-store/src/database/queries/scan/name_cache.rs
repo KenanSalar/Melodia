@@ -2,6 +2,8 @@
 
 use std::collections::HashMap;
 
+use rusqlite::Transaction;
+
 use melodia_core::error::AppError;
 
 use super::upserts::{upsert_artist, upsert_genre};
@@ -29,9 +31,9 @@ impl NameCache {
     ///
     /// Returns `unknown_artist_id` for an empty name, so callers stay branch-free the way
     /// [`upsert_artist`] lets them.
-    pub async fn artist(
+    pub fn artist(
         &mut self,
-        tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
+        tx: &Transaction<'_>,
         name: &str,
         unknown_artist_id: i64,
     ) -> Result<i64, AppError> {
@@ -41,24 +43,20 @@ impl NameCache {
         if let Some(&id) = self.artists.get(name) {
             return Ok(id);
         }
-        let id = upsert_artist(tx, name, unknown_artist_id).await?;
+        let id = upsert_artist(tx, name, unknown_artist_id)?;
         self.artists.insert(name.to_owned(), id);
         Ok(id)
     }
 
     /// The genre row for `name`, `None` for an empty one.
-    pub async fn genre(
-        &mut self,
-        tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
-        name: &str,
-    ) -> Result<Option<i64>, AppError> {
+    pub fn genre(&mut self, tx: &Transaction<'_>, name: &str) -> Result<Option<i64>, AppError> {
         if name.is_empty() {
             return Ok(None);
         }
         if let Some(&id) = self.genres.get(name) {
             return Ok(id);
         }
-        let id = upsert_genre(tx, name).await?;
+        let id = upsert_genre(tx, name)?;
         self.genres.insert(name.to_owned(), id);
         Ok(id)
     }

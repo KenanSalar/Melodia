@@ -13,8 +13,8 @@ doctest = false
 
 # No workspace member appears here, and none may: this is the crate every other one depends on.
 [dependencies]
-# `AppError`'s two `#[from]` database variants, and every `FromRow` in `entities/`.
-sqlx.workspace = true
+# `AppError`'s two database variants, and `DismissalSet`'s `FromSql`.
+rusqlite.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true

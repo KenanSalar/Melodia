@@ -45,15 +45,19 @@ pub fn store(bytes: &[u8], extension: &str, dir: &Path) -> Option<StoredLogo> {
     if width < MIN_LOGO_DIM || height < MIN_LOGO_DIM {
         return None;
     }
-    // Held to the end: `compose` flattens at full resolution, and the store decodes again to bound
-    // an oversized source. The download's byte cap bounds only the compressed size, which a flat
-    // icon stays under at any dimension.
-    let _oversized = image_decode::large_decode_guard(u64::from(width) * u64::from(height));
     // `None` stores the source's own bytes: already fine, or its tile wouldn't encode.
-    let tile = match tile_for(bytes) {
-        Tile::Composed(tile) => encoded_png(tile),
-        Tile::SourceIsFine => None,
-        Tile::Undrawable => return None,
+    let tile = {
+        // `compose` flattens at full resolution, and the download's byte cap bounds only the
+        // compressed size, which a flat icon stays under at any dimension. Released before the
+        // store, which takes the gate for its own decode.
+        let _oversized = image_decode::large_decode_guard(u64::from(width) * u64::from(height));
+        match tile_for(bytes) {
+            // PNG rather than the store's JPEG: a tile is flat ground behind a hard-edged mark,
+            // which JPEG rings around and PNG holds in a few kilobytes.
+            Tile::Composed(tile) => image_decode::encode_png(&tile).ok(),
+            Tile::SourceIsFine => None,
+            Tile::Undrawable => return None,
+        }
     };
 
     let path = match tile.as_deref() {
@@ -72,15 +76,6 @@ fn tile_for(bytes: &[u8]) -> Tile {
         Some(decoded) => compose(decoded),
         None => Tile::SourceIsFine,
     }
-}
-
-/// PNG rather than the store's JPEG: a tile is flat ground behind a hard-edged mark, which JPEG
-/// rings around and PNG holds in a few kilobytes.
-fn encoded_png(tile: RgbImage) -> Option<Vec<u8>> {
-    let mut encoded = Vec::new();
-    let encoder = image::codecs::png::PngEncoder::new(&mut encoded);
-    DynamicImage::ImageRgb8(tile).write_with_encoder(encoder).ok()?;
-    Some(encoded)
 }
 
 /// What [`compose`] decided. "Already fine" and "nothing worth storing" both come back without a

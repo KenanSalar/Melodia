@@ -196,7 +196,9 @@ fn form_error(form: &RadioForm<'_>, error: &AppError) -> SharedString {
         // row submitting through `set_station_overrides`.
         AppError::Validation { .. } => form.invoke_err_bad_url(),
         AppError::Network { .. } => form.invoke_err_unreachable(),
-        AppError::Database(_) | AppError::Io(_) => form.invoke_err_save_failed(),
+        AppError::Database(_) | AppError::DatabaseClosed | AppError::Io(_) => {
+            form.invoke_err_save_failed()
+        }
         // `Player` is the decoder's own refusal and is what this arm is for.
         _ => form.invoke_err_not_audio(),
     }

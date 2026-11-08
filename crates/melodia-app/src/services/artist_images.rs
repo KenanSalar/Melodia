@@ -191,7 +191,7 @@ async fn run_pass(paths: &Paths, db: &DbPool, client: &reqwest::Client) -> AppRe
         while let Some(result) = set.join_next().await {
             match result {
                 Ok((id, name, FetchOutcome::Cached(path))) => {
-                    if let Err(e) = queries::artist::update_artist_image_path(db, id, &path).await {
+                    if let Err(e) = queries::artist::update_artist_image_path(db, id, path).await {
                         log::warn!(
                             "Failed to update artist image path for '{name}': {}",
                             describe(&e)

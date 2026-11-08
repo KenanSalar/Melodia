@@ -11,7 +11,7 @@ use tempfile::TempDir;
 
 use super::*;
 use melodia_core::error::AppError;
-use melodia_store::database::queries::fixtures::insert_test_track;
+use melodia_store::database::queries::fixtures::{execute, fetch_all, insert_test_track};
 
 /// The `date_modified` every seeded row starts with, so a value still equal to it after the pass
 /// means nothing was written rather than that the file happened to match.
@@ -29,16 +29,14 @@ async fn library(files: &[(&str, &[u8])]) -> Result<(DbPool, TempDir), AppError>
         std::fs::write(&path, bytes)?;
         insert_test_track(&db, &path.to_string_lossy(), name, "Artist", "Album", "Rock").await?;
     }
-    sqlx::query("UPDATE tracks SET file_hash = NULL").execute(db.write()).await?;
+    execute(&db, "UPDATE tracks SET file_hash = NULL").await?;
     Ok((db, tmp))
 }
 
 /// Every row's hash and mtime, keyed by the file name the row points at.
 async fn rows(db: &DbPool) -> Result<HashMap<String, (Option<String>, Option<String>)>, AppError> {
     let rows: Vec<(String, Option<String>, Option<String>)> =
-        sqlx::query_as("SELECT file_name, file_hash, date_modified FROM tracks")
-            .fetch_all(db.read())
-            .await?;
+        fetch_all(db, "SELECT file_name, file_hash, date_modified FROM tracks").await?;
     Ok(rows.into_iter().map(|(name, hash, mtime)| (name, (hash, mtime))).collect())
 }
 
@@ -102,7 +100,7 @@ async fn a_row_whose_file_is_gone_does_not_cost_its_neighbour_a_hash() -> Result
 #[tokio::test]
 async fn a_row_that_already_has_a_hash_is_left_alone() -> Result<(), AppError> {
     let (db, _tmp) = library(&[("song.mp3", b"bytes")]).await?;
-    sqlx::query("UPDATE tracks SET file_hash = 'from an earlier pass'").execute(db.write()).await?;
+    execute(&db, "UPDATE tracks SET file_hash = 'from an earlier pass'").await?;
 
     hash_unhashed_tracks(&db).await?;
 

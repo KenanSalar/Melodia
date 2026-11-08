@@ -6,15 +6,16 @@
 
 use std::collections::{BTreeSet, HashMap};
 
-use sqlx::{AssertSqlSafe, FromRow, Sqlite, Transaction};
+use rusqlite::Transaction;
 
 use crate::database::queries::excluded_files::{self, NewExclusion};
-use crate::database::queries::ingest::BULK_THRESHOLD;
+use crate::database::queries::ingest::is_bulk;
 use crate::database::queries::playlist::{self, NewItem};
 use crate::database::queries::{scan, stats};
+use crate::database::rows::by_name;
+use crate::database::sql::Sql;
 use crate::database::{
-    DbPool, MAX_BINDS_PER_STATEMENT, chunked_in_execute_on, chunked_in_query_on,
-    values_placeholders,
+    DbPool, MAX_BINDS_PER_STATEMENT, chunked_in_execute, chunked_in_query, values_placeholders,
 };
 use melodia_core::entities::duplicates::GroupRemoval;
 use melodia_core::error::AppError;
@@ -32,7 +33,7 @@ pub struct RemovedDuplicates {
 }
 
 /// A copy as the merge reads it: where its file is, and the history a user built up on it.
-#[derive(Clone, Debug, FromRow)]
+#[derive(Clone, Debug)]
 struct CopyFacts {
     id: i64,
     file_path: String,
@@ -47,6 +48,21 @@ struct CopyFacts {
     is_favorite: bool,
     date_added: String,
 }
+
+by_name!(CopyFacts {
+    id,
+    file_path,
+    file_hash,
+    file_size,
+    date_modified,
+    folder_id,
+    play_count,
+    skip_count,
+    last_played,
+    rating,
+    is_favorite,
+    date_added,
+});
 
 /// The columns a user builds up on a row, every other one being the file's, which a rescan
 /// rewrites. A column joining this list joins [`merged`] too.
@@ -64,59 +80,59 @@ struct History {
 /// history onto the keeper.
 pub async fn remove_duplicates(
     db: &DbPool,
-    removals: &[GroupRemoval],
+    removals: Vec<GroupRemoval>,
 ) -> Result<RemovedDuplicates, AppError> {
-    let mut tx = db.write().begin().await?;
-    let facts = read_facts(&mut tx, removals).await?;
+    db.transaction(move |tx| merge(tx, &removals)).await
+}
+
+fn merge(tx: &Transaction<'_>, removals: &[GroupRemoval]) -> Result<RemovedDuplicates, AppError> {
+    let facts = read_facts(tx, removals)?;
     let plan = MergePlan::new(removals, &facts);
     if plan.spares.is_empty() {
         return Ok(plan.outcome);
     }
 
     // On the bulk path one recalc at the end beats the triggers' per-row cost.
-    let bulk = plan.spares.len() > BULK_THRESHOLD;
+    let bulk = is_bulk(plan.spares.len());
     if bulk {
-        stats::disable_stats_triggers(&mut tx).await?;
+        stats::disable_stats_triggers(tx)?;
     }
-    write_keepers(&mut tx, &plan.keepers).await?;
-    let touched = move_playlist_places(&mut tx, &plan.keeper_of).await?;
+    write_keepers(tx, &plan.keepers)?;
+    let touched = move_playlist_places(tx, &plan.keeper_of)?;
     let exclusions: Vec<NewExclusion<'_>> =
         plan.spares.iter().map(|spare| spare.exclusion()).collect();
-    excluded_files::exclude_on(&mut tx, &exclusions).await?;
+    excluded_files::exclude_on(tx, &exclusions)?;
     let spare_ids: Vec<i64> = plan.spares.iter().map(|spare| spare.id).collect();
-    chunked_in_execute_on(&mut tx, &spare_ids, |placeholders| {
+    chunked_in_execute(tx, &spare_ids, |placeholders| {
         format!("DELETE FROM tracks WHERE id IN ({placeholders})")
-    })
-    .await?;
+    })?;
     for playlist_id in touched {
-        playlist::renumber_playlist_positions_tx(&mut tx, playlist_id).await?;
+        playlist::renumber_playlist_positions_tx(tx, playlist_id)?;
     }
-    scan::roll_up_covers(&mut tx).await?;
-    scan::prune_orphans(&mut tx).await?;
+    scan::roll_up_covers(tx)?;
+    scan::prune_orphans(tx)?;
     if bulk {
-        stats::recalculate_all_stats(&mut tx).await?;
-        stats::enable_stats_triggers(&mut tx).await?;
+        stats::recalculate_all_stats(tx)?;
+        stats::enable_stats_triggers(tx)?;
     }
-    tx.commit().await?;
     Ok(plan.outcome)
 }
 
-async fn read_facts(
-    tx: &mut Transaction<'_, Sqlite>,
+fn read_facts(
+    tx: &Transaction<'_>,
     removals: &[GroupRemoval],
 ) -> Result<HashMap<i64, CopyFacts>, AppError> {
     let ids: Vec<i64> = removals
         .iter()
         .flat_map(|removal| std::iter::once(removal.keeper).chain(removal.spares.iter().copied()))
         .collect();
-    let rows: Vec<CopyFacts> = chunked_in_query_on(tx, &ids, |placeholders| {
+    let rows: Vec<CopyFacts> = chunked_in_query(tx, &ids, |placeholders| {
         format!(
             "SELECT id, file_path, file_hash, file_size, date_modified, folder_id, play_count, \
                     skip_count, last_played, rating, is_favorite, date_added \
              FROM tracks WHERE id IN ({placeholders})"
         )
-    })
-    .await?;
+    })?;
     Ok(rows.into_iter().map(|row| (row.id, row)).collect())
 }
 
@@ -203,25 +219,20 @@ impl CopyFacts {
     }
 }
 
-async fn write_keepers(
-    tx: &mut Transaction<'_, Sqlite>,
-    keepers: &[(i64, History)],
-) -> Result<(), AppError> {
+fn write_keepers(tx: &Transaction<'_>, keepers: &[(i64, History)]) -> Result<(), AppError> {
     const COLS_PER_ROW: usize = 7;
     for chunk in keepers.chunks(MAX_BINDS_PER_STATEMENT / COLS_PER_ROW) {
         let rows = values_placeholders(chunk.len(), COLS_PER_ROW);
-        let sql = format!(
+        let mut sql = Sql::vouched(format!(
             "WITH v(id, is_favorite, rating, play_count, skip_count, last_played, date_added) \
                  AS (VALUES {rows}) \
              UPDATE tracks SET is_favorite = v.is_favorite, rating = v.rating, \
                     play_count = v.play_count, skip_count = v.skip_count, \
                     last_played = v.last_played, date_added = v.date_added \
              FROM v WHERE tracks.id = v.id"
-        );
-        let mut query = sqlx::query(AssertSqlSafe(sql)).persistent(false);
+        ));
         for (id, history) in chunk {
-            query = query
-                .bind(id)
+            sql.bind(*id)
                 .bind(history.is_favorite)
                 .bind(history.rating)
                 .bind(history.play_count)
@@ -229,7 +240,7 @@ async fn write_keepers(
                 .bind(history.last_played.as_deref())
                 .bind(history.date_added.as_str());
         }
-        query.execute(&mut **tx).await?;
+        sql.execute(tx)?;
     }
     Ok(())
 }
@@ -238,19 +249,18 @@ async fn write_keepers(
 /// spare's added date, returning the playlists touched. An insert rather than a re-point, since
 /// the playlist stats triggers watch only inserts and deletes; a playlist the keeper is already in
 /// keeps the keeper's own place.
-async fn move_playlist_places(
-    tx: &mut Transaction<'_, Sqlite>,
+fn move_playlist_places(
+    tx: &Transaction<'_>,
     keeper_of: &HashMap<i64, i64>,
 ) -> Result<BTreeSet<i64>, AppError> {
     let spare_ids: Vec<i64> = keeper_of.keys().copied().collect();
     let mut places: Vec<(i64, i64, i32, String)> =
-        chunked_in_query_on(tx, &spare_ids, |placeholders| {
+        chunked_in_query(tx, &spare_ids, |placeholders| {
             format!(
                 "SELECT playlist_id, track_id, position, added_at FROM playlist_items \
                  WHERE track_id IN ({placeholders})"
             )
-        })
-        .await?;
+        })?;
     // Lowest first, since the first insert wins; in Rust, as an ORDER BY holds per chunk only.
     places.sort_unstable_by_key(|&(_, _, position, _)| position);
 
@@ -266,7 +276,7 @@ async fn move_playlist_places(
         });
     }
     for (playlist_id, items) in &by_playlist {
-        playlist::insert_items_tx(tx, *playlist_id, items).await?;
+        playlist::insert_items_tx(tx, *playlist_id, items)?;
     }
     Ok(by_playlist.into_keys().collect())
 }

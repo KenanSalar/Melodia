@@ -261,16 +261,15 @@ pub(crate) async fn write_tag_edit(
         .map_err(|e| AppError::metadata("tag write task panicked", e))??
     };
 
-    let updated_ids =
-        match run_commit(db, &files, edit, cached_artwork.as_deref(), &mut report).await {
-            Ok(ids) => ids,
-            Err(e) => {
-                // Unmarked so the watcher re-ingests rather than leaving the rows stale.
-                let marked: Vec<PathBuf> = files.iter().map(|f| PathBuf::from(&f.path)).collect();
-                self_writes.unmark(&marked);
-                return Err(e);
-            }
-        };
+    let updated_ids = match run_commit(db, &files, edit, cached_artwork, &mut report).await {
+        Ok(ids) => ids,
+        Err(e) => {
+            // Unmarked so the watcher re-ingests rather than leaving the rows stale.
+            let marked: Vec<PathBuf> = files.iter().map(|f| PathBuf::from(&f.path)).collect();
+            self_writes.unmark(&marked);
+            return Err(e);
+        }
+    };
 
     report.updated = updated_ids.len();
     // Here rather than in `apply_tag_edit`, so the rating write-back is covered too and no later
@@ -344,15 +343,19 @@ async fn run_commit(
     db: &DbPool,
     files: &[FileWrite],
     edit: &TagEdit,
-    cached_artwork: Option<&str>,
+    cached_artwork: Option<String>,
     report: &mut TagEditReport,
 ) -> Result<Vec<i64>, AppError> {
     let mut written: Vec<(&FileWrite, &tag_writer::WriteOutcome)> = Vec::with_capacity(files.len());
-    let mut retagged: Vec<queries::scan::RetaggedFile<'_>> = Vec::with_capacity(files.len());
+    let mut retagged: Vec<queries::scan::RetaggedFile> = Vec::with_capacity(files.len());
     for f in files {
         match &f.outcome {
             Ok((meta, outcome)) => {
-                retagged.push(queries::scan::RetaggedFile { id: f.id, path: &f.path, meta });
+                retagged.push(queries::scan::RetaggedFile {
+                    id: f.id,
+                    path: f.path.clone(),
+                    meta: meta.clone(),
+                });
                 written.push((f, outcome));
             }
             Err(e) => {
@@ -363,7 +366,7 @@ async fn run_commit(
         }
     }
 
-    let retags = queries::scan::commit_retag(db, &retagged, edit, cached_artwork).await?;
+    let retags = queries::scan::commit_retag(db, retagged, edit, cached_artwork).await?;
 
     let mut updated_ids: Vec<i64> = Vec::with_capacity(written.len());
     for ((f, outcome), retag) in written.into_iter().zip(retags) {

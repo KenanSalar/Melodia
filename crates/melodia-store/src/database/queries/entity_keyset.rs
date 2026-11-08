@@ -1,15 +1,14 @@
 //! The ordered ids behind every card grid, filtered and sorted in SQL.
 //!
 //! A grid keeps only these and fetches the cards near its viewport by id, as the track lists do
-//! (`track::track_ids`, whose packed read-back these share). A lowercased name compares through
+//! (`track::track_ids`). A lowercased name compares through
 //! `UNICODE_LOWER`, a missing album year reads as `0`, and every arm ends in the id, so the order
 //! is total and descending reverses every key.
 
-use sqlx::{AssertSqlSafe, QueryBuilder, Sqlite};
-
-use super::track::{fetch_packed_ids, push_folded_match, sql_direction};
+use super::track::{push_folded_match, sql_direction};
 use crate::database::DbPool;
 use crate::database::collation::UNICODE_LOWER;
+use crate::database::sql::{self, Sql};
 use melodia_core::entities::grid_order::{AlbumSort, ArtistSort, FavoriteArtistSort, GenreSort};
 use melodia_core::entities::track_list::SortDir;
 use melodia_core::error::AppError;
@@ -174,12 +173,11 @@ pub async fn favorite_artist_count(db: &DbPool) -> Result<i64, AppError> {
     .await
 }
 
-async fn count(db: &DbPool, sql: &'static str) -> Result<i64, AppError> {
-    Ok(sqlx::query_scalar(AssertSqlSafe(sql)).fetch_one(db.read()).await?)
+async fn count(db: &DbPool, statement: &'static str) -> Result<i64, AppError> {
+    db.read(move |conn| sql::fetch_one(conn, statement, ())).await
 }
 
-/// `grid`'s ids that `needle` matches, ordered by `keys` then the id, every one in `dir`, packed
-/// as `track::track_ids` argues.
+/// `grid`'s ids that `needle` matches, ordered by `keys` then the id, every one in `dir`.
 async fn ids(
     db: &DbPool,
     grid: &Grid,
@@ -187,20 +185,20 @@ async fn ids(
     keys: &[String],
     dir: SortDir,
 ) -> Result<Vec<i64>, AppError> {
-    let mut qb = QueryBuilder::<Sqlite>::new("SELECT group_concat(id, ',') FROM (SELECT ");
-    qb.push(grid.id).push(" AS id FROM ").push(grid.from);
+    let mut sql = Sql::new("SELECT ");
+    sql.push(grid.id).push(" AS id FROM ").push(grid.from);
     if let Some(member) = grid.member {
-        qb.push(" WHERE ").push(member);
+        sql.push(" WHERE ").push(member);
     }
     if !needle.is_empty() {
-        qb.push(if grid.member.is_some() { " AND " } else { " WHERE " });
-        push_folded_match(&mut qb, needle, grid.search, grid.year);
+        sql.push(if grid.member.is_some() { " AND " } else { " WHERE " });
+        push_folded_match(&mut sql, needle, grid.search, grid.year);
     }
     if let Some(group_by) = grid.group_by {
-        qb.push(" GROUP BY ").push(group_by);
+        sql.push(" GROUP BY ").push(group_by);
     }
-    qb.push(" ORDER BY ").push(order_by(keys, grid.id, dir)).push(")");
-    fetch_packed_ids(db.read(), qb).await
+    sql.push(" ORDER BY ").push_vouched(&order_by(keys, grid.id, dir));
+    db.read(move |conn| sql.fetch_all(conn)).await
 }
 
 fn order_by(keys: &[String], id: &str, dir: SortDir) -> String {

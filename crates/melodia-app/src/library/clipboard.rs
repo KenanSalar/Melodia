@@ -102,7 +102,11 @@ pub struct StationText<'a> {
 /// # Errors
 ///
 /// Propagates the lookup's database error.
-pub async fn track_lines(db: &DbPool, ids: &[i64], field: TrackField) -> Result<String, AppError> {
+pub async fn track_lines(
+    db: &DbPool,
+    ids: Vec<i64>,
+    field: TrackField,
+) -> Result<String, AppError> {
     let tracks = queries::track::get_track_summaries_by_ids(db, ids).await?;
     Ok(join_lines(tracks.iter().filter_map(|track| track_line(track, field))))
 }
@@ -151,7 +155,7 @@ async fn entity_labels(
         EntityKind::Artist => named(queries::entity_labels::artist_names(db, ids).await?),
         EntityKind::Genre => named(queries::entity_labels::genre_names(db, ids).await?),
         EntityKind::Playlist => named(queries::entity_labels::playlist_names(db, ids).await?),
-        EntityKind::Track => queries::track::get_track_summaries_by_ids(db, ids)
+        EntityKind::Track => queries::track::get_track_summaries_by_ids(db, ids.to_vec())
             .await?
             .into_iter()
             .map(|track| (track.id, EntityLabel { name: track.title, artist: track.artist }))

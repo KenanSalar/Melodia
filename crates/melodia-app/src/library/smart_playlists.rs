@@ -84,13 +84,9 @@ pub async fn create_smart_playlist(
     criteria: &SmartCriteria,
 ) -> Result<Playlist, AppError> {
     let criteria_json = criteria_to_json(criteria)?;
-    let playlist = queries::playlist::create_smart_playlist(
-        &state.db,
-        &name,
-        description.as_deref(),
-        &criteria_json,
-    )
-    .await?;
+    let playlist =
+        queries::playlist::create_smart_playlist(&state.db, name, description, criteria_json)
+            .await?;
     state.library_changed.bump();
     Ok(playlist)
 }
@@ -102,7 +98,7 @@ pub async fn update_smart_criteria(
     criteria: &SmartCriteria,
 ) -> Result<Playlist, AppError> {
     let criteria_json = criteria_to_json(criteria)?;
-    let playlist = queries::playlist::update_smart_criteria(&state.db, id, &criteria_json).await?;
+    let playlist = queries::playlist::update_smart_criteria(&state.db, id, criteria_json).await?;
     state.library_changed.bump();
     Ok(playlist)
 }
@@ -118,7 +114,7 @@ pub async fn convert_to_regular(
 }
 
 /// Undoes a convert, making the playlist smart again under the rules it dropped.
-pub async fn restore_rules(db: &DbPool, dropped: &DroppedRules) -> Result<(), AppError> {
+pub async fn restore_rules(db: &DbPool, dropped: DroppedRules) -> Result<(), AppError> {
     queries::playlist_convert::restore_rules(db, dropped).await
 }
 

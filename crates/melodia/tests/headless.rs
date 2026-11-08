@@ -29,6 +29,7 @@ use melodia_core::config::Paths;
 use melodia_core::entities::track_list::{SortDir, TrackListScope, TrackOrder};
 use melodia_core::error::AppError;
 use melodia_core::utils::needle::fold_needle;
+use melodia_store::database::queries::fixtures::{execute, fetch_one, fetch_optional, quoted};
 use melodia_testkit::http::{TestResponse, TestServer};
 
 /// The backend, and what has to live as long as it does.
@@ -100,10 +101,7 @@ impl Library {
     }
 
     async fn track_count(&self) -> Result<i64, AppError> {
-        let count = sqlx::query_scalar("SELECT COUNT(*) FROM tracks")
-            .fetch_one(self.state().db.read())
-            .await?;
-        Ok(count)
+        fetch_one(&self.state().db, "SELECT COUNT(*) FROM tracks").await
     }
 }
 
@@ -133,7 +131,7 @@ async fn headless_scan_persists_track() -> Result<(), AppError> {
     let ids =
         library::keyset::track_ids(&state.db, TrackListScope::Library, order, &fold_needle(""))
             .await?;
-    let tracks = library::keyset::rows_by_ids(&state.db, &ids).await?;
+    let tracks = library::keyset::rows_by_ids(&state.db, ids).await?;
     assert_eq!(tracks.len(), 1, "exactly one track should be in DB");
 
     let row = &tracks[0];
@@ -179,19 +177,22 @@ async fn headless_scan_that_changes_nothing_bumps_no_list() -> Result<(), AppErr
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn headless_scan_keeps_a_moved_files_play_count() -> Result<(), AppError> {
     let library = Library::scanned().await?;
-    sqlx::query("UPDATE tracks SET play_count = 2 WHERE file_path = ?")
-        .bind(library.path("a.flac"))
-        .execute(library.state().db.write())
-        .await?;
+    let original = quoted(&library.path("a.flac"));
+    execute(
+        &library.state().db,
+        &format!("UPDATE tracks SET play_count = 2 WHERE file_path = {original}"),
+    )
+    .await?;
     std::fs::rename(library.dir.join("a.flac"), library.dir.join("renamed.flac"))?;
 
     library.rescan().await?;
 
-    let play_count: Option<i64> =
-        sqlx::query_scalar("SELECT play_count FROM tracks WHERE file_path = ?")
-            .bind(library.path("renamed.flac"))
-            .fetch_optional(library.state().db.read())
-            .await?;
+    let renamed = quoted(&library.path("renamed.flac"));
+    let play_count: Option<i64> = fetch_optional(
+        &library.state().db,
+        &format!("SELECT play_count FROM tracks WHERE file_path = {renamed}"),
+    )
+    .await?;
     assert_eq!(play_count, Some(2));
     Ok(())
 }

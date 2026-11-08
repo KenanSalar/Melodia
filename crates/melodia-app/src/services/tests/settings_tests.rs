@@ -1044,6 +1044,19 @@ fn the_tag_backfill_marker_ships_unset_and_survives_being_set() -> Result<(), Ap
     Ok(())
 }
 
+/// Installs carry `artwork_store_normalized` from the sweep under the narrower bound, which left
+/// covers full size wherever they were smaller than their JPEG. Read as this marker, those stores
+/// would never be swept to the cap.
+#[test]
+fn the_artwork_bounds_marker_is_not_satisfied_by_the_previous_sweeps_key() -> Result<(), AppError> {
+    let swept_before = r#"{"theme_id": "catppuccin", "artwork_store_normalized": true}"#;
+
+    let settings: SettingsData = serde_json::from_str(swept_before).map_err(json_err)?;
+
+    assert!(!settings.library.artwork_store_bounded, "the store is owed a sweep under the cap");
+    Ok(())
+}
+
 /// The Output card persists each pick through `set_output_choice`, and the boot hands the engine
 /// what `output_choice` reads back off disk, so every part of a choice has to survive the trip.
 /// A part that doesn't comes back at its default on the next launch, silently.

@@ -30,7 +30,7 @@ pub async fn ids(db: &DbPool) -> Result<Vec<i64>, AppError> {
 }
 
 /// The files behind `ids` as they read now, for the rows on screen.
-pub async fn files(db: &DbPool, ids: &[i64]) -> Result<Vec<KeptOutFile>, AppError> {
+pub async fn files(db: &DbPool, ids: Vec<i64>) -> Result<Vec<KeptOutFile>, AppError> {
     queries::excluded_files::files(db, ids).await
 }
 
@@ -70,13 +70,13 @@ pub async fn bring_all_back(state: &AppState) -> Result<BroughtBack, AppError> {
 
 async fn bring_back_page(state: &AppState, ids: &[i64]) -> Result<BroughtBack, AppError> {
     let paths: Vec<String> =
-        files(&state.db, ids).await?.into_iter().map(|file| file.path).collect();
+        files(&state.db, ids.to_vec()).await?.into_iter().map(|file| file.path).collect();
     if paths.is_empty() {
         return Ok(BroughtBack::default());
     }
     import_files(&state.db, &state.paths.artwork_dir, &state.cover_cache, &paths).await?;
     // Read back rather than taken from the insert count: a file whose bytes match a row whose own
     // file is gone takes that row back and inserts nothing.
-    let still_out = files(&state.db, ids).await?.len().min(paths.len());
+    let still_out = files(&state.db, ids.to_vec()).await?.len().min(paths.len());
     Ok(BroughtBack { returned: paths.len() - still_out, not_returned: still_out })
 }

@@ -19,10 +19,9 @@
 
 use std::path::{Path, PathBuf};
 
-use sqlx::AssertSqlSafe;
-use sqlx::sqlite::SqlitePool;
-
 use melodia_core::error::{AppError, describe};
+
+use super::{DbPool, sql};
 
 /// How many backups a [`maintain`] sweep keeps. Each is a full copy of the library, and what you
 /// want back is the state just before the migration that broke something.
@@ -75,7 +74,7 @@ fn legacy_version_of(name: &str) -> Option<i64> {
 /// Returns early where that version is already backed up: a failed migration rolls back, so each
 /// retry would copy identical bytes.
 pub(super) async fn create(
-    pool: &SqlitePool,
+    db: &DbPool,
     backups_dir: &Path,
     version: i64,
 ) -> Result<PathBuf, AppError> {
@@ -97,9 +96,13 @@ pub(super) async fn create(
         })?;
     }
 
-    // `VACUUM INTO` takes no bind, so the path is interpolated with its quotes doubled.
-    let escaped = tmp_path.display().to_string().replace('\'', "''");
-    sqlx::raw_sql(AssertSqlSafe(format!("VACUUM INTO '{escaped}'"))).execute(pool).await?;
+    let Some(tmp) = tmp_path.to_str().map(str::to_owned) else {
+        return Err(AppError::io_other(format!(
+            "The backup path {} is not valid UTF-8",
+            tmp_path.display()
+        )));
+    };
+    db.write(move |conn| sql::execute(conn, "VACUUM INTO ?1", (tmp,))).await?;
     std::fs::rename(&tmp_path, &final_path).map_err(|e| {
         AppError::io(format!("Could not publish the backup as {}", final_path.display()), e)
     })?;

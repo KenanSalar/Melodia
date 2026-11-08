@@ -1,6 +1,4 @@
-use sqlx::FromRow;
-
-#[derive(Clone, Debug, PartialEq, FromRow)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct AlbumStats {
     pub id: i64,
     pub name: String,
@@ -32,7 +30,7 @@ pub struct AlbumStats {
 ///
 /// Editing a subset of a release isn't durable: the untouched files keep the old value, and the
 /// next re-ingest of any of them puts it back.
-#[derive(Clone, Debug, Default, PartialEq, FromRow)]
+#[derive(Clone, Debug, Default, PartialEq)]
 pub struct ReleaseTagRow {
     pub label: String,
     pub catalog_number: String,

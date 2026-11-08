@@ -25,11 +25,6 @@ rustc-ice-*.txt
 # NOTE: Cargo.lock IS committed — Melodia is a binary application.
 # (Libraries should ignore it; apps should not.)
 
-# ─── SQLx ────────────────────────────────────────────────────────────────────
-# `.sqlx/` (offline query cache) IS committed so the app builds in CI without a
-# live database. See https://github.com/launchbadge/sqlx FAQ on offline mode.
-# Do NOT add `.sqlx/` here.
-
 # Local development databases that live alongside the source tree
 *.db
 *.db-journal

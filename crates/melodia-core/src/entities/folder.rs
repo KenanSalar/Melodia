@@ -1,6 +1,4 @@
-use sqlx::FromRow;
-
-#[derive(Clone, Debug, PartialEq, FromRow)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct Folder {
     pub id: i64,
     pub path: String,

@@ -1,13 +1,11 @@
 //! How good an encode is, for choosing which of two copies of one song to keep.
 
-use sqlx::FromRow;
-
 /// lofty's container names, as `tracks.codec` stores them, that only ever hold lossless audio.
 /// `Mp4` holds AAC as often as ALAC, so [`AudioFormat::is_lossless`] asks it apart.
 const LOSSLESS_CONTAINERS: [&str; 5] = ["Flac", "Wav", "Aiff", "Ape", "WavPack"];
 
 /// The technical columns an encode is judged by.
-#[derive(Clone, Debug, PartialEq, Eq, FromRow)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct AudioFormat {
     pub codec: Option<String>,
     pub bitrate: Option<i32>,

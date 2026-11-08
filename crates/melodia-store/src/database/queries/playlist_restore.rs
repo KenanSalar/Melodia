@@ -2,6 +2,8 @@
 
 use std::collections::HashSet;
 
+use rusqlite::Transaction;
+
 use super::playlist::{
     NewItem, batch_update_positions_pairs, insert_items_tx,
     update_playlist_thumbnail_and_timestamp_tx,
@@ -9,6 +11,7 @@ use super::playlist::{
 use super::search_name;
 use super::track::missing_ids_on;
 use crate::database::DbPool;
+use crate::database::sql;
 use melodia_core::entities::playlist::{CutItem, Playlist, PlaylistItemsCut, PlaylistSnapshot};
 use melodia_core::error::AppError;
 use melodia_core::utils::reinsert::reinsert;
@@ -27,32 +30,33 @@ enum Slot<'a> {
 /// The playlist going too fails it, the rows having nowhere to go, even once its id is reused.
 pub async fn restore_playlist_items(
     db: &DbPool,
-    cuts: &[PlaylistItemsCut],
+    cuts: Vec<PlaylistItemsCut>,
 ) -> Result<(), AppError> {
+    db.transaction(move |tx| put_back_items(tx, &cuts)).await
+}
+
+fn put_back_items(tx: &Transaction<'_>, cuts: &[PlaylistItemsCut]) -> Result<(), AppError> {
     let Some(playlist) = cuts.first().map(|cut| &cut.playlist) else {
         return Ok(());
     };
     let playlist_id = playlist.id;
-    let mut tx = db.write().begin().await?;
 
-    let live_stamp: String =
-        sqlx::query_scalar("SELECT updated_at FROM playlists WHERE id = ? AND created_at = ?")
-            .bind(playlist_id)
-            .bind(&playlist.created_at)
-            .fetch_optional(&mut *tx)
-            .await?
-            .ok_or_else(|| AppError::not_found("Playlist", playlist_id))?;
-    let survivors: Vec<(i64, i64, i32)> = sqlx::query_as(
+    let live_stamp: String = sql::fetch_optional(
+        tx,
+        "SELECT updated_at FROM playlists WHERE id = ? AND created_at = ?",
+        (playlist_id, &playlist.created_at),
+    )?
+    .ok_or_else(|| AppError::not_found("Playlist", playlist_id))?;
+    let survivors: Vec<(i64, i64, i32)> = sql::fetch_all(
+        tx,
         "SELECT id, track_id, position FROM playlist_items WHERE playlist_id = ?
          ORDER BY position, id",
-    )
-    .bind(playlist_id)
-    .fetch_all(&mut *tx)
-    .await?;
+        (playlist_id,),
+    )?;
 
     let held_ids: Vec<i64> =
         cuts.iter().flat_map(|cut| &cut.rows).map(|item| item.track_id).collect();
-    let missing = missing_ids_on(&mut tx, &held_ids).await?;
+    let missing = missing_ids_on(tx, &held_ids)?;
     let listed: HashSet<i64> = survivors.iter().map(|&(_, track_id, _)| track_id).collect();
 
     // Newest first, each cut's indices being the playlist's at the moment it was made. A row that
@@ -79,13 +83,10 @@ pub async fn restore_playlist_items(
             }
         }
     }
-    batch_update_positions_pairs(&mut tx, &moved).await?;
-    insert_items_tx(&mut tx, playlist_id, &back).await?;
+    batch_update_positions_pairs(tx, &moved)?;
+    insert_items_tx(tx, playlist_id, &back)?;
     let stamp = restored_stamp(&live_stamp, cuts);
-    update_playlist_thumbnail_and_timestamp_tx(&mut tx, playlist_id, &stamp).await?;
-
-    tx.commit().await?;
-    Ok(())
+    update_playlist_thumbnail_and_timestamp_tx(tx, playlist_id, &stamp)
 }
 
 /// Steps back through the cuts, newest first, while `updated_at` still reads as each one left it,
@@ -107,19 +108,24 @@ fn restored_stamp(live: &str, cuts: &[PlaylistItemsCut]) -> String {
 /// cover refresh that also re-derives an automatic cover, so each card returns to its grid slot.
 pub async fn restore_playlists(
     db: &DbPool,
-    snapshots: &[PlaylistSnapshot],
+    snapshots: Vec<PlaylistSnapshot>,
 ) -> Result<(), AppError> {
     if snapshots.is_empty() {
         return Ok(());
     }
-    let mut tx = db.write().begin().await?;
+    db.transaction(move |tx| put_back_playlists(tx, &snapshots)).await
+}
 
+fn put_back_playlists(
+    tx: &Transaction<'_>,
+    snapshots: &[PlaylistSnapshot],
+) -> Result<(), AppError> {
     let held_ids: Vec<i64> =
         snapshots.iter().flat_map(|snapshot| &snapshot.items).map(|item| item.track_id).collect();
-    let missing = missing_ids_on(&mut tx, &held_ids).await?;
+    let missing = missing_ids_on(tx, &held_ids)?;
 
     for snapshot in snapshots {
-        let id = insert_playlist_tx(&mut tx, &snapshot.playlist).await?;
+        let id = insert_playlist_tx(tx, &snapshot.playlist)?;
         let items: Vec<NewItem<'_>> = snapshot
             .items
             .iter()
@@ -131,45 +137,37 @@ pub async fn restore_playlists(
                 added_at: &item.added_at,
             })
             .collect();
-        insert_items_tx(&mut tx, id, &items).await?;
-        update_playlist_thumbnail_and_timestamp_tx(&mut tx, id, &snapshot.playlist.updated_at)
-            .await?;
+        insert_items_tx(tx, id, &items)?;
+        update_playlist_thumbnail_and_timestamp_tx(tx, id, &snapshot.playlist.updated_at)?;
     }
-
-    tx.commit().await?;
     Ok(())
 }
 
 /// Inserts `playlist` under its own id, or a fresh one where a playlist created since took it, and
 /// answers which. The stats go in at 0, the item triggers adding each item back.
-async fn insert_playlist_tx(
-    tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
-    playlist: &Playlist,
-) -> Result<i64, AppError> {
-    let taken: bool = sqlx::query_scalar("SELECT EXISTS (SELECT 1 FROM playlists WHERE id = ?)")
-        .bind(playlist.id)
-        .fetch_one(&mut **tx)
-        .await?;
+fn insert_playlist_tx(tx: &Transaction<'_>, playlist: &Playlist) -> Result<i64, AppError> {
+    let taken: bool =
+        sql::fetch_one(tx, "SELECT EXISTS (SELECT 1 FROM playlists WHERE id = ?)", (playlist.id,))?;
     // A NULL `INTEGER PRIMARY KEY` takes the next free id.
     let id = (!taken).then_some(playlist.id);
 
-    let id = sqlx::query_scalar(
+    sql::fetch_one(
+        tx,
         "INSERT INTO playlists (id, name, description, thumbnail_path, is_smart, smart_criteria,
                                 created_at, updated_at, custom_thumbnail, search_name)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
          RETURNING id",
+        (
+            id,
+            &playlist.name,
+            &playlist.description,
+            &playlist.thumbnail_path,
+            playlist.is_smart,
+            &playlist.smart_criteria,
+            &playlist.created_at,
+            &playlist.updated_at,
+            playlist.custom_thumbnail,
+            search_name::pack(&[&playlist.name]),
+        ),
     )
-    .bind(id)
-    .bind(&playlist.name)
-    .bind(&playlist.description)
-    .bind(&playlist.thumbnail_path)
-    .bind(playlist.is_smart)
-    .bind(&playlist.smart_criteria)
-    .bind(&playlist.created_at)
-    .bind(&playlist.updated_at)
-    .bind(playlist.custom_thumbnail)
-    .bind(search_name::pack(&[&playlist.name]))
-    .fetch_one(&mut **tx)
-    .await?;
-    Ok(id)
 }

@@ -15,7 +15,9 @@ mod reconcile;
 mod repair;
 mod run;
 
-pub use reconcile::{finish_interrupted_imports, reconcile_watched_folders};
+pub use reconcile::{
+    finish_interrupted_imports, reconcile_after_missed_events, reconcile_watched_folders,
+};
 pub use repair::restore_missing_artwork;
 
 use std::path::{Path, PathBuf};
@@ -83,7 +85,7 @@ pub async fn scan_folder(
     let cancel = state.scan.token();
     let restoring = forget_missing_artwork(state).await;
     let run = ScanRun::start(&state.scan, cancel);
-    let outcome = scan_one(state, folder_id, &run).await?;
+    let outcome = scan_one(state, folder_id, &run, Orphans::PurgeNow).await?;
     let cancelled_import =
         on_stop == OnStop::Withdraw && state.scan.user_cancels() != cancels_at_start;
     let outcome = match outcome {
@@ -144,13 +146,35 @@ pub fn cancel(state: &AppState) {
 
 /// Files parsed and ingested per write transaction: large enough that begin, commit and the trigger
 /// DDL are noise, small enough that interactive writes get the single writer every few seconds on
-/// a slow disk. Also the scan's memory peak, one chunk's tags being resident at a time.
+/// a slow disk. Also bounds the parsed tags held at once to one chunk's.
 const TX_CHUNK_FILES: usize = 2_000;
+
+/// Where a completed scan's orphans go.
+enum Orphans<'a> {
+    PurgeNow,
+    /// Left for the pass to purge once its last folder has ingested: a row moved to a folder still
+    /// to come has to be there for that folder's scan to re-point.
+    HoldIn(&'a mut Unwalked),
+}
+
+impl Orphans<'_> {
+    /// Takes in a scan's `unwalked`, answering the part its own commit purges.
+    fn due_now(self, unwalked: Unwalked) -> Unwalked {
+        match self {
+            Self::PurgeNow => unwalked,
+            Self::HoldIn(held) => {
+                held.absorb(unwalked);
+                Unwalked::default()
+            }
+        }
+    }
+}
 
 async fn scan_one(
     state: &AppState,
     folder_id: i64,
     run: &Arc<ScanRun>,
+    orphans: Orphans<'_>,
 ) -> Result<ScanOutcome, AppError> {
     let folder = queries::folder::get_folder_by_id(&state.db, folder_id).await?;
 
@@ -205,10 +229,10 @@ async fn scan_one(
 
         let result = queries::ingest::commit_scan_chunk(
             &state.db,
-            &scanned_files,
+            scanned_files,
             folder.id,
-            &scan_timestamp,
-            &pool,
+            scan_timestamp.clone(),
+            pool.clone(),
             &ingested,
         )
         .await?;
@@ -219,17 +243,19 @@ async fn scan_one(
     // --- Stage 2. `queries::scan::commit_scan` argues what a stopped scan still owes.
     if !run.try_begin_finishing() {
         if ingested.any() {
-            queries::scan::commit_scan(&state.db, &folder, &Unwalked::default(), &ingested).await?;
+            queries::scan::commit_scan(&state.db, &folder, Unwalked::default(), &ingested).await?;
             state.library_changed.bump();
         }
         return Ok(ScanOutcome::Stopped { rewrote_existing: ingested.rewrote_existing() });
     }
-    queries::scan::commit_scan(&state.db, &folder, &unwalked, &ingested).await?;
+    let purged_now = orphans.due_now(unwalked);
+    let found_unwalked = !purged_now.is_empty();
+    queries::scan::commit_scan(&state.db, &folder, purged_now, &ingested).await?;
     finish::absorb_nested(&state.db, &folder, &scope.nested).await?;
     finish::after_completed(state, folder.id).await?;
     // Only for a change: every list showing the library re-fetches on a bump, and a launch scans
     // every folder. The folder's new `last_scanned` reaches Settings when the run ends instead.
-    if ingested.any() || !unwalked.is_empty() || !scope.nested.is_empty() {
+    if ingested.any() || found_unwalked || !scope.nested.is_empty() {
         state.library_changed.bump();
     }
 
@@ -302,8 +328,7 @@ async fn discover(
     // `scan_one` purges nothing after an empty walk, so its rows would be read only to be dropped.
     let mut kept_out = Vec::new();
     if !index.is_empty() {
-        queries::scan::visit_folder_tracks(db, folder_id, |path, stamp| index.add_row(path, stamp))
-            .await?;
+        index = queries::scan::fold_folder_tracks(db, folder_id, index, WalkIndex::add_row).await?;
         for (path, stamp) in queries::excluded_files::in_folder(db, folder_id).await? {
             index.add_kept_out(&path, stamp);
             kept_out.push(path);

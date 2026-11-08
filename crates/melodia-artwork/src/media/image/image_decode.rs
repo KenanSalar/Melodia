@@ -1,5 +1,5 @@
-//! The primitives every image path shares: one bounded decode, one resize, one JPEG encode, and
-//! the gate that keeps two oversized decodes off the heap at once.
+//! The primitives every image path shares: one bounded decode, one resize, one JPEG and one PNG
+//! encode, and the gate that keeps two oversized decodes off the heap at once.
 //!
 //! Cover art comes from files the user didn't write, and a forged dimension header can ask for
 //! gigabytes before any downscale caps it, so every decode is bounded here. `cover_embed` decodes
@@ -12,7 +12,7 @@ use std::cell::RefCell;
 use std::path::Path;
 
 use fast_image_resize::{ResizeAlg, ResizeOptions, Resizer};
-use image::{DynamicImage, GrayImage, RgbImage};
+use image::{DynamicImage, ExtendedColorType, GrayImage, ImageEncoder, RgbImage};
 use jpeg_decoder::PixelFormat;
 
 /// Re-exported so a call site picks a filter without naming the resampler crate, keeping
@@ -161,10 +161,27 @@ pub fn resize_rgb8_image(
 /// `source` as JPEG bytes at `quality`. Shared because both in-memory JPEG writers sit behind a
 /// resize, and encoding differently would make the cover the store caches differ from the one
 /// written into the user's file.
-pub fn encode_jpeg(source: RgbImage, quality: u8) -> image::ImageResult<Vec<u8>> {
+pub fn encode_jpeg(source: &RgbImage, quality: u8) -> image::ImageResult<Vec<u8>> {
     let mut encoded = Vec::new();
-    let encoder = image::codecs::jpeg::JpegEncoder::new_with_quality(&mut encoded, quality);
-    DynamicImage::ImageRgb8(source).write_with_encoder(encoder)?;
+    image::codecs::jpeg::JpegEncoder::new_with_quality(&mut encoded, quality).write_image(
+        source.as_raw(),
+        source.width(),
+        source.height(),
+        ExtendedColorType::Rgb8,
+    )?;
+    Ok(encoded)
+}
+
+/// `source` as PNG bytes, for what JPEG holds in more of them: flat art, and the hard edges JPEG
+/// rings around.
+pub fn encode_png(source: &RgbImage) -> image::ImageResult<Vec<u8>> {
+    let mut encoded = Vec::new();
+    image::codecs::png::PngEncoder::new(&mut encoded).write_image(
+        source.as_raw(),
+        source.width(),
+        source.height(),
+        ExtendedColorType::Rgb8,
+    )?;
     Ok(encoded)
 }
 
@@ -221,7 +238,9 @@ static LARGE_DECODE_GATE: parking_lot::Mutex<()> = parking_lot::Mutex::new(());
 
 /// `None` where `pixels` needs no gate. Take it from the header read before the decode
 /// ([`source_pixels`], [`memory_dimensions`]) and hold it while any full-resolution buffer lives,
-/// the flatten and re-encode included.
+/// the flatten and re-encode included. **Not reentrant**: release it before
+/// [`store_image`](crate::media::image::artwork::store_image), which takes it to bound an
+/// oversized source.
 #[must_use]
 pub fn large_decode_guard(pixels: u64) -> Option<parking_lot::MutexGuard<'static, ()>> {
     (pixels > LARGE_SOURCE_PIXELS).then(|| LARGE_DECODE_GATE.lock())

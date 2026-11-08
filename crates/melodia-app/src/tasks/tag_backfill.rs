@@ -5,7 +5,7 @@
 //! **The pass is one UPDATE**, `queries::track::mark_every_track_stale`: a blank `date_modified`
 //! sends every file back through the scan's own batched, cancellable path. A second ingest pipeline
 //! would have to keep its column list in step with `TRACK_INSERT_COLUMNS` and would re-hash every
-//! file. **Not an `SQLx` migration**, for [`super::artwork_renormalize`]'s reason.
+//! file. **Not a migration**, for [`super::artwork_renormalize`]'s reason.
 
 use crate::library;
 use crate::state::AppState;

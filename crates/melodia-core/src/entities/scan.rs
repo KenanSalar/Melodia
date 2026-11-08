@@ -17,12 +17,30 @@ pub struct FileStamp {
 }
 
 impl FileStamp {
+    pub fn borrowed(&self) -> FileStampRef<'_> {
+        FileStampRef { file_size: self.file_size, date_modified: self.date_modified.as_deref() }
+    }
+
+    /// [`FileStampRef::matches`] on this stamp.
+    pub fn matches(&self, file_size: i64, date_modified: Option<&str>) -> bool {
+        self.borrowed().matches(file_size, date_modified)
+    }
+}
+
+/// A [`FileStamp`] with its mtime borrowed, for a holder keeping its stamps' text in one buffer.
+#[derive(Debug, Clone, Copy)]
+pub struct FileStampRef<'a> {
+    pub file_size: Option<i64>,
+    pub date_modified: Option<&'a str>,
+}
+
+impl FileStampRef<'_> {
     /// Whether a file of `file_size` bytes, modified at `date_modified`, is the one stamped. The
     /// mtime compares byte for byte, and a file with none never matches.
     pub fn matches(&self, file_size: i64, date_modified: Option<&str>) -> bool {
         self.file_size == Some(file_size)
             && date_modified.is_some()
-            && self.date_modified.as_deref() == date_modified
+            && self.date_modified == date_modified
     }
 }
 

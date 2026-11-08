@@ -2,12 +2,12 @@ use std::collections::HashSet;
 use std::path::PathBuf;
 
 use super::listed_as_spelled;
-use crate::database::DbPool;
 use crate::database::queries;
 use crate::database::queries::fixtures::{insert_test_track, keep_out, make_test_metadata};
 use crate::database::queries::ingest::{
-    IngestResult, IngestSource, commit_import, ingest_scanned_files,
+    BULK_THRESHOLD, IngestResult, IngestSource, commit_import, ingest_scanned_files,
 };
+use crate::database::{DbPool, sql};
 use crate::media::ingest::scan_pool::ScanPool;
 use melodia_core::entities::artist::ArtistCredit;
 use melodia_core::entities::genre::GenreList;
@@ -31,15 +31,7 @@ fn make_scanned_file_with_hash(path: &str, title: &str, hash: &str) -> ScannedFi
 #[tokio::test]
 async fn ingest_empty_list_returns_zero() -> Result<(), AppError> {
     let db = DbPool::test_pool().await?;
-    let mut tx = db.write().begin().await?;
-    let result = ingest_scanned_files(
-        &mut tx,
-        &[],
-        &IngestSource::FolderScan(1),
-        "2024-01-01T00:00:00Z",
-        &ScanPool::default(),
-    )
-    .await?;
+    let result = folder_scan(&db, Vec::new()).await?;
     assert_eq!(result.inserted_count, 0);
     assert!(result.inserted_track_ids.is_empty());
     Ok(())
@@ -52,26 +44,22 @@ async fn ingest_single_file_fixed_folder() -> Result<(), AppError> {
 
     let files = vec![make_scanned_file("/music/song.mp3", "My Song")];
 
-    let mut tx = db.write().begin().await?;
-    let result = ingest_scanned_files(
-        &mut tx,
-        &files,
-        &IngestSource::FolderScan(1),
-        "2024-01-01T00:00:00Z",
-        &ScanPool::default(),
-    )
-    .await?;
-    tx.commit().await?;
+    let result = folder_scan(&db, files).await?;
 
     assert_eq!(result.inserted_count, 1);
     assert_eq!(result.inserted_track_ids.len(), 1);
     assert!(result.inserted_track_ids[0] > 0);
 
     // Verify track exists in DB
-    let exists: Option<(i64,)> =
-        sqlx::query_as("SELECT 1 FROM tracks WHERE file_path = '/music/song.mp3'")
-            .fetch_optional(db.read())
-            .await?;
+    let exists: Option<i64> = db
+        .read(|conn| {
+            sql::fetch_optional(
+                conn,
+                "SELECT 1 FROM tracks WHERE file_path = '/music/song.mp3'",
+                (),
+            )
+        })
+        .await?;
     assert!(exists.is_some());
     Ok(())
 }
@@ -88,24 +76,17 @@ async fn ingest_deduplicates_artists() -> Result<(), AppError> {
     let mut f3 = make_scanned_file("/music/c.mp3", "C");
     f3.metadata.artist = ArtistCredit::from_name("Same Artist");
 
-    let mut tx = db.write().begin().await?;
-    let result = ingest_scanned_files(
-        &mut tx,
-        &[f1, f2, f3],
-        &IngestSource::FolderScan(1),
-        "2024-01-01T00:00:00Z",
-        &ScanPool::default(),
-    )
-    .await?;
-    tx.commit().await?;
+    let result = folder_scan(&db, vec![f1, f2, f3]).await?;
 
     assert_eq!(result.inserted_count, 3);
 
     // Verify only one artist row (plus the sentinel "Unknown Artist")
-    let count: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM artists WHERE name = 'Same Artist'")
-        .fetch_one(db.read())
+    let count: i64 = db
+        .read(|conn| {
+            sql::fetch_one(conn, "SELECT COUNT(*) FROM artists WHERE name = 'Same Artist'", ())
+        })
         .await?;
-    assert_eq!(count.0, 1);
+    assert_eq!(count, 1);
     Ok(())
 }
 
@@ -121,21 +102,14 @@ async fn ingest_deduplicates_albums() -> Result<(), AppError> {
     f2.metadata.artist = ArtistCredit::from_name("Artist");
     f2.metadata.album = Some("Same Album".to_owned());
 
-    let mut tx = db.write().begin().await?;
-    ingest_scanned_files(
-        &mut tx,
-        &[f1, f2],
-        &IngestSource::FolderScan(1),
-        "2024-01-01T00:00:00Z",
-        &ScanPool::default(),
-    )
-    .await?;
-    tx.commit().await?;
+    folder_scan(&db, vec![f1, f2]).await?;
 
-    let count: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM albums WHERE name = 'Same Album'")
-        .fetch_one(db.read())
+    let count: i64 = db
+        .read(|conn| {
+            sql::fetch_one(conn, "SELECT COUNT(*) FROM albums WHERE name = 'Same Album'", ())
+        })
         .await?;
-    assert_eq!(count.0, 1);
+    assert_eq!(count, 1);
     Ok(())
 }
 
@@ -149,21 +123,12 @@ async fn ingest_deduplicates_genres() -> Result<(), AppError> {
     let mut f2 = make_scanned_file("/music/b.mp3", "B");
     f2.metadata.genres = GenreList::from_name("Rock");
 
-    let mut tx = db.write().begin().await?;
-    ingest_scanned_files(
-        &mut tx,
-        &[f1, f2],
-        &IngestSource::FolderScan(1),
-        "2024-01-01T00:00:00Z",
-        &ScanPool::default(),
-    )
-    .await?;
-    tx.commit().await?;
+    folder_scan(&db, vec![f1, f2]).await?;
 
-    let count: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM genres WHERE name = 'Rock'")
-        .fetch_one(db.read())
+    let count: i64 = db
+        .read(|conn| sql::fetch_one(conn, "SELECT COUNT(*) FROM genres WHERE name = 'Rock'", ()))
         .await?;
-    assert_eq!(count.0, 1);
+    assert_eq!(count, 1);
     Ok(())
 }
 
@@ -175,16 +140,7 @@ async fn ingest_skips_existing_track() -> Result<(), AppError> {
 
     let files = vec![make_scanned_file("/music/existing.mp3", "Existing")];
 
-    let mut tx = db.write().begin().await?;
-    let result = ingest_scanned_files(
-        &mut tx,
-        &files,
-        &IngestSource::FolderScan(1),
-        "2024-01-01T00:00:00Z",
-        &ScanPool::default(),
-    )
-    .await?;
-    tx.commit().await?;
+    let result = folder_scan(&db, files).await?;
 
     assert_eq!(result.inserted_count, 0);
     assert!(result.inserted_track_ids.is_empty());
@@ -200,27 +156,23 @@ async fn a_folder_scan_backfills_artwork_on_a_current_row() -> Result<(), AppErr
     let mut file = make_scanned_file("/music/song.mp3", "Song");
     file.metadata.artwork_path = Some("/art/cover.jpg".to_owned());
 
-    let mut tx = db.write().begin().await?;
-    let result = ingest_scanned_files(
-        &mut tx,
-        &[file],
-        &IngestSource::FolderScan(1),
-        "2024-01-01T00:00:00Z",
-        &ScanPool::default(),
-    )
-    .await?;
-    tx.commit().await?;
+    let result = folder_scan(&db, vec![file]).await?;
 
     // Track was not inserted (already existed)
     assert_eq!(result.inserted_count, 0);
 
     // But artwork should have been updated
-    let artwork: Option<(Option<String>,)> =
-        sqlx::query_as("SELECT artwork_path FROM tracks WHERE file_path = '/music/song.mp3'")
-            .fetch_optional(db.read())
-            .await?;
+    let artwork: Option<Option<String>> = db
+        .read(|conn| {
+            sql::fetch_optional(
+                conn,
+                "SELECT artwork_path FROM tracks WHERE file_path = '/music/song.mp3'",
+                (),
+            )
+        })
+        .await?;
     assert_eq!(
-        artwork.ok_or_else(|| AppError::validation_msg("track missing"))?.0.as_deref(),
+        artwork.ok_or_else(|| AppError::validation_msg("track missing"))?.as_deref(),
         Some("/art/cover.jpg")
     );
     Ok(())
@@ -235,22 +187,18 @@ async fn an_import_leaves_a_current_rows_artwork_alone() -> Result<(), AppError>
     let mut file = make_scanned_file("/music/song.mp3", "Song");
     file.metadata.artwork_path = Some("/art/cover.jpg".to_owned());
 
-    let mut tx = db.write().begin().await?;
-    ingest_scanned_files(
-        &mut tx,
-        &[file],
-        &IngestSource::Import,
-        "2024-01-01T00:00:00Z",
-        &ScanPool::default(),
-    )
-    .await?;
-    tx.commit().await?;
+    ingest(&db, vec![file], IngestSource::Import).await?;
 
-    let artwork: (Option<String>,) =
-        sqlx::query_as("SELECT artwork_path FROM tracks WHERE file_path = '/music/song.mp3'")
-            .fetch_one(db.read())
-            .await?;
-    assert!(artwork.0.is_none());
+    let artwork: Option<String> = db
+        .read(|conn| {
+            sql::fetch_one(
+                conn,
+                "SELECT artwork_path FROM tracks WHERE file_path = '/music/song.mp3'",
+                (),
+            )
+        })
+        .await?;
+    assert!(artwork.is_none());
     Ok(())
 }
 
@@ -260,16 +208,7 @@ async fn ingest_from_parent_dir_creates_folder() -> Result<(), AppError> {
 
     let files = vec![make_scanned_file("/home/user/music/song.mp3", "Song")];
 
-    let mut tx = db.write().begin().await?;
-    let result = ingest_scanned_files(
-        &mut tx,
-        &files,
-        &IngestSource::Import,
-        "2024-01-01T00:00:00Z",
-        &ScanPool::default(),
-    )
-    .await?;
-    tx.commit().await?;
+    let result = ingest(&db, files, IngestSource::Import).await?;
 
     assert_eq!(result.inserted_count, 1);
 
@@ -288,16 +227,7 @@ async fn ingest_from_parent_dir_caches_folder() -> Result<(), AppError> {
         make_scanned_file("/data/music/b.mp3", "B"),
     ];
 
-    let mut tx = db.write().begin().await?;
-    ingest_scanned_files(
-        &mut tx,
-        &files,
-        &IngestSource::Import,
-        "2024-01-01T00:00:00Z",
-        &ScanPool::default(),
-    )
-    .await?;
-    tx.commit().await?;
+    ingest(&db, files, IngestSource::Import).await?;
 
     // Only one folder row for /data/music
     let folders = queries::folder::get_all_folders(&db).await?;
@@ -314,23 +244,19 @@ async fn ingest_empty_artist_gets_unknown_id() -> Result<(), AppError> {
     let mut file = make_scanned_file("/music/no_artist.mp3", "No Artist Track");
     file.metadata.artist = ArtistCredit::default();
 
-    let mut tx = db.write().begin().await?;
-    ingest_scanned_files(
-        &mut tx,
-        &[file],
-        &IngestSource::FolderScan(1),
-        "2024-01-01T00:00:00Z",
-        &ScanPool::default(),
-    )
-    .await?;
-    tx.commit().await?;
+    folder_scan(&db, vec![file]).await?;
 
     // Track should be linked to the sentinel "Unknown Artist" (id=1)
-    let artist_id: (i64,) =
-        sqlx::query_as("SELECT artist_id FROM tracks WHERE file_path = '/music/no_artist.mp3'")
-            .fetch_one(db.read())
-            .await?;
-    assert_eq!(artist_id.0, 1);
+    let artist_id: i64 = db
+        .read(|conn| {
+            sql::fetch_one(
+                conn,
+                "SELECT artist_id FROM tracks WHERE file_path = '/music/no_artist.mp3'",
+                (),
+            )
+        })
+        .await?;
+    assert_eq!(artist_id, 1);
     Ok(())
 }
 
@@ -342,23 +268,19 @@ async fn ingest_empty_album_gets_none() -> Result<(), AppError> {
     let mut file = make_scanned_file("/music/no_album.mp3", "No Album Track");
     file.metadata.album = None;
 
-    let mut tx = db.write().begin().await?;
-    ingest_scanned_files(
-        &mut tx,
-        &[file],
-        &IngestSource::FolderScan(1),
-        "2024-01-01T00:00:00Z",
-        &ScanPool::default(),
-    )
-    .await?;
-    tx.commit().await?;
+    folder_scan(&db, vec![file]).await?;
 
     // Empty album name → upsert_album returns None → album_id should be NULL
-    let album_id: (Option<i64>,) =
-        sqlx::query_as("SELECT album_id FROM tracks WHERE file_path = '/music/no_album.mp3'")
-            .fetch_one(db.read())
-            .await?;
-    assert!(album_id.0.is_none());
+    let album_id: Option<i64> = db
+        .read(|conn| {
+            sql::fetch_one(
+                conn,
+                "SELECT album_id FROM tracks WHERE file_path = '/music/no_album.mp3'",
+                (),
+            )
+        })
+        .await?;
+    assert!(album_id.is_none());
     Ok(())
 }
 
@@ -373,16 +295,7 @@ async fn ingest_mixed_new_and_existing() -> Result<(), AppError> {
         make_scanned_file("/music/new.mp3", "New Song"),
     ];
 
-    let mut tx = db.write().begin().await?;
-    let result = ingest_scanned_files(
-        &mut tx,
-        &files,
-        &IngestSource::FolderScan(1),
-        "2024-01-01T00:00:00Z",
-        &ScanPool::default(),
-    )
-    .await?;
-    tx.commit().await?;
+    let result = folder_scan(&db, files).await?;
 
     assert_eq!(result.inserted_count, 1);
     assert_eq!(result.inserted_track_ids.len(), 1);
@@ -401,22 +314,15 @@ async fn ingest_same_album_different_artists() -> Result<(), AppError> {
     f2.metadata.artist = ArtistCredit::from_name("Artist 2");
     f2.metadata.album = Some("Compilation".to_owned());
 
-    let mut tx = db.write().begin().await?;
-    ingest_scanned_files(
-        &mut tx,
-        &[f1, f2],
-        &IngestSource::FolderScan(1),
-        "2024-01-01T00:00:00Z",
-        &ScanPool::default(),
-    )
-    .await?;
-    tx.commit().await?;
+    folder_scan(&db, vec![f1, f2]).await?;
 
     // Two-level album cache: same album name + different artist → separate album rows
-    let count: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM albums WHERE name = 'Compilation'")
-        .fetch_one(db.read())
+    let count: i64 = db
+        .read(|conn| {
+            sql::fetch_one(conn, "SELECT COUNT(*) FROM albums WHERE name = 'Compilation'", ())
+        })
         .await?;
-    assert_eq!(count.0, 2);
+    assert_eq!(count, 2);
     Ok(())
 }
 
@@ -432,39 +338,22 @@ async fn ingest_detects_moved_file() -> Result<(), AppError> {
         insert_test_track(&db, "/music/old/song.mp3", "Song", "Art", "Alb", "Rock").await?;
 
     // Get the hash that was inserted
-    let hash: (String,) = sqlx::query_as("SELECT file_hash FROM tracks WHERE id = ?")
-        .bind(old_id)
-        .fetch_one(db.read())
-        .await?;
+    let hash = stored_hash(&db, old_id).await?;
 
     // Now ingest the same content at a new path
-    let files = vec![make_scanned_file_with_hash("/music/new/song.mp3", "Song", &hash.0)];
+    let files = vec![make_scanned_file_with_hash("/music/new/song.mp3", "Song", &hash)];
 
-    let mut tx = db.write().begin().await?;
-    let result = ingest_scanned_files(
-        &mut tx,
-        &files,
-        &IngestSource::FolderScan(1),
-        "2024-01-01T00:00:00Z",
-        &ScanPool::default(),
-    )
-    .await?;
-    tx.commit().await?;
+    let result = folder_scan(&db, files).await?;
 
     // Should be detected as moved, not inserted
     assert_eq!(result.inserted_count, 0);
     assert_eq!(result.moved_count, 1);
 
     // Verify the track's path was updated
-    let new_path: (String,) = sqlx::query_as("SELECT file_path FROM tracks WHERE id = ?")
-        .bind(old_id)
-        .fetch_one(db.read())
-        .await?;
-    assert_eq!(new_path.0, "/music/new/song.mp3");
+    assert_eq!(path_of(&db, old_id).await?, "/music/new/song.mp3");
 
     // Verify only one track exists (no duplicate)
-    let count: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM tracks").fetch_one(db.read()).await?;
-    assert_eq!(count.0, 1);
+    assert_eq!(track_count(&db).await?, 1);
     Ok(())
 }
 
@@ -490,35 +379,27 @@ async fn ingest_batched_inserts_preserve_input_order_across_chunks() -> Result<(
         })
         .collect();
 
-    let mut tx = db.write().begin().await?;
-    let result = ingest_scanned_files(
-        &mut tx,
-        &files,
-        &IngestSource::FolderScan(1),
-        "2024-01-01T00:00:00Z",
-        &ScanPool::default(),
-    )
-    .await?;
-    tx.commit().await?;
+    let result = folder_scan(&db, files).await?;
 
     assert_eq!(result.inserted_count, u32::try_from(n).unwrap_or(u32::MAX));
     assert_eq!(result.inserted_track_ids.len(), n);
 
     // Each returned id (in input order) must resolve to the matching path.
-    for (i, id) in result.inserted_track_ids.iter().enumerate() {
-        let path: (String,) = sqlx::query_as("SELECT file_path FROM tracks WHERE id = ?")
-            .bind(id)
-            .fetch_one(db.read())
-            .await?;
-        assert_eq!(path.0, format!("/music/batch/{i:04}.mp3"));
+    for (i, &id) in result.inserted_track_ids.iter().enumerate() {
+        assert_eq!(path_of(&db, id).await?, format!("/music/batch/{i:04}.mp3"));
     }
 
     // Playback defaults from the literal block.
-    let defaults: (i64, i64, bool) = sqlx::query_as(
-        "SELECT play_count, last_position, is_favorite FROM tracks WHERE file_path = '/music/batch/0000.mp3'",
-    )
-    .fetch_one(db.read())
-    .await?;
+    let defaults: (i64, i64, bool) = db
+        .read(|conn| {
+            sql::fetch_one(
+                conn,
+                "SELECT play_count, last_position, is_favorite FROM tracks \
+                 WHERE file_path = '/music/batch/0000.mp3'",
+                (),
+            )
+        })
+        .await?;
     assert_eq!(defaults.0, 0);
     assert_eq!(defaults.1, 0);
     assert!(!defaults.2);
@@ -537,45 +418,33 @@ async fn ingest_duplicate_hash_repoints_once_inserts_second() -> Result<(), AppE
 
     let old_id =
         insert_test_track(&db, "/music/old/song.mp3", "Song", "Art", "Alb", "Rock").await?;
-    let hash: (String,) = sqlx::query_as("SELECT file_hash FROM tracks WHERE id = ?")
-        .bind(old_id)
-        .fetch_one(db.read())
-        .await?;
+    let hash = stored_hash(&db, old_id).await?;
 
     let files = vec![
-        make_scanned_file_with_hash("/music/new/copy-a.mp3", "Song", &hash.0),
-        make_scanned_file_with_hash("/music/new/copy-b.mp3", "Song", &hash.0),
+        make_scanned_file_with_hash("/music/new/copy-a.mp3", "Song", &hash),
+        make_scanned_file_with_hash("/music/new/copy-b.mp3", "Song", &hash),
     ];
 
-    let mut tx = db.write().begin().await?;
-    let result = ingest_scanned_files(
-        &mut tx,
-        &files,
-        &IngestSource::FolderScan(1),
-        "2024-01-01T00:00:00Z",
-        &ScanPool::default(),
-    )
-    .await?;
-    tx.commit().await?;
+    let result = folder_scan(&db, files).await?;
 
     assert_eq!(result.moved_count, 1);
     assert_eq!(result.inserted_count, 1);
 
     // The existing row was re-pointed to the FIRST new path…
-    let repointed: (String,) = sqlx::query_as("SELECT file_path FROM tracks WHERE id = ?")
-        .bind(old_id)
-        .fetch_one(db.read())
-        .await?;
-    assert_eq!(repointed.0, "/music/new/copy-a.mp3");
+    assert_eq!(path_of(&db, old_id).await?, "/music/new/copy-a.mp3");
 
     // …and the second file got its own fresh row — no path lost.
-    let count: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM tracks").fetch_one(db.read()).await?;
-    assert_eq!(count.0, 2);
-    let second: (i64,) =
-        sqlx::query_as("SELECT COUNT(*) FROM tracks WHERE file_path = '/music/new/copy-b.mp3'")
-            .fetch_one(db.read())
-            .await?;
-    assert_eq!(second.0, 1);
+    assert_eq!(track_count(&db).await?, 2);
+    let second: i64 = db
+        .read(|conn| {
+            sql::fetch_one(
+                conn,
+                "SELECT COUNT(*) FROM tracks WHERE file_path = '/music/new/copy-b.mp3'",
+                (),
+            )
+        })
+        .await?;
+    assert_eq!(second, 1);
     Ok(())
 }
 
@@ -590,24 +459,14 @@ async fn ingest_does_not_move_when_hash_differs() -> Result<(), AppError> {
     // Ingest a new file with a different hash
     let files = vec![make_scanned_file_with_hash("/music/new.mp3", "New Song", &"b".repeat(64))];
 
-    let mut tx = db.write().begin().await?;
-    let result = ingest_scanned_files(
-        &mut tx,
-        &files,
-        &IngestSource::FolderScan(1),
-        "2024-01-01T00:00:00Z",
-        &ScanPool::default(),
-    )
-    .await?;
-    tx.commit().await?;
+    let result = folder_scan(&db, files).await?;
 
     // Should be a normal insert, not a move
     assert_eq!(result.inserted_count, 1);
     assert_eq!(result.moved_count, 0);
 
     // Two tracks should exist
-    let count: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM tracks").fetch_one(db.read()).await?;
-    assert_eq!(count.0, 2);
+    assert_eq!(track_count(&db).await?, 2);
     Ok(())
 }
 
@@ -621,30 +480,19 @@ async fn ingest_moved_file_preserves_playback_state() -> Result<(), AppError> {
     queries::track::update_play_count(&db, old_id).await?;
     queries::track::update_play_count(&db, old_id).await?;
 
-    let hash: (String,) = sqlx::query_as("SELECT file_hash FROM tracks WHERE id = ?")
-        .bind(old_id)
-        .fetch_one(db.read())
-        .await?;
+    let hash = stored_hash(&db, old_id).await?;
 
     // Ingest same hash at new path
-    let files = vec![make_scanned_file_with_hash("/music/new.mp3", "Song", &hash.0)];
-    let mut tx = db.write().begin().await?;
-    ingest_scanned_files(
-        &mut tx,
-        &files,
-        &IngestSource::FolderScan(1),
-        "2024-01-01T00:00:00Z",
-        &ScanPool::default(),
-    )
-    .await?;
-    tx.commit().await?;
+    let files = vec![make_scanned_file_with_hash("/music/new.mp3", "Song", &hash)];
+    folder_scan(&db, files).await?;
 
     // Verify play_count was preserved
-    let play_count: (i32,) = sqlx::query_as("SELECT play_count FROM tracks WHERE id = ?")
-        .bind(old_id)
-        .fetch_one(db.read())
+    let play_count: i32 = db
+        .read(move |conn| {
+            sql::fetch_one(conn, "SELECT play_count FROM tracks WHERE id = ?", (old_id,))
+        })
         .await?;
-    assert_eq!(play_count.0, 2);
+    assert_eq!(play_count, 2);
     Ok(())
 }
 
@@ -659,16 +507,7 @@ async fn ingest_skips_unchanged_file() -> Result<(), AppError> {
     // Ingest the same file with matching mtime and size
     let files = vec![make_scanned_file("/music/song.mp3", "Song")];
 
-    let mut tx = db.write().begin().await?;
-    let result = ingest_scanned_files(
-        &mut tx,
-        &files,
-        &IngestSource::FolderScan(1),
-        "2024-01-01T00:00:00Z",
-        &ScanPool::default(),
-    )
-    .await?;
-    tx.commit().await?;
+    let result = folder_scan(&db, files).await?;
 
     assert_eq!(result.inserted_count, 0);
     assert_eq!(result.updated_count, 0);
@@ -685,26 +524,18 @@ async fn ingest_updates_metadata_when_file_changed() -> Result<(), AppError> {
     let mut file = make_scanned_file("/music/song.mp3", "New Title");
     file.metadata.date_modified = Some("2025-06-01T00:00:00+00:00".to_owned());
 
-    let mut tx = db.write().begin().await?;
-    let result = ingest_scanned_files(
-        &mut tx,
-        &[file],
-        &IngestSource::FolderScan(1),
-        "2024-01-01T00:00:00Z",
-        &ScanPool::default(),
-    )
-    .await?;
-    tx.commit().await?;
+    let result = folder_scan(&db, vec![file]).await?;
 
     assert_eq!(result.inserted_count, 0);
     assert_eq!(result.updated_count, 1);
 
     // Verify title was updated
-    let title: (String,) =
-        sqlx::query_as("SELECT title FROM tracks WHERE file_path = '/music/song.mp3'")
-            .fetch_one(db.read())
-            .await?;
-    assert_eq!(title.0, "New Title");
+    let title: String = db
+        .read(|conn| {
+            sql::fetch_one(conn, "SELECT title FROM tracks WHERE file_path = '/music/song.mp3'", ())
+        })
+        .await?;
+    assert_eq!(title, "New Title");
     Ok(())
 }
 
@@ -716,22 +547,18 @@ async fn ingest_stores_file_hash() -> Result<(), AppError> {
     let hash = "c".repeat(64);
     let files = vec![make_scanned_file_with_hash("/music/song.mp3", "Song", &hash)];
 
-    let mut tx = db.write().begin().await?;
-    ingest_scanned_files(
-        &mut tx,
-        &files,
-        &IngestSource::FolderScan(1),
-        "2024-01-01T00:00:00Z",
-        &ScanPool::default(),
-    )
-    .await?;
-    tx.commit().await?;
+    folder_scan(&db, files).await?;
 
-    let stored_hash: (Option<String>,) =
-        sqlx::query_as("SELECT file_hash FROM tracks WHERE file_path = '/music/song.mp3'")
-            .fetch_one(db.read())
-            .await?;
-    assert_eq!(stored_hash.0.as_deref(), Some(hash.as_str()));
+    let stored: Option<String> = db
+        .read(|conn| {
+            sql::fetch_one(
+                conn,
+                "SELECT file_hash FROM tracks WHERE file_path = '/music/song.mp3'",
+                (),
+            )
+        })
+        .await?;
+    assert_eq!(stored.as_deref(), Some(hash.as_str()));
     Ok(())
 }
 
@@ -821,16 +648,7 @@ async fn a_hard_link_beside_its_row_is_a_duplicate_rather_than_a_move() -> Resul
     insert_test_track(&db, &original.to_string_lossy(), "Song", "Art", "Alb", "Rock").await?;
     let files = vec![ScannedFile { path: link, metadata: make_test_metadata("Song") }];
 
-    let mut tx = db.write().begin().await?;
-    let result = ingest_scanned_files(
-        &mut tx,
-        &files,
-        &IngestSource::FolderScan(1),
-        "2024-01-01T00:00:00Z",
-        &ScanPool::default(),
-    )
-    .await?;
-    tx.commit().await?;
+    let result = folder_scan(&db, files).await?;
 
     assert_eq!((result.inserted_count, result.moved_count), (1, 0), "(inserted, moved)");
     Ok(())
@@ -851,20 +669,67 @@ async fn a_case_only_rename_keeps_the_tracks_rating() -> Result<(), AppError> {
     queries::track::set_rating(&db, &[id], 5).await?;
     let files = vec![ScannedFile { path: renamed.clone(), metadata: make_test_metadata("Song") }];
 
-    let mut tx = db.write().begin().await?;
-    ingest_scanned_files(
-        &mut tx,
-        &files,
-        &IngestSource::FolderScan(1),
-        "2024-01-01T00:00:00Z",
-        &ScanPool::default(),
-    )
-    .await?;
-    tx.commit().await?;
+    folder_scan(&db, files).await?;
 
     let track = queries::track::get_track_by_id(&db, id).await?;
     let renamed = renamed.to_string_lossy();
     assert_eq!((track.file_path.as_str(), track.rating), (renamed.as_ref(), 5), "(path, rating)");
+    Ok(())
+}
+
+/// The old spelling of a folder renamed by case still resolves and still lists its file, so only
+/// folding the two paths tells the rename from a copy. Read as a copy, the row would be purged
+/// with its rating.
+#[cfg(any(target_os = "windows", target_os = "macos"))]
+#[tokio::test]
+async fn a_folder_renamed_by_case_alone_keeps_its_tracks_rating() -> Result<(), AppError> {
+    for (old_folder, renamed_folder) in [("abba", "ABBA"), ("müller", "MÜLLER")] {
+        let tmp = tempfile::tempdir()?;
+        let db = DbPool::test_pool().await?;
+        queries::folder::insert_folder(&db, &tmp.path().to_string_lossy(), true).await?;
+        std::fs::create_dir(tmp.path().join(renamed_folder))?;
+        let renamed = tmp.path().join(renamed_folder).join("song.flac");
+        std::fs::write(&renamed, b"audio")?;
+        let old = tmp.path().join(old_folder).join("song.flac");
+        let id =
+            insert_test_track(&db, &old.to_string_lossy(), "Song", "Art", "Alb", "Rock").await?;
+        queries::track::set_rating(&db, &[id], 5).await?;
+        let file = ScannedFile { path: renamed.clone(), metadata: make_test_metadata("Song") };
+
+        folder_scan(&db, vec![file]).await?;
+
+        let track = queries::track::get_track_by_id(&db, id).await?;
+        let renamed = renamed.to_string_lossy();
+        assert_eq!(
+            (track.file_path.as_str(), track.rating),
+            (renamed.as_ref(), 5),
+            "renamed to {renamed_folder:?}"
+        );
+    }
+    Ok(())
+}
+
+/// On a disk that keeps case apart `abba` and `ABBA` are two folders, so the same bytes in the
+/// second are a copy and the first keeps its row.
+#[cfg(not(any(target_os = "windows", target_os = "macos")))]
+#[tokio::test]
+async fn the_same_bytes_under_another_spelling_are_a_copy_where_the_disk_keeps_case()
+-> Result<(), AppError> {
+    let tmp = tempfile::tempdir()?;
+    let db = DbPool::test_pool().await?;
+    queries::folder::insert_folder(&db, &tmp.path().to_string_lossy(), true).await?;
+    let original = tmp.path().join("abba").join("song.flac");
+    let copy = tmp.path().join("ABBA").join("song.flac");
+    std::fs::create_dir_all(tmp.path().join("abba"))?;
+    std::fs::create_dir_all(tmp.path().join("ABBA"))?;
+    std::fs::write(&original, b"audio")?;
+    std::fs::write(&copy, b"audio")?;
+    insert_test_track(&db, &original.to_string_lossy(), "Song", "Art", "Alb", "Rock").await?;
+    let file = ScannedFile { path: copy, metadata: make_test_metadata("Song") };
+
+    let result = folder_scan(&db, vec![file]).await?;
+
+    assert_eq!((result.inserted_count, result.moved_count), (1, 0), "(inserted, moved)");
     Ok(())
 }
 
@@ -879,17 +744,38 @@ async fn music_library() -> Result<DbPool, AppError> {
     Ok(db)
 }
 
-async fn folder_scan(db: &DbPool, files: &[ScannedFile]) -> Result<IngestResult, AppError> {
-    let mut tx = db.write().begin().await?;
-    let source = IngestSource::FolderScan(1);
-    let result =
-        ingest_scanned_files(&mut tx, files, &source, SCAN_TIMESTAMP, &ScanPool::default()).await?;
-    tx.commit().await?;
-    Ok(result)
+/// `files` ingested as `source` in one committed transaction, as a scan's chunk is.
+async fn ingest(
+    db: &DbPool,
+    files: Vec<ScannedFile>,
+    source: IngestSource,
+) -> Result<IngestResult, AppError> {
+    db.transaction(move |tx| {
+        ingest_scanned_files(tx, &files, &source, SCAN_TIMESTAMP, &ScanPool::default())
+    })
+    .await
 }
 
-async fn import(db: &DbPool, files: &[ScannedFile]) -> Result<IngestResult, AppError> {
-    commit_import(db, files, SCAN_TIMESTAMP, &ScanPool::default()).await
+async fn folder_scan(db: &DbPool, files: Vec<ScannedFile>) -> Result<IngestResult, AppError> {
+    ingest(db, files, IngestSource::FolderScan(1)).await
+}
+
+async fn import(db: &DbPool, files: Vec<ScannedFile>) -> Result<IngestResult, AppError> {
+    commit_import(db, files, SCAN_TIMESTAMP.to_owned(), ScanPool::default()).await
+}
+
+async fn stored_hash(db: &DbPool, id: i64) -> Result<String, AppError> {
+    db.read(move |conn| sql::fetch_one(conn, "SELECT file_hash FROM tracks WHERE id = ?", (id,)))
+        .await
+}
+
+async fn path_of(db: &DbPool, id: i64) -> Result<String, AppError> {
+    db.read(move |conn| sql::fetch_one(conn, "SELECT file_path FROM tracks WHERE id = ?", (id,)))
+        .await
+}
+
+async fn track_count(db: &DbPool) -> Result<i64, AppError> {
+    db.read(|conn| sql::fetch_one(conn, "SELECT COUNT(*) FROM tracks", ())).await
 }
 
 async fn kept_out_paths(db: &DbPool) -> Result<Vec<String>, AppError> {
@@ -902,7 +788,7 @@ async fn a_folder_scan_leaves_a_kept_out_file_out() -> Result<(), AppError> {
     let spare = make_scanned_file("/music/spare.mp3", "Spare");
     keep_out(&db, "/music/spare.mp3", &spare.metadata.file_hash).await?;
 
-    let result = folder_scan(&db, &[spare]).await?;
+    let result = folder_scan(&db, vec![spare]).await?;
 
     assert_eq!(result.inserted_count, 0);
     Ok(())
@@ -919,12 +805,17 @@ async fn a_folder_scan_restamps_a_kept_out_file_it_read() -> Result<(), AppError
     retagged.metadata.date_modified = Some("2025-02-03T04:05:06+00:00".to_owned());
     let new_hash = retagged.metadata.file_hash.clone();
 
-    folder_scan(&db, &[retagged]).await?;
+    folder_scan(&db, vec![retagged]).await?;
 
-    let stamp: Vec<(Option<String>, Option<i64>, Option<String>)> =
-        sqlx::query_as("SELECT file_hash, file_size, date_modified FROM excluded_files")
-            .fetch_all(db.read())
-            .await?;
+    let stamp: Vec<(Option<String>, Option<i64>, Option<String>)> = db
+        .read(|conn| {
+            sql::fetch_all(
+                conn,
+                "SELECT file_hash, file_size, date_modified FROM excluded_files",
+                (),
+            )
+        })
+        .await?;
     assert_eq!(
         stamp,
         [(Some(new_hash), Some(6_000_000), Some("2025-02-03T04:05:06+00:00".to_owned()))]
@@ -939,7 +830,7 @@ async fn a_kept_out_file_moved_within_a_folder_scan_carries_its_exclusion() -> R
     keep_out(&db, "/music/old/spare.mp3", "spare-bytes").await?;
     let moved = make_scanned_file_with_hash("/music/new/spare.mp3", "Spare", "spare-bytes");
 
-    folder_scan(&db, &[moved]).await?;
+    folder_scan(&db, vec![moved]).await?;
 
     assert_eq!(kept_out_paths(&db).await?, ["/music/new/spare.mp3"]);
     Ok(())
@@ -956,10 +847,181 @@ async fn a_moved_keeper_beside_its_kept_out_twin_takes_its_own_row_back() -> Res
     keep_out(&db, "/music/old/twin.mp3", &bytes).await?;
     let moved = make_scanned_file_with_hash("/music/new/song.mp3", "Song", &bytes);
 
-    folder_scan(&db, &[moved]).await?;
+    folder_scan(&db, vec![moved]).await?;
 
     let track = queries::track::get_track_by_id(&db, keeper).await?;
     assert_eq!(track.file_path, "/music/new/song.mp3");
+    Ok(())
+}
+
+/// The kept-out name is met first, and the lowest id handed to it would leave the keeper kept out.
+#[tokio::test]
+async fn a_kept_out_twin_moved_with_its_keeper_stays_the_one_kept_out() -> Result<(), AppError> {
+    let db = music_library().await?;
+    let keeper =
+        insert_test_track(&db, "/music/old/keep.mp3", "Song", "Art", "Alb", "Rock").await?;
+    queries::track::set_rating(&db, &[keeper], 5).await?;
+    let bytes = make_test_metadata("Song").file_hash;
+    keep_out(&db, "/music/old/dup.mp3", &bytes).await?;
+    let moved = vec![
+        make_scanned_file_with_hash("/music/new/dup.mp3", "Song", &bytes),
+        make_scanned_file_with_hash("/music/new/keep.mp3", "Song", &bytes),
+    ];
+
+    folder_scan(&db, moved).await?;
+
+    assert_eq!(rating_at(&db, "/music/new/keep.mp3").await?, 5);
+    assert_eq!(kept_out_paths(&db).await?, ["/music/new/dup.mp3"]);
+    Ok(())
+}
+
+/// The kept-out file is scanned at its own spelling, which is no respelling, so its exclusion
+/// isn't there for the new copy to take.
+#[cfg(any(target_os = "windows", target_os = "macos"))]
+#[tokio::test]
+async fn a_new_copy_beside_a_kept_out_file_leaves_its_exclusion_alone() -> Result<(), AppError> {
+    let tmp = tempfile::tempdir()?;
+    let db = DbPool::test_pool().await?;
+    queries::folder::insert_folder(&db, &tmp.path().to_string_lossy(), true).await?;
+    let (spare, copy) = (tmp.path().join("spare.flac"), tmp.path().join("copy.flac"));
+    std::fs::write(&spare, b"audio")?;
+    std::fs::write(&copy, b"audio")?;
+    let bytes = make_test_metadata("Song").file_hash;
+    keep_out(&db, &spare.to_string_lossy(), &bytes).await?;
+    let files = vec![
+        ScannedFile { path: copy, metadata: make_test_metadata("Song") },
+        ScannedFile { path: spare.clone(), metadata: make_test_metadata("Song") },
+    ];
+
+    let result = folder_scan(&db, files).await?;
+
+    assert_eq!(result.inserted_count, 1, "the copy is a track of its own");
+    assert_eq!(kept_out_paths(&db).await?, [spare.to_string_lossy().into_owned()]);
+    Ok(())
+}
+
+// === Rows sharing a file's bytes ===
+
+async fn rating_at(db: &DbPool, path: &str) -> Result<i32, AppError> {
+    let path = path.to_owned();
+    db.read(move |conn| {
+        sql::fetch_one(conn, "SELECT rating FROM tracks WHERE file_path = ?", (path,))
+    })
+    .await
+}
+
+/// Met in reverse id order, so handing out the lowest id gives each twin the other's history.
+#[tokio::test]
+async fn twins_moved_together_each_keep_their_own_history() -> Result<(), AppError> {
+    let db = music_library().await?;
+    let first = insert_test_track(&db, "/music/old/a.mp3", "Song", "Art", "Alb", "Rock").await?;
+    let second = insert_test_track(&db, "/music/old/b.mp3", "Song", "Art", "Alb", "Rock").await?;
+    queries::track::set_rating(&db, &[first], 3).await?;
+    queries::track::set_rating(&db, &[second], 5).await?;
+    let bytes = make_test_metadata("Song").file_hash;
+    let moved = vec![
+        make_scanned_file_with_hash("/music/new/b.mp3", "Song", &bytes),
+        make_scanned_file_with_hash("/music/new/a.mp3", "Song", &bytes),
+    ];
+
+    folder_scan(&db, moved).await?;
+
+    let a = rating_at(&db, "/music/new/a.mp3").await?;
+    let b = rating_at(&db, "/music/new/b.mp3").await?;
+    assert_eq!((a, b), (3, 5), "(a, b)");
+    Ok(())
+}
+
+/// The lowest id belongs to the twin left behind, so only a look at every row finds the one that
+/// moved.
+#[tokio::test]
+async fn a_twin_that_moved_takes_its_row_from_beside_one_that_stayed() -> Result<(), AppError> {
+    let tmp = tempfile::tempdir()?;
+    let db = DbPool::test_pool().await?;
+    queries::folder::insert_folder(&db, &tmp.path().to_string_lossy(), true).await?;
+    let (stayed, vanished) = (tmp.path().join("stayed.flac"), tmp.path().join("gone.flac"));
+    let arrived = tmp.path().join("arrived.flac");
+    std::fs::write(&stayed, b"audio")?;
+    std::fs::write(&arrived, b"audio")?;
+    insert_test_track(&db, &stayed.to_string_lossy(), "Song", "Art", "Alb", "Rock").await?;
+    let moved =
+        insert_test_track(&db, &vanished.to_string_lossy(), "Song", "Art", "Alb", "Rock").await?;
+    queries::track::set_rating(&db, &[moved], 5).await?;
+    let file = ScannedFile { path: arrived.clone(), metadata: make_test_metadata("Song") };
+
+    folder_scan(&db, vec![file]).await?;
+
+    assert_eq!(rating_at(&db, &arrived.to_string_lossy()).await?, 5);
+    Ok(())
+}
+
+/// A drive gone offline moved nothing, and handing its row to a copy of the twin still on disk
+/// would leave the drive's own file with no history once it returns.
+#[tokio::test]
+async fn a_copy_of_a_present_twin_leaves_the_row_on_an_offline_folder_alone() -> Result<(), AppError>
+{
+    let tmp = tempfile::tempdir()?;
+    let db = DbPool::test_pool().await?;
+    let (local, offline) = (tmp.path().join("local"), tmp.path().join("offline"));
+    queries::folder::insert_folder(&db, &local.to_string_lossy(), true).await?;
+    queries::folder::insert_folder(&db, &offline.to_string_lossy(), true).await?;
+    std::fs::create_dir(&local)?;
+    let (present, copy) = (local.join("song.flac"), local.join("copy.flac"));
+    std::fs::write(&present, b"audio")?;
+    std::fs::write(&copy, b"audio")?;
+    insert_test_track(&db, &present.to_string_lossy(), "Song", "Art", "Alb", "Rock").await?;
+    let on_offline = offline.join("song.flac").to_string_lossy().into_owned();
+    let row = insert_test_track(&db, &on_offline, "Song", "Art", "Alb", "Rock").await?;
+    let file = ScannedFile { path: copy, metadata: make_test_metadata("Song") };
+
+    let result = folder_scan(&db, vec![file]).await?;
+
+    assert_eq!((result.inserted_count, result.moved_count), (1, 0), "(inserted, moved)");
+    assert_eq!(path_of(&db, row).await?, on_offline);
+    Ok(())
+}
+
+/// With no twin on disk a missing folder reads as moved, which is what lets a library folder moved
+/// on disk and added back keep its history.
+#[tokio::test]
+async fn a_library_folder_moved_and_added_back_keeps_its_history() -> Result<(), AppError> {
+    let tmp = tempfile::tempdir()?;
+    let db = DbPool::test_pool().await?;
+    let (added_back, moved_away) = (tmp.path().join("new"), tmp.path().join("old"));
+    queries::folder::insert_folder(&db, &added_back.to_string_lossy(), true).await?;
+    queries::folder::insert_folder(&db, &moved_away.to_string_lossy(), true).await?;
+    std::fs::create_dir(&added_back)?;
+    let arrived = added_back.join("song.flac");
+    std::fs::write(&arrived, b"audio")?;
+    let old = moved_away.join("song.flac").to_string_lossy().into_owned();
+    let row = insert_test_track(&db, &old, "Song", "Art", "Alb", "Rock").await?;
+    queries::track::set_rating(&db, &[row], 5).await?;
+    let file = ScannedFile { path: arrived.clone(), metadata: make_test_metadata("Song") };
+
+    folder_scan(&db, vec![file]).await?;
+
+    assert_eq!(rating_at(&db, &arrived.to_string_lossy()).await?, 5);
+    Ok(())
+}
+
+/// Left at the old spelling, the exclusion stops matching and the duplicate the user removed comes
+/// back as a track.
+#[cfg(any(target_os = "windows", target_os = "macos"))]
+#[tokio::test]
+async fn a_kept_out_file_stays_out_of_a_folder_renamed_by_case_alone() -> Result<(), AppError> {
+    let tmp = tempfile::tempdir()?;
+    let db = DbPool::test_pool().await?;
+    queries::folder::insert_folder(&db, &tmp.path().to_string_lossy(), true).await?;
+    std::fs::create_dir(tmp.path().join("ABBA"))?;
+    let renamed = tmp.path().join("ABBA").join("spare.flac");
+    std::fs::write(&renamed, b"audio")?;
+    let old = tmp.path().join("abba").join("spare.flac");
+    let file = ScannedFile { path: renamed.clone(), metadata: make_test_metadata("Spare") };
+    keep_out(&db, &old.to_string_lossy(), &file.metadata.file_hash).await?;
+
+    folder_scan(&db, vec![file]).await?;
+
+    assert_eq!(kept_out_paths(&db).await?, [renamed.to_string_lossy().into_owned()]);
     Ok(())
 }
 
@@ -969,7 +1031,7 @@ async fn an_import_brings_a_kept_out_file_back() -> Result<(), AppError> {
     let spare = make_scanned_file("/music/spare.mp3", "Spare");
     keep_out(&db, "/music/spare.mp3", &spare.metadata.file_hash).await?;
 
-    let result = import(&db, &[spare]).await?;
+    let result = import(&db, vec![spare]).await?;
 
     assert_eq!(result.inserted_count, 1, "the file is a track again");
     assert!(kept_out_paths(&db).await?.is_empty(), "and no longer listed as kept out");
@@ -986,7 +1048,7 @@ async fn an_import_that_takes_an_old_row_back_still_lifts_the_kept_out_file() ->
     keep_out(&db, "/music/spare.mp3", &bytes).await?;
     let spare = make_scanned_file_with_hash("/music/spare.mp3", "Song", &bytes);
 
-    let result = import(&db, &[spare]).await?;
+    let result = import(&db, vec![spare]).await?;
 
     assert_eq!(result.moved_count, 1, "the premise: the import re-pointed the old row");
     assert!(kept_out_paths(&db).await?.is_empty());
@@ -1001,10 +1063,10 @@ async fn an_import_inside_a_library_folder_is_filed_under_that_folder() -> Resul
     let library = queries::folder::insert_folder(&db, "/music", true).await?;
     queries::folder::insert_folder(&db, "/music/drop", false).await?;
 
-    let result = import(&db, &[make_scanned_file("/music/drop/song.mp3", "Song")]).await?;
+    let result = import(&db, vec![make_scanned_file("/music/drop/song.mp3", "Song")]).await?;
 
     let folder_ids: Vec<i64> =
-        sqlx::query_scalar("SELECT folder_id FROM tracks").fetch_all(db.read()).await?;
+        db.read(|conn| sql::fetch_all(conn, "SELECT folder_id FROM tracks", ())).await?;
     assert_eq!(result.inserted_count, 1, "the premise: the file was imported");
     assert_eq!(folder_ids, [library.id]);
     Ok(())
@@ -1019,9 +1081,138 @@ async fn records_that_a_move_two_gone_rows_share_takes_back_the_lower_id() -> Re
     insert_test_track(&db, "/music/b/song.mp3", "Song", "Art", "Alb", "Rock").await?;
     let bytes = make_test_metadata("Song").file_hash;
 
-    folder_scan(&db, &[make_scanned_file_with_hash("/music/c/song.mp3", "Song", &bytes)]).await?;
+    folder_scan(&db, vec![make_scanned_file_with_hash("/music/c/song.mp3", "Song", &bytes)])
+        .await?;
 
     let track = queries::track::get_track_by_id(&db, older).await?;
     assert_eq!(track.file_path, "/music/c/song.mp3");
+    Ok(())
+}
+
+/// Files past [`BULK_THRESHOLD`], so the import runs with the stats triggers dropped.
+const BULK_IMPORT: usize = 21;
+
+fn numbered_files(count: usize) -> Vec<ScannedFile> {
+    (0..count)
+        .map(|index| make_scanned_file(&format!("/music/{index}.mp3"), &format!("Track {index}")))
+        .collect()
+}
+
+async fn schema_version(db: &DbPool) -> Result<i64, AppError> {
+    db.read(|conn| sql::fetch_one(conn, "SELECT schema_version FROM pragma_schema_version", ()))
+        .await
+}
+
+/// `(track_count, album_count, total_duration_ms)` as the artist's row stores them.
+async fn stored_artist(db: &DbPool, name: &'static str) -> Result<(i64, i64, i64), AppError> {
+    db.read(move |conn| {
+        sql::fetch_one(
+            conn,
+            "SELECT track_count, album_count, total_duration_ms FROM artists WHERE name = ?",
+            (name,),
+        )
+    })
+    .await
+}
+
+/// `(track_count, total_duration_ms)` as the album's row stores them.
+async fn stored_album(db: &DbPool, name: &'static str) -> Result<(i64, i64), AppError> {
+    db.read(move |conn| {
+        sql::fetch_one(
+            conn,
+            "SELECT track_count, total_duration_ms FROM albums WHERE name = ?",
+            (name,),
+        )
+    })
+    .await
+}
+
+/// `(track_count, total_duration_ms)` as the genre's row stores them.
+async fn stored_genre(db: &DbPool, name: &'static str) -> Result<(i64, i64), AppError> {
+    db.read(move |conn| {
+        sql::fetch_one(
+            conn,
+            "SELECT track_count, total_duration_ms FROM genres WHERE name = ?",
+            (name,),
+        )
+    })
+    .await
+}
+
+/// Dropping a trigger moves the schema version and sends every connection back to re-parse its
+/// statements, which one dropped file must not cost.
+#[tokio::test]
+async fn an_import_changes_the_schema_only_past_the_bulk_threshold() -> Result<(), AppError> {
+    let cases = [(1, false), (BULK_THRESHOLD, false), (BULK_THRESHOLD + 1, true)];
+    for (files, rebuilds_triggers) in cases {
+        let db = music_library().await?;
+        let before = schema_version(&db).await?;
+
+        import(&db, numbered_files(files)).await?;
+
+        let after = schema_version(&db).await?;
+        assert_eq!(after != before, rebuilds_triggers, "{files} file(s)");
+    }
+    Ok(())
+}
+
+/// The triggers keep the counts on one side of the threshold and the recalc on the other. Every
+/// fixture track runs 180 s and shares one artist, album and genre.
+#[tokio::test]
+async fn an_import_leaves_the_stored_counts_right_either_side_of_the_threshold()
+-> Result<(), AppError> {
+    let cases = [(1, 1, 180_000), (BULK_IMPORT, 21, 3_780_000)];
+    for (files, tracks, total_ms) in cases {
+        let db = music_library().await?;
+
+        import(&db, numbered_files(files)).await?;
+
+        assert_eq!(stored_artist(&db, "Test Artist").await?, (tracks, 1, total_ms), "artist");
+        assert_eq!(stored_album(&db, "Test Album").await?, (tracks, total_ms), "album");
+        assert_eq!(stored_genre(&db, "Rock").await?, (tracks, total_ms), "genre");
+    }
+    Ok(())
+}
+
+#[tokio::test]
+async fn an_import_onto_a_held_album_adds_to_it() -> Result<(), AppError> {
+    let db = music_library().await?;
+    folder_scan(&db, vec![make_scanned_file("/music/held.mp3", "Held")]).await?;
+
+    import(&db, vec![make_scanned_file("/music/new.mp3", "New")]).await?;
+
+    assert_eq!(stored_artist(&db, "Test Artist").await?, (2, 1, 360_000), "artist");
+    assert_eq!(stored_album(&db, "Test Album").await?, (2, 360_000), "album");
+    Ok(())
+}
+
+/// A small import recalculates nothing, so moving a rewritten row's counts is the triggers' job.
+#[tokio::test]
+async fn an_import_rewriting_a_row_moves_its_counts_to_the_new_album() -> Result<(), AppError> {
+    let db = music_library().await?;
+    let mut original = make_scanned_file("/music/a.mp3", "A");
+    original.metadata.album = Some("Old Album".to_owned());
+    folder_scan(&db, vec![original]).await?;
+    let mut rewritten = make_scanned_file("/music/a.mp3", "A");
+    rewritten.metadata.album = Some("New Album".to_owned());
+    rewritten.metadata.file_size = 6_000_000;
+
+    import(&db, vec![rewritten]).await?;
+
+    assert_eq!(stored_album(&db, "Old Album").await?, (0, 0), "the album it left");
+    assert_eq!(stored_album(&db, "New Album").await?, (1, 180_000), "the album it joined");
+    Ok(())
+}
+
+/// Every later writer relies on the triggers a bulk import drops for its own inserts.
+#[tokio::test]
+async fn a_bulk_import_leaves_the_stats_triggers_live() -> Result<(), AppError> {
+    let db = music_library().await?;
+    import(&db, numbered_files(BULK_IMPORT)).await?;
+    let (after_import, _, _) = stored_artist(&db, "Test Artist").await?;
+
+    insert_test_track(&db, "/music/added.mp3", "Added", "Test Artist", "Album", "Rock").await?;
+
+    assert_eq!(stored_artist(&db, "Test Artist").await?.0, after_import + 1);
     Ok(())
 }

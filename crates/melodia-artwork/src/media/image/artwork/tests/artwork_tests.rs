@@ -1,3 +1,7 @@
+use std::sync::mpsc::{self, RecvTimeoutError};
+use std::time::Duration;
+
+use image::ImageEncoder;
 use melodia_core::error::AppError;
 
 use super::*;
@@ -34,6 +38,17 @@ fn solid_source(
         .save(&path)
         .map_err(|e| AppError::validation(format!("write {name}"), e))?;
     Ok(path)
+}
+
+/// Noise rather than a flat fill, so a JPEG of it comes out smaller than its PNG.
+fn noisy_image(width: u32, height: u32) -> image::RgbImage {
+    image::RgbImage::from_fn(width, height, |x, y| {
+        image::Rgb([(x % 251) as u8, (y % 241) as u8, ((x * y) % 239) as u8])
+    })
+}
+
+fn file_name(stored: &str) -> Option<&str> {
+    Path::new(stored).file_name().and_then(|name| name.to_str())
 }
 
 #[test]
@@ -111,13 +126,8 @@ fn a_store_deleted_while_running_is_made_again_by_the_next_write() -> Result<(),
 #[test]
 fn an_oversized_source_is_shrunk_and_named_after_what_was_written() -> Result<(), AppError> {
     let tmp = tempfile::tempdir()?;
-    // Noise rather than a flat fill, so the JPEG actually comes out smaller than the source PNG.
     let source = tmp.path().join("big.png");
-    image::RgbImage::from_fn(1024, 1024, |x, y| {
-        image::Rgb([(x % 251) as u8, (y % 241) as u8, ((x * y) % 239) as u8])
-    })
-    .save(&source)
-    .map_err(|e| AppError::validation("write big.png", e))?;
+    noisy_image(1024, 1024).save(&source).map_err(|e| AppError::validation("write big.png", e))?;
     let bytes = std::fs::read(&source)?;
 
     let stored = store_image(&bytes, "png", tmp.path())
@@ -132,50 +142,185 @@ fn an_oversized_source_is_shrunk_and_named_after_what_was_written() -> Result<()
     );
     assert!(written.len() < bytes.len(), "the whole point is that it got smaller");
 
-    let name = std::path::Path::new(&stored)
-        .file_name()
-        .and_then(|n| n.to_str())
-        .ok_or_else(|| AppError::validation_msg("stored path has no file name"))?;
     assert_eq!(
-        name,
-        stored_name(&compute_hash(&written), "jpg"),
+        file_name(&stored),
+        Some(stored_name(&compute_hash(&written), "jpg").as_str()),
         "the name must describe the file"
     );
     Ok(())
 }
 
-/// The rule that makes the cap forgiving, and the real mechanism behind it: a source encoded
-/// cheaply is only a little over the cap in pixels but far under it in bytes, so re-encoding it
-/// at a *fixed* quality 90 costs more than the downscale saves. A cap chosen slightly too low can
-/// therefore waste CPU here but can never grow the store. Live machinery rather than a
-/// theoretical guard — it fires on 6 of the reference library's 83 over-cap files.
+/// A source encoded cheaply is only a little over the cap in pixels but far under it in bytes, so
+/// re-encoding it at a *fixed* quality 90 costs more than the downscale saves. It is bounded anyway:
+/// every draw decodes the stored file whole, and a kept source puts its full size behind each one.
 #[test]
-fn a_source_that_would_grow_under_re_encode_is_left_alone() -> Result<(), AppError> {
+fn a_source_over_the_cap_is_bounded_even_where_that_grows_it() -> Result<(), AppError> {
     let tmp = tempfile::tempdir()?;
 
     // Just past the cap, and encoded far below the quality the normalizer would use.
-    let noisy = image::RgbImage::from_fn(600, 600, |x, y| {
-        image::Rgb([(x % 251) as u8, (y % 241) as u8, ((x * y) % 239) as u8])
-    });
     let mut cheap = Vec::new();
     let encoder = image::codecs::jpeg::JpegEncoder::new_with_quality(&mut cheap, 20);
-    image::DynamicImage::ImageRgb8(noisy)
+    image::DynamicImage::ImageRgb8(noisy_image(600, 600))
         .write_with_encoder(encoder)
         .map_err(|e| AppError::validation("encode cheap jpeg", e))?;
 
     let stored = store_image(&cheap, "jpg", tmp.path())
         .ok_or_else(|| AppError::validation_msg("store_image returned None"))?;
+    let written = std::fs::read(&stored)?;
 
+    let (width, height) = image_decode::memory_dimensions(&written, MAX_SOURCE_DIM)
+        .ok_or_else(|| AppError::validation_msg("stored file will not decode"))?;
     assert_eq!(
-        std::fs::read(&stored)?,
-        cheap,
-        "the re-encode came out larger than the source, so the source is what must be kept"
+        (width, height),
+        (STORE_MAX_DIM, STORE_MAX_DIM),
+        "a re-encode larger than the source must still land inside the cap"
+    );
+    assert!(written.len() > cheap.len(), "the fixture no longer grows under the re-encode");
+    assert_eq!(
+        file_name(&stored),
+        Some(stored_name(&compute_hash(&written), "jpg").as_str()),
+        "a PNG is taken only where it beats the JPEG"
     );
     Ok(())
 }
 
-/// Header validation, which is also what stops a container this build cannot draw taking up disk
-/// forever — `image` is compiled without the BMP/GIF/TIFF decoders the lofty MIME map can name.
+/// Flat art, which a PNG holds in a few kilobytes, so a source compressed that well is smaller than
+/// its JPEG at the cap. It lands as a PNG, and the name has to say so.
+#[test]
+fn a_source_smaller_than_its_jpeg_is_bounded_as_a_png_named_after_what_was_written()
+-> Result<(), AppError> {
+    let tmp = tempfile::tempdir()?;
+    // Few, large blocks: many edges would ring under the resize and cost the PNG its advantage.
+    let checkerboard = image::RgbImage::from_fn(1024, 1024, |x, y| {
+        if (x / 256 + y / 256) % 2 == 0 {
+            image::Rgb([0, 0, 0])
+        } else {
+            image::Rgb([255, 255, 255])
+        }
+    });
+    let mut source = Vec::new();
+    image::codecs::png::PngEncoder::new_with_quality(
+        &mut source,
+        image::codecs::png::CompressionType::Best,
+        image::codecs::png::FilterType::Adaptive,
+    )
+    .write_image(checkerboard.as_raw(), 1024, 1024, image::ExtendedColorType::Rgb8)
+    .map_err(|e| AppError::validation("encode checkerboard", e))?;
+
+    let stored = store_image(&source, "png", tmp.path())
+        .ok_or_else(|| AppError::validation_msg("store_image returned None"))?;
+    let written = std::fs::read(&stored)?;
+
+    let dimensions = image_decode::memory_dimensions(&written, MAX_SOURCE_DIM);
+    assert_eq!(dimensions, Some((STORE_MAX_DIM, STORE_MAX_DIM)), "the cap holds for flat art too");
+    assert_eq!(
+        file_name(&stored),
+        Some(stored_name(&compute_hash(&written), "png").as_str()),
+        "a PNG named as anything else is a file its own name misdescribes"
+    );
+    Ok(())
+}
+
+#[test]
+fn a_source_over_only_the_byte_bound_keeps_its_dimensions_as_a_jpeg() -> Result<(), AppError> {
+    let tmp = tempfile::tempdir()?;
+    let source = solid_source(tmp.path(), "padded.png", [10, 20, 30], 64, 64)?;
+    let mut bytes = std::fs::read(&source)?;
+    // Past the image's end, so the bound is crossed with no pixels to pay for it.
+    bytes.resize(STORE_MAX_BYTES + 1, 0);
+
+    let stored = store_image(&bytes, "png", tmp.path())
+        .ok_or_else(|| AppError::validation_msg("store_image returned None"))?;
+    let written = std::fs::read(&stored)?;
+
+    let dimensions = image_decode::memory_dimensions(&written, MAX_SOURCE_DIM);
+    assert_eq!(dimensions, Some((64, 64)), "the byte bound has no business resizing it");
+    assert_eq!(file_name(&stored), Some(stored_name(&compute_hash(&written), "jpg").as_str()));
+    Ok(())
+}
+
+#[test]
+fn a_source_on_the_byte_bound_is_stored_byte_identical() -> Result<(), AppError> {
+    let tmp = tempfile::tempdir()?;
+    let source = solid_source(tmp.path(), "padded.png", [10, 20, 30], 64, 64)?;
+    let mut bytes = std::fs::read(&source)?;
+    bytes.resize(STORE_MAX_BYTES, 0);
+
+    let stored = store_image(&bytes, "png", tmp.path())
+        .ok_or_else(|| AppError::validation_msg("store_image returned None"))?;
+
+    assert_eq!(file_name(&stored), Some(stored_name(&compute_hash(&bytes), "png").as_str()));
+    Ok(())
+}
+
+/// Noise, as a flat fill's PNG beats its JPEG and survives even a re-encode at the cap.
+#[test]
+fn a_source_on_the_dimension_cap_is_stored_byte_identical() -> Result<(), AppError> {
+    let tmp = tempfile::tempdir()?;
+    let source = tmp.path().join("at_the_cap.png");
+    noisy_image(STORE_MAX_DIM, STORE_MAX_DIM)
+        .save(&source)
+        .map_err(|e| AppError::validation("write at_the_cap.png", e))?;
+    let bytes = std::fs::read(&source)?;
+
+    let stored = store_image(&bytes, "png", tmp.path())
+        .ok_or_else(|| AppError::validation_msg("store_image returned None"))?;
+
+    assert_eq!(file_name(&stored), Some(stored_name(&compute_hash(&bytes), "png").as_str()));
+    Ok(())
+}
+
+/// Called directly: inside the cap, nothing ordinary is both past the byte bound and smaller than
+/// its own JPEG.
+#[test]
+fn a_source_inside_the_cap_that_would_not_shrink_is_kept() -> Result<(), AppError> {
+    let tmp = tempfile::tempdir()?;
+    let source = solid_source(tmp.path(), "flat.png", [10, 20, 30], 64, 64)?;
+    let bytes = std::fs::read(&source)?;
+
+    let normalized = normalized_bytes(&bytes, 64, 64);
+
+    assert!(normalized.is_none(), "a re-encode inside the cap has to pay for itself");
+    Ok(())
+}
+
+/// How long a test leaves a second thread to run into something the first still holds. Only a
+/// broken build is sensitive to it: a correct one waits however long that is.
+const OVERLAP_WINDOW: Duration = Duration::from_millis(200);
+
+/// How long a test waits on a second thread before calling it stuck, so a deadlock reads as a
+/// failure rather than a suite that never finishes.
+const WATCHDOG: Duration = Duration::from_secs(30);
+
+#[test]
+fn a_source_past_the_large_decode_gate_waits_for_it() -> Result<(), AppError> {
+    const PAST_THE_GATE: u32 = 2048;
+    // The gate goes by the header, and the decode fails just past it, so a store that doesn't wait
+    // is done well inside the window.
+    const HEADER_AND_A_SLIVER_OF_PIXELS: usize = 64;
+    let tmp = tempfile::tempdir()?;
+    let source = solid_source(tmp.path(), "large.png", [10, 20, 30], PAST_THE_GATE, PAST_THE_GATE)?;
+    let mut bytes = std::fs::read(&source)?;
+    bytes.truncate(HEADER_AND_A_SLIVER_OF_PIXELS);
+    let (finished, store_result) = mpsc::channel();
+    let gate = image_decode::large_decode_guard(u64::from(PAST_THE_GATE).pow(2));
+
+    let while_held = std::thread::scope(|scope| {
+        scope.spawn(|| finished.send(store_image(&bytes, "png", tmp.path())));
+        let while_held = store_result.recv_timeout(OVERLAP_WINDOW);
+        drop(gate);
+        while_held
+    });
+
+    assert_eq!(
+        while_held,
+        Err(RecvTimeoutError::Timeout),
+        "a second full-resolution decode ran beside the one holding the gate"
+    );
+    Ok(())
+}
+
+/// The header read is the format check: a source failing it would sit on disk undrawable.
 #[test]
 fn a_source_that_is_not_a_decodable_image_is_not_stored() -> Result<(), AppError> {
     let tmp = tempfile::tempdir()?;
@@ -230,7 +375,7 @@ fn find_external_cover_cache_hit() -> Result<(), AppError> {
     let _ = find_external_cover(&track_path, &cache);
 
     // Only one directory entry cached
-    assert_eq!(cache.dir_to_cover.lock().len(), 1);
+    assert_eq!(cache.dir_to_cover.state.lock().entries.len(), 1);
     Ok(())
 }
 
@@ -329,7 +474,7 @@ fn find_and_cache_artwork_memoizes_per_cover() -> Result<(), AppError> {
         .ok_or_else(|| AppError::validation_msg("expected cached artwork path"))?;
 
     assert_eq!(first, second);
-    assert_eq!(cache.cover_to_cached.lock().len(), 1);
+    assert_eq!(cache.cover_to_cached.state.lock().entries.len(), 1);
     Ok(())
 }
 
@@ -385,11 +530,9 @@ fn extract_and_cache_artwork_empty_pictures() -> Result<(), AppError> {
 /// re-encode rather than a hash.
 fn tag_with_oversized_cover() -> Result<lofty::tag::Tag, AppError> {
     let mut png = Vec::new();
-    image::DynamicImage::ImageRgb8(image::RgbImage::from_fn(1024, 1024, |x, y| {
-        image::Rgb([(x % 251) as u8, (y % 241) as u8, ((x * y) % 239) as u8])
-    }))
-    .write_to(&mut std::io::Cursor::new(&mut png), image::ImageFormat::Png)
-    .map_err(|e| AppError::validation("encode png", e))?;
+    image::DynamicImage::ImageRgb8(noisy_image(1024, 1024))
+        .write_to(&mut std::io::Cursor::new(&mut png), image::ImageFormat::Png)
+        .map_err(|e| AppError::validation("encode png", e))?;
 
     let picture = lofty::picture::Picture::from_reader(&mut std::io::Cursor::new(&png))
         .map_err(|e| AppError::validation("read picture", e))?;
@@ -450,6 +593,64 @@ fn a_hit_whose_file_the_sweep_retired_is_stored_again() -> Result<(), AppError> 
     assert_eq!(second, first);
     assert!(Path::new(&second).exists(), "the memo handed back a path the sweep had unlinked");
     Ok(())
+}
+
+const MEMO_KEY: &str = "album";
+
+#[test]
+fn a_miss_on_a_key_being_computed_takes_that_answer() -> Result<(), AppError> {
+    let tmp = tempfile::tempdir()?;
+    // On disk, or the waiter reads the answer as stale and computes its own.
+    let stored = tmp.path().join("stored.jpg");
+    std::fs::write(&stored, b"stored")?;
+    let memo = Arc::new(Memo::new());
+    let waiting_memo = Arc::clone(&memo);
+    let (answered, answer) = mpsc::channel();
+
+    memo.get_or_compute(MEMO_KEY.to_owned(), |_| {
+        // Not scoped: a scope would join a waiter that's never woken, hanging the suite.
+        std::thread::spawn(move || {
+            answered.send(waiting_memo.get_or_compute(MEMO_KEY.to_owned(), |_| None))
+        });
+        std::thread::sleep(OVERLAP_WINDOW);
+        Some(stored.clone())
+    });
+
+    assert_eq!(
+        answer.recv_timeout(WATCHDOG),
+        Ok(Some(stored)),
+        "the waiter computed beside the one holding the key, or was never woken"
+    );
+    Ok(())
+}
+
+#[test]
+fn a_key_being_computed_holds_up_no_other_key() {
+    let memo = Memo::new();
+    let stored = PathBuf::from("stored.jpg");
+    let (other_settled, other_answered) = mpsc::channel();
+
+    let held = std::thread::scope(|scope| {
+        memo.get_or_compute(MEMO_KEY.to_owned(), |_| {
+            scope.spawn(|| {
+                memo.get_or_compute("another album".to_owned(), |_| None);
+                other_settled.send(())
+            });
+            other_answered.recv_timeout(WATCHDOG).ok().map(|()| stored.clone())
+        })
+    });
+
+    assert_eq!(held, Some(stored), "the other key waited out this one's compute");
+}
+
+#[test]
+fn a_memoized_none_is_a_settled_answer() {
+    let memo = Memo::new();
+    memo.get_or_compute(MEMO_KEY.to_owned(), |_| None);
+
+    let second = memo.get_or_compute(MEMO_KEY.to_owned(), |_| Some(PathBuf::from("found.jpg")));
+
+    assert_eq!(second, None, "every track in a coverless folder would probe the disk again");
 }
 
 // ── compose_cover ──

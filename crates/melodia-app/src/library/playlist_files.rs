@@ -272,7 +272,7 @@ async fn import_text(
     let outcome = match_entries(db, &parsed.entries, origin.parent()).await?;
 
     let playlist_id =
-        queries::playlist::create_playlist_with_tracks(db, &name, None, &outcome.ordered_ids)
+        queries::playlist::create_playlist_with_tracks(db, name.clone(), None, outcome.ordered_ids)
             .await?;
 
     Ok(ImportPlaylistResult {
@@ -320,7 +320,7 @@ async fn match_entries(
         .filter_map(|(_, e)| e.hash.clone())
         .collect();
     if !hashes.is_empty() {
-        let by_hash = queries::track::get_track_ids_by_hashes(db, &hashes).await?;
+        let by_hash = queries::track::get_track_ids_by_hashes(db, hashes).await?;
         for (i, entry) in entries.iter().enumerate() {
             if ids[i].is_some() {
                 continue;

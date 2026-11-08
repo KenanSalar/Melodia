@@ -12,7 +12,7 @@ use tempfile::TempDir;
 use super::*;
 use melodia_core::error::AppError;
 use melodia_engine::player::engine::types::{PersistableQueue, PersistedPlayback};
-use melodia_store::database::queries::fixtures::insert_test_track;
+use melodia_store::database::queries::fixtures::{fetch_one, insert_test_track};
 
 type TestResult<T = ()> = Result<T, Box<dyn std::error::Error>>;
 
@@ -35,12 +35,8 @@ impl Fixture {
     }
 
     async fn last_position(&self) -> Result<i64, AppError> {
-        let position =
-            sqlx::query_scalar::<_, i64>("SELECT last_position FROM tracks WHERE id = ?")
-                .bind(self.track_id)
-                .fetch_one(self.db.read())
-                .await?;
-        Ok(position)
+        let id = self.track_id;
+        fetch_one(&self.db, &format!("SELECT last_position FROM tracks WHERE id = {id}")).await
     }
 
     /// Read the file back the way the startup restore does, so a shape only this test can parse

@@ -6,11 +6,10 @@
 //! arm ends in the id, so the order is total and a descending sort is the exact reverse of the
 //! ascending one. Rows `ui::track_sort` leaves tied in fetch order come back in id order instead.
 
-use sqlx::{QueryBuilder, Sqlite};
-
 use super::membership::Membership;
 use crate::database::DbPool;
 use crate::database::collation::UNICODE_LOWER;
+use crate::database::sql::Sql;
 use melodia_core::entities::track_list::{SortDir, TrackListScope, TrackOrder, TrackSortField};
 use melodia_core::error::AppError;
 use melodia_core::utils::needle::Needle;
@@ -20,59 +19,45 @@ use melodia_core::utils::needle::Needle;
 const UNTAGGED_TRACK_LAST: i32 = i32::MAX;
 
 /// The longest a Songs row's length reads, the most milliseconds the `i32` it displays holds.
+/// `idx_tracks_length_order` carries it written out, so another cap still sorts right and walks
+/// nothing.
 const SONGS_LENGTH_CAP_MS: i32 = i32::MAX;
+
+/// A Songs row's year, a missing one as `0`. `idx_tracks_year_order` carries this spelling, the
+/// only one an index on an expression serves.
+const SONGS_YEAR: &str = "COALESCE(t.year, 0)";
 
 /// The scan's natural-order key, folded the way `to_ascii_lowercase` folds it.
 const NATURAL: &str = "COALESCE(t.sort_key, '') COLLATE NOCASE";
 
+/// [`NATURAL`] named bare, so a walked list reads `idx_tracks_sort_key` in order. The same order,
+/// every track write filling `sort_key`.
+const NATURAL_WALKED: &str = "t.sort_key COLLATE NOCASE";
+
 /// The ids of every track in `scope` that `needle` matches, in `order`.
-///
-/// They come back as one comma-joined row rather than a row each: sqlx hands every row across
-/// from its connection's worker thread on its own, which over a library costs more than the sort.
-///
-/// The order is the subquery's, not the aggregate's own `ORDER BY`, which sorts slower wherever an
-/// index can't answer it. `SQLite`'s flattener keeps a FROM-clause subquery's `ORDER BY` under
-/// any aggregate but `count`, `min` and `max`, and `cross_tier` holds every arm to it.
 pub async fn track_ids(
     db: &DbPool,
     scope: TrackListScope,
     order: TrackOrder,
     needle: &Needle,
 ) -> Result<Vec<i64>, AppError> {
-    let membership = Membership::resolve(db, scope).await?;
-    let mut qb =
-        QueryBuilder::<Sqlite>::new("SELECT group_concat(id, ',') FROM (SELECT t.id FROM ");
-    membership.push_source(&mut qb);
-    if !needle.is_empty() {
-        membership.push_and(&mut qb);
-        push_needle(&mut qb, needle);
-    }
-    qb.push(" ORDER BY ")
-        .push(order_by(Page::of(&membership), order, membership.position()))
-        .push(")");
-    fetch_packed_ids(db.read(), qb).await
-}
-
-/// The ids `qb` reads back as one `group_concat(id, ',')`, in the order joined. The aggregate is
-/// NULL where nothing matched.
-pub(crate) async fn fetch_packed_ids<'e, E>(
-    executor: E,
-    mut qb: QueryBuilder<Sqlite>,
-) -> Result<Vec<i64>, AppError>
-where
-    E: sqlx::Executor<'e, Database = Sqlite>,
-{
-    let packed: Option<String> =
-        qb.build_query_scalar().persistent(false).fetch_one(executor).await?;
-    packed.map_or_else(|| Ok(Vec::new()), |packed| unpack_ids(&packed))
-}
-
-fn unpack_ids(packed: &str) -> Result<Vec<i64>, AppError> {
-    let mut ids = Vec::with_capacity(packed.bytes().filter(|&b| b == b',').count() + 1);
-    for id in packed.split(',') {
-        ids.push(id.parse().map_err(|e| sqlx::Error::Decode(Box::new(e)))?);
-    }
-    Ok(ids)
+    let needle = needle.clone();
+    db.read(move |conn| {
+        let membership = Membership::resolve(conn, scope)?;
+        let mut sql = Sql::new("SELECT t.id FROM ");
+        membership.push_source(&mut sql);
+        if !needle.is_empty() {
+            membership.push_and(&mut sql);
+            push_needle(&mut sql, &needle);
+        }
+        sql.push(" ORDER BY ").push_vouched(&order_by(
+            Page::of(&membership, &needle),
+            order,
+            membership.position(),
+        ));
+        sql.fetch_all(conn)
+    })
+    .await
 }
 
 /// The order a detail page defaults to for `field`, ascending, for a query over `tracks t` that
@@ -82,8 +67,8 @@ pub(super) fn detail_order(field: TrackSortField) -> String {
 }
 
 /// Pushes the condition `needle` filters a track list by, for a caller that skips an empty needle.
-pub(super) fn push_needle(qb: &mut QueryBuilder<Sqlite>, needle: &Needle) {
-    push_folded_match(qb, needle, "search_text", Some("year"));
+pub(super) fn push_needle(sql: &mut Sql, needle: &Needle) {
+    push_folded_match(sql, needle, "search_text", Some("year"));
 }
 
 /// Pushes `needle` against the folded `column`, plus `year` in decimal wherever the needle can
@@ -92,22 +77,28 @@ pub(super) fn push_needle(qb: &mut QueryBuilder<Sqlite>, needle: &Needle) {
 /// A row the backfill hasn't reached yet matches every needle rather than none, so the window
 /// after an upgrade can only widen a list.
 pub(crate) fn push_folded_match(
-    qb: &mut QueryBuilder<Sqlite>,
+    sql: &mut Sql,
     needle: &Needle,
     column: &'static str,
     year: Option<&'static str>,
 ) {
-    qb.push(format!("({column} = '' OR instr({column}, "))
-        .push_bind(needle.as_str().to_owned())
+    sql.push("(")
+        .push(column)
+        .push(" = '' OR instr(")
+        .push(column)
+        .push(", ")
+        .push_bind(needle.as_str())
         .push(") > 0");
     if let Some(year) = year
         && needle.is_number()
     {
-        qb.push(format!(" OR instr(CAST({year} AS TEXT), "))
-            .push_bind(needle.as_str().to_owned())
+        sql.push(" OR instr(CAST(")
+            .push(year)
+            .push(" AS TEXT), ")
+            .push_bind(needle.as_str())
             .push(") > 0");
     }
-    qb.push(")");
+    sql.push(")");
 }
 
 /// Which page a list sits on, which decides its tie-break and how a row reads.
@@ -116,37 +107,70 @@ enum Page {
     /// My Library's and Favorites' Songs tabs. A missing year sorts as `0` beside an explicit one
     /// rather than ahead of every year, and the length is clamped to what an `i32` of milliseconds
     /// holds, the values a Songs row displays.
-    Songs,
+    Songs(IndexUse),
     /// The album, artist, genre and playlist pages, whose rows read as stored, ties going to the
     /// title.
     Detail,
 }
 
+/// How an order names a term an index carries in that order.
+#[derive(Clone, Copy)]
+enum IndexUse {
+    /// Named bare, so the whole library, unfiltered, comes off the term's index already in order.
+    Walked,
+    /// Behind `+` or `COALESCE`, so `SQLite` finds a filter's or a scope's rows first and sorts
+    /// those, where walking the index would look up every row the filter then drops.
+    Sorted,
+}
+
 impl Page {
-    fn of(membership: &Membership) -> Self {
+    fn of(membership: &Membership, needle: &Needle) -> Self {
         match membership {
-            Membership::Library | Membership::Favorites => Self::Songs,
+            Membership::Library if needle.is_empty() => Self::Songs(IndexUse::Walked),
+            Membership::Library | Membership::Favorites => Self::Songs(IndexUse::Sorted),
             _ => Self::Detail,
         }
     }
 
+    fn natural(self) -> &'static str {
+        match self {
+            Self::Songs(IndexUse::Walked) => NATURAL_WALKED,
+            Self::Songs(IndexUse::Sorted) | Self::Detail => NATURAL,
+        }
+    }
+
+    fn indexed(self, term: &str) -> String {
+        match self {
+            Self::Songs(IndexUse::Walked) => term.to_owned(),
+            Self::Songs(IndexUse::Sorted) | Self::Detail => format!("+{term}"),
+        }
+    }
+
+    /// The stored order key `column` names (`queries::track::order_keys`), `ui::track_sort`'s
+    /// lowercase of its field.
+    fn key(self, column: &str) -> String {
+        self.indexed(&format!("t.{column}"))
+    }
+
     fn tie_break(self) -> String {
         match self {
-            Self::Songs => NATURAL.to_owned(),
+            Self::Songs(_) => self.natural().to_owned(),
             Self::Detail => format!("t.title COLLATE {UNICODE_LOWER}"),
         }
     }
 
-    fn year(self) -> &'static str {
+    fn year(self) -> String {
         match self {
-            Self::Songs => "COALESCE(t.year, 0)",
-            Self::Detail => "t.year",
+            Self::Songs(_) => self.indexed(SONGS_YEAR),
+            Self::Detail => "t.year".to_owned(),
         }
     }
 
     fn length(self) -> String {
         match self {
-            Self::Songs => format!("MIN(MAX(t.duration_ms, 0), {SONGS_LENGTH_CAP_MS})"),
+            Self::Songs(_) => {
+                self.indexed(&format!("MIN(MAX(t.duration_ms, 0), {SONGS_LENGTH_CAP_MS})"))
+            }
             Self::Detail => "t.duration_ms".to_owned(),
         }
     }
@@ -165,15 +189,15 @@ fn order_by(page: Page, order: TrackOrder, position: Option<&str>) -> String {
              COALESCE(NULLIF(t.track_number, 0), {UNTAGGED_TRACK_LAST}) {dir}, \
              {tie} ASC, t.id ASC"
         ),
-        (TrackSortField::Artist, _) => then_tie(&lowered("t.artist")),
-        (TrackSortField::Album, _) => then_tie(&lowered("t.album")),
-        (TrackSortField::Genre, _) => then_tie(&lowered("t.genre")),
-        (TrackSortField::Year, _) => then_tie(page.year()),
+        (TrackSortField::Artist, _) => then_tie(&page.key("artist_key")),
+        (TrackSortField::Album, _) => then_tie(&page.key("album_key")),
+        (TrackSortField::Genre, _) => then_tie(&page.key("genre_key")),
+        (TrackSortField::Year, _) => then_tie(&page.year()),
         (TrackSortField::Length, _) => then_tie(&page.length()),
         (TrackSortField::Position, Some(position)) => format!("{position} {dir}, t.id {dir}"),
         // On the Songs tabs the natural key is the tie-break too, so it is compared once.
         (TrackSortField::Title | TrackSortField::Position, _) => match page {
-            Page::Songs => format!("{NATURAL} {dir}, t.id {dir}"),
+            Page::Songs(_) => format!("{} {dir}, t.id {dir}", page.natural()),
             Page::Detail => then_tie(NATURAL),
         },
     }
@@ -186,8 +210,6 @@ pub(crate) fn sql_direction(dir: SortDir) -> &'static str {
     }
 }
 
-/// A nullable text column read the way `ui::track_sort` reads it: missing as `""`, which a bare
-/// NULL would sort ahead of, then folded through `to_lowercase()`.
-fn lowered(column: &str) -> String {
-    format!("COALESCE({column}, '') COLLATE {UNICODE_LOWER}")
-}
+#[cfg(test)]
+#[path = "../tests/keyset_tests.rs"]
+mod tests;
