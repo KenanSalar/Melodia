@@ -1,5 +1,7 @@
+use std::path::Path;
+
 use crate::database::queries;
-use crate::database::queries::fixtures::{execute, insert_test_track};
+use crate::database::queries::fixtures::{execute, fetch_one, insert_test_track};
 use crate::database::{
     DbPool, MAX_BINDS_PER_STATEMENT, chunked_in_execute_on, chunked_in_query, init_database, sql,
 };
@@ -195,6 +197,55 @@ async fn a_database_a_newer_build_migrated_refuses_to_open() -> Result<(), AppEr
         ),
         "{:?}",
         reopened.err()
+    );
+    Ok(())
+}
+
+/// A lone `CREATE INDEX IF NOT EXISTS`, so deleting its history row stages an upgrade that re-runs
+/// harmlessly. Shipped, so it stays that shape.
+const REPEATABLE_MIGRATION: i64 = 20_260_708_000_000;
+
+const LEAVE_FREE_PAGES: &str = "\
+    CREATE TABLE ballast (payload BLOB); \
+    INSERT INTO ballast VALUES (zeroblob(1048576)); \
+    DROP TABLE ballast;";
+
+const FREE_PAGES: &str = "PRAGMA freelist_count";
+
+/// A migrated database holding free pages, which only a VACUUM gives back.
+async fn database_with_free_pages(dir: &Path) -> Result<(Paths, DbPool), AppError> {
+    let paths = Paths::rooted_at(dir.to_path_buf());
+    paths.create_dirs()?;
+    let db = init_database(&paths).await?;
+    execute(&db, LEAVE_FREE_PAGES).await?;
+    Ok((paths, db))
+}
+
+#[tokio::test]
+async fn a_boot_that_applies_a_migration_compacts_the_file() -> Result<(), AppError> {
+    let tmp = tempfile::tempdir()?;
+    let (paths, db) = database_with_free_pages(tmp.path()).await?;
+    let rewind = format!("DELETE FROM _sqlx_migrations WHERE version = {REPEATABLE_MIGRATION}");
+    execute(&db, &rewind).await?;
+    db.close().await;
+
+    let upgraded = init_database(&paths).await?;
+
+    assert_eq!(fetch_one::<i64>(&upgraded, FREE_PAGES).await?, 0);
+    Ok(())
+}
+
+#[tokio::test]
+async fn a_boot_with_nothing_to_migrate_leaves_the_file_uncompacted() -> Result<(), AppError> {
+    let tmp = tempfile::tempdir()?;
+    let (paths, db) = database_with_free_pages(tmp.path()).await?;
+    db.close().await;
+
+    let reopened = init_database(&paths).await?;
+
+    assert!(
+        fetch_one::<i64>(&reopened, FREE_PAGES).await? > 0,
+        "an ordinary launch rewrote the whole file"
     );
     Ok(())
 }

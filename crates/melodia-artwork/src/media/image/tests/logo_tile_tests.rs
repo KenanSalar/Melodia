@@ -101,6 +101,11 @@ fn a_composed_tile_is_stored_as_png_whatever_the_source_was() -> TestResult {
         "a wordmark is stored as the tile it became, not the JPEG it arrived as: {}",
         stored.path
     );
+    assert_eq!(
+        image::guess_format(&std::fs::read(&stored.path)?).ok(),
+        Some(image::ImageFormat::Png),
+        "the extension is the caller's to name, so only the bytes say what was encoded"
+    );
     Ok(())
 }
 

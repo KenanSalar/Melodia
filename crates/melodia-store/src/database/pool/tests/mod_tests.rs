@@ -2,6 +2,7 @@ use std::path::Path;
 
 use rusqlite::Connection;
 
+use super::open::{self, Role};
 use super::{DbPool, FTS_OPTIMIZE};
 use crate::database::{init_database, sql};
 use melodia_core::config::Paths;
@@ -146,5 +147,36 @@ async fn closing_the_pool_folds_the_wal_into_the_database() -> Result<(), AppErr
     db.close().await;
 
     assert!(!wal.exists(), "{} outlived the pool", wal.display());
+    Ok(())
+}
+
+#[tokio::test]
+async fn compacting_leaves_the_wal_empty() -> Result<(), AppError> {
+    let tmp = tempfile::tempdir()?;
+    let (paths, db) = file_pool(tmp.path()).await?;
+    db.write(|conn| sql::execute(conn, INSERT_FOLDER, ())).await?;
+    let wal = paths.db_path.with_extension("db-wal");
+    assert!(std::fs::metadata(&wal)?.len() > 0, "nothing reached the WAL, so empty proves nothing");
+
+    db.compact().await?;
+
+    assert_eq!(std::fs::metadata(&wal)?.len(), 0);
+    Ok(())
+}
+
+fn temp_store(conn: &Connection) -> Result<i64, AppError> {
+    sql::fetch_one(conn, "PRAGMA temp_store", ())
+}
+
+#[tokio::test]
+async fn compacting_puts_the_writer_back_on_its_temp_store() -> Result<(), AppError> {
+    let tmp = tempfile::tempdir()?;
+    let (paths, db) = file_pool(tmp.path()).await?;
+    // A new connection's, the pool's writer having already been through the boot's own compact.
+    let as_opened = temp_store(&open::open(&paths.db_path, Role::Writer)?)?;
+
+    db.compact().await?;
+
+    assert_eq!(db.write(|conn| temp_store(conn)).await?, as_opened);
     Ok(())
 }
