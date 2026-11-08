@@ -7,15 +7,17 @@ use std::path::Path;
 use parking_lot::Mutex;
 use tokio_util::sync::CancellationToken;
 
+use super::finish::purge_held;
 use super::repair::RestoreNotice;
 use super::run::ScanRun;
-use super::{forget_missing_artwork, scan_one};
+use super::{Orphans, forget_missing_artwork, scan_one};
 use crate::state::AppState;
 use crate::tasks::TaskSpawner;
 use melodia_core::entities::folder::Folder;
 use melodia_core::error::describe;
 use melodia_platform::services::platform::allocator::trim;
 use melodia_store::database::queries;
+use melodia_store::database::queries::scan::Unwalked;
 
 /// Which folders a pass reads.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -35,9 +37,9 @@ impl Reach {
     }
 }
 
-/// Coalesces concurrent reconcile triggers, so a watcher-overflow burst during `rsync` doesn't walk
-/// the library several times over. One lock, so a request can't land between a pass deciding it is
-/// done and letting go, where a deferred one would be lost.
+/// Coalesces concurrent reconcile triggers, so a watcher-overflow burst during `rsync` merges into
+/// one round after the running one. One lock, so a request can't land between a pass deciding it
+/// is done and letting go, where a deferred one would be lost.
 static PASS: Mutex<PassState> = Mutex::new(PassState::Idle);
 
 enum PassState {
@@ -51,8 +53,9 @@ struct Owed {
     /// A library-wide pass asked for while this one ran. A narrower round doesn't read the folders
     /// that request is for, so it runs one next rather than dropping it.
     library: bool,
-    /// A directory moved while this one ran. A walk already past it never sees the move, so even a
-    /// full round is followed by one that starts after it.
+    /// The watcher missed events while this one ran, for a moved directory or an overflow. A walk
+    /// already past the change never sees it, so even a full round is followed by one that starts
+    /// after it.
     rewalk: bool,
 }
 
@@ -121,12 +124,13 @@ pub fn reconcile_watched_folders(state: &AppState) {
     start(state, Reach::Library, None);
 }
 
-/// [`reconcile_watched_folders`] for a directory the watcher saw move: the event is all there is of
-/// the change, so a running pass owes a round that starts after this call, whatever its reach.
-pub fn reconcile_after_directory_rename(state: &AppState) {
+/// [`reconcile_watched_folders`] for changes the watcher couldn't report file by file, a moved
+/// directory or an overflow: nothing else will tell of them, so a running pass owes a round that
+/// starts after this call, whatever its reach.
+pub fn reconcile_after_missed_events(state: &AppState) {
     match PassClaim::take_for_rewalk(&PASS) {
         Some(claim) => run_pass(state, claim, Reach::Library, None),
-        None => log::debug!("reconcile_after_directory_rename: already in flight, owed a round"),
+        None => log::debug!("reconcile_after_missed_events: already in flight, owed a round"),
     }
 }
 
@@ -158,11 +162,16 @@ fn run_pass(
         let _handed_over = restoring;
         let mut reach = reach;
         loop {
-            reach = round(&state, reach, &cancel).await;
+            let ended = round(&state, reach, &cancel).await;
             if cancel.is_cancelled() {
                 return;
             }
-            let Some(next) = claim.next_round(reach) else {
+            // An owed round's walk finds its own orphans, and one of these may be a file moved to
+            // a path this round's walk had already passed.
+            let Some(next) = claim.next_round(ended.reach) else {
+                if let Err(e) = purge_held(&state, ended.orphans).await {
+                    log::warn!("reconcile_watched_folders: orphan purge failed: {}", describe(&e));
+                }
                 break;
             };
             reach = next;
@@ -173,41 +182,58 @@ fn run_pass(
     });
 }
 
-/// One round over the folders `reach` covers, answering the reach it ended up reading: the repair
-/// widens it to the library when it clears covers.
-async fn round(state: &AppState, reach: Reach, cancel: &CancellationToken) -> Reach {
+struct RoundEnd {
+    /// The reach it ended up reading: the repair widens it to the library when it clears covers.
+    reach: Reach,
+    orphans: Unwalked,
+}
+
+impl RoundEnd {
+    fn without_scanning(reach: Reach) -> Self {
+        Self { reach, orphans: Unwalked::default() }
+    }
+}
+
+/// One round over the folders `reach` covers.
+async fn round(state: &AppState, reach: Reach, cancel: &CancellationToken) -> RoundEnd {
     let mut folders = match queries::folder::get_all_folders(&state.db).await {
         Ok(f) => f,
         Err(e) => {
             log::warn!("reconcile_watched_folders: load folders failed: {}", describe(&e));
-            return reach;
+            return RoundEnd::without_scanning(reach);
         }
     };
     if reach == Reach::UnfinishedImports && !folders.iter().any(|f| reach.covers(f)) {
         // The repair runs ahead of a scan, and with watching off there is none to run ahead of.
-        return reach;
+        return RoundEnd::without_scanning(reach);
     }
     let restoring = forget_missing_artwork(state).await;
     // The repair cleared covers across the library, and a cleared one is never reported missing
     // again, so only a full round brings them back.
     let reach = if restoring.is_some() { Reach::Library } else { reach };
     folders.retain(|f| reach.covers(f));
-    scan_in_turn(state, folders, cancel).await;
-    reach
+    let orphans = scan_in_turn(state, folders, cancel).await;
+    RoundEnd { reach, orphans }
 }
 
-/// Scans `folders` one after another, until `cancel` stops the pass.
-async fn scan_in_turn(state: &AppState, mut folders: Vec<Folder>, cancel: &CancellationToken) {
+/// Scans `folders` one after another, until `cancel` stops the pass, answering the orphans they
+/// held back.
+async fn scan_in_turn(
+    state: &AppState,
+    mut folders: Vec<Folder>,
+    cancel: &CancellationToken,
+) -> Unwalked {
     // Deepest first: a folder absorbs the ones nested in it when its scan completes, so
     // theirs has to run before it or not at all.
     folders.sort_by_key(|f| Reverse(Path::new(&f.path).components().count()));
+    let mut orphans = Unwalked::default();
     for folder in &folders {
         if cancel.is_cancelled() {
             log::info!("reconcile_watched_folders: stopped, bailing between folders");
-            return;
+            break;
         }
         let run = ScanRun::start(&state.scan, cancel.clone());
-        if let Err(e) = scan_one(state, folder.id, &run).await {
+        if let Err(e) = scan_one(state, folder.id, &run, Orphans::HoldIn(&mut orphans)).await {
             log::warn!(
                 "reconcile_watched_folders: scan of {} failed: {}",
                 folder.path,
@@ -215,6 +241,7 @@ async fn scan_in_turn(state: &AppState, mut folders: Vec<Folder>, cancel: &Cance
             );
         }
     }
+    orphans
 }
 
 #[cfg(test)]

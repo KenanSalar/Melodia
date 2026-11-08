@@ -23,6 +23,11 @@ impl Unwalked {
     pub fn is_empty(&self) -> bool {
         self.tracks.is_empty() && self.exclusions.is_empty()
     }
+
+    pub fn absorb(&mut self, other: Self) {
+        self.tracks.extend(other.tracks);
+        self.exclusions.extend(other.exclusions);
+    }
 }
 
 /// Orphan pruning, the cover roll-ups and the stats recalc, in one transaction.
@@ -53,6 +58,15 @@ pub async fn commit_scan(
     if ingested.updated > 0 {
         log::info!("Updated metadata for {} changed files", ingested.updated);
     }
+    Ok(())
+}
+
+/// Purges what the folders of a pass held back, each having committed its own ingest already.
+pub async fn purge_unwalked(db: &DbPool, unwalked: Unwalked) -> Result<(), AppError> {
+    let ingested = Ingested::for_delta(unwalked.tracks.len());
+    let (removed, forgotten) =
+        db.transaction(move |tx| finish_on(tx, &unwalked, &ingested)).await?;
+    log::info!("Removed {removed} orphaned tracks and forgot {forgotten} kept-out files");
     Ok(())
 }
 

@@ -33,8 +33,22 @@ pub(super) async fn after_completed(state: &AppState, folder_id: i64) -> Result<
     services::artist_images::spawn_fetch(state);
     let spawner = TaskSpawner::from_state(state);
     tasks::retroactive_hash::spawn(&spawner, state);
-    // After the orphan pass committed, so the rows it deleted are already gone from the
-    // reference set this reads.
+    // After this scan's purge committed, so the rows it deleted are already gone from the
+    // reference set this reads. `purge_held` sweeps for the rows a pass held back.
     tasks::artwork_sweep::spawn(&spawner, state);
+    Ok(())
+}
+
+/// Purges what a pass's folders held back, and tells the library and the artwork store.
+pub(super) async fn purge_held(
+    state: &AppState,
+    orphans: queries::scan::Unwalked,
+) -> Result<(), AppError> {
+    if orphans.is_empty() {
+        return Ok(());
+    }
+    queries::scan::purge_unwalked(&state.db, orphans).await?;
+    state.library_changed.bump();
+    tasks::artwork_sweep::spawn(&TaskSpawner::from_state(state), state);
     Ok(())
 }

@@ -19,7 +19,7 @@ pub(crate) struct MoveCandidates {
     /// one that moved.
     pub(crate) tracks: ByHash,
     exclusions: ByHash,
-    /// Every library folder, which tells a row on an offline drive from one whose file moved.
+    /// Every library folder, which tells a file on an offline drive from one that moved.
     library_roots: Vec<String>,
 }
 
@@ -50,23 +50,31 @@ impl MoveCandidates {
         }
     }
 
-    /// Drops the rows on a missing library folder from a hash with a row still on disk: the new
-    /// file is a copy of that row, and a drive gone offline moved nothing. A hash with every row
-    /// gone keeps them, so a library folder moved and added back takes its history along.
+    /// Drops the candidates on an offline library folder from a hash with a file still on disk:
+    /// the new file is a copy of that one, and a drive gone offline moved nothing. A hash with
+    /// nothing left on disk keeps them, so a library folder moved and added back takes its history
+    /// along.
     fn drop_offline_twins(&mut self, still_present: &HashSet<String>) {
+        let on_disk: HashSet<String> = self
+            .tracks
+            .iter()
+            .chain(&self.exclusions)
+            .filter(|(_, files)| files.iter().any(|(_, path)| still_present.contains(path)))
+            .map(|(hash, _)| hash.clone())
+            .collect();
         // Lazy because a stat on an offline network share can hang for seconds.
-        let missing_roots = LazyCell::new(|| {
+        let offline_roots = LazyCell::new(|| {
             let roots = self.library_roots.iter().map(Path::new);
-            roots.filter(|root| !root.exists()).collect::<Vec<_>>()
+            roots.filter(|root| !holds_entries(root)).collect::<Vec<_>>()
         });
-        for rows in self.tracks.values_mut() {
-            if !rows.iter().any(|(_, path)| still_present.contains(path)) {
-                continue;
+        let is_offline =
+            |path: &str| offline_roots.iter().any(|root| Path::new(path).starts_with(root));
+        for candidates in [&mut self.tracks, &mut self.exclusions] {
+            for (hash, files) in candidates.iter_mut() {
+                if on_disk.contains(hash) {
+                    files.retain(|(_, path)| still_present.contains(path) || !is_offline(path));
+                }
             }
-            rows.retain(|(_, path)| {
-                still_present.contains(path)
-                    || !missing_roots.iter().any(|root| Path::new(path).starts_with(root))
-            });
         }
     }
 
@@ -113,4 +121,10 @@ impl MoveCandidates {
 
 fn named<'a>(candidates: &'a [(i64, String)], name: Option<&OsStr>) -> Option<&'a (i64, String)> {
     candidates.iter().find(|(_, old)| Path::new(old).file_name() == name)
+}
+
+/// Whether a library folder has anything to read: an unmounted drive's mount point is there but
+/// empty.
+fn holds_entries(root: &Path) -> bool {
+    std::fs::read_dir(root).is_ok_and(|mut entries| entries.next().is_some())
 }

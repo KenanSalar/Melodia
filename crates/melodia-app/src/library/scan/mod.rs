@@ -16,7 +16,7 @@ mod repair;
 mod run;
 
 pub use reconcile::{
-    finish_interrupted_imports, reconcile_after_directory_rename, reconcile_watched_folders,
+    finish_interrupted_imports, reconcile_after_missed_events, reconcile_watched_folders,
 };
 pub use repair::restore_missing_artwork;
 
@@ -85,7 +85,7 @@ pub async fn scan_folder(
     let cancel = state.scan.token();
     let restoring = forget_missing_artwork(state).await;
     let run = ScanRun::start(&state.scan, cancel);
-    let outcome = scan_one(state, folder_id, &run).await?;
+    let outcome = scan_one(state, folder_id, &run, Orphans::PurgeNow).await?;
     let cancelled_import =
         on_stop == OnStop::Withdraw && state.scan.user_cancels() != cancels_at_start;
     let outcome = match outcome {
@@ -149,10 +149,32 @@ pub fn cancel(state: &AppState) {
 /// a slow disk. Also bounds the parsed tags held at once to one chunk's.
 const TX_CHUNK_FILES: usize = 2_000;
 
+/// Where a completed scan's orphans go.
+enum Orphans<'a> {
+    PurgeNow,
+    /// Left for the pass to purge once its last folder has ingested: a row moved to a folder still
+    /// to come has to be there for that folder's scan to re-point.
+    HoldIn(&'a mut Unwalked),
+}
+
+impl Orphans<'_> {
+    /// Takes in a scan's `unwalked`, answering the part its own commit purges.
+    fn due_now(self, unwalked: Unwalked) -> Unwalked {
+        match self {
+            Self::PurgeNow => unwalked,
+            Self::HoldIn(held) => {
+                held.absorb(unwalked);
+                Unwalked::default()
+            }
+        }
+    }
+}
+
 async fn scan_one(
     state: &AppState,
     folder_id: i64,
     run: &Arc<ScanRun>,
+    orphans: Orphans<'_>,
 ) -> Result<ScanOutcome, AppError> {
     let folder = queries::folder::get_folder_by_id(&state.db, folder_id).await?;
 
@@ -226,8 +248,9 @@ async fn scan_one(
         }
         return Ok(ScanOutcome::Stopped { rewrote_existing: ingested.rewrote_existing() });
     }
-    let found_unwalked = !unwalked.is_empty();
-    queries::scan::commit_scan(&state.db, &folder, unwalked, &ingested).await?;
+    let purged_now = orphans.due_now(unwalked);
+    let found_unwalked = !purged_now.is_empty();
+    queries::scan::commit_scan(&state.db, &folder, purged_now, &ingested).await?;
     finish::absorb_nested(&state.db, &folder, &scope.nested).await?;
     finish::after_completed(state, folder.id).await?;
     // Only for a change: every list showing the library re-fetches on a bump, and a launch scans

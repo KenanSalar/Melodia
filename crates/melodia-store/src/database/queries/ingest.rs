@@ -179,8 +179,8 @@ impl ResolveCaches {
 /// A new path whose hash matches a row whose file is gone re-points that row rather than
 /// inserting, and an existing path whose size and mtime haven't moved is skipped. A folder scan
 /// passes a kept-out file by, restamping it with what it read, and re-points the exclusion of one
-/// that moved, but only once no row claims the bytes: a moved keeper beside its kept-out twin must
-/// get its own row back.
+/// that moved. A row with the file's own name goes first, a kept-out file with it next and any
+/// other row last: a moved keeper beside its kept-out twin must get its own row back.
 pub(crate) fn ingest_scanned_files(
     tx: &Transaction<'_>,
     scanned_files: &[ScannedFile],
