@@ -12,7 +12,7 @@ use melodia_ui::{AppWindow, Dialog, TagEditor};
 /// list and chrome property, being a `public function` with no handler slot to register away;
 /// the `image` properties have no Slint default literal and are reset here, so the buffer the
 /// dialog opened with drops on the tick its body unmounts. The trim runs off the UI thread, as it
-/// walks the arena's free lists.
+/// walks the heap's free lists.
 pub(super) fn wire(ui: &AppWindow, state: &AppState) {
     let weak = ui.as_weak();
     let s = state.clone();

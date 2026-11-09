@@ -66,7 +66,7 @@ fn leave(ui: &AppWindow, state: &AppState, radio_ui: &Arc<RadioUi>) {
         let ru = radio_ui.clone();
         state.runtime.spawn_blocking(move || ru.release_detail_artwork());
     } else {
-        // The arena walk can't run on the UI thread; the seated arm trims in
+        // The heap trim can't run on the UI thread; the seated arm trims in
         // `release_detail_artwork`.
         state.runtime.spawn_blocking(melodia_platform::services::platform::allocator::trim);
     }

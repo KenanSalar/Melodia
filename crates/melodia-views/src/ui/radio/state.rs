@@ -98,8 +98,8 @@ impl RadioUi {
         self.section.mark_dirty();
     }
 
-    /// Gives the hero's decode tier back and trims the arena; the Slint image slots are the
-    /// leave's. Blocking pool only, a `malloc_trim` having no place on the event loop.
+    /// Gives the hero's decode tier back and trims the heap; the Slint image slots are the
+    /// leave's. Blocking pool only, a heap trim having no place on the event loop.
     pub(super) fn release_detail_artwork(&self) {
         self.detail_artwork.clear();
         melodia_platform::services::platform::allocator::trim();
