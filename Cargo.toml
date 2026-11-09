@@ -279,15 +279,17 @@ libc = "0.2.191"
 
 # Windows
 # `GetUserDefaultLocaleName`, the DWM accent values `window_border` reads out of
-# the registry, and the exclusive output's WASAPI error codes and MMCSS
-# registration. Declarations from here rather than a hand-rolled `extern` block
-# only review can keep true.
+# the registry, the process heap's trim, and the exclusive output's WASAPI error
+# codes and MMCSS registration. Declarations from here rather than a hand-rolled
+# `extern` block only review can keep true.
 windows-sys = { version = "0.61.2", features = [
     "Win32_Graphics_Dwm",
     "Win32_Foundation",
     "Win32_Globalization",
     "Win32_Media_Audio",
+    "Win32_System_Memory",
     "Win32_System_Registry",
+    "Win32_System_SystemServices",
     "Win32_System_Threading",
 ] }
 # `canonicalize` returns the extended-length form (`\\?\C:\...`), which lands in

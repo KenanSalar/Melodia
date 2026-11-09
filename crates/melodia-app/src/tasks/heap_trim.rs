@@ -1,6 +1,6 @@
-//! Two glibc heap trims after startup: one once the boot's short-lived allocations have settled,
-//! which glibc's arena keeps rather than returns, and one after the pool closes the connections
-//! the boot opened.
+//! Two heap trims after startup: one once the boot's short-lived allocations have settled, which
+//! the allocator keeps rather than returns, and one after the pool closes the connections the
+//! boot opened.
 //!
 //! **It must not become periodic.** The RSS climb over a long session with Now Playing open is
 //! live memory, Wayland event closures piling up under a high repaint rate, which `malloc_trim`

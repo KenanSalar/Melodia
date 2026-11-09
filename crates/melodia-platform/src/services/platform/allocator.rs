@@ -1,9 +1,9 @@
-//! The two glibc allocator knobs, and the only place `libc` is named.
+//! The allocator knobs, and the only place `libc` is named.
 //!
-//! Both answer how much the process keeps resident that it no longer uses, and they are set
-//! against each other: pinning the trim threshold is what leaves [`trim`] anything to do, a
+//! Both answer how much the process keeps resident that it no longer uses, and on glibc they are
+//! set against each other: pinning the trim threshold is what leaves [`trim`] anything to do, a
 //! threshold glibc has ratcheted upward leaving free runs on the arena list. Compile-time no-ops
-//! off glibc Linux, so both are safe to call unconditionally.
+//! where a platform has no such knob, so both are safe to call unconditionally.
 
 /// Caps the arenas and pins the mmap and trim thresholds where glibc starts them.
 ///
@@ -29,8 +29,8 @@ pub fn pin_arenas_and_thresholds() {
     }
 }
 
-/// Hands glibc's retained free-list pages back to the kernel. Off the UI thread, as it walks the
-/// arena free lists; `tasks::heap_trim` owns the schedule and argues why it is never periodic.
+/// Hands the allocator's retained free pages back to the OS. Off the UI thread, as it walks the
+/// free lists; `tasks::heap_trim` owns the schedule and argues why it is never periodic.
 pub fn trim() {
     #[cfg(all(target_os = "linux", target_env = "gnu"))]
     #[allow(
@@ -41,5 +41,44 @@ pub fn trim() {
     // any thread may call it at any time.
     unsafe {
         libc::malloc_trim(0);
+    }
+
+    #[cfg(target_os = "windows")]
+    optimize_process_heap();
+}
+
+/// Empties the process heap's low-fragmentation caches and decommits what that frees, the nearest
+/// Windows has to `malloc_trim`. `HeapCompact`, the obvious call, returns no memory to the OS.
+#[cfg(target_os = "windows")]
+#[allow(
+    unsafe_code,
+    reason = "FFI to HeapSetInformation, which only releases the process heap's free memory"
+)]
+fn optimize_process_heap() {
+    use melodia_core::error::describe;
+    use windows_sys::Win32::System::Memory::{
+        GetProcessHeap, HeapOptimizeResources, HeapSetInformation,
+    };
+    use windows_sys::Win32::System::SystemServices::{
+        HEAP_OPTIMIZE_RESOURCES_CURRENT_VERSION, HEAP_OPTIMIZE_RESOURCES_INFORMATION,
+    };
+
+    let request = HEAP_OPTIMIZE_RESOURCES_INFORMATION {
+        Version: HEAP_OPTIMIZE_RESOURCES_CURRENT_VERSION,
+        Flags: 0,
+    };
+    // SAFETY: `request` is a stack local whose size matches the length passed, and the call only
+    // reads it. `GetProcessHeap` answers the heap that lives as long as the process, and that heap
+    // serializes its callers.
+    let optimized = unsafe {
+        HeapSetInformation(
+            GetProcessHeap(),
+            HeapOptimizeResources,
+            std::ptr::from_ref(&request).cast(),
+            size_of::<HEAP_OPTIMIZE_RESOURCES_INFORMATION>(),
+        )
+    };
+    if optimized == 0 {
+        log::warn!("heap trim: {}", describe(&std::io::Error::last_os_error()));
     }
 }
