@@ -3315,7 +3315,7 @@ checksum = "0695a693e38d35838dd34bc3ab19911395f6837ccf55c7271189cfb12cb8b57f"
 
 [[package]]
 name = "melodia"
-version = "0.22.0"
+version = "0.23.0"
 dependencies = [
  "async-compat",
  "glob",
@@ -3344,7 +3344,7 @@ dependencies = [
 
 [[package]]
 name = "melodia-app"
-version = "0.22.0"
+version = "0.23.0"
 dependencies = [
  "blake3",
  "chrono",
@@ -3387,7 +3387,7 @@ dependencies = [
 
 [[package]]
 name = "melodia-artwork"
-version = "0.22.0"
+version = "0.23.0"
 dependencies = [
  "blake3",
  "color-thief",
@@ -3408,7 +3408,7 @@ dependencies = [
 
 [[package]]
 name = "melodia-audio"
-version = "0.22.0"
+version = "0.23.0"
 dependencies = [
  "icy-metadata",
  "lofty",
@@ -3429,7 +3429,7 @@ dependencies = [
 
 [[package]]
 name = "melodia-core"
-version = "0.22.0"
+version = "0.23.0"
 dependencies = [
  "chrono",
  "dirs",
@@ -3448,7 +3448,7 @@ dependencies = [
 
 [[package]]
 name = "melodia-engine"
-version = "0.22.0"
+version = "0.23.0"
 dependencies = [
  "cpal",
  "log",
@@ -3467,7 +3467,7 @@ dependencies = [
 
 [[package]]
 name = "melodia-integrations"
-version = "0.22.0"
+version = "0.23.0"
 dependencies = [
  "log",
  "lru",
@@ -3490,7 +3490,7 @@ dependencies = [
 
 [[package]]
 name = "melodia-net"
-version = "0.22.0"
+version = "0.23.0"
 dependencies = [
  "blake3",
  "futures-util",
@@ -3506,7 +3506,7 @@ dependencies = [
 
 [[package]]
 name = "melodia-platform"
-version = "0.22.0"
+version = "0.23.0"
 dependencies = [
  "blake3",
  "chrono",
@@ -3531,7 +3531,7 @@ dependencies = [
 
 [[package]]
 name = "melodia-playback"
-version = "0.22.0"
+version = "0.23.0"
 dependencies = [
  "alsa",
  "biquad",
@@ -3554,7 +3554,7 @@ dependencies = [
 
 [[package]]
 name = "melodia-store"
-version = "0.22.0"
+version = "0.23.0"
 dependencies = [
  "blake3",
  "chrono",
@@ -3577,7 +3577,7 @@ dependencies = [
 
 [[package]]
 name = "melodia-testkit"
-version = "0.22.0"
+version = "0.23.0"
 dependencies = [
  "image",
  "tempfile",
@@ -3585,7 +3585,7 @@ dependencies = [
 
 [[package]]
 name = "melodia-ui"
-version = "0.22.0"
+version = "0.23.0"
 dependencies = [
  "slint",
  "slint-build",
@@ -3593,7 +3593,7 @@ dependencies = [
 
 [[package]]
 name = "melodia-views"
-version = "0.22.0"
+version = "0.23.0"
 dependencies = [
  "async-compat",
  "chrono",

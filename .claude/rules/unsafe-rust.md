@@ -26,8 +26,8 @@ effect would be to move every allow into a `build.rs`-shaped workaround.
 ## The one sanctioned category: platform FFI
 
 Every `unsafe` in production is a call into an OS the type system can't reach. There is
-no other kind, and the list is short enough to keep here. **Seventeen calls, in fifteen `unsafe`
-blocks, across seven files, under twelve `#[allow(unsafe_code)]` attributes.** Say which of
+no other kind, and the list is short enough to keep here. **Nineteen calls, in sixteen `unsafe`
+blocks, across seven files, under thirteen `#[allow(unsafe_code)]` attributes.** Say which of
 the four you mean when you quote a number, and re-derive it the same way — they differ,
 and none of them is the count of rows below. (The attributes fall three short of the blocks
 because `dwm_titlebar.rs`'s first `#[allow]` sits on a function holding two of them, and
@@ -36,7 +36,7 @@ because `dwm_titlebar.rs`'s first `#[allow]` sits on a function holding two of t
 | site | what |
 |---|---|
 | `crates/melodia/src/main.rs` | `env::set_var` for `PIPEWIRE_ALSA` |
-| `crates/melodia-platform/…/allocator.rs` | `libc::mallopt` ×3 (the glibc arena / mmap / trim knobs), `libc::malloc_trim` |
+| `crates/melodia-platform/…/allocator.rs` | `libc::mallopt` ×3 (the glibc arena / mmap / trim knobs), `libc::malloc_trim`, `GetProcessHeap` and `HeapSetInformation` (Windows' trim) |
 | `crates/melodia-platform/…/dwm_titlebar.rs` | `DwmSetWindowAttribute` ×3 |
 | `crates/melodia-platform/…/registry.rs` | `RegGetValueW` (the DWM accent a window border takes, and the Windows app mode) |
 | `crates/melodia-app/…/settings/data.rs` | `GetUserDefaultLocaleName` |

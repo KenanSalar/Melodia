@@ -87,9 +87,9 @@ pub(crate) fn folders_inside(outer: &Path, folders: &[folder::Folder]) -> Vec<Ne
 
 pub async fn add_folder(state: &AppState, path: String) -> Result<folder::Folder, AppError> {
     let folder = insert_validated(&state.db, &path).await?;
-    // Puts the row on screen before its scan starts.
+    // The scan's own bump waits for its last commit, and the row belongs on screen now.
     state.library_changed.bump();
-    retarget_watcher(state).await;
+    retarget_watcher(state);
     Ok(folder)
 }
 
@@ -111,7 +111,7 @@ pub async fn remove_folder(state: &AppState, id: i64) -> Result<(), AppError> {
         state,
         referenced_before,
     );
-    retarget_watcher(state).await;
+    retarget_watcher(state);
     Ok(())
 }
 
@@ -149,14 +149,21 @@ pub(crate) async fn start_watcher(state: &AppState) -> Result<(), AppError> {
 /// Points a running watcher at the folder list as it now stands, so a folder added in Settings
 /// is watched from now rather than from the next launch. A failure costs only that, so it is
 /// logged rather than failing the add or remove it follows.
-async fn retarget_watcher(state: &AppState) {
-    let retarget = async {
-        let paths = watch_roots(&state.db).await?;
-        with_watcher(state, move |watcher| watcher.retarget(&paths)).await
-    };
-    if let Err(e) = retarget.await {
-        log::warn!("Folder watcher didn't follow the folder list: {}", describe(&e));
-    }
+///
+/// In the background, so neither a new scan's bar nor a cancelled import's "Stopping" waits for
+/// it: on Windows a new root's watch opens every file under it for its ID, holding the lock the
+/// next retarget needs. Untracked, as quit has nothing to wait for here.
+fn retarget_watcher(state: &AppState) {
+    let task_state = state.clone();
+    state.runtime.spawn(async move {
+        let retarget = async {
+            let paths = watch_roots(&task_state.db).await?;
+            with_watcher(&task_state, move |watcher| watcher.retarget(&paths)).await
+        };
+        if let Err(e) = retarget.await {
+            log::warn!("Folder watcher didn't follow the folder list: {}", describe(&e));
+        }
+    });
 }
 
 /// The enabled folders, less any inside another. A folder awaiting absorption is already under its
@@ -171,7 +178,7 @@ async fn watch_roots(db: &DbPool) -> Result<Vec<PathBuf>, AppError> {
 }
 
 /// Runs `op` against the watcher on the blocking pool: registering a recursive watch walks the
-/// whole tree under the lock, and Add Folder's flow runs on the UI thread.
+/// whole tree under the lock.
 async fn with_watcher<R: Send + 'static>(
     state: &AppState,
     op: impl FnOnce(&mut FolderWatcher) -> R + Send + 'static,

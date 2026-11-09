@@ -106,8 +106,7 @@ pub async fn refresh_folders(ui: Weak<AppWindow>, state: AppState) {
 /// refused. The Library tab's picker and the welcome card's Music folder offer both land here.
 pub async fn add_folder_and_scan(state: &AppState, ui: &Weak<AppWindow>, path: String) {
     match library::settings::add_folder(state, path).await {
-        // The bump inside `add_folder` already drove the folder-list subscriber, so the new row
-        // is on screen by the time the scan starts.
+        // The bump inside `add_folder` puts the new row on screen, so nothing here refetches it.
         Ok(folder) => library::scan::start(state, folder.id, OnStop::Withdraw),
         Err(AppError::Validation { msg, .. }) => show_error(ui, "Cannot add folder", msg),
         Err(AppError::Io(io_error)) => show_error(ui, "Cannot add folder", describe(&io_error)),
