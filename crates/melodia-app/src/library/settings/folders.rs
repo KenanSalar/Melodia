@@ -89,7 +89,10 @@ pub async fn add_folder(state: &AppState, path: String) -> Result<folder::Folder
     let folder = insert_validated(&state.db, &path).await?;
     // Puts the row on screen before its scan starts.
     state.library_changed.bump();
-    retarget_watcher(state).await;
+    // Not awaited, so the scan's bar goes up at once: on Windows a new root's watch opens every
+    // file under it for its ID. Untracked, as quit has nothing to wait for here.
+    let task_state = state.clone();
+    state.runtime.spawn(async move { retarget_watcher(&task_state).await });
     Ok(folder)
 }
 
@@ -171,7 +174,7 @@ async fn watch_roots(db: &DbPool) -> Result<Vec<PathBuf>, AppError> {
 }
 
 /// Runs `op` against the watcher on the blocking pool: registering a recursive watch walks the
-/// whole tree under the lock, and Add Folder's flow runs on the UI thread.
+/// whole tree under the lock.
 async fn with_watcher<R: Send + 'static>(
     state: &AppState,
     op: impl FnOnce(&mut FolderWatcher) -> R + Send + 'static,
