@@ -94,7 +94,7 @@ pub fn same_album(a: &TrackSummary, b: &TrackSummary) -> bool {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Joint {
     Unrelated,
-    /// [`same_album`], or two tracks of one file, whose sheet may name a performer per track.
+    /// [`same_album`], or two cue tracks of one file, whose sheet may name a performer per track.
     SameAlbum,
     /// The next track starts on the sample this one ends: one recording a cue sheet cut in two.
     /// Never faded, and staged with gapless off too, which governs joints between files.
@@ -106,9 +106,10 @@ pub fn joint(current: Option<&TrackSummary>, next: &TrackSummary) -> Joint {
     let Some(current) = current else {
         return Joint::Unrelated;
     };
-    if current.file_path == next.file_path {
-        let current_end = current.span.and_then(CueSpan::end);
-        let continues = next.span.is_some_and(|span| current_end == Some(span.start()));
+    if let Some(next_span) = next.span
+        && current.file_path == next.file_path
+    {
+        let continues = current.span.and_then(CueSpan::end) == Some(next_span.start());
         return if continues { Joint::Continuous } else { Joint::SameAlbum };
     }
     if same_album(current, next) { Joint::SameAlbum } else { Joint::Unrelated }

@@ -329,12 +329,11 @@ impl FileDecoder {
         Ok(SeekTo::Time { time, track_id: Some(self.track) })
     }
 
-    /// `frame` of the file's timeline in the track's ticks, rounded down as the demuxers round a
-    /// `Time`. `None` without a timebase, or past what a tick can hold.
+    /// `frame` of the file's timeline in the track's ticks. `None` without a timebase, or past
+    /// what a tick can hold.
     fn timestamp(&self, frame: u64) -> Option<Timestamp> {
         let time_base = self.time_base?;
-        let ticks =
-            decode::frames_to_ticks(frame, time_base, self.cursor.shape().rate, Rounding::Down)?;
+        let ticks = decode::frames_to_ticks(frame, time_base, self.cursor.shape().rate)?;
         Some(Timestamp::new(i64::try_from(ticks).ok()?))
     }
 
