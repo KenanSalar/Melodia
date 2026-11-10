@@ -91,9 +91,10 @@ async fn fold_stamps<A: Send + 'static>(
 
 /// The cue sheets on record around a watcher batch or the files an import opens, and the claims a
 /// re-plan of them starts from.
-#[derive(Default)]
 pub struct SheetsAround {
-    /// The sheets directly inside the directories asked about.
+    /// The directories asked about.
+    pub dirs: Vec<String>,
+    /// The sheets directly inside `dirs`.
     pub sheets: Vec<String>,
     /// Each image those sheets claim, and each claimed image among the audio asked about, mapped
     /// to its sheet's path.
@@ -120,7 +121,7 @@ pub async fn sheets_around(
         let holds_sheets: bool =
             sql::fetch_one(conn, "SELECT EXISTS (SELECT 1 FROM cue_sheets)", ())?;
         if !holds_sheets {
-            return Ok(SheetsAround::default());
+            return Ok(SheetsAround { dirs, sheets: Vec::new(), claims: HashMap::new() });
         }
         let mut sheets: Vec<String> = Vec::new();
         for dir in &dirs {
@@ -144,7 +145,7 @@ pub async fn sheets_around(
             )
         })?;
         let claims = by_sheet.into_iter().chain(by_image).collect();
-        Ok(SheetsAround { sheets, claims })
+        Ok(SheetsAround { dirs, sheets, claims })
     })
     .await
 }

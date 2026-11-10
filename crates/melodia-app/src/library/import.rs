@@ -166,10 +166,8 @@ async fn read_in(
     let cover_cache = cover_cache.clone();
     tokio::task::spawn_blocking(move || {
         let Reading { mut new_audio, unrecorded, around, opened } = reading;
-        let dirs: Vec<PathBuf> =
-            parent_dirs(&new_audio, &unrecorded).into_iter().map(PathBuf::from).collect();
         let written = new_audio.iter().chain(&unrecorded).cloned().collect();
-        let plan = cue::settle_dirs(&dirs, written, &around, |image| opened.contains(image));
+        let plan = cue::settle_dirs(&around, written, |image| opened.contains(image));
         plan.take_out_of(&mut new_audio);
         let cue = plan.into_chunk();
         new_audio.extend(cue.images());

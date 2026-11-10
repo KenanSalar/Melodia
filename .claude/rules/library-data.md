@@ -30,9 +30,10 @@ paths:
 - **An image a cue sheet claims never reaches the ordinary ingest**: the planner
   (`media::cue::plan`) takes it out of a scan's files, a watcher batch's events
   (`file_event_processor::sheets`) and an import's files (`library::import`), and its sheet's job
-  writes its tracks (`queries::scan::cue_units`). A sheet claims a file it carves into two or more rows, one sheet
-  wins an image, and a sheet that fails to read keeps its claim. A new path that ingests a file a
-  sheet may claim asks the planner, or the image gets a whole-file row beside its tracks.
+  writes its tracks (`queries::scan::cue_units`). A sheet claims a file it carves into two or more
+  rows, one sheet wins an image, and a sheet that fails to read keeps its claim. A new path that
+  ingests a file a sheet may claim asks the planner, or the image gets a whole-file row beside its
+  tracks.
 - **`utils::trash_dir` is the one trash-folder predicate**: a walk or watch that finds files by
   itself asks it, never a trash name of its own.
 - **Nothing inside a write transaction `stat`s a file**: a second `stat` can pair a new mtime with

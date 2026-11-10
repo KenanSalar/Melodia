@@ -1,6 +1,6 @@
 //! The cue sheet side of a watcher batch: the events a sheet claims or could claim, settled by the
-//! scan's planner (`cue::settle_dirs`) over the directories the batch touches and those its claims
-//! sit in, before anything is read for the write.
+//! scan's planner (`cue::settle_dirs`) over the directories the batch touches, before anything is
+//! read for the write.
 
 use std::collections::{BTreeSet, HashMap};
 use std::path::{Path, PathBuf};
@@ -112,39 +112,14 @@ fn split_sheet_renames(events: Vec<FileEvent>) -> Vec<FileEvent> {
     split
 }
 
-/// Runs the planner over the directories `events` touch, on the blocking pool.
+/// Runs the planner over the directories `events` touch, on the blocking pool. Each job is filed
+/// under the library folder its own sheet sits in, so no folder's files are kept out here.
 async fn plan(events: &[FileEvent], around: SheetsAround) -> Result<CuePlan, AppError> {
-    let touched = Touched::of(events, &around.claims);
-    tokio::task::spawn_blocking(move || touched.settle(&around))
+    let written: Vec<PathBuf> =
+        events.iter().filter_map(written_path).map(Path::to_path_buf).collect();
+    tokio::task::spawn_blocking(move || cue::settle_dirs(&around, written, |_| true))
         .await
         .map_err(|e| AppError::scanner("Cue sheet planning task failed", e))
-}
-
-/// What the planner reads off a batch's events.
-struct Touched {
-    /// Every directory an event touches, and those of the sheets and images the library holds
-    /// claims for, so a sheet planned again finds the images it already claims.
-    dirs: Vec<PathBuf>,
-    /// The paths the events leave new content at.
-    written: Vec<PathBuf>,
-}
-
-impl Touched {
-    fn of(events: &[FileEvent], claims: &HashMap<String, String>) -> Self {
-        let claimed = claims.iter().flat_map(|(image, sheet)| [Path::new(image), Path::new(sheet)]);
-        let paths = events.iter().flat_map(event_paths).chain(claimed);
-        let dirs: BTreeSet<&Path> = paths.filter_map(Path::parent).collect();
-        Self {
-            dirs: dirs.into_iter().map(Path::to_path_buf).collect(),
-            written: events.iter().filter_map(written_path).map(Path::to_path_buf).collect(),
-        }
-    }
-
-    /// Settles the directories' sheets against what `around` holds. Each job is filed under the
-    /// library folder its own sheet sits in, so no folder's files are kept out here.
-    fn settle(self, around: &SheetsAround) -> CuePlan {
-        cue::settle_dirs(&self.dirs, self.written, around, |_| true)
-    }
 }
 
 /// Whether the sheet jobs own `event` in place of the ordinary path: a sheet written to, which the

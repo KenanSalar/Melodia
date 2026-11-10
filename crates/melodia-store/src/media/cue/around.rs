@@ -2,7 +2,7 @@
 //! the user opens. Only those directories are listed, so a saved or opened sheet costs a few
 //! listings rather than the folder scan's `stat` of every file.
 
-use std::collections::HashSet;
+use std::collections::{BTreeSet, HashSet};
 use std::path::{Path, PathBuf};
 
 use super::parse;
@@ -15,15 +15,14 @@ use crate::media::ingest::scanner::{MediaWalk, WalkIndex, list_media_files};
 use crate::media::ingest::watcher::is_sheet_file;
 use melodia_core::error::AppError;
 
-/// Settles the sheets in `dirs` against what the library holds `around` them, `written` being the
-/// paths left with new content. Only the images `owns` admits are claimed or given back.
+/// Settles the sheets `around` was read for against what the library holds there, `written` being
+/// the paths left with new content. Only the images `owns` admits are claimed or given back.
 pub fn settle_dirs(
-    dirs: &[PathBuf],
-    written: Vec<PathBuf>,
     around: &SheetsAround,
+    written: Vec<PathBuf>,
     owns: impl Fn(&Path) -> bool + Send + Sync,
 ) -> CuePlan {
-    let MediaWalk { files, sheets, unreadable } = list_media_files(dirs);
+    let MediaWalk { files, sheets, unreadable } = list_media_files(&listed_dirs(around));
     ScanPool::for_files(sheets.len()).install(|| {
         let audio = WalkIndex::new(files, unreadable.clone());
         let sheets = WalkIndex::new(sheets, unreadable);
@@ -46,6 +45,16 @@ pub fn settle_dirs(
         };
         settle(&input, owns)
     })
+}
+
+/// The directories `around` was asked about, and those of each sheet and image it holds a claim
+/// for, so a sheet read again finds the images it claims. Every sheet on record there sits in one,
+/// so a sheet the listing missed is gone rather than merely unlisted.
+fn listed_dirs(around: &SheetsAround) -> Vec<PathBuf> {
+    let claimed = around.claims.iter().flat_map(|(image, sheet)| [image, sheet]);
+    let claim_dirs = claimed.filter_map(|path| Path::new(path).parent()).map(Path::to_path_buf);
+    let dirs: BTreeSet<PathBuf> = around.dirs.iter().map(PathBuf::from).chain(claim_dirs).collect();
+    dirs.into_iter().collect()
 }
 
 /// The audio files each of `sheets` names, in its order, which is what opening a sheet opens: the
