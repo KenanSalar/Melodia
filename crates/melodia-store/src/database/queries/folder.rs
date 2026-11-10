@@ -53,20 +53,20 @@ pub async fn delete_folder(db: &DbPool, id: i64) -> Result<(), AppError> {
     .await
 }
 
-/// Hands the tracks and kept-out files of the folders in `ids` to `parent_id`, then deletes those
-/// folders.
+/// Hands the tracks, cue sheets and kept-out files of the folders in `ids` to `parent_id`, then
+/// deletes those folders.
 ///
-/// Both move before the rows go, so the cascade has nothing left to take: what a parent
-/// supersedes keeps its ratings, play counts, favourites and playlist entries, and a kept-out file
-/// stays out. Neither the search index nor the stats triggers watch `folder_id`, so the move
-/// rewrites nothing else.
+/// All three move before the rows go, so the cascade has nothing left to take: what a parent
+/// supersedes keeps its ratings, play counts, favourites and playlist entries, a sheet keeps the
+/// tracks that cascade from it, and a kept-out file stays out. Neither the search index nor the
+/// stats triggers watch `folder_id`, so the move rewrites nothing else.
 pub async fn absorb_folders(db: &DbPool, parent_id: i64, ids: &[i64]) -> Result<(), AppError> {
     if ids.is_empty() {
         return Ok(());
     }
     let ids = ids.to_vec();
     db.transaction(move |tx| {
-        for table in ["tracks", "excluded_files"] {
+        for table in ["tracks", "cue_sheets", "excluded_files"] {
             let repoints = chunked_in_statements(parent_id, &ids, |placeholders| {
                 format!("UPDATE {table} SET folder_id = ? WHERE folder_id IN ({placeholders})")
             });

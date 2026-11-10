@@ -10,7 +10,7 @@ use std::path::Path;
 
 use lofty::tag::items::Timestamp;
 
-use super::layout::{FileLayout, PlacedTrack};
+use super::layout::{FileLayout, MIN_CLAIMED_ROWS, PlacedTrack};
 use super::parse::{Sheet, SheetTrack};
 use crate::media::ingest::metadata::{parse_replaygain_gain, parse_replaygain_peak, split_genres};
 use melodia_core::entities::artist::ArtistCredit;
@@ -25,17 +25,19 @@ pub(crate) struct CueRow {
     pub(crate) meta: ExtractedMetadata,
 }
 
-/// The rows `layout` carves out of the image at `image`, whose own read is `disc`. A track
-/// starting past the image's end is dropped and logged, which only the image's length can tell.
+/// The rows `layout` carves out of the image at `image`, whose own read is `disc`, or `None` where
+/// fewer than [`MIN_CLAIMED_ROWS`] fit inside it. A track starting past the image's end is dropped
+/// and logged, which only the image's length can tell. An image too short to split is another file
+/// the sheet's name led to, or a truncated one, and keeps its own rows.
 pub(crate) fn rows(
     sheet: &Sheet,
     layout: &FileLayout,
     image: &Path,
     disc: &ExtractedMetadata,
-) -> Vec<CueRow> {
+) -> Option<Vec<CueRow>> {
     let stem = image.file_stem().map(|stem| stem.to_string_lossy()).unwrap_or_default();
     let track_total = i32::try_from(layout.track_total()).unwrap_or(i32::MAX);
-    layout
+    let carved: Vec<CueRow> = layout
         .rows
         .iter()
         .filter(|row| {
@@ -63,7 +65,12 @@ pub(crate) fn rows(
             forget_the_recording(&mut meta);
             CueRow { track: row.track, span: row.span, meta }
         })
-        .collect()
+        .collect();
+    if carved.len() < MIN_CLAIMED_ROWS {
+        log::warn!("{} is too short to split into its cue sheet's tracks", image.display());
+        return None;
+    }
+    Some(carved)
 }
 
 /// The span's length, the last track's running to the end of the image.

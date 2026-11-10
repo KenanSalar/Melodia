@@ -193,7 +193,10 @@ a span goes in as `SeekTo::TimeStamp` ticks, never through `Duration`.
   the name resolves to a walked audio file. Sheets get the type wrong routinely.
 - **A `FILE` is claimed only when the sheet carves it into at least two rows**, the hidden track
   counting as one. A file holding one track that starts at `00:00:00` is a per-track rip; it keeps
-  its own row and its own tags.
+  its own row and its own tags. The rule is held again once the image is read and the tracks past
+  its end are dropped: an image left with fewer rows (one track of the disc that `FILE` resolved
+  to, a truncated image) keeps the rows it had, and the sheet goes unstamped so the next scan reads
+  both again.
 - **When several sheets claim one image, one wins, deterministically:**
   1. the sheet whose stem is the image's stem (`Album.cue` for `Album.flac`);
   2. then the sheet named after the whole image file name (`Album.flac.cue`);

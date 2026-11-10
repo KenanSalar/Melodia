@@ -15,6 +15,10 @@ use melodia_core::entities::cue::{CueSpan, CueTrack, FRAMES_PER_SECOND};
 /// a disc's first pregap often holds a few frames of.
 const HIDDEN_TRACK_FLOOR: u32 = FRAMES_PER_SECOND;
 
+/// The fewest rows a sheet carves out of a file to split it. One track from the top is a per-track
+/// rip, whose file keeps its own row and tags.
+pub(crate) const MIN_CLAIMED_ROWS: usize = 2;
+
 /// The rows a sheet carves out of one of its files, in track order.
 pub(crate) struct FileLayout {
     /// The file, as a position in [`Sheet::files`].
@@ -23,10 +27,9 @@ pub(crate) struct FileLayout {
 }
 
 impl FileLayout {
-    /// Whether the sheet splits the file. One track from the top is a per-track rip, whose file
-    /// keeps its own row and tags.
+    /// Whether the sheet splits the file.
     pub(crate) fn claims(&self) -> bool {
-        self.rows.len() >= 2
+        self.rows.len() >= MIN_CLAIMED_ROWS
     }
 
     /// The sheet's numbered tracks on this file, the count a row's `track_total` states.

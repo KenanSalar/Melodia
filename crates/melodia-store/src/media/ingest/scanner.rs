@@ -113,8 +113,8 @@ impl WalkedPaths {
         start..start + matching
     }
 
-    /// The paths directly inside `dir`, once sorted. Every path under `dir` shares its spelling as
-    /// a prefix, so they sit in one run of the sort, which is walked to drop the deeper ones.
+    /// The paths directly inside `dir`, once sorted. Every path starting with its spelling sits in
+    /// one run of the sort, deeper ones and a sibling like `Album (2)` beside `Album` alike.
     fn in_dir<'a>(&'a self, dir: &'a Path) -> impl Iterator<Item = &'a Path> {
         let prefix = dir.to_string_lossy();
         let start =

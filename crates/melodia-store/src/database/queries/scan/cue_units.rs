@@ -78,17 +78,21 @@ struct SheetWriter<'a, 'conn> {
 
 impl SheetWriter<'_, '_> {
     fn apply_read_sheet(&mut self, job: &SheetJob, read: &SheetRead) -> Result<(), AppError> {
-        // An image that couldn't be read leaves the sheet unstamped, so the next scan claims it.
-        let all_read =
-            job.claims.iter().all(|claim| self.images.contains_key(claim.image.as_path()));
-        let stamp = all_read.then_some(&read.stamp);
+        let units: Vec<(&Claim, &ScannedFile, Vec<CueRow>)> = job
+            .claims
+            .iter()
+            .filter_map(|claim| {
+                let image = *self.images.get(claim.image.as_path())?;
+                let carved = rows(&read.sheet, &claim.layout, &claim.image, &image.metadata)?;
+                Some((claim, image, carved))
+            })
+            .collect();
+        // An image that couldn't be read, or that is too short for the sheet to split, keeps its
+        // rows and leaves the sheet unstamped, so the next scan reads both again.
+        let stamp = (units.len() == job.claims.len()).then_some(&read.stamp);
         let sheet_id = upsert_sheet(self.tx, &job.path.to_string_lossy(), self.folder_id, stamp)?;
-        for claim in &job.claims {
-            let Some(&image) = self.images.get(claim.image.as_path()) else {
-                continue;
-            };
-            let carved = rows(&read.sheet, &claim.layout, &claim.image, &image.metadata);
-            self.apply_cue_unit(claim, image, sheet_id, &carved)?;
+        for (claim, image, carved) in &units {
+            self.apply_cue_unit(claim, image, sheet_id, carved)?;
         }
         Ok(())
     }
