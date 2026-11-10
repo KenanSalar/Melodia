@@ -6,6 +6,7 @@ use std::sync::LazyLock;
 
 use rusqlite::Connection;
 
+use super::file_rows::WHOLE_FILE;
 use super::membership::Membership;
 use super::{columns, json_array};
 use crate::database::rows::FromRow;
@@ -232,8 +233,8 @@ pub async fn get_track_ids_by_hashes(
     Ok(map)
 }
 
-/// `file_hash → [(id, file_path)]` of the rows carrying each of `hashes`, lowest id first: the ones
-/// a moved file may re-point rather than duplicate. Hashes with no row are absent.
+/// `file_hash → [(id, file_path)]` of the whole-file rows carrying each of `hashes`, lowest id
+/// first: the ones a moved file may re-point rather than duplicate. Hashes with no row are absent.
 ///
 /// On a connection rather than the pool so the scan's ingest can ask inside its transaction and
 /// the watcher's batch off the read pool, ahead of its own.
@@ -247,7 +248,7 @@ pub(crate) fn rows_by_hash_on(
     let rows: Vec<(String, i64, String)> = chunked_in_query(conn, &unique, |placeholders| {
         format!(
             "SELECT file_hash, id, file_path FROM tracks
-             WHERE file_hash IN ({placeholders})
+             WHERE file_hash IN ({placeholders}) AND {WHOLE_FILE}
              ORDER BY id ASC"
         )
     })?;

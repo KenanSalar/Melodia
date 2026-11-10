@@ -14,6 +14,8 @@
 //!
 //! A library-sized list holds no projection per track, only ids (`ui::paged_rows`).
 
+use crate::entities::cue::{CueSpan, CueTrack};
+
 /// What the player and the bar render, cloned into every published view model, so it carries
 /// playback identity and nothing a list draws.
 #[derive(Clone, Debug, PartialEq)]
@@ -21,6 +23,8 @@ pub struct TrackSummary {
     pub id: i64,
     pub file_path: String,
     pub file_name: String,
+    /// The part of the file a cue sheet track plays, `None` playing all of it.
+    pub span: Option<CueSpan>,
     pub title: String,
     pub artist: Option<String>,
     pub album: Option<String>,
@@ -55,6 +59,7 @@ impl From<Track> for TrackSummary {
             id: t.id,
             file_path: t.file_path,
             file_name: t.file_name,
+            span: t.span,
             title: t.title,
             artist: t.artist,
             album: t.album,
@@ -79,6 +84,7 @@ impl From<&Track> for TrackSummary {
             id: t.id,
             file_path: t.file_path.clone(),
             file_name: t.file_name.clone(),
+            span: t.span,
             title: t.title.clone(),
             artist: t.artist.clone(),
             album: t.album.clone(),
@@ -126,6 +132,7 @@ pub struct TrackListRow {
 #[derive(Clone, Debug, PartialEq)]
 pub struct PlaylistExportRow {
     pub file_path: String,
+    pub cue_track: Option<CueTrack>,
     pub file_hash: Option<String>,
     pub title: String,
     pub artist: Option<String>,
@@ -152,6 +159,7 @@ pub struct TrackMeta {
 pub struct TagEditRow {
     pub id: i64,
     pub file_path: String,
+    pub cue_track: Option<CueTrack>,
     pub title: String,
     pub artist: Option<String>,
     pub album_artist: Option<String>,
@@ -219,6 +227,9 @@ pub struct Track {
     pub file_path: String,
     pub file_name: String,
     pub file_hash: Option<String>,
+    /// The cue sheet track this row plays, `None` for a row playing its whole file.
+    pub cue_track: Option<CueTrack>,
+    pub span: Option<CueSpan>,
 
     // Core metadata
     pub title: String,

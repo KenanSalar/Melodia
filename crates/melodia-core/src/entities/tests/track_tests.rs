@@ -6,6 +6,8 @@ fn make_track() -> Track {
         file_path: "/music/song.flac".into(),
         file_name: "song.flac".into(),
         file_hash: Some("abc123".into()),
+        cue_track: None,
+        span: None,
         title: "Test Song".into(),
         artist: Some("Artist".into()),
         album_artist: Some("Album Artist".into()),

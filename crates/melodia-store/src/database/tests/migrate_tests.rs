@@ -1,13 +1,31 @@
 use rusqlite::Connection;
 
-use super::{Applied, MIGRATIONS, Migration, Pending, apply, compare};
+use super::{Applied, ForeignKeys, MIGRATIONS, Migration, Pending, apply, compare};
 use crate::database::{DbPool, sql};
 use melodia_core::error::{AppError, MigrationError};
 
 static KNOWN: &[Migration] = &[
-    Migration { version: 1, description: "first", sql: "", checksum: b"one" },
-    Migration { version: 2, description: "second", sql: "", checksum: b"two" },
-    Migration { version: 3, description: "third", sql: "", checksum: b"three" },
+    Migration {
+        version: 1,
+        description: "first",
+        sql: "",
+        checksum: b"one",
+        foreign_keys: ForeignKeys::Enforced,
+    },
+    Migration {
+        version: 2,
+        description: "second",
+        sql: "",
+        checksum: b"two",
+        foreign_keys: ForeignKeys::Enforced,
+    },
+    Migration {
+        version: 3,
+        description: "third",
+        sql: "",
+        checksum: b"three",
+        foreign_keys: ForeignKeys::Enforced,
+    },
 ];
 
 fn ran(version: i64, checksum: &[u8]) -> Applied {
@@ -94,12 +112,19 @@ fn an_unknown_migration_is_refused_before_an_edited_one() {
 }
 
 static LANDS_THEN_FAILS: [Migration; 2] = [
-    Migration { version: 1, description: "lands", sql: "CREATE TABLE landed (x)", checksum: b"1" },
+    Migration {
+        version: 1,
+        description: "lands",
+        sql: "CREATE TABLE landed (x)",
+        checksum: b"1",
+        foreign_keys: ForeignKeys::Enforced,
+    },
     Migration {
         version: 2,
         description: "fails",
         sql: "CREATE TABLE half_made (x); INSERT INTO no_such_table VALUES (1)",
         checksum: b"2",
+        foreign_keys: ForeignKeys::Enforced,
     },
 ];
 

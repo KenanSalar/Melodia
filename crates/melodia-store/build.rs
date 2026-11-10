@@ -32,7 +32,12 @@ struct MigrationFile {
     description: String,
     path: String,
     checksum: Vec<u8>,
+    /// The `database::migrate::ForeignKeys` variant it runs under.
+    foreign_keys: &'static str,
 }
+
+/// The first line that runs a migration with foreign keys suspended.
+const FOREIGN_KEYS_OFF: &str = "-- foreign-keys-off";
 
 /// A shipped file's hashes, in the lowercase hex `sha384sum` and `b3sum` print.
 struct Pinned {
@@ -173,6 +178,8 @@ fn read_migration(name: &str, path: &Path) -> MigrationFile {
     if sql.starts_with("-- no-transaction") {
         fail(format_args!("{name}: every migration runs inside a transaction"));
     }
+    let foreign_keys =
+        if sql.lines().next() == Some(FOREIGN_KEYS_OFF) { "Suspended" } else { "Enforced" };
     let Some(path) = path.to_str() else {
         fail(format_args!("{} is not a UTF-8 path", path.display()));
     };
@@ -182,6 +189,7 @@ fn read_migration(name: &str, path: &Path) -> MigrationFile {
         description: description.replace('_', " "),
         path: path.to_owned(),
         checksum: checksum(name, &sql),
+        foreign_keys,
     }
 }
 
@@ -219,11 +227,12 @@ fn render(migrations: &[MigrationFile]) -> String {
             let checksum: Vec<String> =
                 migration.checksum.iter().map(|byte| format!("{byte:#04x}")).collect();
             format!(
-                "    Migration {{ version: {}, description: {:?}, sql: include_str!({:?}), checksum: &[{}] }},",
+                "    Migration {{ version: {}, description: {:?}, sql: include_str!({:?}), checksum: &[{}], foreign_keys: ForeignKeys::{} }},",
                 grouped(migration.version),
                 migration.description,
                 migration.path,
                 checksum.join(", "),
+                migration.foreign_keys,
             )
         })
         .collect();

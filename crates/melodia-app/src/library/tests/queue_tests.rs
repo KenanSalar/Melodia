@@ -12,6 +12,7 @@ fn make_summary(id: i64) -> Arc<TrackSummary> {
         id,
         file_path: format!("/music/{id}.mp3"),
         file_name: format!("{id}.mp3"),
+        span: None,
         title: format!("Track {id}"),
         artist: None,
         album: None,

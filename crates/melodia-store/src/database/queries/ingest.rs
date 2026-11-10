@@ -9,6 +9,7 @@ use rusqlite::Transaction;
 use crate::database::queries;
 use crate::database::queries::artist::UNKNOWN_ARTIST_ID;
 use crate::database::queries::scan::{MoveCandidates, NameCache, file_name_of};
+use crate::database::queries::track::file_rows::WHOLE_FILE;
 use crate::database::sql::Sql;
 use crate::database::{DbPool, MAX_BINDS_PER_STATEMENT, placeholders, values_placeholders};
 use crate::media::ingest::scan_pool::ScanPool;
@@ -250,7 +251,7 @@ pub(crate) fn ingest_scanned_files(
             // row is there.
             let _repointed = queries::scan::update_track_location(
                 tx,
-                existing_id,
+                &old_path,
                 file_path_str,
                 &file_name_of(&file.path),
                 folder_id,
@@ -277,6 +278,7 @@ pub(crate) fn ingest_scanned_files(
         let row = queries::scan::NewTrackRow {
             file_path: file_path_str.to_owned(),
             file_name: file_name_of(&file.path),
+            cue: None,
             meta,
             ids,
         };
@@ -296,7 +298,7 @@ pub(crate) fn ingest_scanned_files(
     })
 }
 
-/// The stored size and mtime of each scanned path that already has a row.
+/// The stored size and mtime of each scanned path that already has a whole-file row.
 ///
 /// Chunked over `scanned_files` itself, so a chunk's binds drop at its end rather than a `String`
 /// per scanned path living for the whole ingest.
@@ -308,7 +310,8 @@ fn load_existing(
     for chunk in scanned_files.chunks(MAX_BINDS_PER_STATEMENT) {
         let path_list = placeholders(chunk.len());
         let mut sql = Sql::vouched(format!(
-            "SELECT file_path, file_size, date_modified FROM tracks WHERE file_path IN ({path_list})"
+            "SELECT file_path, file_size, date_modified FROM tracks \
+             WHERE file_path IN ({path_list}) AND {WHOLE_FILE}"
         ));
         for file in chunk {
             sql.bind(file.path.to_string_lossy().into_owned());
@@ -495,7 +498,7 @@ fn flush_artwork_backfill(
             "WITH v(path, art) AS (VALUES {rows})
              UPDATE tracks
                 SET artwork_path = (SELECT art FROM v WHERE v.path = tracks.file_path)
-              WHERE file_path IN (SELECT path FROM v)
+              WHERE file_path IN (SELECT path FROM v) AND {WHOLE_FILE}
                 AND (artwork_path IS NULL OR artwork_path = '')"
         ));
         for (path, art) in chunk {

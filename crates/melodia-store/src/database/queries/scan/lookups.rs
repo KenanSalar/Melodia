@@ -63,10 +63,3 @@ pub async fn fold_folder_tracks<A: Send + 'static>(
     })
     .await
 }
-
-pub(crate) fn get_track_id_by_path(
-    tx: &Transaction<'_>,
-    file_path: &str,
-) -> Result<Option<i64>, AppError> {
-    sql::fetch_optional(tx, "SELECT id FROM tracks WHERE file_path = ? LIMIT 1", (file_path,))
-}

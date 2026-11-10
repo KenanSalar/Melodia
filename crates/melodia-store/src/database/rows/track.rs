@@ -1,15 +1,37 @@
+use rusqlite::types::Type;
+use rusqlite::{Row, Statement};
+
 use melodia_core::entities::browse::DirectoryTrack;
+use melodia_core::entities::cue::{CueFrames, CueSpan};
 use melodia_core::entities::track::{
     MostPlayedFavorite, PlaylistExportRow, ScrobbleRow, TagEditRow, Track, TrackLinks,
     TrackListRow, TrackMeta, TrackSummary,
 };
 
-use super::by_name;
+use super::{FromRow, by_name};
+
+impl FromRow for Option<CueSpan> {
+    type Columns = (usize, usize);
+
+    fn columns(statement: &Statement<'_>) -> rusqlite::Result<(usize, usize)> {
+        Ok((statement.column_index("cue_start")?, statement.column_index("cue_end")?))
+    }
+
+    fn from_row(row: &Row<'_>, &(start, end): &(usize, usize)) -> rusqlite::Result<Self> {
+        let Some(start_frames) = row.get::<_, Option<CueFrames>>(start)? else {
+            return Ok(None);
+        };
+        CueSpan::new(start_frames, row.get(end)?)
+            .map(Some)
+            .map_err(|e| rusqlite::Error::FromSqlConversionFailure(end, Type::Integer, Box::new(e)))
+    }
+}
 
 by_name!(TrackSummary {
     id,
     file_path,
     file_name,
+    span: Option<CueSpan>,
     title,
     artist,
     album,
@@ -48,13 +70,14 @@ by_name!(TrackListRow {
 
 by_name!(DirectoryTrack { file_path, row: TrackListRow });
 
-by_name!(PlaylistExportRow { file_path, file_hash, title, artist, duration_ms });
+by_name!(PlaylistExportRow { file_path, cue_track, file_hash, title, artist, duration_ms });
 
 by_name!(TrackMeta { id, codec, bitrate, sample_rate, bit_depth, channels, year, genre });
 
 by_name!(TagEditRow {
     id,
     file_path,
+    cue_track,
     title,
     artist,
     album_artist,
@@ -110,6 +133,8 @@ by_name!(Track {
     file_path,
     file_name,
     file_hash,
+    cue_track,
+    span: Option<CueSpan>,
     title,
     artist,
     album_artist,

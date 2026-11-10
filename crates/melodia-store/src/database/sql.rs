@@ -14,6 +14,7 @@ use rusqlite::{
     CachedStatement, Connection, OptionalExtension, Params, Statement, ToSql, params_from_iter,
 };
 
+use melodia_core::entities::cue::{CueFrames, CueTrack};
 use melodia_core::entities::duplicates::DismissalSet;
 use melodia_core::error::AppError;
 
@@ -239,6 +240,8 @@ param_from!(
     i32 => Integer,
     bool => Integer,
     DismissalSet => Integer,
+    CueTrack => Integer,
+    CueFrames => Integer,
     f64 => Real,
     String => Text,
     &str => Text,

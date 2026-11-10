@@ -6,9 +6,11 @@ use std::sync::LazyLock;
 
 use rusqlite::Transaction;
 
+use crate::database::queries::track::file_rows::WHOLE_FILE;
 use crate::database::queries::track::order_keys::OrderKeys;
 use crate::database::sql::{self, Sql};
 use crate::database::{MAX_BINDS_PER_STATEMENT, chunked_in_execute, placeholders, values_list};
+use melodia_core::entities::cue::{CueSpan, CueTrack};
 use melodia_core::entities::scan::ExtractedMetadata;
 use melodia_core::entities::track_search::SearchFields;
 use melodia_core::error::AppError;
@@ -22,6 +24,7 @@ use super::upserts::{insert_track_joins, replace_track_joins};
 /// [`bind_track_columns`] binds them, which `update_track_metadata`'s `SET` list follows too. The
 /// placeholder grid and the bind budget are counted off this string.
 const TRACK_INSERT_COLUMNS: &str = "file_path, file_name,
+    cue_track, cue_start, cue_end, cue_sheet_id,
     file_hash, title, artist, album_artist, album, genre, credits,
     track_number, track_total, disc_number, disc_total, disc_subtitle, subtitle,
     release_date, year, original_date, original_year, comment,
@@ -73,6 +76,11 @@ static TRACK_ROW: LazyLock<String> = LazyLock::new(|| {
 /// Binds one [`TRACK_ROW`].
 fn bind_new_track(sql: &mut Sql, row: &NewTrackRow<'_>, now: &str) {
     sql.bind(row.file_path.as_str()).bind(row.file_name.as_str());
+    let cue = row.cue.as_ref();
+    sql.bind(cue.map(|cue| cue.track))
+        .bind(cue.map(|cue| cue.span.start()))
+        .bind(cue.and_then(|cue| cue.span.end()))
+        .bind(cue.and_then(|cue| cue.sheet_id));
     bind_track_columns(sql, row.meta, &row.ids);
     sql.bind(row.meta.rating.unwrap_or(0)).bind(now);
 }
@@ -184,6 +192,7 @@ pub(crate) fn insert_track(
     let row = NewTrackRow {
         file_path: file_path.to_owned(),
         file_name: file_name.to_owned(),
+        cue: None,
         meta,
         ids: *ids,
     };
@@ -203,8 +212,19 @@ pub(crate) fn file_name_of(path: &Path) -> String {
 pub struct NewTrackRow<'a> {
     pub file_path: String,
     pub file_name: String,
+    /// `None` for a row playing its whole file.
+    pub cue: Option<CuePlacement>,
     pub meta: &'a ExtractedMetadata,
     pub ids: ResolvedIds,
+}
+
+/// Where a cue sheet puts a row in its file.
+#[derive(Clone, Copy)]
+pub struct CuePlacement {
+    pub track: CueTrack,
+    pub span: CueSpan,
+    /// `None` for a sheet embedded in the file.
+    pub sheet_id: Option<i64>,
 }
 
 /// Rows per multi-row INSERT inside the bind budget, the [`LITERAL_DEFAULTS`] riding as SQL.
@@ -213,7 +233,7 @@ pub const INSERT_CHUNK_ROWS: usize =
 
 /// [`insert_track`] for the ingest hot path, one statement per [`INSERT_CHUNK_ROWS`] rows. Returns
 /// the ids **in `rows` order**, which the drag-and-drop import queues by: `RETURNING`'s order is
-/// unspecified, so each id is matched back by its `file_path`.
+/// unspecified, so each id is matched back by its `file_path` and `cue_track`.
 pub(crate) fn insert_tracks_batch(
     tx: &Transaction<'_>,
     rows: &[NewTrackRow<'_>],
@@ -223,18 +243,22 @@ pub(crate) fn insert_tracks_batch(
     let mut out = Vec::with_capacity(rows.len());
     for chunk in rows.chunks(INSERT_CHUNK_ROWS) {
         let mut sql = Sql::vouched(format!(
-            "INSERT INTO tracks ({TRACK_INSERT_COLUMNS}) VALUES {} RETURNING id, file_path",
+            "INSERT INTO tracks ({TRACK_INSERT_COLUMNS}) VALUES {} \
+             RETURNING id, file_path, cue_track",
             values_list(&TRACK_ROW, chunk.len())
         ));
         for row in chunk {
             bind_new_track(&mut sql, row, now);
         }
 
-        let returned: Vec<(i64, String)> = sql.fetch_all(tx)?;
-        let mut by_path: HashMap<String, i64> =
-            returned.into_iter().map(|(id, path)| (path, id)).collect();
+        let returned: Vec<(i64, String, Option<CueTrack>)> = sql.fetch_all(tx)?;
+        let mut by_key: HashMap<(&str, Option<CueTrack>), i64> = returned
+            .iter()
+            .map(|(id, path, cue_track)| ((path.as_str(), *cue_track), *id))
+            .collect();
         for row in chunk {
-            let Some(id) = by_path.remove(row.file_path.as_str()) else {
+            let key = (row.file_path.as_str(), row.cue.map(|cue| cue.track));
+            let Some(id) = by_key.remove(&key) else {
                 // Every VALUES row returns one; failing beats ids out of step with the rows.
                 return Err(AppError::scanner_msg(format!(
                     "multi-row insert returned no id for {}",
@@ -248,11 +272,12 @@ pub(crate) fn insert_tracks_batch(
     Ok(out)
 }
 
-/// Re-points a moved or renamed track, keeping its playback state. `false` where the row is gone,
-/// which a caller holding an id resolved before the transaction opened takes as a cue to insert.
+/// Re-points every row of a moved or renamed file, keeping their playback state. `false` where the
+/// rows are gone, which a caller holding a path read before the transaction opened takes as a cue
+/// to insert.
 pub(crate) fn update_track_location(
     tx: &Transaction<'_>,
-    track_id: i64,
+    old_path: &str,
     new_path: &str,
     new_file_name: &str,
     new_folder_id: i64,
@@ -261,27 +286,14 @@ pub(crate) fn update_track_location(
     let updated = sql::execute(
         tx,
         "UPDATE tracks SET file_path = ?, file_name = ?, folder_id = ?, date_modified = ?
-         WHERE id = ?",
-        (new_path, new_file_name, new_folder_id, date_modified, track_id),
+         WHERE file_path = ?",
+        (new_path, new_file_name, new_folder_id, date_modified, old_path),
     )?;
     Ok(updated > 0)
 }
 
-/// Rewrites every tag-backed column of a track that changed on disk, keeping its playback state.
-///
-/// The rating is tag-backed too, but a file that can't carry one (a filename-derived Matroska row,
-/// read-only media, the write-back turned off) leaves the row its only copy, hence the `CASE`: the
-/// tag wins whenever it says something, and silence leaves the row alone. So with the write-back
-/// off, a star set here gives way to one another player wrote, and a cleared one comes back while
-/// the file still carries it, the column having no way to say "the user meant zero".
-pub(crate) fn update_track_metadata(
-    tx: &Transaction<'_>,
-    file_path: &str,
-    meta: &ExtractedMetadata,
-    ids: &ResolvedIds,
-    names: &mut NameCache,
-) -> Result<(), AppError> {
-    let mut sql = Sql::new(
+static UPDATE_TRACK_METADATA: LazyLock<String> = LazyLock::new(|| {
+    format!(
         "UPDATE tracks SET
             file_hash = ?, title = ?, artist = ?, album_artist = ?, album = ?,
             genre = ?, credits = ?,
@@ -302,8 +314,26 @@ pub(crate) fn update_track_metadata(
             date_modified = ?, sort_key = ?, search_text = ?,
             artist_key = ?, album_key = ?, genre_key = ?,
             rating = CASE WHEN ? = 0 THEN rating ELSE ? END
-         WHERE file_path = ? RETURNING id",
-    );
+         WHERE file_path = ? AND {WHOLE_FILE} RETURNING id"
+    )
+});
+
+/// Rewrites every tag-backed column of a file's own row when the file changed on disk, keeping its
+/// playback state.
+///
+/// The rating is tag-backed too, but a file that can't carry one (a filename-derived Matroska row,
+/// read-only media, the write-back turned off) leaves the row its only copy, hence the `CASE`: the
+/// tag wins whenever it says something, and silence leaves the row alone. So with the write-back
+/// off, a star set here gives way to one another player wrote, and a cleared one comes back while
+/// the file still carries it, the column having no way to say "the user meant zero".
+pub(crate) fn update_track_metadata(
+    tx: &Transaction<'_>,
+    file_path: &str,
+    meta: &ExtractedMetadata,
+    ids: &ResolvedIds,
+    names: &mut NameCache,
+) -> Result<(), AppError> {
+    let mut sql = Sql::new(UPDATE_TRACK_METADATA.as_str());
     bind_track_columns(&mut sql, meta, ids);
     let tag_rating = meta.rating.unwrap_or(0);
     sql.bind(tag_rating).bind(tag_rating).bind(file_path);

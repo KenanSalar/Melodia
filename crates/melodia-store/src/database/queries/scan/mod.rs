@@ -16,9 +16,9 @@ mod watch_batch;
 
 pub use finish::{Unwalked, commit_scan, purge_unwalked};
 pub use lookups::fold_folder_tracks;
-pub(crate) use lookups::{find_folder_for_path, get_track_id_by_path, track_exists_by_path};
+pub(crate) use lookups::{find_folder_for_path, track_exists_by_path};
 pub(crate) use moves::MoveCandidates;
-pub use mutations::{INSERT_CHUNK_ROWS, NewTrackRow};
+pub use mutations::{CuePlacement, INSERT_CHUNK_ROWS, NewTrackRow};
 pub(crate) use mutations::{
     delete_track_by_path, delete_tracks_by_paths_batch, file_name_of, insert_track,
     insert_tracks_batch, prune_orphans, roll_up_covers, update_album_artwork_from_tracks,

@@ -10,8 +10,8 @@ use rusqlite::Transaction;
 
 use super::{
     MoveCandidates, NameCache, delete_track_by_path, file_name_of, find_folder_for_path,
-    get_track_id_by_path, insert_track, prune_orphans, resolve_track_context, roll_up_covers,
-    track_exists_by_path, update_track_location, update_track_metadata,
+    insert_track, prune_orphans, resolve_track_context, roll_up_covers, track_exists_by_path,
+    update_track_location, update_track_metadata,
 };
 use crate::database::DbPool;
 use crate::database::queries::ingest;
@@ -221,7 +221,7 @@ fn handle_created(
         let file_name = file_name_of(path);
         let repointed = update_track_location(
             tx,
-            existing_id,
+            &old_path,
             &path_str,
             &file_name,
             folder_id,
@@ -295,15 +295,15 @@ fn handle_renamed(
     let from_str = from.to_string_lossy().into_owned();
     let to_str = to.to_string_lossy().into_owned();
 
-    if let Some(track_id) = get_track_id_by_path(tx, &from_str)? {
+    if track_exists_by_path(tx, &from_str)? {
         let Some(folder_id) = library_folder(tx, to, &to_str, "Renamed")? else {
             return Ok(false);
         };
 
         let file_name = file_name_of(to);
-        // Resolved inside this transaction, so the row is there.
+        // Asked inside this transaction, so the rows are there.
         let _repointed =
-            update_track_location(tx, track_id, &to_str, &file_name, folder_id, date_modified)?;
+            update_track_location(tx, &from_str, &to_str, &file_name, folder_id, date_modified)?;
         // The row's file now sits where the kept-out one did.
         excluded_files::lift_on(tx, &[to_str.as_str()])?;
         log::info!("Renamed track: {from_str} -> {to_str}");

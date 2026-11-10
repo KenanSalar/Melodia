@@ -7,6 +7,7 @@
 
 use std::sync::LazyLock;
 
+use super::file_rows::FILE_ORDER;
 use super::keyset::detail_order;
 use crate::database::collation::UNICODE_LOWER;
 use crate::database::queries::DISK_IGNORES_CASE;
@@ -100,14 +101,15 @@ pub async fn track_ids_by_playlists(
     .await
 }
 
-const IDS_IN_SUBTREE: &str = "SELECT id FROM tracks WHERE file_path >= ?1 AND file_path < ?2 \
-     ORDER BY file_path COLLATE NOCASE ASC";
+static IDS_IN_SUBTREE: LazyLock<String> = LazyLock::new(|| {
+    format!("SELECT id FROM tracks WHERE file_path >= ?1 AND file_path < ?2 ORDER BY {FILE_ORDER}")
+});
 
 static IDS_IN_SUBTREE_ANY_CASE: LazyLock<String> = LazyLock::new(|| {
     format!(
         "SELECT id FROM tracks \
          WHERE file_path COLLATE {UNICODE_LOWER} >= ?1 AND file_path COLLATE {UNICODE_LOWER} < ?2 \
-         ORDER BY file_path COLLATE NOCASE ASC"
+         ORDER BY {FILE_ORDER}"
     )
 });
 
@@ -124,7 +126,7 @@ static IDS_IN_SUBTREE_ANY_CASE: LazyLock<String> = LazyLock::new(|| {
 pub async fn track_ids_under_directory(db: &DbPool, dir_path: &str) -> Result<Vec<i64>, AppError> {
     let (from, before) = super::list::subtree_bounds(dir_path);
     db.read(move |conn| {
-        let ids = sql::fetch_all(conn, IDS_IN_SUBTREE, (&from, &before))?;
+        let ids = sql::fetch_all(conn, IDS_IN_SUBTREE.as_str(), (&from, &before))?;
         if ids.is_empty() && DISK_IGNORES_CASE {
             return sql::fetch_all(conn, IDS_IN_SUBTREE_ANY_CASE.as_str(), (from, before));
         }

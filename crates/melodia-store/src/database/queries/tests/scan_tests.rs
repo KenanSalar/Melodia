@@ -623,30 +623,6 @@ async fn fold_folder_tracks_folds_nothing_for_an_unknown_folder() -> Result<(), 
     Ok(())
 }
 
-// === Tests for get_track_id_by_path ===
-
-#[tokio::test]
-async fn get_track_id_by_path_returns_id_when_exists() -> Result<(), AppError> {
-    let db = DbPool::test_pool().await?;
-    queries::folder::insert_folder(&db, "/music", true).await?;
-    let expected_id =
-        insert_test_track(&db, "/music/song.mp3", "Song", "Artist", "Album", "Rock").await?;
-
-    let id =
-        db.transaction(|tx| queries::scan::get_track_id_by_path(tx, "/music/song.mp3")).await?;
-    assert_eq!(id, Some(expected_id));
-    Ok(())
-}
-
-#[tokio::test]
-async fn get_track_id_by_path_returns_none_when_missing() -> Result<(), AppError> {
-    let db = DbPool::test_pool().await?;
-    let id =
-        db.transaction(|tx| queries::scan::get_track_id_by_path(tx, "/nonexistent.mp3")).await?;
-    assert!(id.is_none());
-    Ok(())
-}
-
 // === Tests for update_track_location ===
 
 #[tokio::test]
@@ -655,21 +631,21 @@ async fn update_track_location_repoints_existing_row() -> Result<(), AppError> {
     let folder = queries::folder::insert_folder(&db, "/music", true).await?;
     let id = insert_test_track(&db, "/music/old.mp3", "Song", "Artist", "Album", "Rock").await?;
 
-    let (repointed, moved) = db
+    let repointed = db
         .transaction(move |tx| {
-            let repointed = queries::scan::update_track_location(
+            queries::scan::update_track_location(
                 tx,
-                id,
+                "/music/old.mp3",
                 "/music/new.mp3",
                 "new.mp3",
                 folder.id,
                 None,
-            )?;
-            Ok((repointed, queries::scan::get_track_id_by_path(tx, "/music/new.mp3")?))
+            )
         })
         .await?;
+    let moved = queries::track::get_track_ids_by_paths(&db, &["/music/new.mp3".to_owned()]).await?;
     assert!(repointed);
-    assert_eq!(moved, Some(id));
+    assert_eq!(moved.get("/music/new.mp3"), Some(&id));
     Ok(())
 }
 
@@ -681,14 +657,14 @@ async fn update_track_location_false_when_row_deleted_in_tx() -> Result<(), AppE
     // falls back to a fresh insert instead of silently dropping the track.
     let db = DbPool::test_pool().await?;
     let folder = queries::folder::insert_folder(&db, "/music", true).await?;
-    let id = insert_test_track(&db, "/music/old.mp3", "Song", "Artist", "Album", "Rock").await?;
+    insert_test_track(&db, "/music/old.mp3", "Song", "Artist", "Album", "Rock").await?;
 
     let (deleted, repointed) = db
         .transaction(move |tx| {
             let deleted = queries::scan::delete_track_by_path(tx, "/music/old.mp3")?;
             let repointed = queries::scan::update_track_location(
                 tx,
-                id,
+                "/music/old.mp3",
                 "/music/new.mp3",
                 "new.mp3",
                 folder.id,

@@ -15,6 +15,7 @@ fn summary(id: i64, duration_ms: i64) -> Arc<TrackSummary> {
         id,
         file_path: String::new(),
         file_name: String::new(),
+        span: None,
         title: String::new(),
         artist: None,
         album: None,

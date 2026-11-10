@@ -76,7 +76,7 @@ paths:
 - A value used twice is one `?N` written twice and bound once, the bind count being the highest
   index. A bare `?` takes the index after the highest so far, so a statement never mixes the two
 - A multi-row `RETURNING` answers in no set order: match each row back by a key it returns, as
-  `insert_tracks_batch` matches `file_path`
+  `insert_tracks_batch` matches `(file_path, cue_track)`
 - Always use parameterized queries — never string concatenation
 - Guard against empty `IN` lists before building the statement
 
@@ -135,6 +135,8 @@ paths:
 - Avoid over-indexing — every index slows writes
 - **Melodia migrates through `database::migrate`**, over sqlx's `_sqlx_migrations` table and row
   format; its `//!` says why the format stays
+- A migration rebuilding a table others reference opens with the line `-- foreign-keys-off`
+  (`migrate::ForeignKeys`), and holds no `PRAGMA`, `BEGIN` or `COMMIT` of its own
 
 ## Performance
 

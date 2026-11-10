@@ -2,7 +2,7 @@
 
 Working doc. Delete when the feature ships.
 
-Status: **proposed** · Created: 2026-11-04
+Status: **in progress**, Phase 1 at its gate · Created: 2026-11-04
 
 Issue [#78](https://github.com/KenanSalar/Melodia/issues/78).
 
@@ -79,6 +79,9 @@ The uniqueness is split in two:
   exactly one row. A table-level `UNIQUE` alone would let two `NULL`s through, since SQLite treats
   `NULL`s as distinct.
 
+`idx_tracks_cue_sheet_id`, partial on `cue_sheet_id IS NOT NULL`, lets a sheet's delete find its
+tracks without scanning `tracks`, at no cost to a library without sheets.
+
 The composite's leading `file_path` keeps the folder range reads (`subtree_bounds`, `list.rs:33`)
 and every `=` and `IN` on an index.
 
@@ -105,7 +108,9 @@ which is what the column says.
 
 With foreign keys on, `DROP TABLE tracks` first runs an implicit `DELETE FROM tracks`, and that
 fires every `ON DELETE CASCADE`. For `playlist_items` (`initial_schema.sql:198`) and
-`duplicate_dismissals` it would delete every row. `PRAGMA foreign_keys` is a no-op inside a
+`duplicate_dismissals` it would delete every row. The credit tables don't cascade, so on a library
+with credits the drop fails outright (checked on a copy of the dev DB), and on one without them the
+cascades go through. `PRAGMA foreign_keys` is a no-op inside a
 transaction, and `database::migrate` runs every migration inside one (`run_and_record`,
 `migrate.rs:132`). `PRAGMA defer_foreign_keys` is no way out, since the cascades still fire. So
 enforcement goes off on the connection, before the transaction opens:
@@ -123,6 +128,7 @@ enforcement goes off on the connection, before the transaction opens:
   3. `CREATE TABLE tracks_new`, then `INSERT … SELECT` with ids preserved.
   4. `DROP TABLE tracks;` then `ALTER TABLE tracks_new RENAME TO tracks;`
   5. Recreate every index and trigger, verbatim apart from the new key.
+  6. `ANALYZE tracks`, since the drop took its `sqlite_stat1` rows.
 
   Dropping the other tables' triggers is not optional. Since SQLite 3.26 the rename re-parses the
   whole schema, and a trigger body still naming the dropped `tracks` fails it. No view names
@@ -378,8 +384,10 @@ user opens goes through the store too. `melodia-views` learns nothing about shee
 least twelve places:
 
 - `update_track_metadata` (`mutations.rs:277`)
-- `update_track_location` (`mutations.rs:253`), which re-points one row by id
-- `get_track_id_by_path` (`lookups.rs:67`)
+- `update_track_location` (`mutations.rs:253`), which re-pointed one row by id and now keys on the
+  old path
+- `get_track_id_by_path` (`lookups.rs:67`), deleted: its one caller, the rename, asks
+  `track_exists_by_path`
 - `track_exists_by_path` (`lookups.rs:10`)
 - `fold_folder_tracks` (`lookups.rs:46`)
 - `load_existing` (`ingest.rs:303`)
@@ -392,12 +400,13 @@ least twelve places:
   is false for a sheet's rows
 - both `IDS_IN_SUBTREE` statements (`entity_ids.rs:103`)
 
-Each one gets one of two answers, and the answer is a named SQL fragment owned once, not a literal
-repeated:
+Each one gets one of two answers, owned in `queries/track/file_rows.rs`:
 
-- **The whole-file row**, `cue_track IS NULL`, for anything that reads or writes a file's own tags.
+- **The whole-file row**, `WHOLE_FILE` (`cue_track IS NULL`), for anything that reads or writes a
+  file's own tags.
 - **File-level**, every row of the path, for anything that moves or deletes a file. A file moves,
-  and all its rows move with it.
+  and all its rows move with it. Keyed on the path, this needs no fragment; an order over files
+  ends in `FILE_ORDER`, which adds `cue_track`.
 
 The two id lookups are the exception: they answer every row with its `cue_track`, for the caller to
 match on (Phase 5). A statement that interpolates a fragment is a `LazyLock<String>`, as
@@ -409,55 +418,56 @@ The `RETURNING id, file_path` match in `insert_tracks_batch` (`mutations.rs:217`
 
 ## Phase 1: The rebuilt `tracks` (no behaviour change)
 
-- [ ] Dump the current definitions with `/usr/bin/sqlite3`:
+- [x] Dump the current definitions with `/usr/bin/sqlite3`:
       `SELECT type, name, sql FROM sqlite_schema WHERE sql LIKE '%tracks%'`, run on a database
       migrated to head. At this tree that is 15 triggers and 18 named indexes, the order-key ones
       included.
-- [ ] `build.rs` reads `-- foreign-keys-off` into a `ForeignKeys` field on `Migration`, and `render`
+- [x] `build.rs` reads `-- foreign-keys-off` into a `ForeignKeys` field on `Migration`, and `render`
       writes it.
-- [ ] `database/migrate.rs`: `apply_one` suspends enforcement around the transaction, and
+- [x] `database/migrate.rs`: `apply_one` suspends enforcement around the transaction, and
       `run_and_record` runs `PRAGMA foreign_key_check` ahead of the history row. A violation is a
       new `MigrationError` variant in `melodia-core`'s `error.rs`.
-- [ ] New migration `migrations/<timestamp>_cue_tracks.sql`, its timestamp after `20261105120000`:
-  - [ ] Its first line is `-- foreign-keys-off`.
-  - [ ] It creates `cue_sheets` and rebuilds `tracks` with the four columns, the split uniqueness
+- [x] New migration `migrations/20261110000000_cue_tracks.sql`:
+  - [x] Its first line is `-- foreign-keys-off`.
+  - [x] It creates `cue_sheets` and rebuilds `tracks` with the four columns, the split uniqueness
         and the two `CHECK`s.
-  - [ ] It drops and recreates every dependent trigger and index, in the order *The rebuild cannot
+  - [x] It drops and recreates every dependent trigger and index, in the order *The rebuild cannot
         eat playlists* gives.
-  - [ ] Its comments say why enforcement is off around it, for the reader of a file that can never
+  - [x] Its comments say why enforcement is off around it, for the reader of a file that can never
         be edited again.
-- [ ] `queries/stats.rs`: the trigger bodies come back unchanged, so only its "must match" note
+- [x] `queries/stats.rs`: the trigger bodies come back unchanged, so only its "must match" note
       repoints, at the new migration.
-- [ ] `entities/cue.rs` with the three newtypes:
-  - [ ] `CueTrack` and `CueFrames` take a `FromSql` beside them and a `param_from!` line in
+- [x] `entities/cue.rs` with the three newtypes (`to_frames` lands with its reader, in Phase 3):
+  - [x] `CueTrack` and `CueFrames` take a `FromSql` beside them and a `param_from!` line in
         `sql.rs`, as `DismissalSet` does.
-  - [ ] `Track` gains `cue_track` and `span`.
-  - [ ] `TrackSummary` gains `span`, which playback reads, a nested `by_name!` entry over
+  - [x] `Track` gains `cue_track` and `span`.
+  - [x] `TrackSummary` gains `span`, which playback reads, a nested `by_name!` entry over
         `cue_start` and `cue_end`.
-  - [ ] `TagEditRow` and `PlaylistExportRow` gain `cue_track`.
-  - [ ] `rows/track.rs` reads them, and `TRACK_SUMMARY`, `TRACK_TAG_EDIT` and `PLAYLIST_EXPORT`
+  - [x] `TagEditRow` and `PlaylistExportRow` gain `cue_track`.
+  - [x] `rows/track.rs` reads them, and `TRACK_SUMMARY`, `TRACK_TAG_EDIT` and `PLAYLIST_EXPORT`
         select them: a missed column fails only when the statement runs.
-- [ ] The whole-file and file-level fragments, and every site listed under Structure moved onto one
-      of them. `TRACK_INSERT_COLUMNS` gains the four columns, and `INSERT_CHUNK_ROWS` re-derives
-      itself. `insert_tracks_batch` matches on `(file_path, cue_track)`.
-- [ ] Folder Play orders by `file_path, cue_track` in both `IDS_IN_SUBTREE` statements
+- [x] The whole-file and file-level fragments, and every site listed under Structure moved onto one
+      of them. `TRACK_INSERT_COLUMNS` gains the four columns, bound from `NewTrackRow::cue`, and
+      `INSERT_CHUNK_ROWS` re-derives itself. `insert_tracks_batch` matches on
+      `(file_path, cue_track)`.
+- [x] Folder Play orders by `file_path, cue_track` in both `IDS_IN_SUBTREE` statements
       (`entity_ids.rs:103`).
-- [ ] Docs:
-  - [ ] `.claude/rules/library-data.md` gains the two fragments and the "a file moves with all its
+- [x] Docs:
+  - [x] `.claude/rules/library-data.md` gains the two fragments and the "a file moves with all its
         rows" rule, since that prohibition can be broken from any query file.
-  - [ ] `.claude/rules/rusqlite.md`: `insert_tracks_batch`'s match names the pair, and the migrator
+  - [x] `.claude/rules/rusqlite.md`: `insert_tracks_batch`'s match names the pair, and the migrator
         line names the directive.
 
 **Gate:**
-- [ ] The static gates.
-- [ ] On copies of the dev database (`~/.local/share/Melodia-dev`) and of the 50,500-track test
-      library's database, all of these hold:
-  - [ ] `sqlite_schema` differs only by `tracks`, its new index and `cue_sheets`;
-  - [ ] the row counts of `tracks`, `playlist_items`, `track_artists`, `track_credits`,
+- [x] The static gates.
+- [x] On copies of the dev database (`~/.local/share/Melodia-dev`) and of the 51,012-track test
+      library's database (`backups/melodia-pre-restore-20261108-133149.db`), all of these hold:
+  - [x] `sqlite_schema` differs only by `tracks`, its two new indexes and `cue_sheets`;
+  - [x] the row counts of `tracks`, `playlist_items`, `track_artists`, `track_credits`,
         `track_genres` and `duplicate_dismissals` are unchanged;
-  - [ ] `PRAGMA foreign_key_check` and `PRAGMA integrity_check` are clean;
-  - [ ] `INSERT INTO tracks_fts(tracks_fts) VALUES('integrity-check')` passes;
-  - [ ] a search still ranks.
+  - [x] `PRAGMA foreign_key_check` and `PRAGMA integrity_check` are clean;
+  - [x] `INSERT INTO tracks_fts(tracks_fts) VALUES('integrity-check')` passes;
+  - [x] a search still ranks.
 - [ ] Kenan's hand pass: the app starts, and the library, playlists, play counts, search and stats
       are as before.
 
@@ -531,6 +541,7 @@ The `RETURNING id, file_path` match in `insert_tracks_batch` (`mutations.rs:217`
 
 ## Phase 3: A track plays its span
 
+- [ ] `CueFrames::to_frames(rate)` in `entities/cue.rs`, the one conversion.
 - [ ] `source/span.rs`. `FileDecoder` gets an open that takes the span:
   - [ ] It seeks to the start in timeline ticks, through a frames-to-ticks conversion that inverts
         `decode::ticks_to_frames`, and trims to the exact sample with `samples_before`.
@@ -573,8 +584,8 @@ The `RETURNING id, file_path` match in `insert_tracks_batch` (`mutations.rs:217`
       since `apply_watch_batch` takes only what was already read (`watch_batch.rs`'s `//!`). The
       outcome reaches it as new `WatchedChange` variants, which run `apply_cue_unit` or
       `release_image` on its transaction. `paths_to_extract` keeps sheets from the tag reader.
-- [ ] A rename re-points every row of the path, through a file-level twin of
-      `update_track_location`. A sheet rename moves its `cue_sheets` row.
+- [ ] A rename already re-points every row of the path, `update_track_location` keying on the old
+      path since Phase 1. A sheet rename moves its `cue_sheets` row.
 - [ ] A move by hash carries the whole file, in the scan (`ingest.rs`) and the watcher alike.
       `MoveCandidates` (`moves.rs`) holds every row per hash and re-points one by id, which would
       carry one row of twelve. So ordinary reads take whole-file rows only, and a sheet image is one

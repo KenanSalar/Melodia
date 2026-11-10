@@ -27,6 +27,7 @@ fn track(id: i64, album: Option<&str>) -> Arc<TrackSummary> {
         id,
         file_path: format!("/music/{id}.mp3"),
         file_name: format!("{id}.mp3"),
+        span: None,
         title: format!("Track {id}"),
         artist: None,
         album: album.map(str::to_owned),

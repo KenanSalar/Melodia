@@ -110,6 +110,9 @@ pub enum MigrationError {
         #[source]
         source: rusqlite::Error,
     },
+
+    #[error("migration {version} left a {table} row referencing a missing {parent} row")]
+    DanglingReference { version: i64, table: String, parent: String },
 }
 
 /// What [`AppError::io`] hands `io::Error`: the operation and the error that failed it.

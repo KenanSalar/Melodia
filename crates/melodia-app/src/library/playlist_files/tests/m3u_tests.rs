@@ -10,6 +10,7 @@ fn row(
 ) -> PlaylistExportRow {
     PlaylistExportRow {
         file_path: path.to_owned(),
+        cue_track: None,
         file_hash: hash.map(ToOwned::to_owned),
         title: title.to_owned(),
         artist: artist.map(ToOwned::to_owned),

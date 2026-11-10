@@ -6,6 +6,7 @@ mod credits;
 mod duplicate_merge;
 mod duplicates;
 mod entity_ids;
+pub(crate) mod file_rows;
 #[cfg(test)]
 mod full_rows;
 mod keyset;

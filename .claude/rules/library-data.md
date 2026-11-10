@@ -35,6 +35,10 @@ paths:
 
 ## Query shape
 
+- **A statement keyed on a file's path says which of its rows it means**
+  (`queries::track::file_rows`): one reading or writing the file's own tags adds `WHOLE_FILE`, and
+  a move or a delete takes every row of the path, a file moving with all its rows. A cue sheet
+  splits one file into a row per track, so a bare `file_path = ?` reaches every one of them.
 - **`database::placeholders(n)` builds every IN list**, paired with `chunked_in_query`,
   `chunked_in_execute` for a statement that returns no rows, and `chunked_in_statements` for one
   binding a value ahead of its list; never re-roll `repeat_n("?", n)`, or the chunk loop for any of
