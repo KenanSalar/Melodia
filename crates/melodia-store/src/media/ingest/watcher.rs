@@ -276,17 +276,12 @@ fn holds_audio(dir: &Path) -> bool {
 }
 
 /// A path gone from the watch, read by its name alone since it no longer exists: a removed track
-/// if it reads as audio, else a directory that may have held some.
+/// if it reads as one, else a directory that may have held some.
 fn left_the_watch(path: &Path) -> Option<FileEvent> {
-    if in_trash_dir(path) {
-        return None;
+    if is_library_file(path) {
+        return Some(FileEvent::Removed(path.to_path_buf()));
     }
-    let path = path.to_path_buf();
-    Some(if is_audio_file(&path) {
-        FileEvent::Removed(path)
-    } else {
-        FileEvent::DirectoryGone(path)
-    })
+    (!in_trash_dir(path)).then(|| FileEvent::DirectoryGone(path.to_path_buf()))
 }
 
 /// Audio outside every trash folder: a trashed file reads as removed, a restored one as created.

@@ -2,7 +2,7 @@
 
 Working doc. Delete when the feature ships.
 
-Status: **in progress**, Phase 1 at its gate · Created: 2026-11-04
+Status: **in progress**, Phase 2 next · Created: 2026-11-04
 
 Issue [#78](https://github.com/KenanSalar/Melodia/issues/78).
 

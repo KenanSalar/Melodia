@@ -37,8 +37,7 @@ enum BatchPlan {
     Nothing,
     /// The watcher overflowed, so its per-file stream is truncated and untrustworthy.
     Rescan,
-    /// A directory holding audio was renamed or removed, which the per-file stream says nothing
-    /// about.
+    /// A directory holding audio was renamed or removed, which the per-file stream misses.
     Reconcile,
     /// Apply these, the echo of our own tag writes already dropped.
     Process(Vec<FileEvent>),
