@@ -23,6 +23,7 @@ pub mod genres;
 pub mod import;
 pub mod keyset;
 pub mod lyrics;
+pub mod outside;
 pub mod playback;
 pub mod playlist_files;
 pub mod playlists;

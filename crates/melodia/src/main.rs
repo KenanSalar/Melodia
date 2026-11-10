@@ -79,6 +79,7 @@ fn main() -> AppResult<()> {
     let spawner = tasks::TaskSpawner::from_state(&state);
     boot::tasks::spawn_background_tasks(&spawner, &state, channels);
     boot::tasks::restore_persisted_playback(&runtime, &state);
+    boot::tasks::sweep_outside_files(&runtime, &state);
 
     let startup_settings: Option<services::settings::SettingsData> =
         library::settings::get_settings(&state.paths).ok();

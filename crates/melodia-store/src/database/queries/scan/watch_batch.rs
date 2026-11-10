@@ -10,7 +10,7 @@ use rusqlite::Transaction;
 
 use super::cue_units::forget_gone_sheet;
 use super::{
-    MoveCandidates, NameCache, SheetWriter, delete_track_by_path, file_name_of,
+    MoveCandidates, NameCache, SheetWriter, TrackFolder, delete_track_by_path, file_name_of,
     find_folder_for_path, insert_track, prune_orphans, resolve_track_context, roll_up_covers,
     track_exists_by_path, update_track_location, update_track_metadata,
 };
@@ -261,9 +261,11 @@ fn create_track(
         return Ok(false);
     }
 
-    // A failed folder lookup leaves the entry for a later same-hash event.
+    // A failed folder lookup leaves the entry for a later same-hash event. A row moved in from
+    // outside the library keeps no links until its folder's next scan, which reads it as unstamped
+    // (`LINKED_STAMP`).
     if let Some((existing_id, old_path)) = batch.moved.track_for(&meta.file_hash, path) {
-        let Some(folder_id) = library_folder(tx, path, &path_str, "Moved")? else {
+        let Some(folder) = library_folder(tx, path, &path_str, "Moved")? else {
             return Ok(false);
         };
         let file_name = file_name_of(path);
@@ -272,7 +274,7 @@ fn create_track(
             &old_path,
             &path_str,
             &file_name,
-            folder_id,
+            folder.id(),
             meta.date_modified.as_deref(),
         )?;
         batch.moved.spend_track(&meta.file_hash, existing_id);
@@ -288,10 +290,10 @@ fn create_track(
         return Ok(false);
     }
 
-    let Some(folder_id) = library_folder(tx, path, &path_str, "Created")? else {
+    let Some(folder) = library_folder(tx, path, &path_str, "Created")? else {
         return Ok(false);
     };
-    let ids = resolve_track_context(tx, folder_id, meta, &mut batch.names)?;
+    let ids = resolve_track_context(tx, folder, meta, &mut batch.names)?;
 
     let file_name = file_name_of(path);
     let now = melodia_core::utils::now_rfc3339();
@@ -351,14 +353,14 @@ fn handle_renamed(
     let to_str = to.to_string_lossy().into_owned();
 
     if track_exists_by_path(tx, &from_str)? {
-        let Some(folder_id) = library_folder(tx, to, &to_str, "Renamed")? else {
+        let Some(folder) = library_folder(tx, to, &to_str, "Renamed")? else {
             return Ok(false);
         };
 
         let file_name = file_name_of(to);
         // Asked inside this transaction, so the rows are there.
         let _repointed =
-            update_track_location(tx, &from_str, &to_str, &file_name, folder_id, date_modified)?;
+            update_track_location(tx, &from_str, &to_str, &file_name, folder.id(), date_modified)?;
         // The row's file now sits where the kept-out one did.
         excluded_files::lift_on(tx, &[to_str.as_str()])?;
         log::info!("Renamed track: {from_str} -> {to_str}");
@@ -411,10 +413,10 @@ fn handle_modified(
         return handle_created(tx, path, meta, batch);
     }
 
-    let Some(folder_id) = library_folder(tx, path, &path_str, "Modified")? else {
+    let Some(folder) = library_folder(tx, path, &path_str, "Modified")? else {
         return Ok(false);
     };
-    let ids = resolve_track_context(tx, folder_id, meta, &mut batch.names)?;
+    let ids = resolve_track_context(tx, folder, meta, &mut batch.names)?;
 
     let updated = update_track_metadata(tx, &path_str, meta, &ids, &mut batch.names)?;
     if updated {
@@ -457,7 +459,7 @@ fn apply_sheet_job(
     images: &[ScannedFile],
     batch: &mut Batch,
 ) -> Result<bool, AppError> {
-    let Some(folder_id) = library_folder(tx, &job.path, &job.path.to_string_lossy(), "Cue")? else {
+    let Some(folder) = library_folder(tx, &job.path, &job.path.to_string_lossy(), "Cue")? else {
         return Ok(false);
     };
     let mut wrote = false;
@@ -467,7 +469,7 @@ fn apply_sheet_job(
 
     let now = melodia_core::utils::now_rfc3339();
     let mut sheets = SheetWriter::new(tx, images, &now, &mut batch.moved);
-    sheets.apply(job, folder_id)?;
+    sheets.apply(job, folder)?;
     Ok(wrote || sheets.into_writes().any())
 }
 
@@ -478,12 +480,12 @@ fn library_folder(
     path: &Path,
     path_str: &str,
     context: &str,
-) -> Result<Option<i64>, AppError> {
+) -> Result<Option<TrackFolder>, AppError> {
     let folder_id = find_folder_for_path(tx, path_str)?;
     if folder_id.is_none() {
         log::debug!("{context} file not in any library folder, skipping: {}", path.display());
     }
-    Ok(folder_id)
+    Ok(folder_id.map(TrackFolder::Library))
 }
 
 #[cfg(test)]

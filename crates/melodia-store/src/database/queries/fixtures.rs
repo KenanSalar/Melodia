@@ -151,10 +151,8 @@ fn insert_tagged_on(
         std::path::Path::new(file_path).file_name().and_then(|f| f.to_str()).unwrap_or("test.mp3");
 
     let ids = queries::ResolvedIds {
-        artist_id,
-        album_id,
-        genre_id,
         folder_id: 1, // default folder
+        links: Some(queries::scan::Links { artist_id, album_id, genre_id }),
     };
 
     let now = melodia_core::utils::now_rfc3339();

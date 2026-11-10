@@ -24,6 +24,28 @@ pub async fn insert_folder(
     .await
 }
 
+/// Makes the disabled folder `id`, an import's, a library folder at the canonical `path`, stored as
+/// a new one is. It keeps its tracks, and the scan that follows links them. Its `last_scanned`
+/// clears, so a launch finishes that scan if a quit cuts it short.
+pub async fn take_over_folder(
+    db: &DbPool,
+    id: i64,
+    path: &str,
+) -> Result<folder::Folder, AppError> {
+    let path = path.to_owned();
+    let now = melodia_core::utils::now_rfc3339();
+    db.write(move |conn| {
+        sql::fetch_one(
+            conn,
+            "UPDATE folders SET is_enabled = TRUE, path = ?, added_at = ?, last_scanned = NULL
+             WHERE id = ? AND NOT is_enabled
+             RETURNING *",
+            (path, now, id),
+        )
+    })
+    .await
+}
+
 pub async fn get_all_folders(db: &DbPool) -> Result<Vec<folder::Folder>, AppError> {
     db.read(|conn| sql::fetch_all(conn, "SELECT * FROM folders", ())).await
 }

@@ -10,6 +10,7 @@ use rusqlite::{Connection, Transaction};
 
 use crate::database::DbPool;
 use crate::database::queries::track::columns;
+use crate::database::queries::track::file_rows::IN_LIBRARY;
 use crate::database::sql::{Sql, escape_like};
 use melodia_core::entities::smart_criteria::{
     Draw, LimitOrder, MatchMode, Rule, RuleField, RuleOp, RuleValue, SmartCriteria, SmartLimit,
@@ -87,9 +88,11 @@ pub(crate) fn first_cover(
     criteria: &SmartCriteria,
 ) -> Result<Option<String>, AppError> {
     let mut sql = Sql::new(
-        "SELECT artwork_path FROM tracks WHERE artwork_path IS NOT NULL AND artwork_path != ''",
+        "SELECT artwork_path FROM tracks WHERE artwork_path IS NOT NULL AND artwork_path != '' \
+         AND ",
     );
-    push_and_rules(&mut sql, criteria);
+    sql.push(IN_LIBRARY);
+    push_and_rules(&mut sql, criteria, MemberTest::Correlated);
     sql.push(order_by_fragment(None)).push(" LIMIT 1");
     sql.fetch_optional(conn)
 }
@@ -172,27 +175,22 @@ pub async fn count_smart_playlist(
     db.read(move |conn| sql.fetch_one(conn)).await
 }
 
-/// Appends `WHERE (rule) AND|OR (rule) …`, skipping incoherent rules; with none left it matches
-/// the whole library.
+/// Appends `WHERE` the library's tracks, then `AND ((rule) AND|OR (rule) …)`, skipping incoherent
+/// rules; with none left it matches the whole library.
 fn push_where(sql: &mut Sql, criteria: &SmartCriteria, test: MemberTest) {
-    let rules = renderable_rules(criteria);
-    if rules.is_empty() {
-        return;
-    }
-    sql.push(" WHERE ");
-    push_rules(sql, &rules, criteria.match_mode, test);
+    sql.push(" WHERE ").push(IN_LIBRARY);
+    push_and_rules(sql, criteria, test);
 }
 
-/// [`push_where`]'s rules as ` AND (…)`, after a `WHERE` holding a condition of its own, for a
-/// query that stops at its first hit. Grouped whole, or an `Any` set's `OR` would bind that
-/// condition to its first rule alone.
-fn push_and_rules(sql: &mut Sql, criteria: &SmartCriteria) {
+/// The rules as ` AND (…)`, after a `WHERE` holding a condition of its own. Grouped whole, or an
+/// `Any` set's `OR` would bind that condition to its first rule alone.
+fn push_and_rules(sql: &mut Sql, criteria: &SmartCriteria, test: MemberTest) {
     let rules = renderable_rules(criteria);
     if rules.is_empty() {
         return;
     }
     sql.push(" AND (");
-    push_rules(sql, &rules, criteria.match_mode, MemberTest::Correlated);
+    push_rules(sql, &rules, criteria.match_mode, test);
     sql.push(")");
 }
 

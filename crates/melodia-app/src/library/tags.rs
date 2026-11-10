@@ -6,7 +6,7 @@
 //! `scanner::file_is_current` reads as current from then on. The re-extract keeps hash, size and
 //! mtime honest together.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, LazyLock};
 
@@ -20,7 +20,7 @@ use melodia_core::entities::artist::ArtistCredit;
 use melodia_core::entities::credits::RoleCredits;
 use melodia_core::entities::genre::GenreList;
 use melodia_core::entities::scan::ExtractedMetadata;
-use melodia_core::entities::tags::{ArtworkEdit, TagEdit, TagField};
+use melodia_core::entities::tags::{ArtworkEdit, FileTags, TagEdit, TagField};
 use melodia_core::entities::track::TagEditRow;
 use melodia_core::error::AppError;
 use melodia_core::error::describe;
@@ -111,23 +111,27 @@ pub async fn get_tag_edit_rows(db: &DbPool, ids: &[i64]) -> Result<Vec<TagEditRo
 }
 
 /// A file's lyrics tag as the tag held it, judged by `library::lyrics`. Apart from
-/// [`read_lyrics_and_credits`] because that caller wants nothing else. Blocking; the caller owns
-/// the `spawn_blocking`.
+/// [`read_file_tags`] because that caller wants nothing else. Blocking; the caller owns the
+/// `spawn_blocking`.
 pub fn read_lyrics(path: &Path) -> Result<Option<String>, AppError> {
     tag_writer::read_lyrics(path)
 }
 
-/// The lyrics tag and both artist credits off one open, for the dialog's single selection.
+/// A file's own tags off one open: the lyrics and credits for the dialog's single selection, and
+/// everything else for a track filed outside the library, which no album or join row holds.
 ///
 /// The credit comes from the file, not the database: a track whose join rows were seeded from
 /// `artist_id` alone would otherwise open showing one name for a credit the file spells with three.
 /// A multi-selection reads [`queries::track::get_track_credits_by_ids`] instead, N file reads on
 /// the open path being what `TagEditRow` exists to avoid. Blocking; the caller owns the
 /// `spawn_blocking`.
-pub fn read_lyrics_and_credits(
-    path: &Path,
-) -> Result<(Option<String>, (ArtistCredit, ArtistCredit)), AppError> {
-    tag_writer::read_lyrics_and_credits(path)
+pub fn read_file_tags(path: &Path) -> Result<FileTags, AppError> {
+    tag_writer::read_file_tags(path)
+}
+
+/// The tracks among `ids` filed outside the library, whose tags only their files hold.
+pub async fn get_tag_edit_outside(db: &DbPool, ids: &[i64]) -> Result<HashSet<i64>, AppError> {
+    queries::track::filed_outside(db, ids).await
 }
 
 /// The credit behind each selected track, for the dialog's multi-selection path.

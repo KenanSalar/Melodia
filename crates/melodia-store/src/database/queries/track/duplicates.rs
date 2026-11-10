@@ -1,6 +1,9 @@
 //! The duplicate finder's two reads: every track's key, then the facts of the candidates the keys
 //! leave (`library::duplicates`).
 
+use std::sync::LazyLock;
+
+use super::file_rows::IN_LIBRARY;
 use crate::database::rows::by_name;
 use crate::database::{DbPool, chunked_in_query, sql};
 use melodia_core::entities::duplicates::DuplicateCopy;
@@ -15,8 +18,13 @@ pub struct DuplicateKeyRow {
 
 by_name!(DuplicateKeyRow { id, title, artist });
 
-/// Folds each track into `init` through `step` one row at a time, so the library's titles are never
-/// all held at once. A zero length is one the decoder couldn't count either, which matches nothing.
+static DUPLICATE_KEYS: LazyLock<String> = LazyLock::new(|| {
+    format!("SELECT id, title, artist FROM tracks WHERE duration_ms > 0 AND {IN_LIBRARY}")
+});
+
+/// Folds each library track into `init` through `step` one row at a time, so the library's titles
+/// are never all held at once. A zero length is one the decoder couldn't count either, which
+/// matches nothing.
 pub async fn fold_duplicate_keys<A: Send + 'static>(
     db: &DbPool,
     init: A,
@@ -24,12 +32,7 @@ pub async fn fold_duplicate_keys<A: Send + 'static>(
 ) -> Result<A, AppError> {
     db.read(move |conn| {
         let mut acc = init;
-        sql::fetch_each(
-            conn,
-            "SELECT id, title, artist FROM tracks WHERE duration_ms > 0",
-            (),
-            |row| step(&mut acc, row),
-        )?;
+        sql::fetch_each(conn, DUPLICATE_KEYS.as_str(), (), |row| step(&mut acc, row))?;
         Ok(acc)
     })
     .await

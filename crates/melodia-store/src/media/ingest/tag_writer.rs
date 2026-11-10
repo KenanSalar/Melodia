@@ -29,7 +29,9 @@ use lofty::tag::{ItemValue, Tag, TagExt, TagItem, TagType};
 use super::{metadata, rating_tags, role_tags};
 use melodia_core::entities::artist::ArtistCredit;
 use melodia_core::entities::genre::GenreList;
-use melodia_core::entities::tags::{ArtworkEdit, FieldEdit, RoleCreditEdit, TagEdit, TagField};
+use melodia_core::entities::tags::{
+    ArtworkEdit, FieldEdit, FileTags, RoleCreditEdit, TagEdit, TagField,
+};
 use melodia_core::error::AppError;
 use melodia_core::utils::atomic_file;
 
@@ -452,14 +454,17 @@ pub fn read_lyrics(path: &Path) -> Result<Option<String>, AppError> {
     Ok(tagged.primary_tag().or_else(|| tagged.first_tag()).and_then(lyrics_from))
 }
 
-/// The lyrics and both artist credits off one parse, for the Edit-Tags dialog's single-file open.
-/// Blocking.
-pub fn read_lyrics_and_credits(
-    path: &Path,
-) -> Result<(Option<String>, (ArtistCredit, ArtistCredit)), AppError> {
+/// The tags the Edit-Tags dialog reads off a file, off one parse. Blocking.
+pub fn read_file_tags(path: &Path) -> Result<FileTags, AppError> {
     let tagged = metadata::read_tags(path, metadata::TagScope::TagsOnly)?;
     let tag = tagged.primary_tag().or_else(|| tagged.first_tag());
-    Ok((tag.and_then(lyrics_from), metadata::credits_from_tag(tag)))
+    Ok(FileTags {
+        lyrics: tag.and_then(lyrics_from),
+        credits: metadata::credits_from_tag(tag),
+        roles: tag.map(role_tags::read_roles).unwrap_or_default(),
+        genres: metadata::read_genres(tag),
+        release: metadata::read_release_tags(tag).into(),
+    })
 }
 
 fn lyrics_from(tag: &Tag) -> Option<String> {

@@ -276,7 +276,8 @@ async fn insert_track_stores_correct_fields() -> Result<(), AppError> {
         let album_id =
             queries::scan::upsert_album(tx, "Test Album", artist_id, &credit, &meta, &mut names)?;
         let genre_id = upserts::upsert_genre(tx, "Rock")?;
-        let ids = queries::ResolvedIds { artist_id, album_id, genre_id, folder_id: 1 };
+        let links = queries::scan::Links { artist_id, album_id, genre_id };
+        let ids = queries::ResolvedIds { folder_id: 1, links: Some(links) };
         queries::scan::insert_track(tx, "/music/my.mp3", "my.mp3", &meta, &ids, now, &mut names)
     })
     .await?;
@@ -790,12 +791,12 @@ async fn re_ingesting_a_track_leaves_none_of_its_old_join_rows() -> Result<(), A
     after.genres = GenreList::from_name("Rock");
     db.transaction(move |tx| {
         let mut names = queries::scan::NameCache::default();
-        let ids = queries::ResolvedIds {
+        let links = queries::scan::Links {
             artist_id: names.artist(tx, "Alice", 1)?,
             album_id: None,
             genre_id: names.genre(tx, "Rock")?,
-            folder_id: 1,
         };
+        let ids = queries::ResolvedIds { folder_id: 1, links: Some(links) };
         queries::scan::update_track_metadata(tx, "/music/1.mp3", &after, &ids, &mut names)
     })
     .await?;
@@ -852,12 +853,12 @@ async fn a_re_ingest_refolds_the_search_text() -> Result<(), AppError> {
     after.artist = ArtistCredit::from_name("Alice");
     db.transaction(move |tx| {
         let mut names = queries::scan::NameCache::default();
-        let ids = queries::ResolvedIds {
+        let links = queries::scan::Links {
             artist_id: names.artist(tx, "Alice", 1)?,
             album_id: None,
             genre_id: names.genre(tx, "Rock")?,
-            folder_id: 1,
         };
+        let ids = queries::ResolvedIds { folder_id: 1, links: Some(links) };
         queries::scan::update_track_metadata(tx, &path, &after, &ids, &mut names)
     })
     .await?;
@@ -911,12 +912,12 @@ async fn a_re_ingest_rekeys_the_row() -> Result<(), AppError> {
     after.genres = GenreList::default();
     db.transaction(move |tx| {
         let mut names = queries::scan::NameCache::default();
-        let ids = queries::ResolvedIds {
+        let links = queries::scan::Links {
             artist_id: names.artist(tx, "ΟΔΟΣ", 1)?,
             album_id: None,
             genre_id: None,
-            folder_id: 1,
         };
+        let ids = queries::ResolvedIds { folder_id: 1, links: Some(links) };
         queries::scan::update_track_metadata(tx, &path, &after, &ids, &mut names)
     })
     .await?;

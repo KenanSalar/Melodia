@@ -3,6 +3,7 @@
 
 use std::sync::LazyLock;
 
+use super::file_rows::IN_LIBRARY;
 use super::keyset::push_needle;
 use super::scope_facts::facts_on;
 use crate::database::DbPool;
@@ -30,6 +31,7 @@ static FAVORITE_COVERS: LazyLock<String> = LazyLock::new(|| {
                    ROW_NUMBER() OVER (ORDER BY {MOST_PLAYED_ORDER}) AS pos \
               FROM tracks \
              WHERE is_favorite = TRUE AND artwork_path IS NOT NULL AND artwork_path <> '' \
+               AND {IN_LIBRARY} \
          ) \
          GROUP BY artwork_path \
          ORDER BY MIN(pos) \
@@ -80,7 +82,7 @@ async fn ranked_ids(
     needle: &Needle,
 ) -> Result<Vec<i64>, AppError> {
     let mut sql = Sql::new("SELECT id FROM tracks WHERE ");
-    sql.push(membership);
+    push_ranked(&mut sql, membership);
     if !needle.is_empty() {
         sql.push(" AND ");
         push_needle(&mut sql, needle);
@@ -108,7 +110,7 @@ async fn ranked_totals(
         "SELECT COUNT(*), COALESCE(SUM(duration_ms), 0), COALESCE(SUM(play_count), 0) \
            FROM tracks WHERE ",
     );
-    sql.push(membership);
+    push_ranked(&mut sql, membership);
     let (tracks, duration_ms, plays): (i64, i64, i64) =
         db.read(move |conn| sql.fetch_one(conn)).await?;
     Ok(MostPlayedTotals {
@@ -116,4 +118,9 @@ async fn ranked_totals(
         duration_ms,
         plays: i32::try_from(plays).unwrap_or(i32::MAX),
     })
+}
+
+/// Pushes the rows a ranking holds: `membership`'s, among the library's.
+fn push_ranked(sql: &mut Sql, membership: &'static str) {
+    sql.push(membership).push(" AND ").push(IN_LIBRARY);
 }

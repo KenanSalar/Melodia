@@ -4,7 +4,7 @@ use std::path::{MAIN_SEPARATOR, MAIN_SEPARATOR_STR};
 use std::sync::LazyLock;
 
 use super::columns;
-use super::file_rows::FILE_ORDER;
+use super::file_rows::{FILE_ORDER, IN_LIBRARY};
 use crate::database::{DbPool, sql};
 use melodia_core::entities::browse::DirectoryTrack;
 use melodia_core::entities::track;
@@ -19,10 +19,13 @@ use melodia_core::error::AppError;
 pub(super) const TRACK_LIST_ORDER: &str = "sort_key COLLATE NOCASE ASC";
 
 static ALL_TRACK_LIST_ROWS: LazyLock<String> = LazyLock::new(|| {
-    format!("SELECT {} FROM tracks ORDER BY {TRACK_LIST_ORDER}", columns::TRACK_LIST.joined())
+    format!(
+        "SELECT {} FROM tracks WHERE {IN_LIBRARY} ORDER BY {TRACK_LIST_ORDER}",
+        columns::TRACK_LIST.joined()
+    )
 });
 
-/// Every track as a list row, in [`TRACK_LIST_ORDER`], for the checks that hold an id query
+/// Every library track as a list row, in [`TRACK_LIST_ORDER`], for the checks that hold an id query
 /// against them; a list fetches its rows by id.
 pub async fn get_all_tracks_for_list(db: &DbPool) -> Result<Vec<track::TrackListRow>, AppError> {
     db.read(|conn| sql::fetch_all(conn, ALL_TRACK_LIST_ROWS.as_str(), ())).await
@@ -86,7 +89,7 @@ pub async fn holds_tracks_under(db: &DbPool, dirs: Vec<String>) -> Result<bool, 
 static RECENTLY_PLAYED: LazyLock<String> = LazyLock::new(|| {
     format!(
         "SELECT {} FROM tracks \
-         WHERE last_played IS NOT NULL \
+         WHERE last_played IS NOT NULL AND {IN_LIBRARY} \
          ORDER BY last_played DESC, id DESC \
          LIMIT ?",
         columns::TRACK_LIST.joined()

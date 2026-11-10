@@ -2,7 +2,7 @@
 
 Working doc. Delete when the feature ships.
 
-Status: **in progress**, Phase 5 through its gates, Phase 5.5 next; Phase 3 owes Kenan's scrobble
+Status: **in progress**, Phase 5.5 through its gates, Phase 6 next; Phase 3 owes Kenan's scrobble
 and Discord check ·
 Created: 2026-11-04
 
@@ -376,11 +376,13 @@ How Melodia holds one:
   leaves it out by construction, their counts being kept by triggers on those links
   (`queries/stats.rs`), where filtering each trigger and entity page instead would spread the rule
   over all of them. Its own artist and album text still show.
-- **Every track-level library surface reads through one predicate**, `IN_LIBRARY`: the track is
-  filed under a library folder (`folders.is_enabled`).
-- **It goes once nothing holds it.** A boot sweep deletes an outside row that no playlist and not
-  the saved queue holds, then an outside folder left empty, its cue sheets with it. Its play count
-  goes too, having belonged to a file the library never held.
+- **Every track-level library surface reads through one predicate**, `IN_LIBRARY`: the track
+  isn't filed under a disabled folder. It is asked as the outside rows' ids, which every index
+  carries, so a list walking its order's index stays index-only.
+- **It goes once nothing holds it.** A boot sweep deletes an outside file none of whose rows a
+  playlist or the restored queue holds, then an outside folder left empty, its cue sheets with it.
+  Its play count goes too, having belonged to a file the library never held. A disabled folder
+  inside a library folder isn't outside: it waits for that folder's scan to absorb it.
 - **The same sweep holds the rule on every launch**, unlinking any outside row that still has a
   link, so an install from before this, a restored database or a stray write is put right
   whatever wrote it. It is one database pass that ends at once without an outside folder, so it
@@ -428,6 +430,7 @@ How Melodia holds one:
 | the planner | `crates/melodia-store/src/media/cue/plan.rs` | which sheet claims which image, settled in `discover` (`scan/mod.rs`) after the incremental filter, whose output decides which directories it reads again, and before the walk is cut into chunks. Each sheet's work is one job that `CuePlan::into_chunks` never splits, so a sheet's stamp commits with everything it caused. The scan calls it, and the watcher's `process_batch` (`file_event_processor/sheets.rs`) and an import (`library/import.rs`) call it over a few directories through `media/cue/around.rs`'s `settle_dirs` |
 | the span on a deck | `crates/melodia-audio/src/player/source/span.rs` | beside `aac_trim.rs`: the open-at-start, the counted end, the seek offset. `file_decode.rs` calls it |
 | the parked decoder | `crates/melodia-audio/src/player/source/park.rs` | Phase 6: the one-slot hand-off and its match rule |
+| files opened from outside | `queries/track/file_rows.rs`, `queries/scan/mod.rs`, `queries/outside.rs`, `library/outside.rs` | Phase 5.5: `IN_LIBRARY` and `LINKED_STAMP`; `TrackFolder` and `ResolvedIds.links`; the boot sweep and `unlink_on`; which folders it sweeps |
 
 The parser and planner sit in the store because ingest is their only consumer, and a `.cue` the
 user opens goes through the store too. `melodia-views` learns nothing about sheets.
@@ -841,48 +844,76 @@ Opening a file or a `.cue` from outside every library folder adds it to My Libra
 It predates this feature, but the feature makes it common: a `.cue` opened from Downloads brings in
 a whole disc. *Files opened from outside the library* gives the model.
 
-- [ ] Map every reader of `tracks` that answers for the library, as Phase 1 mapped the per-file
-      statements. Known so far:
-  - `Membership`'s `Library`, `Favorites` and `SmartPlaylist` arms (`track/membership.rs`), under
-    Songs, Favorites, smart playlists and every scope's facts and keysets;
-  - `search_all` (`search.rs`);
-  - Most Played and the favourite stats (`track/ranking.rs`);
-  - Recently Played (`track/list.rs`);
-  - the duplicate finder's `fold_duplicate_keys` (`track/duplicates.rs`);
-  - the library totals.
-- [ ] `IN_LIBRARY`, one predicate each of them reads, beside `WHOLE_FILE`. `EXPLAIN QUERY PLAN`
-      before and after on the 51,012-track test library's database for Songs, search and Most
-      Played.
-- [ ] An import outside every library folder (`IngestSource::Import`) writes no album, artist or
-      genre link. A library folder absorbing that directory reads those rows again, whatever their
-      stamps say, so they gain their links.
-- [ ] The boot sweep, every launch, after the queue is restored, and ending at once without an
-      outside folder:
-  - [ ] unlinks any outside row still linked, logged at warn per row;
-  - [ ] deletes the outside rows no playlist and not `queue.json` holds, their join rows first,
-        since those don't cascade;
-  - [ ] then the outside folders left empty, cascading their `cue_sheets`;
-  - [ ] then the albums, artists and genres left with no track (`prune_orphans`).
-- [ ] No migration: `album_id`, `artist_id` and `genre_id` are already nullable and `folder_id`
+- [x] `IN_LIBRARY` beside `WHOLE_FILE` (`file_rows.rs`), asked as the outside rows' ids. Asked as
+      `folder_id IN` the enabled folders, it sorts the whole library in a temporary B-tree
+      instead of walking `idx_tracks_sort_key` (`EXPLAIN QUERY PLAN` on the 51,012-track test
+      library's database, 2026-11-10). The outside ids come through a `CROSS JOIN` from
+      `folders`: a plain join, on a database with no `sqlite_stat1` yet, walks all of
+      `idx_tracks_folder_id`. Every reader of `tracks` that answers for the library reads it:
+  - `Membership`'s `Library` and `Favorites` arms (`track/membership.rs`), under Songs, Favorites
+    and every scope's facts and keysets;
+  - `smart_playlist::push_where` and `first_cover`, which every smart read goes through, the
+    `Drawn` arm's pick included;
+  - Most Played, the favourite stats and the Favorites collage (`track/ranking.rs`), Recently
+    Played (`track/list.rs`), `search_all`'s tracks, `fold_duplicate_keys`, `count_tracks`, the
+    scrobbler's favourites, and the test oracle `ALL_TRACK_LIST_ROWS`.
+  - `missing_ids_on` stops asking the `Library` arm and asks every row, so the queue and the
+    playlists keep an outside track.
+- [x] An outside row writes no album, artist or genre link. `TrackFolder` says where a row is
+      filed and whether that folder links it, before any name is looked up. The import, a cue
+      unit, a retag and the watcher each pass one. A library row an import re-points by hash into
+      an outside folder is unlinked in the same write.
+- [x] A library scan reads a row with no links as never stamped (`fold_folder_tracks`,
+      `load_existing`). So the scan absorbing an outside directory links the rows it reads, and so
+      does the next scan after a hash move into the library.
+- [x] The boot sweep (`library::outside`, `queries::outside`), every launch, after the queue is
+      restored and before the launch's own files open, ending at once without an outside folder.
+      An outside folder is a disabled one that no library folder holds (`folders_inside`, the
+      absorb's own rule):
+  - [x] unlinks any outside row still linked, logged at warn per row;
+  - [x] deletes the outside files none of whose rows a playlist or the restored queue holds, every
+        row of a path together. `tracks_credits_cleanup` takes their join rows;
+  - [x] then the outside folders left empty, cascading their `cue_sheets`;
+  - [x] then the albums, artists and genres left with no track (`prune_orphans`).
+- [x] No migration: `album_id`, `artist_id` and `genre_id` are already nullable and `folder_id`
       already indexed (`idx_tracks_folder_id`).
-- [ ] Settings ▸ Library Folders lists library folders only (`get_folders`), and `scan_one`
-      refuses a folder that isn't one.
-- [ ] Docs:
+- [x] Settings ▸ Library Folders lists library folders only (`get_folders`), and an outside folder
+      refuses no add. An add at its path takes it over, and cancelling that scan keeps its tracks
+      (`OnStop::Keep`). `scan_one` refuses a folder that isn't a library folder.
+- [x] Edit Tags reads an outside file's genres, role credits and release tags from the file
+      (`read_file_tags`), the database holding none for it (Kenan's call, 2026-11-10).
+- [x] Docs:
   - `library-data.md` gains "a library surface reads through `IN_LIBRARY`" and "an outside track
     links to no album, artist or genre";
   - `README.md` says opening a file plays it without adding it;
   - the release notes say an install's opened files leave My Library and stay in their playlists.
+    They are written on the draft release, so the line waits for the release.
 
 **Gate:**
-- [ ] The static gates.
-- [ ] Kenan's hand pass:
-  - [ ] a file and a `.cue` opened from outside play and queue, and show on no library page, in no
-        search and in no count;
-  - [ ] one added to a playlist survives a restart, and once removed from it is gone after the
-        next;
-  - [ ] Settings lists library folders only;
-  - [ ] adding that folder as a library folder brings its tracks in, linked;
-  - [ ] an install carrying opened files from before keeps them in their playlists only.
+- [x] The static gates.
+- [x] Kenan's hand pass. Run by Claude on Kenan's go (2026-11-10): the debug build against
+      `Melodia-dev` on a null sink, restored after, the UI driven through ydotool and KWin scripts,
+      the fixtures in the scratchpad outside every library folder:
+  - [x] a file and a `.cue` opened from outside play and queue, and show on no library page, in no
+        search and in no count: Songs stayed at 525 and Albums at 93, a search for their titles
+        found nothing while one played, and their row menus offer no Go to entry;
+  - [x] one added to a playlist survives a restart, and once removed from it is gone after the
+        next; one only the restored queue holds survives too;
+  - [x] Settings lists library folders only, four outside folders on record;
+  - [x] adding that folder as a library folder brings its tracks in, linked: the rescan after the
+        cancel below re-read the opened file whatever its stamp and linked it under its id;
+  - [x] cancelling the scan of a library folder added at an opened file's directory keeps the
+        tracks: 103,001 files, cancelled after 10,000, the opened file, sorted last and unread,
+        kept under the folder taken over;
+  - [x] an outside folder nested in a library folder survives a relaunch until that folder's scan
+        absorbs it, linked: the first scan quit after 10,000 files, the relaunch's sweep left the
+        nested row, and the resumed scan linked it under its id;
+  - [x] Edit Tags on an opened file, alone and beside library tracks, shows its genres, composer
+        and label, and a Save touching only the title leaves them in the file;
+  - [x] an install carrying opened files from before keeps them in their playlists only: opened
+        and added to a playlist on the HEAD build, the new build's first launch unlinked all five
+        rows with a warning each, deleted the one nothing held, kept a disc whole for its one
+        held track, and pruned their albums, artists and genres.
 
 ## Phase 6: Continuous decode at joints
 
@@ -913,6 +944,8 @@ a whole disc. *Files opened from outside the library* gives the model.
       path.
 - [ ] The tag editor opens the fields the sheet can hold. The rest, and the hidden track's row, stay
       read-only with the note reworded.
+- [ ] An outside sheet track has no `track_genres` or `track_credits` rows, so its genre and
+      composer fields need another source once they open.
 - [ ] i18n as in Phase 5.
 - [ ] Docs: `write.rs`'s module doc carries the encoding rule. `library-data.md` gains "a sheet
       track's tags live in its sheet" where a tag write could break it.

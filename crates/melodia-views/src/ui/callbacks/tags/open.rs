@@ -2,7 +2,7 @@
 //! record the baseline the commit diffs against.
 
 use std::cell::RefCell;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 use std::rc::Rc;
 
@@ -23,7 +23,7 @@ use melodia_core::entities::album::ReleaseTagRow;
 use melodia_core::entities::artist::{ArtistCredit, JOIN_PHRASES};
 use melodia_core::entities::credits::RoleCredits;
 use melodia_core::entities::genre::GenreList;
-use melodia_core::entities::tags::{ArtworkEdit, RoleCreditEdit};
+use melodia_core::entities::tags::{ArtworkEdit, FileTags, RoleCreditEdit};
 use melodia_core::entities::track::TagEditRow;
 use melodia_core::error::{AppError, describe};
 use melodia_ui::{AppWindow, Dialog, Settings, TagEditor};
@@ -65,33 +65,23 @@ pub(super) fn wire_request_edit(
                 }
             };
             let single = rows.len() == 1;
+            let outside =
+                or_logged(library::tags::get_tag_edit_outside(&s.db, &ids).await, "outside rows");
+            let files = read_files(&s, &rows, &outside).await;
 
             // Lyrics live in the file, and so does the authoritative credit, join rows seeded from
             // `artist_id` alone knowing only the first name. A multi-selection takes the database
             // instead, N file reads on the open path being what the row projection avoids, and so
-            // does a cue sheet's track, its file's tags stating the whole disc.
+            // does a cue sheet's track, its file's tags stating the whole disc. A file filed
+            // outside the library has no join rows, so a selection reads it too.
             let (lyrics, credits) = if single && !rows[0].is_sheet_track() {
-                let path = PathBuf::from(&rows[0].file_path);
-                let read =
-                    s.runtime.spawn_blocking(move || library::tags::read_lyrics_and_credits(&path));
-                match read.await {
-                    Ok(Ok((lyrics, credits))) => (lyrics.unwrap_or_default(), vec![credits]),
-                    Ok(Err(e)) => {
-                        log::warn!("tag edit: reading {}: {}", rows[0].file_path, describe(&e));
-                        (String::new(), vec![<(ArtistCredit, ArtistCredit)>::default()])
-                    }
-                    Err(e) => {
-                        log::warn!(
-                            "tag edit: reading {} failed: {}",
-                            rows[0].file_path,
-                            describe(&e)
-                        );
-                        (String::new(), vec![<(ArtistCredit, ArtistCredit)>::default()])
-                    }
-                }
+                let file = files.get(&rows[0].id);
+                let lyrics = file.and_then(|tags| tags.lyrics.clone()).unwrap_or_default();
+                (lyrics, vec![file.map(|tags| tags.credits.clone()).unwrap_or_default()])
             } else {
-                let by_id =
+                let mut by_id =
                     or_logged(library::tags::get_tag_edit_credits(&s.db, &ids).await, "credits");
+                by_id.extend(files.iter().map(|(&id, tags)| (id, tags.credits.clone())));
                 (String::new(), by_row(&rows, &by_id))
             };
 
@@ -121,24 +111,33 @@ pub(super) fn wire_request_edit(
                 None => None,
             };
 
-            // Always from the database, single selection included — argued at
-            // `library::tags::get_tag_edit_role_credits`.
-            let roles_by_id = or_logged(
+            // From the database, single selection included, as argued at
+            // `library::tags::get_tag_edit_role_credits`, except for a file filed outside the
+            // library, which has no join rows to read.
+            let mut roles_by_id = or_logged(
                 library::tags::get_tag_edit_role_credits(&s.db, &ids).await,
                 "role credits",
             );
-            let roles: Vec<RoleCredits> = by_row(&rows, &roles_by_id);
-
-            let genres_by_id =
+            let mut genres_by_id =
                 or_logged(library::tags::get_tag_edit_genres(&s.db, &ids).await, "genres");
-            let genre_lists: Vec<GenreList> = by_row(&rows, &genres_by_id);
 
             // Release-level tags live on `albums`, so the Details tab reads them through the album
-            // each selected track sits on.
-            let release = or_logged(
+            // each selected track sits on, or off the file where it sits on none.
+            let mut release = or_logged(
                 library::tags::get_tag_edit_release_tags(&s.db, &ids).await,
                 "release tags",
             );
+            for (id, tags) in files.into_iter().filter(|(id, _)| outside.contains(id)) {
+                roles_by_id.insert(id, tags.roles);
+                genres_by_id.insert(id, tags.genres);
+                if let Some(slot) =
+                    ids.iter().position(|&asked| asked == id).and_then(|at| release.get_mut(at))
+                {
+                    *slot = tags.release;
+                }
+            }
+            let roles: Vec<RoleCredits> = by_row(&rows, &roles_by_id);
+            let genre_lists: Vec<GenreList> = by_row(&rows, &genres_by_id);
 
             let Some(ui) = weak.upgrade() else { return };
             if !claim.holds(&ui) {
@@ -168,6 +167,41 @@ fn or_logged<T: Default>(result: Result<T, AppError>, what: &str) -> T {
     result.unwrap_or_else(|e| {
         log::warn!("tag edit {what}: {}", describe(&e));
         T::default()
+    })
+}
+
+/// The tags of each whole file in `rows` the dialog reads off disk, by track id: the one a single
+/// selection opens on, and every one filed outside the library. A file that fails to read is
+/// logged and left to the database's answer.
+async fn read_files(
+    s: &AppState,
+    rows: &[TagEditRow],
+    outside: &HashSet<i64>,
+) -> HashMap<i64, FileTags> {
+    let single = rows.len() == 1;
+    let wanted: Vec<(i64, PathBuf)> = rows
+        .iter()
+        .filter(|row| !row.is_sheet_track() && (single || outside.contains(&row.id)))
+        .map(|row| (row.id, PathBuf::from(&row.file_path)))
+        .collect();
+    if wanted.is_empty() {
+        return HashMap::new();
+    }
+    let read = s.runtime.spawn_blocking(move || {
+        wanted
+            .into_iter()
+            .filter_map(|(id, path)| match library::tags::read_file_tags(&path) {
+                Ok(tags) => Some((id, tags)),
+                Err(e) => {
+                    log::warn!("tag edit: reading {}: {}", path.display(), describe(&e));
+                    None
+                }
+            })
+            .collect()
+    });
+    read.await.unwrap_or_else(|e| {
+        log::warn!("tag edit: the file read failed: {}", describe(&e));
+        HashMap::new()
     })
 }
 

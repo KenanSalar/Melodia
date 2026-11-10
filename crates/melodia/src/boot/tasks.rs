@@ -66,6 +66,15 @@ pub fn restore_persisted_playback(runtime: &tokio::runtime::Runtime, state: &App
     }
 }
 
+/// Holds the files opened from outside the library to their rule: after
+/// [`restore_persisted_playback`], whose queue keeps what it holds, and before
+/// [`open_startup_files`] can import one.
+pub fn sweep_outside_files(runtime: &tokio::runtime::Runtime, state: &AppState) {
+    if let Err(e) = runtime.block_on(library::outside::sweep(state)) {
+        log::warn!("Failed to sweep the files opened from outside the library: {}", describe(&e));
+    }
+}
+
 /// Plays a restored source when "Resume on Startup" is on, here so the first frame paints
 /// `Playing`. A station re-opens through the same call and paints `Connecting…` instead.
 pub fn maybe_resume_on_startup(

@@ -14,8 +14,9 @@ use std::sync::LazyLock;
 use rusqlite::Transaction;
 
 use super::{
-    CuePlacement, MoveCandidates, NameCache, NewTrackRow, file_name_of, insert_tracks_batch,
-    resolve_track_context, track_exists_by_path, update_cue_track, update_track_location,
+    CuePlacement, MoveCandidates, NameCache, NewTrackRow, TrackFolder, file_name_of,
+    insert_tracks_batch, resolve_track_context, track_exists_by_path, update_cue_track,
+    update_track_location,
 };
 use crate::database::chunked_in_execute;
 use crate::database::queries::excluded_files;
@@ -65,7 +66,7 @@ struct CueUnit<'u> {
 #[derive(Clone, Copy)]
 struct Filing {
     sheet_id: i64,
-    folder_id: i64,
+    folder: TrackFolder,
 }
 
 impl<'a, 'conn> SheetWriter<'a, 'conn> {
@@ -85,13 +86,13 @@ impl<'a, 'conn> SheetWriter<'a, 'conn> {
         }
     }
 
-    /// Applies `job`, filing its rows under the library folder `folder_id`.
+    /// Applies `job`, filing its sheet and rows under `folder`.
     ///
     /// Runs after the batch's ordinary ingest, which wrote the whole-file row a released image
     /// takes its playlist places back onto.
-    pub(crate) fn apply(&mut self, job: &SheetJob, folder_id: i64) -> Result<(), AppError> {
+    pub(crate) fn apply(&mut self, job: &SheetJob, folder: TrackFolder) -> Result<(), AppError> {
         if let Some(read) = &job.read {
-            self.apply_read_sheet(job, read, folder_id)?;
+            self.apply_read_sheet(job, read, folder)?;
         }
         for image in &job.releases {
             if release_image(self.tx, &image.to_string_lossy())? {
@@ -109,7 +110,7 @@ impl<'a, 'conn> SheetWriter<'a, 'conn> {
         &mut self,
         job: &SheetJob,
         read: &SheetRead,
-        folder_id: i64,
+        folder: TrackFolder,
     ) -> Result<(), AppError> {
         let units: Vec<CueUnit<'_>> = job
             .claims
@@ -123,9 +124,9 @@ impl<'a, 'conn> SheetWriter<'a, 'conn> {
         // An image that couldn't be read, or that is too short for the sheet to split, keeps its
         // rows and leaves the sheet unstamped, so the next scan reads both again.
         let stamp = (units.len() == job.claims.len()).then_some(&read.stamp);
-        let sheet_id = upsert_sheet(self.tx, &job.path.to_string_lossy(), folder_id, stamp)?;
+        let sheet_id = upsert_sheet(self.tx, &job.path.to_string_lossy(), folder.id(), stamp)?;
         for unit in &units {
-            self.apply_cue_unit(unit, Filing { sheet_id, folder_id })?;
+            self.apply_cue_unit(unit, Filing { sheet_id, folder })?;
         }
         Ok(())
     }
@@ -140,7 +141,7 @@ impl<'a, 'conn> SheetWriter<'a, 'conn> {
         if excluded_files::id_at_on(tx, &path)?.is_some() {
             return excluded_files::restamp_on(tx, &[(claim.image.as_path(), &image.metadata)]);
         }
-        self.carry_moved_rows(image, filing.folder_id)?;
+        self.carry_moved_rows(image, filing.folder.id())?;
 
         let mut earlier: HashMap<CueTrack, i64> = sql::fetch_all(
             tx,
@@ -153,7 +154,7 @@ impl<'a, 'conn> SheetWriter<'a, 'conn> {
         let mut new_rows = Vec::new();
         let mut new_tracks = Vec::new();
         for row in carved {
-            let ids = resolve_track_context(tx, filing.folder_id, &row.meta, &mut self.names)?;
+            let ids = resolve_track_context(tx, filing.folder, &row.meta, &mut self.names)?;
             let cue =
                 CuePlacement { track: row.track, span: row.span, sheet_id: Some(filing.sheet_id) };
             if let Some(id) = earlier.remove(&row.track) {

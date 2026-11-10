@@ -37,23 +37,71 @@ pub(crate) use upserts::upsert_album;
 pub use upserts::{CreditDetails, album_artist_name_for, album_credit_for};
 pub use watch_batch::{WatchedChange, apply_watch_batch};
 
-/// Resolved foreign-key IDs for a track being inserted during a scan.
+/// The folder a track is filed under, and whether the library holds it.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum TrackFolder {
+    /// A library folder, whose tracks link to their album, artists and genres.
+    Library(i64),
+    /// The disabled folder a file opened from outside every library folder is filed under. Its
+    /// tracks link to nothing, so no album, artist or genre page counts them.
+    Outside(i64),
+}
+
+impl TrackFolder {
+    pub fn id(self) -> i64 {
+        match self {
+            Self::Library(id) | Self::Outside(id) => id,
+        }
+    }
+}
+
+/// A track's folder and, where the library holds it, the rows it links to.
 #[derive(Clone, Copy)]
 pub struct ResolvedIds {
+    pub folder_id: i64,
+    pub links: Option<Links>,
+}
+
+/// The album, artist and genre rows a library track links to. Its artist is never absent, Unknown
+/// at worst, so a NULL `artist_id` marks a row with no links.
+#[derive(Clone, Copy)]
+pub struct Links {
     pub artist_id: i64,
     pub album_id: Option<i64>,
     pub genre_id: Option<i64>,
-    pub folder_id: i64,
+}
+
+impl ResolvedIds {
+    pub(crate) fn outside(folder_id: i64) -> Self {
+        Self { folder_id, links: None }
+    }
+
+    pub fn artist_id(&self) -> Option<i64> {
+        self.links.map(|links| links.artist_id)
+    }
+
+    pub fn album_id(&self) -> Option<i64> {
+        self.links.and_then(|links| links.album_id)
+    }
+
+    pub fn genre_id(&self) -> Option<i64> {
+        self.links.and_then(|links| links.genre_id)
+    }
 }
 
 /// Resolves a track's artist, album and genre rows, upserting what's missing, beside the folder it
-/// is filed under.
+/// is filed under. A track filed outside the library resolves none, ahead of the lookups, which
+/// write to the library's albums and artists.
 pub(crate) fn resolve_track_context(
     tx: &rusqlite::Transaction<'_>,
-    folder_id: i64,
+    folder: TrackFolder,
     meta: &melodia_core::entities::scan::ExtractedMetadata,
     names: &mut NameCache,
 ) -> Result<ResolvedIds, melodia_core::error::AppError> {
+    let folder_id = match folder {
+        TrackFolder::Library(id) => id,
+        TrackFolder::Outside(id) => return Ok(ResolvedIds::outside(id)),
+    };
     // The **first** credited name: a row named "X feat. Y" is an artist nobody recorded under.
     let artist_name = meta.artist.primary_name();
     let album_name = meta.album.as_deref().unwrap_or("");
@@ -72,7 +120,7 @@ pub(crate) fn resolve_track_context(
     let album_id = upsert_album(tx, album_name, album_artist_id, &album_credit, meta, names)?;
     let genre_id = names.genre(tx, genre_name)?;
 
-    Ok(ResolvedIds { artist_id, album_id, genre_id, folder_id })
+    Ok(ResolvedIds { folder_id, links: Some(Links { artist_id, album_id, genre_id }) })
 }
 
 #[cfg(test)]

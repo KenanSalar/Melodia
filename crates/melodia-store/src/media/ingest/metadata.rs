@@ -435,7 +435,7 @@ pub(super) fn release_timestamp(tag: Option<&Tag>) -> Option<Timestamp> {
 /// A repeated `GENRE` is already a list. A single value splits on `;` alone, the separator Picard
 /// flattens a list to in ID3v2.3: `ID3v1`'s own list holds `Pop/Funk`, and `,` and `&` live inside
 /// names like `Drum & Bass`.
-fn read_genres(tag: Option<&Tag>) -> GenreList {
+pub(crate) fn read_genres(tag: Option<&Tag>) -> GenreList {
     let Some(tag) = tag else {
         return GenreList::default();
     };
@@ -462,7 +462,7 @@ fn read_sort_tags(tag: Option<&Tag>) -> SortTags {
     }
 }
 
-fn read_release_tags(tag: Option<&Tag>) -> ReleaseTags {
+pub(crate) fn read_release_tags(tag: Option<&Tag>) -> ReleaseTags {
     ReleaseTags {
         label: text(tag, ItemKey::Label),
         catalog_number: text(tag, ItemKey::CatalogNumber),

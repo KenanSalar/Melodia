@@ -6,7 +6,7 @@ use std::sync::LazyLock;
 
 use rusqlite::Connection;
 
-use super::file_rows::{FILE_ORDER, WHOLE_FILE};
+use super::file_rows::{FILE_ORDER, IN_LIBRARY, OUTSIDE_IDS, WHOLE_FILE};
 use super::membership::Membership;
 use super::{columns, json_array};
 use crate::database::rows::FromRow;
@@ -39,11 +39,14 @@ pub async fn get_scrobble_row(
 }
 
 static FAVORITE_SCROBBLE_ROWS: LazyLock<String> = LazyLock::new(|| {
-    format!("SELECT {} FROM tracks WHERE is_favorite = TRUE", columns::SCROBBLE_ROW.joined())
+    format!(
+        "SELECT {} FROM tracks WHERE is_favorite = TRUE AND {IN_LIBRARY}",
+        columns::SCROBBLE_ROW.joined()
+    )
 });
 
-/// Every favorite's scrobble row, so connecting a service backfills its loves without re-toggling
-/// each heart.
+/// Every favorite the Favorites page shows, as scrobble rows, so connecting a service backfills its
+/// loves without re-toggling each heart.
 pub async fn get_favorite_scrobble_rows(db: &DbPool) -> Result<Vec<track::ScrobbleRow>, AppError> {
     db.read(|conn| sql::fetch_all(conn, FAVORITE_SCROBBLE_ROWS.as_str(), ())).await
 }
@@ -71,9 +74,12 @@ pub async fn get_track_file_path(db: &DbPool, id: i64) -> Result<Option<String>,
     .await
 }
 
+static LIBRARY_TRACK_COUNT: LazyLock<String> =
+    LazyLock::new(|| format!("SELECT COUNT(*) FROM tracks WHERE {IN_LIBRARY}"));
+
 /// How many tracks the library holds, for the diagnostics bundle and a filtered Songs list's total.
 pub async fn count_tracks(db: &DbPool) -> Result<i64, AppError> {
-    db.read(|conn| sql::fetch_one(conn, "SELECT COUNT(*) FROM tracks", ())).await
+    db.read(|conn| sql::fetch_one(conn, LIBRARY_TRACK_COUNT.as_str(), ())).await
 }
 
 /// `TrackSummary` rows for `ids`, in order: what the queue, Now Playing and playback read.
@@ -166,9 +172,37 @@ pub async fn missing_ids(db: &DbPool, ids: &[i64]) -> Result<HashSet<i64>, AppEr
     db.read(move |conn| missing_ids_on(conn, &ids)).await
 }
 
-/// [`missing_ids`] inside a transaction, for a write inserting the ids that still have a row.
+/// [`missing_ids`] inside a transaction, for a write inserting the ids that still have a row. A file
+/// opened from outside the library has one, though no library page shows it.
 pub(crate) fn missing_ids_on(conn: &Connection, ids: &[i64]) -> Result<HashSet<i64>, AppError> {
-    ids_outside(conn, ids, &Membership::Library)
+    ids_answering(
+        conn,
+        ids,
+        "SELECT j.value FROM json_each(?) j WHERE j.value NOT IN (SELECT id FROM tracks)",
+    )
+}
+
+static FILED_OUTSIDE: LazyLock<String> = LazyLock::new(|| {
+    format!("SELECT j.value FROM json_each(?) j WHERE j.value IN ({OUTSIDE_IDS})")
+});
+
+/// The ids in `ids` filed outside the library, whose tags no album or join row holds.
+pub async fn filed_outside(db: &DbPool, ids: &[i64]) -> Result<HashSet<i64>, AppError> {
+    let ids = ids.to_vec();
+    db.read(move |conn| ids_answering(conn, &ids, FILED_OUTSIDE.as_str())).await
+}
+
+/// The ids `statement` answers out of `ids`, which it reads from one `json_each` bind.
+fn ids_answering(
+    conn: &Connection,
+    ids: &[i64],
+    statement: &'static str,
+) -> Result<HashSet<i64>, AppError> {
+    if ids.is_empty() {
+        return Ok(HashSet::new());
+    }
+    let answered: Vec<i64> = sql::fetch_all(conn, statement, (json_array(ids),))?;
+    Ok(answered.into_iter().collect())
 }
 
 /// The ids in `ids` that `scope` no longer holds, asked the way round [`missing_ids`] is.

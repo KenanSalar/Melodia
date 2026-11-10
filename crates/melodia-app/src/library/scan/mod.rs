@@ -180,6 +180,11 @@ async fn scan_one(
 ) -> Result<ScanOutcome, AppError> {
     let folder = queries::folder::get_folder_by_id(&state.db, folder_id).await?;
 
+    // A disabled folder holds files opened from outside the library, which a scan would link and
+    // fill with the rest of their directory.
+    if !folder.is_enabled {
+        return Err(AppError::scanner_msg(format!("Not a library folder: {}", folder.path)));
+    }
     if !Path::new(&folder.path).exists() {
         return Err(AppError::scanner_msg(format!("Folder does not exist: {}", folder.path)));
     }

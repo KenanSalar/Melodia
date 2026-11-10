@@ -9,9 +9,9 @@ use rusqlite::Transaction;
 use crate::database::queries;
 use crate::database::queries::artist::UNKNOWN_ARTIST_ID;
 use crate::database::queries::scan::{
-    CueWrites, MoveCandidates, NameCache, SheetWriter, file_name_of,
+    CueWrites, Links, MoveCandidates, NameCache, SheetWriter, TrackFolder, file_name_of,
 };
-use crate::database::queries::track::file_rows::WHOLE_FILE;
+use crate::database::queries::track::file_rows::{LINKED_STAMP, WHOLE_FILE};
 use crate::database::sql::Sql;
 use crate::database::{DbPool, MAX_BINDS_PER_STATEMENT, placeholders, values_placeholders};
 use crate::media::cue::CueChunk;
@@ -25,7 +25,7 @@ pub(crate) enum IngestSource {
     /// current row missing artwork takes the file's.
     FolderScan(i64),
     /// Files the user named, each taken as named and filed under the library folder holding it,
-    /// else under a folder made for its own directory.
+    /// else under a disabled folder made for its own directory ([`TrackFolder::Outside`]).
     Import,
 }
 
@@ -38,16 +38,16 @@ impl IngestSource {
         matches!(self, Self::FolderScan(_))
     }
 
-    /// The `folder_id` a file or a cue sheet at `path` is filed under, or `None` for one with no
-    /// parent directory, which is skipped.
+    /// The folder a file or a cue sheet at `path` is filed under, or `None` for one with no parent
+    /// directory, which is skipped. A scan reads only a library folder (`library::scan`).
     fn folder_of(
         &self,
         tx: &Transaction<'_>,
         path: &Path,
-        folder_cache: &mut HashMap<String, i64>,
-    ) -> Result<Option<i64>, AppError> {
+        folder_cache: &mut HashMap<String, TrackFolder>,
+    ) -> Result<Option<TrackFolder>, AppError> {
         match self {
-            Self::FolderScan(id) => Ok(Some(*id)),
+            Self::FolderScan(id) => Ok(Some(TrackFolder::Library(*id))),
             Self::Import => import_folder_of(tx, path, folder_cache),
         }
     }
@@ -198,8 +198,8 @@ fn ingest_chunk(
     let mut sheets = SheetWriter::new(tx, &claimed, scan_timestamp, &mut moved);
     let mut folders = HashMap::new();
     for job in cue.jobs() {
-        if let Some(folder_id) = source.folder_of(tx, &job.path, &mut folders)? {
-            sheets.apply(job, folder_id)?;
+        if let Some(folder) = source.folder_of(tx, &job.path, &mut folders)? {
+            sheets.apply(job, folder)?;
         }
     }
     result.add_sheets(&sheets.into_writes());
@@ -211,7 +211,7 @@ fn ingest_chunk(
 struct ResolveCaches {
     names: NameCache,
     album: HashMap<String, HashMap<i64, Option<i64>>>,
-    folder: HashMap<String, i64>,
+    folder: HashMap<String, TrackFolder>,
 }
 
 impl ResolveCaches {
@@ -291,7 +291,7 @@ pub(crate) fn ingest_scanned_files(
         if let Some((existing_id, old_path)) =
             moved_from.track_for(meta.file_hash.as_str(), &file.path)
         {
-            let Some(folder_id) = source.folder_of(tx, &file.path, &mut caches.folder)? else {
+            let Some(folder) = source.folder_of(tx, &file.path, &mut caches.folder)? else {
                 continue;
             };
             // Resolved inside this transaction, and nothing deletes ahead of this loop, so the
@@ -301,9 +301,12 @@ pub(crate) fn ingest_scanned_files(
                 &old_path,
                 file_path_str,
                 &file_name_of(&file.path),
-                folder_id,
+                folder.id(),
                 meta.date_modified.as_deref(),
             )?;
+            if let TrackFolder::Outside(_) = folder {
+                queries::outside::unlink_on(tx, &[existing_id])?;
+            }
             moved_from.spend_track(meta.file_hash.as_str(), existing_id);
             log::info!("Detected moved file: {old_path} -> {file_path_str}");
             moved_count += 1;
@@ -311,9 +314,9 @@ pub(crate) fn ingest_scanned_files(
         }
 
         if let Some((exclusion_id, old_path)) = moved_from.take_exclusion(&meta.file_hash)
-            && let Some(folder_id) = source.folder_of(tx, &file.path, &mut caches.folder)?
+            && let Some(folder) = source.folder_of(tx, &file.path, &mut caches.folder)?
         {
-            queries::excluded_files::repoint_on(tx, exclusion_id, file_path_str, folder_id)?;
+            queries::excluded_files::repoint_on(tx, exclusion_id, file_path_str, folder.id())?;
             log::info!("Kept-out file moved: {old_path} -> {file_path_str}");
             continue;
         }
@@ -344,7 +347,8 @@ pub(crate) fn ingest_scanned_files(
     })
 }
 
-/// The stored size and mtime of each scanned path that already has a whole-file row.
+/// The stored size and mtime of each scanned path that already has a whole-file row, a row with no
+/// links stamped as never read, so a library folder absorbing an import's directory links it.
 ///
 /// Chunked over `scanned_files` itself, so a chunk's binds drop at its end rather than a `String`
 /// per scanned path living for the whole ingest.
@@ -356,7 +360,7 @@ fn load_existing(
     for chunk in scanned_files.chunks(MAX_BINDS_PER_STATEMENT) {
         let path_list = placeholders(chunk.len());
         let mut sql = Sql::vouched(format!(
-            "SELECT file_path, file_size, date_modified FROM tracks \
+            "SELECT file_path, file_size, {LINKED_STAMP} FROM tracks \
              WHERE file_path IN ({path_list}) AND {WHOLE_FILE}"
         ));
         for file in chunk {
@@ -583,24 +587,24 @@ fn flush_artwork_backfill(
 fn import_folder_of(
     tx: &Transaction<'_>,
     path: &Path,
-    folder_cache: &mut HashMap<String, i64>,
-) -> Result<Option<i64>, AppError> {
+    folder_cache: &mut HashMap<String, TrackFolder>,
+) -> Result<Option<TrackFolder>, AppError> {
     let parent_dir = path.parent().map(|p| p.to_string_lossy().into_owned()).unwrap_or_default();
     if parent_dir.is_empty() {
         log::warn!("Skipping file with no parent directory: {}", path.display());
         return Ok(None);
     }
-    if let Some(&id) = folder_cache.get(&parent_dir) {
-        return Ok(Some(id));
+    if let Some(&folder) = folder_cache.get(&parent_dir) {
+        return Ok(Some(folder));
     }
     // A file inside a library folder is that folder's, so its scans pair the file with its row and
     // removing the folder takes the track along.
-    let id = match queries::scan::find_folder_for_path(tx, &path.to_string_lossy())? {
-        Some(id) => id,
-        None => queries::folder::upsert_folder(tx, &parent_dir)?,
+    let folder = match queries::scan::find_folder_for_path(tx, &path.to_string_lossy())? {
+        Some(id) => TrackFolder::Library(id),
+        None => TrackFolder::Outside(queries::folder::upsert_folder(tx, &parent_dir)?),
     };
-    folder_cache.insert(parent_dir, id);
-    Ok(Some(id))
+    folder_cache.insert(parent_dir, folder);
+    Ok(Some(folder))
 }
 
 /// A track's artist, album, genre and folder ids, or `None` where the file is skipped.
@@ -611,8 +615,10 @@ fn resolve_ids(
     file: &ScannedFile,
     caches: &mut ResolveCaches,
 ) -> Result<Option<queries::ResolvedIds>, AppError> {
-    let Some(folder_id) = source.folder_of(tx, &file.path, &mut caches.folder)? else {
-        return Ok(None);
+    let folder_id = match source.folder_of(tx, &file.path, &mut caches.folder)? {
+        None => return Ok(None),
+        Some(TrackFolder::Outside(id)) => return Ok(Some(queries::ResolvedIds::outside(id))),
+        Some(TrackFolder::Library(id)) => id,
     };
 
     // The **first** credited name, as `resolve_track_context` takes: a row keyed on the whole line
@@ -653,7 +659,8 @@ fn resolve_ids(
 
     let genre_id = caches.names.genre(tx, genre_name)?;
 
-    Ok(Some(queries::ResolvedIds { artist_id, album_id, genre_id, folder_id }))
+    let links = Links { artist_id, album_id, genre_id };
+    Ok(Some(queries::ResolvedIds { folder_id, links: Some(links) }))
 }
 
 #[cfg(test)]

@@ -1,6 +1,7 @@
 //! What a tag edit is, independent of writing one: the dialog builds it and
 //! `media::ingest::tag_writer` consumes it, so the dialog names it without naming the writer.
 
+use super::album::ReleaseTagRow;
 use super::artist::ArtistCredit;
 use super::credits::{CreditRole, ROLES, RoleCredits};
 use super::genre::GenreList;
@@ -193,6 +194,18 @@ impl ClearedReleaseTags {
     pub fn is_empty(self) -> bool {
         self == Self::default()
     }
+}
+
+/// A file's own tags as the dialog shows them, off one open: what a track filed outside the
+/// library holds nowhere else, having no album or join rows.
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct FileTags {
+    pub lyrics: Option<String>,
+    /// The track's own artist credit, then its album's.
+    pub credits: (ArtistCredit, ArtistCredit),
+    pub roles: RoleCredits,
+    pub genres: GenreList,
+    pub release: ReleaseTagRow,
 }
 
 /// A field a write can fail on: a stable name for the log and a translated word for the toast,

@@ -2,9 +2,11 @@
 
 use std::collections::HashMap;
 use std::path::MAIN_SEPARATOR_STR;
+use std::sync::LazyLock;
 
 use rusqlite::Transaction;
 
+use crate::database::queries::track::file_rows::LINKED_STAMP;
 use crate::database::queries::track::subtree_bounds;
 use crate::database::{DbPool, chunked_in_query, sql};
 use melodia_core::entities::scan::FileStamp;
@@ -43,6 +45,10 @@ pub(crate) fn find_folder_for_path(
     )
 }
 
+static FOLDER_TRACK_STAMPS: LazyLock<String> = LazyLock::new(|| {
+    format!("SELECT file_path, file_size, {LINKED_STAMP} FROM tracks WHERE folder_id = ?")
+});
+
 /// Folds each of a folder's rows into `init` through `step`, with the columns the incremental-scan
 /// filter needs, one row at a time, so the folder's paths are never all held at once. Read through
 /// the read pool, before the scan's writer transaction opens.
@@ -52,8 +58,7 @@ pub async fn fold_folder_tracks<A: Send + 'static>(
     init: A,
     step: impl FnMut(&mut A, String, FileStamp) + Send + 'static,
 ) -> Result<A, AppError> {
-    let rows = "SELECT file_path, file_size, date_modified FROM tracks WHERE folder_id = ?";
-    fold_stamps(db, rows, folder_id, init, step).await
+    fold_stamps(db, FOLDER_TRACK_STAMPS.as_str(), folder_id, init, step).await
 }
 
 /// [`fold_folder_tracks`] for the folder's cue sheets.

@@ -3,6 +3,7 @@
 
 use rusqlite::Connection;
 
+use super::file_rows::IN_LIBRARY;
 use super::json_array;
 use crate::database::queries::smart_playlist::{
     pick_random, push_member_ids, push_positioned_membership, random_cap,
@@ -62,7 +63,7 @@ impl Membership {
 
     /// Whether [`Self::push_source`] already opened a `WHERE`.
     fn narrows(&self) -> bool {
-        !matches!(self, Self::Library | Self::SmartPlaylist(_) | Self::Drawn(_))
+        !matches!(self, Self::SmartPlaylist(_) | Self::Drawn(_))
     }
 
     /// The column holding the list's own order, where it has one.
@@ -81,10 +82,10 @@ impl Membership {
     pub(super) fn push_source(&self, sql: &mut Sql) {
         match self {
             Self::Library => {
-                sql.push("tracks t");
+                sql.push("tracks t WHERE ").push(IN_LIBRARY);
             }
             Self::Favorites => {
-                sql.push("tracks t WHERE t.is_favorite = TRUE");
+                sql.push("tracks t WHERE t.is_favorite = TRUE AND ").push(IN_LIBRARY);
             }
             Self::Album(id) => {
                 sql.push("tracks t WHERE t.album_id = ").push_bind(*id);

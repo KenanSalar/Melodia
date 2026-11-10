@@ -789,7 +789,7 @@ async fn a_cover_lookup_walks_the_natural_order() -> Result<(), AppError> {
         "EXPLAIN QUERY PLAN SELECT artwork_path FROM tracks \
          WHERE artwork_path IS NOT NULL AND artwork_path != ''",
     );
-    super::push_and_rules(&mut sql, &rock_rule());
+    super::push_and_rules(&mut sql, &rock_rule(), super::MemberTest::Correlated);
     sql.push(super::order_by_fragment(None)).push(" LIMIT 1");
 
     let plan = plan_steps(&db, sql).await?;
@@ -810,7 +810,16 @@ async fn a_favorite_rule_reaches_its_partial_index() -> Result<(), AppError> {
 
     let plan = plan_steps(&db, sql).await?;
 
-    assert_eq!(plan, ["SEARCH tracks USING INDEX idx_tracks_is_favorite (is_favorite=?)"]);
+    assert_eq!(
+        plan,
+        [
+            "SEARCH tracks USING INDEX idx_tracks_is_favorite (is_favorite=?)",
+            "LIST SUBQUERY 1",
+            "SCAN f",
+            "SEARCH outside USING COVERING INDEX idx_tracks_folder_id (folder_id=?)",
+            "CREATE BLOOM FILTER",
+        ]
+    );
     Ok(())
 }
 

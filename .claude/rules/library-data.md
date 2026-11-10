@@ -42,6 +42,11 @@ paths:
   move or rewrite carries an exclusion as it carries a row** (`queries::excluded_files`,
   `scan::moves`), or a removed duplicate comes back. An exclusion covers a whole file, so nothing
   excludes a cue sheet's track (`DuplicateCopy::is_removable`).
+- **A track filed outside the library links to no album, artist or genre**
+  (`queries::scan::TrackFolder`): a write path resolves its ids through `resolve_track_context`
+  with the row's own folder, or a file opened from Downloads lands on the album, artist and genre
+  pages and in their counts. A library scan reads a row with no links as unstamped
+  (`file_rows::LINKED_STAMP`), which is what links an import a library folder absorbs.
 - **A cue sheet's track owns no file**: its image's tags, cover, lyrics and rating state the whole
   disc. A write into a file reaches only rows that play it whole (`get_whole_file_paths_by_ids`),
   and a read of a file's tags or lyrics for one track skips a sheet's (`TagEditRow::is_sheet_track`,
@@ -55,6 +60,10 @@ paths:
   splits one file into a row per track, so a bare `file_path = ?` reaches every one of them. A
   lookup of ids by path or hash answers every row with its number (`queries::track::FileTracks`),
   the caller matching on it or taking one file's rows whole, never one row picked at random.
+- **A statement listing, counting, searching or ranking the library's tracks adds `IN_LIBRARY`**
+  (`queries::track::file_rows`), or a file opened from outside every library folder shows in it.
+  Such a file keeps a row, which the queue, a playlist and every read by id reach, so
+  `missing_ids_on` asks every row, never the `Library` scope.
 - **`database::placeholders(n)` builds every IN list**, paired with `chunked_in_query`,
   `chunked_in_execute` for a statement that returns no rows, and `chunked_in_statements` for one
   binding a value ahead of its list; never re-roll `repeat_n("?", n)`, or the chunk loop for any of
