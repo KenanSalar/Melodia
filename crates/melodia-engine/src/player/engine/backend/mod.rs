@@ -29,6 +29,7 @@ use parking_lot::Mutex;
 use melodia_audio::player::source::audio::AudioSource;
 use melodia_audio::player::source::decode_ahead::{self, DecodeAhead};
 use melodia_audio::player::source::file_decode::FileDecoder;
+use melodia_audio::player::source::park::ParkSlot;
 use melodia_audio::player::source::prebuffer::StreamShared;
 use melodia_audio::player::source::stream_source::PreparedStream;
 use melodia_playback::player::playback::crossfade::{self, CrossfadeShared};
@@ -98,6 +99,9 @@ pub struct PlaybackEngine {
     live_stream: Arc<Mutex<Option<Arc<StreamShared>>>>,
     runtime: tokio::runtime::Handle,
     decode_ahead: Duration,
+    // A track start, a station and a stop empty it. A seek doesn't: the staged successor it keeps
+    // holds a ticket there.
+    park: Arc<ParkSlot>,
 }
 
 impl PlaybackEngine {
@@ -127,6 +131,7 @@ impl PlaybackEngine {
             live_stream: Arc::new(Mutex::new(None)),
             runtime,
             decode_ahead,
+            park: Arc::default(),
         })
     }
 
@@ -224,6 +229,7 @@ impl PlaybackEngine {
     ) -> Result<(), AppError> {
         let fade_ms = self.manual_fade_ms(start_position_ms);
 
+        self.park.clear();
         // Off the deck lock: the monitor takes it every tick, and a Symphonia probe under it
         // stalls the poll.
         let mut decoded = FileDecoder::open_track(audio)?;
@@ -243,22 +249,32 @@ impl PlaybackEngine {
 
         // A manual fade is never asked for with a resume position, so the two can't both apply.
         let entry = if fade_ms > 0 { Entry::Fade(fade_ms) } else { Entry::Cut(start) };
-        self.start_track(decoded, baked_rg, entry, volume, speed)
+        let source = self.start_decoding(decoded, audio)?;
+        self.start_track(source, baked_rg, entry, volume, speed);
+        Ok(())
     }
 
-    /// Mounts `decoded` as `entry` asks, cutting from the top where a fade can't go: behind a
-    /// gapless source staged since, or onto an output that has to reopen. A fade never reopens,
-    /// so whatever a track start would reclaim waits for the next cut. A file that can't start
-    /// decoding ahead touches no deck.
-    fn start_track(
+    /// Hands `decoded` to a decode-ahead feeder, which parks it for the track after should `audio`
+    /// play its span out.
+    fn start_decoding(
         &self,
         decoded: FileDecoder,
+        audio: &TrackAudio,
+    ) -> Result<DecodeAhead, AppError> {
+        DecodeAhead::start(decoded, self.decode_ahead, self.park.ticket(audio))
+    }
+
+    /// Mounts `source` as `entry` asks, cutting from the top where a fade can't go: behind a
+    /// gapless source staged since, or onto an output that has to reopen. A fade never reopens,
+    /// so whatever a track start would reclaim waits for the next cut.
+    fn start_track(
+        &self,
+        source: DecodeAhead,
         baked_rg: TrackReplayGain,
         entry: Entry,
         volume: f64,
         speed: f64,
-    ) -> Result<(), AppError> {
-        let source = DecodeAhead::start(decoded, self.decode_ahead)?;
+    ) {
         self.bump_epoch();
         self.clear_live_stream();
         let mut decks = self.lock_decks();
@@ -283,7 +299,6 @@ impl PlaybackEngine {
             }
         }
         self.gapless_pending.store(false, Ordering::Release);
-        Ok(())
     }
 
     /// Plays `source` alone from `start`, reopening the output first. The decks pause ahead of the
@@ -349,6 +364,7 @@ impl PlaybackEngine {
 
         // Published before the deck work, so the monitor never sees a station with no cell.
         *self.live_stream.lock() = Some(shared);
+        self.park.clear();
         self.bump_epoch();
         let decks = self.lock_decks();
         // A live mount has no timeline to resume on.
@@ -377,7 +393,9 @@ impl PlaybackEngine {
         volume: f64,
         speed: f64,
     ) -> Result<(), AppError> {
+        self.park.clear();
         let decoded = FileDecoder::open_track(audio)?;
+        let source = self.start_decoding(decoded, audio)?;
 
         // A staged source would share the outgoing fade cell. `crossfade_eligible` keeps the
         // preload off, so one here is a bug `start_track`'s fallback cut would hide.
@@ -385,7 +403,8 @@ impl PlaybackEngine {
             !self.gapless_pending.load(Ordering::Acquire),
             "crossfade must never race a staged gapless preload"
         );
-        self.start_track(decoded, baked_rg, Entry::Fade(fade_ms), volume, speed)
+        self.start_track(source, baked_rg, Entry::Fade(fade_ms), volume, speed);
+        Ok(())
     }
 
     /// Wraps a source in what the decks play: the EQ, this track's baked `ReplayGain` and `deck`'s
@@ -482,6 +501,7 @@ impl PlaybackEngine {
     }
 
     pub fn stop(&self) {
+        self.park.clear();
         self.bump_epoch();
         self.crossfade_armed.store(false, Ordering::Release);
         // Dropping the source is what closes a stream's connection; this only stops readers.
@@ -497,6 +517,7 @@ impl PlaybackEngine {
     /// Leaves `gapless_pending` alone: the gate refused the fade if a source was staged, and one
     /// slipping in behind is dropped with the flag by that `ClearAll`.
     pub fn stop_with_fade(&self, fade_ms: u64) {
+        self.park.clear();
         if !self.arm_fade_out(fade_ms, DeferredOp::ClearAll) {
             self.stop();
         }
@@ -540,7 +561,7 @@ impl PlaybackEngine {
             log::warn!("Seek failed: {}", describe(&e));
             return;
         }
-        let source = match DecodeAhead::start(decoded, self.decode_ahead) {
+        let source = match self.start_decoding(decoded, audio) {
             Ok(source) => source,
             Err(e) => {
                 log::warn!("Seek could not start decoding the track: {}", describe(&e));
@@ -582,7 +603,7 @@ impl PlaybackEngine {
         let epoch = self.deck_epoch.load(Ordering::Acquire);
 
         let staged = self.open_for_gapless(audio).and_then(|opened| {
-            opened.map(|decoded| DecodeAhead::start(decoded, self.decode_ahead)).transpose()
+            opened.map(|decoded| self.start_decoding(decoded, audio)).transpose()
         });
         let source = match staged {
             Ok(Some(source)) => source,

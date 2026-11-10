@@ -12,10 +12,11 @@ use super::backend::{DeckClock, PlaybackCheck, PlaybackEngine};
 use super::event_sink::PlayerSinks;
 use super::signal_path::{SignalPath, Transport};
 use super::state::{
-    PlayerAction, PlayerState, PlayerStateHandle, PositionTick, ReleaseDecision, lock_state,
-    with_state_emit,
+    MAX_SPEED, PlayerAction, PlayerState, PlayerStateHandle, PositionTick, ReleaseDecision,
+    lock_state, with_state_emit,
 };
 use super::types::{PersistedPlayback, PlaybackSource, PlaybackStatus};
+use melodia_audio::player::source::decode_ahead;
 use melodia_audio::player::source::prebuffer::StreamShared;
 use melodia_core::entities::track::TrackSummary;
 use melodia_playback::player::playback::crossfade::{self, Joint};
@@ -36,6 +37,19 @@ const _: () = assert!(
 /// How far before the end the next gapless source is staged: long enough to decode on a slow
 /// disk, short enough that a queue change mid-track still decides it.
 const PRELOAD_LEAD_MS: u64 = 1500;
+
+/// A cue track's feeder parks its decoder at its first wake within a ring's depth of the end, so
+/// the ring less one nap at the top speed has to outlast the lead, or the preload of the next track
+/// comes first and opens the file again. Feeders start on a poll, so their wakes trail it closely.
+const _: () = {
+    let depth = decode_ahead::DEPTH.as_secs_f64();
+    let nap = depth / decode_ahead::NAPS_PER_DEPTH as f64;
+    let lead = Duration::from_millis(PRELOAD_LEAD_MS).as_secs_f64();
+    assert!(
+        depth - nap * MAX_SPEED > lead,
+        "a cue track's decoder must park before the next track's preload, at every speed"
+    );
+};
 
 /// How much playback a `SIGKILL` may cost; a clean exit writes the authoritative snapshot.
 /// Counted in playback rather than wall time, a skipped poll not counting.

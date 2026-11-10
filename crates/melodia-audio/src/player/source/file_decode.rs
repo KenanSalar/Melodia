@@ -129,7 +129,8 @@ pub struct FileDecoder {
     cursor: decode::Cursor,
     source_format: SourceFormat,
     time_base: Option<TimeBase>,
-    total_duration: Option<Duration>,
+    /// The whole file's. A cue track's is cut from it on each read, so narrowing again keeps it.
+    file_duration: Option<Duration>,
     /// For the seek, which has to add the head back on.
     trim: Option<Trim>,
     /// The cue sheet track this decoder plays, its frames counted after the trim's head.
@@ -170,7 +171,7 @@ impl FileDecoder {
             cursor,
             source_format,
             time_base,
-            total_duration,
+            file_duration: total_duration,
             trim: None,
             span: None,
             end: None,
@@ -192,18 +193,28 @@ impl FileDecoder {
         Ok(decoded)
     }
 
-    /// Narrows the decoder to `span`'s length and count. A span opening on the file's first sample
-    /// needs no seek: the open leaves the cursor there.
+    /// Narrows a fresh open to `span`. One opening on the file's first sample needs no seek: the
+    /// open leaves the cursor there.
     fn enter_span(&mut self, span: CueSpan) -> Result<(), SeekError> {
-        let rate = self.cursor.shape().rate;
-        let span = Span::at_rate(span, rate);
-        self.total_duration = span.duration(self.total_duration, rate);
-        self.span = Some(span);
-        if span.start == 0 {
-            self.end = self.end_after(0);
+        self.narrow_to(span);
+        if self.span.is_some_and(|span| span.start == 0) {
             return Ok(());
         }
         self.seek_to_frame(0)
+    }
+
+    /// Narrows the decoder to `span`'s length and count from wherever it stands: a fresh open's
+    /// first sample, or the first after a track it [played out](Self::played_span_out).
+    pub(super) fn narrow_to(&mut self, span: CueSpan) {
+        self.span = Some(Span::at_rate(span, self.cursor.shape().rate));
+        self.end = self.end_after(0);
+    }
+
+    /// Whether the decoder stopped on its cue track's last sample, and so stands on the first of
+    /// the track after it, rather than on the end of the file or a failed read.
+    pub(super) fn played_span_out(&self) -> bool {
+        self.span.is_some_and(|span| span.len.is_some())
+            && matches!(self.end, Some(End::Counted(0)))
     }
 
     /// Lines this source's timeline up with the demuxer's. AAC's head comes off through
@@ -224,7 +235,7 @@ impl FileDecoder {
             log::debug!(
                 "AAC encoder padding: {} priming frames dropped, {:?} of audio",
                 aac.head,
-                self.total_duration
+                self.file_duration
             );
             return;
         }
@@ -239,7 +250,7 @@ impl FileDecoder {
         log::debug!(
             "Container padding: {head} priming frames already off the samples, {tail} trailing \
              frames held back, {:?} of audio",
-            self.total_duration
+            self.file_duration
         );
     }
 
@@ -269,9 +280,9 @@ impl FileDecoder {
         let shape = self.cursor.shape();
 
         let head = self.head_duration();
-        self.total_duration = match trim.playable {
+        self.file_duration = match trim.playable {
             Some(playable) => Some(frames_to_duration(playable, shape.rate)),
-            None => self.total_duration.map(|total| total.saturating_sub(head)),
+            None => self.file_duration.map(|total| total.saturating_sub(head)),
         };
         self.end = self.end_after(0);
     }
@@ -447,14 +458,18 @@ impl AudioSource for FileDecoder {
 
     #[inline]
     fn total_duration(&self) -> Option<Duration> {
-        self.total_duration
+        match self.span {
+            Some(span) => span.duration(self.file_duration, self.cursor.shape().rate),
+            None => self.file_duration,
+        }
     }
 
     fn try_seek(&mut self, pos: Duration) -> Result<(), SeekError> {
         // The caller asks past the end routinely, positions coming off tags that overshoot the
         // decoded length, and the ceiling sits short of it for [`SEEK_END_MARGIN`]'s reason.
-        let pos =
-            self.total_duration.map_or(pos, |total| pos.min(total.saturating_sub(SEEK_END_MARGIN)));
+        let pos = self
+            .total_duration()
+            .map_or(pos, |total| pos.min(total.saturating_sub(SEEK_END_MARGIN)));
         self.seek_to_frame(frames_in(pos, self.cursor.shape().rate))
     }
 }

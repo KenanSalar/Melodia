@@ -2,7 +2,7 @@
 
 Working doc. Delete when the feature ships.
 
-Status: **in progress**, Phase 5.5 through its gates, Phase 6 next; Phase 3 owes Kenan's scrobble
+Status: **in progress**, Phase 6 through its gates, Phase 7 next; Phase 3 owes Kenan's scrobble
 and Discord check ·
 Created: 2026-11-04
 
@@ -303,9 +303,11 @@ on open and counts down to its end with the `End::Counted` that container paddin
 **Continuous decode at joints.** When one track runs into the next track of the same image, the
 decoder the first one finished with is already standing on the second one's first sample:
 
-- the feeder thread parks it in a one-slot hand-off the backend owns;
+- the feeder thread parks it in a one-slot hand-off the backend owns. It naps a tenth of its ring
+  at a time, so even at the top speed it parks before the preload comes inside the last 1.5 s;
 - the preload of `(path, start == where it stopped)` takes it back with no reopen, no seek and no
-  decoder reset;
+  decoder reset. One that finds nothing, behind a feeder a slow drive holds up, opens the file as
+  any other track does;
 - the voice already carries a gapless successor through the same resampler when the shapes match
   (`voice.rs:499-515`).
 
@@ -429,7 +431,7 @@ How Melodia holds one:
 | playlist carry | `crates/melodia-store/src/database/queries/playlist_carry.rs` | `replace_in_playlists` and `merge_into_playlists`, beside the other playlist membership writers |
 | the planner | `crates/melodia-store/src/media/cue/plan.rs` | which sheet claims which image, settled in `discover` (`scan/mod.rs`) after the incremental filter, whose output decides which directories it reads again, and before the walk is cut into chunks. Each sheet's work is one job that `CuePlan::into_chunks` never splits, so a sheet's stamp commits with everything it caused. The scan calls it, and the watcher's `process_batch` (`file_event_processor/sheets.rs`) and an import (`library/import.rs`) call it over a few directories through `media/cue/around.rs`'s `settle_dirs` |
 | the span on a deck | `crates/melodia-audio/src/player/source/span.rs` | beside `aac_trim.rs`: the open-at-start, the counted end, the seek offset. `file_decode.rs` calls it |
-| the parked decoder | `crates/melodia-audio/src/player/source/park.rs` | Phase 6: the one-slot hand-off and its match rule |
+| the parked decoder | `crates/melodia-audio/src/player/source/park.rs` | Phase 6: the one-slot hand-off, the tickets it lets park and its match rule |
 | files opened from outside | `queries/track/file_rows.rs`, `queries/scan/mod.rs`, `queries/outside.rs`, `library/outside.rs` | Phase 5.5: `IN_LIBRARY` and `LINKED_STAMP`; `TrackFolder` and `ResolvedIds.links`; the boot sweep and `unlink_on`; which folders it sweeps |
 
 The parser and planner sit in the store because ingest is their only consumer, and a `.cue` the
@@ -919,20 +921,53 @@ a whole disc. *Files opened from outside the library* gives the model.
 
 ## Phase 6: Continuous decode at joints
 
-- [ ] `source/park.rs`, a one-slot hand-off owned by the backend:
-  - [ ] When a span ends on its count (not at end of file, not on an error), `DecodeAhead`'s feeder
-        parks its `FileDecoder` there with the path and the cue frame it stopped on.
-  - [ ] An open of `(path, span)` whose start is that frame takes it, re-arms the count for the new
-        span, and skips the open, the seek and the reset.
-  - [ ] Any other open, a seek or a stop empties the slot. The slot holds one decoder at most.
-- [ ] The preload is the only taker. A manual jump, a seek or a crossfade reopens as in Phase 3.
-- [ ] Docs: the module doc carries the match rule and why only one decoder is ever held.
+- [x] `source/park.rs`, a one-slot hand-off owned by the backend (`PlaybackEngine::park`):
+  - [x] Every decode-ahead source of a span with an end carries a `ParkTicket` naming its path and
+        end (`start_decoding`). When the span ends on its count (`played_span_out`: not at end of
+        file, not on an error), the feeder parks its `FileDecoder` on that ticket, from the feeder
+        or from `start`'s own fill for a span shorter than the ring.
+  - [x] The preload of `(path, span)` whose start is that frame takes it (`ParkSlot::take`),
+        narrowed to the new span through the same `narrow_to` a fresh open uses, with no open, seek
+        or reset.
+        `total_duration` is derived from the file's length on every read rather than stored, so a
+        narrowed decoder keeps it.
+  - [x] The feeder naps a tenth of its ring rather than a quarter (`NAPS_PER_DEPTH`), so it parks
+        with at least 1.6 s of ring to play at 2x, ahead of the 1.5 s preload. A const assertion
+        beside `PRELOAD_LEAD_MS` holds depth, nap, `MAX_SPEED` and lead together. At a quarter the
+        hand pass found the preload ahead of the park at 2x, the feeders' wakes trailing the poll
+        they started on, and a wait for the next poll fell through to a reopen with a dropout. A
+        preload that finds nothing opens the file as in Phase 3.
+  - [x] A track start, a station and a stop empty the slot and void every ticket out, so a source
+        let go of can't park late and nothing keeps the file open. A seek leaves it: the staged
+        successor it keeps holds a ticket. The slot holds one decoder at most.
+- [x] The preload is the only taker. A manual jump, a seek or a crossfade reopens as in Phase 3.
+- [x] Docs: the module doc carries the match rule and why only one decoder is ever held, and
+      `handlers.rs`'s assertion the timing that keeps the park ahead of the preload.
 
 **Gate:**
-- [ ] The static gates, and RSS against Phase 3.
-- [ ] Kenan's hand pass on a live recording and an MP3 image, where the music runs across the
-      joints: listen for a click; check that skipping, seeking and crossfading into the next track
-      still behave.
+- [x] The static gates.
+- [x] RSS against Phase 3. Run by Claude on Kenan's go (2026-11-11): release builds of this phase
+      and of `a92b33fc` against `Melodia-dev`, restored after, each playing the FLAC image through
+      its three joints. Playing Anonymous 32.1 MiB here against 32.2, threads and CPU time level;
+      the VmRSS gap (181.6 against 176.4 MiB) is all `RssFile`. heaptrack: peak heap 21.97 MB
+      against 21.94, 14,000 fewer allocation calls, and the temporary allocations that differ all
+      in D-Bus signatures, accesskit and FemtoVG.
+- [x] Kenan's hand pass. Run by Claude on Kenan's go (2026-11-11): release builds of this phase and
+      of `a92b33fc` against `Melodia-dev`, restored after, on a null sink pinned to 48 kHz float.
+      The fixtures cut a 48 kHz DJ mix, so the music runs across every joint: a four-track FLAC
+      image, the same as MP3, forty 3 s tracks, and thirty whose lengths walk the poll's phase:
+  - [x] compared sample for sample rather than by ear, each joint plays bit-identical to a straight
+        decode, the FLAC image against `ffmpeg`'s, the MP3 against the same file played whole.
+        `a92b33fc` differs at every MP3 joint, up to 0.32 of full scale, from 432 frames before it
+        to 414 after;
+  - [x] every joint logs the decoder carried on, at 1x and at 2x, over tracks of varied length: 29
+        of 29 at 2x with no dropout. At a quarter nap the same run had 11 preloads come first, 2 of
+        them falling through to a reopen with a 13 to 17 ms dropout, which the tenth fixed;
+  - [x] four stops in a track's last two seconds, before and after the next track took the decoder,
+        each leave no handle on the image (`/proc/<pid>/fd`);
+  - [x] Next in the last second reopens; a seek into the last 1.5 s after the next track was staged
+        still carries on at that track's own joint; a crossfade from another file into the image
+        fades, its first joint carrying on; the last track ends at the end of the file.
 
 ## Phase 7: Edits written to the sheet
 
@@ -1007,7 +1042,8 @@ Existing tests a phase breaks are fixed in that phase.
 - **Lock order** (ADR 0035) is untouched:
   - the span rides on the plain-data actions;
   - every open and seek stays off the decks lock (`backend/mod.rs:227-229`);
-  - the park slot is taken in the preload, ahead of the decks lock.
+  - the park slot is taken in the preload, ahead of the decks lock. Its mutex is a leaf, and no
+    decoder is narrowed or dropped under it.
 
 ## Open questions
 

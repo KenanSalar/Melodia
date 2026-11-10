@@ -324,8 +324,9 @@ impl PlaybackEngine {
         !plays
     }
 
-    /// Opens `audio` to stage behind the playing track, `None` where the output would reopen for
-    /// it. Asked every tick until the track ends, so a refusal opens the file once.
+    /// Opens `audio` to stage behind the playing track, or carries on the decoder that played the
+    /// track before it in the same file. `None` where the output would reopen for it. Asked every
+    /// tick until the track ends, so a refusal opens the file once.
     ///
     /// # Errors
     ///
@@ -337,7 +338,13 @@ impl PlaybackEngine {
         if self.recorded_answer(&audio.path) == Some(false) {
             return Ok(None);
         }
-        let decoded = self.open_recorded(audio)?;
+        let decoded = match self.park.take(audio) {
+            Some(decoded) => {
+                log::debug!("Carrying the decoder on into {audio}");
+                decoded
+            }
+            None => self.open_recorded(audio)?,
+        };
         // Left unstaged, it ends in `EndOfStream` and starts through `play_media`, which reopens.
         if !self.plays_without_reopen(decoded.shape(), decoded.format()) {
             log::debug!("Not staging {audio} gapless: the output reopens for its format");
