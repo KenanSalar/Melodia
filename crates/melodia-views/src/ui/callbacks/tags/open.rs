@@ -17,6 +17,7 @@ use crate::ui::util::{
     format_size, len_as_i32, opt_shared,
 };
 use melodia_app::library;
+use melodia_app::library::lyrics::LyricsKey;
 use melodia_app::state::AppState;
 use melodia_core::entities::album::ReleaseTagRow;
 use melodia_core::entities::artist::{ArtistCredit, JOIN_PHRASES};
@@ -67,8 +68,9 @@ pub(super) fn wire_request_edit(
 
             // Lyrics live in the file, and so does the authoritative credit, join rows seeded from
             // `artist_id` alone knowing only the first name. A multi-selection takes the database
-            // instead, N file reads on the open path being what the row projection avoids.
-            let (lyrics, credits) = if single {
+            // instead, N file reads on the open path being what the row projection avoids, and so
+            // does a cue sheet's track, its file's tags stating the whole disc.
+            let (lyrics, credits) = if single && !rows[0].is_sheet_track() {
                 let path = PathBuf::from(&rows[0].file_path);
                 let read =
                     s.runtime.spawn_blocking(move || library::tags::read_lyrics_and_credits(&path));
@@ -97,7 +99,7 @@ pub(super) fn wire_request_edit(
             // nothing better exists. Offered rather than applied: writing it is a tag edit like
             // any other, so it goes through this dialog's own Save.
             let resident = if single {
-                library::lyrics::resident_text(&s, &rows[0].file_path)
+                library::lyrics::resident_text(&s, LyricsKey::from(&rows[0]))
                     .await
                     .unwrap_or_else(|e| {
                         log::debug!("tag edit: no resident sheet: {}", describe(&e));
@@ -463,7 +465,7 @@ fn finalize_populate(
     let single = rows.len() == 1;
     te.set_track_count(len_as_i32(rows.len()));
     te.set_active_tab(te.get_tab_tags());
-    te.set_lyrics_enabled(single);
+    te.set_read_only(rows.iter().any(TagEditRow::is_sheet_track));
     te.set_has_resident_lyrics(resident.is_some());
 
     if let Some(buf) = cover {

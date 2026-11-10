@@ -107,7 +107,10 @@ fn refresh_rows(
             resolved
         };
 
-        update_track_metadata(tx, &file.path, meta, &rids, &mut names)?;
+        if !update_track_metadata(tx, &file.path, meta, &rids, &mut names)? {
+            outcomes.push(Retag::Gone);
+            continue;
+        }
         updated_ids.push(file.id);
         outcomes.push(Retag::Updated);
 

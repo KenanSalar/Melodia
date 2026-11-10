@@ -28,9 +28,9 @@ paths:
 - **`utils::audio_ext::is_audio_extension` is the one audio-extension predicate**, and
   `is_cue_sheet` the one cue-sheet one; never re-roll a lowercase-and-contains at a new call site.
 - **An image a cue sheet claims never reaches the ordinary ingest**: the planner
-  (`media::cue::plan`) takes it out of a scan's files and a watcher batch's events
-  (`file_event_processor::sheets`), and its sheet's job writes its tracks
-  (`queries::scan::cue_units`). A sheet claims a file it carves into two or more rows, one sheet
+  (`media::cue::plan`) takes it out of a scan's files, a watcher batch's events
+  (`file_event_processor::sheets`) and an import's files (`library::import`), and its sheet's job
+  writes its tracks (`queries::scan::cue_units`). A sheet claims a file it carves into two or more rows, one sheet
   wins an image, and a sheet that fails to read keeps its claim. A new path that ingests a file a
   sheet may claim asks the planner, or the image gets a whole-file row beside its tracks.
 - **`utils::trash_dir` is the one trash-folder predicate**: a walk or watch that finds files by
@@ -39,14 +39,21 @@ paths:
   the previous scan's size, which then reads as current (`queries::scan::watch_batch`).
 - **A new ingest path consults `excluded_files` inside its inserting transaction, and a rename,
   move or rewrite carries an exclusion as it carries a row** (`queries::excluded_files`,
-  `scan::moves`), or a removed duplicate comes back.
+  `scan::moves`), or a removed duplicate comes back. An exclusion covers a whole file, so nothing
+  excludes a cue sheet's track (`DuplicateCopy::is_removable`).
+- **A cue sheet's track owns no file**: its image's tags, cover, lyrics and rating state the whole
+  disc. A write into a file reaches only rows that play it whole (`get_whole_file_paths_by_ids`),
+  and a read of a file's tags or lyrics for one track skips a sheet's (`TagEditRow::is_sheet_track`,
+  `lyrics::LyricsKey`).
 
 ## Query shape
 
 - **A statement keyed on a file's path says which of its rows it means**
   (`queries::track::file_rows`): one reading or writing the file's own tags adds `WHOLE_FILE`, and
   a move or a delete takes every row of the path, a file moving with all its rows. A cue sheet
-  splits one file into a row per track, so a bare `file_path = ?` reaches every one of them.
+  splits one file into a row per track, so a bare `file_path = ?` reaches every one of them. A
+  lookup of ids by path or hash answers every row with its number (`queries::track::FileTracks`),
+  the caller matching on it or taking them all, never one row picked at random.
 - **`database::placeholders(n)` builds every IN list**, paired with `chunked_in_query`,
   `chunked_in_execute` for a statement that returns no rows, and `chunked_in_statements` for one
   binding a value ahead of its list; never re-roll `repeat_n("?", n)`, or the chunk loop for any of

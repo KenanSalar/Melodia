@@ -11,7 +11,7 @@ use tokio::sync::mpsc;
 use walkdir::WalkDir;
 
 use melodia_core::error::{AppError, describe};
-use melodia_core::utils::audio_ext::{is_audio_extension, is_cue_sheet};
+use melodia_core::utils::audio_ext::{is_audio_extension, is_cue_sheet, is_library_extension};
 use melodia_core::utils::trash_dir::in_trash_dir;
 
 /// Classified file system event sent through the mpsc channel to the event processor.
@@ -302,7 +302,8 @@ fn left_the_watch(path: &Path) -> Option<FileEvent> {
 /// Audio or a cue sheet outside every trash folder: a trashed file reads as removed, a restored one
 /// as created.
 fn is_library_file(path: &Path) -> bool {
-    (is_audio_file(path) || is_sheet_file(path)) && !in_trash_dir(path)
+    let ext = path.extension().and_then(|e| e.to_str());
+    ext.is_some_and(is_library_extension) && !in_trash_dir(path)
 }
 
 pub(crate) fn is_audio_file(path: &Path) -> bool {

@@ -13,6 +13,7 @@ use slint::{ComponentHandle, Weak};
 use super::rows::rows_for;
 use super::{LyricsUi, NowPlayingState, follow};
 use melodia_app::library;
+use melodia_app::library::lyrics::LyricsKey;
 use melodia_app::state::AppState;
 use melodia_core::entities::lyrics::{Lyrics as Sheet, LyricsOutcome, LyricsSource};
 use melodia_core::entities::track::TrackSummary;
@@ -52,11 +53,11 @@ fn reseed(weak: &Weak<AppWindow>, state: &AppState, np_state: &Rc<NowPlayingStat
         }
         return;
     };
-    if ly.holds(&track.file_path) {
+    if ly.holds(track.id) {
         return;
     }
 
-    mark_loading(&ui, ly, &track.file_path);
+    mark_loading(&ui, ly, track.id);
     let weak = weak.clone();
     let state = state.clone();
     let np_state = np_state.clone();
@@ -64,10 +65,10 @@ fn reseed(weak: &Weak<AppWindow>, state: &AppState, np_state: &Rc<NowPlayingStat
         let outcome = fetch(&state, &track).await;
         let Some(ui) = weak.upgrade() else { return };
         // The song may have moved under the lookup; the claim says so.
-        if !np_state.lyrics.holds(&track.file_path) {
+        if !np_state.lyrics.holds(track.id) {
             return;
         }
-        apply(&ui, &np_state.lyrics, &track.file_path, &outcome, state.lyrics_online_enabled.get());
+        apply(&ui, &np_state.lyrics, &track, &outcome, state.lyrics_online_enabled.get());
     }));
     if let Err(e) = res {
         log::warn!(
@@ -100,7 +101,8 @@ pub(crate) fn wire_menu(ui: &AppWindow, state: &AppState, np_state: &Rc<NowPlayi
             let state = state.clone();
             let np_state = np_state.clone();
             let res = slint::spawn_local(Compat::new(async move {
-                if let Err(e) = library::lyrics::forget(&state, &track.file_path).await {
+                let key = LyricsKey::from(&*track);
+                if let Err(e) = library::lyrics::forget(&state, key).await {
                     log::warn!("lyrics refresh: {}", melodia_core::error::describe(&e));
                 }
                 if weak.upgrade().is_some() {
@@ -128,7 +130,7 @@ pub(crate) fn wire_menu(ui: &AppWindow, state: &AppState, np_state: &Rc<NowPlayi
             let weak = weak.clone();
             let np_state = np_state.clone();
             let res = slint::spawn_local(Compat::new(async move {
-                let found = library::lyrics::resident_text(&state, &track.file_path).await;
+                let found = library::lyrics::resident_text(&state, LyricsKey::from(&*track)).await;
                 let text = match found {
                     Ok(Some(text)) => text,
                     // The row is only offered against a sheet on screen, so nothing here is the
@@ -188,7 +190,7 @@ pub(crate) fn wire_reseed(ui: &AppWindow, state: &AppState, np_state: &Rc<NowPla
 fn apply(
     ui: &AppWindow,
     ly: &LyricsUi,
-    track_path: &str,
+    track: &TrackSummary,
     outcome: &LyricsOutcome,
     online_enabled: bool,
 ) {
@@ -197,7 +199,7 @@ fn apply(
 
     // Whatever the outcome, so a re-open on an answered track pays no second lookup: an outcome
     // with no rows is an answer, not an absence.
-    *ly.holding.borrow_mut() = Some(track_path.to_owned());
+    *ly.holding.borrow_mut() = Some(track.id);
 
     match outcome {
         LyricsOutcome::Sheet(sheet) => {
@@ -206,7 +208,9 @@ fn apply(
             global.set_synced(sheet.is_synced());
             // Every source but the file's own tag is worth offering to write into it. A sidecar
             // counts: it is the user's file, but it is not the one that travels with the track.
-            global.set_can_save_to_tag(sheet.source != LyricsSource::Tag);
+            // Nor for a cue sheet's track, which has no tag of its own.
+            let to_tag = sheet.source != LyricsSource::Tag && !track.is_sheet_track();
+            global.set_can_save_to_tag(to_tag);
             global.set_state(LyricsState::Ready);
         }
         LyricsOutcome::Instrumental => {
@@ -230,9 +234,9 @@ fn apply(
 
 /// **Claims the track before the `.await`**: the lookup can reach a file and then a socket, and a
 /// reseed landing in that window would start a second one for the same song.
-fn mark_loading(ui: &AppWindow, ly: &LyricsUi, track_path: &str) {
+fn mark_loading(ui: &AppWindow, ly: &LyricsUi, track_id: i64) {
     clear(ui, ly);
-    *ly.holding.borrow_mut() = Some(track_path.to_owned());
+    *ly.holding.borrow_mut() = Some(track_id);
     ui.global::<Lyrics>().set_state(LyricsState::Loading);
 }
 

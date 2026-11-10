@@ -42,7 +42,8 @@ pub async fn duplicate_copies(db: &DbPool, ids: &[i64]) -> Result<Vec<DuplicateC
     db.read(move |conn| {
         chunked_in_query(conn, &ids, |placeholders| {
             format!(
-                "SELECT t.id, t.file_path, t.file_hash, t.file_size, t.title, t.artist, t.album, \
+                "SELECT t.id, t.file_path, t.file_hash, t.file_size, t.cue_start, t.cue_end, \
+                        t.title, t.artist, t.album, \
                         t.disc_number, t.track_number, t.year, t.musicbrainz_track_id, \
                         t.musicbrainz_release_id, t.duration_ms, t.date_added, \
                         t.codec, t.bitrate, t.sample_rate, t.bit_depth, d.set_id AS dismissal, \

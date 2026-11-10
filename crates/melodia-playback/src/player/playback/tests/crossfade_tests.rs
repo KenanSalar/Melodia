@@ -30,6 +30,7 @@ fn track(album: Option<&str>, artist: Option<&str>) -> TrackSummary {
         id: 1,
         file_path: "/music/a.flac".into(),
         file_name: "a.flac".into(),
+        cue_track: None,
         span: None,
         title: "A".into(),
         artist: artist.map(Into::into),

@@ -254,6 +254,10 @@ msgstr[0] "{n} salinan"
 msgid "Now Playing"
 msgstr "Sedang Diputar"
 
+#: ui/components/dialog/duplicate-row.slint
+msgid "From a cue sheet"
+msgstr "Dari berkas CUE"
+
 #. Translators: {} is the day the copy joined the library, as 2026-11-02.
 #: ui/components/dialog/duplicate-row.slint
 msgid "Added {}"
@@ -777,6 +781,10 @@ msgstr "Remixer"
 #: ui/components/dialog/tag-editor-body.slint
 msgid "Replace…"
 msgstr "Ganti…"
+
+#: ui/components/dialog/tag-editor-body.slint
+msgid "Tracks from a cue sheet can't be edited here."
+msgstr "Lagu dari berkas CUE tidak dapat diedit di sini."
 
 #: ui/components/dialog/tag-editor-body.slint ui/settings.slint
 msgid "Details"

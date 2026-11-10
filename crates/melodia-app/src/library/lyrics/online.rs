@@ -1,7 +1,7 @@
 //! The lyrics directory, and the only thing in this feature that opens a socket.
 
 use super::lrc;
-use super::store::{self, Fetched};
+use super::store::{self, Fetched, LyricsKey};
 use crate::state::AppState;
 use melodia_core::entities::artist::ArtistCredit;
 use melodia_core::entities::lyrics::{LyricsOutcome, LyricsSource};
@@ -52,7 +52,7 @@ pub(super) async fn look_up(
         (None, true) => Fetched::Instrumental,
         (None, false) => Fetched::Nothing,
     };
-    if let Err(e) = store::write(&state.paths.lyrics_dir, &track.file_path, fetched) {
+    if let Err(e) = store::write(&state.paths.lyrics_dir, &LyricsKey::from(track), fetched) {
         // Costs a request next time, never the sheet in hand.
         log::debug!("lyrics: not stored: {}", melodia_core::error::describe(&e));
     }

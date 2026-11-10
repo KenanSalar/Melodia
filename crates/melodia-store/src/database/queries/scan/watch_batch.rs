@@ -416,10 +416,11 @@ fn handle_modified(
     };
     let ids = resolve_track_context(tx, folder_id, meta, &mut batch.names)?;
 
-    update_track_metadata(tx, &path_str, meta, &ids, &mut batch.names)?;
-    log::info!("Updated metadata for: {path_str}");
-
-    Ok(true)
+    let updated = update_track_metadata(tx, &path_str, meta, &ids, &mut batch.names)?;
+    if updated {
+        log::info!("Updated metadata for: {path_str}");
+    }
+    Ok(updated)
 }
 
 /// Whether a row was written. Each job is a savepoint of its own, so a sheet failing leaves nothing

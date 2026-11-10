@@ -260,6 +260,10 @@ msgstr[1] "{n} kopya"
 msgid "Now Playing"
 msgstr "Şimdi Çalıyor"
 
+#: ui/components/dialog/duplicate-row.slint
+msgid "From a cue sheet"
+msgstr "CUE dosyasından"
+
 #. Translators: {} is the day the copy joined the library, as 2026-11-02.
 #: ui/components/dialog/duplicate-row.slint
 msgid "Added {}"
@@ -790,6 +794,10 @@ msgstr "Remiksçi"
 #: ui/components/dialog/tag-editor-body.slint
 msgid "Replace…"
 msgstr "Değiştir…"
+
+#: ui/components/dialog/tag-editor-body.slint
+msgid "Tracks from a cue sheet can't be edited here."
+msgstr "CUE dosyasındaki parçalar burada düzenlenemez."
 
 #: ui/components/dialog/tag-editor-body.slint ui/settings.slint
 msgid "Details"

@@ -31,6 +31,7 @@ by_name!(TrackSummary {
     id,
     file_path,
     file_name,
+    cue_track,
     span: Option<CueSpan>,
     title,
     artist,

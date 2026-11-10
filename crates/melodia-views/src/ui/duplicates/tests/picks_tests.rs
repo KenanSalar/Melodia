@@ -19,6 +19,7 @@ fn copy_in(id: i64, folder: &[&str], file_hash: Option<&str>) -> DuplicateCopy {
         file_path: dir.join(format!("{id}.mp3")).to_string_lossy().into_owned(),
         file_hash: file_hash.map(str::to_owned),
         file_size: Some(1_000),
+        span: None,
         title: "Song".to_owned(),
         artist: Some("Artist".to_owned()),
         album: None,

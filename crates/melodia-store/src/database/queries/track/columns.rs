@@ -46,6 +46,7 @@ pub(crate) static TRACK_SUMMARY: Columns = Columns::new(&[
     "id",
     "file_path",
     "file_name",
+    "cue_track",
     "cue_start",
     "cue_end",
     "title",

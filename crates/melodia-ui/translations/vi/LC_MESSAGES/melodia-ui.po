@@ -254,6 +254,10 @@ msgstr[0] "{n} bản sao"
 msgid "Now Playing"
 msgstr "Đang phát"
 
+#: ui/components/dialog/duplicate-row.slint
+msgid "From a cue sheet"
+msgstr "Từ tệp CUE"
+
 #. Translators: {} is the day the copy joined the library, as 2026-11-02.
 #: ui/components/dialog/duplicate-row.slint
 msgid "Added {}"
@@ -777,6 +781,10 @@ msgstr "Người remix"
 #: ui/components/dialog/tag-editor-body.slint
 msgid "Replace…"
 msgstr "Thay thế…"
+
+#: ui/components/dialog/tag-editor-body.slint
+msgid "Tracks from a cue sheet can't be edited here."
+msgstr "Không thể sửa các bản nhạc từ tệp CUE tại đây."
 
 #: ui/components/dialog/tag-editor-body.slint ui/settings.slint
 msgid "Details"

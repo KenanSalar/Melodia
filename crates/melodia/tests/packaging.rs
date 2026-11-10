@@ -410,18 +410,20 @@ const MSI_EXTENSION_KEYS: [&str; 2] = [
 /// Windows offers a file type only where `main.wxs` writes the rows for it, and there is no glob
 /// there any more than for the licences — so a new entry in
 /// [`melodia_core::utils::audio_ext::AUDIO_EXTENSIONS`] is one the app imports happily and
-/// Explorer never offers.
+/// Explorer never offers. A cue sheet opens from Explorer too.
 ///
 /// A walk rather than a list, and comment-stripped first, both for
 /// [`the_msi_names_every_licence_file`]'s reasons.
 #[test]
-fn the_msi_offers_every_audio_extension() {
+fn the_msi_offers_every_library_extension() {
+    use melodia_core::utils::audio_ext::{AUDIO_EXTENSIONS, CUE_SHEET_EXTENSION};
+
     let raw = std::fs::read_to_string(Path::new(REPO_ROOT).join(MSI_SOURCE)).unwrap_or_default();
     assert!(!raw.is_empty(), "{MSI_SOURCE} won't read — did the MSI source move?");
     let wxs = strip_xml_comments(&raw);
 
     let mut unoffered = Vec::new();
-    for ext in melodia_core::utils::audio_ext::AUDIO_EXTENSIONS {
+    for ext in AUDIO_EXTENSIONS.iter().chain([&CUE_SHEET_EXTENSION]) {
         for key in MSI_EXTENSION_KEYS {
             if !wxs.contains(&format!("Key=\"{key}\" Name=\".{ext}\"")) {
                 unoffered.push(format!(".{ext} under {key}"));

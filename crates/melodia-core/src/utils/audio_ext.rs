@@ -15,7 +15,16 @@ pub fn is_audio_extension(ext: &str) -> bool {
     AUDIO_EXTENSIONS.iter().any(|a| ext.eq_ignore_ascii_case(a))
 }
 
+/// A cue sheet's extension. It owes what an [`AUDIO_EXTENSIONS`] entry owes the installers, since
+/// a sheet opens from the file manager too.
+pub const CUE_SHEET_EXTENSION: &str = "cue";
+
 /// Whether `ext`, without the dot and in any case, names a cue sheet.
 pub fn is_cue_sheet(ext: &str) -> bool {
-    ext.eq_ignore_ascii_case("cue")
+    ext.eq_ignore_ascii_case(CUE_SHEET_EXTENSION)
+}
+
+/// Whether Melodia takes a file with `ext`: audio, or a cue sheet over it.
+pub fn is_library_extension(ext: &str) -> bool {
+    is_audio_extension(ext) || is_cue_sheet(ext)
 }

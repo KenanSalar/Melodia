@@ -9,6 +9,7 @@ export component LabeledInput inherits VerticalLayout {
     in-out property <string> text;
     // `number` for a field the commit parses as an integer, so a letter can't be typed into it.
     in property <InputType> input-type: InputType.text;
+    in property <bool> read-only;
     callback accepted();
 
     spacing: 4px;
@@ -30,6 +31,7 @@ export component LabeledInput inherits VerticalLayout {
                 text <=> root.text;
                 placeholder: root.placeholder;
                 input-type: root.input-type;
+                read-only: root.read-only;
                 accepted => { root.accepted(); }
             }
         }

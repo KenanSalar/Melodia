@@ -10,6 +10,7 @@ use std::path::Path;
 use std::sync::Arc;
 
 use crate::ui::util::clamp_i64_to_i32;
+use melodia_core::entities::cue::CueSpan;
 use melodia_core::entities::duplicates::{DismissalSet, DuplicateGroup, GroupRemoval, MatchKind};
 
 /// What a header row states about its group.
@@ -33,8 +34,10 @@ struct CopyEntry {
     group: usize,
     size: i64,
     folder: u32,
-    /// Copies of one group sharing a class are one byte-identical file.
+    /// Copies of one group sharing a class play one byte-identical stretch of audio.
     hash_class: Option<u32>,
+    /// A cue sheet's track isn't, and nothing picks it (`DuplicateCopy::is_removable`).
+    removable: bool,
     picked: bool,
 }
 
@@ -62,7 +65,7 @@ impl DuplicateSet {
         let mut folders: HashMap<&Path, u32> = HashMap::new();
         for (index, group) in groups.iter().enumerate() {
             let start = set.copies.len();
-            let mut hashes: HashMap<&str, u32> = HashMap::new();
+            let mut hashes: HashMap<(&str, Option<CueSpan>), u32> = HashMap::new();
             for copy in &group.copies {
                 let folder = Path::new(&copy.file_path).parent().unwrap_or(Path::new(""));
                 let next_folder = u32::try_from(folders.len()).unwrap_or(u32::MAX);
@@ -75,7 +78,8 @@ impl DuplicateSet {
                     hash_class: copy
                         .file_hash
                         .as_deref()
-                        .map(|hash| *hashes.entry(hash).or_insert(next_class)),
+                        .map(|hash| *hashes.entry((hash, copy.span)).or_insert(next_class)),
+                    removable: copy.is_removable(),
                     picked: false,
                 });
             }
@@ -107,7 +111,7 @@ impl DuplicateSet {
     /// Picks or unpicks one copy. Picking a group's last unpicked copy unpicks the one after it
     /// instead, so every group keeps a copy.
     pub(super) fn toggle(&mut self, copy_id: i64) {
-        let Some(at) = self.pickable(copy_id) else {
+        let Some(at) = self.pickable(copy_id).filter(|&at| self.copies[at].removable) else {
             return;
         };
         let picking = !self.copies[at].picked;
@@ -119,7 +123,7 @@ impl DuplicateSet {
         }
     }
 
-    /// Keep This Copy: every other copy of its group picked.
+    /// Keep This Copy: every other removable copy of its group picked.
     pub(super) fn keep(&mut self, copy_id: i64) {
         let Some(at) = self.pickable(copy_id) else {
             return;
@@ -268,7 +272,7 @@ impl DuplicateSet {
         match kind {
             MatchKind::Identical | MatchKind::SameRelease => {
                 for (at, copy) in copies.iter_mut().enumerate() {
-                    copy.picked = at > 0;
+                    copy.picked = at > 0 && copy.removable;
                 }
             }
             MatchKind::Review(_) => pick_identical_spares(copies),
@@ -277,7 +281,8 @@ impl DuplicateSet {
 
     fn keep_only(&mut self, group: usize, keeper: usize) {
         for index in self.groups[group].copies.clone() {
-            self.copies[index].picked = index != keeper;
+            let copy = &mut self.copies[index];
+            copy.picked = index != keeper && copy.removable;
         }
     }
 
@@ -305,7 +310,8 @@ impl DuplicateSet {
 fn pick_identical_spares(copies: &mut [CopyEntry]) {
     let mut seen = HashSet::new();
     for copy in copies {
-        copy.picked = copy.hash_class.is_some_and(|class| !seen.insert(class));
+        let repeats = copy.hash_class.is_some_and(|class| !seen.insert(class));
+        copy.picked = repeats && copy.removable;
     }
 }
 

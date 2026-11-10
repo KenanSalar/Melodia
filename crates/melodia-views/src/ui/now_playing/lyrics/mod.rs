@@ -155,9 +155,10 @@ pub(crate) struct LyricsUi {
     /// A clicked row, held until the clock catches up with it.
     pinned: Cell<Option<usize>>,
     pinned_at_ms: Cell<i32>,
-    /// The track path the resident sheet belongs to, `None` once the rows are handed back. **This
-    /// makes the reseed idempotent**, so the three edges reaching it cost one lookup between them.
-    holding: RefCell<Option<String>>,
+    /// The track the resident sheet belongs to, `None` once the rows are handed back. **This makes
+    /// the reseed idempotent**, so the three edges reaching it cost one lookup between them. An id
+    /// rather than a path, every track of an image a cue sheet splits sharing its path.
+    holding: RefCell<Option<i64>>,
     /// Filled after [`install`] returns, needing the `NowPlayingState` this is a field of.
     reseed: RefCell<Option<super::Hook>>,
     model: Rc<VecModel<LyricRow>>,
@@ -171,8 +172,8 @@ impl LyricsUi {
         }
     }
 
-    fn holds(&self, path: &str) -> bool {
-        self.holding.borrow().as_deref() == Some(path)
+    fn holds(&self, track_id: i64) -> bool {
+        *self.holding.borrow() == Some(track_id)
     }
 }
 

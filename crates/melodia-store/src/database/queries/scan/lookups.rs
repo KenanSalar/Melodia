@@ -89,13 +89,14 @@ async fn fold_stamps<A: Send + 'static>(
     .await
 }
 
-/// The cue sheets on record around a watcher batch, and the claims a re-plan of them starts from.
+/// The cue sheets on record around a watcher batch or the files an import opens, and the claims a
+/// re-plan of them starts from.
 #[derive(Default)]
 pub struct SheetsAround {
-    /// The sheets directly inside the batch's directories.
+    /// The sheets directly inside the directories asked about.
     pub sheets: Vec<String>,
-    /// Each image those sheets claim, and each claimed image among the batch's audio, mapped to
-    /// its sheet's path.
+    /// Each image those sheets claim, and each claimed image among the audio asked about, mapped
+    /// to its sheet's path.
     pub claims: HashMap<String, String>,
 }
 

@@ -5,9 +5,10 @@ use super::listed_as_spelled;
 use crate::database::queries;
 use crate::database::queries::fixtures::{insert_test_track, keep_out, make_test_metadata};
 use crate::database::queries::ingest::{
-    BULK_THRESHOLD, IngestResult, IngestSource, commit_import, ingest_scanned_files,
+    BULK_THRESHOLD, IngestResult, IngestSource, ScanChunk, commit_import, ingest_scanned_files,
 };
 use crate::database::{DbPool, sql};
+use crate::media::cue::CueChunk;
 use crate::media::ingest::scan_pool::ScanPool;
 use melodia_core::entities::artist::ArtistCredit;
 use melodia_core::entities::genre::GenreList;
@@ -761,7 +762,8 @@ async fn folder_scan(db: &DbPool, files: Vec<ScannedFile>) -> Result<IngestResul
 }
 
 async fn import(db: &DbPool, files: Vec<ScannedFile>) -> Result<IngestResult, AppError> {
-    commit_import(db, files, SCAN_TIMESTAMP.to_owned(), ScanPool::default()).await
+    let chunk = ScanChunk { files, cue: CueChunk::default() };
+    commit_import(db, chunk, SCAN_TIMESTAMP.to_owned(), ScanPool::default()).await
 }
 
 async fn stored_hash(db: &DbPool, id: i64) -> Result<String, AppError> {

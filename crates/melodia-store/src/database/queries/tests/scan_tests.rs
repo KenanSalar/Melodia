@@ -645,7 +645,7 @@ async fn update_track_location_repoints_existing_row() -> Result<(), AppError> {
         .await?;
     let moved = queries::track::get_track_ids_by_paths(&db, &["/music/new.mp3".to_owned()]).await?;
     assert!(repointed);
-    assert_eq!(moved.get("/music/new.mp3"), Some(&id));
+    assert_eq!(moved.ids("/music/new.mp3").collect::<Vec<_>>(), [id]);
     Ok(())
 }
 

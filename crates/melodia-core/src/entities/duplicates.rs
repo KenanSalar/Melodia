@@ -4,6 +4,7 @@
 use rusqlite::types::{FromSql, FromSqlResult, ValueRef};
 
 use crate::entities::audio_quality::AudioFormat;
+use crate::entities::cue::CueSpan;
 
 /// How a group's copies matched, which decides what is picked for removal unasked. Declared in
 /// list order, the surest matches first.
@@ -56,6 +57,8 @@ pub struct DuplicateCopy {
     pub file_path: String,
     pub file_hash: Option<String>,
     pub file_size: Option<i64>,
+    /// The part of the file a cue sheet track plays, `None` for a whole file.
+    pub span: Option<CueSpan>,
     pub title: String,
     pub artist: Option<String>,
     pub album: Option<String>,
@@ -74,6 +77,14 @@ pub struct DuplicateCopy {
     pub is_favorite: bool,
     /// Manual playlists only, a smart one holding no rows of its own.
     pub playlist_count: i64,
+}
+
+impl DuplicateCopy {
+    /// Whether removing the copy can keep its file out of the library. A cue sheet's track can't
+    /// be: the exclusion covers a file, and would take every other track of its image along.
+    pub fn is_removable(&self) -> bool {
+        self.span.is_none()
+    }
 }
 
 /// Tracks that look like one song.

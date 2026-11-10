@@ -15,6 +15,7 @@ fn copy(id: i64) -> DuplicateCopy {
         file_path: format!("{id}.mp3"),
         file_hash: None,
         file_size: Some(5_000_000),
+        span: None,
         title: "Song".to_owned(),
         artist: Some("Artist".to_owned()),
         album: Some("Album".to_owned()),

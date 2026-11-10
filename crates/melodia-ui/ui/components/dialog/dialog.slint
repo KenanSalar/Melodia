@@ -258,7 +258,7 @@ export component DialogOverlay inherits Rectangle {
                             || (SmartEditor.name != "" && SmartEditor.rules.length > 0))
                         // Rust short-circuits a no-op Save.
                         && (DialogGlobal.kind != DialogKind.edit-tags
-                            || TagEditor.track-count > 0)
+                            || (TagEditor.track-count > 0 && !TagEditor.read-only))
                         && (DialogGlobal.kind != DialogKind.scrobble-listenbrainz-login
                             || (ScrobbleUi.lb-token != "" && !ScrobbleUi.busy))
                         && (DialogGlobal.kind != DialogKind.scrobble-lastfm-login

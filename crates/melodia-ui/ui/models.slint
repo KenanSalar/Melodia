@@ -195,7 +195,9 @@ export struct DuplicateRow {
     artist: string,
     match_kind: DuplicateMatch,
     copy_count: int,
-    // Copy only. `release` is the album and year, what tells one release from another.
+    // Copy only. `release` is the album and year, what tells one release from another. A cue
+    // sheet's track isn't `removable` (`DuplicateCopy::is_removable`).
+    removable: bool,
     file_name: string,
     format: string,
     lossless: bool,

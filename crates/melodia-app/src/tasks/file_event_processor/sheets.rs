@@ -1,9 +1,6 @@
 //! The cue sheet side of a watcher batch: the events a sheet claims or could claim, settled by the
-//! scan's planner before anything is read for the write.
-//!
-//! The planner walks the directories the batch touches and those its claims sit in, never the
-//! library folder, so a saved sheet costs a few directory listings rather than the folder scan's
-//! `stat` of every file.
+//! scan's planner (`cue::settle_dirs`) over the directories the batch touches and those its claims
+//! sit in, before anything is read for the write.
 
 use std::collections::{BTreeSet, HashMap};
 use std::path::{Path, PathBuf};
@@ -12,9 +9,7 @@ use melodia_core::entities::scan::{ExtractedMetadata, ScannedFile};
 use melodia_core::error::{AppError, describe};
 use melodia_store::database::DbPool;
 use melodia_store::database::queries::scan::{self, SheetsAround, WatchedChange};
-use melodia_store::media::cue::{self, CueChunk, CuePlan, PlanInput};
-use melodia_store::media::ingest::scan_pool::ScanPool;
-use melodia_store::media::ingest::scanner::{MediaWalk, WalkIndex, list_media_files};
+use melodia_store::media::cue::{self, CueChunk, CuePlan};
 use melodia_store::media::ingest::watcher::{FileEvent, is_sheet_file};
 
 /// A batch with its cue sheets settled.
@@ -145,33 +140,10 @@ impl Touched {
         }
     }
 
-    /// Walks the directories and settles their sheets against what `around` holds.
+    /// Settles the directories' sheets against what `around` holds. Each job is filed under the
+    /// library folder its own sheet sits in, so no folder's files are kept out here.
     fn settle(self, around: &SheetsAround) -> CuePlan {
-        let MediaWalk { files, sheets, unreadable } = list_media_files(&self.dirs);
-        ScanPool::for_files(sheets.len()).install(|| {
-            let audio = WalkIndex::new(files, unreadable.clone());
-            let sheets = WalkIndex::new(sheets, unreadable);
-            let (changed_sheets, changed_audio): (Vec<PathBuf>, Vec<PathBuf>) =
-                self.written.into_iter().partition(|path| is_sheet_file(path));
-            let changed_audio: Vec<PathBuf> =
-                changed_audio.into_iter().filter(|path| audio.contains(path)).collect();
-            let changed_sheets: Vec<PathBuf> =
-                changed_sheets.into_iter().filter(|path| sheets.contains(path)).collect();
-            // A stamp row outlives a sheet whose job rolled back, so a sheet on record the walk
-            // didn't find is gone whether or not this batch saw it go.
-            let gone_sheets = sheets.unwalked(around.sheets.iter().cloned());
-            let input = PlanInput {
-                audio: &audio,
-                sheets: &sheets,
-                changed_audio: &changed_audio,
-                changed_sheets: &changed_sheets,
-                gone_sheets: &gone_sheets,
-                claims: &around.claims,
-            };
-            // Each job is filed under the library folder its own sheet sits in, so no folder's
-            // files are kept out here.
-            cue::settle(&input, |_| true)
-        })
+        cue::settle_dirs(&self.dirs, self.written, around, |_| true)
     }
 }
 

@@ -101,7 +101,7 @@ Shrink the window and the full UI collapses into a mini-player that grows with i
 
 - A three-panel first-run card: add your Music folder or any other, pick the language, theme and accent, and see every feature that reaches the network before you switch it on. Settings ▸ About reopens it
 - Parallel folder scanning, live folder watching, and incremental re-scans
-- Cue sheets: a whole-disc rip with its `.cue` lists as the disc's tracks, each with its own title, artist and number, and a playlist holding the whole disc holds its tracks in its place
+- Cue sheets: a whole-disc rip with its `.cue` lists as the disc's tracks, each with its own title, artist and number, and a playlist holding the whole disc holds its tracks in its place. Opening the `.cue`, or dropping it on the queue, queues the disc in order
 - Content hashing (BLAKE3), so a moved or renamed file keeps its play counts, favorites, and place in the queue
 - A duplicate finder under Settings ▸ Library that groups the songs held more than once, labels how sure each match is, and picks the best copy to keep. **Remove** takes the spares out of the library, moving their plays, rating, heart and playlist places onto that copy. Their files stay on disk, and later scans skip them until you bring them back from **Files kept out of the library**
 - Full-text search (SQLite FTS5) over tracks, albums, artists, genres, and the people credited on a track: accent-insensitive, relevance-ranked, with a top-result card and recent history. Every list's filter box searches the same fields

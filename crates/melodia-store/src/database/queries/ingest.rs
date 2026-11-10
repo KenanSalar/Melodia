@@ -37,6 +37,20 @@ impl IngestSource {
     fn backfills_artwork(&self) -> bool {
         matches!(self, Self::FolderScan(_))
     }
+
+    /// The `folder_id` a file or a cue sheet at `path` is filed under, or `None` for one with no
+    /// parent directory, which is skipped.
+    fn folder_of(
+        &self,
+        tx: &Transaction<'_>,
+        path: &Path,
+        folder_cache: &mut HashMap<String, i64>,
+    ) -> Result<Option<i64>, AppError> {
+        match self {
+            Self::FolderScan(id) => Ok(Some(*id)),
+            Self::Import => import_folder_of(tx, path, folder_cache),
+        }
+    }
 }
 
 /// Result of ingesting scanned files into the database.
@@ -100,8 +114,7 @@ impl Ingested {
     }
 }
 
-/// One chunk of a folder scan: the files it read, and the cue sheet jobs whose images are among
-/// them.
+/// Files read for one commit, and the cue sheet jobs whose images are among them.
 pub struct ScanChunk {
     pub files: Vec<ScannedFile>,
     pub cue: CueChunk,
@@ -111,7 +124,7 @@ pub struct ScanChunk {
 ///
 /// On the bulk path the stats triggers are dropped and recreated *inside* that transaction, so a
 /// crash never leaves them missing; the counts lag until [`queries::scan::commit_scan`] recalculates
-/// them. An image a sheet claims goes to its sheet's job and never to the ordinary ingest.
+/// them.
 pub async fn commit_scan_chunk(
     db: &DbPool,
     chunk: ScanChunk,
@@ -121,29 +134,12 @@ pub async fn commit_scan_chunk(
     ingested: &Ingested,
 ) -> Result<IngestResult, AppError> {
     let is_bulk = ingested.is_bulk();
-    let ScanChunk { files, cue } = chunk;
-    let (claimed, unclaimed): (Vec<_>, Vec<_>) = if cue.is_empty() {
-        (Vec::new(), files)
-    } else {
-        files.into_iter().partition(|file| cue.claims(&file.path))
-    };
     db.transaction(move |tx| {
         if is_bulk {
             queries::stats::disable_stats_triggers(tx)?;
         }
-        let mut result = ingest_scanned_files(
-            tx,
-            &unclaimed,
-            &IngestSource::FolderScan(folder_id),
-            &scan_timestamp,
-            &pool,
-        )?;
-        let mut moved = image_move_candidates(tx, &claimed, &pool)?;
-        let mut sheets = SheetWriter::new(tx, &claimed, &scan_timestamp, &mut moved);
-        for job in cue.jobs() {
-            sheets.apply(job, folder_id)?;
-        }
-        result.add_sheets(&sheets.into_writes());
+        let source = IngestSource::FolderScan(folder_id);
+        let result = ingest_chunk(tx, chunk, &source, &scan_timestamp, &pool)?;
         if is_bulk {
             queries::stats::enable_stats_triggers(tx)?;
         }
@@ -152,31 +148,25 @@ pub async fn commit_scan_chunk(
     .await
 }
 
-/// Files dropped onto a playlist or the queue, filed as [`IngestSource::Import`] says, in one
+/// Files the user opened, dropped or brought back, filed as [`IngestSource::Import`] says, in one
 /// transaction with the album covers and stats brought up to date. A kept-out file among them comes
-/// back, the user having named it.
+/// back, the user having named it or a sheet naming it.
 pub async fn commit_import(
     db: &DbPool,
-    scanned_files: Vec<ScannedFile>,
+    chunk: ScanChunk,
     scan_timestamp: String,
     pool: ScanPool,
 ) -> Result<IngestResult, AppError> {
-    let bulk = is_bulk(scanned_files.len());
+    let bulk = is_bulk(chunk.files.len());
     db.transaction(move |tx| {
         let paths: Vec<Cow<'_, str>> =
-            scanned_files.iter().map(|f| f.path.to_string_lossy()).collect();
+            chunk.files.iter().map(|f| f.path.to_string_lossy()).collect();
         let paths: Vec<&str> = paths.iter().map(AsRef::as_ref).collect();
         queries::excluded_files::lift_on(tx, &paths)?;
         if bulk {
             queries::stats::disable_stats_triggers(tx)?;
         }
-        let result = ingest_scanned_files(
-            tx,
-            &scanned_files,
-            &IngestSource::Import,
-            &scan_timestamp,
-            &pool,
-        )?;
+        let result = ingest_chunk(tx, chunk, &IngestSource::Import, &scan_timestamp, &pool)?;
         queries::scan::update_album_artwork_from_tracks(tx)?;
         if bulk {
             queries::stats::recalculate_all_stats(tx)?;
@@ -185,6 +175,35 @@ pub async fn commit_import(
         Ok(result)
     })
     .await
+}
+
+/// Ingests `chunk` within `tx`, each file and sheet filed as `source` says. An image a sheet claims
+/// goes to its sheet's job and never to the ordinary ingest, which runs first and writes the
+/// whole-file row an image given back takes its playlist places onto.
+fn ingest_chunk(
+    tx: &Transaction<'_>,
+    chunk: ScanChunk,
+    source: &IngestSource,
+    scan_timestamp: &str,
+    pool: &ScanPool,
+) -> Result<IngestResult, AppError> {
+    let ScanChunk { files, cue } = chunk;
+    let (claimed, unclaimed): (Vec<_>, Vec<_>) = if cue.is_empty() {
+        (Vec::new(), files)
+    } else {
+        files.into_iter().partition(|file| cue.claims(&file.path))
+    };
+    let mut result = ingest_scanned_files(tx, &unclaimed, source, scan_timestamp, pool)?;
+    let mut moved = image_move_candidates(tx, &claimed, pool)?;
+    let mut sheets = SheetWriter::new(tx, &claimed, scan_timestamp, &mut moved);
+    let mut folders = HashMap::new();
+    for job in cue.jobs() {
+        if let Some(folder_id) = source.folder_of(tx, &job.path, &mut folders)? {
+            sheets.apply(job, folder_id)?;
+        }
+    }
+    result.add_sheets(&sheets.into_writes());
+    Ok(result)
 }
 
 /// The caches [`resolve_ids`] reuses within one ingest transaction. Artist and genre are in
@@ -247,17 +266,17 @@ pub(crate) fn ingest_scanned_files(
                         .or_default()
                         .push(file_path_str.to_owned());
                 }
-            } else if let Some(ids) =
-                resolve_ids(tx, meta, source, file, file_path_str, &mut caches)?
-            {
-                queries::scan::update_track_metadata(
+            } else if let Some(ids) = resolve_ids(tx, meta, source, file, &mut caches)? {
+                let updated = queries::scan::update_track_metadata(
                     tx,
                     file_path_str,
                     meta,
                     &ids,
                     &mut caches.names,
                 )?;
-                updated_count += 1;
+                if updated {
+                    updated_count += 1;
+                }
             }
             continue;
         }
@@ -272,9 +291,7 @@ pub(crate) fn ingest_scanned_files(
         if let Some((existing_id, old_path)) =
             moved_from.track_for(meta.file_hash.as_str(), &file.path)
         {
-            let Some(folder_id) =
-                resolve_folder_id(tx, source, file, file_path_str, &mut caches.folder)?
-            else {
+            let Some(folder_id) = source.folder_of(tx, &file.path, &mut caches.folder)? else {
                 continue;
             };
             // Resolved inside this transaction, and nothing deletes ahead of this loop, so the
@@ -294,15 +311,14 @@ pub(crate) fn ingest_scanned_files(
         }
 
         if let Some((exclusion_id, old_path)) = moved_from.take_exclusion(&meta.file_hash)
-            && let Some(folder_id) =
-                resolve_folder_id(tx, source, file, file_path_str, &mut caches.folder)?
+            && let Some(folder_id) = source.folder_of(tx, &file.path, &mut caches.folder)?
         {
             queries::excluded_files::repoint_on(tx, exclusion_id, file_path_str, folder_id)?;
             log::info!("Kept-out file moved: {old_path} -> {file_path_str}");
             continue;
         }
 
-        let Some(ids) = resolve_ids(tx, meta, source, file, file_path_str, &mut caches)? else {
+        let Some(ids) = resolve_ids(tx, meta, source, file, &mut caches)? else {
             continue;
         };
         let row = queries::scan::NewTrackRow {
@@ -563,36 +579,28 @@ fn flush_artwork_backfill(
     Ok(())
 }
 
-/// The file's `folder_id`, or `None` for a file with no parent directory, which is skipped.
-fn resolve_folder_id(
+/// [`IngestSource::Import`]'s folder for `path`.
+fn import_folder_of(
     tx: &Transaction<'_>,
-    source: &IngestSource,
-    file: &ScannedFile,
-    file_path_str: &str,
+    path: &Path,
     folder_cache: &mut HashMap<String, i64>,
 ) -> Result<Option<i64>, AppError> {
-    match source {
-        IngestSource::FolderScan(id) => Ok(Some(*id)),
-        IngestSource::Import => {
-            let parent_dir =
-                file.path.parent().map(|p| p.to_string_lossy().into_owned()).unwrap_or_default();
-            if parent_dir.is_empty() {
-                log::warn!("Skipping file with no parent directory: {file_path_str}");
-                return Ok(None);
-            }
-            if let Some(&id) = folder_cache.get(&parent_dir) {
-                return Ok(Some(id));
-            }
-            // A file inside a library folder is that folder's, so its scans pair the file with its
-            // row and removing the folder takes the track along.
-            let id = match queries::scan::find_folder_for_path(tx, file_path_str)? {
-                Some(id) => id,
-                None => queries::folder::upsert_folder(tx, &parent_dir)?,
-            };
-            folder_cache.insert(parent_dir, id);
-            Ok(Some(id))
-        }
+    let parent_dir = path.parent().map(|p| p.to_string_lossy().into_owned()).unwrap_or_default();
+    if parent_dir.is_empty() {
+        log::warn!("Skipping file with no parent directory: {}", path.display());
+        return Ok(None);
     }
+    if let Some(&id) = folder_cache.get(&parent_dir) {
+        return Ok(Some(id));
+    }
+    // A file inside a library folder is that folder's, so its scans pair the file with its row and
+    // removing the folder takes the track along.
+    let id = match queries::scan::find_folder_for_path(tx, &path.to_string_lossy())? {
+        Some(id) => id,
+        None => queries::folder::upsert_folder(tx, &parent_dir)?,
+    };
+    folder_cache.insert(parent_dir, id);
+    Ok(Some(id))
 }
 
 /// A track's artist, album, genre and folder ids, or `None` where the file is skipped.
@@ -601,11 +609,9 @@ fn resolve_ids(
     meta: &ExtractedMetadata,
     source: &IngestSource,
     file: &ScannedFile,
-    file_path_str: &str,
     caches: &mut ResolveCaches,
 ) -> Result<Option<queries::ResolvedIds>, AppError> {
-    let Some(folder_id) = resolve_folder_id(tx, source, file, file_path_str, &mut caches.folder)?
-    else {
+    let Some(folder_id) = source.folder_of(tx, &file.path, &mut caches.folder)? else {
         return Ok(None);
     };
 

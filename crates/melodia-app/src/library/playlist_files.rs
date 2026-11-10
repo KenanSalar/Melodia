@@ -13,9 +13,12 @@ use std::path::{Path, PathBuf};
 
 use chrono::{DateTime, Local, NaiveDateTime};
 
+use super::import::files_opened_by;
+use melodia_core::entities::cue::CueTrack;
 use melodia_core::entities::smart_criteria::SmartCriteria;
 use melodia_core::error::{AppError, describe};
 use melodia_core::utils::atomic_file;
+use melodia_store::database::queries::track::FileTracks;
 use melodia_store::database::{DbPool, queries};
 
 mod archive;
@@ -293,49 +296,62 @@ struct MatchOutcome {
     missing: u32,
 }
 
-/// Split from [`import_text`] so matching is testable without creating a playlist.
+/// Split from [`import_text`] so matching is testable without creating a playlist. An entry may
+/// match several tracks: a foreign one naming an image a cue sheet splits, or naming the sheet.
 async fn match_entries(
     db: &DbPool,
     entries: &[m3u::ParsedEntry],
     base: Option<&Path>,
 ) -> Result<MatchOutcome, AppError> {
     let resolved: Vec<String> = entries.iter().map(|e| resolve_path(&e.path, base)).collect();
+    let opened = files_opened_by(&resolved).await?;
+    let files: Vec<String> = opened.iter().flatten().cloned().collect();
 
-    let mut ids: Vec<Option<i64>> = vec![None; entries.len()];
-    let mut matched_by_path: u32 = 0;
-    let mut matched_by_hash: u32 = 0;
-
-    let by_path = queries::track::get_track_ids_by_paths(db, &resolved).await?;
-    for (i, path) in resolved.iter().enumerate() {
-        if let Some(&id) = by_path.get(path) {
-            ids[i] = Some(id);
-            matched_by_path += 1;
-        }
-    }
+    let by_path = queries::track::get_track_ids_by_paths(db, &files).await?;
+    let mut ids: Vec<Vec<i64>> = entries
+        .iter()
+        .zip(&opened)
+        .map(|(entry, files)| {
+            files.iter().flat_map(|file| rows_named(&by_path, file, entry.cue_track)).collect()
+        })
+        .collect();
+    let matched_by_path = count(ids.iter().filter(|ids| !ids.is_empty()));
 
     let hashes: Vec<String> = entries
         .iter()
-        .enumerate()
-        .filter(|(i, _)| ids[*i].is_none())
-        .filter_map(|(_, e)| e.hash.clone())
+        .zip(&ids)
+        .filter(|(_, ids)| ids.is_empty())
+        .filter_map(|(entry, _)| entry.hash.clone())
         .collect();
+    let mut matched_by_hash: u32 = 0;
     if !hashes.is_empty() {
         let by_hash = queries::track::get_track_ids_by_hashes(db, hashes).await?;
-        for (i, entry) in entries.iter().enumerate() {
-            if ids[i].is_some() {
-                continue;
-            }
-            if let Some(id) = entry.hash.as_deref().and_then(|h| by_hash.get(h)) {
-                ids[i] = Some(*id);
-                matched_by_hash += 1;
+        for (entry, entry_ids) in entries.iter().zip(&mut ids) {
+            if let Some(hash) = entry.hash.as_deref()
+                && entry_ids.is_empty()
+            {
+                *entry_ids = rows_named(&by_hash, hash, entry.cue_track);
+                matched_by_hash += u32::from(!entry_ids.is_empty());
             }
         }
     }
 
-    let missing = u32::try_from(ids.iter().filter(|id| id.is_none()).count()).unwrap_or(u32::MAX);
+    let missing = count(ids.iter().filter(|ids| ids.is_empty()));
     let ordered_ids: Vec<i64> = ids.into_iter().flatten().collect();
 
     Ok(MatchOutcome { ordered_ids, matched_by_path, matched_by_hash, missing })
+}
+
+/// What an entry naming `key` matches: the cue sheet track it names, or every row of the file.
+fn rows_named(found: &FileTracks, key: &str, cue_track: Option<CueTrack>) -> Vec<i64> {
+    match cue_track {
+        Some(number) => found.track(key, number).into_iter().collect(),
+        None => found.ids(key).collect(),
+    }
+}
+
+fn count<T>(items: impl Iterator<Item = T>) -> u32 {
+    u32::try_from(items.count()).unwrap_or(u32::MAX)
 }
 
 fn resolve_path(entry_path: &str, base: Option<&Path>) -> String {

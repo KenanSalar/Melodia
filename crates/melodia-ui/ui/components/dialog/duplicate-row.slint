@@ -175,7 +175,7 @@ component CopyRow inherits Rectangle {
             Rectangle {
                 width: root.checkbox-w;
                 height: root.checkbox-w;
-                if !root.row-data.dismissed: Checkbox {
+                if !root.row-data.dismissed && root.row-data.removable: Checkbox {
                     checked: root.row-data.selected;
                     // The default border is the hover fill's own colour, so the box would
                     // vanish under the pointer.
@@ -204,6 +204,12 @@ component CopyRow inherits Rectangle {
                     icon: "play_arrow";
                     // Translators: on the copy that is the current track, playing or paused.
                     text: @tr("Now Playing");
+                    fill: Theme.card-control;
+                    label-color: Theme.text;
+                }
+                // Says why the copy has no checkbox.
+                if !root.row-data.removable: MetaChip {
+                    text: @tr("From a cue sheet");
                     fill: Theme.card-control;
                     label-color: Theme.text;
                 }
@@ -332,7 +338,9 @@ export component DuplicateRowItem inherits Rectangle {
         y: root.card-y;
         width: root.card-w;
         height: root.card-h;
-        mouse-cursor: root.row-data.is_header || root.row-data.dismissed ? default : pointer;
+        mouse-cursor: root.row-data.is_header || root.row-data.dismissed || !root.row-data.removable
+            ? default
+            : pointer;
         clicked => {
             if (!root.row-data.is_header) {
                 DuplicatesUi.toggle(root.row-data.id);

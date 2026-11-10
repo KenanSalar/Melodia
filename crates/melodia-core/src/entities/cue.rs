@@ -89,7 +89,7 @@ impl FromSql for CueFrames {
 
 /// The stretch of a file one sheet track plays, from `start` to `end`, or on to the end of the
 /// file where `end` is `None`.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct CueSpan {
     start: CueFrames,
     end: Option<CueFrames>,

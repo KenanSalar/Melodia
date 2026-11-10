@@ -51,7 +51,7 @@ fn main() -> AppResult<()> {
 
     // Ahead of the logger, so a forwarding launch never opens the shared file, and of everything
     // expensive, so forwarding costs a socket write and a return.
-    let startup_files = platform::single_instance::audio_files_from_argv();
+    let startup_files = platform::single_instance::library_files_from_argv();
     let mut unenforced_reason = None;
     let file_open_listener = match platform::single_instance::claim(&paths.data_dir, &startup_files)
     {

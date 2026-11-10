@@ -5,16 +5,55 @@
 //!
 //! **The name hashes the track's path, not its contents**, though it wears the artwork store's 16
 //! hex characters: a tag edit moves the content hash, and a sheet keyed on it would be orphaned by
-//! the user fixing a typo in the title.
+//! the user fixing a typo in the title. A cue sheet's track adds its number past a NUL, a byte no
+//! path holds, every track of an image sharing the path; a whole file hashes its path alone.
 
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::time::{Duration, SystemTime};
 
 use super::lrc;
+use melodia_core::entities::cue::CueTrack;
 use melodia_core::entities::lyrics::{LyricsOutcome, LyricsSource};
+use melodia_core::entities::track::{TagEditRow, TrackSummary};
 use melodia_core::error::AppError;
 use melodia_core::utils::atomic_file;
+
+/// The track the store files answers for.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct LyricsKey {
+    path: String,
+    cue_track: Option<CueTrack>,
+}
+
+impl LyricsKey {
+    /// A file's own row, the one a tag edit rewrites.
+    pub fn whole_file(path: String) -> Self {
+        Self { path, cue_track: None }
+    }
+
+    pub(super) fn path(&self) -> &Path {
+        Path::new(&self.path)
+    }
+
+    /// Whether a cue sheet carves the track out of its file, whose sidecar and lyrics tag then
+    /// state the whole disc.
+    pub(super) fn is_sheet_track(&self) -> bool {
+        self.cue_track.is_some()
+    }
+}
+
+impl From<&TrackSummary> for LyricsKey {
+    fn from(track: &TrackSummary) -> Self {
+        Self { path: track.file_path.clone(), cue_track: track.cue_track }
+    }
+}
+
+impl From<&TagEditRow> for LyricsKey {
+    fn from(row: &TagEditRow) -> Self {
+        Self { path: row.file_path.clone(), cue_track: row.cue_track }
+    }
+}
 
 /// Half a BLAKE3, as the artwork store takes. Long enough that a collision needs more tracks than
 /// anyone has, short enough to read in a directory listing.
@@ -34,8 +73,8 @@ const MISS_STANDS_FOR: Duration = Duration::from_hours(30 * 24);
 
 /// What the store has for a track, or `None`. A file that won't read is a miss, the caller's next
 /// move being the same either way.
-pub(super) fn read(dir: &Path, track_path: &str) -> Option<LyricsOutcome> {
-    let stem = key(track_path);
+pub(super) fn read(dir: &Path, track: &LyricsKey) -> Option<LyricsOutcome> {
+    let stem = stem(track);
 
     if let Ok(text) = fs::read_to_string(entry(dir, &stem, SHEET_EXT))
         && let Some(lyrics) = lrc::parse(&text, LyricsSource::Online)
@@ -61,8 +100,8 @@ pub(super) enum Fetched<'a> {
 }
 
 /// Records an answer, so the same track never costs a second request.
-pub(super) fn write(dir: &Path, track_path: &str, fetched: Fetched<'_>) -> Result<(), AppError> {
-    let stem = key(track_path);
+pub(super) fn write(dir: &Path, track: &LyricsKey, fetched: Fetched<'_>) -> Result<(), AppError> {
+    let stem = stem(track);
     match fetched {
         Fetched::Sheet(text) => atomic_file::write_text_sync(&entry(dir, &stem, SHEET_EXT), text),
         Fetched::Instrumental => {
@@ -84,8 +123,8 @@ fn still_stands(marker: &Path) -> bool {
 /// Drop every answer the store holds for one track, which is what makes a re-ask possible. Every
 /// name is attempted, the first error coming back: stopping at the sheet would leave the absent
 /// marker answering for the month.
-pub(super) fn forget(dir: &Path, track_path: &str) -> Result<(), AppError> {
-    let stem = key(track_path);
+pub(super) fn forget(dir: &Path, track: &LyricsKey) -> Result<(), AppError> {
+    let stem = stem(track);
     let mut first_error = None;
     for extension in [SHEET_EXT, INSTRUMENTAL_EXT, ABSENT_EXT] {
         match fs::remove_file(entry(dir, &stem, extension)) {
@@ -98,8 +137,8 @@ pub(super) fn forget(dir: &Path, track_path: &str) -> Result<(), AppError> {
 }
 
 /// The stored sheet's text, verbatim. The markers answer a different question.
-pub(super) fn read_text(dir: &Path, track_path: &str) -> Option<String> {
-    fs::read_to_string(entry(dir, &key(track_path), SHEET_EXT))
+pub(super) fn read_text(dir: &Path, track: &LyricsKey) -> Option<String> {
+    fs::read_to_string(entry(dir, &stem(track), SHEET_EXT))
         .ok()
         .filter(|text| !text.trim().is_empty())
 }
@@ -108,8 +147,13 @@ fn entry(dir: &Path, stem: &str, extension: &str) -> PathBuf {
     dir.join(format!("{stem}.{extension}"))
 }
 
-fn key(track_path: &str) -> String {
-    blake3::hash(track_path.as_bytes()).to_hex()[..HASH_HEX_LEN].to_owned()
+fn stem(track: &LyricsKey) -> String {
+    let mut hasher = blake3::Hasher::new();
+    hasher.update(track.path.as_bytes());
+    if let Some(cue_track) = track.cue_track {
+        hasher.update(&[0, cue_track.number()]);
+    }
+    hasher.finalize().to_hex()[..HASH_HEX_LEN].to_owned()
 }
 
 /// Bytes of sheets the store may hold before the oldest are retired, thousands of tracks' worth.

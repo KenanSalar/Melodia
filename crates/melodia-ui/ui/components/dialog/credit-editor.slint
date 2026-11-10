@@ -8,12 +8,14 @@ import { ControlledInput } from "./controlled-input.slint";
 import { RemoveRowButton } from "./remove-row-button.slint";
 
 // One credited name. The phrase picker names what follows it, so the last row has none, and a
-// lone row can't be removed, a credit with no names being unreachable.
+// lone row can't be removed, a credit with no names being unreachable. Read-only, a row is its
+// name alone, the editor's preview line stating the phrases.
 component CreditRowView inherits HorizontalLayout {
     in property <ArtistCreditRow> credit;
     in property <bool> is-last;
     in property <bool> is-only;
     in property <string> placeholder;
+    in property <bool> read-only;
     callback set-name(string);
     callback set-join(int /*phrase index*/);
     callback remove();
@@ -26,10 +28,11 @@ component CreditRowView inherits HorizontalLayout {
         min-width: 120px;
         text: root.credit.name;
         placeholder: root.placeholder;
+        read-only: root.read-only;
         edited(t) => { root.set-name(t); }
     }
 
-    if !root.is-last: Dropdown {
+    if !root.read-only && !root.is-last: Dropdown {
         trigger-width: 112px;
         options: TagEditor.join-phrases;
         // `manual`, so no self-write detaches the binding a removal above re-reads as the
@@ -40,9 +43,9 @@ component CreditRowView inherits HorizontalLayout {
     }
     // Keeps the × flush-right on the last row. Not on a lone one, where the reserved slots left
     // the field short of the inputs either side.
-    if root.is-last && !root.is-only: Rectangle { width: 112px; }
+    if !root.read-only && root.is-last && !root.is-only: Rectangle { width: 112px; }
 
-    if !root.is-only: RemoveRowButton {
+    if !root.read-only && !root.is-only: RemoveRowButton {
         clicked => { root.remove(); }
     }
 }
@@ -55,6 +58,7 @@ export component CreditEditor inherits VerticalLayout {
     // The credit as written, shown once there is more than one name.
     in property <string> preview;
     in property <int> field;
+    in property <bool> read-only;
 
     // `LabeledInput`'s label gap.
     spacing: 4px;
@@ -69,6 +73,7 @@ export component CreditEditor inherits VerticalLayout {
         is-only: root.credits.length == 1;
         // Repeated, the multiple-values hint would read as one per artist.
         placeholder: i == 0 ? root.placeholder : "";
+        read-only: root.read-only;
         set-name(t) => { TagEditor.set-credit-name(root.field, i, t); }
         set-join(idx) => { TagEditor.set-credit-join(root.field, i, idx); }
         remove => { TagEditor.remove-credit(root.field, i); }
@@ -80,7 +85,7 @@ export component CreditEditor inherits VerticalLayout {
         cross-axis-alignment: center;
 
         // The genre list's add: a literal "+" label reads a size smaller than its control.
-        PillButton {
+        if !root.read-only: PillButton {
             icon: "add";
             // Bare, the field's heading sitting directly above.
             text: @tr("Add");

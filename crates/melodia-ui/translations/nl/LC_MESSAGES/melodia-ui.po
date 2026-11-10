@@ -257,6 +257,10 @@ msgstr[1] "{n} kopieën"
 msgid "Now Playing"
 msgstr "Nu aan het afspelen"
 
+#: ui/components/dialog/duplicate-row.slint
+msgid "From a cue sheet"
+msgstr "Uit een cuesheet"
+
 #. Translators: {} is the day the copy joined the library, as 2026-11-02.
 #: ui/components/dialog/duplicate-row.slint
 msgid "Added {}"
@@ -786,6 +790,10 @@ msgstr "Remixer"
 #: ui/components/dialog/tag-editor-body.slint
 msgid "Replace…"
 msgstr "Vervangen…"
+
+#: ui/components/dialog/tag-editor-body.slint
+msgid "Tracks from a cue sheet can't be edited here."
+msgstr "Nummers uit een cuesheet kunnen hier niet worden bewerkt."
 
 #: ui/components/dialog/tag-editor-body.slint ui/settings.slint
 msgid "Details"

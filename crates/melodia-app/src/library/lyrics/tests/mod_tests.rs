@@ -7,6 +7,8 @@
 //! Getting the order wrong is invisible: the panel draws a sheet either way, and the one it draws
 //! is the one the user did not put there.
 
+use std::path::PathBuf;
+
 use tempfile::TempDir;
 
 use super::*;
@@ -36,9 +38,9 @@ impl Staged {
         Ok(Self { _tmp: tmp, track, lyrics_dir })
     }
 
-    /// The path as the store keys it, which is the track's own path and nothing else.
-    fn key(&self) -> String {
-        self.track.to_string_lossy().into_owned()
+    /// The track as the store keys it, a whole file's being its own path and nothing else.
+    fn key(&self) -> LyricsKey {
+        LyricsKey::whole_file(self.track.to_string_lossy().into_owned())
     }
 
     fn write_tag(&self, text: &str) -> Result<(), AppError> {
@@ -57,11 +59,11 @@ impl Staged {
     }
 
     fn local(&self) -> Result<Local, AppError> {
-        read_local(&self.track, &self.lyrics_dir, &self.key())
+        read_local(&self.lyrics_dir, &self.key())
     }
 
     fn text(&self) -> Result<Option<String>, AppError> {
-        read_local_text(&self.track, &self.lyrics_dir, &self.key())
+        read_local_text(&self.lyrics_dir, &self.key())
     }
 }
 

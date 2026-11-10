@@ -2,8 +2,8 @@
 
 Working doc. Delete when the feature ships.
 
-Status: **in progress**, Phase 4 through its gates; Phase 3 owes Kenan's scrobble and Discord
-check ·
+Status: **in progress**, Phase 5 through its gates, Phase 5.5 next; Phase 3 owes Kenan's scrobble
+and Discord check ·
 Created: 2026-11-04
 
 Issue [#78](https://github.com/KenanSalar/Melodia/issues/78).
@@ -47,6 +47,8 @@ too.
 - A cue sheet embedded in the file splits it too: a `CUESHEET` tag, or FLAC's native CUESHEET
   block.
 - A `.cue` opens from the file manager, the command line or a drop, and queues its tracks.
+- A file or a `.cue` opened from outside every library folder plays without joining the library,
+  and stays only while a playlist or the queue holds it.
 - It is always on, with no setting. A library without sheets sees no change. A sheet that describes
   files already split one per track claims nothing, so those files keep their own tags.
 
@@ -353,6 +355,41 @@ the `TaggedFile` the rest of `metadata::extract` already uses. That keeps the si
 `crates/melodia/tests/lofty_open.rs` pins. Edits to rows from a `CUESHEET` tag rewrite that tag's
 text through the same writer. Rows from the native block alone are read-only.
 
+### Files opened from outside the library
+
+Opening a file or a `.cue` that sits outside every library folder plays it without adding it to
+the library. The library is the folders the user added, which is what onboarding and Settings say,
+and it is what the folder-based players do:
+
+- fooyin files such a track under `LibraryID = -1`, keeps it out of its library views, and deletes
+  it at quit once no playlist holds it (`removeUnmanagedTracks`).
+- Strawberry keeps it as a playlist item only, the collection untouched.
+- Windows 11's Media Player plays or queues it without adding it.
+- Apple Music imports it, but its library has no folders to be outside of.
+
+How Melodia holds one:
+
+- **It keeps a row**, since the queue, playlists, play counts and scrobbles key on a track id. The
+  disabled folder an import files it under already says it is outside the library.
+- **It links to no album, artist or genre**: no `album_id`, `artist_id` or `genre_id`, and no
+  `track_artists`, `track_genres` or `track_credits` rows. Every album, artist and genre surface
+  leaves it out by construction, their counts being kept by triggers on those links
+  (`queries/stats.rs`), where filtering each trigger and entity page instead would spread the rule
+  over all of them. Its own artist and album text still show.
+- **Every track-level library surface reads through one predicate**, `IN_LIBRARY`: the track is
+  filed under a library folder (`folders.is_enabled`).
+- **It goes once nothing holds it.** A boot sweep deletes an outside row that no playlist and not
+  the saved queue holds, then an outside folder left empty, its cue sheets with it. Its play count
+  goes too, having belonged to a file the library never held.
+- **The same sweep holds the rule on every launch**, unlinking any outside row that still has a
+  link, so an install from before this, a restored database or a stray write is put right
+  whatever wrote it. It is one database pass that ends at once without an outside folder, so it
+  needs no `one_shot` marker, which lives in `settings.json` and can disagree with a restored
+  database. It logs each row it unlinks, so a path that keeps linking shows up rather than being
+  quietly undone.
+- **A library folder added around its directory takes it over**, as it does today
+  (`finish::absorb_nested`), and that scan gives it its links.
+
 ---
 
 ## What this does not do
@@ -388,7 +425,7 @@ text through the same writer. Rows from the native block alone are read-only.
 | embedded sources | `media/cue/embedded.rs` | Phase 8: the CUESHEET block reader and the tag text |
 | store units of work | `crates/melodia-store/src/database/queries/scan/cue_units.rs` | `SheetWriter::apply`: per sheet job, the stamp, `apply_cue_unit` (a gone image's rows carried by hash, upsert by key, drop missing numbers, carry playlist entries off the whole-file row) and `release_image` (the reverse), `pub(crate)` on the caller's transaction: the scan chunk's, whose stats triggers drop and return inside it (`commit_scan_chunk`), or the watcher batch's (`handle_sheets`), each job filed under its sheet's folder |
 | playlist carry | `crates/melodia-store/src/database/queries/playlist_carry.rs` | `replace_in_playlists` and `merge_into_playlists`, beside the other playlist membership writers |
-| the planner | `crates/melodia-store/src/media/cue/plan.rs` | which sheet claims which image, settled in `discover` (`scan/mod.rs`) after the incremental filter, whose output decides which directories it reads again, and before the walk is cut into chunks. Each sheet's work is one job that `CuePlan::into_chunks` never splits, so a sheet's stamp commits with everything it caused. The scan and the watcher's `process_batch` (`file_event_processor/sheets.rs`) both call it |
+| the planner | `crates/melodia-store/src/media/cue/plan.rs` | which sheet claims which image, settled in `discover` (`scan/mod.rs`) after the incremental filter, whose output decides which directories it reads again, and before the walk is cut into chunks. Each sheet's work is one job that `CuePlan::into_chunks` never splits, so a sheet's stamp commits with everything it caused. The scan calls it, and the watcher's `process_batch` (`file_event_processor/sheets.rs`) and an import (`library/import.rs`) call it over a few directories through `media/cue/around.rs`'s `settle_dirs` |
 | the span on a deck | `crates/melodia-audio/src/player/source/span.rs` | beside `aac_trim.rs`: the open-at-start, the counted end, the seek offset. `file_decode.rs` calls it |
 | the parked decoder | `crates/melodia-audio/src/player/source/park.rs` | Phase 6: the one-slot hand-off and its match rule |
 
@@ -707,40 +744,143 @@ The `RETURNING id, file_path` match in `insert_tracks_batch` (`mutations.rs:217`
 
 Each item is a site from the map that breaks once twelve rows share a path:
 
-- [ ] **Tag editor** (`library/tags.rs`, `views/.../tags/open.rs`): sheet tracks open read-only, with
-      a note. Phase 7 opens the fields a sheet can hold.
-- [ ] **Cover and lyrics writes** are refused for sheet tracks.
-- [ ] **Rating write-back** (`ratings.rs:93-103`) is skipped for sheet tracks, so ratings stay in the
-      database.
-- [ ] **Lyrics:**
-  - [ ] no sidecar and no embedded lyrics for sheet tracks, since both describe the disc;
-  - [ ] the online-answer store keys on the track, path plus `cue_track` (`lyrics/store.rs`);
-  - [ ] the panel's "already holds this song" compares track ids (`lyrics/sheet.rs:55,67`).
-- [ ] **Duplicates:**
-  - [ ] `is_identical` (`matcher.rs:114-120`) also requires the same span;
-  - [ ] rows of one file are never duplicates of each other;
-  - [ ] Remove is unavailable on a sheet track; Dismiss stays.
-- [ ] **M3U** (`playlist_files/m3u.rs`):
-  - [ ] Export writes the image path with a `#MELODIA-CUE-TRACK:<n>` line beside `#MELODIA-HASH`.
-  - [ ] Import matches path plus number, and a hash re-match hash plus number (`match_entries`,
-        `playlist_files.rs:297`). A foreign entry naming a claimed image, or a `.cue`, expands to
-        all its tracks in order.
-- [ ] **Browse** (`browse.rs:91-93`): a claimed image lists its tracks in place.
-- [ ] **Background tasks:** the retroactive hash hashes each file once
-      (`tasks/retroactive_hash.rs`). The rating import skips sheet tracks (`tasks/rating_import.rs`).
-- [ ] **Opening a `.cue`:**
-  - [ ] `import_files` (`import.rs:25`), `audio_files_from_argv` and the drop accept sheets and
-        queue their tracks;
-  - [ ] opening a claimed image queues all of its tracks in order, `import_files` taking every row
-        `get_track_ids_by_paths` answers;
-  - [ ] the four `.desktop` sources gain `application/x-cue`, and `main.wxs` gains its two `.cue`
-        rows, which is the list `audio_ext.rs`'s doc names (`packaging.rs` pins it).
-- [ ] i18n: each new string through `scripts/update-translations.py`, every catalog finished.
-- [ ] Docs: `README.md`'s open-with list, if it names extensions.
+- [x] **The shapes:** `TrackSummary` gains `cue_track` beside `span`, as `Track` and `TagEditRow`
+      have it. `audio_ext.rs` gains `CUE_SHEET_EXTENSION` and `is_library_extension`, which the
+      watcher's `is_library_file` and the argv filter read. `get_track_ids_by_paths` and
+      `get_track_ids_by_hashes` answer a `FileTracks`: each key's rows with their `cue_track` in
+      `FILE_ORDER`, a hash answering one file's rows, the lowest path's.
+- [x] **Tag editor** (`views/.../tags/open.rs`): any sheet track in the selection opens it read-only
+      (`TagEditor.read-only`), a note above the tabs. Every field takes `read-only` through a local
+      `TagField` and the credit and name editors, the cover buttons and Insert found lyrics hide,
+      and Save is off. A single sheet track reads its credits from the database, not the image.
+      Phase 7 opens the fields a sheet can hold.
+- [x] **Cover, lyrics and rating writes** go through `get_whole_file_paths_by_ids`, which answers
+      whole-file rows only, so the dialog's Save, lyrics' Save to file and the rating write-back
+      (`ratings.rs`) never reach the image. `update_track_metadata` answers whether it matched, and
+      the retag counts a miss as `Gone` rather than `Updated`.
+- [x] **Lyrics:**
+  - [x] no sidecar and no embedded lyrics for sheet tracks, since both describe the disc
+        (`read_local`, `read_local_text`);
+  - [x] the online-answer store keys on `LyricsKey`, path plus the number past a NUL, a whole
+        file's hash unchanged (`lyrics/store.rs`);
+  - [x] the panel's "already holds this song" compares track ids (`LyricsUi::holds`), and Save to
+        file isn't offered for a sheet track.
+- [x] **Duplicates:**
+  - [x] `is_identical` also requires the same span (`DuplicateCopy.span`);
+  - [x] a group keeps one row per file, the keeper's (`matcher::one_per_file`);
+  - [x] a sheet track isn't removable (`DuplicateCopy::is_removable`): no checkbox, a "From a cue
+        sheet" chip, never picked by a toggle, Keep or a suggestion, and `MergePlan` skips one
+        should it arrive. Dismiss stays.
+- [x] **M3U** (`playlist_files/m3u.rs`):
+  - [x] Export writes `#MELODIA-CUE-TRACK:<n>` beside `#MELODIA-HASH`.
+  - [x] Import matches path plus number, and a hash re-match hash plus number (`match_entries`).
+        An entry with no number takes every row of its file, and a `.cue` entry the rows of the
+        files it names (`import::files_opened_by`).
+- [x] **Browse** (`browse.rs`): a claimed image lists its tracks in place, `TRACKS_IN_DIRECTORY`
+      ordered by `FILE_ORDER`.
+- [x] **Background tasks:** the retroactive hash hashes each file once and writes every row of it.
+      The rating import's page (`get_unrated_track_paths_after`) takes whole-file rows only.
+- [x] **Opening a `.cue`:**
+  - [x] `import_files` takes sheets: each opens the audio files it names in order
+        (`cue::named_files`), so a per-track rip's sheet queues its files. A file with no row, or a
+        sheet with no stamp, is planned over its directory (`cue::settle_dirs`, `owns` the opened
+        files) and committed through `commit_import`, which now runs sheet jobs too, each filed as
+        `IngestSource::folder_of` says. An image opened beside its sheet is split, outside the
+        library too.
+  - [x] opening a claimed image queues all of its tracks in order, `import_files` answering one
+        block per opened path. `import_and_summarize` orders the blocks by first title
+        (`in_play_order`); the queue's and the playlist import's own sorts are gone.
+  - [x] `library_files_from_argv`; the drop needed nothing.
+  - [x] the four `.desktop` sources gain `application/x-cue` (`desktop_integration_tests.rs`), and
+        `main.wxs` gains its two `.cue` rows on a `Melodia.AssocFile.CueSheet` ProgId
+        (`packaging.rs`'s `the_msi_offers_every_library_extension`).
+- [x] i18n: the two new strings through `scripts/update-translations.py`, every catalog finished.
+- [x] Docs: `README.md`'s cue line, `library-data.md`'s claim rule, "a cue sheet's track owns no
+      file", the exclusion and the `FileTracks` answer.
+
+**Gate:**
+- [x] The static gates.
+- [x] Kenan's hand pass over each item above. Run by Claude on Kenan's go (2026-11-10): the debug
+      build against `Melodia-dev` on a null sink, restored after, fixtures in a `phase5/` folder
+      under the `phase3-playback` root and in the scratchpad outside every library folder, the UI
+      driven through ydotool and KWin scripts:
+  - [x] opened on the command line: a recorded sheet, a claimed image, an unrecorded sheet outside
+        the library (split under a disabled folder, no whole-file row), a per-track rip's sheet
+        (its files), an image beside its unrecorded sheet (split), a kept-out image (split, its
+        exclusion lifted), and three paths at once (blocks by first title, a track reached twice
+        queued once); forwarded by a second instance; dropped from Dolphin onto the queue panel.
+        Each queued in sheet order, titled against it so title order would show;
+  - [x] the tag editor opens read-only with the note over two sheet tracks, a mixed selection and
+        one sheet track (database credits, Lyrics tab locked), typing changes nothing and Save is
+        off; a whole file alone edits as before;
+  - [x] a star on a sheet track lands in the database and "wrote 4 into 0 file(s)", the image
+        byte-identical; on a whole file it writes the file;
+  - [x] lyrics: each track of one image shows its own stored answer, the panel reloading from
+        track to track, a disc `.lrc` beside the image ignored, Save to file off;
+  - [x] duplicates: a byte copy of an image groups as Identical per track, each copy with the
+        chip and no checkbox, a click picks nothing, two "Interlude" tracks of one disc don't
+        group, and Not Duplicates writes a set over both rows;
+  - [x] M3U: the export writes `#MELODIA-CUE-TRACK`, re-imports to the same four tracks, and a
+        foreign file expands an image to its tracks and a `.cue` to its, a stale path taking its
+        hash and number;
+  - [x] Browse lists a claimed image's tracks;
+  - [x] the retroactive hash reads an image once for all its rows, and the rating import leaves a
+        sheet's tracks unrated beside a whole file it rates.
+
+## Phase 5.5: Files opened from outside the library
+
+Opening a file or a `.cue` from outside every library folder adds it to My Library for good:
+
+- It shows in Songs, Albums, Artists, search and the counts.
+- Settings ▸ Library Folders lists its directory as a library folder, and that row's Rescan would
+  import the whole directory and everything below it.
+- Nothing scans or watches that folder, so deleting the download leaves its tracks behind.
+
+It predates this feature, but the feature makes it common: a `.cue` opened from Downloads brings in
+a whole disc. *Files opened from outside the library* gives the model.
+
+- [ ] Map every reader of `tracks` that answers for the library, as Phase 1 mapped the per-file
+      statements. Known so far:
+  - `Membership`'s `Library`, `Favorites` and `SmartPlaylist` arms (`track/membership.rs`), under
+    Songs, Favorites, smart playlists and every scope's facts and keysets;
+  - `search_all` (`search.rs`);
+  - Most Played and the favourite stats (`track/ranking.rs`);
+  - Recently Played (`track/list.rs`);
+  - the duplicate finder's `fold_duplicate_keys` (`track/duplicates.rs`);
+  - the library totals.
+- [ ] `IN_LIBRARY`, one predicate each of them reads, beside `WHOLE_FILE`. `EXPLAIN QUERY PLAN`
+      before and after on the 51,012-track test library's database for Songs, search and Most
+      Played.
+- [ ] An import outside every library folder (`IngestSource::Import`) writes no album, artist or
+      genre link. A library folder absorbing that directory reads those rows again, whatever their
+      stamps say, so they gain their links.
+- [ ] The boot sweep, every launch, after the queue is restored, and ending at once without an
+      outside folder:
+  - [ ] unlinks any outside row still linked, logged at warn per row;
+  - [ ] deletes the outside rows no playlist and not `queue.json` holds, their join rows first,
+        since those don't cascade;
+  - [ ] then the outside folders left empty, cascading their `cue_sheets`;
+  - [ ] then the albums, artists and genres left with no track (`prune_orphans`).
+- [ ] No migration: `album_id`, `artist_id` and `genre_id` are already nullable and `folder_id`
+      already indexed (`idx_tracks_folder_id`).
+- [ ] Settings ▸ Library Folders lists library folders only (`get_folders`), and `scan_one`
+      refuses a folder that isn't one.
+- [ ] Docs:
+  - `library-data.md` gains "a library surface reads through `IN_LIBRARY`" and "an outside track
+    links to no album, artist or genre";
+  - `README.md` says opening a file plays it without adding it;
+  - the release notes say an install's opened files leave My Library and stay in their playlists.
 
 **Gate:**
 - [ ] The static gates.
-- [ ] Kenan's hand pass over each item above.
+- [ ] Kenan's hand pass:
+  - [ ] a file and a `.cue` opened from outside play and queue, and show on no library page, in no
+        search and in no count;
+  - [ ] one added to a playlist survives a restart, and once removed from it is gone after the
+        next;
+  - [ ] Settings lists library folders only;
+  - [ ] adding that folder as a library folder brings its tracks in, linked;
+  - [ ] an install carrying opened files from before keeps them in their playlists only.
 
 ## Phase 6: Continuous decode at joints
 

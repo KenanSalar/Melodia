@@ -17,6 +17,7 @@ use crate::database::sql::Sql;
 use crate::database::{
     DbPool, MAX_BINDS_PER_STATEMENT, chunked_in_execute, chunked_in_query, values_placeholders,
 };
+use melodia_core::entities::cue::CueTrack;
 use melodia_core::entities::duplicates::GroupRemoval;
 use melodia_core::error::AppError;
 
@@ -37,6 +38,7 @@ pub struct RemovedDuplicates {
 struct CopyFacts {
     id: i64,
     file_path: String,
+    cue_track: Option<CueTrack>,
     file_hash: Option<String>,
     file_size: Option<i64>,
     date_modified: Option<String>,
@@ -52,6 +54,7 @@ struct CopyFacts {
 by_name!(CopyFacts {
     id,
     file_path,
+    cue_track,
     file_hash,
     file_size,
     date_modified,
@@ -128,8 +131,8 @@ fn read_facts(
         .collect();
     let rows: Vec<CopyFacts> = chunked_in_query(tx, &ids, |placeholders| {
         format!(
-            "SELECT id, file_path, file_hash, file_size, date_modified, folder_id, play_count, \
-                    skip_count, last_played, rating, is_favorite, date_added \
+            "SELECT id, file_path, cue_track, file_hash, file_size, date_modified, folder_id, \
+                    play_count, skip_count, last_played, rating, is_favorite, date_added \
              FROM tracks WHERE id IN ({placeholders})"
         )
     })?;
@@ -157,8 +160,13 @@ impl<'a> MergePlan<'a> {
                 plan.outcome.skipped += removal.spares.len();
                 continue;
             };
-            let spares: Vec<&CopyFacts> =
-                removal.spares.iter().filter_map(|id| facts.get(id)).collect();
+            // A cue sheet's track is skipped too, for `DuplicateCopy::is_removable`'s reason.
+            let spares: Vec<&CopyFacts> = removal
+                .spares
+                .iter()
+                .filter_map(|id| facts.get(id))
+                .filter(|spare| spare.cue_track.is_none())
+                .collect();
             plan.outcome.skipped += removal.spares.len() - spares.len();
             if spares.is_empty() {
                 continue;

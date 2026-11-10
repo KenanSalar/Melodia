@@ -15,6 +15,7 @@ fn entry(path: &str, hash: Option<&str>) -> m3u::ParsedEntry {
     m3u::ParsedEntry {
         path: path.to_owned(),
         hash: hash.map(ToOwned::to_owned),
+        cue_track: None,
         duration_secs: None,
         display: None,
     }

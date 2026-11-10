@@ -150,6 +150,9 @@ export global TagEditor {
 
     // 1 = single selection (Lyrics + Summary available), >1 = batch.
     in property <int> track-count;
+    // A cue sheet's track among the selection: its image's tags describe the whole disc, so
+    // nothing here may write into it.
+    in property <bool> read-only;
     // Reset to `tab-tags` by every populate, then set to the tab the request asked for.
     in-out property <int> active-tab;
 
@@ -164,7 +167,6 @@ export global TagEditor {
     // `has-cover` gates Remove.
     in-out property <image> cover;
     in property <bool> has-cover;
-    in property <bool> lyrics-enabled;
 
     // Preformatted by Rust.
     in property <string> summary-path;

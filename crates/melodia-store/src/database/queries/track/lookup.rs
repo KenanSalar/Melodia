@@ -6,12 +6,13 @@ use std::sync::LazyLock;
 
 use rusqlite::Connection;
 
-use super::file_rows::WHOLE_FILE;
+use super::file_rows::{FILE_ORDER, WHOLE_FILE};
 use super::membership::Membership;
 use super::{columns, json_array};
 use crate::database::rows::FromRow;
 use crate::database::sql::{self, Sql};
-use crate::database::{DbPool, chunked_in_query, select_in_id_order};
+use crate::database::{DbPool, chunked_in_query, in_id_order, select_in_id_order};
+use melodia_core::entities::cue::CueTrack;
 use melodia_core::entities::track;
 use melodia_core::entities::track_list::TrackListScope;
 use melodia_core::error::AppError;
@@ -130,13 +131,23 @@ pub async fn get_tag_edit_rows_by_ids(
     rows_in_id_order(db, cols, ids.to_vec(), |t: &track::TagEditRow| t.id).await
 }
 
-/// `(id, file_path)` for `ids`, in order, so the tag writer's self-write marks land
-/// deterministically.
-pub async fn get_track_paths_by_ids(
+/// `(id, file_path)` for those of `ids` that play a whole file, in order, so the tag writer's
+/// self-write marks land deterministically. A cue sheet's track owns no file: its image's tags
+/// describe the whole disc, and writing one track's edit there would stamp it on every track.
+pub async fn get_whole_file_paths_by_ids(
     db: &DbPool,
     ids: &[i64],
 ) -> Result<Vec<(i64, String)>, AppError> {
-    rows_in_id_order(db, "id, file_path", ids.to_vec(), |&(id, _): &(i64, String)| id).await
+    let ids = ids.to_vec();
+    db.read(move |conn| {
+        let rows = chunked_in_query(conn, &ids, |placeholders| {
+            format!(
+                "SELECT id, file_path FROM tracks WHERE id IN ({placeholders}) AND {WHOLE_FILE}"
+            )
+        })?;
+        Ok(in_id_order(rows, &ids, |&(id, _): &(i64, String)| id))
+    })
+    .await
 }
 
 /// `TrackLinks` for `ids`, in order: the foreign keys the now-playing bar's menu needs, which
@@ -192,45 +203,77 @@ fn ids_outside(
     Ok(sql.fetch_all::<i64>(conn)?.into_iter().collect())
 }
 
-/// `file_path → id` for each of `paths` that has a row.
-pub async fn get_track_ids_by_paths(
-    db: &DbPool,
-    paths: &[String],
-) -> Result<HashMap<String, i64>, AppError> {
-    let paths = paths.to_vec();
-    let rows: Vec<(i64, String)> = db
-        .read(move |conn| {
-            chunked_in_query(conn, &paths, |placeholders| {
-                format!("SELECT id, file_path FROM tracks WHERE file_path IN ({placeholders})")
-            })
-        })
-        .await?;
+/// The rows of each path or hash asked for, a file's in its sheet's order: one for a whole file,
+/// one per track for an image a cue sheet splits. A caller matches on the sheet's number, or takes
+/// them all.
+#[derive(Debug, Default)]
+pub struct FileTracks(HashMap<String, Vec<(Option<CueTrack>, i64)>>);
 
-    let mut map = HashMap::with_capacity(rows.len());
-    map.extend(rows.into_iter().map(|(id, path)| (path, id)));
-    Ok(map)
+impl FileTracks {
+    /// Files them under `key`, keeping only the first file each key meets: two copies of one
+    /// image share a hash, and their tracks would otherwise interleave.
+    fn from_rows(rows: Vec<(String, String, Option<CueTrack>, i64)>) -> Self {
+        let mut first_path: HashMap<String, String> = HashMap::new();
+        let mut tracks = Self::default();
+        for (key, path, cue_track, id) in rows {
+            if *first_path.entry(key.clone()).or_insert_with(|| path.clone()) == path {
+                tracks.0.entry(key).or_default().push((cue_track, id));
+            }
+        }
+        tracks
+    }
+
+    pub fn contains(&self, key: &str) -> bool {
+        self.0.contains_key(key)
+    }
+
+    /// Every row under `key`, in play order.
+    pub fn ids(&self, key: &str) -> impl Iterator<Item = i64> + '_ {
+        self.0.get(key).into_iter().flatten().map(|&(_, id)| id)
+    }
+
+    /// The row of the sheet's track `number` under `key`.
+    pub fn track(&self, key: &str, number: CueTrack) -> Option<i64> {
+        let tracks = self.0.get(key)?;
+        tracks.iter().find(|(cue_track, _)| *cue_track == Some(number)).map(|&(_, id)| id)
+    }
 }
 
-/// `file_hash → id` for each of `hashes` that has a row. Where duplicates share a hash any one wins,
-/// either playing the same audio for a playlist re-match.
-pub async fn get_track_ids_by_hashes(
-    db: &DbPool,
-    hashes: Vec<String>,
-) -> Result<HashMap<String, i64>, AppError> {
-    let rows: Vec<(i64, String)> = db
+/// The rows of each of `paths` that has any.
+pub async fn get_track_ids_by_paths(db: &DbPool, paths: &[String]) -> Result<FileTracks, AppError> {
+    let paths = paths.to_vec();
+    let rows = db
         .read(move |conn| {
-            chunked_in_query(conn, &hashes, |placeholders| {
+            chunked_in_query(conn, &paths, |placeholders| {
                 format!(
-                    "SELECT id, file_hash FROM tracks \
-                         WHERE file_hash IS NOT NULL AND file_hash IN ({placeholders})"
+                    "SELECT file_path, file_path, cue_track, id FROM tracks
+                     WHERE file_path IN ({placeholders})
+                     ORDER BY {FILE_ORDER}"
                 )
             })
         })
         .await?;
+    Ok(FileTracks::from_rows(rows))
+}
 
-    let mut map = HashMap::with_capacity(rows.len());
-    map.extend(rows.into_iter().map(|(id, hash)| (hash, id)));
-    Ok(map)
+/// The rows of one file carrying each of `hashes`, the lowest path's: any copy plays the same
+/// audio for a playlist re-match.
+pub async fn get_track_ids_by_hashes(
+    db: &DbPool,
+    hashes: Vec<String>,
+) -> Result<FileTracks, AppError> {
+    let rows = db
+        .read(move |conn| {
+            chunked_in_query(conn, &hashes, |placeholders| {
+                format!(
+                    "SELECT file_hash, file_path, cue_track, id FROM tracks
+                     WHERE file_hash IS NOT NULL AND file_hash IN ({placeholders})
+                     ORDER BY {FILE_ORDER}"
+                )
+            })
+        })
+        .await?;
+    Ok(FileTracks::from_rows(rows))
 }
 
 /// `file_hash → [(id, file_path)]` of the whole-file rows carrying each of `hashes`, lowest id
@@ -291,23 +334,25 @@ pub async fn get_unhashed_track_paths(db: &DbPool) -> Result<Vec<(i64, String)>,
     .await
 }
 
+static UNRATED_WHOLE_FILES_AFTER: LazyLock<String> = LazyLock::new(|| {
+    format!(
+        "SELECT id, file_path FROM tracks
+         WHERE rating = 0 AND id > ? AND {WHOLE_FILE}
+         ORDER BY id LIMIT ?"
+    )
+});
+
 /// One page of unrated tracks past `after_id`, the one-shot rating import's work list.
 ///
 /// `rating = 0` can't tell an untouched row from a cleared one, so the import runs once and
 /// records that in `settings.json`. Keyset-paged because a first run selects the whole library,
 /// and because the import rates as it goes, so rows leave the predicate and an `OFFSET` would skip
-/// their neighbours.
+/// their neighbours. A cue sheet's tracks are left out, their image's rating being the disc's.
 pub async fn get_unrated_track_paths_after(
     db: &DbPool,
     after_id: i64,
     limit: i64,
 ) -> Result<Vec<(i64, String)>, AppError> {
-    db.read(move |conn| {
-        sql::fetch_all(
-            conn,
-            "SELECT id, file_path FROM tracks WHERE rating = 0 AND id > ? ORDER BY id LIMIT ?",
-            (after_id, limit),
-        )
-    })
-    .await
+    db.read(move |conn| sql::fetch_all(conn, UNRATED_WHOLE_FILES_AFTER.as_str(), (after_id, limit)))
+        .await
 }

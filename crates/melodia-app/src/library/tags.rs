@@ -198,14 +198,14 @@ pub async fn apply_tag_edit(
 /// Drop what the lyrics directory answered for each retagged track: the store is keyed on the path,
 /// so a month-long miss would outlive the corrected tags. Best-effort, the edit having committed.
 async fn forget_stored_lyrics(state: &AppState, ids: &[i64]) {
-    let paths = match queries::track::get_track_paths_by_ids(&state.db, ids).await {
-        Ok(rows) => rows.into_iter().map(|(_, path)| path).collect(),
+    let tracks = match queries::track::get_whole_file_paths_by_ids(&state.db, ids).await {
+        Ok(rows) => rows.into_iter().map(|(_, path)| lyrics::LyricsKey::whole_file(path)).collect(),
         Err(e) => {
             log::debug!("tags: lyrics store kept: {}", describe(&e));
             return;
         }
     };
-    if let Err(e) = lyrics::forget_all(state, paths).await {
+    if let Err(e) = lyrics::forget_all(state, tracks).await {
         log::debug!("tags: lyrics store kept: {}", describe(&e));
     }
 }
@@ -230,7 +230,7 @@ pub(crate) async fn write_tag_edit(
         return Ok((report, Vec::new()));
     }
 
-    let rows = queries::track::get_track_paths_by_ids(db, ids).await?;
+    let rows = queries::track::get_whole_file_paths_by_ids(db, ids).await?;
     if rows.is_empty() {
         return Ok((report, Vec::new()));
     }

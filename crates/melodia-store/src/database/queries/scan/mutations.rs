@@ -333,7 +333,7 @@ static UPDATE_CUE_TRACK: LazyLock<String> = LazyLock::new(|| {
 });
 
 /// Rewrites every tag-backed column of a file's own row when the file changed on disk, keeping its
-/// playback state.
+/// playback state. `false` where the file has no row of its own: gone, or split by a cue sheet.
 ///
 /// The rating is tag-backed too, but a file that can't carry one (a filename-derived Matroska row,
 /// read-only media, the write-back turned off) leaves the row its only copy, hence the `CASE`: the
@@ -346,18 +346,18 @@ pub(crate) fn update_track_metadata(
     meta: &ExtractedMetadata,
     ids: &ResolvedIds,
     names: &mut NameCache,
-) -> Result<(), AppError> {
+) -> Result<bool, AppError> {
     let mut sql = Sql::new(UPDATE_TRACK_METADATA.as_str());
     bind_tag_update(&mut sql, meta, ids);
     sql.bind(file_path);
-    let updated: Option<i64> = sql.fetch_optional(tx)?;
+    let Some(track_id) = sql.fetch_optional::<i64>(tx)? else {
+        return Ok(false);
+    };
 
     // Here rather than at the callers: an artist column refreshed without its credit rows displays
     // one thing and files under another.
-    if let Some(track_id) = updated {
-        replace_track_joins(tx, track_id, meta, ids, names)?;
-    }
-    Ok(())
+    replace_track_joins(tx, track_id, meta, ids, names)?;
+    Ok(true)
 }
 
 /// [`update_track_metadata`] for the sheet track `track_id`, which a reread sheet may also have

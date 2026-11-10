@@ -4,6 +4,7 @@ use std::path::{MAIN_SEPARATOR, MAIN_SEPARATOR_STR};
 use std::sync::LazyLock;
 
 use super::columns;
+use super::file_rows::FILE_ORDER;
 use crate::database::{DbPool, sql};
 use melodia_core::entities::browse::DirectoryTrack;
 use melodia_core::entities::track;
@@ -43,12 +44,14 @@ static TRACKS_IN_DIRECTORY: LazyLock<String> = LazyLock::new(|| {
     format!(
         "SELECT file_path, {} FROM tracks \
          WHERE file_path >= ?1 AND file_path < ?2 \
-           AND instr(substr(file_path, length(?1) + 1), ?3) = 0",
+           AND instr(substr(file_path, length(?1) + 1), ?3) = 0 \
+         ORDER BY {FILE_ORDER}",
         columns::TRACK_LIST.joined()
     )
 });
 
-/// The tracks directly inside `dir_path`, each with the path Browse matches its file by.
+/// The tracks directly inside `dir_path`, each with the path Browse matches its file by, a file's
+/// rows in its sheet's order.
 ///
 /// `file_path` holds the native separator, so `dir_path` comes in native form through
 /// `canonicalize_path`.

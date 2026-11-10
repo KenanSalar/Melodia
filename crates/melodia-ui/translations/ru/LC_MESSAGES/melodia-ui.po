@@ -260,6 +260,10 @@ msgstr[2] "{n} копий"
 msgid "Now Playing"
 msgstr "Сейчас играет"
 
+#: ui/components/dialog/duplicate-row.slint
+msgid "From a cue sheet"
+msgstr "Из CUE-файла"
+
 #. Translators: {} is the day the copy joined the library, as 2026-11-02.
 #: ui/components/dialog/duplicate-row.slint
 msgid "Added {}"
@@ -795,6 +799,10 @@ msgstr "Автор ремикса"
 #: ui/components/dialog/tag-editor-body.slint
 msgid "Replace…"
 msgstr "Заменить…"
+
+#: ui/components/dialog/tag-editor-body.slint
+msgid "Tracks from a cue sheet can't be edited here."
+msgstr "Треки из CUE-файла здесь изменить нельзя."
 
 #: ui/components/dialog/tag-editor-body.slint ui/settings.slint
 msgid "Details"

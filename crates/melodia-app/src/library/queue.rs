@@ -22,12 +22,6 @@ use super::import::{ImportFilesResult, import_and_summarize};
 use super::keyset::existing_in_order;
 use super::playback::player_play_tracks;
 
-/// Files from outside, a drop or "Open with", arrive in visual selection order. Stable, so equal
-/// titles keep their import order.
-fn sort_for_queue(summaries: &mut [Arc<TrackSummary>]) {
-    summaries.sort_by(|a, b| natord::compare(&a.title, &b.title));
-}
-
 pub async fn queue_import_files(
     state: &AppState,
     file_paths: Vec<String>,
@@ -46,8 +40,7 @@ async fn append_imported(
 
     if !result.summaries.is_empty() {
         // Moved rather than cloned: the drag-drop caller discards the success result.
-        let mut summaries = std::mem::take(&mut result.summaries);
-        sort_for_queue(&mut summaries);
+        let summaries = std::mem::take(&mut result.summaries);
         let ids: Vec<i64> = summaries.iter().map(|summary| summary.id).collect();
         with_state_emit(&ctx.player_state, &ctx.sinks, |s| {
             s.queue.add_tracks(&ids);
@@ -68,14 +61,13 @@ pub async fn open_files(state: &AppState, file_paths: Vec<String>) -> AppResult<
     Ok(())
 }
 
-/// Ids come off the sorted summaries, not `ImportFilesResult::track_ids`, which arrive partly in
-/// `HashMap` order.
+/// Ids come off the summaries, which `import_and_summarize` puts in play order.
 async fn open_as_queue(
     ctx: &PlaybackContext,
     cover_cache: &CoverCache,
     file_paths: &[String],
 ) -> AppResult<()> {
-    let mut result =
+    let result =
         import_and_summarize(&ctx.db, &ctx.paths.artwork_dir, cover_cache, file_paths).await?;
 
     if result.summaries.is_empty() {
@@ -85,7 +77,6 @@ async fn open_as_queue(
         )));
     }
 
-    sort_for_queue(&mut result.summaries);
     let track_ids: Vec<i64> = result.summaries.iter().map(|summary| summary.id).collect();
 
     log::debug!("queue: open {} track(s) from the command line", track_ids.len());

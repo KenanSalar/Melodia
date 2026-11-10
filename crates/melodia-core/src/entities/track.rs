@@ -23,6 +23,7 @@ pub struct TrackSummary {
     pub id: i64,
     pub file_path: String,
     pub file_name: String,
+    pub cue_track: Option<CueTrack>,
     /// The part of the file a cue sheet track plays, `None` playing all of it.
     pub span: Option<CueSpan>,
     pub title: String,
@@ -48,6 +49,11 @@ pub struct TrackSummary {
 impl TrackSummary {
     pub fn audio(&self) -> TrackAudio {
         TrackAudio { path: self.file_path.clone(), span: self.span }
+    }
+
+    /// Whether a cue sheet carves this track out of its file.
+    pub fn is_sheet_track(&self) -> bool {
+        self.cue_track.is_some()
     }
 }
 
@@ -88,6 +94,7 @@ impl From<Track> for TrackSummary {
             id: t.id,
             file_path: t.file_path,
             file_name: t.file_name,
+            cue_track: t.cue_track,
             span: t.span,
             title: t.title,
             artist: t.artist,
@@ -113,6 +120,7 @@ impl From<&Track> for TrackSummary {
             id: t.id,
             file_path: t.file_path.clone(),
             file_name: t.file_name.clone(),
+            cue_track: t.cue_track,
             span: t.span,
             title: t.title.clone(),
             artist: t.artist.clone(),
@@ -223,6 +231,14 @@ pub struct TagEditRow {
     pub date_modified: Option<String>,
     pub duration_ms: i64,
     pub file_hash: Option<String>,
+}
+
+impl TagEditRow {
+    /// Whether a cue sheet carves this track out of its file, whose own tags then state the
+    /// whole disc rather than this track.
+    pub fn is_sheet_track(&self) -> bool {
+        self.cue_track.is_some()
+    }
 }
 
 /// What a scrobble needs, native columns only; `ScrobbleTrack::from_row` converts it.
