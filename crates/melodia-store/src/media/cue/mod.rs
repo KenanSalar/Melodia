@@ -11,8 +11,10 @@ mod parse;
 mod plan;
 mod resolve;
 mod text;
+mod track_tags;
 
 pub use around::{named_files, settle_dirs};
 pub(crate) use merge::{CueRow, rows};
 pub(crate) use plan::{Claim, SheetJob, SheetRead};
 pub use plan::{CueChunk, CuePlan, PlanInput, settle};
+pub use track_tags::read_track_tags;

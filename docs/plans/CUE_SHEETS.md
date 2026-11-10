@@ -881,7 +881,9 @@ a whole disc. *Files opened from outside the library* gives the model.
       refuses no add. An add at its path takes it over, and cancelling that scan keeps its tracks
       (`OnStop::Keep`). `scan_one` refuses a folder that isn't a library folder.
 - [x] Edit Tags reads an outside file's genres, role credits and release tags from the file
-      (`read_file_tags`), the database holding none for it (Kenan's call, 2026-11-10).
+      (`read_file_tags`), the database holding none for it (Kenan's call, 2026-11-10). An outside
+      sheet track's are its sheet read over its image by the scan's own rules
+      (`cue::read_track_tags`, `merge::track_tags`).
 - [x] Docs:
   - `library-data.md` gains "a library surface reads through `IN_LIBRARY`" and "an outside track
     links to no album, artist or genre";
@@ -944,8 +946,9 @@ a whole disc. *Files opened from outside the library* gives the model.
       path.
 - [ ] The tag editor opens the fields the sheet can hold. The rest, and the hidden track's row, stay
       read-only with the note reworded.
-- [ ] An outside sheet track has no `track_genres` or `track_credits` rows, so its genre and
-      composer fields need another source once they open.
+- [ ] An outside sheet track's fields open on what `cue::read_track_tags` reads, its row holding
+      no join rows, and the re-read of its sheet after a write files it as
+      `TrackFolder::Outside`, or it gains the links Phase 5.5 keeps from it.
 - [ ] i18n as in Phase 5.
 - [ ] Docs: `write.rs`'s module doc carries the encoding rule. `library-data.md` gains "a sheet
       track's tags live in its sheet" where a tag write could break it.

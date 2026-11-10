@@ -18,6 +18,7 @@ use melodia_artwork::media::image::artwork::{self, CoverCache};
 use melodia_core::entities::album::ReleaseTagRow;
 use melodia_core::entities::artist::ArtistCredit;
 use melodia_core::entities::credits::RoleCredits;
+use melodia_core::entities::cue::CueTrack;
 use melodia_core::entities::genre::GenreList;
 use melodia_core::entities::scan::ExtractedMetadata;
 use melodia_core::entities::tags::{ArtworkEdit, FileTags, TagEdit, TagField};
@@ -26,6 +27,7 @@ use melodia_core::error::AppError;
 use melodia_core::error::describe;
 use melodia_core::utils::self_writes::SelfWrites;
 use melodia_store::database::{DbPool, queries};
+use melodia_store::media::cue;
 use melodia_store::media::ingest::metadata::extract_metadata;
 use melodia_store::media::ingest::{cover_embed, tag_writer};
 
@@ -129,9 +131,27 @@ pub fn read_file_tags(path: &Path) -> Result<FileTags, AppError> {
     tag_writer::read_file_tags(path)
 }
 
+/// [`read_file_tags`] for a cue sheet's track filed outside the library: its sheet read over its
+/// image, as the scan merges them. Blocking; the caller owns the `spawn_blocking`.
+pub fn read_sheet_track_tags(
+    sheet: &Path,
+    image: &Path,
+    track: CueTrack,
+) -> Result<FileTags, AppError> {
+    cue::read_track_tags(sheet, image, track)
+}
+
 /// The tracks among `ids` filed outside the library, whose tags only their files hold.
 pub async fn get_tag_edit_outside(db: &DbPool, ids: &[i64]) -> Result<HashSet<i64>, AppError> {
     queries::track::filed_outside(db, ids).await
+}
+
+/// The sheet behind each cue sheet track among `ids`, by track id.
+pub async fn get_tag_edit_sheets(
+    db: &DbPool,
+    ids: &[i64],
+) -> Result<HashMap<i64, String>, AppError> {
+    queries::track::get_sheet_paths_by_ids(db, ids).await
 }
 
 /// The credit behind each selected track, for the dialog's multi-selection path.

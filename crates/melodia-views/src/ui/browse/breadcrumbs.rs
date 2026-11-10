@@ -10,7 +10,7 @@ use melodia_core::entities::folder::Folder;
 use melodia_ui::BreadcrumbRow as UiBreadcrumbRow;
 
 /// Builds the trail from the library folder down to `path`, hiding the filesystem above it, the
-/// library folder being the user's root. Empty at the root. A `path` under no enabled folder,
+/// library folder being the user's root. Empty at the root. A `path` under no library folder,
 /// which `browse_directory` already refuses, falls back to every path component, so there is
 /// still something to click.
 pub(super) fn build_breadcrumbs(path: &str, library_folders: &[Folder]) -> Vec<UiBreadcrumbRow> {
@@ -22,7 +22,6 @@ pub(super) fn build_breadcrumbs(path: &str, library_folders: &[Folder]) -> Vec<U
     // The deepest, for a library folder nested inside another.
     let lib_root: Option<&Path> = library_folders
         .iter()
-        .filter(|f| f.is_enabled)
         .filter_map(|f| {
             let fp = Path::new(&f.path);
             if p.starts_with(fp) { Some(fp) } else { None }

@@ -17,6 +17,7 @@ use melodia_core::entities::artist::ArtistCredit;
 use melodia_core::entities::credits::{CreditRole, RoleCredit, RoleCredits};
 use melodia_core::entities::cue::{CueSpan, CueTrack};
 use melodia_core::entities::scan::ExtractedMetadata;
+use melodia_core::entities::tags::FileTags;
 
 /// One row a sheet carves out of an image.
 pub(crate) struct CueRow {
@@ -154,6 +155,30 @@ fn apply_sheet(meta: &mut ExtractedMetadata, scopes: &Scopes<'_>) {
     }
     meta.isrc = scopes.track.and_then(|track| track.isrc.clone());
     apply_replaygain(meta, scopes);
+}
+
+/// Track `track`'s credits, genres and release tags as Edit Tags shows them: `image`'s own, with
+/// what the sheet states over them by [`apply_sheet`]'s rules, for a row that stores none of them.
+/// Lyrics describe a recording, so the image's are no track's.
+pub(crate) fn track_tags(sheet: &Sheet, track: CueTrack, image: FileTags) -> FileTags {
+    let scopes = Scopes { track: sheet.tracks.iter().find(|stated| stated.number == track), sheet };
+    let mut tags = FileTags { lyrics: None, ..image };
+    if let Some(performer) = scopes.performer() {
+        tags.credits.0 = ArtistCredit::from_name(performer);
+    }
+    if let Some(album_artist) = &sheet.fields.performer {
+        tags.credits.1 = ArtistCredit::from_name(album_artist);
+    }
+    if let Some(composer) = scopes.composer() {
+        tags.roles = with_composer(&tags.roles, composer);
+    }
+    if let Some(genre) = scopes.rem("GENRE") {
+        tags.genres = split_genres(genre);
+    }
+    if let Some(catalog) = &sheet.catalog {
+        tags.release.barcode.clone_from(catalog);
+    }
+    tags
 }
 
 /// The track pair is the track's own or none, since the image's describes the whole disc. The

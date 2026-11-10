@@ -94,7 +94,6 @@ async fn apply_root(
     }
     let browse_folders: Vec<BrowseFolder> = folders
         .iter()
-        .filter(|f| f.is_enabled)
         .map(|f| BrowseFolder { name: folder_basename(&f.path), path: f.path.clone() })
         .collect();
     paint_listing(

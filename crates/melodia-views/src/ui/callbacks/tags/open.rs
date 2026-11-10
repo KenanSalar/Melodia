@@ -3,7 +3,7 @@
 
 use std::cell::RefCell;
 use std::collections::{HashMap, HashSet};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::rc::Rc;
 
 use async_compat::Compat;
@@ -22,6 +22,7 @@ use melodia_app::state::AppState;
 use melodia_core::entities::album::ReleaseTagRow;
 use melodia_core::entities::artist::{ArtistCredit, JOIN_PHRASES};
 use melodia_core::entities::credits::RoleCredits;
+use melodia_core::entities::cue::CueTrack;
 use melodia_core::entities::genre::GenreList;
 use melodia_core::entities::tags::{ArtworkEdit, FileTags, RoleCreditEdit};
 use melodia_core::entities::track::TagEditRow;
@@ -72,8 +73,9 @@ pub(super) fn wire_request_edit(
             // Lyrics live in the file, and so does the authoritative credit, join rows seeded from
             // `artist_id` alone knowing only the first name. A multi-selection takes the database
             // instead, N file reads on the open path being what the row projection avoids, and so
-            // does a cue sheet's track, its file's tags stating the whole disc. A file filed
-            // outside the library has no join rows, so a selection reads it too.
+            // does a cue sheet's track, its file's tags stating the whole disc. A track filed
+            // outside the library has no join rows, so a selection reads it too, a sheet's track
+            // as its sheet read over its image.
             let (lyrics, credits) = if single && !rows[0].is_sheet_track() {
                 let file = files.get(&rows[0].id);
                 let lyrics = file.and_then(|tags| tags.lyrics.clone()).unwrap_or_default();
@@ -170,19 +172,41 @@ fn or_logged<T: Default>(result: Result<T, AppError>, what: &str) -> T {
     })
 }
 
-/// The tags of each whole file in `rows` the dialog reads off disk, by track id: the one a single
-/// selection opens on, and every one filed outside the library. A file that fails to read is
-/// logged and left to the database's answer.
+/// The tags of each track in `rows` the dialog reads off disk, by track id: the whole file a single
+/// selection opens on, and every track filed outside the library. A read that fails is logged and
+/// left to the database's answer.
 async fn read_files(
     s: &AppState,
     rows: &[TagEditRow],
     outside: &HashSet<i64>,
 ) -> HashMap<i64, FileTags> {
     let single = rows.len() == 1;
-    let wanted: Vec<(i64, PathBuf)> = rows
+    let outside_sheet_tracks: Vec<i64> = rows
         .iter()
-        .filter(|row| !row.is_sheet_track() && (single || outside.contains(&row.id)))
-        .map(|row| (row.id, PathBuf::from(&row.file_path)))
+        .filter(|row| row.is_sheet_track() && outside.contains(&row.id))
+        .map(|row| row.id)
+        .collect();
+    let mut sheets = if outside_sheet_tracks.is_empty() {
+        HashMap::new()
+    } else {
+        let read = library::tags::get_tag_edit_sheets(&s.db, &outside_sheet_tracks).await;
+        or_logged(read, "cue sheets")
+    };
+    let wanted: Vec<(i64, FileRead)> = rows
+        .iter()
+        .filter_map(|row| {
+            let path = PathBuf::from(&row.file_path);
+            let read = match row.cue_track {
+                Some(track) => FileRead::SheetTrack {
+                    sheet: PathBuf::from(sheets.remove(&row.id)?),
+                    image: path,
+                    track,
+                },
+                None if single || outside.contains(&row.id) => FileRead::Whole(path),
+                None => return None,
+            };
+            Some((row.id, read))
+        })
         .collect();
     if wanted.is_empty() {
         return HashMap::new();
@@ -190,10 +214,10 @@ async fn read_files(
     let read = s.runtime.spawn_blocking(move || {
         wanted
             .into_iter()
-            .filter_map(|(id, path)| match library::tags::read_file_tags(&path) {
+            .filter_map(|(id, read)| match read.tags() {
                 Ok(tags) => Some((id, tags)),
                 Err(e) => {
-                    log::warn!("tag edit: reading {}: {}", path.display(), describe(&e));
+                    log::warn!("tag edit: reading {}: {}", read.path().display(), describe(&e));
                     None
                 }
             })
@@ -203,6 +227,34 @@ async fn read_files(
         log::warn!("tag edit: the file read failed: {}", describe(&e));
         HashMap::new()
     })
+}
+
+/// Where the dialog reads one track's own tags.
+enum FileRead {
+    Whole(PathBuf),
+    /// A cue sheet's track: its sheet read over its image, whose own tags state the whole disc.
+    SheetTrack {
+        sheet: PathBuf,
+        image: PathBuf,
+        track: CueTrack,
+    },
+}
+
+impl FileRead {
+    fn tags(&self) -> Result<FileTags, AppError> {
+        match self {
+            Self::Whole(path) => library::tags::read_file_tags(path),
+            Self::SheetTrack { sheet, image, track } => {
+                library::tags::read_sheet_track_tags(sheet, image, *track)
+            }
+        }
+    }
+
+    fn path(&self) -> &Path {
+        match self {
+            Self::Whole(path) | Self::SheetTrack { image: path, .. } => path,
+        }
+    }
 }
 
 /// Line a by-id fetch up with `rows`, defaulting whatever it didn't answer for.

@@ -192,6 +192,25 @@ pub async fn filed_outside(db: &DbPool, ids: &[i64]) -> Result<HashSet<i64>, App
     db.read(move |conn| ids_answering(conn, &ids, FILED_OUTSIDE.as_str())).await
 }
 
+/// The external sheet that carved each of `ids` out of its image, by track id.
+pub async fn get_sheet_paths_by_ids(
+    db: &DbPool,
+    ids: &[i64],
+) -> Result<HashMap<i64, String>, AppError> {
+    let ids = ids.to_vec();
+    let rows: Vec<(i64, String)> = db
+        .read(move |conn| {
+            chunked_in_query(conn, &ids, |placeholders| {
+                format!(
+                    "SELECT t.id, c.path FROM tracks t JOIN cue_sheets c ON c.id = t.cue_sheet_id \
+                     WHERE t.id IN ({placeholders})"
+                )
+            })
+        })
+        .await?;
+    Ok(rows.into_iter().collect())
+}
+
 /// The ids `statement` answers out of `ids`, which it reads from one `json_each` bind.
 fn ids_answering(
     conn: &Connection,
