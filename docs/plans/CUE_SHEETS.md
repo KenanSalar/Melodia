@@ -6,10 +6,10 @@ Status: **proposed** · Created: 2026-11-04
 
 Issue [#78](https://github.com/KenanSalar/Melodia/issues/78).
 
-> Verified **2026-11-04** against this tree at `7655194` (v0.22.0), the pinned `sqlx-core` /
-> `sqlx-sqlite` 0.9.0 and `symphonia-*` 0.6.1 sources in the registry, the SQLite docs on
-> `ALTER TABLE` and `PRAGMA foreign_keys`, RFC 9639 §8.7 (FLAC CUESHEET), and the CDRWIN cue
-> syntax appendix. Anything marked ⚠️ **re-verify** drifts; check it again on the day.
+> Verified **2026-11-10** against this tree at `18ada620` (v0.23.0), the pinned `rusqlite` 0.41.1
+> and `symphonia-*` 0.6.1 sources in the registry, the SQLite docs on `ALTER TABLE` and
+> `PRAGMA foreign_keys`, RFC 9639 §8.7 (FLAC CUESHEET), and the CDRWIN cue syntax appendix. Anything
+> marked ⚠️ **re-verify** drifts; check it again on the day.
 
 ---
 
@@ -79,6 +79,9 @@ The uniqueness is split in two:
   exactly one row. A table-level `UNIQUE` alone would let two `NULL`s through, since SQLite treats
   `NULL`s as distinct.
 
+The composite's leading `file_path` keeps the folder range reads (`subtree_bounds`, `list.rs:33`)
+and every `=` and `IN` on an index.
+
 Two `CHECK`s hold the shape:
 
 - `(cue_track IS NULL) = (cue_start IS NULL)`
@@ -94,40 +97,46 @@ sheet moves identity by number. That is rare, and it is the right trade: a numbe
 says the track *is*.
 
 **`file_size` stays the whole file's size on every row.** It is the stamp a scan compares
-(`scanner.rs:189-198`), and nothing in the tree sums it. A smart-playlist `FileSize` rule matches
-the image a track plays from, which is what the column says.
+(`FileStamp::matches`, `entities/scan.rs:25`, through `WalkIndex::changed`, `scanner.rs:271`), and
+nothing in the tree sums it. A smart-playlist `FileSize` rule matches the image a track plays from,
+which is what the column says.
 
 ### The rebuild cannot eat playlists
 
 With foreign keys on, `DROP TABLE tracks` first runs an implicit `DELETE FROM tracks`, and that
 fires every `ON DELETE CASCADE`. For `playlist_items` (`initial_schema.sql:198`) and
 `duplicate_dismissals` it would delete every row. `PRAGMA foreign_keys` is a no-op inside a
-transaction, and sqlx wraps each migration in one by default. So:
+transaction, and `database::migrate` runs every migration inside one (`run_and_record`,
+`migrate.rs:132`). `PRAGMA defer_foreign_keys` is no way out, since the cascades still fire. So
+enforcement goes off on the connection, before the transaction opens:
 
-- **The migration's first bytes are `-- no-transaction`.** `sqlx-core` 0.9.0
-  `migrate/source.rs:234` tests `starts_with`, and `sqlx-sqlite` `migrate.rs:165` then runs the
-  script without its own transaction.
-- **The script runs SQLite's documented rebuild:**
-  1. `PRAGMA foreign_keys = OFF;` then `BEGIN;`
-  2. `CREATE TABLE cue_sheets`
-  3. Drop every view and every trigger whose SQL names `tracks`.
-  4. `CREATE TABLE tracks_new`, then `INSERT … SELECT` with ids preserved.
-  5. `DROP TABLE tracks;` then `ALTER TABLE tracks_new RENAME TO tracks;`
-  6. Recreate every index, trigger and view, verbatim apart from the new key.
-  7. `COMMIT;` then `PRAGMA foreign_keys = ON;`
+- **The migration's first line is `-- foreign-keys-off`.** `build.rs` reads it into a `ForeignKeys`
+  field on the embedded `Migration`, and `apply_one` turns enforcement off before the transaction
+  and back on after it, on commit or rollback alike, since the writer outlives the migration. Only
+  this migration opts in: replaying the shipped ones with cascades off would change what they do.
+  `build.rs`'s refusal of `-- no-transaction` stays.
+- **The script holds no `PRAGMA`, `BEGIN` or `COMMIT`.** A `BEGIN` fails under the migrator's
+  transaction, and a `PRAGMA foreign_keys` there does nothing and says nothing. It runs SQLite's
+  documented rebuild:
+  1. `CREATE TABLE cue_sheets`
+  2. Drop every trigger whose SQL names `tracks`.
+  3. `CREATE TABLE tracks_new`, then `INSERT … SELECT` with ids preserved.
+  4. `DROP TABLE tracks;` then `ALTER TABLE tracks_new RENAME TO tracks;`
+  5. Recreate every index and trigger, verbatim apart from the new key.
 
-  Dropping the views and the other tables' triggers is not optional. Since SQLite 3.26 the rename
-  re-parses the whole schema, and a trigger body still naming the dropped `tracks` fails it.
+  Dropping the other tables' triggers is not optional. Since SQLite 3.26 the rename re-parses the
+  whole schema, and a trigger body still naming the dropped `tracks` fails it. No view names
+  `tracks` at this tree, the views reading the stored counts; Phase 1's dump checks that again.
 - **`tracks_fts` stays as it is.** It is external content over `content_rowid = 'id'`, and the copy
   keeps every id, so its index stays valid. Only its three triggers come back.
-- **After `migrate!().run` (`database/mod.rs:388`), `PRAGMA foreign_key_check` must come back
-  empty.** A row is fatal and names the backup, the way a failed migration already is
-  (`mod.rs:417-424`). `PRAGMA foreign_keys = OFF` turns enforcement off for the duration, so this
-  is what proves the copy kept every reference.
-- **The script is safe to run twice.** sqlx records a `no_tx` migration after the script finishes
-  (`execute_migration`, `migrate.rs:249-270`), so a crash between the two re-runs it on the next
-  launch. Every column it selects exists in both shapes, and the backup is retaken because the
-  migration shows as pending again.
+- **`PRAGMA foreign_key_check` runs inside the transaction, ahead of the history row**
+  (`run_and_record`), read through a fetch: `execute_batch` steps each statement once and discards
+  its rows, so a check in the script would pass whatever it found. Any row is a new `MigrationError`
+  variant and rolls the migration back, and `init_database` already names the backup
+  (`database/mod.rs:89-98`). With enforcement off for the duration, this is what proves the copy
+  kept every reference.
+- **A crash re-runs the migration on an untouched database.** The schema and the history row commit
+  together (`migrate.rs:42`).
 
 ### Boundaries in cue frames, converted with the decoder's own rate
 
@@ -190,8 +199,10 @@ a span goes in as `SeekTo::TimeStamp` ticks, never through `Duration`.
   gone, or that parses cleanly without naming the image any more, releases the image. A write
   caught half-done by the watcher would otherwise delete twelve rows and re-insert them with new
   ids.
-- **An image in `excluded_files` produces no rows**, whatever sheet names it. This is the existing
-  rule in `.claude/rules/library-data.md`.
+- **An image in `excluded_files` produces no rows**, whatever sheet names it. `apply_cue_unit` asks
+  inside its inserting transaction, the rule in `.claude/rules/library-data.md`. A folder scan
+  restamps the kept-out image (`restamp_on`), and an import lifts the exclusion, the user having
+  named the file (`commit_import`).
 
 ### What a row takes from the sheet and what from the image
 
@@ -355,24 +366,31 @@ text through the same writer. Rows from the native block alone are read-only.
 | sheet + image tags → row fields | `media/cue/merge.rs` | the table above; produces the `ExtractedMetadata` shape the ordinary ingest already writes |
 | sheet rewrite | `media/cue/write.rs` | Phase 7 |
 | embedded sources | `media/cue/embedded.rs` | Phase 8: the CUESHEET block reader and the tag text |
-| store units of work | `crates/melodia-store/src/database/queries/scan/cue_units.rs` | `apply_cue_unit` (upsert by key, drop missing numbers, carry playlist entries off the whole-file row, write the sheet stamp) and `release_image` (the reverse), each one write transaction |
-| the scan's planner | `crates/melodia-app/src/library/scan/` | sheets parsed and claims settled over the whole walk *before* it is cut into chunks (`scan/mod.rs:148,195`), so an image and its sheet are never split across two chunks |
+| store units of work | `crates/melodia-store/src/database/queries/scan/cue_units.rs` | `apply_cue_unit` (upsert by key, drop missing numbers, carry playlist entries off the whole-file row, write the sheet stamp) and `release_image` (the reverse), `pub(crate)` on the caller's transaction: the scan chunk's, whose stats triggers drop and return inside it (`commit_scan_chunk`), or the watcher batch's |
+| the planner | `crates/melodia-store/src/media/cue/plan.rs` | which sheet claims which image, settled before the walk is cut into chunks (`discover`, `scan/mod.rs:308`; `TX_CHUNK_FILES`, `:150`), so an image and its sheet are never split across two chunks. The scan and the watcher's `process_batch` (`file_event_processor/reconcile.rs`) both call it |
 | the span on a deck | `crates/melodia-audio/src/player/source/span.rs` | beside `aac_trim.rs`: the open-at-start, the counted end, the seek offset. `file_decode.rs` calls it |
 | the parked decoder | `crates/melodia-audio/src/player/source/park.rs` | Phase 6: the one-slot hand-off and its match rule |
 
 The parser and planner sit in the store because ingest is their only consumer, and a `.cue` the
 user opens goes through the store too. `melodia-views` learns nothing about sheets.
 
-**The duplication this collapses.** Per-file statements key on a bare `file_path` in at least seven
-places:
+**The duplication this collapses.** Per-file statements assume one row per path or per hash in at
+least twelve places:
 
-- `update_track_metadata` (`mutations.rs:301-342`)
-- `get_track_id_by_path` (`lookups.rs:65-70`)
-- `track_exists_by_path` (`watch_batch.rs:209`)
-- `load_existing` (`ingest.rs:286-308`)
-- the retag commit (`retag.rs:87`)
-- the cover backfill (`ingest.rs:470-480`)
-- the hash move (`moves.rs`, `lookup.rs:227-252`)
+- `update_track_metadata` (`mutations.rs:277`)
+- `update_track_location` (`mutations.rs:253`), which re-points one row by id
+- `get_track_id_by_path` (`lookups.rs:67`)
+- `track_exists_by_path` (`lookups.rs:10`)
+- `fold_folder_tracks` (`lookups.rs:46`)
+- `load_existing` (`ingest.rs:303`)
+- the retag commit (`retag.rs:110`)
+- the cover backfill (`ingest.rs:474`)
+- the hash move (`moves.rs`, `rows_by_hash_on`, `lookup.rs:240`)
+- `get_track_ids_by_paths` (`lookup.rs:195`), one arbitrary id per path, read by `import_files` and
+  `match_entries`
+- `get_track_ids_by_hashes` (`lookup.rs:215`), whose "any one wins, either playing the same audio"
+  is false for a sheet's rows
+- both `IDS_IN_SUBTREE` statements (`entity_ids.rs:103`)
 
 Each one gets one of two answers, and the answer is a named SQL fragment owned once, not a literal
 repeated:
@@ -381,37 +399,54 @@ repeated:
 - **File-level**, every row of the path, for anything that moves or deletes a file. A file moves,
   and all its rows move with it.
 
-The `RETURNING id, file_path` match in `insert_tracks_batch` (`mutations.rs:249-262`) keys on the
-pair.
+The two id lookups are the exception: they answer every row with its `cue_track`, for the caller to
+match on (Phase 5). A statement that interpolates a fragment is a `LazyLock<String>`, as
+`TRACKS_IN_DIRECTORY` is, so it stays cached (`database::sql`'s `//!`).
+
+The `RETURNING id, file_path` match in `insert_tracks_batch` (`mutations.rs:217`) keys on the pair.
 
 ---
 
 ## Phase 1: The rebuilt `tracks` (no behaviour change)
 
-- [ ] Dump the current definitions with `/usr/bin/sqlite3`. They are spread over five migrations:
+- [ ] Dump the current definitions with `/usr/bin/sqlite3`:
       `SELECT type, name, sql FROM sqlite_schema WHERE sql LIKE '%tracks%'`, run on a database
-      migrated to head.
-- [ ] New migration `migrations/<timestamp>_cue_tracks.sql`:
-  - [ ] Its first bytes are `-- no-transaction`.
+      migrated to head. At this tree that is 15 triggers and 18 named indexes, the order-key ones
+      included.
+- [ ] `build.rs` reads `-- foreign-keys-off` into a `ForeignKeys` field on `Migration`, and `render`
+      writes it.
+- [ ] `database/migrate.rs`: `apply_one` suspends enforcement around the transaction, and
+      `run_and_record` runs `PRAGMA foreign_key_check` ahead of the history row. A violation is a
+      new `MigrationError` variant in `melodia-core`'s `error.rs`.
+- [ ] New migration `migrations/<timestamp>_cue_tracks.sql`, its timestamp after `20261105120000`:
+  - [ ] Its first line is `-- foreign-keys-off`.
   - [ ] It creates `cue_sheets` and rebuilds `tracks` with the four columns, the split uniqueness
         and the two `CHECK`s.
-  - [ ] It drops and recreates every dependent view and trigger, in the order *The rebuild cannot
+  - [ ] It drops and recreates every dependent trigger and index, in the order *The rebuild cannot
         eat playlists* gives.
-  - [ ] Its comments say why it runs outside sqlx's transaction, for the reader of a file that can
-        never be edited again.
-- [ ] `queries/stats.rs` keeps its copy of the stats triggers byte-equal to the recreated ones.
-- [ ] `database/mod.rs`: `PRAGMA foreign_key_check` after the migrator. Any row is fatal and names
-      the backup.
+  - [ ] Its comments say why enforcement is off around it, for the reader of a file that can never
+        be edited again.
+- [ ] `queries/stats.rs`: the trigger bodies come back unchanged, so only its "must match" note
+      repoints, at the new migration.
 - [ ] `entities/cue.rs` with the three newtypes:
+  - [ ] `CueTrack` and `CueFrames` take a `FromSql` beside them and a `param_from!` line in
+        `sql.rs`, as `DismissalSet` does.
   - [ ] `Track` gains `cue_track` and `span`.
-  - [ ] `TrackSummary` gains `span`, which playback reads.
+  - [ ] `TrackSummary` gains `span`, which playback reads, a nested `by_name!` entry over
+        `cue_start` and `cue_end`.
   - [ ] `TagEditRow` and `PlaylistExportRow` gain `cue_track`.
-  - [ ] Each `FromRow` reads them.
+  - [ ] `rows/track.rs` reads them, and `TRACK_SUMMARY`, `TRACK_TAG_EDIT` and `PLAYLIST_EXPORT`
+        select them: a missed column fails only when the statement runs.
 - [ ] The whole-file and file-level fragments, and every site listed under Structure moved onto one
-      of them. `insert_tracks_batch` matches on `(file_path, cue_track)`.
-- [ ] Folder Play orders by `file_path, cue_track` (`entity_ids.rs:94-98`).
-- [ ] Docs: `.claude/rules/library-data.md` gains the two fragments and the "a file moves with all
-      its rows" rule, since that prohibition can be broken from any query file.
+      of them. `TRACK_INSERT_COLUMNS` gains the four columns, and `INSERT_CHUNK_ROWS` re-derives
+      itself. `insert_tracks_batch` matches on `(file_path, cue_track)`.
+- [ ] Folder Play orders by `file_path, cue_track` in both `IDS_IN_SUBTREE` statements
+      (`entity_ids.rs:103`).
+- [ ] Docs:
+  - [ ] `.claude/rules/library-data.md` gains the two fragments and the "a file moves with all its
+        rows" rule, since that prohibition can be broken from any query file.
+  - [ ] `.claude/rules/rusqlite.md`: `insert_tracks_batch`'s match names the pair, and the migrator
+        line names the directive.
 
 **Gate:**
 - [ ] The static gates.
@@ -432,19 +467,30 @@ pair.
       `cargo search` ⚠️ **re-verify**, named by `melodia-store` alone. Check each against
       `licenses/ATTRIBUTION.txt`'s criterion: an entry is owed only for a crate that asks something
       of whoever ships it, such as a NOTICE.
-- [ ] `is_cue_sheet`. `collect_media_files` (`scanner.rs:45-83`) keeps sheets beside audio, pruned
-      by the same `is_trash_dir`.
-- [ ] `media/cue/{text,parse,layout,resolve,merge}.rs` as Structure gives them.
-- [ ] The planner, in `library/scan/`:
-  - [ ] parses every walked sheet and resolves its `FILE`s;
+- [ ] `is_cue_sheet`. `collect_media_files` (`scanner.rs:118`) keeps sheets in their own packed
+      `WalkedPaths` on `MediaWalk`, pruned by the same `is_trash_dir`. In `files` they would be sent
+      to the audio parse and counted as audio.
+- [ ] `WalkIndex::add_row` (`scanner.rs:250`) takes several rows per path, the first stamp winning.
+- [ ] `media/cue/{text,parse,layout,resolve,merge,plan}.rs` as Structure gives them.
+- [ ] The planner, called from `discover` (`scan/mod.rs:308`) between the row fold and
+      `index.changed`:
+  - [ ] re-plans a directory only when a sheet's stamp moved, a sheet is new or gone, or an audio
+        file in it passed the filter: every launch rescans, and the packed walk exists to keep
+        per-file allocations out of that window;
+  - [ ] parses those sheets and resolves their `FILE`s;
   - [ ] ranks competing sheets;
-  - [ ] applies the claim rule and the exclusion check;
-  - [ ] hands each chunk its claimed images as cue units, and the rest of the walk to the ordinary
-        path. Claimed images never reach the ordinary path.
+  - [ ] applies the claim rule;
+  - [ ] keeps claimed images out of `index.changed` through its `keep`, and adds to `to_scan` each
+        image owed a cue unit and each one released, since `WalkIndex` stamps an image from any of
+        its rows and `changed` alone would never read it again;
+  - [ ] hands each chunk the claims of the images in it. A claimed image is parsed like any other
+        and then routed to `apply_cue_unit`, never to the ordinary path.
 - [ ] A cue unit extracts the image once, through the existing `metadata::extract`, with its hash,
       tags, cover and length. `merge` turns that and the sheet into the rows, and `apply_cue_unit`
-      writes them, with `search_text` and the credit and genre joins, through the shared
-      `bind_track_columns`.
+      writes them, with `search_text`, the order keys and the credit and genre joins, through the
+      shared `bind_track_columns`.
+- [ ] `apply_cue_unit` runs on `commit_scan_chunk`'s transaction, asks `excluded_files` there and
+      reports into `IngestResult`. `Ingested::for_delta` counts its rows.
 - [ ] Carrying playlists:
   - [ ] `apply_cue_unit` replaces a whole-file row's playlist entries with the new rows in sheet
         order, at its position, before deleting it.
@@ -452,16 +498,21 @@ pair.
         at the first one's position.
   - [ ] Play count, rating and favourite on the whole-file row are not carried over; they can't be
         attributed to a single track.
-- [ ] `load_existing` reads whole-file rows only, so an image whose rows are all sheet tracks is a new
-      file to the ordinary path the moment its sheet lets go.
-- [ ] The purge: a sheet the walk didn't find releases its images (`finish.rs`).
+- [ ] `load_existing` reads whole-file rows only, so a released image, which the planner puts in
+      `to_scan`, is a new file to the ordinary path.
+- [ ] A sheet the walk didn't find:
+  - [ ] with its image still walked, releases it at once;
+  - [ ] with its image gone too, is held in `Unwalked`, which gains `sheets`, because a pass purges
+        last so a later folder can re-point the rows (`Orphans::HoldIn`). `finish_on`
+        (`queries/scan/finish.rs`) drops its stamp row with the orphans.
 - [ ] Docs:
   - [ ] `README.md`'s feature list names cue sheets.
   - [ ] `library-data.md` gains the claim rule and "a failed parse keeps the claim", each where a
         reader would break it.
 
 **Gate:**
-- [ ] The static gates.
+- [ ] The static gates, and idle RSS on the 50,500-track library against v0.23.0, with no sheets in
+      it: a library without sheets owes nothing to this phase.
 - [ ] Kenan's hand pass over this fixture set (`ffmpeg` builds the audio):
   - [ ] a FLAC image with a UTF-8 sheet;
   - [ ] a WAV image with a Shift_JIS sheet;
@@ -501,7 +552,7 @@ pair.
 - [ ] Docs: none owed. The span's argument lives on `span.rs`.
 
 **Gate:**
-- [ ] The static gates, and peak and idle RSS on the 50,500-track library against v0.22.0.
+- [ ] The static gates, and peak and idle RSS on the 50,500-track library against v0.23.0.
 - [ ] Kenan's hand pass:
   - [ ] each track starts and ends on its own audio;
   - [ ] a seek lands inside the track;
@@ -514,13 +565,20 @@ pair.
 
 ## Phase 4: Keeping it current (watcher, moves, incremental)
 
-- [ ] `classify_event` (`watcher.rs:188-238`) passes sheets as well as audio.
-- [ ] `apply_watch_batch` (`watch_batch.rs:69-156`) routes these to one re-plan of that folder:
-      every sheet event, and every event on an image a sheet claims or could claim. It is the
-      planner the scan uses, scoped to one directory; it stats outside the write transaction, then
-      runs `apply_cue_unit` or `release_image`.
-- [ ] A rename re-points every row of the path, file-level. A sheet rename moves its `cue_sheets`
-      row. A cross-filesystem move by hash re-points the gone *path*, not the lowest id.
+- [ ] `is_library_file` (`watcher.rs:271`), the one place `classify_event` asks, passes sheets as
+      well as audio.
+- [ ] `process_batch` (`file_event_processor/reconcile.rs`) routes these to one re-plan of that
+      folder: every sheet event, and every event on an image a sheet claims or could claim. It is
+      the planner the scan uses, scoped to one directory and run ahead of the write transaction,
+      since `apply_watch_batch` takes only what was already read (`watch_batch.rs`'s `//!`). The
+      outcome reaches it as new `WatchedChange` variants, which run `apply_cue_unit` or
+      `release_image` on its transaction. `paths_to_extract` keeps sheets from the tag reader.
+- [ ] A rename re-points every row of the path, through a file-level twin of
+      `update_track_location`. A sheet rename moves its `cue_sheets` row.
+- [ ] A move by hash carries the whole file, in the scan (`ingest.rs`) and the watcher alike.
+      `MoveCandidates` (`moves.rs`) holds every row per hash and re-points one by id, which would
+      carry one row of twelve. So ordinary reads take whole-file rows only, and a sheet image is one
+      candidate, named by its gone *path* and spent whole.
 - [ ] Incremental scan: a cue unit is current when the image's stamp matches its rows' and the
       sheet's matches `cue_sheets`.
 - [ ] Docs: the watcher's module doc says sheets are library files.
@@ -554,15 +612,17 @@ Each item is a site from the map that breaks once twelve rows share a path:
   - [ ] Remove is unavailable on a sheet track; Dismiss stays.
 - [ ] **M3U** (`playlist_files/m3u.rs`):
   - [ ] Export writes the image path with a `#MELODIA-CUE-TRACK:<n>` line beside `#MELODIA-HASH`.
-  - [ ] Import matches path plus number. A foreign entry naming a claimed image, or a `.cue`, expands
-        to all its tracks in order.
+  - [ ] Import matches path plus number, and a hash re-match hash plus number (`match_entries`,
+        `playlist_files.rs:297`). A foreign entry naming a claimed image, or a `.cue`, expands to
+        all its tracks in order.
 - [ ] **Browse** (`browse.rs:91-93`): a claimed image lists its tracks in place.
 - [ ] **Background tasks:** the retroactive hash hashes each file once
       (`tasks/retroactive_hash.rs`). The rating import skips sheet tracks (`tasks/rating_import.rs`).
 - [ ] **Opening a `.cue`:**
-  - [ ] `import_files` (`import.rs:25-103`), `audio_files_from_argv` and the drop accept sheets and
+  - [ ] `import_files` (`import.rs:25`), `audio_files_from_argv` and the drop accept sheets and
         queue their tracks;
-  - [ ] opening a claimed image queues all of its tracks;
+  - [ ] opening a claimed image queues all of its tracks in order, `import_files` taking every row
+        `get_track_ids_by_paths` answers;
   - [ ] the four `.desktop` sources gain `application/x-cue`, and `main.wxs` gains its two `.cue`
         rows, which is the list `audio_ext.rs`'s doc names (`packaging.rs` pins it).
 - [ ] i18n: each new string through `scripts/update-translations.py`, every catalog finished.
@@ -648,8 +708,8 @@ Existing tests a phase breaks are fixed in that phase.
 - **Docs land in the phase that stales them**, held to the anchor rule. Most of the argument above
   moves into the module docs of `cue/`, `span.rs` and `park.rs`, and into the migration's comments,
   as each lands.
-- **800 lines:** `backend/mod.rs` (647), `voice.rs` (593), `ingest.rs` (580), `metadata.rs` (537)
-  and `watch_batch.rs` (401) are the files at risk. The new logic goes into its own modules (`cue/`,
+- **800 lines:** `backend/mod.rs` (647), `ingest.rs` (598), `voice.rs` (593), `metadata.rs` (537)
+  and `watch_batch.rs` (387) are the files at risk. The new logic goes into its own modules (`cue/`,
   `cue_units.rs`, `span.rs`, `park.rs`), so each of these gains call sites, not bodies.
 - **Memory:** `TrackSummary` gains an `Option<CueSpan>` per queued or cached track, and Phase 6
   holds at most one parked decoder. Both are measured at the gates where they land.
