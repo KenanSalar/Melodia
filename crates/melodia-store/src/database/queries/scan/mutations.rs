@@ -21,8 +21,8 @@ use super::sort_key::to_natural_sort_key;
 use super::upserts::{insert_track_joins, replace_track_joins};
 
 /// The columns [`insert_track`] and [`insert_tracks_batch`] write, in the order
-/// [`bind_track_columns`] binds them, which `update_track_metadata`'s `SET` list follows too. The
-/// placeholder grid and the bind budget are counted off this string.
+/// [`bind_track_columns`] binds them, which [`TAG_BACKED_SET`] follows too. The placeholder grid
+/// and the bind budget are counted off this string.
 const TRACK_INSERT_COLUMNS: &str = "file_path, file_name,
     cue_track, cue_start, cue_end, cue_sheet_id,
     file_hash, title, artist, album_artist, album, genre, credits,
@@ -292,29 +292,43 @@ pub(crate) fn update_track_location(
     Ok(updated > 0)
 }
 
+/// The `SET` list of every tag-backed column, in [`bind_tag_update`]'s order.
+const TAG_BACKED_SET: &str = "
+    file_hash = ?, title = ?, artist = ?, album_artist = ?, album = ?,
+    genre = ?, credits = ?,
+    track_number = ?, track_total = ?, disc_number = ?, disc_total = ?,
+    disc_subtitle = ?, subtitle = ?,
+    release_date = ?, year = ?, original_date = ?, original_year = ?, comment = ?,
+    bpm = ?, initial_key = ?, mood = ?, grouping = ?,
+    work = ?, movement = ?, movement_number = ?, movement_total = ?,
+    language = ?, copyright = ?, isrc = ?,
+    musicbrainz_track_id = ?, musicbrainz_release_id = ?,
+    musicbrainz_release_track_id = ?,
+    replaygain_track_gain = ?, replaygain_track_peak = ?,
+    replaygain_album_gain = ?, replaygain_album_peak = ?,
+    duration_ms = ?, file_size = ?, codec = ?, bitrate = ?,
+    channels = ?, sample_rate = ?, bit_depth = ?,
+    artwork_path = COALESCE(?, artwork_path),
+    album_id = ?, artist_id = ?, genre_id = ?, folder_id = ?,
+    date_modified = ?, sort_key = ?, search_text = ?,
+    artist_key = ?, album_key = ?, genre_key = ?,
+    rating = CASE WHEN ? = 0 THEN rating ELSE ? END";
+
+/// Binds [`TAG_BACKED_SET`].
+fn bind_tag_update(sql: &mut Sql, meta: &ExtractedMetadata, ids: &ResolvedIds) {
+    bind_track_columns(sql, meta, ids);
+    let tag_rating = meta.rating.unwrap_or(0);
+    sql.bind(tag_rating).bind(tag_rating);
+}
+
 static UPDATE_TRACK_METADATA: LazyLock<String> = LazyLock::new(|| {
+    format!("UPDATE tracks SET {TAG_BACKED_SET} WHERE file_path = ? AND {WHOLE_FILE} RETURNING id")
+});
+
+static UPDATE_CUE_TRACK: LazyLock<String> = LazyLock::new(|| {
     format!(
-        "UPDATE tracks SET
-            file_hash = ?, title = ?, artist = ?, album_artist = ?, album = ?,
-            genre = ?, credits = ?,
-            track_number = ?, track_total = ?, disc_number = ?, disc_total = ?,
-            disc_subtitle = ?, subtitle = ?,
-            release_date = ?, year = ?, original_date = ?, original_year = ?, comment = ?,
-            bpm = ?, initial_key = ?, mood = ?, grouping = ?,
-            work = ?, movement = ?, movement_number = ?, movement_total = ?,
-            language = ?, copyright = ?, isrc = ?,
-            musicbrainz_track_id = ?, musicbrainz_release_id = ?,
-            musicbrainz_release_track_id = ?,
-            replaygain_track_gain = ?, replaygain_track_peak = ?,
-            replaygain_album_gain = ?, replaygain_album_peak = ?,
-            duration_ms = ?, file_size = ?, codec = ?, bitrate = ?,
-            channels = ?, sample_rate = ?, bit_depth = ?,
-            artwork_path = COALESCE(?, artwork_path),
-            album_id = ?, artist_id = ?, genre_id = ?, folder_id = ?,
-            date_modified = ?, sort_key = ?, search_text = ?,
-            artist_key = ?, album_key = ?, genre_key = ?,
-            rating = CASE WHEN ? = 0 THEN rating ELSE ? END
-         WHERE file_path = ? AND {WHOLE_FILE} RETURNING id"
+        "UPDATE tracks SET {TAG_BACKED_SET}, cue_start = ?, cue_end = ?, cue_sheet_id = ?
+         WHERE id = ?"
     )
 });
 
@@ -334,9 +348,8 @@ pub(crate) fn update_track_metadata(
     names: &mut NameCache,
 ) -> Result<(), AppError> {
     let mut sql = Sql::new(UPDATE_TRACK_METADATA.as_str());
-    bind_track_columns(&mut sql, meta, ids);
-    let tag_rating = meta.rating.unwrap_or(0);
-    sql.bind(tag_rating).bind(tag_rating).bind(file_path);
+    bind_tag_update(&mut sql, meta, ids);
+    sql.bind(file_path);
     let updated: Option<i64> = sql.fetch_optional(tx)?;
 
     // Here rather than at the callers: an artist column refreshed without its credit rows displays
@@ -345,6 +358,23 @@ pub(crate) fn update_track_metadata(
         replace_track_joins(tx, track_id, meta, ids, names)?;
     }
     Ok(())
+}
+
+/// [`update_track_metadata`] for the sheet track `track_id`, which a reread sheet may also have
+/// moved or handed to another sheet.
+pub(crate) fn update_cue_track(
+    tx: &Transaction<'_>,
+    track_id: i64,
+    cue: CuePlacement,
+    meta: &ExtractedMetadata,
+    ids: &ResolvedIds,
+    names: &mut NameCache,
+) -> Result<(), AppError> {
+    let mut sql = Sql::new(UPDATE_CUE_TRACK.as_str());
+    bind_tag_update(&mut sql, meta, ids);
+    sql.bind(cue.span.start()).bind(cue.span.end()).bind(cue.sheet_id).bind(track_id);
+    sql.execute(tx)?;
+    replace_track_joins(tx, track_id, meta, ids, names)
 }
 
 /// Gives each album missing a cover the artwork of its lowest-id track that has one.

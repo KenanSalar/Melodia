@@ -8,10 +8,11 @@ use rusqlite::Transaction;
 
 use crate::database::queries;
 use crate::database::queries::artist::UNKNOWN_ARTIST_ID;
-use crate::database::queries::scan::{MoveCandidates, NameCache, file_name_of};
+use crate::database::queries::scan::{CueWrites, MoveCandidates, NameCache, file_name_of};
 use crate::database::queries::track::file_rows::WHOLE_FILE;
 use crate::database::sql::Sql;
 use crate::database::{DbPool, MAX_BINDS_PER_STATEMENT, placeholders, values_placeholders};
+use crate::media::cue::CueChunk;
 use crate::media::ingest::scan_pool::ScanPool;
 use melodia_core::entities::scan::{ExtractedMetadata, FileStamp, ScannedFile};
 use melodia_core::error::AppError;
@@ -41,8 +42,15 @@ pub struct IngestResult {
     pub inserted_count: u32,
     pub moved_count: u32,
     pub updated_count: u32,
-    /// The freshly inserted tracks' ids, in **input order**.
+    /// The freshly inserted whole-file rows' ids, in **input order**.
     pub inserted_track_ids: Vec<i64>,
+}
+
+impl IngestResult {
+    fn add_sheets(&mut self, sheets: &CueWrites) {
+        self.inserted_count += sheets.inserted;
+        self.updated_count += sheets.updated;
+    }
 }
 
 /// Rows a batch writes above which the stats triggers are dropped and the counts rebuilt by one
@@ -89,31 +97,47 @@ impl Ingested {
     }
 }
 
+/// One chunk of a folder scan: the files it read, and the cue sheet jobs whose images are among
+/// them.
+pub struct ScanChunk {
+    pub files: Vec<ScannedFile>,
+    pub cue: CueChunk,
+}
+
 /// One chunk of a folder scan, in a write transaction of its own.
 ///
 /// On the bulk path the stats triggers are dropped and recreated *inside* that transaction, so a
 /// crash never leaves them missing; the counts lag until [`queries::scan::commit_scan`] recalculates
-/// them.
+/// them. An image a sheet claims goes to its sheet's job and never to the ordinary ingest.
 pub async fn commit_scan_chunk(
     db: &DbPool,
-    scanned_files: Vec<ScannedFile>,
+    chunk: ScanChunk,
     folder_id: i64,
     scan_timestamp: String,
     pool: ScanPool,
     ingested: &Ingested,
 ) -> Result<IngestResult, AppError> {
     let is_bulk = ingested.is_bulk();
+    let ScanChunk { files, cue } = chunk;
+    let (claimed, unclaimed): (Vec<_>, Vec<_>) = if cue.is_empty() {
+        (Vec::new(), files)
+    } else {
+        files.into_iter().partition(|file| cue.claims(&file.path))
+    };
     db.transaction(move |tx| {
         if is_bulk {
             queries::stats::disable_stats_triggers(tx)?;
         }
-        let result = ingest_scanned_files(
+        let mut result = ingest_scanned_files(
             tx,
-            &scanned_files,
+            &unclaimed,
             &IngestSource::FolderScan(folder_id),
             &scan_timestamp,
             &pool,
         )?;
+        let sheets =
+            queries::scan::apply_sheet_jobs(tx, folder_id, &cue, &claimed, &scan_timestamp)?;
+        result.add_sheets(&sheets);
         if is_bulk {
             queries::stats::enable_stats_triggers(tx)?;
         }

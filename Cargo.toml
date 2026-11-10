@@ -144,6 +144,9 @@ natord = "1.0.9"
 # Accent folding, so filter boxes narrow on the same spellings `tracks_fts`'s
 # `remove_diacritics 2` tokenizer does.
 unicode-normalization = "0.1.26"
+# Cue sheets arrive in whatever codepage the ripper's Windows ran: the guess, then the decode.
+chardetng = "1.0.0"
+encoding_rs = "0.8.44"
 
 # Lyrics romanization
 # The universal romanizer. Its dictionaries compile to a zero-copy `rkyv` archive read in

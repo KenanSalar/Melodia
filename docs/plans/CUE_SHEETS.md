@@ -2,7 +2,7 @@
 
 Working doc. Delete when the feature ships.
 
-Status: **in progress**, Phase 2 next · Created: 2026-11-04
+Status: **in progress**, Phase 2 landed and hand-passed, its RSS check next · Created: 2026-11-04
 
 Issue [#78](https://github.com/KenanSalar/Melodia/issues/78).
 
@@ -183,7 +183,8 @@ a span goes in as `SeekTo::TimeStamp` ticks, never through `Duration`.
 
 - **A sheet's `FILE` resolves against the walked audio files, in this order:**
   1. the path as written, relative to the sheet's folder;
-  2. the same name, ignoring case and Unicode normalization form;
+  2. the same name, ignoring case, accents and Unicode normalization form (`utils::fold`), which
+     runs only once the exact spelling missed;
   3. the same stem with any `is_audio_extension` extension.
 
   A sheet saying `album.wav` beside a re-encoded `album.flac` is the common case for step 3. A
@@ -204,7 +205,12 @@ a span goes in as `SeekTo::TimeStamp` ticks, never through `Duration`.
 - **A sheet that fails to read or parse keeps its previous claim untouched.** Only a sheet that is
   gone, or that parses cleanly without naming the image any more, releases the image. A write
   caught half-done by the watcher would otherwise delete twelve rows and re-insert them with new
-  ids.
+  ids. Failing means a read error, a sheet over the size cap, or one placing no track at all; a
+  truncated or partly broken sheet still parses. A failed sheet records no stamp, so every scan
+  reads it again, and logs it, until it parses.
+- **A claim is owed**, and the image read again, when the image or its winning sheet is new or
+  changed, or the winner isn't the sheet the library holds the image under. Anything else is
+  current, and the scan leaves it alone.
 - **An image in `excluded_files` produces no rows**, whatever sheet names it. `apply_cue_unit` asks
   inside its inserting transaction, the rule in `.claude/rules/library-data.md`. A folder scan
   restamps the kept-out image (`restamp_on`), and an import lifts the exclusion, the user having
@@ -372,8 +378,9 @@ text through the same writer. Rows from the native block alone are read-only.
 | sheet + image tags → row fields | `media/cue/merge.rs` | the table above; produces the `ExtractedMetadata` shape the ordinary ingest already writes |
 | sheet rewrite | `media/cue/write.rs` | Phase 7 |
 | embedded sources | `media/cue/embedded.rs` | Phase 8: the CUESHEET block reader and the tag text |
-| store units of work | `crates/melodia-store/src/database/queries/scan/cue_units.rs` | `apply_cue_unit` (upsert by key, drop missing numbers, carry playlist entries off the whole-file row, write the sheet stamp) and `release_image` (the reverse), `pub(crate)` on the caller's transaction: the scan chunk's, whose stats triggers drop and return inside it (`commit_scan_chunk`), or the watcher batch's |
-| the planner | `crates/melodia-store/src/media/cue/plan.rs` | which sheet claims which image, settled before the walk is cut into chunks (`discover`, `scan/mod.rs:308`; `TX_CHUNK_FILES`, `:150`), so an image and its sheet are never split across two chunks. The scan and the watcher's `process_batch` (`file_event_processor/reconcile.rs`) both call it |
+| store units of work | `crates/melodia-store/src/database/queries/scan/cue_units.rs` | `apply_sheet_jobs`: per sheet job, the stamp, `apply_cue_unit` (upsert by key, drop missing numbers, carry playlist entries off the whole-file row) and `release_image` (the reverse), `pub(crate)` on the caller's transaction: the scan chunk's, whose stats triggers drop and return inside it (`commit_scan_chunk`), or the watcher batch's |
+| playlist carry | `crates/melodia-store/src/database/queries/playlist_carry.rs` | `replace_in_playlists` and `merge_into_playlists`, beside the other playlist membership writers |
+| the planner | `crates/melodia-store/src/media/cue/plan.rs` | which sheet claims which image, settled in `discover` (`scan/mod.rs`) after the incremental filter, whose output decides which directories it reads again, and before the walk is cut into chunks. Each sheet's work is one job that `CuePlan::into_chunks` never splits, so a sheet's stamp commits with everything it caused. The scan and the watcher's `process_batch` (`file_event_processor/reconcile.rs`) both call it |
 | the span on a deck | `crates/melodia-audio/src/player/source/span.rs` | beside `aac_trim.rs`: the open-at-start, the counted end, the seek offset. `file_decode.rs` calls it |
 | the parked decoder | `crates/melodia-audio/src/player/source/park.rs` | Phase 6: the one-slot hand-off and its match rule |
 
@@ -474,69 +481,81 @@ The `RETURNING id, file_path` match in `insert_tracks_batch` (`mutations.rs:217`
 
 ## Phase 2: Sheets become tracks (the full scan)
 
-- [ ] `encoding_rs` and `chardetng` join `[workspace.dependencies]`, latest at `x.y.z` per
-      `cargo search` ⚠️ **re-verify**, named by `melodia-store` alone. Check each against
-      `licenses/ATTRIBUTION.txt`'s criterion: an entry is owed only for a crate that asks something
-      of whoever ships it, such as a NOTICE.
-- [ ] `is_cue_sheet`. `collect_media_files` (`scanner.rs:118`) keeps sheets in their own packed
-      `WalkedPaths` on `MediaWalk`, pruned by the same `is_trash_dir`. In `files` they would be sent
-      to the audio parse and counted as audio.
-- [ ] `WalkIndex::add_row` (`scanner.rs:250`) takes several rows per path, the first stamp winning.
-- [ ] `media/cue/{text,parse,layout,resolve,merge,plan}.rs` as Structure gives them.
-- [ ] The planner, called from `discover` (`scan/mod.rs:308`) between the row fold and
-      `index.changed`:
-  - [ ] re-plans a directory only when a sheet's stamp moved, a sheet is new or gone, or an audio
-        file in it passed the filter: every launch rescans, and the packed walk exists to keep
-        per-file allocations out of that window;
-  - [ ] parses those sheets and resolves their `FILE`s;
-  - [ ] ranks competing sheets;
-  - [ ] applies the claim rule;
-  - [ ] keeps claimed images out of `index.changed` through its `keep`, and adds to `to_scan` each
-        image owed a cue unit and each one released, since `WalkIndex` stamps an image from any of
-        its rows and `changed` alone would never read it again;
-  - [ ] hands each chunk the claims of the images in it. A claimed image is parsed like any other
-        and then routed to `apply_cue_unit`, never to the ordinary path.
-- [ ] A cue unit extracts the image once, through the existing `metadata::extract`, with its hash,
+- [x] `encoding_rs` 0.8.44 and `chardetng` 1.0.0 join `[workspace.dependencies]` (`cargo search`,
+      2026-11-10), named by `melodia-store` alone. Neither ships a NOTICE, nor do `core_detect` and
+      `multiversion_no_op`, which `encoding_rs` brings in, so `ATTRIBUTION.txt` owes no entry.
+- [x] `is_cue_sheet`. `collect_media_files` keeps sheets in their own packed `WalkedPaths` on
+      `MediaWalk`, pruned by the same `is_trash_dir`. In `files` they would be sent to the audio
+      parse and counted as audio.
+- [x] The sheets get a `WalkIndex` of their own, fed from `cue_sheets` (`fold_folder_sheets`), so a
+      new or changed sheet comes out of `changed` and a gone one out of `take_orphans`, spared under
+      an unreadable directory as a track is.
+- [x] `WalkIndex::add_row` takes several rows per path, the first stamp winning, and `take_orphans`
+      names a path once however many rows it held.
+- [x] `media/cue/{text,parse,layout,resolve,merge,plan}.rs` as Structure gives them.
+- [x] The planner, called from `discover` after `index.changed`, whose output it needs:
+  - [x] re-plans a directory only when a sheet's stamp moved, a sheet is new or gone, or an audio
+        file in it, or claimed from it, passed the filter: every launch rescans, and the packed walk
+        exists to keep per-file allocations out of that window;
+  - [x] parses those sheets and resolves their `FILE`s;
+  - [x] ranks competing sheets by name, the library's claimer competing unread where nothing
+        around it moved;
+  - [x] applies the claim rule and the owed rule;
+  - [x] takes every image it settled out of `to_scan` (`CuePlan::take_out_of`), and reads each one
+        owed a cue unit or released in its sheet's job instead, since `WalkIndex` stamps an image
+        from any of its rows and `changed` alone would never read it again;
+  - [x] hands the scan its jobs in chunks of their own after the ordinary ones, a job never split.
+        A claimed image is parsed like any other and routed to `apply_cue_unit`, never to the
+        ordinary path.
+- [x] A cue unit extracts the image once, through the existing `metadata::extract`, with its hash,
       tags, cover and length. `merge` turns that and the sheet into the rows, and `apply_cue_unit`
       writes them, with `search_text`, the order keys and the credit and genre joins, through the
-      shared `bind_track_columns`.
-- [ ] `apply_cue_unit` runs on `commit_scan_chunk`'s transaction, asks `excluded_files` there and
+      shared `bind_track_columns` (`update_cue_track` shares `update_track_metadata`'s `SET` list).
+- [x] `apply_cue_unit` runs on `commit_scan_chunk`'s transaction, asks `excluded_files` there and
       reports into `IngestResult`. `Ingested::for_delta` counts its rows.
-- [ ] Carrying playlists:
-  - [ ] `apply_cue_unit` replaces a whole-file row's playlist entries with the new rows in sheet
+- [x] Carrying playlists:
+  - [x] `apply_cue_unit` replaces a whole-file row's playlist entries with the new rows in sheet
         order, at its position, before deleting it.
-  - [ ] `release_image` gives the playlists that held any of the sheet's tracks the whole-file row,
-        at the first one's position.
-  - [ ] Play count, rating and favourite on the whole-file row are not carried over; they can't be
+  - [x] `release_image` gives the playlists that held any of the sheet's tracks the whole-file row,
+        at the first one's position. The chunk's ordinary ingest writes that row first.
+  - [x] Play count, rating and favourite on the whole-file row are not carried over; they can't be
         attributed to a single track.
-- [ ] `load_existing` reads whole-file rows only, so a released image, which the planner puts in
-      `to_scan`, is a new file to the ordinary path.
-- [ ] A sheet the walk didn't find:
-  - [ ] with its image still walked, releases it at once;
-  - [ ] with its image gone too, is held in `Unwalked`, which gains `sheets`, because a pass purges
-        last so a later folder can re-point the rows (`Orphans::HoldIn`). `finish_on`
-        (`queries/scan/finish.rs`) drops its stamp row with the orphans.
-- [ ] Docs:
-  - [ ] `README.md`'s feature list names cue sheets.
-  - [ ] `library-data.md` gains the claim rule and "a failed parse keeps the claim", each where a
+- [x] `load_existing` reads whole-file rows only (Phase 1), so a released image is a new file to the
+      ordinary path.
+- [x] A sheet the walk didn't find:
+  - [x] with its image still walked, releases it in the scan's chunks;
+  - [x] goes to `Unwalked`, which gains `sheets`, because a pass purges last so a later folder can
+        re-point the rows (`Orphans::HoldIn`). `finish_on` (`queries/scan/finish.rs`) drops its
+        stamp row with the orphans, which takes any row of an image gone with it.
+- [x] Docs:
+  - [x] `README.md`'s feature list names cue sheets.
+  - [x] `library-data.md` gains the claim rule and "a failed parse keeps the claim", each where a
         reader would break it.
 
 **Gate:**
-- [ ] The static gates, and idle RSS on the 50,500-track library against v0.23.0, with no sheets in
-      it: a library without sheets owes nothing to this phase.
-- [ ] Kenan's hand pass over this fixture set (`ffmpeg` builds the audio):
-  - [ ] a FLAC image with a UTF-8 sheet;
-  - [ ] a WAV image with a Shift_JIS sheet;
-  - [ ] a Windows-1251 sheet;
-  - [ ] a sheet naming `.wav` beside a `.flac`;
-  - [ ] a hidden-track sheet;
-  - [ ] the multi-file layout over per-track files, which must claim nothing;
-  - [ ] two sheets naming one image;
-  - [ ] an image that already sat in a playlist.
-- [ ] Checks, by a full rescan where it applies:
-  - [ ] the titles, numbers and artists are right;
-  - [ ] the image's own row is gone and its playlist holds the tracks;
-  - [ ] deleting the sheet brings the image back.
+- [x] The static gates.
+- [ ] Idle RSS on the 50,500-track library against v0.23.0, with no sheets in it: a library without
+      sheets owes nothing to this phase.
+- [x] Kenan's hand pass over this fixture set (`ffmpeg` builds the audio). Run by Claude on Kenan's
+      go (2026-11-10), four launches against `Melodia-dev`, restored after; the sheets are kept in
+      `~/Development/melodia-cue-test-files`:
+  - [x] a FLAC image with a UTF-8 sheet;
+  - [x] a WAV image with a Shift_JIS sheet;
+  - [x] a Windows-1251 sheet;
+  - [x] a sheet naming `.wav` beside a `.flac`;
+  - [x] a hidden-track sheet;
+  - [x] the multi-file layout over per-track files, which must claim nothing;
+  - [x] two sheets naming one image;
+  - [x] an image that already sat in a playlist;
+  - [x] twelve real EAC sheets from public parser test suites, audio built to their timings: ISRC
+        and `CATALOG`, sub-second track-1 pregaps (no hidden track), `.ape` and `.wav` names over
+        `.flac`, Shift_JIS, GBK and UTF-8 with a BOM, and two EAC multi-file rips, one with `PREGAP`.
+- [x] Checks, by a full rescan where it applies:
+  - [x] the titles, numbers and artists are right;
+  - [x] the image's own row is gone and its playlist holds the tracks;
+  - [x] deleting the sheet brings the image back;
+  - [x] a reread sheet keeps its rows' ids and play counts, and only the owed images are read;
+  - [x] an empty sheet keeps its tracks and is read again next scan.
 
   Playback still plays from the top of the file until Phase 3.
 
@@ -591,8 +610,8 @@ The `RETURNING id, file_path` match in `insert_tracks_batch` (`mutations.rs:217`
       `MoveCandidates` (`moves.rs`) holds every row per hash and re-points one by id, which would
       carry one row of twelve. So ordinary reads take whole-file rows only, and a sheet image is one
       candidate, named by its gone *path* and spent whole.
-- [ ] Incremental scan: a cue unit is current when the image's stamp matches its rows' and the
-      sheet's matches `cue_sheets`.
+- [x] Incremental scan: a cue unit is current when the image's stamp matches its rows' and the
+      sheet's matches `cue_sheets`. Landed with Phase 2's planner, as the owed rule.
 - [ ] Docs: the watcher's module doc says sheets are library files.
 
 **Gate:**
@@ -720,7 +739,7 @@ Existing tests a phase breaks are fixed in that phase.
 - **Docs land in the phase that stales them**, held to the anchor rule. Most of the argument above
   moves into the module docs of `cue/`, `span.rs` and `park.rs`, and into the migration's comments,
   as each lands.
-- **800 lines:** `backend/mod.rs` (647), `ingest.rs` (598), `voice.rs` (593), `metadata.rs` (537)
+- **800 lines:** `backend/mod.rs` (647), `ingest.rs` (625), `voice.rs` (593), `metadata.rs` (541)
   and `watch_batch.rs` (387) are the files at risk. The new logic goes into its own modules (`cue/`,
   `cue_units.rs`, `span.rs`, `park.rs`), so each of these gains call sites, not bodies.
 - **Memory:** `TrackSummary` gains an `Option<CueSpan>` per queued or cached track, and Phase 6
@@ -732,7 +751,5 @@ Existing tests a phase breaks are fixed in that phase.
 
 ## Open questions
 
-- ⚠️ **re-verify** on the day: the latest `encoding_rs` and `chardetng` releases, and whether either
-  ships a NOTICE.
 - The one-second floor for a hidden track is a judgement. A real disc with a shorter hidden track
   would move it, and the constant's doc says what it separates, not why one second.

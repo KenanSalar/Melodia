@@ -7,8 +7,9 @@ use crate::database::queries;
 use crate::database::queries::fixtures::{
     insert_test_track, keep_out, make_test_metadata, numbered_library, setup_seeded_db,
 };
-use crate::database::queries::ingest::{Ingested, commit_scan_chunk};
+use crate::database::queries::ingest::{Ingested, ScanChunk, commit_scan_chunk};
 use crate::database::{DbPool, sql};
+use crate::media::cue::CueChunk;
 use crate::media::ingest::scan_pool::ScanPool;
 use melodia_core::entities::scan::ScannedFile;
 use melodia_core::error::AppError;
@@ -70,7 +71,7 @@ async fn an_orphan_whose_row_a_chunk_repointed_deletes_nothing() -> Result<(), A
     let mut ingested = Ingested::for_delta(2);
     let chunk = commit_scan_chunk(
         &db,
-        vec![moved],
+        ScanChunk { files: vec![moved], cue: CueChunk::default() },
         folder.id,
         "2024-01-01T00:00:00Z".to_owned(),
         ScanPool::default(),

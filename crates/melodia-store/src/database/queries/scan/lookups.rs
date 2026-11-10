@@ -1,5 +1,7 @@
 //! The reads the scan and the watcher batch make.
 
+use std::collections::HashMap;
+
 use rusqlite::Transaction;
 
 use crate::database::DbPool;
@@ -47,19 +49,59 @@ pub async fn fold_folder_tracks<A: Send + 'static>(
     db: &DbPool,
     folder_id: i64,
     init: A,
+    step: impl FnMut(&mut A, String, FileStamp) + Send + 'static,
+) -> Result<A, AppError> {
+    let rows = "SELECT file_path, file_size, date_modified FROM tracks WHERE folder_id = ?";
+    fold_stamps(db, rows, folder_id, init, step).await
+}
+
+/// [`fold_folder_tracks`] for the folder's cue sheets.
+pub async fn fold_folder_sheets<A: Send + 'static>(
+    db: &DbPool,
+    folder_id: i64,
+    init: A,
+    step: impl FnMut(&mut A, String, FileStamp) + Send + 'static,
+) -> Result<A, AppError> {
+    let rows = "SELECT path, file_size, date_modified FROM cue_sheets WHERE folder_id = ?";
+    fold_stamps(db, rows, folder_id, init, step).await
+}
+
+async fn fold_stamps<A: Send + 'static>(
+    db: &DbPool,
+    rows: &'static str,
+    folder_id: i64,
+    init: A,
     mut step: impl FnMut(&mut A, String, FileStamp) + Send + 'static,
 ) -> Result<A, AppError> {
     db.read(move |conn| {
         let mut acc = init;
         sql::fetch_each(
             conn,
-            "SELECT file_path, file_size, date_modified FROM tracks WHERE folder_id = ?",
+            rows,
             (folder_id,),
             |(path, file_size, date_modified): (String, Option<i64>, Option<String>)| {
                 step(&mut acc, path, FileStamp { file_size, date_modified });
             },
         )?;
         Ok(acc)
+    })
+    .await
+}
+
+/// Each image a cue sheet in the folder claims, mapped to that sheet's path.
+pub async fn sheet_claims(
+    db: &DbPool,
+    folder_id: i64,
+) -> Result<HashMap<String, String>, AppError> {
+    db.read(move |conn| {
+        let rows: Vec<(String, String)> = sql::fetch_all(
+            conn,
+            "SELECT DISTINCT tracks.file_path, cue_sheets.path
+             FROM cue_sheets JOIN tracks ON tracks.cue_sheet_id = cue_sheets.id
+             WHERE cue_sheets.folder_id = ?",
+            (folder_id,),
+        )?;
+        Ok(rows.into_iter().collect())
     })
     .await
 }

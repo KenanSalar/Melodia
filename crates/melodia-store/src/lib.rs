@@ -8,5 +8,6 @@
 pub mod database;
 
 pub mod media {
+    pub mod cue;
     pub mod ingest;
 }

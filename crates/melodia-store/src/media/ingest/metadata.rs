@@ -136,12 +136,12 @@ pub fn read_tags(path: &Path, scope: TagScope) -> Result<TaggedFile, AppError> {
 
 /// Parses a `ReplayGain` gain like `"-6.50 dB"`. Rejects `nan` and `inf`, which `f64` parses and
 /// which would play the track as silence.
-fn parse_replaygain_gain(s: &str) -> Option<f64> {
+pub(crate) fn parse_replaygain_gain(s: &str) -> Option<f64> {
     s.trim().trim_end_matches("dB").trim().parse::<f64>().ok().filter(|v| v.is_finite())
 }
 
 /// Parses a linear `ReplayGain` peak like `"0.988553"`, finite only.
-fn parse_replaygain_peak(s: &str) -> Option<f64> {
+pub(crate) fn parse_replaygain_peak(s: &str) -> Option<f64> {
     s.trim().parse::<f64>().ok().filter(|v| v.is_finite())
 }
 
@@ -440,13 +440,17 @@ fn read_genres(tag: Option<&Tag>) -> GenreList {
         return GenreList::default();
     };
     let values = trimmed_values(tag, ItemKey::Genre);
-    let names = match values.as_slice() {
-        [single] => {
-            single.split(';').map(str::trim).filter(|s| !s.is_empty()).map(str::to_owned).collect()
-        }
-        _ => values,
-    };
-    GenreList::new(names)
+    match values.as_slice() {
+        [single] => split_genres(single),
+        _ => GenreList::new(values),
+    }
+}
+
+/// One genre value as the list it may flatten, by [`read_genres`]' rule.
+pub(crate) fn split_genres(value: &str) -> GenreList {
+    GenreList::new(
+        value.split(';').map(str::trim).filter(|s| !s.is_empty()).map(str::to_owned).collect(),
+    )
 }
 
 fn read_sort_tags(tag: Option<&Tag>) -> SortTags {

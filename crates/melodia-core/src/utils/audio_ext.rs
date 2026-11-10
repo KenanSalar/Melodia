@@ -14,3 +14,8 @@ pub const AUDIO_EXTENSIONS: &[&str] = &[
 pub fn is_audio_extension(ext: &str) -> bool {
     AUDIO_EXTENSIONS.iter().any(|a| ext.eq_ignore_ascii_case(a))
 }
+
+/// Whether `ext`, without the dot and in any case, names a cue sheet.
+pub fn is_cue_sheet(ext: &str) -> bool {
+    ext.eq_ignore_ascii_case("cue")
+}

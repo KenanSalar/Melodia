@@ -9,6 +9,13 @@ pub struct CueTrack(u8);
 
 impl CueTrack {
     const LAST: u8 = 99;
+
+    /// The hidden track ahead of track 1.
+    pub const HIDDEN: Self = Self(0);
+
+    pub fn number(self) -> u8 {
+        self.0
+    }
 }
 
 impl TryFrom<i64> for CueTrack {
@@ -40,6 +47,16 @@ impl FromSql for CueTrack {
 /// is the decoder's.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct CueFrames(u32);
+
+/// Cue frames to the second, the CD's sector rate.
+pub const FRAMES_PER_SECOND: u32 = 75;
+
+impl CueFrames {
+    /// The time in milliseconds, rounded down.
+    pub fn millis(self) -> i64 {
+        i64::from(self.0) * 1000 / i64::from(FRAMES_PER_SECOND)
+    }
+}
 
 impl TryFrom<i64> for CueFrames {
     type Error = CueError;

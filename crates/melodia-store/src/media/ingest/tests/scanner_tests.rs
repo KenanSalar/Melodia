@@ -316,10 +316,7 @@ fn a_file_with_no_row_is_read() -> Result<(), AppError> {
     let tmp = TempDir::new()?;
     let f = tmp.path().join("a.wav");
     create_minimal_wav(&f)?;
-    let index = WalkIndex::new(MediaWalk {
-        files: walked_paths(slice::from_ref(&f)),
-        unreadable: Vec::new(),
-    });
+    let index = WalkIndex::new(walked_paths(slice::from_ref(&f)), Vec::new());
     assert_eq!(index.changed(|_| true), [f]);
     Ok(())
 }
@@ -366,13 +363,13 @@ fn only_a_row_the_walk_did_not_find_is_an_orphan() {
     let (early, found, gone, late) =
         (root.join("a.mp3"), root.join("m.mp3"), root.join("n.mp3"), root.join("z.mp3"));
     let files = walked_paths(&[late.clone(), found.clone(), early.clone()]);
-    let mut index = WalkIndex::new(MediaWalk { files, unreadable: Vec::new() });
+    let mut index = WalkIndex::new(files, Vec::new());
 
     for path in [&found, &gone, &late, &early] {
         index.add_row(stored(path), any_row());
     }
 
-    assert_eq!(index.into_orphans(), [stored(&gone)]);
+    assert_eq!(index.take_orphans(), [stored(&gone)]);
 }
 
 /// A directory the walk couldn't read says nothing about the files in it, and a row purged there
@@ -383,13 +380,12 @@ fn a_row_under_a_path_the_walk_could_not_read_is_spared() {
     let unreadable = root.join("locked");
     let inside = unreadable.join("a.mp3");
     let gone = root.join("gone.mp3");
-    let mut index =
-        WalkIndex::new(MediaWalk { files: WalkedPaths::default(), unreadable: vec![unreadable] });
+    let mut index = WalkIndex::new(WalkedPaths::default(), vec![unreadable]);
 
     index.add_row(stored(&inside), any_row());
     index.add_row(stored(&gone), any_row());
 
-    assert_eq!(index.into_orphans(), [stored(&gone)]);
+    assert_eq!(index.take_orphans(), [stored(&gone)]);
 }
 
 /// A rescan reads only what moved on disk; a row the filter ignores is a launch that re-reads the
@@ -400,10 +396,7 @@ fn a_file_whose_row_matches_its_size_and_mtime_is_left_unread() -> Result<(), Ap
     let (current, edited) = (tmp.path().join("a.wav"), tmp.path().join("b.wav"));
     create_minimal_wav(&current)?;
     create_minimal_wav(&edited)?;
-    let mut index = WalkIndex::new(MediaWalk {
-        files: walked_paths(&[edited.clone(), current.clone()]),
-        unreadable: Vec::new(),
-    });
+    let mut index = WalkIndex::new(walked_paths(&[edited.clone(), current.clone()]), Vec::new());
     let mut edited_row = row_for(&edited)?;
     edited_row.file_size = edited_row.file_size.map(|size| size + 1);
     index.add_row(stored(&current), row_for(&current)?);
@@ -427,10 +420,7 @@ fn each_file_is_held_to_its_own_rows_mtime() -> Result<(), AppError> {
     create_minimal_wav(&newer)?;
     let written = SystemTime::UNIX_EPOCH + Duration::from_secs(1_600_000_000);
     fs::File::options().write(true).open(&older)?.set_modified(written)?;
-    let mut index = WalkIndex::new(MediaWalk {
-        files: walked_paths(&[older.clone(), newer.clone()]),
-        unreadable: Vec::new(),
-    });
+    let mut index = WalkIndex::new(walked_paths(&[older.clone(), newer.clone()]), Vec::new());
     index.add_row(stored(&older), row_for(&older)?);
     index.add_row(stored(&newer), row_for(&newer)?);
 
@@ -448,12 +438,12 @@ fn every_row_is_paired_when_path_order_and_string_order_disagree() {
     let root = PathBuf::from("music");
     let (nested, hyphenated) = (root.join("a").join("b.mp3"), root.join("a-b.mp3"));
     let files = walked_paths(&[nested.clone(), hyphenated.clone()]);
-    let mut index = WalkIndex::new(MediaWalk { files, unreadable: Vec::new() });
+    let mut index = WalkIndex::new(files, Vec::new());
 
     index.add_row(stored(&nested), any_row());
     index.add_row(stored(&hyphenated), any_row());
 
-    assert_eq!(index.into_orphans(), Vec::<String>::new());
+    assert_eq!(index.take_orphans(), Vec::<String>::new());
 }
 
 /// The store compares paths byte for byte, so the walk has to sort the same way: folding case,
@@ -463,13 +453,13 @@ fn every_row_is_paired_whatever_case_accent_or_numeral_its_name_carries() {
     let root = PathBuf::from("music");
     let names = ["Track 9.mp3", "ete.mp3", "track 1.mp3", "Été.mp3", "Track 10.mp3"];
     let files = walked_paths(&names.map(|name| root.join(name)));
-    let mut index = WalkIndex::new(MediaWalk { files, unreadable: Vec::new() });
+    let mut index = WalkIndex::new(files, Vec::new());
 
     for name in ["Été.mp3", "Track 10.mp3", "track 1.mp3", "Track 9.mp3", "ete.mp3"] {
         index.add_row(stored(&root.join(name)), any_row());
     }
 
-    assert_eq!(index.into_orphans(), Vec::<String>::new());
+    assert_eq!(index.take_orphans(), Vec::<String>::new());
 }
 
 /// A file whose name only starts with a row's is a different file.
@@ -477,12 +467,11 @@ fn every_row_is_paired_whatever_case_accent_or_numeral_its_name_carries() {
 fn a_row_whose_path_is_a_prefix_of_a_walked_file_is_an_orphan() {
     let root = PathBuf::from("music");
     let (walked, gone) = (root.join("song.mp3.flac"), root.join("song.mp3"));
-    let mut index =
-        WalkIndex::new(MediaWalk { files: walked_paths(&[walked]), unreadable: Vec::new() });
+    let mut index = WalkIndex::new(walked_paths(&[walked]), Vec::new());
 
     index.add_row(stored(&gone), any_row());
 
-    assert_eq!(index.into_orphans(), [stored(&gone)]);
+    assert_eq!(index.take_orphans(), [stored(&gone)]);
 }
 
 /// An unreadable directory spares what is inside it and nothing beside it, whatever its name
@@ -492,11 +481,11 @@ fn a_row_beside_an_unreadable_directory_sharing_its_name_prefix_is_still_an_orph
     let root = PathBuf::from("music");
     let gone = root.join("locked2").join("a.mp3");
     let unreadable = vec![root.join("locked")];
-    let mut index = WalkIndex::new(MediaWalk { files: WalkedPaths::default(), unreadable });
+    let mut index = WalkIndex::new(WalkedPaths::default(), unreadable);
 
     index.add_row(stored(&gone), any_row());
 
-    assert_eq!(index.into_orphans(), [stored(&gone)]);
+    assert_eq!(index.take_orphans(), [stored(&gone)]);
 }
 
 /// The scan imports in the order this hands back, so files arriving in whatever order the
@@ -506,7 +495,7 @@ fn new_files_are_read_in_path_order() {
     let root = PathBuf::from("music");
     let (a, m, z) = (root.join("a.mp3"), root.join("m.mp3"), root.join("z.mp3"));
     let files = walked_paths(&[z.clone(), a.clone(), m.clone()]);
-    let index = WalkIndex::new(MediaWalk { files, unreadable: Vec::new() });
+    let index = WalkIndex::new(files, Vec::new());
 
     let changed = index.changed(|_| true);
 
@@ -519,7 +508,7 @@ fn a_file_the_keep_filter_refuses_is_left_unread_even_without_a_row() {
     let root = PathBuf::from("music");
     let (kept, refused) = (root.join("a.mp3"), root.join("nested").join("b.mp3"));
     let files = walked_paths(&[kept.clone(), refused.clone()]);
-    let index = WalkIndex::new(MediaWalk { files, unreadable: Vec::new() });
+    let index = WalkIndex::new(files, Vec::new());
 
     let changed = index.changed(|file| file != refused);
 
@@ -545,7 +534,7 @@ fn two_files_whose_names_read_back_alike_share_their_row() -> Result<(), AppErro
         fs::File::options().write(true).open(path)?.set_modified(written)?;
     }
     let files = walked_paths(&[second.clone(), first.clone()]);
-    let mut index = WalkIndex::new(MediaWalk { files, unreadable: Vec::new() });
+    let mut index = WalkIndex::new(files, Vec::new());
     index.add_row(stored(&first), row_for(&first)?);
 
     let changed = index.changed(|_| true);
@@ -601,10 +590,7 @@ fn a_kept_out_file_that_matches_its_stamp_is_left_unread() -> Result<(), AppErro
     let tmp = TempDir::new()?;
     let spare = tmp.path().join("spare.wav");
     create_minimal_wav(&spare)?;
-    let mut index = WalkIndex::new(MediaWalk {
-        files: walked_paths(slice::from_ref(&spare)),
-        unreadable: Vec::new(),
-    });
+    let mut index = WalkIndex::new(walked_paths(slice::from_ref(&spare)), Vec::new());
     index.add_kept_out(&stored(&spare), row_for(&spare)?);
 
     let changed = index.changed(|_| true);
@@ -617,10 +603,7 @@ fn a_kept_out_file_that_matches_its_stamp_is_left_unread() -> Result<(), AppErro
 fn only_a_kept_out_file_the_walk_did_not_find_is_unwalked() {
     let root = PathBuf::from("music");
     let (found, gone) = (root.join("found.mp3"), root.join("gone.mp3"));
-    let index = WalkIndex::new(MediaWalk {
-        files: walked_paths(slice::from_ref(&found)),
-        unreadable: Vec::new(),
-    });
+    let index = WalkIndex::new(walked_paths(slice::from_ref(&found)), Vec::new());
 
     let unwalked = index.unwalked([stored(&found), stored(&gone)]);
 
@@ -634,8 +617,7 @@ fn a_kept_out_file_under_a_path_the_walk_could_not_read_is_spared() {
     let root = PathBuf::from("music");
     let unreadable = root.join("locked");
     let (inside, gone) = (unreadable.join("spare.mp3"), root.join("gone.mp3"));
-    let index =
-        WalkIndex::new(MediaWalk { files: WalkedPaths::default(), unreadable: vec![unreadable] });
+    let index = WalkIndex::new(WalkedPaths::default(), vec![unreadable]);
 
     let unwalked = index.unwalked([stored(&inside), stored(&gone)]);
 

@@ -2,6 +2,7 @@
 
 use rusqlite::Transaction;
 
+use super::cue_units::forget_sheets;
 use super::{delete_tracks_by_paths_batch, prune_orphans, roll_up_covers};
 use crate::database::DbPool;
 use crate::database::queries::ingest::Ingested;
@@ -17,16 +18,20 @@ pub struct Unwalked {
     pub tracks: Vec<String>,
     /// The folder's kept-out files, whose exclusions the commit forgets.
     pub exclusions: Vec<String>,
+    /// The folder's cue sheets, whose stamps the commit forgets. Their images still walked have
+    /// had their own rows back from the scan's chunks.
+    pub sheets: Vec<String>,
 }
 
 impl Unwalked {
     pub fn is_empty(&self) -> bool {
-        self.tracks.is_empty() && self.exclusions.is_empty()
+        self.tracks.is_empty() && self.exclusions.is_empty() && self.sheets.is_empty()
     }
 
     pub fn absorb(&mut self, other: Self) {
         self.tracks.extend(other.tracks);
         self.exclusions.extend(other.exclusions);
+        self.sheets.extend(other.sheets);
     }
 }
 
@@ -86,6 +91,10 @@ fn finish_on(
     let removed = delete_tracks_by_paths_batch(tx, &unwalked.tracks)?;
     let exclusions: Vec<&str> = unwalked.exclusions.iter().map(String::as_str).collect();
     let forgotten = excluded_files::lift_on(tx, &exclusions)?;
+    let sheets = forget_sheets(tx, &unwalked.sheets)?;
+    if sheets > 0 {
+        log::info!("Forgot {sheets} cue sheets gone from disk");
+    }
 
     // A rescan that changed nothing skips the sweeps, which would only rewrite the same values.
     let any_changes = ingested.any() || removed > 0;

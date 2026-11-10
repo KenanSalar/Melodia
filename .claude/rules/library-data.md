@@ -3,6 +3,7 @@ paths:
   - crates/melodia-app/src/library/**/*.rs
   - crates/melodia-store/src/database/**/*.rs
   - crates/melodia-store/src/media/ingest/**/*.rs
+  - crates/melodia-store/src/media/cue/**/*.rs
   - crates/melodia-core/src/utils/audio_ext.rs
   - crates/melodia-core/src/utils/fold.rs
   - crates/melodia-core/src/utils/trash_dir.rs
@@ -23,8 +24,13 @@ paths:
 - **A column naming a stored file joins `queries::artwork::ARTWORK_COLUMNS` in the migration that
   adds it**, or the artwork sweep deletes what it names. An undo that writes back a row naming a
   file nothing can rebuild holds it in an `ArtworkHold` taken before the delete commits.
-- **`utils::audio_ext::is_audio_extension` is the one audio-extension predicate**; never re-roll a
-  lowercase-and-contains at a new call site.
+- **`utils::audio_ext::is_audio_extension` is the one audio-extension predicate**, and
+  `is_cue_sheet` the one cue-sheet one; never re-roll a lowercase-and-contains at a new call site.
+- **An image a cue sheet claims never reaches the ordinary ingest**: the planner
+  (`media::cue::plan`) takes it out of a scan's files, and its sheet's job writes its tracks
+  (`queries::scan::cue_units`). A sheet claims a file it carves into two or more rows, one sheet
+  wins an image, and a sheet that fails to read keeps its claim. A new path that ingests a file a
+  sheet may claim asks the planner, or the image gets a whole-file row beside its tracks.
 - **`utils::trash_dir` is the one trash-folder predicate**: a walk or watch that finds files by
   itself asks it, never a trash name of its own.
 - **Nothing inside a write transaction `stat`s a file**: a second `stat` can pair a new mtime with

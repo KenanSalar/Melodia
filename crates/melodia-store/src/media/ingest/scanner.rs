@@ -7,7 +7,7 @@ use walkdir::{DirEntry, WalkDir};
 
 use crate::media::ingest::metadata::extract_or_filename_row;
 use melodia_core::entities::scan::{FileStamp, FileStampRef, ScannedFile};
-use melodia_core::utils::audio_ext::is_audio_extension;
+use melodia_core::utils::audio_ext::{is_audio_extension, is_cue_sheet};
 use melodia_core::utils::trash_dir::is_trash_dir;
 
 /// What a library walk and parse report while they run, and how they learn to stop.
@@ -33,9 +33,10 @@ impl ScanObserver for Unobserved {
     }
 }
 
-/// The audio files under one folder, and what the walk couldn't vouch for.
+/// The audio files and cue sheets under one folder, and what the walk couldn't vouch for.
 pub struct MediaWalk {
     pub files: WalkedPaths,
+    pub sheets: WalkedPaths,
     /// Paths the walk failed to read, a directory or now and then a single entry. Nothing under
     /// one is known to be gone, so a row there can't be taken for an orphan.
     pub unreadable: Vec<PathBuf>,
@@ -111,12 +112,26 @@ impl WalkedPaths {
             self.entries[start..].partition_point(|&entry| self.spelling(entry).as_ref() == path);
         start..start + matching
     }
+
+    /// The paths directly inside `dir`, once sorted. Every path under `dir` shares its spelling as
+    /// a prefix, so they sit in one run of the sort, which is walked to drop the deeper ones.
+    fn in_dir<'a>(&'a self, dir: &'a Path) -> impl Iterator<Item = &'a Path> {
+        let prefix = dir.to_string_lossy();
+        let start =
+            self.entries.partition_point(|&entry| self.spelling(entry).as_ref() < prefix.as_ref());
+        self.entries[start..]
+            .iter()
+            .take_while(move |&&entry| self.spelling(entry).starts_with(prefix.as_ref()))
+            .map(|&entry| self.path(entry))
+            .filter(move |path| path.parent() == Some(dir))
+    }
 }
 
-/// Walks `dir` for audio files, or answers `None` once `observer` cancels: a partial list is
-/// one a caller could mistake for the whole tree.
+/// Walks `dir` for audio files and cue sheets, or answers `None` once `observer` cancels: a
+/// partial list is one a caller could mistake for the whole tree.
 pub fn collect_media_files(dir: &Path, observer: &dyn ScanObserver) -> Option<MediaWalk> {
     let mut files = WalkedPaths::default();
+    let mut sheets = WalkedPaths::default();
     let mut unreadable = Vec::new();
 
     let walk = WalkDir::new(dir).follow_links(false).into_iter();
@@ -149,10 +164,12 @@ pub fn collect_media_files(dir: &Path, observer: &dyn ScanObserver) -> Option<Me
         if is_audio_extension(ext) {
             files.push(path);
             observer.found(u32::try_from(files.len()).unwrap_or(u32::MAX));
+        } else if is_cue_sheet(ext) {
+            sheets.push(path);
         }
     }
 
-    Some(MediaWalk { files, unreadable })
+    Some(MediaWalk { files, sheets, unreadable })
 }
 
 /// A root is walked whatever its name, as the user added it on purpose.
@@ -203,7 +220,7 @@ pub fn scan_files_parallel(
 }
 
 /// A folder's walk sorted by path, each file paired with the stamp its row or its exclusion holds,
-/// if any.
+/// if any: the audio files against their tracks, or the cue sheets against `cue_sheets`.
 ///
 /// Rows arrive one at a time and find their files by binary search, so only an orphan's path is
 /// copied, and the sort is on the lossy string a row stores so the two compare equal. Orphans are
@@ -226,33 +243,47 @@ struct PackedStamp {
 }
 
 impl WalkIndex {
-    /// Sorts `walk` on the current rayon pool.
-    pub fn new(walk: MediaWalk) -> Self {
-        let MediaWalk { mut files, unreadable } = walk;
+    /// Sorts `files` on the current rayon pool.
+    pub fn new(mut files: WalkedPaths, unreadable: Vec<PathBuf>) -> Self {
         files.sort();
         let stamps = vec![None; files.len()];
         Self { files, stamps, stamp_text: String::new(), unreadable, orphans: Vec::new() }
     }
 
-    /// How many audio files the walk found.
+    /// How many files the walk found.
     pub fn len(&self) -> usize {
         self.files.len()
     }
 
-    /// Whether the walk found no audio file at all.
+    /// Whether the walk found no file at all.
     pub fn is_empty(&self) -> bool {
         self.files.is_empty()
+    }
+
+    /// Whether the walk found `path`.
+    pub fn contains(&self, path: &Path) -> bool {
+        !self.files.spelled(&path.to_string_lossy()).is_empty()
+    }
+
+    /// The walked files directly inside `dir`.
+    pub fn in_dir<'a>(&'a self, dir: &'a Path) -> impl Iterator<Item = &'a Path> {
+        self.files.in_dir(dir)
     }
 
     /// Pairs a stored row with the files at its path, or keeps it as an orphan when there are
     /// none. A row under a path the walk couldn't read is spared: its file is as likely there as
     /// gone, and purging it takes the track's rating and play count with it.
+    ///
+    /// A sheet's rows share their image's path and stamp, so a file already stamped keeps it.
     pub fn add_row(&mut self, path: String, stamp: FileStamp) {
         let found = self.files.spelled(&path);
         if found.is_empty() {
             if !self.under_unreadable(&path) {
                 self.orphans.push(path);
             }
+            return;
+        }
+        if self.stamps[found.start].is_some() {
             return;
         }
         self.stamp_files(found, stamp);
@@ -281,9 +312,12 @@ impl WalkIndex {
             .collect()
     }
 
-    /// The rows the walk didn't find.
-    pub fn into_orphans(self) -> Vec<String> {
-        self.orphans
+    /// The paths of the rows the walk didn't find, each once however many rows it held.
+    pub fn take_orphans(&mut self) -> Vec<String> {
+        let mut orphans = std::mem::take(&mut self.orphans);
+        orphans.sort_unstable();
+        orphans.dedup();
+        orphans
     }
 
     /// The kept-out paths among `paths` the walk didn't find, sparing those under a path it
