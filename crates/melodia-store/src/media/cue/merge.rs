@@ -157,9 +157,8 @@ fn apply_sheet(meta: &mut ExtractedMetadata, scopes: &Scopes<'_>) {
     apply_replaygain(meta, scopes);
 }
 
-/// Track `track`'s credits, genres and release tags as Edit Tags shows them: `image`'s own, with
-/// what the sheet states over them by [`apply_sheet`]'s rules, for a row that stores none of them.
-/// Lyrics describe a recording, so the image's are no track's.
+/// `image`'s credits, genres and release tags for track `track`, with what the sheet states over
+/// them by [`apply_sheet`]'s rules. Lyrics describe a recording, so the image's are no track's.
 pub(crate) fn track_tags(sheet: &Sheet, track: CueTrack, image: FileTags) -> FileTags {
     let scopes = Scopes { track: sheet.tracks.iter().find(|stated| stated.number == track), sheet };
     let mut tags = FileTags { lyrics: None, ..image };

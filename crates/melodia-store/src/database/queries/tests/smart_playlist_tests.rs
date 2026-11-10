@@ -780,13 +780,13 @@ async fn a_capped_set_valued_rule_walks_its_order() -> Result<(), AppError> {
     Ok(())
 }
 
-/// Through `first_cover`'s own `WHERE`. The first hit ends the walk, which an `IN` would pay for
+/// Through `first_cover`'s own statement. The first hit ends the walk, which an `IN` would pay for
 /// with every match.
 #[tokio::test]
 async fn a_cover_lookup_walks_the_natural_order() -> Result<(), AppError> {
     let db = DbPool::test_pool().await?;
-    let mut sql = Sql::new("EXPLAIN QUERY PLAN SELECT artwork_path FROM tracks");
-    super::push_first_cover_where(&mut sql, &rock_rule());
+    let mut sql = Sql::new("EXPLAIN QUERY PLAN SELECT artwork_path");
+    super::push_first_cover(&mut sql, &rock_rule());
 
     let plan = plan_steps(&db, sql).await?;
 

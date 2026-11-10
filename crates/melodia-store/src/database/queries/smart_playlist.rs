@@ -87,14 +87,15 @@ pub(crate) fn first_cover(
     conn: &Connection,
     criteria: &SmartCriteria,
 ) -> Result<Option<String>, AppError> {
-    let mut sql = Sql::new("SELECT artwork_path FROM tracks");
-    push_first_cover_where(&mut sql, criteria);
+    let mut sql = Sql::new("SELECT artwork_path");
+    push_first_cover(&mut sql, criteria);
     sql.fetch_optional(conn)
 }
 
-/// [`first_cover`]'s `WHERE`, order and cap, apart so its plan test reads the statement it runs.
-fn push_first_cover_where(sql: &mut Sql, criteria: &SmartCriteria) {
-    sql.push(" WHERE artwork_path IS NOT NULL AND artwork_path != '' AND ").push(IN_LIBRARY);
+/// [`first_cover`]'s statement past its projection, which its plan test reads.
+fn push_first_cover(sql: &mut Sql, criteria: &SmartCriteria) {
+    sql.push(" FROM tracks WHERE artwork_path IS NOT NULL AND artwork_path != '' AND ")
+        .push(IN_LIBRARY);
     push_and_rules(sql, criteria, MemberTest::Correlated);
     sql.push(order_by_fragment(None)).push(" LIMIT 1");
 }

@@ -50,7 +50,7 @@ paths:
 - **A cue sheet's track owns no file**: its image's tags, cover, lyrics and rating state the whole
   disc. A write into a file reaches only rows that play it whole (`get_whole_file_paths_by_ids`),
   and a read of a file's tags or lyrics for one track skips a sheet's (`TagEditRow::is_sheet_track`,
-  `lyrics::LyricsKey`).
+  `lyrics::LyricsKey`) or lays its sheet over them (`cue::read_track_tags`).
 
 ## Query shape
 

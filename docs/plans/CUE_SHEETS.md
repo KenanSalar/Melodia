@@ -972,6 +972,9 @@ a whole disc. *Files opened from outside the library* gives the model.
       §8.7. It drops the lead-out and non-audio tracks and rounds offsets to cue frames.
 - [ ] Planner precedence: an external sheet, then the `CUESHEET` tag, then the block. Embedded rows
       have no `cue_sheet_id`, and their stamp is the image's own.
+- [ ] Edit Tags reads an outside embedded-sheet track through its embedded sheet: `read_files`
+      (`callbacks/tags/open.rs`) finds a sheet only through `cue_sheet_id`, so such a track opens
+      with its genres, credits and release tags blank.
 - [ ] Edits on `CUESHEET`-tag rows rewrite the tag's text through `write.rs` and save it through the
       concrete `VorbisComments`. Rows from the block alone are read-only.
 - [ ] Docs: `README.md`'s cue line covers embedded sheets.

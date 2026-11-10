@@ -114,7 +114,7 @@ pub(super) fn wire_request_edit(
             };
 
             // From the database, single selection included, as argued at
-            // `library::tags::get_tag_edit_role_credits`, except for a file filed outside the
+            // `library::tags::get_tag_edit_role_credits`, except for a track filed outside the
             // library, which has no join rows to read.
             let mut roles_by_id = or_logged(
                 library::tags::get_tag_edit_role_credits(&s.db, &ids).await,
@@ -232,12 +232,7 @@ async fn read_files(
 /// Where the dialog reads one track's own tags.
 enum FileRead {
     Whole(PathBuf),
-    /// A cue sheet's track: its sheet read over its image, whose own tags state the whole disc.
-    SheetTrack {
-        sheet: PathBuf,
-        image: PathBuf,
-        track: CueTrack,
-    },
+    SheetTrack { sheet: PathBuf, image: PathBuf, track: CueTrack },
 }
 
 impl FileRead {
