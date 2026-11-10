@@ -468,8 +468,9 @@ The `RETURNING id, file_path` match in `insert_tracks_batch` (`mutations.rs:217`
   - [x] `PRAGMA foreign_key_check` and `PRAGMA integrity_check` are clean;
   - [x] `INSERT INTO tracks_fts(tracks_fts) VALUES('integrity-check')` passes;
   - [x] a search still ranks.
-- [ ] Kenan's hand pass: the app starts, and the library, playlists, play counts, search and stats
-      are as before.
+- [x] Kenan's hand pass: the app starts, and the library, playlists, play counts, search and stats
+      are as before. Run by Claude on Kenan's go (2026-11-10), with watcher renames, moves, a hash
+      move, a retag, an import and a queue restore on top.
 
 ## Phase 2: Sheets become tracks (the full scan)
 
