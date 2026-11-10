@@ -277,3 +277,16 @@ pub(crate) fn forget_sheets(tx: &Transaction<'_>, paths: &[String]) -> Result<u6
         format!("DELETE FROM cue_sheets WHERE path IN ({path_list})")
     })
 }
+
+/// Forgets the gone sheet at `path` once no row names it, its images given back or claimed by
+/// another sheet, answering whether it did. A row still naming it is an image no job settled, kept
+/// with the stamp row for the next scan to give back rather than cascaded away.
+pub(crate) fn forget_gone_sheet(tx: &Transaction<'_>, path: &str) -> Result<bool, AppError> {
+    let forgotten = sql::execute(
+        tx,
+        "DELETE FROM cue_sheets WHERE path = ?
+         AND NOT EXISTS (SELECT 1 FROM tracks WHERE tracks.cue_sheet_id = cue_sheets.id)",
+        (path,),
+    )?;
+    Ok(forgotten > 0)
+}

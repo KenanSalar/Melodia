@@ -15,7 +15,7 @@ use melodia_core::error::AppError;
 type ByHash = HashMap<String, Vec<(i64, String)>>;
 
 /// Candidates by hash, each taken once so two same-hash files can't both claim one.
-#[derive(Default)]
+#[derive(Default, Clone)]
 pub(crate) struct MoveCandidates {
     /// Every row per hash, lowest id first, as `(id, old path)`: any of a hash's twins can be the
     /// one that moved.

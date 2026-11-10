@@ -643,15 +643,21 @@ The `RETURNING id, file_path` match in `insert_tracks_batch` (`mutations.rs:217`
   - [x] a sheet's `Created` or `Modified`, and an image the plan settles, leave the ordinary path
         (`CuePlan::settles`), and the outcome reaches the transaction as one
         `WatchedChange::Sheets` (`CuePlan::into_chunk`), applied after the other changes and
-        before the deletes. `handle_sheets` writes a released image's whole-file row through
-        `create_track` and files each job under its sheet's folder;
+        before the deletes. `handle_sheets` runs each job in a savepoint of its own
+        (`sql::in_savepoint`), on a copy of the batch's caches kept only with it, a released
+        image's whole-file row written inside it through `create_track`, and files it under its
+        sheet's folder;
   - [x] `paths_to_extract` keeps sheets from the tag reader, and a removed sheet forgets its stamp
-        row (`handle_removed`).
-- [x] Renames: a plain image rename re-points every row, `update_track_location` keying on the old
-      path since Phase 1. A rename of a sheet or of a claimed image is split into its removal and
-      its creation before the plan: a sheet's new name claims the image by number, a claimed
-      image's rows follow its bytes, so every row keeps its id, and a rename over another sheet
-      needs no case of its own.
+        row once no row names it (`forget_gone_sheet`), applied after every other delete. The plan
+        takes a sheet on record that the walk didn't find for gone, whether or not the batch saw it
+        go. A failed read or plan leaves the sheets to the next scan, their events safe applied
+        alone.
+- [x] Renames: an image rename re-points every row, `update_track_location` keying on the old path
+      since Phase 1. A claimed image's claim follows it to the new name before the plan
+      (`follow_renamed_images`), which updates its rows by number where the sheet still names it
+      and gives the image back, playlist places carried, where it doesn't. A sheet's rename is
+      split into its removal and its creation: the new name claims the images by number, so every
+      row keeps its id, and a rename over another sheet needs no case of its own.
 - [x] A move by hash carries the whole file, in the scan and the watcher alike. Ordinary reads take
       whole-file rows only (Phase 1). `MoveCandidates` gains the images a sheet splits, one per
       path under its lowest id (`images_by_hash_on`), and `apply_cue_unit` re-points a gone
@@ -684,6 +690,18 @@ The `RETURNING id, file_path` match in `insert_tracks_batch` (`mutations.rs:217`
   - [x] a sheet renamed and back, and an image renamed by case, keep every id; a sheet copied in
         ahead of its image claims the image when it lands; an album folder copied in or moved in
         from outside the library is split.
+- [x] Recheck after the review fixes, run by Claude on Kenan's go (2026-11-10) as the pass above:
+  - [x] an image renamed to a name its sheet doesn't resolve comes back whole, in the playlist
+        where its tracks sat, and splits again in place renamed back; renamed by case it stays
+        split with every id and play count;
+  - [x] a sheet renamed and back keeps every id, only the current name on record; a sheet deleted
+        gives the image back and is forgotten, and deleted with its image in one batch both go;
+  - [x] a sheet on record whose file is gone without an event is taken for gone: the sheet beside
+        it claims the image back with every id;
+  - [x] a job failed through a test trigger rolls back alone, its tracks and sheet record kept,
+        while the next job in the batch releases its image with the artist the failed job had
+        inserted written again rather than taken from the cache; once the trigger is gone, the
+        image comes back whole.
 
 ## Phase 5: The rest of the library
 

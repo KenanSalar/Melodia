@@ -124,8 +124,8 @@ pub(super) async fn process_batch(
     to_extract.sort_unstable();
     to_extract.dedup();
     let mut metadata = extract_metadata_batch(paths, cover_cache, to_extract).await;
-    // First: a file renamed onto a name a sheet claims gives its read to the sheet, whose rows
-    // replace the one the rename re-points.
+    // First: a file renamed onto a name the plan settled gives its read to the sheet's job, which
+    // takes over the rows the rename re-points.
     let mut changes: Vec<WatchedChange> = sheets::change(cue, &mut metadata).into_iter().collect();
     changes.extend(watched_changes(events, metadata));
     queries::scan::apply_watch_batch(db, changes).await

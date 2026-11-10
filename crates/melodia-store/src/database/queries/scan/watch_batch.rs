@@ -8,16 +8,16 @@ use std::path::{Path, PathBuf};
 
 use rusqlite::Transaction;
 
-use super::cue_units::forget_sheets;
+use super::cue_units::forget_gone_sheet;
 use super::{
     MoveCandidates, NameCache, SheetWriter, delete_track_by_path, file_name_of,
     find_folder_for_path, insert_track, prune_orphans, resolve_track_context, roll_up_covers,
     track_exists_by_path, update_track_location, update_track_metadata,
 };
-use crate::database::DbPool;
 use crate::database::queries::ingest;
 use crate::database::queries::{excluded_files, stats};
-use crate::media::cue::CueChunk;
+use crate::database::{DbPool, sql};
+use crate::media::cue::{CueChunk, SheetJob};
 use crate::media::ingest::watcher::is_sheet_file;
 use melodia_core::entities::scan::{ExtractedMetadata, ScannedFile};
 use melodia_core::error::{AppError, describe};
@@ -60,7 +60,7 @@ pub enum WatchedChange {
 }
 
 /// What one batch carries from event to event.
-#[derive(Default)]
+#[derive(Default, Clone)]
 struct Batch {
     /// The rows and kept-out files whose file vanished, where a `Created` with those bytes
     /// re-points rather than inserts.
@@ -91,13 +91,15 @@ pub async fn apply_watch_batch(
 }
 
 /// The sheets apply after the other changes, so a renamed image's rows sit at its new path for its
-/// sheet to update, and before the deletes, so a moved image's rows are still there to take.
+/// sheet to update, and before the deletes, so a moved image's rows are still there to take. A
+/// removed sheet goes last, once a removed image's rows no longer name it.
 fn apply_order(change: &WatchedChange) -> u8 {
     match change {
         WatchedChange::Created { .. }
         | WatchedChange::Modified { .. }
         | WatchedChange::Renamed { .. } => 0,
         WatchedChange::Sheets { .. } => 1,
+        WatchedChange::Removed { path, .. } if is_sheet_file(path) => 3,
         WatchedChange::Removed { .. } => 2,
     }
 }
@@ -151,7 +153,7 @@ fn apply_change(
             handle_renamed(tx, from, to, meta.as_ref(), date_modified.as_deref(), batch)
         }
         WatchedChange::Modified { path, meta } => handle_modified(tx, path, meta, batch),
-        WatchedChange::Sheets { cue, images } => handle_sheets(tx, cue, images, batch),
+        WatchedChange::Sheets { cue, images } => Ok(handle_sheets(tx, cue, images, batch)),
     }
 }
 
@@ -174,9 +176,8 @@ fn log_failed(change: &WatchedChange, e: &AppError) {
         WatchedChange::Modified { path, .. } => {
             log::warn!("Failed to process modified file {}: {}", path.display(), describe(e));
         }
-        WatchedChange::Sheets { .. } => {
-            log::warn!("Failed to apply the batch's cue sheets: {}", describe(e));
-        }
+        // `handle_sheets` logs each job's failure as it rolls the job back.
+        WatchedChange::Sheets { .. } => {}
     }
 }
 
@@ -300,14 +301,14 @@ fn create_track(
     Ok(true)
 }
 
-/// Whether a row was deleted. A sheet's stamp row goes, and any row still naming the sheet with it.
+/// Whether a row was deleted. A sheet's stamp row goes once no row names it.
 fn handle_removed(tx: &Transaction<'_>, path: &Path) -> Result<bool, AppError> {
     if is_sheet_file(path) {
-        let forgotten = forget_sheets(tx, &[path.to_string_lossy().into_owned()])?;
-        if forgotten > 0 {
+        let forgotten = forget_gone_sheet(tx, &path.to_string_lossy())?;
+        if forgotten {
             log::info!("Forgot cue sheet: {}", path.display());
         }
-        return Ok(forgotten > 0);
+        return Ok(forgotten);
     }
     let deleted = delete_track_by_path(tx, &path.to_string_lossy())?;
     if deleted {
@@ -421,31 +422,51 @@ fn handle_modified(
     Ok(true)
 }
 
-/// Whether a row was written. Each image given back takes its whole-file row first, for its
-/// sheet's job to carry the playlist places onto, and each job is filed under its sheet's library
-/// folder. One sheet failing leaves the others to apply.
+/// Whether a row was written. Each job is a savepoint of its own, so a sheet failing leaves nothing
+/// half-written, its stamp included, and the others apply. It runs on a copy of the batch, kept
+/// only once the savepoint is: a rolled-back artist's cached id would name whichever artist next
+/// takes its rowid.
 fn handle_sheets(
     tx: &Transaction<'_>,
     cue: &CueChunk,
     images: &[ScannedFile],
     batch: &mut Batch,
-) -> Result<bool, AppError> {
+) -> bool {
     let mut wrote = false;
-    for image in images.iter().filter(|image| !cue.claims(&image.path)) {
+    for job in cue.jobs() {
+        let mut job_batch = batch.clone();
+        match sql::in_savepoint(tx, || apply_sheet_job(tx, job, images, &mut job_batch)) {
+            Ok(job_wrote) => {
+                wrote |= job_wrote;
+                *batch = job_batch;
+            }
+            Err(e) => {
+                log::warn!("Failed to apply cue sheet {}: {}", job.path.display(), describe(&e));
+            }
+        }
+    }
+    wrote
+}
+
+/// Writes `job` under its sheet's library folder. Each image it gives back takes its whole-file
+/// row first, for the job to carry the playlist places onto.
+fn apply_sheet_job(
+    tx: &Transaction<'_>,
+    job: &SheetJob,
+    images: &[ScannedFile],
+    batch: &mut Batch,
+) -> Result<bool, AppError> {
+    let Some(folder_id) = library_folder(tx, &job.path, &job.path.to_string_lossy(), "Cue")? else {
+        return Ok(false);
+    };
+    let mut wrote = false;
+    for image in images.iter().filter(|image| job.releases.contains(&image.path)) {
         wrote |= create_track(tx, &image.path, &image.metadata, batch)?;
     }
 
     let now = melodia_core::utils::now_rfc3339();
     let mut sheets = SheetWriter::new(tx, images, &now, &mut batch.moved);
-    for job in cue.jobs() {
-        let Some(folder_id) = library_folder(tx, &job.path, &job.path.to_string_lossy(), "Cue")?
-        else {
-            continue;
-        };
-        if let Err(e) = sheets.apply(job, folder_id) {
-            log::warn!("Failed to apply cue sheet {}: {}", job.path.display(), describe(&e));
-        }
-    }
+    sheets.apply(job, folder_id)?;
     Ok(wrote || sheets.into_writes().any())
 }
 

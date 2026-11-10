@@ -69,6 +69,21 @@ pub(crate) fn fetch_each<T: FromRow>(
     Ok(())
 }
 
+/// Runs `unit` as one piece of the caller's transaction: what it wrote is rolled back if it fails,
+/// and the transaction goes on. What the caller cached from those writes is its own to roll back.
+pub(crate) fn in_savepoint<T>(
+    conn: &Connection,
+    unit: impl FnOnce() -> Result<T, AppError>,
+) -> Result<T, AppError> {
+    execute(conn, "SAVEPOINT unit", ())?;
+    let outcome = unit();
+    if outcome.is_err() {
+        execute(conn, "ROLLBACK TO unit", ())?;
+    }
+    execute(conn, "RELEASE unit", ())?;
+    outcome
+}
+
 /// Escapes `%`, `_` and `\` for a `LIKE ? ESCAPE '\'` pattern.
 pub(crate) fn escape_like(s: &str) -> String {
     let mut out = String::with_capacity(s.len() + 2);

@@ -335,8 +335,8 @@ impl WalkIndex {
         orphans
     }
 
-    /// The kept-out paths among `paths` the walk didn't find, sparing those under a path it
-    /// couldn't read as [`Self::add_row`] spares a row.
+    /// Those of `paths` the walk didn't find, sparing those under a path it couldn't read as
+    /// [`Self::add_row`] spares a row.
     pub fn unwalked(&self, paths: impl IntoIterator<Item = String>) -> Vec<String> {
         paths
             .into_iter()

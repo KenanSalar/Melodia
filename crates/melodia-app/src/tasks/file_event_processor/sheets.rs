@@ -28,14 +28,12 @@ pub(super) struct SheetBatch {
 /// Settles the cue sheets `events` touch. A failed read leaves them to the next scan, and the batch
 /// goes on without them.
 pub(super) async fn settle(db: &DbPool, events: Vec<FileEvent>) -> SheetBatch {
-    let around = match read_around(db, &events).await {
+    let mut around = match read_around(db, &events).await {
         Ok(around) => around,
-        Err(e) => {
-            log::warn!("Cue sheets in this batch left to the next scan: {}", describe(&e));
-            return SheetBatch { events, cue: CueChunk::default() };
-        }
+        Err(e) => return leave_to_next_scan(events, &e),
     };
-    let events = split_renames(events, &around.claims);
+    follow_renamed_images(&mut around.claims, &events);
+    let events = split_sheet_renames(events);
     let names_a_sheet = events.iter().flat_map(event_paths).any(is_sheet_file);
     if around.is_empty() && !names_a_sheet {
         return SheetBatch { events, cue: CueChunk::default() };
@@ -43,13 +41,17 @@ pub(super) async fn settle(db: &DbPool, events: Vec<FileEvent>) -> SheetBatch {
 
     let plan = match plan(&events, around).await {
         Ok(plan) => plan,
-        Err(e) => {
-            log::warn!("Cue sheets in this batch left to the next scan: {}", describe(&e));
-            return SheetBatch { events, cue: CueChunk::default() };
-        }
+        Err(e) => return leave_to_next_scan(events, &e),
     };
     let events = events.into_iter().filter(|event| !is_taken_by(&plan, event)).collect();
     SheetBatch { events, cue: plan.into_chunk() }
+}
+
+/// The batch with no sheet work. A sheet's own events are safe applied alone: a removal forgets
+/// only a sheet no row names.
+fn leave_to_next_scan(events: Vec<FileEvent>, e: &AppError) -> SheetBatch {
+    log::warn!("Cue sheets in this batch left to the next scan: {}", describe(e));
+    SheetBatch { events, cue: CueChunk::default() }
 }
 
 /// The batch's sheet change, each image its jobs read moved out of `metadata`, or `None` where it
@@ -86,18 +88,26 @@ async fn read_around(db: &DbPool, events: &[FileEvent]) -> Result<SheetsAround, 
     scan::sheets_around(db, dirs.into_iter().collect(), audio).await
 }
 
-/// Splits each rename of a sheet or a claimed image into its removal and its creation, which the
-/// plan reads as a scan would: a sheet's new name claims the image by number, and an image's rows
-/// follow its bytes, so every row keeps its id either way.
-fn split_renames(events: Vec<FileEvent>, claims: &HashMap<String, String>) -> Vec<FileEvent> {
+/// Hands each renamed image's claim to its new name. The rename re-points every row of the path
+/// before the sheet's job runs, so the plan judges the image where its rows will be: still named,
+/// they update by number; named no more, the image is given back with its playlist places.
+fn follow_renamed_images(claims: &mut HashMap<String, String>, events: &[FileEvent]) {
+    for event in events {
+        if let FileEvent::Renamed { from, to } = event
+            && let Some(sheet) = claims.remove(from.to_string_lossy().as_ref())
+        {
+            claims.insert(to.to_string_lossy().into_owned(), sheet);
+        }
+    }
+}
+
+/// Splits each rename of a sheet into its removal and its creation, which the plan reads as a scan
+/// would: the new name claims the images by number, so every row keeps its id.
+fn split_sheet_renames(events: Vec<FileEvent>) -> Vec<FileEvent> {
     let mut split = Vec::with_capacity(events.len());
     for event in events {
         match event {
-            FileEvent::Renamed { from, to }
-                if is_sheet_file(&from)
-                    || is_sheet_file(&to)
-                    || claims.contains_key(from.to_string_lossy().as_ref()) =>
-            {
+            FileEvent::Renamed { from, to } if is_sheet_file(&from) || is_sheet_file(&to) => {
                 split.push(FileEvent::Removed(from));
                 split.push(FileEvent::Created(to));
             }
@@ -110,7 +120,7 @@ fn split_renames(events: Vec<FileEvent>, claims: &HashMap<String, String>) -> Ve
 /// Runs the planner over the directories `events` touch, on the blocking pool.
 async fn plan(events: &[FileEvent], around: SheetsAround) -> Result<CuePlan, AppError> {
     let touched = Touched::of(events, &around.claims);
-    tokio::task::spawn_blocking(move || touched.settle(&around.claims))
+    tokio::task::spawn_blocking(move || touched.settle(&around))
         .await
         .map_err(|e| AppError::scanner("Cue sheet planning task failed", e))
 }
@@ -118,11 +128,10 @@ async fn plan(events: &[FileEvent], around: SheetsAround) -> Result<CuePlan, App
 /// What the planner reads off a batch's events.
 struct Touched {
     /// Every directory an event touches, and those of the sheets and images the library holds
-    /// claims between there, so a sheet planned again finds the images it already claims.
+    /// claims for, so a sheet planned again finds the images it already claims.
     dirs: Vec<PathBuf>,
     /// The paths the events leave new content at.
     written: Vec<PathBuf>,
-    removed_sheets: Vec<PathBuf>,
 }
 
 impl Touched {
@@ -130,19 +139,14 @@ impl Touched {
         let claimed = claims.iter().flat_map(|(image, sheet)| [Path::new(image), Path::new(sheet)]);
         let paths = events.iter().flat_map(event_paths).chain(claimed);
         let dirs: BTreeSet<&Path> = paths.filter_map(Path::parent).collect();
-        let removed_sheets = events.iter().filter_map(|event| match event {
-            FileEvent::Removed(path) if is_sheet_file(path) => Some(path.clone()),
-            _ => None,
-        });
         Self {
             dirs: dirs.into_iter().map(Path::to_path_buf).collect(),
             written: events.iter().filter_map(written_path).map(Path::to_path_buf).collect(),
-            removed_sheets: removed_sheets.collect(),
         }
     }
 
-    /// Walks the directories and settles their sheets against `claims`.
-    fn settle(self, claims: &HashMap<String, String>) -> CuePlan {
+    /// Walks the directories and settles their sheets against what `around` holds.
+    fn settle(self, around: &SheetsAround) -> CuePlan {
         let MediaWalk { files, sheets, unreadable } = list_media_files(&self.dirs);
         ScanPool::for_files(sheets.len()).install(|| {
             let audio = WalkIndex::new(files, unreadable.clone());
@@ -153,19 +157,16 @@ impl Touched {
                 changed_audio.into_iter().filter(|path| audio.contains(path)).collect();
             let changed_sheets: Vec<PathBuf> =
                 changed_sheets.into_iter().filter(|path| sheets.contains(path)).collect();
-            let gone_sheets: Vec<String> = self
-                .removed_sheets
-                .iter()
-                .filter(|path| !sheets.contains(path))
-                .map(|path| path.to_string_lossy().into_owned())
-                .collect();
+            // A stamp row outlives a sheet whose job rolled back, so a sheet on record the walk
+            // didn't find is gone whether or not this batch saw it go.
+            let gone_sheets = sheets.unwalked(around.sheets.iter().cloned());
             let input = PlanInput {
                 audio: &audio,
                 sheets: &sheets,
                 changed_audio: &changed_audio,
                 changed_sheets: &changed_sheets,
                 gone_sheets: &gone_sheets,
-                claims,
+                claims: &around.claims,
             };
             // Each job is filed under the library folder its own sheet sits in, so no folder's
             // files are kept out here.
