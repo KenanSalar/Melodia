@@ -203,39 +203,64 @@ fn ids_outside(
     Ok(sql.fetch_all::<i64>(conn)?.into_iter().collect())
 }
 
-/// The rows of each path or hash asked for, a file's in its sheet's order: one for a whole file,
-/// one per track for an image a cue sheet splits. A caller matches on the sheet's number, or takes
-/// them all.
+/// The rows of each path or hash asked for, by copy in path order, each copy's in its sheet's order:
+/// one row for a whole file, one per track for an image a cue sheet splits. A path holds one copy,
+/// a hash every file carrying it, split or not.
 #[derive(Debug, Default)]
-pub struct FileTracks(HashMap<String, Vec<(Option<CueTrack>, i64)>>);
+pub struct FileTracks(HashMap<String, Vec<FileCopy>>);
+
+/// One file's rows under a [`FileTracks`] key.
+#[derive(Debug)]
+struct FileCopy {
+    path: String,
+    tracks: Vec<(Option<CueTrack>, i64)>,
+}
+
+impl FileCopy {
+    fn whole(&self) -> Option<i64> {
+        self.tracks.iter().find(|(cue_track, _)| cue_track.is_none()).map(|&(_, id)| id)
+    }
+
+    fn track(&self, number: CueTrack) -> Option<i64> {
+        self.tracks.iter().find(|(cue_track, _)| *cue_track == Some(number)).map(|&(_, id)| id)
+    }
+}
 
 impl FileTracks {
-    /// Files them under `key`, keeping only the first file each key meets: two copies of one
-    /// image share a hash, and their tracks would otherwise interleave.
+    /// Files each row under its key and its copy. `FILE_ORDER` sorts paths without case, so two
+    /// copies named alike interleave by number, and a row joins its copy by the exact path.
     fn from_rows(rows: Vec<(String, String, Option<CueTrack>, i64)>) -> Self {
-        let mut first_path: HashMap<String, String> = HashMap::new();
-        let mut tracks = Self::default();
+        let mut found = Self::default();
         for (key, path, cue_track, id) in rows {
-            if *first_path.entry(key.clone()).or_insert_with(|| path.clone()) == path {
-                tracks.0.entry(key).or_default().push((cue_track, id));
+            let copies = found.0.entry(key).or_default();
+            match copies.iter_mut().find(|copy| copy.path == path) {
+                Some(copy) => copy.tracks.push((cue_track, id)),
+                None => copies.push(FileCopy { path, tracks: vec![(cue_track, id)] }),
             }
         }
-        tracks
+        found
     }
 
     pub fn contains(&self, key: &str) -> bool {
         self.0.contains_key(key)
     }
 
-    /// Every row under `key`, in play order.
+    /// The rows of one copy under `key`, in play order, for a caller naming no track: a copy played
+    /// whole where there is one, else every track of the lowest path's.
     pub fn ids(&self, key: &str) -> impl Iterator<Item = i64> + '_ {
-        self.0.get(key).into_iter().flatten().map(|&(_, id)| id)
+        let copies = self.0.get(key).map_or(&[][..], Vec::as_slice);
+        let copy = copies.iter().find(|copy| copy.whole().is_some()).or(copies.first());
+        copy.into_iter().flat_map(|copy| copy.tracks.iter().map(|&(_, id)| id))
     }
 
-    /// The row of the sheet's track `number` under `key`.
+    /// The row of the sheet's track `number` under `key`, from the lowest path's copy holding one.
     pub fn track(&self, key: &str, number: CueTrack) -> Option<i64> {
-        let tracks = self.0.get(key)?;
-        tracks.iter().find(|(cue_track, _)| *cue_track == Some(number)).map(|&(_, id)| id)
+        self.0.get(key)?.iter().find_map(|copy| copy.track(number))
+    }
+
+    /// The row of the lowest path's copy played whole under `key`.
+    pub fn whole(&self, key: &str) -> Option<i64> {
+        self.0.get(key)?.iter().find_map(FileCopy::whole)
     }
 }
 
@@ -256,8 +281,8 @@ pub async fn get_track_ids_by_paths(db: &DbPool, paths: &[String]) -> Result<Fil
     Ok(FileTracks::from_rows(rows))
 }
 
-/// The rows of one file carrying each of `hashes`, the lowest path's: any copy plays the same
-/// audio for a playlist re-match.
+/// The rows of every file carrying each of `hashes`: any copy plays the same audio for a playlist
+/// re-match, split by a cue sheet or not.
 pub async fn get_track_ids_by_hashes(
     db: &DbPool,
     hashes: Vec<String>,

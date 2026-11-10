@@ -748,7 +748,8 @@ Each item is a site from the map that breaks once twelve rows share a path:
       have it. `audio_ext.rs` gains `CUE_SHEET_EXTENSION` and `is_library_extension`, which the
       watcher's `is_library_file` and the argv filter read. `get_track_ids_by_paths` and
       `get_track_ids_by_hashes` answer a `FileTracks`: each key's rows with their `cue_track` in
-      `FILE_ORDER`, a hash answering one file's rows, the lowest path's.
+      `FILE_ORDER`, a hash answering every copy's. A number matches the first copy holding it, and
+      no number a copy played whole before the first copy's tracks.
 - [x] **Tag editor** (`views/.../tags/open.rs`): any sheet track in the selection opens it read-only
       (`TagEditor.read-only`), a note above the tabs. Every field takes `read-only` through a local
       `TagField` and the credit and name editors, the cover buttons and Insert found lyrics hide,
@@ -774,8 +775,9 @@ Each item is a site from the map that breaks once twelve rows share a path:
 - [x] **M3U** (`playlist_files/m3u.rs`):
   - [x] Export writes `#MELODIA-CUE-TRACK:<n>` beside `#MELODIA-HASH`.
   - [x] Import matches path plus number, and a hash re-match hash plus number (`match_entries`).
-        An entry with no number takes every row of its file, and a `.cue` entry the rows of the
-        files it names (`import::files_opened_by`).
+        A number no copy holds takes the file played whole, as `release_image` hands a playlist
+        the image once its sheet goes. An entry with no number takes every row of its file, and a
+        `.cue` entry the rows of the files it names (`import::files_opened_by`).
 - [x] **Browse** (`browse.rs`): a claimed image lists its tracks in place, `TRACKS_IN_DIRECTORY`
       ordered by `FILE_ORDER`.
 - [x] **Background tasks:** the retroactive hash hashes each file once and writes every row of it.

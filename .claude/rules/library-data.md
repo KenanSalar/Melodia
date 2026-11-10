@@ -54,7 +54,7 @@ paths:
   a move or a delete takes every row of the path, a file moving with all its rows. A cue sheet
   splits one file into a row per track, so a bare `file_path = ?` reaches every one of them. A
   lookup of ids by path or hash answers every row with its number (`queries::track::FileTracks`),
-  the caller matching on it or taking them all, never one row picked at random.
+  the caller matching on it or taking one file's rows whole, never one row picked at random.
 - **`database::placeholders(n)` builds every IN list**, paired with `chunked_in_query`,
   `chunked_in_execute` for a statement that returns no rows, and `chunked_in_statements` for one
   binding a value ahead of its list; never re-roll `repeat_n("?", n)`, or the chunk loop for any of
