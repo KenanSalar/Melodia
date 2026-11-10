@@ -286,20 +286,22 @@ fn a_directory_without_audio_at_a_new_path_asks_for_nothing() -> Result<(), AppE
     Ok(())
 }
 
-/// A `From` names the side that left, and inotify's `Create(Folder)` is a real mkdir whose files
-/// each raise their own event.
+/// A `From` or a removal names the side that left, which only the database can say held tracks,
+/// and inotify's `Create(Folder)` is a real mkdir whose files each raise their own event.
 #[test]
-fn a_directory_reported_any_other_way_asks_for_nothing() -> Result<(), AppError> {
+fn a_directory_reported_any_other_way_is_not_taken_for_a_rename() -> Result<(), AppError> {
     let tmp = TempDir::new()?;
     let album = album_holding(&tmp, "song.flac")?;
-    let kinds = [
-        renamed(RenameMode::From),
-        EventKind::Create(CreateKind::Folder),
-        EventKind::Remove(RemoveKind::Any),
+    let gone = vec![super::FileEvent::DirectoryGone(album.clone())];
+    let cases = [
+        (renamed(RenameMode::From), gone.clone()),
+        (EventKind::Create(CreateKind::Folder), vec![]),
+        (EventKind::Remove(RemoveKind::Any), gone),
     ];
 
-    for kind in kinds {
-        assert_eq!(super::classify_event(kind, std::slice::from_ref(&album)), [], "{kind:?}");
+    for (kind, expected) in cases {
+        let events = super::classify_event(kind, std::slice::from_ref(&album));
+        assert_eq!(events, expected, "{kind:?}");
     }
     Ok(())
 }

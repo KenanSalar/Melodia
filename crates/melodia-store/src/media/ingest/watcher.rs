@@ -30,6 +30,11 @@ pub enum FileEvent {
     /// A directory holding audio was renamed or moved. The OS reports nothing for the files inside
     /// it, so the library is reconciled rather than leave their rows on the old paths.
     DirectoryRenamed,
+    /// A path with no audio extension was removed or moved out of the watch, which may have been a
+    /// directory: the debouncer folds a deleted directory's file removals into its own, and one
+    /// moved out reports nothing for its files. The library is reconciled if it holds tracks under
+    /// the path.
+    DirectoryGone(PathBuf),
 }
 
 /// The recommended watcher, minus the access events nothing here reads.
@@ -207,14 +212,17 @@ fn classify_event(kind: EventKind, paths: &[PathBuf]) -> Vec<FileEvent> {
                 }
             }
         }
-        // Cross-directory rename source side: only one path visible.
-        EventKind::Remove(RemoveKind::File | RemoveKind::Any)
-        | EventKind::Modify(ModifyKind::Name(RenameMode::From)) => {
+        EventKind::Remove(RemoveKind::File) => {
             for path in paths {
                 if is_library_file(path) {
                     events.push(FileEvent::Removed(path.clone()));
                 }
             }
+        }
+        // Cross-directory rename source side: only one path visible.
+        EventKind::Remove(RemoveKind::Folder | RemoveKind::Any)
+        | EventKind::Modify(ModifyKind::Name(RenameMode::From)) => {
+            events.extend(paths.iter().filter_map(|path| left_the_watch(path)));
         }
         EventKind::Modify(ModifyKind::Name(RenameMode::Both)) => {
             if paths.len() >= 2 {
@@ -265,6 +273,20 @@ fn relocates_an_audio_directory(kind: EventKind, paths: &[PathBuf]) -> bool {
 
 fn holds_audio(dir: &Path) -> bool {
     WalkDir::new(dir).into_iter().flatten().any(|entry| is_audio_file(entry.path()))
+}
+
+/// A path gone from the watch, read by its name alone since it no longer exists: a removed track
+/// if it reads as audio, else a directory that may have held some.
+fn left_the_watch(path: &Path) -> Option<FileEvent> {
+    if in_trash_dir(path) {
+        return None;
+    }
+    let path = path.to_path_buf();
+    Some(if is_audio_file(&path) {
+        FileEvent::Removed(path)
+    } else {
+        FileEvent::DirectoryGone(path)
+    })
 }
 
 /// Audio outside every trash folder: a trashed file reads as removed, a restored one as created.

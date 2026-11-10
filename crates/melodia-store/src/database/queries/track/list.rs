@@ -63,6 +63,23 @@ pub async fn get_tracks_in_directory(
     .await
 }
 
+const ANY_TRACK_UNDER: &str =
+    "SELECT EXISTS (SELECT 1 FROM tracks WHERE file_path >= ?1 AND file_path < ?2)";
+
+/// Whether a track sits anywhere under one of `dirs`, subdirectories included.
+pub async fn holds_tracks_under(db: &DbPool, dirs: Vec<String>) -> Result<bool, AppError> {
+    db.read(move |conn| {
+        for dir in &dirs {
+            let (from, before) = subtree_bounds(dir);
+            if sql::fetch_one(conn, ANY_TRACK_UNDER, (from, before))? {
+                return Ok(true);
+            }
+        }
+        Ok(false)
+    })
+    .await
+}
+
 static RECENTLY_PLAYED: LazyLock<String> = LazyLock::new(|| {
     format!(
         "SELECT {} FROM tracks \
