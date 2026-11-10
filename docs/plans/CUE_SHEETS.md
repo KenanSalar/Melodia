@@ -2,7 +2,8 @@
 
 Working doc. Delete when the feature ships.
 
-Status: **in progress**, Phase 3 through its gates but Kenan's scrobble and Discord check ·
+Status: **in progress**, Phase 4 through its gates; Phase 3 owes Kenan's scrobble and Discord
+check ·
 Created: 2026-11-04
 
 Issue [#78](https://github.com/KenanSalar/Melodia/issues/78).
@@ -366,6 +367,9 @@ text through the same writer. Rows from the native block alone are read-only.
 - **The duplicate finder can dismiss a sheet track but not remove it.** `excluded_files` excludes a
   whole file (`excluded_files.sql:10`), so removing one track would hide all its siblings on the
   next scan.
+- **The watcher re-plans only the directories a batch touches**, and those its claims sit in. A
+  sheet edited to name a file in some other directory claims it the next time that sheet changes,
+  since the edit stamps it.
 
 ---
 
@@ -382,9 +386,9 @@ text through the same writer. Rows from the native block alone are read-only.
 | sheet + image tags → row fields | `media/cue/merge.rs` | the table above; produces the `ExtractedMetadata` shape the ordinary ingest already writes |
 | sheet rewrite | `media/cue/write.rs` | Phase 7 |
 | embedded sources | `media/cue/embedded.rs` | Phase 8: the CUESHEET block reader and the tag text |
-| store units of work | `crates/melodia-store/src/database/queries/scan/cue_units.rs` | `apply_sheet_jobs`: per sheet job, the stamp, `apply_cue_unit` (upsert by key, drop missing numbers, carry playlist entries off the whole-file row) and `release_image` (the reverse), `pub(crate)` on the caller's transaction: the scan chunk's, whose stats triggers drop and return inside it (`commit_scan_chunk`), or the watcher batch's |
+| store units of work | `crates/melodia-store/src/database/queries/scan/cue_units.rs` | `SheetWriter::apply`: per sheet job, the stamp, `apply_cue_unit` (a gone image's rows carried by hash, upsert by key, drop missing numbers, carry playlist entries off the whole-file row) and `release_image` (the reverse), `pub(crate)` on the caller's transaction: the scan chunk's, whose stats triggers drop and return inside it (`commit_scan_chunk`), or the watcher batch's (`handle_sheets`), each job filed under its sheet's folder |
 | playlist carry | `crates/melodia-store/src/database/queries/playlist_carry.rs` | `replace_in_playlists` and `merge_into_playlists`, beside the other playlist membership writers |
-| the planner | `crates/melodia-store/src/media/cue/plan.rs` | which sheet claims which image, settled in `discover` (`scan/mod.rs`) after the incremental filter, whose output decides which directories it reads again, and before the walk is cut into chunks. Each sheet's work is one job that `CuePlan::into_chunks` never splits, so a sheet's stamp commits with everything it caused. The scan and the watcher's `process_batch` (`file_event_processor/reconcile.rs`) both call it |
+| the planner | `crates/melodia-store/src/media/cue/plan.rs` | which sheet claims which image, settled in `discover` (`scan/mod.rs`) after the incremental filter, whose output decides which directories it reads again, and before the walk is cut into chunks. Each sheet's work is one job that `CuePlan::into_chunks` never splits, so a sheet's stamp commits with everything it caused. The scan and the watcher's `process_batch` (`file_event_processor/sheets.rs`) both call it |
 | the span on a deck | `crates/melodia-audio/src/player/source/span.rs` | beside `aac_trim.rs`: the open-at-start, the counted end, the seek offset. `file_decode.rs` calls it |
 | the parked decoder | `crates/melodia-audio/src/player/source/park.rs` | Phase 6: the one-slot hand-off and its match rule |
 
@@ -626,33 +630,60 @@ The `RETURNING id, file_path` match in `insert_tracks_batch` (`mutations.rs:217`
 
 ## Phase 4: Keeping it current (watcher, moves, incremental)
 
-- [ ] `is_library_file` (`watcher.rs:271`), the one place `classify_event` asks, passes sheets as
-      well as audio.
-- [ ] `process_batch` (`file_event_processor/reconcile.rs`) routes these to one re-plan of that
-      folder: every sheet event, and every event on an image a sheet claims or could claim. It is
-      the planner the scan uses, scoped to one directory and run ahead of the write transaction,
-      since `apply_watch_batch` takes only what was already read (`watch_batch.rs`'s `//!`). The
-      outcome reaches it as new `WatchedChange` variants, which run `apply_cue_unit` or
-      `release_image` on its transaction. `paths_to_extract` keeps sheets from the tag reader.
-- [ ] A rename already re-points every row of the path, `update_track_location` keying on the old
-      path since Phase 1. A sheet rename moves its `cue_sheets` row.
-- [ ] A move by hash carries the whole file, in the scan (`ingest.rs`) and the watcher alike.
-      `MoveCandidates` (`moves.rs`) holds every row per hash and re-points one by id, which would
-      carry one row of twelve. So ordinary reads take whole-file rows only, and a sheet image is one
-      candidate, named by its gone *path* and spent whole.
+- [x] `is_library_file` (`watcher.rs`), the one place `classify_event` asks, passes sheets as well
+      as audio (`is_sheet_file`), so a removed sheet is a `Removed`, never a `DirectoryGone`.
+- [x] `process_batch` re-plans through `file_event_processor/sheets.rs`, ahead of the write
+      transaction, since `apply_watch_batch` takes only what was already read:
+  - [x] one read (`sheets_around`) finds the sheets on record in the batch's directories and the
+        claims around them, and stops at an empty `cue_sheets`, so a library without sheets pays
+        one `EXISTS`;
+  - [x] the walk lists the batch's directories and those its claims sit in, never a whole folder
+        (`list_media_files`), and the scan's `cue::settle` plans them, changed and gone taken off
+        the events;
+  - [x] a sheet's `Created` or `Modified`, and an image the plan settles, leave the ordinary path
+        (`CuePlan::settles`), and the outcome reaches the transaction as one
+        `WatchedChange::Sheets` (`CuePlan::into_chunk`), applied after the other changes and
+        before the deletes. `handle_sheets` writes a released image's whole-file row through
+        `create_track` and files each job under its sheet's folder;
+  - [x] `paths_to_extract` keeps sheets from the tag reader, and a removed sheet forgets its stamp
+        row (`handle_removed`).
+- [x] Renames: a plain image rename re-points every row, `update_track_location` keying on the old
+      path since Phase 1. A rename of a sheet or of a claimed image is split into its removal and
+      its creation before the plan: a sheet's new name claims the image by number, a claimed
+      image's rows follow its bytes, so every row keeps its id, and a rename over another sheet
+      needs no case of its own.
+- [x] A move by hash carries the whole file, in the scan and the watcher alike. Ordinary reads take
+      whole-file rows only (Phase 1). `MoveCandidates` gains the images a sheet splits, one per
+      path under its lowest id (`images_by_hash_on`), and `apply_cue_unit` re-points a gone
+      image's rows onto a claimed one whose path holds none (`carry_moved_rows`). The scan reads
+      them in `commit_scan_chunk` (`image_move_candidates`), the watcher in `moved_candidates`.
 - [x] Incremental scan: a cue unit is current when the image's stamp matches its rows' and the
       sheet's matches `cue_sheets`. Landed with Phase 2's planner, as the owed rule.
-- [ ] Docs: the watcher's module doc says sheets are library files.
+- [x] Docs: `watcher.rs` has no `//!`, so `classify_event`, `is_library_file` and `DirectoryGone`
+      name sheets. `plan.rs`, `cue/mod.rs`, `cue_units.rs`, `moves.rs`, `queries/scan/mod.rs` and
+      `reconcile.rs` say the watcher plans and writes too, and `library-data.md`'s claim rule
+      names the watcher batch, its glob widened to `file_event_processor/`.
 
 **Gate:**
-- [ ] The static gates.
-- [ ] Kenan's hand pass, with play counts watched throughout:
-  - [ ] edit a title in the sheet, and the row updates with its play count kept;
-  - [ ] save a broken sheet, and nothing changes;
-  - [ ] delete the sheet, and the image comes back;
-  - [ ] restore the sheet, and the tracks come back;
-  - [ ] move the album folder within the library and across filesystems, and the ids are kept;
-  - [ ] delete the image, and its rows go.
+- [x] The static gates.
+- [x] Kenan's hand pass, with play counts watched throughout. Run by Claude on Kenan's go
+      (2026-11-10): the debug build against `Melodia-dev` with watching on, restored after, over
+      two scratch library roots, one on btrfs and one on tmpfs. Play counts and ratings were seeded
+      into the sheet rows and a playlist put around them, and the database read after every change:
+  - [x] edit a title in the sheet, written in place, and the row updates with its id and play count
+        kept;
+  - [x] save a broken sheet through a rename, as an editor saves, and nothing changes; saving it
+        fixed changes nothing either;
+  - [x] delete the sheet, and the image comes back, in the playlist where its tracks sat;
+  - [x] restore the sheet, and the tracks come back in its place;
+  - [x] move the album folder within the library, and across filesystems and back, and the ids,
+        play counts, ratings and playlist places are kept. A root the move leaves empty reads as an
+        unmounted drive, as it does for any file: its rows stay, and a twin still on disk elsewhere
+        keeps the move from being taken;
+  - [x] delete the image, and its rows go, its playlist entries with them;
+  - [x] a sheet renamed and back, and an image renamed by case, keep every id; a sheet copied in
+        ahead of its image claims the image when it lands; an album folder copied in or moved in
+        from outside the library is split.
 
 ## Phase 5: The rest of the library
 

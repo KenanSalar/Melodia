@@ -1,11 +1,12 @@
 //! The reads the scan and the watcher batch make.
 
 use std::collections::HashMap;
+use std::path::MAIN_SEPARATOR_STR;
 
 use rusqlite::Transaction;
 
-use crate::database::DbPool;
-use crate::database::sql;
+use crate::database::queries::track::subtree_bounds;
+use crate::database::{DbPool, chunked_in_query, sql};
 use melodia_core::entities::scan::FileStamp;
 use melodia_core::error::AppError;
 
@@ -84,6 +85,65 @@ async fn fold_stamps<A: Send + 'static>(
             },
         )?;
         Ok(acc)
+    })
+    .await
+}
+
+/// The cue sheets on record around a watcher batch, and the claims a re-plan of them starts from.
+#[derive(Default)]
+pub struct SheetsAround {
+    /// The sheets directly inside the batch's directories.
+    pub sheets: Vec<String>,
+    /// Each image those sheets claim, and each claimed image among the batch's audio, mapped to
+    /// its sheet's path.
+    pub claims: HashMap<String, String>,
+}
+
+impl SheetsAround {
+    pub fn is_empty(&self) -> bool {
+        self.sheets.is_empty() && self.claims.is_empty()
+    }
+}
+
+const SHEETS_IN_DIRECTORY: &str = "SELECT path FROM cue_sheets \
+     WHERE path >= ?1 AND path < ?2 AND instr(substr(path, length(?1) + 1), ?3) = 0";
+
+/// The sheets on record directly inside `dirs`, and the claims of those sheets and of the images
+/// among `audio`. A library holding no sheet answers empty from its first statement.
+pub async fn sheets_around(
+    db: &DbPool,
+    dirs: Vec<String>,
+    audio: Vec<String>,
+) -> Result<SheetsAround, AppError> {
+    db.read(move |conn| {
+        let holds_sheets: bool =
+            sql::fetch_one(conn, "SELECT EXISTS (SELECT 1 FROM cue_sheets)", ())?;
+        if !holds_sheets {
+            return Ok(SheetsAround::default());
+        }
+        let mut sheets: Vec<String> = Vec::new();
+        for dir in &dirs {
+            let (from, before) = subtree_bounds(dir);
+            let bind = (from.as_str(), before.as_str(), MAIN_SEPARATOR_STR);
+            let inside: Vec<String> = sql::fetch_all(conn, SHEETS_IN_DIRECTORY, bind)?;
+            sheets.extend(inside);
+        }
+        let by_sheet: Vec<(String, String)> = chunked_in_query(conn, &sheets, |path_list| {
+            format!(
+                "SELECT DISTINCT tracks.file_path, cue_sheets.path
+                 FROM cue_sheets JOIN tracks ON tracks.cue_sheet_id = cue_sheets.id
+                 WHERE cue_sheets.path IN ({path_list})"
+            )
+        })?;
+        let by_image: Vec<(String, String)> = chunked_in_query(conn, &audio, |path_list| {
+            format!(
+                "SELECT DISTINCT tracks.file_path, cue_sheets.path
+                 FROM tracks JOIN cue_sheets ON cue_sheets.id = tracks.cue_sheet_id
+                 WHERE tracks.file_path IN ({path_list})"
+            )
+        })?;
+        let claims = by_sheet.into_iter().chain(by_image).collect();
+        Ok(SheetsAround { sheets, claims })
     })
     .await
 }

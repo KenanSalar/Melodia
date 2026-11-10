@@ -242,16 +242,40 @@ pub(crate) fn rows_by_hash_on(
     conn: &Connection,
     hashes: &[&str],
 ) -> Result<HashMap<String, Vec<(i64, String)>>, AppError> {
-    let unique: HashSet<&str> = hashes.iter().copied().collect();
-    let unique: Vec<&str> = unique.into_iter().collect();
-
-    let rows: Vec<(String, i64, String)> = chunked_in_query(conn, &unique, |placeholders| {
+    fetch_by_hash(conn, hashes, |placeholders| {
         format!(
             "SELECT file_hash, id, file_path FROM tracks
              WHERE file_hash IN ({placeholders}) AND {WHOLE_FILE}
              ORDER BY id ASC"
         )
-    })?;
+    })
+}
+
+/// [`rows_by_hash_on`] for the files a cue sheet splits, one entry per file under its lowest row
+/// id: a moved image takes all of its rows or none.
+pub(crate) fn images_by_hash_on(
+    conn: &Connection,
+    hashes: &[&str],
+) -> Result<HashMap<String, Vec<(i64, String)>>, AppError> {
+    fetch_by_hash(conn, hashes, |placeholders| {
+        format!(
+            "SELECT file_hash, MIN(id), file_path FROM tracks
+             WHERE file_hash IN ({placeholders}) AND cue_track IS NOT NULL
+             GROUP BY file_hash, file_path
+             ORDER BY MIN(id) ASC"
+        )
+    })
+}
+
+fn fetch_by_hash(
+    conn: &Connection,
+    hashes: &[&str],
+    build_sql: impl Fn(&str) -> String,
+) -> Result<HashMap<String, Vec<(i64, String)>>, AppError> {
+    let unique: HashSet<&str> = hashes.iter().copied().collect();
+    let unique: Vec<&str> = unique.into_iter().collect();
+
+    let rows: Vec<(String, i64, String)> = chunked_in_query(conn, &unique, build_sql)?;
     let mut by_hash: HashMap<String, Vec<(i64, String)>> = HashMap::new();
     for (hash, id, path) in rows {
         by_hash.entry(hash).or_default().push((id, path));

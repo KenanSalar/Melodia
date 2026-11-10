@@ -3,6 +3,7 @@
 
 mod dedup;
 mod reconcile;
+mod sheets;
 
 use tokio::sync::mpsc;
 use tokio::time::{Duration, Instant};

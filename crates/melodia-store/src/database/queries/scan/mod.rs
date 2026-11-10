@@ -3,7 +3,8 @@
 //!
 //! [`commit_scan`], [`commit_retag`] and [`apply_watch_batch`] each own their transaction, and are
 //! the only writes here another crate can reach: every query taking a transaction is `pub(crate)`.
-//! A scan chunk's cue sheet writes run on `ingest::commit_scan_chunk`'s.
+//! A scan chunk's cue sheet writes run on `ingest::commit_scan_chunk`'s, a watcher batch's on
+//! [`apply_watch_batch`]'s.
 
 mod cue_units;
 mod finish;
@@ -16,10 +17,12 @@ mod sort_key;
 mod upserts;
 mod watch_batch;
 
-pub(crate) use cue_units::{CueWrites, apply_sheet_jobs};
+pub(crate) use cue_units::{CueWrites, SheetWriter};
 pub use finish::{Unwalked, commit_scan, purge_unwalked};
+pub use lookups::{
+    SheetsAround, fold_folder_sheets, fold_folder_tracks, sheet_claims, sheets_around,
+};
 pub(crate) use lookups::{find_folder_for_path, track_exists_by_path};
-pub use lookups::{fold_folder_sheets, fold_folder_tracks, sheet_claims};
 pub(crate) use moves::MoveCandidates;
 pub use mutations::{CuePlacement, INSERT_CHUNK_ROWS, NewTrackRow};
 pub(crate) use mutations::{

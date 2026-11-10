@@ -287,15 +287,17 @@ fn a_directory_without_audio_at_a_new_path_asks_for_nothing() -> Result<(), AppE
 }
 
 /// A `From` or a removal names the side that left, which only the database can say held tracks,
-/// and inotify's `Create(Folder)` is a real mkdir whose files each raise their own event.
+/// and inotify's `Create(Folder)` is a new directory, whose files written before its watch existed
+/// raise no event of their own.
 #[test]
 fn a_directory_reported_any_other_way_is_not_taken_for_a_rename() -> Result<(), AppError> {
     let tmp = TempDir::new()?;
     let album = album_holding(&tmp, "song.flac")?;
     let gone = vec![super::FileEvent::DirectoryGone(album.clone())];
+    let created = vec![super::FileEvent::Created(album.join("disc 1").join("song.flac"))];
     let cases = [
         (renamed(RenameMode::From), gone.clone()),
-        (EventKind::Create(CreateKind::Folder), vec![]),
+        (EventKind::Create(CreateKind::Folder), created),
         (EventKind::Remove(RemoveKind::Any), gone),
     ];
 

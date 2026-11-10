@@ -8,7 +8,9 @@ use rusqlite::Transaction;
 
 use crate::database::queries;
 use crate::database::queries::artist::UNKNOWN_ARTIST_ID;
-use crate::database::queries::scan::{CueWrites, MoveCandidates, NameCache, file_name_of};
+use crate::database::queries::scan::{
+    CueWrites, MoveCandidates, NameCache, SheetWriter, file_name_of,
+};
 use crate::database::queries::track::file_rows::WHOLE_FILE;
 use crate::database::sql::Sql;
 use crate::database::{DbPool, MAX_BINDS_PER_STATEMENT, placeholders, values_placeholders};
@@ -50,6 +52,7 @@ impl IngestResult {
     fn add_sheets(&mut self, sheets: &CueWrites) {
         self.inserted_count += sheets.inserted;
         self.updated_count += sheets.updated;
+        self.moved_count += sheets.moved;
     }
 }
 
@@ -135,9 +138,12 @@ pub async fn commit_scan_chunk(
             &scan_timestamp,
             &pool,
         )?;
-        let sheets =
-            queries::scan::apply_sheet_jobs(tx, folder_id, &cue, &claimed, &scan_timestamp)?;
-        result.add_sheets(&sheets);
+        let mut moved = image_move_candidates(tx, &claimed, &pool)?;
+        let mut sheets = SheetWriter::new(tx, &claimed, &scan_timestamp, &mut moved);
+        for job in cue.jobs() {
+            sheets.apply(job, folder_id)?;
+        }
+        result.add_sheets(&sheets.into_writes());
         if is_bulk {
             queries::stats::enable_stats_triggers(tx)?;
         }
@@ -380,13 +386,37 @@ fn resolve_move_candidates(
         .collect();
     let new_path_hashes: Vec<&str> =
         new_files.iter().map(|f| f.metadata.file_hash.as_str()).collect();
-    let mut candidates = MoveCandidates::read_on(tx, &new_path_hashes)?;
+    let candidates = MoveCandidates::read_on(tx, &new_path_hashes, &[])?;
+    Ok(keep_gone(candidates, &new_files, pool))
+}
+
+/// The cue sheet images the `claimed` ones may have moved from, kept as
+/// [`resolve_move_candidates`] keeps a row.
+fn image_move_candidates(
+    tx: &Transaction<'_>,
+    claimed: &[ScannedFile],
+    pool: &ScanPool,
+) -> Result<MoveCandidates, AppError> {
+    if claimed.is_empty() {
+        return Ok(MoveCandidates::default());
+    }
+    let claimed: Vec<&ScannedFile> = claimed.iter().collect();
+    let hashes: Vec<&str> = claimed.iter().map(|f| f.metadata.file_hash.as_str()).collect();
+    let candidates = MoveCandidates::read_on(tx, &[], &hashes)?;
+    Ok(keep_gone(candidates, &claimed, pool))
+}
+
+fn keep_gone(
+    mut candidates: MoveCandidates,
+    new_files: &[&ScannedFile],
+    pool: &ScanPool,
+) -> MoveCandidates {
     let mut still_present = batch_still_on_disk(candidates.old_paths(), pool);
     if queries::DISK_IGNORES_CASE {
-        forget_respelled(&mut still_present, &new_files);
+        forget_respelled(&mut still_present, new_files);
     }
     candidates.retain_gone(&still_present);
-    Ok(candidates)
+    candidates
 }
 
 /// Drops the old paths a new file only respells: where the disk ignores case, two paths folding

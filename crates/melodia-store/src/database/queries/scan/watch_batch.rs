@@ -8,15 +8,18 @@ use std::path::{Path, PathBuf};
 
 use rusqlite::Transaction;
 
+use super::cue_units::forget_sheets;
 use super::{
-    MoveCandidates, NameCache, delete_track_by_path, file_name_of, find_folder_for_path,
-    insert_track, prune_orphans, resolve_track_context, roll_up_covers, track_exists_by_path,
-    update_track_location, update_track_metadata,
+    MoveCandidates, NameCache, SheetWriter, delete_track_by_path, file_name_of,
+    find_folder_for_path, insert_track, prune_orphans, resolve_track_context, roll_up_covers,
+    track_exists_by_path, update_track_location, update_track_metadata,
 };
 use crate::database::DbPool;
 use crate::database::queries::ingest;
 use crate::database::queries::{excluded_files, stats};
-use melodia_core::entities::scan::ExtractedMetadata;
+use crate::media::cue::CueChunk;
+use crate::media::ingest::watcher::is_sheet_file;
+use melodia_core::entities::scan::{ExtractedMetadata, ScannedFile};
 use melodia_core::error::{AppError, describe};
 
 /// One watcher event, with what extraction read off the file.
@@ -48,6 +51,12 @@ pub enum WatchedChange {
         /// separate batches.
         gone: bool,
     },
+    /// The cue sheet work the batch's events owe, settled before its files were read, with every
+    /// image its jobs claim or give back.
+    Sheets {
+        cue: CueChunk,
+        images: Vec<ScannedFile>,
+    },
 }
 
 /// What one batch carries from event to event.
@@ -65,9 +74,10 @@ struct Batch {
 ///
 /// A move between filesystems arrives as a `Removed` plus a `Created`, never a rename. **Both
 /// halves are needed**: the candidates are resolved before the write transaction opens, and the
-/// deletes apply last, since a `Removed` applied first would hard-delete the row the `Created`
-/// needs and land the move as a fresh insert without the user's rating, play count and favourite.
-/// Dedup emits from a `HashMap`, so the sort is what decides; stable, so nothing else moves.
+/// deletes apply last (`apply_order`), since a `Removed` applied first would hard-delete the row
+/// the `Created` needs and land the move as a fresh insert without the user's rating, play count
+/// and favourite. Dedup emits from a `HashMap`, so the sort is what decides; stable, so nothing
+/// else moves.
 pub async fn apply_watch_batch(
     db: &DbPool,
     mut changes: Vec<WatchedChange>,
@@ -76,8 +86,20 @@ pub async fn apply_watch_batch(
         moved: moved_candidates(db, &changes).await,
         names: NameCache::for_chunk(changes.len()),
     };
-    changes.sort_by_key(|change| matches!(change, WatchedChange::Removed { .. }));
+    changes.sort_by_key(apply_order);
     db.transaction(move |tx| apply_changes(tx, &changes, &mut batch)).await
+}
+
+/// The sheets apply after the other changes, so a renamed image's rows sit at its new path for its
+/// sheet to update, and before the deletes, so a moved image's rows are still there to take.
+fn apply_order(change: &WatchedChange) -> u8 {
+    match change {
+        WatchedChange::Created { .. }
+        | WatchedChange::Modified { .. }
+        | WatchedChange::Renamed { .. } => 0,
+        WatchedChange::Sheets { .. } => 1,
+        WatchedChange::Removed { .. } => 2,
+    }
 }
 
 fn apply_changes(
@@ -129,6 +151,7 @@ fn apply_change(
             handle_renamed(tx, from, to, meta.as_ref(), date_modified.as_deref(), batch)
         }
         WatchedChange::Modified { path, meta } => handle_modified(tx, path, meta, batch),
+        WatchedChange::Sheets { cue, images } => handle_sheets(tx, cue, images, batch),
     }
 }
 
@@ -151,25 +174,33 @@ fn log_failed(change: &WatchedChange, e: &AppError) {
         WatchedChange::Modified { path, .. } => {
             log::warn!("Failed to process modified file {}: {}", path.display(), describe(e));
         }
+        WatchedChange::Sheets { .. } => {
+            log::warn!("Failed to apply the batch's cue sheets: {}", describe(e));
+        }
     }
 }
 
-/// The rows and kept-out files carrying a created file's hash whose own file is gone from disk:
-/// moved, not duplicated. Read before the write transaction opens; a failed lookup costs the batch
-/// its move detection and nothing else.
+/// The rows and kept-out files carrying a created file's hash, and the sheet images carrying a
+/// claimed image's, whose own file is gone from disk: moved, not duplicated. Read before the write
+/// transaction opens; a failed lookup costs the batch its move detection and nothing else.
 async fn moved_candidates(db: &DbPool, changes: &[WatchedChange]) -> MoveCandidates {
-    let hashes: Vec<String> = changes
-        .iter()
-        .filter_map(|change| match change {
-            WatchedChange::Created { meta, .. } => Some(meta.file_hash.clone()),
-            _ => None,
-        })
-        .collect();
-    if hashes.is_empty() {
+    let mut hashes: Vec<String> = Vec::new();
+    let mut image_hashes: Vec<String> = Vec::new();
+    for change in changes {
+        match change {
+            WatchedChange::Created { meta, .. } => hashes.push(meta.file_hash.clone()),
+            WatchedChange::Sheets { cue, images } => {
+                let claimed = images.iter().filter(|image| cue.claims(&image.path));
+                image_hashes.extend(claimed.map(|image| image.metadata.file_hash.clone()));
+            }
+            _ => {}
+        }
+    }
+    if hashes.is_empty() && image_hashes.is_empty() {
         return MoveCandidates::default();
     }
 
-    let mut candidates = match read_candidates(db, hashes).await {
+    let mut candidates = match read_candidates(db, hashes, image_hashes).await {
         Ok(candidates) => candidates,
         Err(e) => {
             log::warn!("Move detection skipped for this batch: {}", describe(&e));
@@ -186,17 +217,36 @@ async fn moved_candidates(db: &DbPool, changes: &[WatchedChange]) -> MoveCandida
     .unwrap_or_default()
 }
 
-async fn read_candidates(db: &DbPool, hashes: Vec<String>) -> Result<MoveCandidates, AppError> {
+async fn read_candidates(
+    db: &DbPool,
+    hashes: Vec<String>,
+    image_hashes: Vec<String>,
+) -> Result<MoveCandidates, AppError> {
     db.read(move |conn| {
         let hashes: Vec<&str> = hashes.iter().map(String::as_str).collect();
-        MoveCandidates::read_on(conn, &hashes)
+        let image_hashes: Vec<&str> = image_hashes.iter().map(String::as_str).collect();
+        MoveCandidates::read_on(conn, &hashes, &image_hashes)
     })
     .await
 }
 
-/// Whether a row was written, by an insert or a re-point. A kept-out file writes none: it is
-/// restamped, or its exclusion follows it where it moved.
+/// Whether a row was written, by an insert or a re-point. A path already holding rows, a split
+/// image's included, writes none beside them.
 fn handle_created(
+    tx: &Transaction<'_>,
+    path: &Path,
+    meta: &ExtractedMetadata,
+    batch: &mut Batch,
+) -> Result<bool, AppError> {
+    if track_exists_by_path(tx, &path.to_string_lossy())? {
+        return Ok(false);
+    }
+    create_track(tx, path, meta, batch)
+}
+
+/// [`handle_created`] past its guard, for a new file or an image its sheet gives back. A kept-out
+/// file writes no row: it is restamped, or its exclusion follows it where it moved.
+fn create_track(
     tx: &Transaction<'_>,
     path: &Path,
     meta: &ExtractedMetadata,
@@ -204,9 +254,6 @@ fn handle_created(
 ) -> Result<bool, AppError> {
     let path_str = path.to_string_lossy().into_owned();
 
-    if track_exists_by_path(tx, &path_str)? {
-        return Ok(false);
-    }
     if excluded_files::id_at_on(tx, &path_str)?.is_some() {
         excluded_files::restamp_on(tx, &[(path, meta)])?;
         log::debug!("Kept out of the library, restamped: {}", path.display());
@@ -253,8 +300,15 @@ fn handle_created(
     Ok(true)
 }
 
-/// Whether a row was deleted.
+/// Whether a row was deleted. A sheet's stamp row goes, and any row still naming the sheet with it.
 fn handle_removed(tx: &Transaction<'_>, path: &Path) -> Result<bool, AppError> {
+    if is_sheet_file(path) {
+        let forgotten = forget_sheets(tx, &[path.to_string_lossy().into_owned()])?;
+        if forgotten > 0 {
+            log::info!("Forgot cue sheet: {}", path.display());
+        }
+        return Ok(forgotten > 0);
+    }
     let deleted = delete_track_by_path(tx, &path.to_string_lossy())?;
     if deleted {
         log::info!("Removed track: {}", path.display());
@@ -365,6 +419,34 @@ fn handle_modified(
     log::info!("Updated metadata for: {path_str}");
 
     Ok(true)
+}
+
+/// Whether a row was written. Each image given back takes its whole-file row first, for its
+/// sheet's job to carry the playlist places onto, and each job is filed under its sheet's library
+/// folder. One sheet failing leaves the others to apply.
+fn handle_sheets(
+    tx: &Transaction<'_>,
+    cue: &CueChunk,
+    images: &[ScannedFile],
+    batch: &mut Batch,
+) -> Result<bool, AppError> {
+    let mut wrote = false;
+    for image in images.iter().filter(|image| !cue.claims(&image.path)) {
+        wrote |= create_track(tx, &image.path, &image.metadata, batch)?;
+    }
+
+    let now = melodia_core::utils::now_rfc3339();
+    let mut sheets = SheetWriter::new(tx, images, &now, &mut batch.moved);
+    for job in cue.jobs() {
+        let Some(folder_id) = library_folder(tx, &job.path, &job.path.to_string_lossy(), "Cue")?
+        else {
+            continue;
+        };
+        if let Err(e) = sheets.apply(job, folder_id) {
+            log::warn!("Failed to apply cue sheet {}: {}", job.path.display(), describe(&e));
+        }
+    }
+    Ok(wrote || sheets.into_writes().any())
 }
 
 /// The library folder holding a watched `path`, or `None`, logged under `context`, outside every

@@ -1,4 +1,5 @@
-//! Which sheet claims which image, settled once per folder scan before the chunks are cut.
+//! Which sheet claims which image, settled before a folder scan is cut into chunks or a watcher
+//! batch's write opens.
 //!
 //! Only the directories where something moved are read again: a sheet new, changed or gone, or an
 //! audio file the incremental filter let through beside a sheet or claimed by one. Every launch
@@ -55,8 +56,13 @@ impl CuePlan {
     /// Takes every image this plan settled out of `to_scan`.
     pub fn take_out_of(&self, to_scan: &mut Vec<PathBuf>) {
         if !self.settled.is_empty() {
-            to_scan.retain(|path| !self.settled.contains(path));
+            to_scan.retain(|path| !self.settles(path));
         }
+    }
+
+    /// Whether this plan settled `image`, which the ordinary ingest then leaves alone.
+    pub fn settles(&self, image: &Path) -> bool {
+        self.settled.contains(image)
     }
 
     /// The images the jobs read.
@@ -87,6 +93,11 @@ impl CuePlan {
             chunks.push(current);
         }
         chunks
+    }
+
+    /// Every job in one chunk, for a watcher batch, which commits in one transaction.
+    pub fn into_chunk(self) -> CueChunk {
+        CueChunk { jobs: self.jobs }
     }
 }
 

@@ -1,5 +1,6 @@
-//! Applies a deduplicated batch: extracts metadata for created, modified and renamed paths, then
-//! hands the batch to [`queries::scan::apply_watch_batch`].
+//! Applies a deduplicated batch: settles the cue sheets it touches, extracts metadata for created,
+//! modified and renamed paths and the images the sheets read, then hands the batch to
+//! [`queries::scan::apply_watch_batch`].
 
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
@@ -13,10 +14,13 @@ use melodia_store::database::queries;
 use melodia_store::database::queries::scan::WatchedChange;
 use melodia_store::media::ingest::metadata::{extract_date_modified, extract_or_filename_row};
 use melodia_store::media::ingest::scan_pool::ScanPool;
-use melodia_store::media::ingest::watcher::FileEvent;
+use melodia_store::media::ingest::watcher::{FileEvent, is_sheet_file};
 
-/// The paths whose tags the batch needs, each once. A kept-out file written to is read too, for its
-/// exclusion to take the new hash; one renamed away needs no read, its exclusion following the name.
+use super::sheets::{self, SheetBatch};
+
+/// The paths whose tags the batch needs, each once, a cue sheet having none. A kept-out file written
+/// to is read too, for its exclusion to take the new hash; one renamed away needs no read, its
+/// exclusion following the name.
 fn paths_to_extract(events: &[FileEvent], kept_out_renamed: &HashSet<String>) -> Vec<PathBuf> {
     let is_kept_out = |path: &Path| kept_out_renamed.contains(path.to_string_lossy().as_ref());
     let mut seen = HashSet::with_capacity(events.len());
@@ -32,6 +36,7 @@ fn paths_to_extract(events: &[FileEvent], kept_out_renamed: &HashSet<String>) ->
             }
         };
         if let Some(path) = wanted
+            && !is_sheet_file(path)
             && path.exists()
             && seen.insert(path.clone())
         {
@@ -113,9 +118,17 @@ pub(super) async fn process_batch(
     events: Vec<FileEvent>,
 ) -> AppResult<()> {
     let kept_out_renamed = kept_out_renamed(db, &events).await;
-    let to_extract = paths_to_extract(&events, &kept_out_renamed);
-    let metadata = extract_metadata_batch(paths, cover_cache, to_extract).await;
-    queries::scan::apply_watch_batch(db, watched_changes(events, metadata)).await
+    let SheetBatch { events, cue } = sheets::settle(db, events).await;
+    let mut to_extract = paths_to_extract(&events, &kept_out_renamed);
+    to_extract.extend(cue.images());
+    to_extract.sort_unstable();
+    to_extract.dedup();
+    let mut metadata = extract_metadata_batch(paths, cover_cache, to_extract).await;
+    // First: a file renamed onto a name a sheet claims gives its read to the sheet, whose rows
+    // replace the one the rename re-points.
+    let mut changes: Vec<WatchedChange> = sheets::change(cue, &mut metadata).into_iter().collect();
+    changes.extend(watched_changes(events, metadata));
+    queries::scan::apply_watch_batch(db, changes).await
 }
 
 /// Pairs each event with what extraction read, dropping a create or a modify whose file could not

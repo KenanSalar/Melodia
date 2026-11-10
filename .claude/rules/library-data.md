@@ -1,6 +1,7 @@
 ---
 paths:
   - crates/melodia-app/src/library/**/*.rs
+  - crates/melodia-app/src/tasks/file_event_processor/**/*.rs
   - crates/melodia-store/src/database/**/*.rs
   - crates/melodia-store/src/media/ingest/**/*.rs
   - crates/melodia-store/src/media/cue/**/*.rs
@@ -27,7 +28,8 @@ paths:
 - **`utils::audio_ext::is_audio_extension` is the one audio-extension predicate**, and
   `is_cue_sheet` the one cue-sheet one; never re-roll a lowercase-and-contains at a new call site.
 - **An image a cue sheet claims never reaches the ordinary ingest**: the planner
-  (`media::cue::plan`) takes it out of a scan's files, and its sheet's job writes its tracks
+  (`media::cue::plan`) takes it out of a scan's files and a watcher batch's events
+  (`file_event_processor::sheets`), and its sheet's job writes its tracks
   (`queries::scan::cue_units`). A sheet claims a file it carves into two or more rows, one sheet
   wins an image, and a sheet that fails to read keeps its claim. A new path that ingests a file a
   sheet may claim asks the planner, or the image gets a whole-file row beside its tracks.

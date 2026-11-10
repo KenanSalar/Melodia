@@ -33,7 +33,7 @@ const AFTER_SEPARATOR: char = (MAIN_SEPARATOR as u8 + 1) as char;
 /// The half-open `file_path` range holding everything under `dir_path`, in the column's BINARY
 /// order. A range walks the column's index and has no wildcards to escape, where a `LIKE` folds
 /// case and so can't use a BINARY index.
-pub(super) fn subtree_bounds(dir_path: &str) -> (String, String) {
+pub(crate) fn subtree_bounds(dir_path: &str) -> (String, String) {
     // A drive root's path already ends in the separator.
     let dir = dir_path.trim_end_matches(MAIN_SEPARATOR);
     (format!("{dir}{MAIN_SEPARATOR}"), format!("{dir}{AFTER_SEPARATOR}"))

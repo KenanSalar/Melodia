@@ -34,6 +34,7 @@ impl ScanObserver for Unobserved {
 }
 
 /// The audio files and cue sheets under one folder, and what the walk couldn't vouch for.
+#[derive(Default)]
 pub struct MediaWalk {
     pub files: WalkedPaths,
     pub sheets: WalkedPaths,
@@ -130,46 +131,60 @@ impl WalkedPaths {
 /// Walks `dir` for audio files and cue sheets, or answers `None` once `observer` cancels: a
 /// partial list is one a caller could mistake for the whole tree.
 pub fn collect_media_files(dir: &Path, observer: &dyn ScanObserver) -> Option<MediaWalk> {
-    let mut files = WalkedPaths::default();
-    let mut sheets = WalkedPaths::default();
-    let mut unreadable = Vec::new();
+    let mut walk = MediaWalk::default();
+    walk.add(WalkDir::new(dir), dir, observer)?;
+    Some(walk)
+}
 
-    let walk = WalkDir::new(dir).follow_links(false).into_iter();
-    for entry in walk.filter_entry(|entry| !is_trash_below_root(entry)) {
-        if observer.is_cancelled() {
-            return None;
-        }
-        let entry = match entry {
-            Ok(entry) => entry,
-            Err(e) => {
-                log::warn!(
-                    "Skipping an unreadable path under {}: {}",
-                    dir.display(),
-                    melodia_core::error::describe(&e)
-                );
-                // An error naming no path vouches for nothing below the root.
-                unreadable.push(e.path().unwrap_or(dir).to_path_buf());
+/// The audio files and cue sheets directly inside each of `dirs`, none below them.
+pub fn list_media_files(dirs: &[PathBuf]) -> MediaWalk {
+    let mut walk = MediaWalk::default();
+    for dir in dirs {
+        // Nothing stops an unobserved walk.
+        let _ = walk.add(WalkDir::new(dir).max_depth(1), dir, &Unobserved);
+    }
+    walk
+}
+
+impl MediaWalk {
+    /// Adds what `walker` finds under `root`, or answers `None` once `observer` cancels.
+    fn add(&mut self, walker: WalkDir, root: &Path, observer: &dyn ScanObserver) -> Option<()> {
+        let entries = walker.follow_links(false).into_iter();
+        for entry in entries.filter_entry(|entry| !is_trash_below_root(entry)) {
+            if observer.is_cancelled() {
+                return None;
+            }
+            let entry = match entry {
+                Ok(entry) => entry,
+                Err(e) => {
+                    log::warn!(
+                        "Skipping an unreadable path under {}: {}",
+                        root.display(),
+                        melodia_core::error::describe(&e)
+                    );
+                    // An error naming no path vouches for nothing below the root.
+                    self.unreadable.push(e.path().unwrap_or(root).to_path_buf());
+                    continue;
+                }
+            };
+            if !entry.file_type().is_file() {
                 continue;
             }
-        };
-        if !entry.file_type().is_file() {
-            continue;
-        }
 
-        let path = entry.path();
-        let Some(ext) = path.extension().and_then(|e| e.to_str()) else {
-            continue;
-        };
+            let path = entry.path();
+            let Some(ext) = path.extension().and_then(|e| e.to_str()) else {
+                continue;
+            };
 
-        if is_audio_extension(ext) {
-            files.push(path);
-            observer.found(u32::try_from(files.len()).unwrap_or(u32::MAX));
-        } else if is_cue_sheet(ext) {
-            sheets.push(path);
+            if is_audio_extension(ext) {
+                self.files.push(path);
+                observer.found(u32::try_from(self.files.len()).unwrap_or(u32::MAX));
+            } else if is_cue_sheet(ext) {
+                self.sheets.push(path);
+            }
         }
+        Some(())
     }
-
-    Some(MediaWalk { files, sheets, unreadable })
 }
 
 /// A root is walked whatever its name, as the user added it on purpose.

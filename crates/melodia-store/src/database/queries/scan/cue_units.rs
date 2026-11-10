@@ -1,5 +1,5 @@
-//! A scan chunk's cue sheet writes, on its transaction: each sheet's stamp, the rows it carves out
-//! of the images it claims, and the images it gives back.
+//! The cue sheet writes of a scan chunk or a watcher batch, on its transaction: each sheet's stamp,
+//! the rows it carves out of the images it claims, and the images it gives back.
 //!
 //! A sheet track is keyed on its image and its number, so a reread sheet updates its rows in place
 //! and a corrected time or title keeps every row's play count, rating and playlist places. When a
@@ -14,104 +14,133 @@ use std::sync::LazyLock;
 use rusqlite::Transaction;
 
 use super::{
-    CuePlacement, NameCache, NewTrackRow, file_name_of, insert_tracks_batch, resolve_track_context,
-    update_cue_track,
+    CuePlacement, MoveCandidates, NameCache, NewTrackRow, file_name_of, insert_tracks_batch,
+    resolve_track_context, track_exists_by_path, update_cue_track, update_track_location,
 };
 use crate::database::chunked_in_execute;
 use crate::database::queries::excluded_files;
 use crate::database::queries::playlist_carry::{merge_into_playlists, replace_in_playlists};
 use crate::database::queries::track::file_rows::WHOLE_FILE;
 use crate::database::sql;
-use crate::media::cue::{Claim, CueChunk, CueRow, SheetJob, SheetRead, rows};
+use crate::media::cue::{Claim, CueRow, SheetJob, SheetRead, rows};
 use melodia_core::entities::cue::CueTrack;
 use melodia_core::entities::scan::{FileStamp, ScannedFile};
 use melodia_core::error::AppError;
 
-/// What a chunk's sheets wrote.
+/// What a batch's sheets wrote.
 #[derive(Default)]
 pub(crate) struct CueWrites {
     pub(crate) inserted: u32,
     /// Rows rewritten, whole-file rows a sheet replaced, and images given back.
     pub(crate) updated: u32,
+    /// Images that took the rows of the path they moved from.
+    pub(crate) moved: u32,
 }
 
-/// Applies `cue`'s jobs for a scan of `folder_id`, each claimed image read in `images`.
-///
-/// Runs after the chunk's ordinary ingest, which wrote the whole-file row a released image takes
-/// its playlist places back onto.
-pub(crate) fn apply_sheet_jobs(
-    tx: &Transaction<'_>,
-    folder_id: i64,
-    cue: &CueChunk,
-    images: &[ScannedFile],
-    scan_timestamp: &str,
-) -> Result<CueWrites, AppError> {
-    let mut writer = SheetWriter {
-        tx,
-        folder_id,
-        scan_timestamp,
-        images: images.iter().map(|image| (image.path.as_path(), image)).collect(),
-        names: NameCache::for_chunk(images.len()),
-        writes: CueWrites::default(),
-    };
-    for job in cue.jobs() {
-        if let Some(read) = &job.read {
-            writer.apply_read_sheet(job, read)?;
-        }
-        for image in &job.releases {
-            if release_image(tx, &image.to_string_lossy())? {
-                writer.writes.updated += 1;
-            }
-        }
+impl CueWrites {
+    pub(crate) fn any(&self) -> bool {
+        self.inserted > 0 || self.updated > 0 || self.moved > 0
     }
-    Ok(writer.writes)
 }
 
-struct SheetWriter<'a, 'conn> {
+/// Writes sheet jobs on one transaction, each claimed image read in the batch's `images`.
+pub(crate) struct SheetWriter<'a, 'conn> {
     tx: &'a Transaction<'conn>,
-    folder_id: i64,
     scan_timestamp: &'a str,
     images: HashMap<&'a Path, &'a ScannedFile>,
+    /// The gone images a claimed one may have moved from.
+    moved: &'a mut MoveCandidates,
     names: NameCache,
     writes: CueWrites,
 }
 
-impl SheetWriter<'_, '_> {
-    fn apply_read_sheet(&mut self, job: &SheetJob, read: &SheetRead) -> Result<(), AppError> {
-        let units: Vec<(&Claim, &ScannedFile, Vec<CueRow>)> = job
+/// One claimed image and the rows its sheet carves out of it.
+struct CueUnit<'u> {
+    claim: &'u Claim,
+    image: &'u ScannedFile,
+    rows: Vec<CueRow>,
+}
+
+/// Where a sheet's rows are filed.
+#[derive(Clone, Copy)]
+struct Filing {
+    sheet_id: i64,
+    folder_id: i64,
+}
+
+impl<'a, 'conn> SheetWriter<'a, 'conn> {
+    pub(crate) fn new(
+        tx: &'a Transaction<'conn>,
+        images: &'a [ScannedFile],
+        scan_timestamp: &'a str,
+        moved: &'a mut MoveCandidates,
+    ) -> Self {
+        Self {
+            tx,
+            scan_timestamp,
+            images: images.iter().map(|image| (image.path.as_path(), image)).collect(),
+            moved,
+            names: NameCache::for_chunk(images.len()),
+            writes: CueWrites::default(),
+        }
+    }
+
+    /// Applies `job`, filing its rows under the library folder `folder_id`.
+    ///
+    /// Runs after the batch's ordinary ingest, which wrote the whole-file row a released image
+    /// takes its playlist places back onto.
+    pub(crate) fn apply(&mut self, job: &SheetJob, folder_id: i64) -> Result<(), AppError> {
+        if let Some(read) = &job.read {
+            self.apply_read_sheet(job, read, folder_id)?;
+        }
+        for image in &job.releases {
+            if release_image(self.tx, &image.to_string_lossy())? {
+                self.writes.updated += 1;
+            }
+        }
+        Ok(())
+    }
+
+    pub(crate) fn into_writes(self) -> CueWrites {
+        self.writes
+    }
+
+    fn apply_read_sheet(
+        &mut self,
+        job: &SheetJob,
+        read: &SheetRead,
+        folder_id: i64,
+    ) -> Result<(), AppError> {
+        let units: Vec<CueUnit<'_>> = job
             .claims
             .iter()
             .filter_map(|claim| {
                 let image = *self.images.get(claim.image.as_path())?;
-                let carved = rows(&read.sheet, &claim.layout, &claim.image, &image.metadata)?;
-                Some((claim, image, carved))
+                let rows = rows(&read.sheet, &claim.layout, &claim.image, &image.metadata)?;
+                Some(CueUnit { claim, image, rows })
             })
             .collect();
         // An image that couldn't be read, or that is too short for the sheet to split, keeps its
         // rows and leaves the sheet unstamped, so the next scan reads both again.
         let stamp = (units.len() == job.claims.len()).then_some(&read.stamp);
-        let sheet_id = upsert_sheet(self.tx, &job.path.to_string_lossy(), self.folder_id, stamp)?;
-        for (claim, image, carved) in &units {
-            self.apply_cue_unit(claim, image, sheet_id, carved)?;
+        let sheet_id = upsert_sheet(self.tx, &job.path.to_string_lossy(), folder_id, stamp)?;
+        for unit in &units {
+            self.apply_cue_unit(unit, Filing { sheet_id, folder_id })?;
         }
         Ok(())
     }
 
-    /// Writes the rows a sheet carves out of `claim`'s image over whatever it held: its earlier
+    /// Writes the rows a sheet carves out of `unit`'s image over whatever it held: its earlier
     /// sheet rows by number, dropping the numbers the sheet no longer has, and a whole-file row,
     /// whose playlist places they take. A kept-out image writes nothing but its exclusion's stamp.
-    fn apply_cue_unit(
-        &mut self,
-        claim: &Claim,
-        image: &ScannedFile,
-        sheet_id: i64,
-        carved: &[CueRow],
-    ) -> Result<(), AppError> {
+    fn apply_cue_unit(&mut self, unit: &CueUnit<'_>, filing: Filing) -> Result<(), AppError> {
         let tx = self.tx;
+        let CueUnit { claim, image, rows: carved } = unit;
         let path = claim.image.to_string_lossy();
         if excluded_files::id_at_on(tx, &path)?.is_some() {
             return excluded_files::restamp_on(tx, &[(claim.image.as_path(), &image.metadata)]);
         }
+        self.carry_moved_rows(image, filing.folder_id)?;
 
         let mut earlier: HashMap<CueTrack, i64> = sql::fetch_all(
             tx,
@@ -124,8 +153,9 @@ impl SheetWriter<'_, '_> {
         let mut new_rows = Vec::new();
         let mut new_tracks = Vec::new();
         for row in carved {
-            let ids = resolve_track_context(tx, self.folder_id, &row.meta, &mut self.names)?;
-            let cue = CuePlacement { track: row.track, span: row.span, sheet_id: Some(sheet_id) };
+            let ids = resolve_track_context(tx, filing.folder_id, &row.meta, &mut self.names)?;
+            let cue =
+                CuePlacement { track: row.track, span: row.span, sheet_id: Some(filing.sheet_id) };
             if let Some(id) = earlier.remove(&row.track) {
                 update_cue_track(tx, id, cue, &row.meta, &ids, &mut self.names)?;
                 placed.push((row.track, id));
@@ -156,6 +186,33 @@ impl SheetWriter<'_, '_> {
             replace_in_playlists(tx, whole_file, &in_sheet_order)?;
             sql::execute(tx, "DELETE FROM tracks WHERE id = ?", (whole_file,))?;
             self.writes.updated += 1;
+        }
+        Ok(())
+    }
+
+    /// Re-points the rows of the gone image `image`'s bytes came from, where its own path holds
+    /// none yet, so a moved album keeps its tracks' play counts, ratings and playlist places.
+    fn carry_moved_rows(&mut self, image: &ScannedFile, folder_id: i64) -> Result<(), AppError> {
+        let hash = image.metadata.file_hash.as_str();
+        let Some(old_path) = self.moved.image_for(hash, &image.path) else {
+            return Ok(());
+        };
+        let path = image.path.to_string_lossy();
+        if track_exists_by_path(self.tx, &path)? {
+            return Ok(());
+        }
+        self.moved.spend_image(hash, &old_path);
+        let repointed = update_track_location(
+            self.tx,
+            &old_path,
+            &path,
+            &file_name_of(&image.path),
+            folder_id,
+            image.metadata.date_modified.as_deref(),
+        )?;
+        if repointed {
+            self.writes.moved += 1;
+            log::info!("Detected moved file: {old_path} -> {path}");
         }
         Ok(())
     }
