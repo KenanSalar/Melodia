@@ -2,7 +2,7 @@
 //! predicates that decide when a transition becomes a crossfade.
 
 use super::{
-    ABORT_RAMP_MS, CrossfadeSettings, CrossfadeShared, DEFAULT_CROSSFADE_MS, FadeShared,
+    ABORT_RAMP_MS, CrossfadeSettings, CrossfadeShared, DEFAULT_CROSSFADE_MS, FadeShared, Joint,
     MAX_CROSSFADE_MS, MIN_CROSSFADE_MS, MIN_FADE_MS, clamp_crossfade_ms, crossfade_eligible,
     crossfade_ms_to_secs, is_unity_target, manual_fade_ms, ramp_gain, same_album,
     secs_to_crossfade_ms, should_crossfade,
@@ -237,35 +237,35 @@ fn same_album_distinguishes_albums_and_artists() {
 
 #[test]
 fn eligible_in_the_ordinary_case() {
-    assert!(crossfade_eligible(settings(), false, true, false));
+    assert!(crossfade_eligible(settings(), false, Some(Joint::Unrelated)));
 }
 
 #[test]
 fn ineligible_when_disabled_or_zero_length_or_last_track() {
     let mut off = settings();
     off.enabled = false;
-    assert!(!crossfade_eligible(off, false, true, false));
+    assert!(!crossfade_eligible(off, false, Some(Joint::Unrelated)));
 
     let mut zero = settings();
     zero.duration_ms = 0;
-    assert!(!crossfade_eligible(zero, false, true, false));
+    assert!(!crossfade_eligible(zero, false, Some(Joint::Unrelated)));
 
-    assert!(!crossfade_eligible(settings(), false, false, false), "no next track");
+    assert!(!crossfade_eligible(settings(), false, None), "no next track");
 }
 
 #[test]
 fn ineligible_when_the_sleep_timer_will_pause_at_track_end() {
     // The track has to drain to `EndOfStream` — the only boundary that gate sees.
-    assert!(!crossfade_eligible(settings(), true, true, false));
+    assert!(!crossfade_eligible(settings(), true, Some(Joint::Unrelated)));
 }
 
 #[test]
 fn same_album_is_skipped_only_when_the_option_is_on() {
-    assert!(!crossfade_eligible(settings(), false, true, true));
+    assert!(!crossfade_eligible(settings(), false, Some(Joint::SameAlbum)));
 
     let mut allow = settings();
     allow.skip_same_album = false;
-    assert!(crossfade_eligible(allow, false, true, true));
+    assert!(crossfade_eligible(allow, false, Some(Joint::SameAlbum)));
 }
 
 // --- should_crossfade ------------------------------------------------------

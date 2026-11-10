@@ -1,11 +1,12 @@
 //! The side effects a state transition hands back, run once the lock is dropped.
 
+use melodia_core::entities::track::TrackAudio;
 use melodia_playback::player::playback::replaygain::TrackReplayGain;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum PlayerAction {
     PlayMedia {
-        file_path: String,
+        audio: TrackAudio,
         volume: f64,
         speed: f64,
         start_position_ms: Option<u64>,
@@ -14,7 +15,7 @@ pub enum PlayerAction {
     /// Fades over `fade_ms` media milliseconds into the next track on the other deck, the current
     /// one staying audible.
     BeginCrossfade {
-        file_path: String,
+        audio: TrackAudio,
         /// The incoming track's own.
         replaygain: TrackReplayGain,
         fade_ms: u64,
@@ -32,11 +33,11 @@ pub enum PlayerAction {
     Stop {
         fade_ms: u64,
     },
-    /// Carries the file and its gain because the backend seeks by building a source already at
+    /// Carries the audio and its gain because the backend seeks by building a source already at
     /// the target. Only ever for a track.
     Seek {
         position_ms: u64,
-        file_path: String,
+        audio: TrackAudio,
         replaygain: TrackReplayGain,
     },
     SetVolume(f64),
@@ -71,12 +72,12 @@ pub struct AwaitedStart {
 impl std::fmt::Display for PlayerAction {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::PlayMedia { file_path, start_position_ms, .. } => match start_position_ms {
-                Some(ms) => write!(f, "play {file_path} from {ms}ms"),
-                None => write!(f, "play {file_path}"),
+            Self::PlayMedia { audio, start_position_ms, .. } => match start_position_ms {
+                Some(ms) => write!(f, "play {audio} from {ms}ms"),
+                None => write!(f, "play {audio}"),
             },
-            Self::BeginCrossfade { file_path, fade_ms, .. } => {
-                write!(f, "crossfade {fade_ms}ms into {file_path}")
+            Self::BeginCrossfade { audio, fade_ms, .. } => {
+                write!(f, "crossfade {fade_ms}ms into {audio}")
             }
             Self::Resume => f.write_str("resume"),
             Self::Pause { fade_ms } => write!(f, "pause (fade {fade_ms}ms)"),

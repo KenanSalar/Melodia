@@ -15,6 +15,8 @@ use symphonia::core::formats::{FormatReader, SeekMode, SeekTo};
 use symphonia::core::io::MediaSource;
 use symphonia::core::units::{Time, TimeBase, Timestamp};
 
+use melodia_core::entities::cue::CueSpan;
+use melodia_core::entities::track::TrackAudio;
 use melodia_core::error::AppError;
 
 use super::aac_trim;
@@ -25,6 +27,7 @@ use super::audio::{
 use super::decode::{self, Rounding};
 use super::mkv_trim;
 use super::opus;
+use super::span::Span;
 
 /// How far short of a stated length a seek lands. The length is not somewhere to land: some
 /// formats answer out of range and park at the end, and the deck reads that as the track finishing,
@@ -129,6 +132,8 @@ pub struct FileDecoder {
     total_duration: Option<Duration>,
     /// For the seek, which has to add the head back on.
     trim: Option<Trim>,
+    /// The cue sheet track this decoder plays, its frames counted after the trim's head.
+    span: Option<Span>,
     end: Option<End>,
 }
 
@@ -167,10 +172,38 @@ impl FileDecoder {
             time_base,
             total_duration,
             trim: None,
+            span: None,
             end: None,
         };
         decoded.install_trim(&edits, &discards);
         Ok(decoded)
+    }
+
+    /// Opens what `audio` names: the whole file, or the cue sheet track, standing on its first
+    /// sample.
+    pub fn open_track(audio: &TrackAudio) -> Result<Self, AppError> {
+        let path = Path::new(&audio.path);
+        let mut decoded = Self::open(path)?;
+        if let Some(span) = audio.span {
+            decoded.enter_span(span).map_err(|e| {
+                AppError::player(format!("Cannot reach the cue track in {}", path.display()), e)
+            })?;
+        }
+        Ok(decoded)
+    }
+
+    /// Narrows the decoder to `span`'s length and count. A span opening on the file's first sample
+    /// needs no seek: the open leaves the cursor there.
+    fn enter_span(&mut self, span: CueSpan) -> Result<(), SeekError> {
+        let rate = self.cursor.shape().rate;
+        let span = Span::at_rate(span, rate);
+        self.total_duration = span.duration(self.total_duration, rate);
+        self.span = Some(span);
+        if span.start == 0 {
+            self.end = self.end_after(0);
+            return Ok(());
+        }
+        self.seek_to_frame(0)
     }
 
     /// Lines this source's timeline up with the demuxer's. AAC's head comes off through
@@ -240,20 +273,69 @@ impl FileDecoder {
             Some(playable) => Some(frames_to_duration(playable, shape.rate)),
             None => self.total_duration.map(|total| total.saturating_sub(head)),
         };
-        self.end = self.end_after(Duration::ZERO);
+        self.end = self.end_after(0);
     }
 
-    /// Where a pre-roll was taken off the ask, the trim still owes the target, which turns the
-    /// frames between into warm-up rather than a head the listener hears. Otherwise, or where the
-    /// timebase can't restate the target, the demuxer's echo stands.
-    fn trim_target(&self, target: Duration, pre_roll: Duration, echoed: Timestamp) -> Timestamp {
-        if pre_roll.is_zero() {
-            return echoed;
-        }
-        let (Some(time_base), Some(time)) = (self.time_base, seek_time(target)) else {
-            return echoed;
+    /// Lands on `frame` of what this source plays. Counted in frames to the demuxer's tick, so a
+    /// span's first sample is reached exactly rather than through a `Duration`'s rounding of it.
+    fn seek_to_frame(&mut self, frame: u64) -> Result<(), SeekError> {
+        let rate = self.cursor.shape().rate;
+        // The demuxer's timeline counts the priming, and everything ahead of a cue track.
+        let head = self.trim.map_or(0, |trim| trim.head);
+        let start = self.span.map_or(0, |span| span.start);
+        let target = head.saturating_add(start).saturating_add(frame);
+
+        // Ask short of the target where the codec needs warming, and let the trim take it back.
+        // Zero everywhere but Opus, and zero without the timebase the trim is measured through,
+        // asking early with nothing to trim being a replay rather than a warm-up.
+        let pre_roll = match self.time_base {
+            Some(_) => frames_in(opus::seek_pre_roll(self.decoder.codec_params()), rate),
+            None => 0,
         };
-        time_base.calc_timestamp(time).unwrap_or(echoed)
+        let ask = self.seek_to(target.saturating_sub(pre_roll))?;
+        let seeked = self.format.seek(SeekMode::Accurate, ask).map_err(other)?;
+
+        // Unconditional, as upstream asks: whatever overlap state the decoder holds now describes
+        // audio that is no longer adjacent, and the stateless codecs' `reset` does nothing.
+        self.decoder.reset();
+
+        // A seek restarts on a frame boundary, so the channel a puller was part way through has to
+        // be put back, or channel 0 comes out where channel 1 was due.
+        let channel_phase = self.cursor.discard_buffered();
+
+        // Dropped around the skip, which pulls through `next`: a count running out there would
+        // end the skip early and leave the channel phase unrestored.
+        self.end = None;
+
+        // A demuxer seek lands on a packet boundary, so without trimming to the frame every seek
+        // replays the tail of what came before.
+        let trim = self
+            .timestamp(target)
+            .map_or(0, |required| self.samples_before(required, seeked.actual_ts));
+        self.skip(trim + channel_phase);
+
+        self.end = self.end_after(frame);
+        Ok(())
+    }
+
+    /// Where the demuxer is asked to land for `frame` of the file's timeline: a tick wherever the
+    /// track has a timebase, `SeekTo::Time` only where it has none.
+    fn seek_to(&self, frame: u64) -> Result<SeekTo, SeekError> {
+        if let Some(ts) = self.timestamp(frame) {
+            return Ok(SeekTo::Timestamp { ts, track_id: self.track });
+        }
+        let time = seek_time(frames_to_duration(frame, self.cursor.shape().rate))
+            .ok_or_else(|| other(AppError::player_msg("Seek position out of range")))?;
+        Ok(SeekTo::Time { time, track_id: Some(self.track) })
+    }
+
+    /// `frame` of the file's timeline in the track's ticks, rounded down as the demuxers round a
+    /// `Time`. `None` without a timebase, or past what a tick can hold.
+    fn timestamp(&self, frame: u64) -> Option<Timestamp> {
+        let time_base = self.time_base?;
+        let ticks =
+            decode::frames_to_ticks(frame, time_base, self.cursor.shape().rate, Rounding::Down)?;
+        Some(Timestamp::new(i64::try_from(ticks).ok()?))
     }
 
     /// Interleaved samples between where the demuxer landed and where the seek asked, rounded up to
@@ -293,16 +375,20 @@ impl FileDecoder {
             .map_or(Duration::ZERO, |trim| frames_to_duration(trim.head, self.cursor.shape().rate))
     }
 
-    /// The end the padding calls for once `pos` has played: a count restated from there, or a
-    /// window rebuilt empty, what it held describing the position being left.
-    fn end_after(&self, pos: Duration) -> Option<End> {
+    /// The end once `played` frames of this source have played. A cue track ending inside the
+    /// file counts down to that end, the padding lying past it. Otherwise the padding's: a count
+    /// restated from there, or a window rebuilt empty, what it held describing the position left.
+    fn end_after(&self, played: u64) -> Option<End> {
+        let channels = self.cursor.shape().channels;
+        if let Some(len) = self.span.and_then(|span| span.len) {
+            return Some(End::Counted(interleaved(len.saturating_sub(played), channels)));
+        }
         let trim = self.trim?;
-        let shape = self.cursor.shape();
         let Some(playable) = trim.playable else {
-            return TailWindow::new(interleaved(trim.tail, shape.channels)).map(End::Held);
+            return TailWindow::new(interleaved(trim.tail, channels)).map(End::Held);
         };
-        let played = frames_in(pos, shape.rate);
-        Some(End::Counted(interleaved(playable.saturating_sub(played), shape.channels)))
+        let played = self.span.map_or(played, |span| span.start.saturating_add(played));
+        Some(End::Counted(interleaved(playable.saturating_sub(played), channels)))
     }
 }
 
@@ -370,47 +456,7 @@ impl AudioSource for FileDecoder {
         // decoded length, and the ceiling sits short of it for [`SEEK_END_MARGIN`]'s reason.
         let pos =
             self.total_duration.map_or(pos, |total| pos.min(total.saturating_sub(SEEK_END_MARGIN)));
-
-        // The demuxer's timeline still opens on the priming.
-        let target = pos.saturating_add(self.head_duration());
-
-        // Ask short of the target where the codec needs warming, and let the trim take it back.
-        // Zero everywhere but Opus, and zero without the timebase the trim is measured through,
-        // asking early with nothing to trim being a replay rather than a warm-up.
-        let pre_roll = match self.time_base {
-            Some(_) => opus::seek_pre_roll(self.decoder.codec_params()),
-            None => Duration::ZERO,
-        };
-        let time = seek_time(target.saturating_sub(pre_roll))
-            .ok_or_else(|| other(AppError::player_msg("Seek position out of range")))?;
-
-        let seeked = self
-            .format
-            .seek(SeekMode::Accurate, SeekTo::Time { time, track_id: Some(self.track) })
-            .map_err(other)?;
-
-        // Unconditional, as upstream asks: whatever overlap state the decoder holds now describes
-        // audio that is no longer adjacent, and the stateless codecs' `reset` does nothing.
-        self.decoder.reset();
-
-        // A seek restarts on a frame boundary, so the channel a puller was part way through has to
-        // be put back, or channel 0 comes out where channel 1 was due.
-        let channel_phase = self.cursor.discard_buffered();
-
-        // Dropped around the skip, which pulls through `next`: a count running out there would
-        // end the skip early and leave the channel phase unrestored.
-        self.end = None;
-
-        // A demuxer seek lands on a packet boundary, so without trimming to the frame every seek
-        // replays the tail of what came before.
-        let trim = self.samples_before(
-            self.trim_target(target, pre_roll, seeked.required_ts),
-            seeked.actual_ts,
-        );
-        self.skip(trim + channel_phase);
-
-        self.end = self.end_after(pos);
-        Ok(())
+        self.seek_to_frame(frames_in(pos, self.cursor.shape().rate))
     }
 }
 

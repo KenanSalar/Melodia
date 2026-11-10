@@ -45,6 +45,35 @@ pub struct TrackSummary {
     pub replaygain_album_peak: Option<f32>,
 }
 
+impl TrackSummary {
+    pub fn audio(&self) -> TrackAudio {
+        TrackAudio { path: self.file_path.clone(), span: self.span }
+    }
+}
+
+/// The audio a deck plays for a track: a file, or the stretch of one a cue sheet names. One value
+/// so nothing on the way from the queue to the decoder can drop the span and play the whole disc.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct TrackAudio {
+    pub path: String,
+    pub span: Option<CueSpan>,
+}
+
+/// The path, and the span in cue frames where there is one, for the action log.
+impl std::fmt::Display for TrackAudio {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&self.path)?;
+        let Some(span) = self.span else {
+            return Ok(());
+        };
+        write!(f, " [cue frames {}..", i64::from(span.start()))?;
+        if let Some(end) = span.end() {
+            write!(f, "{}", i64::from(end))?;
+        }
+        f.write_str("]")
+    }
+}
+
 #[expect(
     clippy::cast_possible_truncation,
     reason = "ReplayGain dB/peak values are tiny and well within f32 range; the narrowing is intentional"

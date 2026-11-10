@@ -11,6 +11,7 @@ use std::path::Path;
 use std::sync::Arc;
 
 use super::*;
+use crate::player::engine::fixtures::whole_file;
 use crate::player::engine::state::PlayerViewModelLight;
 use melodia_audio::player::source::audio::{Sample, Shape};
 use melodia_audio::player::source::decode_ahead;
@@ -443,7 +444,7 @@ fn a_poll_that_is_not_holding_starts_the_count_over() {
 #[tokio::test]
 async fn a_release_never_writes_back_the_position_a_seek_moved_off() -> Result<(), AppError> {
     const SEEK_MS: u64 = 700;
-    let fixture = Path::new(ASSETS_DIR).join("silence.wav").to_string_lossy().into_owned();
+    let fixture = whole_file(&Path::new(ASSETS_DIR).join("silence.wav").to_string_lossy());
     let device = Shape {
         channels: NonZero::new(2).unwrap_or(NonZero::<u16>::MIN),
         rate: NonZero::new(44_100).unwrap_or(NonZero::<u32>::MIN),

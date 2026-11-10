@@ -2,7 +2,8 @@
 
 Working doc. Delete when the feature ships.
 
-Status: **in progress**, Phase 2 landed and hand-passed, its RSS check next · Created: 2026-11-04
+Status: **in progress**, Phase 3 through its gates but Kenan's scrobble and Discord check ·
+Created: 2026-11-04
 
 Issue [#78](https://github.com/KenanSalar/Melodia/issues/78).
 
@@ -537,8 +538,10 @@ The `RETURNING id, file_path` match in `insert_tracks_batch` (`mutations.rs:217`
 
 **Gate:**
 - [x] The static gates.
-- [ ] Idle RSS on the 50,500-track library against v0.23.0, with no sheets in it: a library without
-      sheets owes nothing to this phase.
+- [x] Idle RSS on the 50,500-track library against v0.23.0, with no sheets in it: a library without
+      sheets owes nothing to this phase. Run by Claude on Kenan's go (2026-11-10): release builds,
+      a fresh scan of the library compacted in both roots, ABAB with the page cache dropped. Idle
+      Anonymous 36.2 / 36.5 MiB on v0.23.0, 36.3 / 36.5 on `bc60bdde`; peak RSS level.
 - [x] Kenan's hand pass over this fixture set (`ffmpeg` builds the audio). Run by Claude on Kenan's
       go (2026-11-10), four launches against `Melodia-dev`, restored after; the sheets are kept in
       `~/Development/melodia-cue-test-files`:
@@ -564,38 +567,62 @@ The `RETURNING id, file_path` match in `insert_tracks_batch` (`mutations.rs:217`
 
 ## Phase 3: A track plays its span
 
-- [ ] `CueFrames::to_frames(rate)` in `entities/cue.rs`, the one conversion.
-- [ ] `source/span.rs`. `FileDecoder` gets an open that takes the span:
-  - [ ] It seeks to the start in timeline ticks, through a frames-to-ticks conversion that inverts
-        `decode::ticks_to_frames`, and trims to the exact sample with `samples_before`.
-  - [ ] It states the span's length as `total_duration`.
-  - [ ] It arms `End::Counted` for the span even with no trim. `end_after` loses its
-        `let trim = self.trim?` early return (`file_decode.rs:299`). A span's end replaces the
-        trim's end, keeping `End`'s "never both"; the last track, with no end, keeps the trim's.
-  - [ ] `try_seek` adds the start and caps at the span's length less `SEEK_END_MARGIN`.
-  - [ ] `probe_duration` stays whole-file.
-- [ ] The span rides with the path. `PlayMedia`, `BeginCrossfade` and `Seek` (`state/action.rs:7-41`),
-      `PlayerBackend` (`player_backend.rs:79-101`) and the preload (`handlers.rs:481`,
-      `backend/mod.rs:580-613`) carry one value, a path plus an `Option<CueSpan>`, in place of the
-      bare `file_path`, so no call site can drop the span. The builders in `transport.rs` fill it
-      from `TrackSummary`.
-- [ ] The preload seeks. Today it opens and stages without seeking, which would play the next sheet
-      track from the top of the image.
-- [ ] `same_album` (`crossfade.rs:88-90`): the same `file_path` is the same album. Without it, a
-      sheet whose tracks name different performers would crossfade inside its own disc.
-- [ ] Docs: none owed. The span's argument lives on `span.rs`.
+- [x] `CueFrames::to_frames(rate)` in `entities/cue.rs`, the one conversion.
+- [x] `source/span.rs`. `FileDecoder::open_track(&TrackAudio)` takes the span:
+  - [x] It seeks to the start in timeline ticks, through `decode::frames_to_ticks`, the inverse of
+        `ticks_to_frames`, and trims to the exact sample with `samples_before`. Every seek, a
+        user's included, goes through one `seek_to_frame` as a `SeekTo::Timestamp`; `SeekTo::Time`
+        is left for a track with no timebase.
+  - [x] It states the span's length as `total_duration`.
+  - [x] It arms `End::Counted` for the span even with no trim. A span's end replaces the trim's,
+        keeping `End`'s "never both"; the last track, with no end, keeps the trim's.
+  - [x] `try_seek` caps at the span's length less `SEEK_END_MARGIN` and lands past its start.
+  - [x] `probe_duration` stays whole-file.
+- [x] The span rides with the path. `PlayMedia`, `BeginCrossfade` and `Seek`, `PlayerBackend` and
+      the preload carry one `TrackAudio` (`entities/track.rs`, a path plus an `Option<CueSpan>`)
+      in place of the bare `file_path`. `TrackSummary::audio()` fills it.
+- [x] The preload seeks: `open_for_gapless` opens through `open_track`. The probe cache stays keyed
+      on the path, every span of a file sharing its shape.
+- [x] **A joint inside one image never crossfades** (`crossfade::Joint`). `Continuous`, the next
+      track starting on the sample this one ends, is never eligible whatever the settings, and is
+      staged with gapless off too, that setting being about joints between files (Kenan's call,
+      2026-11-10). `SameAlbum` also takes two tracks of one file, so a sheet naming a performer
+      per track still counts as one album under "skip same album". The plan's `same_album` item
+      alone would only have held with that setting on.
+- [x] Docs: the span's argument lives on `span.rs`, the joint's on `Joint`.
+      `.claude/rules/symphonia.md`'s seeking line names the timestamp seek.
 
 **Gate:**
-- [ ] The static gates, and peak and idle RSS on the 50,500-track library against v0.23.0.
-- [ ] Kenan's hand pass:
-  - [ ] each track starts and ends on its own audio;
-  - [ ] a seek lands inside the track;
-  - [ ] a restart resumes inside it;
-  - [ ] the album plays through with crossfade on, and has no crossfade or gap at a joint inside
-        the image;
-  - [ ] MPRIS length and position, the scrobble and Discord show the track, not the disc;
-  - [ ] the last track ends at the end of the file;
-  - [ ] the hidden track plays.
+- [x] The static gates, and peak and idle RSS on the 50,500-track library against v0.23.0. Run by
+      Claude on Kenan's go (2026-11-10), as Phase 2's, plus a "Playing, list view" window on a
+      FLAC opened from the command line. ABAB, v0.23.0 / Phase 3: idle Anonymous 35.9, 35.7 /
+      36.5, 36.4 MiB; playing 37.8, 38.1 / 38.3, 38.4; peak RSS 260.8, 252.9 / 255.1, 261.8.
+      Playing adds no more over idle on Phase 3 than on v0.23.0, and idle runs none of Phase 3's
+      code; v0.23.0 read 36.2 and 36.5 idle in Phase 2's batch.
+- [ ] Kenan's hand pass. Run by Claude on Kenan's go (2026-11-10): the Phase 3 release build
+      against `Melodia-dev`, restored after, its audio recorded off a null sink. The fixtures are
+      time-coded, each second its own tone, so the recording says which sample of the file
+      played; they are kept in `~/Development/melodia-cue-test-files/phase3-playback`: a 44.1 kHz
+      image of five tracks, one behind a pregap, a 48 kHz image with a hidden track, and a FLAC,
+      MP3, Opus and AAC file.
+  - [x] each track starts and ends on its own audio: both images played through as one stretch
+        each, from the file's first sample to its last, with no sample lost or doubled at any
+        joint; a lone cue track ending the queue stops on its span's last sample;
+  - [x] a seek lands inside the track: on the span's start plus the target, at 44.1 and 48 kHz,
+        and a seek past the end stops at the margin before the span's end;
+  - [x] a restart resumes inside it: Previous lands on the span's first sample, and a relaunch
+        resumes at the saved position inside the span;
+  - [x] the album plays through with crossfade on, and has no crossfade or gap at a joint inside
+        the image: crossfade on with "skip same album" and gapless off, the only fade was the
+        one out of the image into another file;
+  - [ ] MPRIS length and position, the scrobble and Discord show the track, not the disc: MPRIS
+        shows each track's span length and a position counted from its start, and each track
+        played through counts its own play. The scrobble and Discord, both off in `Melodia-dev`,
+        are left to Kenan;
+  - [x] the last track ends at the end of the file;
+  - [x] the hidden track plays.
+  - [x] Ordinary files still start at their first sample and seek to the target, FLAC, MP3, Opus
+        and AAC alike.
 
 ## Phase 4: Keeping it current (watcher, moves, incremental)
 

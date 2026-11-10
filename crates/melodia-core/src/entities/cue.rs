@@ -1,6 +1,8 @@
 //! Where a cue sheet puts one of its tracks: the sheet's number for it, and the stretch of the
 //! file's audio it plays.
 
+use std::num::NonZero;
+
 use rusqlite::types::{FromSql, FromSqlError, FromSqlResult, ValueRef};
 
 /// A sheet's `TRACK` number, 0 being the audio hidden ahead of track 1.
@@ -55,6 +57,12 @@ impl CueFrames {
     /// The time in milliseconds, rounded down.
     pub fn millis(self) -> i64 {
         i64::from(self.0) * 1000 / i64::from(FRAMES_PER_SECOND)
+    }
+
+    /// The time in sample frames at `rate`, rounded down and exact at any multiple of 75 Hz. Both
+    /// sides of a boundary come through here from one stored value, so a joint loses no sample.
+    pub fn to_frames(self, rate: NonZero<u32>) -> u64 {
+        u64::from(self.0) * u64::from(rate.get()) / u64::from(FRAMES_PER_SECOND)
     }
 }
 

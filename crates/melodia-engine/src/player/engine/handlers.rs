@@ -18,7 +18,7 @@ use super::state::{
 use super::types::{PersistedPlayback, PlaybackSource, PlaybackStatus};
 use melodia_audio::player::source::prebuffer::StreamShared;
 use melodia_core::entities::track::TrackSummary;
-use melodia_playback::player::playback::crossfade;
+use melodia_playback::player::playback::crossfade::{self, Joint};
 use melodia_playback::player::playback::decks::DECK_COUNT;
 
 /// How often the monitor wakes: tight enough that gapless preload triggers and
@@ -172,18 +172,15 @@ pub fn evaluate_playing_tick(
     // A next track whose record the window doesn't hold yet is no next yet: neither the crossfade
     // nor the stage below can wait on a fetch, and the next poll asks again.
     let next = state.queue.peek_next().and_then(|id| state.record(id));
-    let same_album = match (state.current_track(), next.as_ref()) {
-        (Some(cur), Some(nxt)) => crossfade::same_album(cur, nxt),
-        _ => false,
-    };
+    let current = state.current_track().map(Arc::as_ref);
+    let joint = next.as_deref().map(|next| crossfade::joint(current, next));
     // Timing-independent, so the preload gated on its negation can't fire first for a crossfade
     // shorter than `PRELOAD_LEAD_MS` and block it. A next track needing a reopen reaches the
     // preload, which refuses it, so it ends at `EndOfStream` either way.
     let eligible = crossfade::crossfade_eligible(
         xf,
         state.pause_after_current_track || next_needs_reopen,
-        next.is_some(),
-        same_album,
+        joint,
     );
 
     // Carries what it was decided against, for `build_crossfade_actions` to re-verify.
@@ -202,7 +199,7 @@ pub fn evaluate_playing_tick(
     });
 
     // Staged late, so a queue or repeat change mid-track still decides what plays next.
-    let late_preload = if state.gapless_enabled
+    let late_preload = if (state.gapless_enabled || joint == Some(Joint::Continuous))
         && !already_preloaded
         && !eligible
         && !crossfading
@@ -232,14 +229,14 @@ fn next_needs_reopen(
     if !xf.enabled {
         return false;
     }
-    let next_path = {
+    let next_audio = {
         let state = lock_state(player_state);
         if !state.source_allows(PlaybackSource::advances_queue) {
             return false;
         }
-        state.queue.peek_next().and_then(|id| state.record(id)).map(|track| track.file_path.clone())
+        state.queue.peek_next().and_then(|id| state.record(id)).map(|track| track.audio())
     };
-    next_path.is_some_and(|path| engine.reopens_for(&path))
+    next_audio.is_some_and(|audio| engine.reopens_for(&audio))
 }
 
 /// Names the station that gave up, which is otherwise a silence with no explanation.
@@ -478,7 +475,7 @@ impl Monitor {
             });
         } else if let Some(track) = late_preload {
             // Its own tags' gain, baked into its own source.
-            self.engine.preload_gapless(&track.file_path, track.as_ref().into());
+            self.engine.preload_gapless(&track.audio(), track.as_ref().into());
             self.staged = Some(track);
         }
         Poll::Counted

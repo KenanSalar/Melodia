@@ -15,6 +15,7 @@ pub mod mkv_trim;
 pub mod opus;
 pub mod prebuffer;
 pub mod sample_ring;
+mod span;
 mod stall_watch;
 pub mod stream_decode;
 pub mod stream_source;

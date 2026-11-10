@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use super::*;
-use crate::player::engine::fixtures::cut_rows;
+use crate::player::engine::fixtures::{cut_rows, whole_file};
 use crate::player::engine::queue::current_index_from_i32;
 use crate::player::engine::types::{PersistableQueue, PersistedPlayback, RepeatMode};
 use melodia_core::error::AppError;
@@ -756,7 +756,7 @@ fn crossfade_advances_the_queue_and_starts_the_next_track() {
     assert_eq!(actions[0], PlayerAction::UpdatePlayCount(1));
     let matched = matches!(
         &actions[1],
-        PlayerAction::BeginCrossfade { file_path, fade_ms: 1_800, .. } if file_path == "/music/2.mp3"
+        PlayerAction::BeginCrossfade { audio, fade_ms: 1_800, .. } if audio.path == "/music/2.mp3"
     );
     assert!(matched, "expected BeginCrossfade for track 2, got {:?}", actions[1]);
 }
@@ -994,7 +994,7 @@ fn every_player_action_names_what_it_did() {
     let cases: Vec<(PlayerAction, &[&str])> = vec![
         (
             PlayerAction::PlayMedia {
-                file_path: "/music/a.flac".to_owned(),
+                audio: whole_file("/music/a.flac"),
                 volume: 1.0,
                 speed: 1.0,
                 start_position_ms: Some(4_200),
@@ -1004,7 +1004,7 @@ fn every_player_action_names_what_it_did() {
         ),
         (
             PlayerAction::PlayMedia {
-                file_path: "/music/b.flac".to_owned(),
+                audio: whole_file("/music/b.flac"),
                 volume: 1.0,
                 speed: 1.0,
                 start_position_ms: None,
@@ -1014,7 +1014,7 @@ fn every_player_action_names_what_it_did() {
         ),
         (
             PlayerAction::BeginCrossfade {
-                file_path: "/music/c.flac".to_owned(),
+                audio: whole_file("/music/c.flac"),
                 replaygain: rg,
                 fade_ms: 3_000,
                 volume: 1.0,
@@ -1028,7 +1028,7 @@ fn every_player_action_names_what_it_did() {
         (
             PlayerAction::Seek {
                 position_ms: 9_001,
-                file_path: "/music/e.flac".to_owned(),
+                audio: whole_file("/music/e.flac"),
                 replaygain: TrackReplayGain::default(),
             },
             &["seek", "9001"],
@@ -1176,7 +1176,7 @@ fn seek_updates_position() {
         actions,
         vec![PlayerAction::Seek {
             position_ms: 45_000,
-            file_path: "/music/1.mp3".to_owned(),
+            audio: whole_file("/music/1.mp3"),
             replaygain: TrackReplayGain::default(),
         }]
     );
@@ -1253,7 +1253,7 @@ fn previous_restarts_after_threshold() {
         actions,
         vec![PlayerAction::Seek {
             position_ms: 0,
-            file_path: "/music/1.mp3".to_owned(),
+            audio: whole_file("/music/1.mp3"),
             replaygain: TrackReplayGain::default(),
         }]
     );
@@ -1786,7 +1786,7 @@ fn the_transport_is_a_tracks_again_once_one_replaces_the_station() {
         state.build_seek_actions(30_000),
         vec![PlayerAction::Seek {
             position_ms: 30_000,
-            file_path: "/music/1.mp3".to_owned(),
+            audio: whole_file("/music/1.mp3"),
             replaygain: TrackReplayGain::default(),
         }]
     );
@@ -2060,7 +2060,7 @@ fn owed_start(actions: &[PlayerAction]) -> Option<AwaitedStart> {
 /// The file `actions` start on the deck, where they start one.
 fn started_path(actions: &[PlayerAction]) -> Option<&str> {
     actions.iter().find_map(|action| match action {
-        PlayerAction::PlayMedia { file_path, .. } => Some(file_path.as_str()),
+        PlayerAction::PlayMedia { audio, .. } => Some(audio.path.as_str()),
         _ => None,
     })
 }

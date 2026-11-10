@@ -9,6 +9,7 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicU8, AtomicU32, AtomicU64, Ordering};
 
 use super::dsp::{AtomicF32, Generation};
+use melodia_core::entities::cue::CueSpan;
 use melodia_core::entities::track::TrackSummary;
 
 /// Bounded by the monitor's poll: a narrower window can be stepped over, and with the gapless
@@ -87,6 +88,30 @@ pub fn is_unity_target(target: f32) -> bool {
 #[must_use]
 pub fn same_album(a: &TrackSummary, b: &TrackSummary) -> bool {
     a.album.is_some() && a.album == b.album && a.artist == b.artist
+}
+
+/// How the playing track meets the next one, for the crossfade gate.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Joint {
+    Unrelated,
+    /// [`same_album`], or two tracks of one file, whose sheet may name a performer per track.
+    SameAlbum,
+    /// The next track starts on the sample this one ends: one recording a cue sheet cut in two.
+    /// Never faded, and staged with gapless off too, which governs joints between files.
+    Continuous,
+}
+
+#[must_use]
+pub fn joint(current: Option<&TrackSummary>, next: &TrackSummary) -> Joint {
+    let Some(current) = current else {
+        return Joint::Unrelated;
+    };
+    if current.file_path == next.file_path {
+        let current_end = current.span.and_then(CueSpan::end);
+        let continues = next.span.is_some_and(|span| current_end == Some(span.start()));
+        return if continues { Joint::Continuous } else { Joint::SameAlbum };
+    }
+    if same_album(current, next) { Joint::SameAlbum } else { Joint::Unrelated }
 }
 
 /// Raw `u8`s, the cell being read on the audio thread through an [`AtomicU8`].
@@ -258,18 +283,19 @@ impl CrossfadeShared {
 /// Timing-independent, so the monitor gates its late gapless preload on the negation: a fade
 /// shorter than the lead would lose to a preload it let through. `drains_to_end` is a track that
 /// must reach `EndOfStream`: the sleep timer catches it only there, and no fade can cross a reopen.
+/// `joint` is `None` with no next track.
 #[must_use]
 pub fn crossfade_eligible(
     xf: CrossfadeSettings,
     drains_to_end: bool,
-    has_next: bool,
-    same_album: bool,
+    joint: Option<Joint>,
 ) -> bool {
-    xf.enabled
-        && xf.duration_ms > 0
-        && has_next
-        && !drains_to_end
-        && !(xf.skip_same_album && same_album)
+    let fades_into_next = match joint {
+        None | Some(Joint::Continuous) => false,
+        Some(Joint::SameAlbum) => !xf.skip_same_album,
+        Some(Joint::Unrelated) => true,
+    };
+    xf.enabled && xf.duration_ms > 0 && !drains_to_end && fades_into_next
 }
 
 /// Adds timing and liveness, returning the real remaining media, never clamped up, so the ramp
