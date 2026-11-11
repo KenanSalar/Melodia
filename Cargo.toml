@@ -232,7 +232,7 @@ minisign-verify = "0.3.0"
 semver = "1.0.28"
 
 # OS integrations
-rfd = "0.17.2"
+rfd = "0.18.0"
 # Hands a path to the OS default handler, for "Open Containing Folder".
 open = "5.4.5"
 # The single-instance socket: one abstraction over a Linux abstract unix socket and
