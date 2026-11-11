@@ -82,7 +82,8 @@ pub(crate) async fn import_files(
     let mut imported_count = 0;
     if !new_audio.is_empty() || !unrecorded.is_empty() {
         let opened: HashSet<PathBuf> = files.iter().map(PathBuf::from).collect();
-        let reading = Reading { new_audio, unrecorded, around, opened };
+        let owns = move |image: &Path| opened.contains(image);
+        let reading = Reading { new_audio, sheets: unrecorded, around, owns };
         let (chunk, pool) = read_in(reading, artwork_dir, cover_cache).await?;
         let scan_timestamp = melodia_core::utils::now_rfc3339();
         let result = queries::ingest::commit_import(db, chunk, scan_timestamp, pool).await?;
@@ -146,28 +147,32 @@ pub(crate) async fn files_opened_by(paths: &[String]) -> Result<Vec<Vec<String>>
 }
 
 /// What an import reads in beyond the rows the library holds.
-struct Reading {
-    new_audio: Vec<PathBuf>,
-    /// Opened sheets the library holds no stamp for.
-    unrecorded: Vec<PathBuf>,
-    around: SheetsAround,
-    /// Every file the paths opened, which bounds what a sheet may claim or give back here.
-    opened: HashSet<PathBuf>,
+pub(super) struct Reading<Owns> {
+    pub(super) new_audio: Vec<PathBuf>,
+    /// Sheets with content the library hasn't read: opened ones it holds no stamp for, or ones a
+    /// tag edit wrote.
+    pub(super) sheets: Vec<PathBuf>,
+    pub(super) around: SheetsAround,
+    /// Which images a sheet may claim or give back here, an import admitting only what it opened.
+    pub(super) owns: Owns,
 }
 
 /// Settles the sheets around what is new and reads it, each image a sheet claims or gives back
 /// included.
-async fn read_in(
-    reading: Reading,
+pub(super) async fn read_in<Owns>(
+    reading: Reading<Owns>,
     artwork_dir: &Path,
     cover_cache: &CoverCache,
-) -> Result<(ScanChunk, ScanPool), AppError> {
+) -> Result<(ScanChunk, ScanPool), AppError>
+where
+    Owns: Fn(&Path) -> bool + Send + Sync + 'static,
+{
     let artwork_dir = artwork_dir.to_path_buf();
     let cover_cache = cover_cache.clone();
     tokio::task::spawn_blocking(move || {
-        let Reading { mut new_audio, unrecorded, around, opened } = reading;
-        let written = new_audio.iter().chain(&unrecorded).cloned().collect();
-        let plan = cue::settle_dirs(&around, written, |image| opened.contains(image));
+        let Reading { mut new_audio, sheets, around, owns } = reading;
+        let written = new_audio.iter().chain(&sheets).cloned().collect();
+        let plan = cue::settle_dirs(&around, written, owns);
         plan.take_out_of(&mut new_audio);
         let cue = plan.into_chunk();
         new_audio.extend(cue.images());

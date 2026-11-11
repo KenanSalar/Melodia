@@ -13,6 +13,7 @@ paths:
   - crates/melodia-views/src/ui/playlists/**/*.rs
   - crates/melodia-ui/ui/views/my-library/playlist-detail.slint
   - crates/melodia-ui/ui/components/track-list/track-context-menu.slint
+  - crates/melodia-ui/ui/components/dialog/tag-editor-body.slint
   - migrations/**/*.sql
 ---
 
@@ -51,6 +52,11 @@ paths:
   disc. A write into a file reaches only rows that play it whole (`get_whole_file_paths_by_ids`),
   and a read of a file's tags or lyrics for one track skips a sheet's (`TagEditRow::is_sheet_track`,
   `lyrics::LyricsKey`) or lays its sheet over them (`cue::read_track_tags`).
+- **A sheet track's tags live in its sheet**: a tag edit writes what `media::cue::SheetEdit` carries
+  into the `.cue` (`library::sheet_tags`) and drops the rest. What Edit Tags leaves open for a
+  sheet track is `tag-editor-body.slint`'s `SheetField`s, the editors bound to `TagEditor.read-only`
+  alone and the Credits tab's composer, so a field joining one side joins the other, or it saves
+  into nothing.
 
 ## Query shape
 

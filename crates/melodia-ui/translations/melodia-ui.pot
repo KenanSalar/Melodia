@@ -792,7 +792,11 @@ msgid "Replace…"
 msgstr ""
 
 #: ui/components/dialog/tag-editor-body.slint
-msgid "Tracks from a cue sheet can't be edited here."
+msgid "The hidden audio before a cue sheet's first track can't be edited here."
+msgstr ""
+
+#: ui/components/dialog/tag-editor-body.slint
+msgid "Changes are saved to the cue sheet, where album, album artist, disc and barcode apply to every track it lists. Fields a cue sheet can't hold are read-only."
 msgstr ""
 
 #: ui/components/dialog/tag-editor-body.slint ui/settings.slint

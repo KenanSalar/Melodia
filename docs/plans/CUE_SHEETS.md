@@ -2,7 +2,7 @@
 
 Working doc. Delete when the feature ships.
 
-Status: **in progress**, Phase 6 through its gates, Phase 7 next; Phase 3 owes Kenan's scrobble
+Status: **in progress**, Phase 7 through its gates, Phase 8 next; Phase 3 owes Kenan's scrobble
 and Discord check ·
 Created: 2026-11-04
 
@@ -323,20 +323,31 @@ the fields the sheet can hold, at the scope each belongs to:
 
 | fields | scope |
 |---|---|
-| title, artist (`PERFORMER`), composer (`SONGWRITER`), ISRC, genre, date | the track |
-| album (`TITLE`), album artist (`PERFORMER`), disc number, barcode (`CATALOG`) | the sheet |
+| title, artist (`PERFORMER`), ISRC | the track |
+| composer (`SONGWRITER`), genre (`REM GENRE`), date (`REM DATE`) | the track, or the sheet once when the edit covers every audio track it places, the tracks' own lines dropped |
+| album (`TITLE`), album artist (`PERFORMER`), disc number and total, barcode (`CATALOG`) | the sheet |
+
+A whole-album genre edit on an EAC sheet therefore changes its one `REM GENRE` line. A sheet holds
+one `PERFORMER` and one `SONGWRITER` per scope: a credit is written as it prints, and several
+composers joined by `;`, which the scan splits as it splits a genre. Track number and total stay
+read-only, the number being the row's identity.
 
 How the rewrite works:
 
-- Every line it doesn't touch stays byte for byte, line endings and BOM included.
-- The new text is encoded in the sheet's own encoding when every character fits, and as UTF-8 with
-  a BOM when one doesn't.
+- The bytes are split into lines before they are decoded, so every line it doesn't touch stays
+  byte for byte, line endings and BOM included, even where a decode wouldn't round-trip.
+- The new text is encoded in the sheet's own encoding when every character fits, and the whole
+  sheet as UTF-8 with a BOM when one doesn't.
+- A set replaces the scope's first line of that command and drops the others; a clear drops them
+  all. A new line goes under its `TRACK` line, or ahead of the first `FILE`.
 - The file is replaced atomically through the tag writer's rename.
-- The scan reads the sheet back, so an edit is never undone by the next rescan.
+- The sheet is read back as a changed sheet is, through the import's commit, which files an
+  outside sheet under its own folder. So an edit is never undone by the next rescan.
 
-What a sheet can't hold (lyrics, BPM, cover art, mood, the hidden track's title) is read-only for
-these rows, with a note saying why. Ratings, favourites and play counts are database-only for sheet
-tracks, and nothing writes them into the image.
+What a sheet can't hold (lyrics, BPM, cover art, mood) is read-only for these rows, with a note
+saying why, and the hidden track, which no line of the sheet states, is read-only whole. Ratings,
+favourites and play counts are database-only for sheet tracks, and nothing writes them into the
+image.
 
 ### Embedded sheets
 
@@ -425,7 +436,8 @@ How Melodia holds one:
 | sheet → rows per file | `media/cue/layout.rs` | starts and ends, hidden track, data tracks, the multi-file layout, the claim rule |
 | `FILE` → walked path | `media/cue/resolve.rs` | the three-step match |
 | sheet + image tags → row fields | `media/cue/merge.rs` | the table above; produces the `ExtractedMetadata` shape the ordinary ingest already writes |
-| sheet rewrite | `media/cue/write.rs` | Phase 7 |
+| sheet rewrite | `media/cue/write.rs` | Phase 7: `SheetEdit`, the edits by scope. `text.rs` splits the lines and encodes them back, `parse.rs`'s reader answers each line's `Statement` |
+| the edit's sheet pass | `crates/melodia-app/src/library/sheet_tags.rs` | Phase 7: write, mark `self_writes`, read back through `import::read_in` and `commit_import` |
 | embedded sources | `media/cue/embedded.rs` | Phase 8: the CUESHEET block reader and the tag text |
 | store units of work | `crates/melodia-store/src/database/queries/scan/cue_units.rs` | `SheetWriter::apply`: per sheet job, the stamp, `apply_cue_unit` (a gone image's rows carried by hash, upsert by key, drop missing numbers, carry playlist entries off the whole-file row) and `release_image` (the reverse), `pub(crate)` on the caller's transaction: the scan chunk's, whose stats triggers drop and return inside it (`commit_scan_chunk`), or the watcher batch's (`handle_sheets`), each job filed under its sheet's folder |
 | playlist carry | `crates/melodia-store/src/database/queries/playlist_carry.rs` | `replace_in_playlists` and `merge_into_playlists`, beside the other playlist membership writers |
@@ -971,32 +983,56 @@ a whole disc. *Files opened from outside the library* gives the model.
 
 ## Phase 7: Edits written to the sheet
 
-- [ ] `media/cue/write.rs`:
-  - [ ] applies a field set to the parsed lines at its scope and leaves every other line alone;
-  - [ ] encodes back in the sheet's encoding, or as UTF-8 with a BOM where a character doesn't fit;
-  - [ ] keeps the line endings;
-  - [ ] replaces the file through the tag writer's atomic rename.
-- [ ] `write_tag_edit` (`library/tags.rs:233`) groups sheet tracks by sheet, writes each sheet once,
-      registers it with `self_writes`, and rescans that sheet's unit. Ordinary tracks keep their
-      path.
-- [ ] The tag editor opens the fields the sheet can hold. The rest, and the hidden track's row, stay
-      read-only with the note reworded.
-- [ ] An outside sheet track's fields open on what `cue::read_track_tags` reads, its row holding
-      no join rows, and the re-read of its sheet after a write files it as
-      `TrackFolder::Outside`, or it gains the links Phase 5.5 keeps from it.
-- [ ] i18n as in Phase 5.
-- [ ] Docs: `write.rs`'s module doc carries the encoding rule. `library-data.md` gains "a sheet
-      track's tags live in its sheet" where a tag write could break it.
+- [x] `media/cue/write.rs`:
+  - [x] applies a field set to the parsed lines at its scope and leaves every other line alone,
+        through the statements `parse.rs`'s one reader answers (`parse::statements`);
+  - [x] encodes back in the sheet's encoding, or as UTF-8 with a BOM where a character doesn't fit,
+        UTF-16 by hand (`text.rs`, `EncodedSheet::encode`);
+  - [x] keeps the line endings, a new line taking the sheet's own;
+  - [x] replaces the file through the tag writer's atomic rename (`replace_sheet`).
+- [x] `write_tag_edit` (`library/tags.rs`) hands the edit's `SheetEdit` to `sheet_tags`, which
+      groups sheet tracks by sheet (`get_sheet_tracks_by_ids`), writes each sheet once, registers it
+      with `self_writes`, and reads every changed sheet back in one `import::read_in` and
+      `commit_import`. Ordinary tracks keep their path, and a rating's write-back projects to an
+      empty `SheetEdit`. `forget_stored_lyrics` keys sheet tracks on their number.
+- [x] Composers split on `;` (`metadata::split_list`), in `merge.rs`'s `with_composer`.
+- [x] The tag editor opens the fields the sheet can hold (`TagEditor.from-sheet`, `SheetField`, the
+      composer). The rest stay read-only, and a hidden track keeps the whole dialog so
+      (`TagEditor.read-only`), each with its own note.
+- [x] An outside sheet track's fields open on what `cue::read_track_tags` reads, the baseline taking
+      the same values the form shows, and the re-read of its sheet after a write files it through
+      `import_folder_of`, as `TrackFolder::Outside`.
+- [x] i18n as in Phase 5.
+- [x] Docs: `write.rs`'s module doc carries the encoding rule. `library-data.md` gains "a sheet
+      track's tags live in its sheet" where a tag write could break it, its glob widened to
+      `tag-editor-body.slint`. `README.md`'s cue line says edits go to the sheet.
 
 **Gate:**
-- [ ] The static gates.
-- [ ] Kenan's hand pass:
-  - [ ] edit a title on a UTF-8 sheet and on a Shift_JIS sheet (once with a character Shift_JIS
-        can't hold);
-  - [ ] edit the album on a multi-select;
-  - [ ] diff each sheet, expecting only the touched lines to change;
-  - [ ] the edit survives a full rescan;
-  - [ ] the watcher doesn't echo the write.
+- [x] The static gates.
+- [x] Kenan's hand pass. Run by Claude on Kenan's go (2026-11-11): the debug build against
+      `Melodia-dev` with watching on, on a null sink, restored after, the UI driven through ydotool
+      and KWin scripts. Play counts, ratings and a playlist were seeded into the sheet rows first.
+      The fixtures, a UTF-8 LF sheet with EAC's top-level `REM GENRE` and a Shift_JIS CRLF one
+      with none, are kept with their originals in `~/Development/melodia-cue-test-files/phase7-edits`:
+  - [x] edit a title on a UTF-8 sheet and on a Shift_JIS sheet: each changed its one `TITLE` line,
+        the Shift_JIS one still Shift_JIS. Once more with `é`, which Shift_JIS can't hold, the whole
+        sheet came back UTF-8 with a BOM, every other line's text and CRLF unchanged, and logged;
+  - [x] edit the album on a multi-select: one sheet `TITLE` line. A genre over every track changed
+        the one top-level `REM GENRE`, and one track's genre and year went in under its `TRACK`
+        line; disc, disc total and genre on a sheet with none went in ahead of `FILE`, and two
+        composers became one `SONGWRITER` line, read back as two composer credits;
+  - [x] diff each sheet, expecting only the touched lines to change;
+  - [x] the edit survives a full rescan: the sheets touched and relaunched, the scan re-read all
+        three, and every row's title, tags, id, play count, rating, composers and playlist place
+        read back identical;
+  - [x] the watcher doesn't echo the write: one "Suppressed" line per save and no batch, two for
+        the mixed save below;
+  - [x] the fields a sheet can't hold refuse typing, with the note, and the hidden track opens
+        fully read-only with its own note and Save off; a mixed selection of a whole file and a
+        sheet track wrote one ISRC into the file's tag and under the track's `TRACK` line;
+  - [x] a star on a sheet track lands in the database alone, sheet and image byte-identical;
+  - [x] an outside sheet track's title edit keeps its rows unlinked under their own folder, the
+        library count unchanged.
 
 ## Phase 8: Embedded sheets
 

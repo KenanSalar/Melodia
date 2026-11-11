@@ -12,7 +12,7 @@ use super::{columns, json_array};
 use crate::database::rows::FromRow;
 use crate::database::sql::{self, Sql};
 use crate::database::{DbPool, chunked_in_query, in_id_order, select_in_id_order};
-use melodia_core::entities::cue::CueTrack;
+use melodia_core::entities::cue::{CueTrack, SheetTrack};
 use melodia_core::entities::track;
 use melodia_core::entities::track_list::TrackListScope;
 use melodia_core::error::AppError;
@@ -192,23 +192,23 @@ pub async fn filed_outside(db: &DbPool, ids: &[i64]) -> Result<HashSet<i64>, App
     db.read(move |conn| ids_answering(conn, &ids, FILED_OUTSIDE.as_str())).await
 }
 
-/// The external sheet that carved each of `ids` out of its image, by track id.
-pub async fn get_sheet_paths_by_ids(
+/// Each of `ids` an external sheet carved out of its image, with that sheet.
+pub async fn get_sheet_tracks_by_ids(
     db: &DbPool,
     ids: &[i64],
-) -> Result<HashMap<i64, String>, AppError> {
+) -> Result<Vec<SheetTrack>, AppError> {
     let ids = ids.to_vec();
-    let rows: Vec<(i64, String)> = db
+    let rows: Vec<(i64, String, CueTrack)> = db
         .read(move |conn| {
             chunked_in_query(conn, &ids, |placeholders| {
                 format!(
-                    "SELECT t.id, c.path FROM tracks t JOIN cue_sheets c ON c.id = t.cue_sheet_id \
-                     WHERE t.id IN ({placeholders})"
+                    "SELECT t.id, c.path, t.cue_track FROM tracks t \
+                     JOIN cue_sheets c ON c.id = t.cue_sheet_id WHERE t.id IN ({placeholders})"
                 )
             })
         })
         .await?;
-    Ok(rows.into_iter().collect())
+    Ok(rows.into_iter().map(|(id, sheet, track)| SheetTrack { id, sheet, track }).collect())
 }
 
 /// The ids `statement` answers out of `ids`, which it reads from one `json_each` bind.

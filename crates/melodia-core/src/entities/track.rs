@@ -239,6 +239,12 @@ impl TagEditRow {
     pub fn is_sheet_track(&self) -> bool {
         self.cue_track.is_some()
     }
+
+    /// Whether this is the audio hidden before a sheet's first track, which no line of the sheet
+    /// states.
+    pub fn is_hidden_track(&self) -> bool {
+        self.cue_track == Some(CueTrack::HIDDEN)
+    }
 }
 
 /// What a scrobble needs, native columns only; `ScrobbleTrack::from_row` converts it.

@@ -10,7 +10,7 @@ hit, so this table finds them. A rule missed where needed gets a wider glob, nev
 
 | file | covers |
 |------|--------|
-| `.claude/rules/library-data.md` | the artwork ledger and its undo hold, the audio-extension and trash-folder predicates, query shape and the folded search columns, punctuation-blind matching and the duplicate matcher, smart-playlist membership, cue sheet claims, files opened from outside the library |
+| `.claude/rules/library-data.md` | the artwork ledger and its undo hold, the audio-extension and trash-folder predicates, query shape and the folded search columns, punctuation-blind matching and the duplicate matcher, smart-playlist membership, cue sheet claims and tag edits, files opened from outside the library |
 | `.claude/rules/ui-patterns.md` | the component catalogue, the UI contracts no one file holds, where to reach for grids, lists, filtering and covers, the three tabbed pages, the Settings page |
 | `.claude/rules/desktop-shell.md` | window chrome + winit, caption styles, restart-gated settings, the unfocused tint, tray, the volume conversion |
 | `.claude/rules/updater.md` | the polkit helper's four spellings, the three platform-key tables |

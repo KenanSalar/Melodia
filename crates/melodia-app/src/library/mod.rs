@@ -35,6 +35,7 @@ pub mod recently_played;
 pub mod scan;
 pub mod search;
 pub mod settings;
+mod sheet_tags;
 pub mod smart_playlists;
 pub mod tags;
 pub mod tracks;

@@ -794,8 +794,12 @@ msgid "Replace…"
 msgstr "Csere…"
 
 #: ui/components/dialog/tag-editor-body.slint
-msgid "Tracks from a cue sheet can't be edited here."
-msgstr "A CUE-fájlból származó számok itt nem szerkeszthetők."
+msgid "The hidden audio before a cue sheet's first track can't be edited here."
+msgstr "A CUE-fájl első száma előtti rejtett hang itt nem szerkeszthető."
+
+#: ui/components/dialog/tag-editor-body.slint
+msgid "Changes are saved to the cue sheet, where album, album artist, disc and barcode apply to every track it lists. Fields a cue sheet can't hold are read-only."
+msgstr "A módosítások a CUE-fájlba kerülnek, ahol az album, az album előadója, a lemez és a vonalkód minden benne szereplő számra érvényes. A CUE-fájlban nem tárolható mezők csak olvashatók."
 
 #: ui/components/dialog/tag-editor-body.slint ui/settings.slint
 msgid "Details"

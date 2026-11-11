@@ -792,8 +792,12 @@ msgid "Replace…"
 msgstr "Sostituisci…"
 
 #: ui/components/dialog/tag-editor-body.slint
-msgid "Tracks from a cue sheet can't be edited here."
-msgstr "Le tracce di un file CUE non si possono modificare qui."
+msgid "The hidden audio before a cue sheet's first track can't be edited here."
+msgstr "L'audio nascosto prima della prima traccia di un file CUE non si può modificare qui."
+
+#: ui/components/dialog/tag-editor-body.slint
+msgid "Changes are saved to the cue sheet, where album, album artist, disc and barcode apply to every track it lists. Fields a cue sheet can't hold are read-only."
+msgstr "Le modifiche vengono salvate nel file CUE, dove album, artista dell'album, disco e codice a barre valgono per ogni traccia che elenca. I campi che un file CUE non può contenere sono di sola lettura."
 
 #: ui/components/dialog/tag-editor-body.slint ui/settings.slint
 msgid "Details"

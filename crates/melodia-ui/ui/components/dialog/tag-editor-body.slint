@@ -35,6 +35,12 @@ component SummaryRow inherits HorizontalLayout {
 }
 
 component TagField inherits LabeledInput {
+    read-only: TagEditor.file-tags-locked;
+}
+
+// A field a cue sheet holds, which `media::cue::SheetEdit` writes into the sheet: one opened here
+// that it doesn't carry would save into nothing.
+component SheetField inherits LabeledInput {
     read-only: TagEditor.read-only;
 }
 
@@ -65,12 +71,12 @@ export component TagEditorBody inherits HorizontalLayout {
             tile-radius: Theme.radius-md;
             fallback-icon: "album";
         }
-        if !TagEditor.read-only: PillButton {
+        if !TagEditor.file-tags-locked: PillButton {
             text: @tr("Replace…");
             icon: "image";
             clicked => { TagEditor.pick-artwork(); }
         }
-        if !TagEditor.read-only && TagEditor.has-cover: PillButton {
+        if !TagEditor.file-tags-locked && TagEditor.has-cover: PillButton {
             text: @tr("Remove");
             icon: "delete";
             danger: true;
@@ -84,8 +90,10 @@ export component TagEditorBody inherits HorizontalLayout {
         horizontal-stretch: 1;
         spacing: Theme.pad-md;
 
-        if TagEditor.read-only: Text {
-            text: @tr("Tracks from a cue sheet can't be edited here.");
+        if TagEditor.file-tags-locked: Text {
+            text: TagEditor.read-only
+                ? @tr("The hidden audio before a cue sheet's first track can't be edited here.")
+                : @tr("Changes are saved to the cue sheet, where album, album artist, disc and barcode apply to every track it lists. Fields a cue sheet can't hold are read-only.");
             color: Theme.subtext0;
             font-size: Theme.font-size-sm;
             wrap: word-wrap;
@@ -106,7 +114,7 @@ export component TagEditorBody inherits HorizontalLayout {
                 width: 100%;
                 height: 100%;
 
-                TagField {
+                SheetField {
                     label: @tr("Title");
                     placeholder: TagEditor.title-placeholder;
                     text <=> TagEditor.title;
@@ -119,7 +127,7 @@ export component TagEditorBody inherits HorizontalLayout {
                     field: TagEditor.field-artist;
                     read-only: TagEditor.read-only;
                 }
-                TagField {
+                SheetField {
                     label: @tr("Album");
                     placeholder: TagEditor.album-placeholder;
                     text <=> TagEditor.album;
@@ -146,7 +154,7 @@ export component TagEditorBody inherits HorizontalLayout {
                 // value over a typo.
                 HorizontalLayout {
                     spacing: Theme.pad-sm;
-                    TagField {
+                    SheetField {
                         label: @tr("Year");
                         placeholder: TagEditor.year-placeholder;
                         input-type: InputType.number;
@@ -164,13 +172,13 @@ export component TagEditorBody inherits HorizontalLayout {
                         input-type: InputType.number;
                         text <=> TagEditor.track-total;
                     }
-                    TagField {
+                    SheetField {
                         label: @tr("Disc");
                         placeholder: TagEditor.disc-number-placeholder;
                         input-type: InputType.number;
                         text <=> TagEditor.disc-number;
                     }
-                    TagField {
+                    SheetField {
                         label: @tr("Total");
                         placeholder: TagEditor.disc-total-placeholder;
                         input-type: InputType.number;
@@ -208,7 +216,8 @@ export component TagEditorBody inherits HorizontalLayout {
                     label: label;
                     names: TagEditor.role-names[i];
                     placeholder: TagEditor.role-placeholders[i];
-                    read-only: TagEditor.read-only;
+                    // The composer, first, is the one role a cue sheet holds.
+                    read-only: i == 0 ? TagEditor.read-only : TagEditor.file-tags-locked;
                     set-name(row, t) => { TagEditor.set-role-name(i, row, t); }
                     add => { TagEditor.add-role(i); }
                     remove(row) => { TagEditor.remove-role(i, row); }
@@ -281,7 +290,7 @@ export component TagEditorBody inherits HorizontalLayout {
                     }
                 }
 
-                TagField {
+                SheetField {
                     label: @tr("ISRC");
                     placeholder: TagEditor.isrc-placeholder;
                     text <=> TagEditor.isrc;
@@ -307,7 +316,7 @@ export component TagEditorBody inherits HorizontalLayout {
                 }
                 HorizontalLayout {
                     spacing: Theme.pad-sm;
-                    TagField {
+                    SheetField {
                         label: @tr("Barcode");
                         placeholder: TagEditor.barcode-placeholder;
                         text <=> TagEditor.barcode;
@@ -336,7 +345,7 @@ export component TagEditorBody inherits HorizontalLayout {
                 DialogToggleRow {
                     label: @tr("Part of a compilation");
                     checked <=> TagEditor.compilation;
-                    enabled: !TagEditor.read-only;
+                    enabled: !TagEditor.file-tags-locked;
                 }
             }
 
@@ -349,7 +358,7 @@ export component TagEditorBody inherits HorizontalLayout {
 
                     // Above the field rather than beside Save: it fills the box for the reader to
                     // check, where Save commits the whole dialog.
-                    if !TagEditor.read-only && TagEditor.has-resident-lyrics: HorizontalLayout {
+                    if !TagEditor.file-tags-locked && TagEditor.has-resident-lyrics: HorizontalLayout {
                         alignment: start;
                         vertical-stretch: 0;
                         PillButton {
@@ -363,7 +372,7 @@ export component TagEditorBody inherits HorizontalLayout {
                         vertical-stretch: 1;
                         placeholder: TagEditor.lyrics-placeholder;
                         text <=> TagEditor.lyrics;
-                        read-only: TagEditor.read-only;
+                        read-only: TagEditor.file-tags-locked;
                     }
                 }
             }

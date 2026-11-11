@@ -72,6 +72,58 @@ pub(crate) fn parse(text: &str, origin: &Path) -> Sheet {
     reader.sheet
 }
 
+/// What each of `lines` states, in order, beside the sheet they state together. A line that can't
+/// be read states [`Command::Other`].
+pub(super) fn statements<'a>(lines: impl IntoIterator<Item = &'a str>) -> (Sheet, Vec<Statement>) {
+    let mut reader = Reader::default();
+    let statements = lines
+        .into_iter()
+        .map(|line| {
+            let command = reader.read(line).unwrap_or(Command::Other);
+            Statement { scope: reader.scope(), command }
+        })
+        .collect();
+    (reader.sheet, statements)
+}
+
+/// The value `line` states, read as the sheet's reader reads it.
+pub(super) fn stated_value(line: &str) -> Option<String> {
+    let (keyword, rest) = split_word(line);
+    let rest = if keyword.eq_ignore_ascii_case("REM") { split_word(rest).1 } else { rest };
+    value_of(rest)
+}
+
+/// One line: what it says, and whose it is.
+pub(super) struct Statement {
+    pub(super) scope: Scope,
+    pub(super) command: Command,
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub(super) enum Scope {
+    /// Ahead of the first `TRACK`.
+    Sheet,
+    /// A `TRACK` line and the lines under it.
+    Track(CueTrack),
+    /// The lines under a `TRACK` line that couldn't be read.
+    Rejected,
+}
+
+#[derive(PartialEq, Eq)]
+pub(super) enum Command {
+    File,
+    Track,
+    Title,
+    Performer,
+    Songwriter,
+    Isrc,
+    Catalog,
+    /// The key upper-cased.
+    Rem(String),
+    /// Any line no field is read from.
+    Other,
+}
+
 /// A line that names something the sheet can't hold, such as an index with no file above it.
 struct Unreadable;
 
@@ -83,52 +135,60 @@ struct Reader {
 }
 
 impl Reader {
-    fn read(&mut self, line: &str) -> Result<(), Unreadable> {
+    fn read(&mut self, line: &str) -> Result<Command, Unreadable> {
         let (keyword, rest) = split_word(line);
         match keyword.to_ascii_uppercase().as_str() {
             "FILE" => {
                 self.sheet.files.push(file_name(rest).ok_or(Unreadable)?);
-                Ok(())
+                Ok(Command::File)
             }
-            "TRACK" => self.start_track(rest),
-            _ if self.in_rejected_track => Ok(()),
-            "INDEX" => self.add_index(rest),
+            "TRACK" => self.start_track(rest).map(|()| Command::Track),
+            _ if self.in_rejected_track => Ok(Command::Other),
+            "INDEX" => self.add_index(rest).map(|()| Command::Other),
             "TITLE" => {
-                set(&mut self.scope().title, rest);
-                Ok(())
+                set(&mut self.fields().title, rest);
+                Ok(Command::Title)
             }
             "PERFORMER" => {
-                set(&mut self.scope().performer, rest);
-                Ok(())
+                set(&mut self.fields().performer, rest);
+                Ok(Command::Performer)
             }
             "SONGWRITER" => {
-                set(&mut self.scope().songwriter, rest);
-                Ok(())
+                set(&mut self.fields().songwriter, rest);
+                Ok(Command::Songwriter)
             }
             "REM" => {
                 let (key, value) = split_word(rest);
+                let key = key.to_ascii_uppercase();
                 if let Some(value) = value_of(value) {
-                    self.scope().rems.push((key.to_ascii_uppercase(), value));
+                    self.fields().rems.push((key.clone(), value));
                 }
-                Ok(())
+                Ok(Command::Rem(key))
             }
             "ISRC" => {
                 if let Some(track) = self.sheet.tracks.last_mut() {
                     set(&mut track.isrc, rest);
                 }
-                Ok(())
+                Ok(Command::Isrc)
             }
             "CATALOG" => {
                 set(&mut self.sheet.catalog, rest);
-                Ok(())
+                Ok(Command::Catalog)
             }
             // `FLAGS`, `PREGAP`, `POSTGAP`, `CDTEXTFILE` and the unknown say nothing a row holds.
-            _ => Ok(()),
+            _ => Ok(Command::Other),
         }
     }
 
+    fn scope(&self) -> Scope {
+        if self.in_rejected_track {
+            return Scope::Rejected;
+        }
+        self.sheet.tracks.last().map_or(Scope::Sheet, |track| Scope::Track(track.number))
+    }
+
     /// The fields a line goes to: the last track's, or the sheet's ahead of the first `TRACK`.
-    fn scope(&mut self) -> &mut Fields {
+    fn fields(&mut self) -> &mut Fields {
         match self.sheet.tracks.last_mut() {
             Some(track) => &mut track.fields,
             None => &mut self.sheet.fields,

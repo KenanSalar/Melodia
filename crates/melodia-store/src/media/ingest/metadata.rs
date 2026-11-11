@@ -446,11 +446,18 @@ pub(crate) fn read_genres(tag: Option<&Tag>) -> GenreList {
     }
 }
 
-/// One genre value as the list it may flatten, by [`read_genres`]' rule.
+/// What a single value flattening a list of names separates them with, by [`read_genres`]' rule. A
+/// cue sheet's composers take it too, its `SONGWRITER` holding one value.
+pub(crate) const LIST_SEPARATOR: char = ';';
+
+/// One value as the names it may flatten.
+pub(crate) fn split_list(value: &str) -> impl Iterator<Item = &str> {
+    value.split(LIST_SEPARATOR).map(str::trim).filter(|name| !name.is_empty())
+}
+
+/// One genre value as the list it may flatten.
 pub(crate) fn split_genres(value: &str) -> GenreList {
-    GenreList::new(
-        value.split(';').map(str::trim).filter(|s| !s.is_empty()).map(str::to_owned).collect(),
-    )
+    GenreList::new(split_list(value).map(str::to_owned).collect())
 }
 
 fn read_sort_tags(tag: Option<&Tag>) -> SortTags {

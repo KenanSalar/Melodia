@@ -115,6 +115,14 @@ impl CueSpan {
     }
 }
 
+/// A track an external sheet carves out of its image, with the sheet that states its tags.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct SheetTrack {
+    pub id: i64,
+    pub sheet: String,
+    pub track: CueTrack,
+}
+
 #[derive(Debug, thiserror::Error)]
 pub enum CueError {
     #[error("cue track {0} is outside 0 to {last}", last = CueTrack::LAST)]

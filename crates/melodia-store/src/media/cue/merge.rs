@@ -12,7 +12,9 @@ use lofty::tag::items::Timestamp;
 
 use super::layout::{FileLayout, MIN_CLAIMED_ROWS, PlacedTrack};
 use super::parse::{Sheet, SheetTrack};
-use crate::media::ingest::metadata::{parse_replaygain_gain, parse_replaygain_peak, split_genres};
+use crate::media::ingest::metadata::{
+    parse_replaygain_gain, parse_replaygain_peak, split_genres, split_list,
+};
 use melodia_core::entities::artist::ArtistCredit;
 use melodia_core::entities::credits::{CreditRole, RoleCredit, RoleCredits};
 use melodia_core::entities::cue::{CueSpan, CueTrack};
@@ -199,12 +201,15 @@ fn apply_replaygain(meta: &mut ExtractedMetadata, scopes: &Scopes<'_>) {
         scopes.track_rem("REPLAYGAIN_TRACK_PEAK").and_then(parse_replaygain_peak);
 }
 
-/// `credits` with the sheet's composer in place of the image's, every other role kept.
-fn with_composer(credits: &RoleCredits, composer: &str) -> RoleCredits {
-    let composer =
-        RoleCredit { role: CreditRole::Composer, name: composer.to_owned(), detail: String::new() };
+/// `credits` with the sheet's composers in place of the image's, every other role kept.
+fn with_composer(credits: &RoleCredits, composers: &str) -> RoleCredits {
+    let composers = split_list(composers).map(|name| RoleCredit {
+        role: CreditRole::Composer,
+        name: name.to_owned(),
+        detail: String::new(),
+    });
     let others = credits.all().iter().filter(|credit| credit.role != CreditRole::Composer).cloned();
-    RoleCredits::new(std::iter::once(composer).chain(others).collect())
+    RoleCredits::new(composers.chain(others).collect())
 }
 
 fn forget_the_recording(meta: &mut ExtractedMetadata) {

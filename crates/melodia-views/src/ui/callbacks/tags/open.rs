@@ -22,7 +22,7 @@ use melodia_app::state::AppState;
 use melodia_core::entities::album::ReleaseTagRow;
 use melodia_core::entities::artist::{ArtistCredit, JOIN_PHRASES};
 use melodia_core::entities::credits::RoleCredits;
-use melodia_core::entities::cue::CueTrack;
+use melodia_core::entities::cue::{CueTrack, SheetTrack};
 use melodia_core::entities::genre::GenreList;
 use melodia_core::entities::tags::{ArtworkEdit, FileTags, RoleCreditEdit};
 use melodia_core::entities::track::TagEditRow;
@@ -186,11 +186,12 @@ async fn read_files(
         .filter(|row| row.is_sheet_track() && outside.contains(&row.id))
         .map(|row| row.id)
         .collect();
-    let mut sheets = if outside_sheet_tracks.is_empty() {
+    let mut sheets: HashMap<i64, String> = if outside_sheet_tracks.is_empty() {
         HashMap::new()
     } else {
         let read = library::tags::get_tag_edit_sheets(&s.db, &outside_sheet_tracks).await;
-        or_logged(read, "cue sheets")
+        let tracks: Vec<SheetTrack> = or_logged(read, "cue sheets");
+        tracks.into_iter().map(|track| (track.id, track.sheet)).collect()
     };
     let wanted: Vec<(i64, FileRead)> = rows
         .iter()
@@ -546,7 +547,8 @@ fn finalize_populate(
     let single = rows.len() == 1;
     te.set_track_count(len_as_i32(rows.len()));
     te.set_active_tab(te.get_tab_tags());
-    te.set_read_only(rows.iter().any(TagEditRow::is_sheet_track));
+    te.set_read_only(rows.iter().any(TagEditRow::is_hidden_track));
+    te.set_from_sheet(rows.iter().any(TagEditRow::is_sheet_track));
     te.set_has_resident_lyrics(resident.is_some());
 
     if let Some(buf) = cover {
