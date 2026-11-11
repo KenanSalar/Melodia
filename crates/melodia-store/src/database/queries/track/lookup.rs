@@ -424,7 +424,8 @@ pub(crate) fn rows_by_hash_on(
 }
 
 /// [`rows_by_hash_on`] for the files a cue sheet splits, one entry per file under its lowest row
-/// id: a moved image takes all of its rows or none.
+/// id, split files first: a moved image takes all of its rows or none. A file still read whole is
+/// one too, for an image moved before its first split to hand its playlist places to its tracks.
 pub(crate) fn images_by_hash_on(
     conn: &Connection,
     hashes: &[&str],
@@ -432,9 +433,9 @@ pub(crate) fn images_by_hash_on(
     fetch_by_hash(conn, hashes, |placeholders| {
         format!(
             "SELECT file_hash, MIN(id), file_path FROM tracks
-             WHERE file_hash IN ({placeholders}) AND cue_track IS NOT NULL
+             WHERE file_hash IN ({placeholders})
              GROUP BY file_hash, file_path
-             ORDER BY MIN(id) ASC"
+             ORDER BY MIN(cue_track) IS NULL, MIN(id) ASC"
         )
     })
 }

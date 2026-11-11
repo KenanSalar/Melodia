@@ -202,7 +202,8 @@ impl<'a, 'conn> SheetWriter<'a, 'conn> {
     }
 
     /// Re-points the rows of the gone image `image`'s bytes came from, where its own path holds
-    /// none yet, so a moved album keeps its tracks' play counts, ratings and playlist places.
+    /// none yet, so a moved album keeps its tracks' play counts, ratings and playlist places. A
+    /// whole-file row re-pointed so hands its playlist places to the tracks as an unmoved one does.
     fn carry_moved_rows(&mut self, image: &ScannedFile, folder_id: i64) -> Result<(), AppError> {
         let hash = image.metadata.file_hash.as_str();
         let Some(old_path) = self.moved.image_for(hash, &image.path) else {

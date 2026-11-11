@@ -2,8 +2,8 @@
 
 Working doc. Delete when the feature ships.
 
-Status: **in progress**, Phase 8 done, Phase 9's tests next on Kenan's go; Phase 3 owes Kenan's
-scrobble and Discord check · Created: 2026-11-04
+Status: **in progress**, Phase 8 and the branch review's fixes done, Phase 9's tests next on
+Kenan's go; Phase 3 owes Kenan's scrobble and Discord check · Created: 2026-11-04
 
 Issue [#78](https://github.com/KenanSalar/Melodia/issues/78).
 
@@ -330,7 +330,7 @@ the fields the sheet can hold, at the scope each belongs to:
 | composer (`SONGWRITER`), genre (`REM GENRE`), date (`REM DATE`) | the track, or the sheet once when the edit covers every audio track it places, the tracks' own lines dropped |
 | album (`TITLE`), album artist (`PERFORMER`), disc number and total, barcode (`CATALOG`) | the sheet |
 
-A whole-album genre edit on an EAC sheet therefore changes its one `REM GENRE` line. A sheet holds
+A whole-album genre edit on a ripper's sheet therefore changes its one `REM GENRE` line. A sheet holds
 one `PERFORMER` and one `SONGWRITER` per scope: a credit is written as it prints, and several
 composers joined by `;`, which the scan splits as it splits a genre. Track number and total stay
 read-only, the number being the row's identity.
@@ -405,14 +405,9 @@ back through a hash and a full read.
 ### Files opened from outside the library
 
 Opening a file or a `.cue` that sits outside every library folder plays it without adding it to
-the library. The library is the folders the user added, which is what onboarding and Settings say,
-and it is what the folder-based players do:
-
-- fooyin files such a track under `LibraryID = -1`, keeps it out of its library views, and deletes
-  it at quit once no playlist holds it (`removeUnmanagedTracks`).
-- Strawberry keeps it as a playlist item only, the collection untouched.
-- Windows 11's Media Player plays or queues it without adding it.
-- Apple Music imports it, but its library has no folders to be outside of.
+the library. The library is the folders the user added, which is what onboarding and Settings say.
+A file opened once to listen to it is no promise to keep it, and a library that kept every such
+file would fill with downloads the user never chose to collect.
 
 How Melodia holds one:
 
@@ -646,9 +641,10 @@ The `RETURNING id, file_path` match in `insert_tracks_batch` (`mutations.rs:217`
   - [x] the multi-file layout over per-track files, which must claim nothing;
   - [x] two sheets naming one image;
   - [x] an image that already sat in a playlist;
-  - [x] twelve real EAC sheets from public parser test suites, audio built to their timings: ISRC
-        and `CATALOG`, sub-second track-1 pregaps (no hidden track), `.ape` and `.wav` names over
-        `.flac`, Shift_JIS, GBK and UTF-8 with a BOM, and two EAC multi-file rips, one with `PREGAP`.
+  - [x] twelve real ripper sheets from public parser test suites, audio built to their timings:
+        ISRC and `CATALOG`, sub-second track-1 pregaps (no hidden track), `.ape` and `.wav` names
+        over `.flac`, Shift_JIS, GBK and UTF-8 with a BOM, and two multi-file rips, one with
+        `PREGAP`.
 - [x] Checks, by a full rescan where it applies:
   - [x] the titles, numbers and artists are right;
   - [x] the image's own row is gone and its playlist holds the tracks;
@@ -1056,7 +1052,7 @@ a whole disc. *Files opened from outside the library* gives the model.
 - [x] Kenan's hand pass. Run by Claude on Kenan's go (2026-11-11): the debug build against
       `Melodia-dev` with watching on, on a null sink, restored after, the UI driven through ydotool
       and KWin scripts. Play counts, ratings and a playlist were seeded into the sheet rows first.
-      The fixtures, a UTF-8 LF sheet with EAC's top-level `REM GENRE` and a Shift_JIS CRLF one
+      The fixtures, a UTF-8 LF sheet with a ripper's top-level `REM GENRE` and a Shift_JIS CRLF one
       with none, are kept with their originals in `~/Development/melodia-cue-test-files/phase7-edits`:
   - [x] edit a title on a UTF-8 sheet and on a Shift_JIS sheet: each changed its one `TITLE` line,
         the Shift_JIS one still Shift_JIS. Once more with `é`, which Shift_JIS can't hold, the whole
@@ -1190,6 +1186,49 @@ a whole disc. *Files opened from outside the library* gives the model.
         `ARTIST=A feat. B`, `ARTISTS=A` and `ARTISTS=B`. Changing one track's album artist wrote
         the disc's `PERFORMER` and pinned each track's to "A feat. B": every track still reads
         "A feat. B", credited to A and B, and the Artists grid gained no "A feat. B" card.
+
+## Branch review fixes
+
+A review of the whole branch against `main` (2026-11-11) found these, each fixed where it lives:
+
+- [x] The upgrade sweep records its marker only once every whole-file FLAC was reached: one out of
+      reach, its drive unmounted, is probed again next launch, while one that is there but won't
+      read is taken as carrying nothing (`embedded_cue_probe::probe_file`).
+- [x] The boot sweep places a nested outside folder by its stored path before its canonical one,
+      so a library folder's offline drive doesn't sweep the import it is waiting to absorb, and
+      stats only the folders the stored path doesn't place (`library::outside::awaits_absorb`).
+- [x] A `FILE` line repeating the one before it names the same file, so a sheet that restates its
+      image ahead of every track splits it (`parse::Reader::read`).
+- [x] A `CUESHEET` comment's BOM is stripped where it is read, so its first line counts
+      (`embedded::read`).
+- [x] A track whose successor starts past the end of a truncated image plays to the file's end,
+      with the length it has (`merge::rows`, `CueSpan::to_end_of_file`).
+- [x] An image moved before its first split hands its whole-file row's playlist places to its
+      tracks: a gone whole-file row is an image move candidate (`images_by_hash_on`).
+- [x] A watcher batch whose transaction an error rolled back stops there rather than committing
+      what follows statement by statement (`sql::in_savepoint`, `apply_changes`, `in_unit`), and an
+      embedded file given back writes its whole-file row and the release as one unit.
+- [x] The migration's reference check refuses only a dangling reference it made, not one the
+      database already held (`migrate::check_references`).
+- [x] A park ticket is taken ahead of the open, so a stop landing during a preload's open voids it
+      and leaves no decoder holding the image (`open_for_gapless`, `start_decoding`).
+- [x] The static gates.
+- [x] Kenan's hand check. Run by Claude on Kenan's go (2026-11-11): the debug build of the working
+      tree against `Melodia-dev` with watching on, on a null sink, restored after, driven through
+      MPRIS and the tray menu with no pointer. The fixtures are built by `make_fixtures.py`, kept in
+      `~/Development/melodia-cue-test-files/review-fixes`:
+  - [x] a FLAC whose `CUESHEET` comment starts with a BOM, copied into a library folder while
+        watching, split into its three tracks with the first line's genre, not the image's;
+  - [x] a sheet repeating `FILE` ahead of every `TRACK` split its image into three, and one naming
+        its image twice, two tracks under each, into four, track 2 ending where track 3 starts;
+  - [x] a 30 s image whose sheet places tracks at 35 s and 45 s dropped them, and its track 3 plays
+        to the end of the file, 10 s long;
+  - [x] a whole image in a playlist, moved within the library with a new `.cue` beside it while
+        Melodia was closed: the boot scan logged the move, and the playlist holds its three tracks
+        in its place, the entries after them following;
+  - [x] ten 2 s tracks of one image carried the decoder on at all nine joints, and sixteen stops
+        across a track, most with its successor staged, each left no handle on the image
+        (`/proc/<pid>/fd`).
 
 ## Phase 9: Tests
 

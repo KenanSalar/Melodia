@@ -38,10 +38,14 @@ const SHEET_KEY: &str = "CUESHEET";
 /// The sheet the FLAC at `path` carries, its comments already read: the `CUESHEET` comment where it
 /// places a track, else the native block, read off the file here. Blocking.
 pub(crate) fn read(path: &Path, comments: Option<&VorbisComments>) -> EmbeddedCue {
-    let comment = comments.and_then(|comments| comments.get(SHEET_KEY)).filter(|text| {
-        let (stated, _) = parse::statements(text.lines(), Files::Inside);
-        stated.places_a_track()
-    });
+    // A sheet copied in from a `.cue` saved with a BOM keeps it, which would hide its first line.
+    let comment = comments
+        .and_then(|comments| comments.get(SHEET_KEY))
+        .map(|text| text.strip_prefix('\u{FEFF}').unwrap_or(text))
+        .filter(|text| {
+            let (stated, _) = parse::statements(text.lines(), Files::Inside);
+            stated.places_a_track()
+        });
     let source = match comment {
         Some(text) => EmbeddedSource::Comment(text.to_owned()),
         None => match chain::read_block(path) {

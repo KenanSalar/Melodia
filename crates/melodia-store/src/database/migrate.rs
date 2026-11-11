@@ -2,7 +2,8 @@
 //! stays sqlx's `_sqlx_migrations`, in sqlx's row format, so an older build migrating through sqlx
 //! still reads it and refuses a newer database.
 
-use rusqlite::{Connection, OptionalExtension, Transaction};
+use rusqlite::{Connection, Transaction};
+use std::collections::HashSet;
 use std::time::Instant;
 
 use melodia_core::error::{AppError, MigrationError};
@@ -61,7 +62,7 @@ const RECORD: &str = "\
 
 const RECORD_TIME: &str = "UPDATE _sqlx_migrations SET execution_time = ?1 WHERE version = ?2";
 
-/// One row per reference to a missing row: `table`, `rowid`, `parent`, `fkid`.
+/// One row per reference to a missing row, read as a [`Dangling`].
 const FOREIGN_KEY_CHECK: &str = "PRAGMA foreign_key_check";
 
 struct Applied {
@@ -168,9 +169,11 @@ fn run_and_record(conn: &mut Connection, migration: &Migration) -> Result<(), Mi
     let failed = |source: rusqlite::Error| MigrationError::Apply { version, source };
 
     let tx = conn.transaction().map_err(failed)?;
+    let suspended = migration.foreign_keys == ForeignKeys::Suspended;
+    let dangling_before = suspended.then(|| dangling(&tx)).transpose().map_err(failed)?;
     tx.execute_batch(migration.sql).map_err(failed)?;
-    if migration.foreign_keys == ForeignKeys::Suspended {
-        check_references(&tx, version)?;
+    if let Some(before) = dangling_before {
+        check_references(&tx, version, &before)?;
     }
     tx.prepare_cached(RECORD)
         .and_then(|mut record| {
@@ -180,17 +183,44 @@ fn run_and_record(conn: &mut Connection, migration: &Migration) -> Result<(), Mi
     tx.commit().map_err(failed)
 }
 
-/// Read through a fetch: `execute_batch` steps each statement once and drops its rows, so the check
-/// inside a script would pass whatever it found.
-fn check_references(tx: &Transaction<'_>, version: i64) -> Result<(), MigrationError> {
-    let dangling = tx
-        .query_row(FOREIGN_KEY_CHECK, (), |row| Ok((row.get(0)?, row.get(2)?)))
-        .optional()
-        .map_err(|source| MigrationError::Apply { version, source })?;
-    match dangling {
-        Some((table, parent)) => Err(MigrationError::DanglingReference { version, table, parent }),
+/// Refuses a reference the migration left dangling. One already dangling before it ran is the
+/// database's own, and refusing that would fail every boot.
+fn check_references(
+    tx: &Transaction<'_>,
+    version: i64,
+    before: &HashSet<Dangling>,
+) -> Result<(), MigrationError> {
+    let after = dangling(tx).map_err(|source| MigrationError::Apply { version, source })?;
+    match after.into_iter().find(|reference| !before.contains(reference)) {
+        Some(Dangling { table, parent, .. }) => {
+            Err(MigrationError::DanglingReference { version, table, parent })
+        }
         None => Ok(()),
     }
+}
+
+#[derive(PartialEq, Eq, Hash)]
+struct Dangling {
+    table: String,
+    /// `None` in a `WITHOUT ROWID` table.
+    rowid: Option<i64>,
+    parent: String,
+    fkid: i64,
+}
+
+/// Read through a fetch: `execute_batch` steps each statement once and drops its rows, so a check
+/// inside a script would pass whatever it found.
+fn dangling(tx: &Transaction<'_>) -> rusqlite::Result<HashSet<Dangling>> {
+    let mut check = tx.prepare(FOREIGN_KEY_CHECK)?;
+    let references = check.query_map((), |row| {
+        Ok(Dangling {
+            table: row.get(0)?,
+            rowid: row.get(1)?,
+            parent: row.get(2)?,
+            fkid: row.get(3)?,
+        })
+    })?;
+    references.collect()
 }
 
 #[cfg(test)]

@@ -184,7 +184,12 @@ impl Reader {
         match keyword.to_ascii_uppercase().as_str() {
             "FILE" if self.files == Files::Inside => Ok(Command::File),
             "FILE" => {
-                self.sheet.files.push(file_name(rest).ok_or(Unreadable)?);
+                let name = file_name(rest).ok_or(Unreadable)?;
+                // Some rippers repeat the image's line ahead of every track, which still names one
+                // file whose tracks end one another.
+                if self.sheet.files.last() != Some(&name) {
+                    self.sheet.files.push(name);
+                }
                 Ok(Command::File)
             }
             "TRACK" => self.start_track(rest).map(|()| Command::Track),

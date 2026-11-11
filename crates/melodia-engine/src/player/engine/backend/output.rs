@@ -14,6 +14,7 @@ use std::time::Duration;
 
 use melodia_audio::player::source::audio::{AudioSource, SampleRate, Shape, SourceFormat};
 use melodia_audio::player::source::file_decode::FileDecoder;
+use melodia_audio::player::source::park::ParkTicket;
 use melodia_core::entities::track::TrackAudio;
 use melodia_core::error::{AppError, describe};
 use melodia_playback::player::playback::decks::Decks;
@@ -325,8 +326,9 @@ impl PlaybackEngine {
     }
 
     /// Opens `audio` to stage behind the playing track, or carries on the decoder that played the
-    /// track before it in the same file. `None` where the output would reopen for it. Asked every
-    /// tick until the track ends, so a refusal opens the file once.
+    /// track before it in the same file, with the ticket its own decoder parks on. `None` where the
+    /// output would reopen for it. Asked every tick until the track ends, so a refusal opens the
+    /// file once.
     ///
     /// # Errors
     ///
@@ -334,11 +336,14 @@ impl PlaybackEngine {
     pub(super) fn open_for_gapless(
         &self,
         audio: &TrackAudio,
-    ) -> Result<Option<FileDecoder>, AppError> {
+    ) -> Result<Option<(FileDecoder, Option<ParkTicket>)>, AppError> {
         if self.recorded_answer(&audio.path) == Some(false) {
             return Ok(None);
         }
-        let decoded = match self.park.take(audio) {
+        let parked = self.park.take(audio);
+        // After the take, which voids every ticket out.
+        let ticket = self.park.ticket(audio);
+        let decoded = match parked {
             Some(decoded) => {
                 log::debug!("Carrying the decoder on into {audio}");
                 decoded
@@ -350,7 +355,7 @@ impl PlaybackEngine {
             log::debug!("Not staging {audio} gapless: the output reopens for its format");
             return Ok(None);
         }
-        Ok(Some(decoded))
+        Ok(Some((decoded, ticket)))
     }
 
     /// `None` until something has opened the file at `path`. Keyed on the file, every cue track

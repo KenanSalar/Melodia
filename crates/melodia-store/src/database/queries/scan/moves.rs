@@ -21,7 +21,8 @@ pub(crate) struct MoveCandidates {
     /// one that moved.
     pub(crate) tracks: ByHash,
     exclusions: ByHash,
-    /// Every image a sheet splits per hash, as `(its lowest row id, old path)`.
+    /// Every file per hash a sheet may split, split already or still read whole, as
+    /// `(its lowest row id, old path)`.
     images: ByHash,
     /// Every library folder, which tells a file on an offline drive from one that moved.
     library_roots: Vec<String>,
@@ -122,7 +123,7 @@ impl MoveCandidates {
     }
 
     /// The image a new image at `new_path` with `hash`'s bytes moved from: the one sharing its file
-    /// name, else the lowest.
+    /// name, else the first in [`track::images_by_hash_on`]'s order.
     pub(crate) fn image_for(&self, hash: &str, new_path: &Path) -> Option<String> {
         let images = self.images.get(hash)?;
         let image = named(images, new_path.file_name()).or_else(|| images.first())?;

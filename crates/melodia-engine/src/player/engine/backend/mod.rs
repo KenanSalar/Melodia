@@ -29,7 +29,7 @@ use parking_lot::Mutex;
 use melodia_audio::player::source::audio::AudioSource;
 use melodia_audio::player::source::decode_ahead::{self, DecodeAhead};
 use melodia_audio::player::source::file_decode::FileDecoder;
-use melodia_audio::player::source::park::ParkSlot;
+use melodia_audio::player::source::park::{ParkSlot, ParkTicket};
 use melodia_audio::player::source::prebuffer::StreamShared;
 use melodia_audio::player::source::stream_source::PreparedStream;
 use melodia_playback::player::playback::crossfade::{self, CrossfadeShared};
@@ -230,6 +230,7 @@ impl PlaybackEngine {
         let fade_ms = self.manual_fade_ms(start_position_ms);
 
         self.park.clear();
+        let ticket = self.park.ticket(audio);
         // Off the deck lock: the monitor takes it every tick, and a Symphonia probe under it
         // stalls the poll.
         let mut decoded = FileDecoder::open_track(audio)?;
@@ -249,19 +250,20 @@ impl PlaybackEngine {
 
         // A manual fade is never asked for with a resume position, so the two can't both apply.
         let entry = if fade_ms > 0 { Entry::Fade(fade_ms) } else { Entry::Cut(start) };
-        let source = self.start_decoding(decoded, audio)?;
+        let source = self.start_decoding(decoded, ticket)?;
         self.start_track(source, baked_rg, entry, volume, speed);
         Ok(())
     }
 
-    /// Hands `decoded` to a decode-ahead feeder, which parks it for the track after should `audio`
-    /// play its span out.
+    /// Hands `decoded` to a decode-ahead feeder, which parks it on `ticket` for the track after
+    /// should it play its span out. Each caller takes the ticket ahead of its open, so a stop
+    /// landing during the open voids it.
     fn start_decoding(
         &self,
         decoded: FileDecoder,
-        audio: &TrackAudio,
+        ticket: Option<ParkTicket>,
     ) -> Result<DecodeAhead, AppError> {
-        DecodeAhead::start(decoded, self.decode_ahead, self.park.ticket(audio))
+        DecodeAhead::start(decoded, self.decode_ahead, ticket)
     }
 
     /// Mounts `source` as `entry` asks, cutting from the top where a fade can't go: behind a
@@ -394,8 +396,9 @@ impl PlaybackEngine {
         speed: f64,
     ) -> Result<(), AppError> {
         self.park.clear();
+        let ticket = self.park.ticket(audio);
         let decoded = FileDecoder::open_track(audio)?;
-        let source = self.start_decoding(decoded, audio)?;
+        let source = self.start_decoding(decoded, ticket)?;
 
         // A staged source would share the outgoing fade cell. `crossfade_eligible` keeps the
         // preload off, so one here is a bug `start_track`'s fallback cut would hide.
@@ -550,6 +553,7 @@ impl PlaybackEngine {
         };
 
         let position = Duration::from_millis(position_ms);
+        let ticket = self.park.ticket(audio);
         let mut decoded = match FileDecoder::open_track(audio) {
             Ok(decoded) => decoded,
             Err(e) => {
@@ -561,7 +565,7 @@ impl PlaybackEngine {
             log::warn!("Seek failed: {}", describe(&e));
             return;
         }
-        let source = match self.start_decoding(decoded, audio) {
+        let source = match self.start_decoding(decoded, ticket) {
             Ok(source) => source,
             Err(e) => {
                 log::warn!("Seek could not start decoding the track: {}", describe(&e));
@@ -603,7 +607,7 @@ impl PlaybackEngine {
         let epoch = self.deck_epoch.load(Ordering::Acquire);
 
         let staged = self.open_for_gapless(audio).and_then(|opened| {
-            opened.map(|decoded| self.start_decoding(decoded, audio)).transpose()
+            opened.map(|(decoded, ticket)| self.start_decoding(decoded, ticket)).transpose()
         });
         let source = match staged {
             Ok(Some(source)) => source,

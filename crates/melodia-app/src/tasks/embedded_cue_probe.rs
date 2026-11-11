@@ -38,23 +38,32 @@ pub fn spawn(spawner: &TaskSpawner, state: &AppState) {
 }
 
 async fn probe(state: &AppState) -> AppResult<()> {
-    let marked = mark_carriers(&state.db).await?;
-    if marked == 0 {
-        return Ok(());
+    let tally = mark_carriers(&state.db).await?;
+    if tally.marked > 0 {
+        log::info!("Embedded cue sheet probe: {} FLAC(s) queued for a re-read", tally.marked);
+        // A reconcile already in flight takes this request; the marks are durable, so a folder it
+        // has already passed picks them up at its next scan.
+        library::scan::reconcile_watched_folders(state);
     }
-    log::info!("Embedded cue sheet probe: {marked} FLAC(s) queued for a re-read");
-
-    // A reconcile already in flight takes this request; the marks are durable, so a folder it has
-    // already passed picks them up at its next scan.
-    library::scan::reconcile_watched_folders(state);
+    if tally.out_of_reach > 0 {
+        return Err(AppError::scanner_msg(format!(
+            "{} FLAC(s) were out of reach, probed again next launch",
+            tally.out_of_reach
+        )));
+    }
     Ok(())
 }
 
-/// Blanks the stamp of every whole-file FLAC carrying a sheet, a page at a time, answering how
-/// many.
-async fn mark_carriers(db: &DbPool) -> AppResult<u64> {
+#[derive(Default)]
+struct Tally {
+    marked: u64,
+    out_of_reach: usize,
+}
+
+/// Blanks the stamp of every whole-file FLAC carrying a sheet, a page at a time.
+async fn mark_carriers(db: &DbPool) -> AppResult<Tally> {
     let mut after_id = 0;
-    let mut marked = 0;
+    let mut tally = Tally::default();
     loop {
         let page = queries::track::get_whole_flac_paths_after(db, after_id, PAGE_ROWS).await?;
         let Some(last_id) = page.last().map(|(id, _)| *id) else {
@@ -62,30 +71,56 @@ async fn mark_carriers(db: &DbPool) -> AppResult<u64> {
         };
         after_id = last_id;
 
-        let carriers = tokio::task::spawn_blocking(move || {
-            ScanPool::for_files(page.len()).install(|| carriers(&page))
+        let probed = tokio::task::spawn_blocking(move || {
+            ScanPool::for_files(page.len()).install(|| probe_page(&page))
         })
         .await
         .map_err(|e| AppError::scanner("Embedded cue sheet probe panicked", e))?;
-        if !carriers.is_empty() {
-            marked += queries::track::mark_tracks_stale(db, carriers).await?;
+        tally.out_of_reach += probed.out_of_reach;
+        if !probed.carriers.is_empty() {
+            tally.marked += queries::track::mark_tracks_stale(db, probed.carriers).await?;
         }
     }
-    Ok(marked)
+    Ok(tally)
 }
 
-/// **Blocking**: the ids of `rows` whose file carries a sheet. A file that can't be read is left to
-/// the scan, which reads it once it changes.
-fn carriers(rows: &[(i64, String)]) -> Vec<i64> {
+struct ProbedPage {
+    carriers: Vec<i64>,
+    out_of_reach: usize,
+}
+
+enum Probed {
+    Sheet,
+    NoSheet,
+    OutOfReach,
+}
+
+/// **Blocking**: which files of `rows` carry a sheet, and how many couldn't be reached.
+fn probe_page(rows: &[(i64, String)]) -> ProbedPage {
     use rayon::prelude::*;
 
-    rows.par_iter()
-        .filter(|(_, path)| {
-            cue::carries_sheet(Path::new(path)).unwrap_or_else(|e| {
-                log::debug!("Embedded cue sheet probe: {}", describe(&e));
-                false
-            })
-        })
-        .map(|(id, _)| *id)
-        .collect()
+    let probed: Vec<(i64, Probed)> =
+        rows.par_iter().map(|(id, path)| (*id, probe_file(Path::new(path)))).collect();
+    let mut page = ProbedPage { carriers: Vec::new(), out_of_reach: 0 };
+    for (id, probed) in probed {
+        match probed {
+            Probed::Sheet => page.carriers.push(id),
+            Probed::NoSheet => {}
+            Probed::OutOfReach => page.out_of_reach += 1,
+        }
+    }
+    page
+}
+
+/// A file that is there but won't read holds nothing the scan could split either, while one out of
+/// reach, its drive unmounted, may carry a sheet once it is back.
+fn probe_file(path: &Path) -> Probed {
+    match cue::carries_sheet(path) {
+        Ok(true) => Probed::Sheet,
+        Ok(false) => Probed::NoSheet,
+        Err(e) => {
+            log::debug!("Embedded cue sheet probe: {}", describe(&e));
+            if matches!(path.try_exists(), Ok(true)) { Probed::NoSheet } else { Probed::OutOfReach }
+        }
+    }
 }

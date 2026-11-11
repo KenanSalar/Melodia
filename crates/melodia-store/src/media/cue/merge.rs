@@ -11,14 +11,14 @@ use std::path::Path;
 
 use lofty::tag::items::Timestamp;
 
-use super::layout::{FileLayout, MIN_CLAIMED_ROWS, PlacedTrack};
+use super::layout::{FileLayout, MIN_CLAIMED_ROWS};
 use super::parse::{Sheet, SheetTrack};
 use crate::media::ingest::metadata::{
     parse_replaygain_gain, parse_replaygain_peak, split_genres, split_list,
 };
 use melodia_core::entities::artist::ArtistCredit;
 use melodia_core::entities::credits::{CreditRole, RoleCredit, RoleCredits};
-use melodia_core::entities::cue::{CueSpan, CueTrack, EmbeddedCue};
+use melodia_core::entities::cue::{CueFrames, CueSpan, CueTrack, EmbeddedCue};
 use melodia_core::entities::scan::ExtractedMetadata;
 use melodia_core::entities::tags::FileTags;
 
@@ -31,8 +31,9 @@ pub(crate) struct CueRow {
 
 /// The rows `layout` carves out of the image at `image`, whose own read is `disc`, or `None` where
 /// fewer than [`MIN_CLAIMED_ROWS`] fit inside it. A track starting past the image's end is dropped
-/// and logged, which only the image's length can tell. An image too short to split is another file
-/// the sheet's name led to, or a truncated one, and keeps its own rows.
+/// and logged, which only the image's length can tell, and the track before it plays to the end.
+/// An image too short to split is another file the sheet's name led to, or a truncated one, and
+/// keeps its own rows.
 pub(crate) fn rows(
     sheet: &Sheet,
     layout: &FileLayout,
@@ -45,8 +46,7 @@ pub(crate) fn rows(
         .rows
         .iter()
         .filter(|row| {
-            let starts_past_end =
-                disc.duration_ms > 0 && row.span.start().millis() >= disc.duration_ms;
+            let starts_past_end = is_past_end(row.span.start(), disc);
             if starts_past_end {
                 log::warn!(
                     "Dropped track {} of {}: it starts past the end of the file",
@@ -65,10 +65,14 @@ pub(crate) fn rows(
                 .map_or_else(|| format!("{stem} {:02}", row.track.number()), ToOwned::to_owned);
             meta.track_number = Some(i32::from(row.track.number()));
             meta.track_total = Some(track_total);
-            meta.duration_ms = duration_ms(row, disc);
+            let span = match row.span.end() {
+                Some(end) if is_past_end(end, disc) => row.span.to_end_of_file(),
+                _ => row.span,
+            };
+            meta.duration_ms = duration_ms(span, disc);
             apply_sheet(&mut meta, &scopes);
             forget_the_recording(&mut meta);
-            CueRow { track: row.track, span: row.span, meta }
+            CueRow { track: row.track, span, meta }
         })
         .collect();
     if carved.len() < MIN_CLAIMED_ROWS {
@@ -78,10 +82,15 @@ pub(crate) fn rows(
     Some(carved)
 }
 
+/// Whether `at` lies at or past the end of the image `disc` reads, where it states its length.
+fn is_past_end(at: CueFrames, disc: &ExtractedMetadata) -> bool {
+    disc.duration_ms > 0 && at.millis() >= disc.duration_ms
+}
+
 /// The span's length, the last track's running to the end of the image.
-fn duration_ms(row: &PlacedTrack, disc: &ExtractedMetadata) -> i64 {
-    let start = row.span.start().millis();
-    match row.span.end() {
+fn duration_ms(span: CueSpan, disc: &ExtractedMetadata) -> i64 {
+    let start = span.start().millis();
+    match span.end() {
         Some(end) => end.millis() - start,
         None => (disc.duration_ms - start).max(0),
     }

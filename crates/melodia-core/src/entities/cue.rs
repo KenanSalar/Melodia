@@ -113,6 +113,12 @@ impl CueSpan {
     pub fn end(self) -> Option<CueFrames> {
         self.end
     }
+
+    /// The same start, played on to the end of the file.
+    #[must_use]
+    pub fn to_end_of_file(self) -> Self {
+        Self { start: self.start, end: None }
+    }
 }
 
 /// A track a sheet carves out of its image, with where that sheet states its tags.

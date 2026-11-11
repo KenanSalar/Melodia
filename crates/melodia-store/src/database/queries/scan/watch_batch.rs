@@ -122,6 +122,8 @@ fn apply_changes(
     for change in changes {
         match apply_change(tx, change, batch) {
             Ok(wrote) => changed += usize::from(wrote),
+            // The error took the transaction with it, so every write after would commit alone.
+            Err(e) if tx.is_autocommit() => return Err(e),
             Err(e) => log_failed(change, &e),
         }
     }
@@ -155,7 +157,7 @@ fn apply_change(
             handle_renamed(tx, from, to, meta.as_ref(), date_modified.as_deref(), batch)
         }
         WatchedChange::Modified { path, meta } => handle_modified(tx, path, meta, batch),
-        WatchedChange::Sheets { cue, images } => Ok(handle_sheets(tx, cue, images, batch)),
+        WatchedChange::Sheets { cue, images } => handle_sheets(tx, cue, images, batch),
     }
 }
 
@@ -269,7 +271,7 @@ fn handle_embedded(
     batch: &mut Batch,
 ) -> Result<Option<bool>, AppError> {
     if let Some(rows) = embedded::carve(path, meta) {
-        return Ok(Some(write_embedded(tx, path, meta, &rows, batch)));
+        return write_embedded(tx, path, meta, &rows, batch).map(Some);
     }
     let path_str = path.to_string_lossy();
     if embedded_images_among(tx, &[path_str.as_ref()])?.is_empty() {
@@ -279,41 +281,46 @@ fn handle_embedded(
         log::warn!("Kept the cue sheet tracks of {path_str}: its sheet didn't read");
         return Ok(Some(false));
     }
-    let wrote = create_track(tx, path, meta, batch)?;
-    let released = release_embedded(tx, &[path_str.as_ref()])? > 0;
-    Ok(Some(wrote || released))
+    in_unit(tx, batch, |batch| {
+        let wrote = create_track(tx, path, meta, batch)?;
+        let released = release_embedded(tx, &[path_str.as_ref()])? > 0;
+        Ok(wrote || released)
+    })
+    .map(Some)
 }
 
-/// Writes the tracks the sheet inside `path` carves out of it, in a savepoint of its own as a
-/// sheet's job is, answering whether any was written.
+/// Writes the tracks the sheet inside `path` carves out of it in a unit of its own, as a sheet's
+/// job does, answering whether any was written.
 fn write_embedded(
     tx: &Transaction<'_>,
     path: &Path,
     meta: &ExtractedMetadata,
     rows: &[CueRow],
     batch: &mut Batch,
-) -> bool {
+) -> Result<bool, AppError> {
     let image = ScannedFile { path: path.to_path_buf(), metadata: meta.clone() };
-    let mut image_batch = batch.clone();
-    let written = sql::in_savepoint(tx, || {
+    in_unit(tx, batch, |batch| {
         let Some(folder) = library_folder(tx, path, &path.to_string_lossy(), "Cue")? else {
             return Ok(false);
         };
         let now = melodia_core::utils::now_rfc3339();
-        let mut sheets = SheetWriter::new(tx, &[], &now, &mut image_batch.moved);
+        let mut sheets = SheetWriter::new(tx, &[], &now, &mut batch.moved);
         sheets.apply_embedded(&image, rows, folder)?;
         Ok(sheets.into_writes().any())
-    });
-    match written {
-        Ok(wrote) => {
-            *batch = image_batch;
-            wrote
-        }
-        Err(e) => {
-            log::warn!("Failed to apply the cue sheet inside {}: {}", path.display(), describe(&e));
-            false
-        }
-    }
+    })
+}
+
+/// Runs `unit` in a savepoint on a copy of `batch`, kept only once the savepoint is: a rolled-back
+/// artist's cached id would name whichever artist next takes its rowid.
+fn in_unit(
+    tx: &Transaction<'_>,
+    batch: &mut Batch,
+    unit: impl FnOnce(&mut Batch) -> Result<bool, AppError>,
+) -> Result<bool, AppError> {
+    let mut unit_batch = batch.clone();
+    let wrote = sql::in_savepoint(tx, || unit(&mut unit_batch))?;
+    *batch = unit_batch;
+    Ok(wrote)
 }
 
 /// [`handle_created`] past its guard, for a new file or an image its sheet gives back. A kept-out
@@ -499,30 +506,25 @@ fn handle_modified(
     Ok(updated)
 }
 
-/// Whether a row was written. Each job is a savepoint of its own, so a sheet failing leaves nothing
-/// half-written, its stamp included, and the others apply. It runs on a copy of the batch, kept
-/// only once the savepoint is: a rolled-back artist's cached id would name whichever artist next
-/// takes its rowid.
+/// Whether a row was written. Each job is a unit of its own, so a sheet failing leaves nothing
+/// half-written, its stamp included, and the others apply.
 fn handle_sheets(
     tx: &Transaction<'_>,
     cue: &CueChunk,
     images: &[ScannedFile],
     batch: &mut Batch,
-) -> bool {
+) -> Result<bool, AppError> {
     let mut wrote = false;
     for job in cue.jobs() {
-        let mut job_batch = batch.clone();
-        match sql::in_savepoint(tx, || apply_sheet_job(tx, job, images, &mut job_batch)) {
-            Ok(job_wrote) => {
-                wrote |= job_wrote;
-                *batch = job_batch;
-            }
+        match in_unit(tx, batch, |batch| apply_sheet_job(tx, job, images, batch)) {
+            Ok(job_wrote) => wrote |= job_wrote,
+            Err(e) if tx.is_autocommit() => return Err(e),
             Err(e) => {
                 log::warn!("Failed to apply cue sheet {}: {}", job.path.display(), describe(&e));
             }
         }
     }
-    wrote
+    Ok(wrote)
 }
 
 /// Writes `job` under its sheet's library folder. Each image it gives back takes its whole-file
