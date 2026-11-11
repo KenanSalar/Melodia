@@ -9,11 +9,11 @@ pub(crate) const WHOLE_FILE: &str = "cue_track IS NULL";
 pub(crate) const SHEET_TRACK: &str = "cue_track IS NOT NULL";
 
 /// A row carved by a sheet in a `.cue` of its own.
-pub(crate) const CARVED_BY_CUE: &str = "cue_track IS NOT NULL AND cue_sheet_id IS NOT NULL";
+pub(crate) const CARVED_BY_CUE: &str = "(cue_track IS NOT NULL AND cue_sheet_id IS NOT NULL)";
 
 /// A row the sheet inside its image carved. `cue_sheet_id IS NULL` alone holds for a whole-file
 /// row too.
-pub(crate) const CARVED_INSIDE: &str = "cue_track IS NOT NULL AND cue_sheet_id IS NULL";
+pub(crate) const CARVED_INSIDE: &str = "(cue_track IS NOT NULL AND cue_sheet_id IS NULL)";
 
 /// Files in the order a folder plays them (`track_ids_under_directory`), each file's rows in its
 /// sheet's order.

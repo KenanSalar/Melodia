@@ -10,7 +10,6 @@ use rusqlite::Transaction;
 
 use crate::database::queries::excluded_files::{self, NewExclusion};
 use crate::database::queries::ingest::is_bulk;
-use crate::database::queries::playlist;
 use crate::database::queries::playlist_carry::move_playlist_places;
 use crate::database::queries::{scan, stats};
 use crate::database::rows::by_name;
@@ -100,15 +99,12 @@ fn merge(tx: &Transaction<'_>, removals: &[GroupRemoval]) -> Result<RemovedDupli
         stats::disable_stats_triggers(tx)?;
     }
     write_keepers(tx, &plan.keepers)?;
-    let touched = move_playlist_places(tx, &plan.keeper_of)?;
+    move_playlist_places(tx, &plan.keeper_of)?;
     let exclusions: Vec<NewExclusion<'_>> =
         plan.spares.iter().map(|spare| spare.exclusion()).collect();
     excluded_files::exclude_on(tx, &exclusions)?;
     let spare_ids: Vec<i64> = plan.spares.iter().map(|spare| spare.id).collect();
     scan::delete_tracks_by_ids(tx, &spare_ids)?;
-    for playlist_id in touched {
-        playlist::renumber_playlist_positions_tx(tx, playlist_id)?;
-    }
     scan::roll_up_covers(tx)?;
     scan::prune_orphans(tx)?;
     if bulk {

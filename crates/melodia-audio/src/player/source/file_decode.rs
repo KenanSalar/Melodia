@@ -227,10 +227,10 @@ impl FileDecoder {
         let tail = mkv_trim::resolve(discards, self.track, self.sample_rate()).unwrap_or(0);
 
         if let Some(aac) = self.aac_padding(edits) {
-            let shape = self.cursor.shape();
             self.trim = Some(Trim { tail, ..aac });
             // Ahead of the counts, which describe the audio left once this is gone.
-            self.skip(usize::try_from(interleaved(aac.head, shape.channels)).unwrap_or(usize::MAX));
+            let head = interleaved(aac.head, self.channels());
+            self.skip(usize::try_from(head).unwrap_or(usize::MAX));
             self.measure_playable();
             log::debug!(
                 "AAC encoder padding: {} priming frames dropped, {:?} of audio",
@@ -278,11 +278,10 @@ impl FileDecoder {
         let Some(trim) = self.trim else {
             return;
         };
-        let shape = self.cursor.shape();
 
         let head = self.head_duration();
         self.file_duration = match trim.playable {
-            Some(playable) => Some(frames_to_duration(playable, shape.rate)),
+            Some(playable) => Some(frames_to_duration(playable, self.sample_rate())),
             None => self.file_duration.map(|total| total.saturating_sub(head)),
         };
         self.end = self.end_after(0);
@@ -355,19 +354,18 @@ impl FileDecoder {
         let Some(time_base) = self.time_base else {
             return 0;
         };
-        let shape = self.cursor.shape();
         // `Timestamp` is signed, so a landing *past* the ask falls out here as nothing to trim.
         let Ok(ahead) = u64::try_from(required.get().saturating_sub(actual.get())) else {
             return 0;
         };
-        let Some(frames) = decode::ticks_to_frames(ahead, time_base, shape.rate, Rounding::Up)
-        else {
+        let rate = self.sample_rate();
+        let Some(frames) = decode::ticks_to_frames(ahead, time_base, rate, Rounding::Up) else {
             return 0;
         };
         let Ok(frames) = usize::try_from(frames) else {
             return 0;
         };
-        frames.saturating_mul(usize::from(shape.channels.get()))
+        frames.saturating_mul(usize::from(self.channels().get()))
     }
 
     /// Discards `count` interleaved samples, decoding as far as it takes.
@@ -388,7 +386,7 @@ impl FileDecoder {
     /// file counts down to that end, the padding lying past it. Otherwise the padding's: a count
     /// restated from there, or a window rebuilt empty, what it held describing the position left.
     fn end_after(&self, played: u64) -> Option<End> {
-        let channels = self.cursor.shape().channels;
+        let channels = self.channels();
         if let Some(len) = self.span.len {
             return Some(End::Counted(interleaved(len.saturating_sub(played), channels)));
         }

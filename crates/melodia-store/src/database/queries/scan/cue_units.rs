@@ -8,7 +8,7 @@
 //! place; when it lets the image go, they take the image back where its first track sat. A play
 //! count, rating or favourite on the side going away stays with it: it belongs to no single track.
 
-use std::collections::{BTreeSet, HashMap, HashSet};
+use std::collections::{HashMap, HashSet};
 use std::path::Path;
 use std::sync::LazyLock;
 
@@ -20,7 +20,6 @@ use super::{
     update_cue_track, update_track_location,
 };
 use crate::database::queries::excluded_files;
-use crate::database::queries::playlist::renumber_playlist_positions_tx;
 use crate::database::queries::playlist_carry::{move_playlist_places, replace_in_playlists};
 use crate::database::queries::track::file_rows::{
     CARVED_BY_CUE, CARVED_INSIDE, SHEET_TRACK, WHOLE_FILE,
@@ -288,17 +287,11 @@ fn release_rows(tx: &Transaction<'_>, image: &str, carver: Carver) -> Result<boo
         return Ok(false);
     }
     // None where the image is kept out or failed to read, and its tracks go all the same.
-    let touched = match whole_file_row(tx, image)? {
-        Some(whole_file) => {
-            let keeper_of = track_ids.iter().map(|&id| (id, whole_file)).collect();
-            move_playlist_places(tx, &keeper_of)?
-        }
-        None => BTreeSet::new(),
-    };
-    delete_tracks_by_ids(tx, &track_ids)?;
-    for playlist_id in touched {
-        renumber_playlist_positions_tx(tx, playlist_id)?;
+    if let Some(whole_file) = whole_file_row(tx, image)? {
+        let keeper_of = track_ids.iter().map(|&id| (id, whole_file)).collect();
+        move_playlist_places(tx, &keeper_of)?;
     }
+    delete_tracks_by_ids(tx, &track_ids)?;
     log::info!("Gave {image} its own row back from {}", carver.sheet());
     Ok(true)
 }
