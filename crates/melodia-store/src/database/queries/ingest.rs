@@ -228,9 +228,9 @@ struct Unclaimed {
     released: Vec<String>,
 }
 
-/// Sorts `files` by the sheet inside each. A file whose tags didn't read keeps the tracks its sheet
-/// carved and writes nothing, so the next scan reads it again: a tagger's write caught half-done
-/// would otherwise cost a disc its play counts.
+/// Sorts `files` by the sheet inside each. A file read as [`EmbeddedCue::Unread`] keeps the tracks
+/// its sheet carved and writes nothing, so the next scan reads it again: a tagger's write caught
+/// half-done would otherwise cost a disc its play counts.
 fn sort_unclaimed(tx: &Transaction<'_>, files: Vec<ScannedFile>) -> Result<Unclaimed, AppError> {
     let mut carved = Vec::new();
     let mut whole = Vec::with_capacity(files.len());
@@ -251,7 +251,7 @@ fn sort_unclaimed(tx: &Transaction<'_>, files: Vec<ScannedFile>) -> Result<Uncla
         if !holding.contains(path.as_ref()) {
             ordinary.push(file);
         } else if file.metadata.embedded_cue == EmbeddedCue::Unread {
-            log::warn!("Kept the cue sheet tracks of {path}: its tags didn't read");
+            log::warn!("Kept the cue sheet tracks of {path}: its sheet didn't read");
         } else {
             released.push(path.into_owned());
             ordinary.push(file);

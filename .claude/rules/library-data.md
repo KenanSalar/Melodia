@@ -39,7 +39,7 @@ paths:
   after a `.cue`'s images are taken out and ahead of its jobs (`ingest::ingest_chunk`, the
   watcher's `handle_embedded`), so a `.cue` wins and one letting go hands the rows to the sheet
   inside by number. A new path writing a file's read asks it too, or the image keeps a whole-file
-  row, and a file whose tags didn't read keeps the tracks its sheet carved.
+  row, and a file read as `EmbeddedCue::Unread` keeps the tracks its sheet carved.
 - **`utils::trash_dir` is the one trash-folder predicate**: a walk or watch that finds files by
   itself asks it, never a trash name of its own.
 - **Nothing inside a write transaction `stat`s a file**: a second `stat` can pair a new mtime with

@@ -5,6 +5,7 @@ use std::fs::File;
 use std::io::{self, BufReader, Read};
 use std::path::Path;
 
+use super::block;
 use melodia_core::entities::cue::EmbeddedSource;
 use melodia_core::error::AppError;
 
@@ -28,7 +29,8 @@ const MAX_CUESHEET_BYTES: u32 = 128 * 1024;
 /// The comment key a sheet's text sits under, with the `=` that ends a key.
 const SHEET_KEY: &[u8; 9] = b"CUESHEET=";
 
-/// The native CUESHEET block of the FLAC at `path`, or `None` where it has none. Blocking.
+/// The native CUESHEET block of the FLAC at `path`, or `None` where it has none. A block that
+/// doesn't parse whole fails as an unreadable file does. Blocking.
 pub(super) fn read_block(path: &Path) -> Result<Option<EmbeddedSource>, AppError> {
     let found = walk(path, |chain, header, sample_rate| {
         if header.kind != CUESHEET {
@@ -38,9 +40,13 @@ pub(super) fn read_block(path: &Path) -> Result<Option<EmbeddedSource>, AppError
             return Err(io::Error::new(io::ErrorKind::InvalidData, "CUESHEET block too large"));
         }
         let bytes = chain.body(header.length)?;
-        Ok(Visit::Found(
-            sample_rate.map(|sample_rate| EmbeddedSource::Block { sample_rate, bytes }),
-        ))
+        let Some(sample_rate) = sample_rate else {
+            return Ok(Visit::Found(None));
+        };
+        if block::sheet(sample_rate, &bytes).is_none() {
+            return Err(io::Error::new(io::ErrorKind::InvalidData, "CUESHEET block doesn't parse"));
+        }
+        Ok(Visit::Found(Some(EmbeddedSource::Block { sample_rate, bytes })))
     })?;
     Ok(found.flatten())
 }
@@ -177,11 +183,11 @@ impl Chain {
     }
 }
 
-/// Moves `reader` past the `ID3v2` tag its first three bytes opened.
+/// Moves `reader` past the `ID3v2` tag whose magic and major version are already read.
 fn skip_id3v2(reader: &mut BufReader<File>) -> io::Result<()> {
-    let mut header = [0; 7];
+    let mut header = [0; 6];
     reader.read_exact(&mut header)?;
-    let [_major, _revision, flags, size @ ..] = header;
+    let [_revision, flags, size @ ..] = header;
     // Seven bits a byte, the high bit clear so no byte of the size reads as a frame sync.
     let size = size.iter().fold(0_i64, |size, &byte| (size << 7) | i64::from(byte & 0x7F));
     let footer = if flags & ID3V2_FOOTER_FLAG == 0 { 0 } else { ID3V2_FOOTER_BYTES };

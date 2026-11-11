@@ -15,7 +15,7 @@ const NON_AUDIO_FLAG: u8 = 0x80;
 const INDEX_RESERVED_BYTES: usize = 3;
 
 /// The sheet `bytes` state, their offsets counting samples at `sample_rate`, or `None` where they
-/// end short. The lead-out, numbered past 99, marks the end of the audio the last track runs to.
+/// don't parse. The lead-out, numbered past 99, marks the end of the audio the last track runs to.
 pub(super) fn sheet(sample_rate: u32, bytes: &[u8]) -> Option<Sheet> {
     let mut block = Block(bytes);
     let catalog = text(block.take(CATALOG_BYTES)?);

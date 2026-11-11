@@ -38,26 +38,28 @@ const SHEET_KEY: &str = "CUESHEET";
 /// The sheet the FLAC at `path` carries, its comments already read: the `CUESHEET` comment where it
 /// places a track, else the native block, read off the file here. Blocking.
 pub(crate) fn read(path: &Path, comments: Option<&VorbisComments>) -> EmbeddedCue {
-    let overrides: Vec<(String, String)> = comments
-        .iter()
-        .flat_map(|comments| comments.items())
-        .filter(|(key, _)| overrides::override_key(key).is_some())
-        .map(|(key, value)| (key.to_owned(), value.to_owned()))
-        .collect();
     let comment = comments.and_then(|comments| comments.get(SHEET_KEY)).filter(|text| {
         let (stated, _) = parse::statements(text.lines(), Files::Inside);
         stated.places_a_track()
     });
     let source = match comment {
-        Some(text) => Some(EmbeddedSource::Comment(text.to_owned())),
-        None => chain::read_block(path).unwrap_or_else(|e| {
-            log::warn!("Skipping the cue sheet inside {}: {}", path.display(), describe(&e));
-            None
-        }),
+        Some(text) => EmbeddedSource::Comment(text.to_owned()),
+        None => match chain::read_block(path) {
+            Ok(Some(block)) => block,
+            Ok(None) => return EmbeddedCue::Absent,
+            Err(e) => {
+                log::warn!("Unreadable CUESHEET block in {}: {}", path.display(), describe(&e));
+                return EmbeddedCue::Unread;
+            }
+        },
     };
-    source.map_or(EmbeddedCue::Absent, |source| {
-        EmbeddedCue::Present(EmbeddedSheet { source, overrides })
-    })
+    let overrides = comments
+        .iter()
+        .flat_map(|comments| comments.items())
+        .filter(|(key, _)| overrides::override_key(key).is_some())
+        .map(|(key, value)| (key.to_owned(), value.to_owned()))
+        .collect();
+    EmbeddedCue::Present(EmbeddedSheet { source, overrides })
 }
 
 /// The rows the sheet inside the image at `path` carves out of it, whose own read is `disc`, or
@@ -74,13 +76,7 @@ pub(crate) fn carve(path: &Path, disc: &ExtractedMetadata) -> Option<Vec<CueRow>
 fn sheet_of(embedded: &EmbeddedSheet, origin: &Path) -> Option<Sheet> {
     let mut sheet = match &embedded.source {
         EmbeddedSource::Comment(text) => parse::parse(text, origin, Files::Inside),
-        EmbeddedSource::Block { sample_rate, bytes } => {
-            let Some(sheet) = block::sheet(*sample_rate, bytes) else {
-                log::warn!("Skipping the CUESHEET block of {}: it ends short", origin.display());
-                return None;
-            };
-            sheet
-        }
+        EmbeddedSource::Block { sample_rate, bytes } => block::sheet(*sample_rate, bytes)?,
     };
     overrides::apply(&mut sheet, &embedded.overrides);
     Some(sheet)
@@ -118,18 +114,21 @@ pub fn rewritten_embedded(
     let no_text =
         || AppError::metadata_msg(format!("{} holds no cue sheet text to write", image.display()));
     let comments = flac.vorbis_comments_mut().ok_or_else(no_text)?;
-    let text = comments.get(SHEET_KEY).ok_or_else(no_text)?.to_owned();
-    let rewrite = write::rewritten_comment(&text, image, edit, rows);
+    let text = comments.get(SHEET_KEY).ok_or_else(no_text)?;
+    let rewrite = write::rewritten_comment(text, image, edit, rows);
 
-    let stale: Vec<String> = comments
-        .items()
-        .filter(|(key, _)| overrides::override_key(key).is_some_and(|field| rewrite.states(field)))
-        .map(|(key, _)| key.to_owned())
-        .collect();
-    for key in &stale {
-        comments.remove(key).for_each(drop);
+    let is_stale =
+        |key: &str| overrides::override_key(key).is_some_and(|field| rewrite.states(field));
+    let has_stale = comments.items().any(|(key, _)| is_stale(key));
+    if has_stale {
+        // Rebuilt rather than `remove`d: lofty's `remove` reorders the comments it keeps.
+        for (key, value) in comments.take_items() {
+            if !is_stale(&key) {
+                comments.push(key, value);
+            }
+        }
     }
-    let changed = rewrite.text.is_some() || !stale.is_empty();
+    let changed = rewrite.text.is_some() || has_stale;
     if let Some(text) = rewrite.text {
         comments.insert(SHEET_KEY.to_owned(), text);
     }

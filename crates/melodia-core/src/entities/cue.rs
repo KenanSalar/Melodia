@@ -146,7 +146,7 @@ pub enum EmbeddedCue {
     /// No sheet inside, or a format that can't hold one.
     #[default]
     Absent,
-    /// The tags didn't read, so whether a sheet is inside is unknown.
+    /// The tags or the CUESHEET block didn't read, so whether a sheet is inside is unknown.
     Unread,
     Present(EmbeddedSheet),
 }

@@ -260,8 +260,8 @@ fn handle_created(
 
 /// Writes a file whose rows the sheet inside it decides: the tracks it carves, or the whole-file
 /// row that takes their place once it carves none. Answers whether a row was written, or `None` to
-/// leave the file to the ordinary handlers. A file whose tags didn't read keeps its tracks, as a
-/// scan keeps them (`ingest::sort_unclaimed`).
+/// leave the file to the ordinary handlers. A file read as [`EmbeddedCue::Unread`] keeps its
+/// tracks, as a scan keeps them (`ingest::sort_unclaimed`).
 fn handle_embedded(
     tx: &Transaction<'_>,
     path: &Path,
@@ -276,7 +276,7 @@ fn handle_embedded(
         return Ok(None);
     }
     if meta.embedded_cue == EmbeddedCue::Unread {
-        log::warn!("Kept the cue sheet tracks of {path_str}: its tags didn't read");
+        log::warn!("Kept the cue sheet tracks of {path_str}: its sheet didn't read");
         return Ok(Some(false));
     }
     let wrote = create_track(tx, path, meta, batch)?;
