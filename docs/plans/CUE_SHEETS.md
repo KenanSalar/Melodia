@@ -2,8 +2,8 @@
 
 Working doc. Delete when the feature ships.
 
-Status: **in progress**, Phase 7 through its gates, Phase 8 next; Phase 3 owes Kenan's scrobble
-and Discord check ·
+Status: **in progress**, Phase 7 through its gates bar the restated credit's hand check, Phase 8
+next; Phase 3 owes Kenan's scrobble and Discord check ·
 Created: 2026-11-04
 
 Issue [#78](https://github.com/KenanSalar/Melodia/issues/78).
@@ -245,6 +245,10 @@ whole disc:
 | lyrics, BPM, key, mood, rating, MusicBrainz recording and release-track ids | none | none: per recording |
 | artwork, codec, bitrate, rate, depth, channels, MusicBrainz release ids | none | the image's |
 
+A `PERFORMER` printing the image's own credit for the field it fills, artist or album artist, keeps
+that credit, its names, MusicBrainz ids and sort name describing the same printed line; one naming
+anyone else takes none of them.
+
 `REM` lines attach to the scope they appear in: before the first `TRACK` they describe the sheet,
 after it they describe that track. Indentation decides nothing.
 
@@ -334,10 +338,11 @@ read-only, the number being the row's identity.
 
 The sheet's `PERFORMER` is also the artist of every track stating none, and where the sheet states
 none such a track reads the image's artist. So an album artist edit first gives each such track the
-artist its row shows on a line of its own, leaving a track whose artist the edit changes. A sheet so
-written states every track's performer, the layout rippers write, which leaves a reader no fallback
-to differ on. The hidden track, which has no lines of its own, takes the new album artist as its
-artist.
+artist its row shows on a line of its own, leaving a track whose artist the edit changes. That line
+prints the credit the track read, so the track keeps its names and ids as well. A sheet so written
+states every track's performer, the layout rippers write, which leaves a reader no fallback to
+differ on. The hidden track, which has no lines of its own, and a track showing no artist, which an
+empty `PERFORMER` can't state, take the new album artist as theirs.
 
 How the rewrite works:
 
@@ -1010,6 +1015,8 @@ a whole disc. *Files opened from outside the library* gives the model.
 - [x] The pin takes the artist each row shows (`get_sheet_artists`, read with the sheet tracks
       ahead of the file pass in `sheet_tags::SheetPass`), so a sheet stating no `PERFORMER` keeps
       its tracks' image artists through an album artist edit too.
+- [x] A `PERFORMER` printing the image's own credit keeps it (`merge.rs`, `restates`), so a pinned
+      track keeps its names, ids and sort name, not only the line.
 - [x] Composers split on `;` (`metadata::split_list`), in `merge.rs`'s `with_composer`.
 - [x] The tag editor opens the fields the sheet can hold (`TagEditor.from-sheet`, `SheetField`, the
       composer). The rest stay read-only, and a hidden track keeps the whole dialog so
@@ -1066,6 +1073,10 @@ a whole disc. *Files opened from outside the library* gives the model.
         own, under a new top-level one ahead of `FILE`;
   - [x] the top-level-only sheet of the check above, edited the same way, writes the same lines,
         each track's artist now taken from its row.
+- [ ] Kenan's hand check of the restated credit: a sheet stating no `PERFORMER` over a FLAC tagged
+      `ARTIST=A feat. B`, `ARTISTS=A` and `ARTISTS=B`. Change one track's album artist: every track
+      still reads "A feat. B" and stays on A's and B's artist pages, and the Artists grid gains no
+      "A feat. B" card.
 
 ## Phase 8: Embedded sheets
 

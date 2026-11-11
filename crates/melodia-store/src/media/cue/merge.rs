@@ -4,7 +4,8 @@
 //! A sheet value applies only where the sheet states one, and the image fills the rest, except for
 //! what describes a single recording (BPM, key, mood, rating, the recording ids), which an image's
 //! tags state for the whole disc and no track of it owns. An identifier or sort tag stays only
-//! beside the field it came with, so a `PERFORMER` can't pair with the disc's artist id.
+//! beside the field it came with, so a `PERFORMER` pairs with the disc's artist ids only where it
+//! prints the disc's own credit.
 
 use std::path::Path;
 
@@ -122,7 +123,9 @@ impl Scopes<'_> {
 
 fn apply_sheet(meta: &mut ExtractedMetadata, scopes: &Scopes<'_>) {
     let sheet = &scopes.sheet.fields;
-    if let Some(performer) = scopes.performer() {
+    if let Some(performer) = scopes.performer()
+        && !restates(&meta.artist, performer)
+    {
         meta.artist = ArtistCredit::from_name(performer);
         meta.artist_mbids.clear();
         meta.sort.artist = None;
@@ -131,7 +134,9 @@ fn apply_sheet(meta: &mut ExtractedMetadata, scopes: &Scopes<'_>) {
         meta.album = Some(album.clone());
         meta.sort.album = None;
     }
-    if let Some(album_artist) = &sheet.performer {
+    if let Some(album_artist) = &sheet.performer
+        && !restates(&meta.album_artist, album_artist)
+    {
         meta.album_artist = ArtistCredit::from_name(album_artist);
         meta.album_artist_mbids.clear();
         meta.sort.album_artist = None;
@@ -164,10 +169,14 @@ fn apply_sheet(meta: &mut ExtractedMetadata, scopes: &Scopes<'_>) {
 pub(crate) fn track_tags(sheet: &Sheet, track: CueTrack, image: FileTags) -> FileTags {
     let scopes = Scopes { track: sheet.tracks.iter().find(|stated| stated.number == track), sheet };
     let mut tags = FileTags { lyrics: None, ..image };
-    if let Some(performer) = scopes.performer() {
+    if let Some(performer) = scopes.performer()
+        && !restates(&tags.credits.0, performer)
+    {
         tags.credits.0 = ArtistCredit::from_name(performer);
     }
-    if let Some(album_artist) = &sheet.fields.performer {
+    if let Some(album_artist) = &sheet.fields.performer
+        && !restates(&tags.credits.1, album_artist)
+    {
         tags.credits.1 = ArtistCredit::from_name(album_artist);
     }
     if let Some(composer) = scopes.composer() {
@@ -180,6 +189,11 @@ pub(crate) fn track_tags(sheet: &Sheet, track: CueTrack, image: FileTags) -> Fil
         tags.release.barcode.clone_from(catalog);
     }
     tags
+}
+
+/// Whether `stated` prints `credit` as it stands.
+fn restates(credit: &ArtistCredit, stated: &str) -> bool {
+    credit.line() == Some(stated)
 }
 
 /// The track pair is the track's own or none, since the image's describes the whole disc. The

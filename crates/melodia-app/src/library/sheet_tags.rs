@@ -35,7 +35,7 @@ pub(super) struct SheetPass {
 
 impl SheetPass {
     /// The sheets behind the cue sheet tracks among `ids`, with the artist each of their tracks
-    /// shows. None where `edit` holds nothing a sheet does.
+    /// shows. Empty where `edit` holds nothing a sheet does.
     pub(super) async fn read(db: &DbPool, ids: &[i64], edit: SheetEdit) -> Result<Self, AppError> {
         if edit.is_empty() {
             return Ok(Self { edit, sheets: BTreeMap::new() });

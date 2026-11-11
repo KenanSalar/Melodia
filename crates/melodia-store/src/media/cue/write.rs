@@ -101,8 +101,7 @@ fn joined<'a>(names: impl Iterator<Item = &'a str>) -> Option<String> {
 pub struct SheetRows {
     /// The tracks the edit names.
     pub edited: Vec<CueTrack>,
-    /// The artist each track shows, which one stating no `PERFORMER` keeps through an edit moving
-    /// the line it reads.
+    /// The artist every track of the sheet shows, not only the edited ones'.
     pub artists: Vec<(CueTrack, String)>,
 }
 
