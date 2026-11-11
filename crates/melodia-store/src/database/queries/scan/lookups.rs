@@ -115,6 +115,10 @@ impl SheetsAround {
 const SHEETS_IN_DIRECTORY: &str = "SELECT path FROM cue_sheets \
      WHERE path >= ?1 AND path < ?2 AND instr(substr(path, length(?1) + 1), ?3) = 0";
 
+/// Each image a sheet claims, beside that sheet's path.
+const SHEET_CLAIMS: &str = "SELECT DISTINCT tracks.file_path, cue_sheets.path \
+     FROM cue_sheets JOIN tracks ON tracks.cue_sheet_id = cue_sheets.id";
+
 /// The sheets on record directly inside `dirs`, and the claims of those sheets and of the images
 /// among `audio`. A library holding no sheet answers empty from its first statement.
 pub async fn sheets_around(
@@ -136,18 +140,10 @@ pub async fn sheets_around(
             sheets.extend(inside);
         }
         let by_sheet: Vec<(String, String)> = chunked_in_query(conn, &sheets, |path_list| {
-            format!(
-                "SELECT DISTINCT tracks.file_path, cue_sheets.path
-                 FROM cue_sheets JOIN tracks ON tracks.cue_sheet_id = cue_sheets.id
-                 WHERE cue_sheets.path IN ({path_list})"
-            )
+            format!("{SHEET_CLAIMS} WHERE cue_sheets.path IN ({path_list})")
         })?;
         let by_image: Vec<(String, String)> = chunked_in_query(conn, &audio, |path_list| {
-            format!(
-                "SELECT DISTINCT tracks.file_path, cue_sheets.path
-                 FROM tracks JOIN cue_sheets ON cue_sheets.id = tracks.cue_sheet_id
-                 WHERE tracks.file_path IN ({path_list})"
-            )
+            format!("{SHEET_CLAIMS} WHERE tracks.file_path IN ({path_list})")
         })?;
         let claims = by_sheet.into_iter().chain(by_image).collect();
         Ok(SheetsAround { dirs, sheets, claims })
@@ -155,19 +151,17 @@ pub async fn sheets_around(
     .await
 }
 
+static CLAIMS_IN_FOLDER: LazyLock<String> =
+    LazyLock::new(|| format!("{SHEET_CLAIMS} WHERE cue_sheets.folder_id = ?"));
+
 /// Each image a cue sheet in the folder claims, mapped to that sheet's path.
 pub async fn sheet_claims(
     db: &DbPool,
     folder_id: i64,
 ) -> Result<HashMap<String, String>, AppError> {
     db.read(move |conn| {
-        let rows: Vec<(String, String)> = sql::fetch_all(
-            conn,
-            "SELECT DISTINCT tracks.file_path, cue_sheets.path
-             FROM cue_sheets JOIN tracks ON tracks.cue_sheet_id = cue_sheets.id
-             WHERE cue_sheets.folder_id = ?",
-            (folder_id,),
-        )?;
+        let rows: Vec<(String, String)> =
+            sql::fetch_all(conn, CLAIMS_IN_FOLDER.as_str(), (folder_id,))?;
         Ok(rows.into_iter().collect())
     })
     .await

@@ -12,7 +12,7 @@ use std::path::Path;
 use lofty::tag::items::Timestamp;
 
 use super::layout::{FileLayout, MIN_CLAIMED_ROWS};
-use super::parse::{Sheet, SheetTrack};
+use super::parse::{Sheet, SheetTrack, rem};
 use crate::media::ingest::metadata::{
     parse_replaygain_gain, parse_replaygain_peak, split_genres, split_list,
 };
@@ -115,10 +115,10 @@ impl Scopes<'_> {
 
     fn composer(&self) -> Option<&str> {
         let track = self.track.and_then(|track| {
-            track.fields.songwriter.as_deref().or_else(|| track.fields.rem("COMPOSER"))
+            track.fields.songwriter.as_deref().or_else(|| track.fields.rem(rem::COMPOSER))
         });
         let sheet = &self.sheet.fields;
-        track.or(sheet.songwriter.as_deref()).or_else(|| sheet.rem("COMPOSER"))
+        track.or(sheet.songwriter.as_deref()).or_else(|| sheet.rem(rem::COMPOSER))
     }
 
     fn rem(&self, key: &str) -> Option<&str> {
@@ -154,17 +154,17 @@ fn apply_sheet(meta: &mut ExtractedMetadata, scopes: &Scopes<'_>) {
     if let Some(composer) = scopes.composer() {
         meta.credits = with_composer(&meta.credits, composer);
     }
-    if let Some(genre) = scopes.rem("GENRE") {
+    if let Some(genre) = scopes.rem(rem::GENRE) {
         meta.genres = split_genres(genre);
     }
-    if let Some(date) = scopes.rem("DATE").and_then(|date| date.parse::<Timestamp>().ok()) {
+    if let Some(date) = scopes.rem(rem::DATE).and_then(|date| date.parse::<Timestamp>().ok()) {
         meta.release_date = Some(date.to_string());
         meta.year = Some(i32::from(date.year));
     }
-    if let Some(disc) = sheet.rem("DISCNUMBER").and_then(|n| n.parse().ok()) {
+    if let Some(disc) = sheet.rem(rem::DISCNUMBER).and_then(|n| n.parse().ok()) {
         meta.disc_number = Some(disc);
     }
-    if let Some(discs) = sheet.rem("TOTALDISCS").and_then(|n| n.parse().ok()) {
+    if let Some(discs) = sheet.rem(rem::TOTALDISCS).and_then(|n| n.parse().ok()) {
         meta.disc_total = Some(discs);
     }
     if let Some(catalog) = &scopes.sheet.catalog {
@@ -177,7 +177,7 @@ fn apply_sheet(meta: &mut ExtractedMetadata, scopes: &Scopes<'_>) {
 /// `image`'s credits, genres and release tags for track `track`, with what the sheet states over
 /// them by [`apply_sheet`]'s rules. Lyrics describe a recording, so the image's are no track's.
 pub(crate) fn track_tags(sheet: &Sheet, track: CueTrack, image: FileTags) -> FileTags {
-    let scopes = Scopes { track: sheet.tracks.iter().find(|stated| stated.number == track), sheet };
+    let scopes = Scopes { track: sheet.track(track), sheet };
     let mut tags = FileTags { lyrics: None, ..image };
     if let Some(performer) = scopes.performer()
         && !restates(&tags.credits.0, performer)
@@ -192,7 +192,7 @@ pub(crate) fn track_tags(sheet: &Sheet, track: CueTrack, image: FileTags) -> Fil
     if let Some(composer) = scopes.composer() {
         tags.roles = with_composer(&tags.roles, composer);
     }
-    if let Some(genre) = scopes.rem("GENRE") {
+    if let Some(genre) = scopes.rem(rem::GENRE) {
         tags.genres = split_genres(genre);
     }
     if let Some(catalog) = &sheet.catalog {

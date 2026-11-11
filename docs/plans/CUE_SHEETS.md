@@ -467,11 +467,11 @@ How Melodia holds one:
 | `FILE` → walked path | `media/cue/resolve.rs` | the three-step match |
 | sheet + image tags → row fields | `media/cue/merge.rs` | the table above; produces the `ExtractedMetadata` shape the ordinary ingest already writes |
 | sheet rewrite | `media/cue/write.rs` | Phase 7: `SheetEdit`, the edits by scope. `text.rs` splits the lines and encodes them back, `parse.rs`'s reader answers each line's `Statement` |
-| the edit's sheet pass | `crates/melodia-app/src/library/sheet_tags.rs` | Phase 7: write, mark `self_writes`, read back through `import::read_in` and `commit_import` |
+| the edit's sheet pass | `crates/melodia-app/src/library/sheet_tags.rs` | Phase 7: write, mark `self_writes`, read back through `import::ingest`, which ends in `commit_import` |
 | embedded sources | `media/cue/embedded/` | Phase 8: which source wins and the carve (`mod.rs`), the block chain walker (`chain.rs`), the native block (`block.rs`), the `CUE_TRACKnn_*` overrides (`overrides.rs`), and the comment's rewrite and save |
 | the upgrade sweep | `crates/melodia-app/src/tasks/embedded_cue_probe.rs` | Phase 8: the one-shot probe of whole-file FLACs |
 | store units of work | `crates/melodia-store/src/database/queries/scan/cue_units.rs` | `SheetWriter::apply`: per sheet job, the stamp, `apply_cue_unit` (a gone image's rows carried by hash, upsert by key, drop missing numbers, carry playlist entries off the whole-file row) and `release_rows` (the reverse), `pub(crate)` on the caller's transaction: the scan chunk's, whose stats triggers drop and return inside it (`commit_scan_chunk`), or the watcher batch's (`handle_sheets`), each job filed under its sheet's folder |
-| playlist carry | `crates/melodia-store/src/database/queries/playlist_carry.rs` | `replace_in_playlists` and `merge_into_playlists`, beside the other playlist membership writers |
+| playlist carry | `crates/melodia-store/src/database/queries/playlist_carry.rs` | `replace_in_playlists`, and `move_playlist_places`, which `release_rows` shares with the duplicate merge, beside the other playlist membership writers |
 | the planner | `crates/melodia-store/src/media/cue/plan.rs` | which sheet claims which image, settled in `discover` (`scan/mod.rs`) after the incremental filter, whose output decides which directories it reads again, and before the walk is cut into chunks. Each sheet's work is one job that `CuePlan::into_chunks` never splits, so a sheet's stamp commits with everything it caused. The scan calls it, and the watcher's `process_batch` (`file_event_processor/sheets.rs`) and an import (`library/import.rs`) call it over a few directories through `media/cue/around.rs`'s `settle_dirs` |
 | the span on a deck | `crates/melodia-audio/src/player/source/span.rs` | beside `aac_trim.rs`: the open-at-start, the counted end, the seek offset. `file_decode.rs` calls it |
 | the parked decoder | `crates/melodia-audio/src/player/source/park.rs` | Phase 6: the one-slot hand-off, the tickets it lets park and its match rule |
@@ -1024,8 +1024,8 @@ a whole disc. *Files opened from outside the library* gives the model.
   - [x] replaces the file through the tag writer's atomic rename (`replace_sheet`).
 - [x] `write_tag_edit` (`library/tags.rs`) hands the edit's `SheetEdit` to `sheet_tags`, which
       groups sheet tracks by sheet (`get_sheet_tracks_by_ids`), writes each sheet once, registers it
-      with `self_writes`, and reads every changed sheet back in one `import::read_in` and
-      `commit_import`. Ordinary tracks keep their path, and a rating's write-back projects to an
+      with `self_writes`, and reads every changed sheet back in one `import::ingest`, which ends
+      in `commit_import`. Ordinary tracks keep their path, and a rating's write-back projects to an
       empty `SheetEdit`. `forget_stored_lyrics` keys sheet tracks on their number.
 - [x] Review fixes: the sheet tracks are looked up ahead of the file pass, and a failed read-back
       is a failure per sheet, so neither discards a file write already committed; the read-back's

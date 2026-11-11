@@ -11,7 +11,9 @@ use std::path::Path;
 use lofty::tag::items::Timestamp;
 
 use super::embedded::TrackField;
-use super::parse::{Command, Files, Scope, Sheet, SheetTrack, Statement, stated_value, statements};
+use super::parse::{
+    Command, Files, Scope, Sheet, SheetTrack, Statement, rem, stated_value, statements,
+};
 use super::text::{EncodedSheet, LineEnding, OutLine, RawLine};
 use crate::media::ingest::metadata::LIST_SEPARATOR;
 use melodia_core::entities::artist::ArtistCredit;
@@ -180,18 +182,28 @@ enum Keyword {
 }
 
 impl Keyword {
+    /// The command a line of this keyword opens with, a `REM` line's key following it.
     fn word(self) -> &'static str {
         match self {
             Self::Title => "TITLE",
             Self::Performer => "PERFORMER",
             Self::Songwriter => "SONGWRITER",
-            Self::RemComposer => "REM COMPOSER",
             Self::Isrc => "ISRC",
             Self::Catalog => "CATALOG",
-            Self::Genre => "REM GENRE",
-            Self::Date => "REM DATE",
-            Self::DiscNumber => "REM DISCNUMBER",
-            Self::TotalDiscs => "REM TOTALDISCS",
+            Self::RemComposer | Self::Genre | Self::Date | Self::DiscNumber | Self::TotalDiscs => {
+                "REM"
+            }
+        }
+    }
+
+    fn rem_key(self) -> Option<&'static str> {
+        match self {
+            Self::RemComposer => Some(rem::COMPOSER),
+            Self::Genre => Some(rem::GENRE),
+            Self::Date => Some(rem::DATE),
+            Self::DiscNumber => Some(rem::DISCNUMBER),
+            Self::TotalDiscs => Some(rem::TOTALDISCS),
+            Self::Title | Self::Performer | Self::Songwriter | Self::Isrc | Self::Catalog => None,
         }
     }
 
@@ -215,7 +227,7 @@ impl Keyword {
             Command::Songwriter => matches!(self, Self::Songwriter),
             Command::Isrc => matches!(self, Self::Isrc),
             Command::Catalog => matches!(self, Self::Catalog),
-            Command::Rem(key) => self.word().strip_prefix("REM ") == Some(key.as_str()),
+            Command::Rem(key) => self.rem_key() == Some(key.as_str()),
             Command::File | Command::Track | Command::Other => false,
         }
     }
@@ -223,7 +235,10 @@ impl Keyword {
     /// The line stating `value`, free text quoted and a number or a code bare, as rippers write
     /// them. The reader takes a quoted value up to the line's last quote, so an inner one is safe.
     fn spell(self, indent: &str, value: &str) -> String {
-        let word = self.word();
+        let word = match self.rem_key() {
+            Some(key) => format!("{} {key}", self.word()),
+            None => self.word().to_owned(),
+        };
         match self {
             Self::Title | Self::Performer | Self::Songwriter | Self::RemComposer | Self::Genre => {
                 format!("{indent}{word} \"{value}\"")
@@ -466,11 +481,11 @@ impl<'a> Rewrite<'a> {
 
     /// `year` as the date written in `scope`, keeping the month and day the scope reads now.
     fn dated(&self, scope: Scope, year: &FieldEdit<u16>) -> FieldEdit<String> {
-        let sheet_date = self.stated.fields.rem("DATE");
+        let sheet_date = self.stated.fields.rem(rem::DATE);
         let date = match scope {
             Scope::Track(number) => {
-                let track = self.stated.tracks.iter().find(|track| track.number == number);
-                track.and_then(|track| track.fields.rem("DATE")).or(sheet_date)
+                let track = self.stated.track(number);
+                track.and_then(|track| track.fields.rem(rem::DATE)).or(sheet_date)
             }
             Scope::Sheet | Scope::Rejected => sheet_date,
         };

@@ -2,7 +2,7 @@
 //! field the sheet doesn't state, or states otherwise. Only what a sheet track holds is read: a
 //! field of the whole disc belongs to the sheet's own lines.
 
-use super::super::parse::Sheet;
+use super::super::parse::{Sheet, rem};
 use melodia_core::entities::cue::CueTrack;
 
 const PREFIX: &str = "CUE_TRACK";
@@ -56,7 +56,7 @@ pub(super) fn apply(sheet: &mut Sheet, overrides: &[(String, String)]) {
         let Some((number, field)) = override_key(key).filter(|_| !value.is_empty()) else {
             continue;
         };
-        let Some(track) = sheet.tracks.iter_mut().find(|track| track.number == number) else {
+        let Some(track) = sheet.track_mut(number) else {
             continue;
         };
         let value = value.to_owned();
@@ -64,8 +64,8 @@ pub(super) fn apply(sheet: &mut Sheet, overrides: &[(String, String)]) {
             TrackField::Title => track.fields.title = Some(value),
             TrackField::Artist => track.fields.performer = Some(value),
             TrackField::Composer => track.fields.songwriter = Some(value),
-            TrackField::Genre => track.fields.set_rem("GENRE", value),
-            TrackField::Date => track.fields.set_rem("DATE", value),
+            TrackField::Genre => track.fields.set_rem(rem::GENRE, value),
+            TrackField::Date => track.fields.set_rem(rem::DATE, value),
             TrackField::Isrc => track.isrc = Some(value),
         }
     }

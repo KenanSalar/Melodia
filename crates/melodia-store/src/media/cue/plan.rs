@@ -230,10 +230,7 @@ fn try_parse_sheet(
         file_size: Some(i64::try_from(stat.len()).unwrap_or(i64::MAX)),
         date_modified: date_modified_from_metadata(&stat),
     };
-    let sheet = parse::parse(&read_sheet(path)?, path, parse::Files::Named);
-    if !sheet.places_a_track() {
-        return Err(AppError::metadata_msg(format!("{} places no track", path.display())));
-    }
+    let sheet = read_cue(path)?;
 
     let sheet_dir = path.parent().unwrap_or(Path::new(""));
     let mut claims: Vec<Claim> = Vec::new();
@@ -250,6 +247,15 @@ fn try_parse_sheet(
         }
     }
     Ok(Parsed { read: SheetRead { stamp, sheet }, claims })
+}
+
+/// The `.cue` at `path`, or an error where it places no track.
+pub(super) fn read_cue(path: &Path) -> Result<Sheet, AppError> {
+    let sheet = parse::parse(&read_sheet(path)?, path, parse::Files::Named);
+    if !sheet.places_a_track() {
+        return Err(AppError::metadata_msg(format!("{} places no track", path.display())));
+    }
+    Ok(sheet)
 }
 
 /// A sheet competing for an image.

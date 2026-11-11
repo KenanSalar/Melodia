@@ -6,11 +6,11 @@
 //! The read lands through the import's commit, which files a sheet outside every library folder
 //! under a folder of its own and links its tracks to nothing; the watcher's would skip that sheet.
 
-use std::collections::{BTreeMap, BTreeSet, HashSet};
+use std::collections::{BTreeMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
-use super::import::{Reading, read_in};
+use super::import::{Reading, ingest, parent_dirs};
 use melodia_artwork::media::image::artwork::CoverCache;
 use melodia_core::entities::cue::{SheetFile, SheetTrack};
 use melodia_core::error::{AppError, describe};
@@ -179,12 +179,7 @@ async fn read_back(
             SheetFile::Embedded(path) => images.push(path.into()),
         }
     }
-    let dirs: BTreeSet<String> = sheets
-        .iter()
-        .filter_map(|sheet| sheet.parent())
-        .map(|dir| dir.to_string_lossy().into_owned())
-        .collect();
-    let around = scan::sheets_around(db, dirs.into_iter().collect(), Vec::new()).await?;
+    let around = scan::sheets_around(db, parent_dirs(&[], &sheets), Vec::new()).await?;
     let held: HashSet<PathBuf> = around
         .claims
         .iter()
@@ -193,8 +188,6 @@ async fn read_back(
         .collect();
     let owns = move |image: &Path| held.contains(image);
     let reading = Reading { new_audio: images, sheets, around, owns };
-    let (chunk, pool) = read_in(reading, artwork_dir, cover_cache).await?;
-    let scan_timestamp = melodia_core::utils::now_rfc3339();
-    queries::ingest::commit_import(db, chunk, scan_timestamp, pool).await?;
+    ingest(db, reading, artwork_dir, cover_cache).await?;
     Ok(())
 }

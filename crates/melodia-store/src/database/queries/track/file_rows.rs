@@ -5,6 +5,16 @@
 /// The row a file has when no sheet splits it: what a read or write of the file's own tags means.
 pub(crate) const WHOLE_FILE: &str = "cue_track IS NULL";
 
+/// A row a cue sheet carves out of its file.
+pub(crate) const SHEET_TRACK: &str = "cue_track IS NOT NULL";
+
+/// A row carved by a sheet in a `.cue` of its own.
+pub(crate) const CARVED_BY_CUE: &str = "cue_track IS NOT NULL AND cue_sheet_id IS NOT NULL";
+
+/// A row the sheet inside its image carved. `cue_sheet_id IS NULL` alone holds for a whole-file
+/// row too.
+pub(crate) const CARVED_INSIDE: &str = "cue_track IS NOT NULL AND cue_sheet_id IS NULL";
+
 /// Files in the order a folder plays them (`track_ids_under_directory`), each file's rows in its
 /// sheet's order.
 pub(crate) const FILE_ORDER: &str = "file_path COLLATE NOCASE ASC, cue_track ASC";

@@ -20,6 +20,23 @@ impl Sheet {
     pub(crate) fn places_a_track(&self) -> bool {
         self.tracks.iter().any(|track| track.index(1).is_some())
     }
+
+    pub(crate) fn track(&self, number: CueTrack) -> Option<&SheetTrack> {
+        self.tracks.iter().find(|track| track.number == number)
+    }
+
+    pub(crate) fn track_mut(&mut self, number: CueTrack) -> Option<&mut SheetTrack> {
+        self.tracks.iter_mut().find(|track| track.number == number)
+    }
+}
+
+/// The `REM` keys a sheet's tags are read from and written under.
+pub(crate) mod rem {
+    pub(crate) const COMPOSER: &str = "COMPOSER";
+    pub(crate) const DATE: &str = "DATE";
+    pub(crate) const DISCNUMBER: &str = "DISCNUMBER";
+    pub(crate) const GENRE: &str = "GENRE";
+    pub(crate) const TOTALDISCS: &str = "TOTALDISCS";
 }
 
 /// What a sheet states for itself, or for one track. A blank value is no value.

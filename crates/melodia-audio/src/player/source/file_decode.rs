@@ -133,8 +133,9 @@ pub struct FileDecoder {
     file_duration: Option<Duration>,
     /// For the seek, which has to add the head back on.
     trim: Option<Trim>,
-    /// The cue sheet track this decoder plays, its frames counted after the trim's head.
-    span: Option<Span>,
+    /// What this decoder plays, a cue sheet track or the whole file, its frames counted after the
+    /// trim's head.
+    span: Span,
     end: Option<End>,
 }
 
@@ -173,7 +174,7 @@ impl FileDecoder {
             time_base,
             file_duration: total_duration,
             trim: None,
-            span: None,
+            span: Span::WHOLE_FILE,
             end: None,
         };
         decoded.install_trim(&edits, &discards);
@@ -197,7 +198,7 @@ impl FileDecoder {
     /// open leaves the cursor there.
     fn enter_span(&mut self, span: CueSpan) -> Result<(), SeekError> {
         self.narrow_to(span);
-        if self.span.is_some_and(|span| span.start == 0) {
+        if self.span.start == 0 {
             return Ok(());
         }
         self.seek_to_frame(0)
@@ -206,15 +207,14 @@ impl FileDecoder {
     /// Narrows the decoder to `span`'s length and count from wherever it stands: a fresh open's
     /// first sample, or the first after a track it [played out](Self::played_span_out).
     pub(super) fn narrow_to(&mut self, span: CueSpan) {
-        self.span = Some(Span::at_rate(span, self.cursor.shape().rate));
+        self.span = Span::at_rate(span, self.sample_rate());
         self.end = self.end_after(0);
     }
 
     /// Whether the decoder stopped on its cue track's last sample, and so stands on the first of
     /// the track after it, rather than on the end of the file or a failed read.
     pub(super) fn played_span_out(&self) -> bool {
-        self.span.is_some_and(|span| span.len.is_some())
-            && matches!(self.end, Some(End::Counted(0)))
+        self.span.len.is_some() && matches!(self.end, Some(End::Counted(0)))
     }
 
     /// Lines this source's timeline up with the demuxer's. AAC's head comes off through
@@ -224,7 +224,7 @@ impl FileDecoder {
     /// lock. Here rather than in [`super::decode`]: a mount has no container header to read a trim
     /// from and no gapless seam for one to spoil.
     fn install_trim(&mut self, edits: &[aac_trim::Edit], discards: &[mkv_trim::Discard]) {
-        let tail = mkv_trim::resolve(discards, self.track, self.cursor.shape().rate).unwrap_or(0);
+        let tail = mkv_trim::resolve(discards, self.track, self.sample_rate()).unwrap_or(0);
 
         if let Some(aac) = self.aac_padding(edits) {
             let shape = self.cursor.shape();
@@ -256,7 +256,8 @@ impl FileDecoder {
 
     fn aac_padding(&mut self, edits: &[aac_trim::Edit]) -> Option<Trim> {
         let timing = decode::audio_track(&*self.format).and_then(aac_trim::aac_timing)?;
-        aac_trim::resolve(&timing, &self.format.metadata(), edits, self.cursor.shape().rate)
+        let rate = self.sample_rate();
+        aac_trim::resolve(&timing, &self.format.metadata(), edits, rate)
     }
 
     /// The priming [`super::opus`] already dropped, which the demuxer's timeline still counts.
@@ -290,11 +291,10 @@ impl FileDecoder {
     /// Lands on `frame` of what this source plays. Counted in frames to the demuxer's tick, so a
     /// span's first sample is reached exactly rather than through a `Duration`'s rounding of it.
     fn seek_to_frame(&mut self, frame: u64) -> Result<(), SeekError> {
-        let rate = self.cursor.shape().rate;
+        let rate = self.sample_rate();
         // The demuxer's timeline counts the priming, and everything ahead of a cue track.
         let head = self.trim.map_or(0, |trim| trim.head);
-        let start = self.span.map_or(0, |span| span.start);
-        let target = head.saturating_add(start).saturating_add(frame);
+        let target = head.saturating_add(self.span.start).saturating_add(frame);
 
         // Ask short of the target where the codec needs warming, and let the trim take it back.
         // Zero everywhere but Opus, and zero without the timebase the trim is measured through,
@@ -335,7 +335,7 @@ impl FileDecoder {
         if let Some(ts) = self.timestamp(frame) {
             return Ok(SeekTo::Timestamp { ts, track_id: self.track });
         }
-        let time = seek_time(frames_to_duration(frame, self.cursor.shape().rate))
+        let time = seek_time(frames_to_duration(frame, self.sample_rate()))
             .ok_or_else(|| other(AppError::player_msg("Seek position out of range")))?;
         Ok(SeekTo::Time { time, track_id: Some(self.track) })
     }
@@ -344,7 +344,7 @@ impl FileDecoder {
     /// what a tick can hold.
     fn timestamp(&self, frame: u64) -> Option<Timestamp> {
         let time_base = self.time_base?;
-        let ticks = decode::frames_to_ticks(frame, time_base, self.cursor.shape().rate)?;
+        let ticks = decode::frames_to_ticks(frame, time_base, self.sample_rate())?;
         Some(Timestamp::new(i64::try_from(ticks).ok()?))
     }
 
@@ -381,8 +381,7 @@ impl FileDecoder {
 
     /// How far the demuxer's timeline runs ahead of the one the source hands out.
     fn head_duration(&self) -> Duration {
-        self.trim
-            .map_or(Duration::ZERO, |trim| frames_to_duration(trim.head, self.cursor.shape().rate))
+        self.trim.map_or(Duration::ZERO, |trim| frames_to_duration(trim.head, self.sample_rate()))
     }
 
     /// The end once `played` frames of this source have played. A cue track ending inside the
@@ -390,14 +389,14 @@ impl FileDecoder {
     /// restated from there, or a window rebuilt empty, what it held describing the position left.
     fn end_after(&self, played: u64) -> Option<End> {
         let channels = self.cursor.shape().channels;
-        if let Some(len) = self.span.and_then(|span| span.len) {
+        if let Some(len) = self.span.len {
             return Some(End::Counted(interleaved(len.saturating_sub(played), channels)));
         }
         let trim = self.trim?;
         let Some(playable) = trim.playable else {
             return TailWindow::new(interleaved(trim.tail, channels)).map(End::Held);
         };
-        let played = self.span.map_or(played, |span| span.start.saturating_add(played));
+        let played = self.span.start.saturating_add(played);
         Some(End::Counted(interleaved(playable.saturating_sub(played), channels)))
     }
 }
@@ -458,10 +457,7 @@ impl AudioSource for FileDecoder {
 
     #[inline]
     fn total_duration(&self) -> Option<Duration> {
-        match self.span {
-            Some(span) => span.duration(self.file_duration, self.cursor.shape().rate),
-            None => self.file_duration,
-        }
+        self.span.duration(self.file_duration, self.sample_rate())
     }
 
     fn try_seek(&mut self, pos: Duration) -> Result<(), SeekError> {
@@ -470,7 +466,7 @@ impl AudioSource for FileDecoder {
         let pos = self
             .total_duration()
             .map_or(pos, |total| pos.min(total.saturating_sub(SEEK_END_MARGIN)));
-        self.seek_to_frame(frames_in(pos, self.cursor.shape().rate))
+        self.seek_to_frame(frames_in(pos, self.sample_rate()))
     }
 }
 

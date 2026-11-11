@@ -10,7 +10,7 @@ use melodia_core::entities::cue::CueSpan;
 
 use super::audio::{SampleRate, frames_to_duration};
 
-/// A [`CueSpan`] at one sample rate, counted from the first real sample of the file.
+/// A [`CueSpan`] at one sample rate, or the whole file, counted from the file's first real sample.
 #[derive(Clone, Copy)]
 pub(super) struct Span {
     pub start: u64,
@@ -19,6 +19,8 @@ pub(super) struct Span {
 }
 
 impl Span {
+    pub(super) const WHOLE_FILE: Self = Self { start: 0, len: None };
+
     pub(super) fn at_rate(span: CueSpan, rate: SampleRate) -> Self {
         let start = span.start().to_frames(rate);
         let len = span.end().map(|end| end.to_frames(rate).saturating_sub(start));

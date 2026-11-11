@@ -6,7 +6,9 @@ use std::sync::LazyLock;
 
 use rusqlite::Connection;
 
-use super::file_rows::{FILE_ORDER, IN_LIBRARY, OUTSIDE_IDS, WHOLE_FILE};
+use super::file_rows::{
+    CARVED_INSIDE, FILE_ORDER, IN_LIBRARY, OUTSIDE_IDS, SHEET_TRACK, WHOLE_FILE,
+};
 use super::membership::Membership;
 use super::{columns, json_array};
 use crate::database::rows::FromRow;
@@ -205,7 +207,7 @@ pub async fn get_sheet_tracks_by_ids(
                 format!(
                     "SELECT t.id, c.path, t.file_path, t.cue_track FROM tracks t \
                      LEFT JOIN cue_sheets c ON c.id = t.cue_sheet_id \
-                     WHERE t.id IN ({placeholders}) AND t.cue_track IS NOT NULL"
+                     WHERE t.id IN ({placeholders}) AND {SHEET_TRACK}"
                 )
             })
         })
@@ -239,8 +241,7 @@ pub async fn get_sheet_artists(
                 chunked_in_query(conn, &images, |placeholders| {
                     format!(
                         "SELECT file_path, cue_track, artist FROM tracks \
-                         WHERE file_path IN ({placeholders}) \
-                         AND cue_track IS NOT NULL AND cue_sheet_id IS NULL"
+                         WHERE file_path IN ({placeholders}) AND {CARVED_INSIDE}"
                     )
                 })?;
             Ok((by_cue, by_image))

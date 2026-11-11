@@ -471,3 +471,11 @@ pub(crate) fn delete_tracks_by_paths_batch(
         format!("DELETE FROM tracks WHERE file_path IN ({placeholders})")
     })
 }
+
+/// Deletes the tracks `ids` name, their playlist entries going with them by `ON DELETE CASCADE`.
+pub(crate) fn delete_tracks_by_ids(tx: &Transaction<'_>, ids: &[i64]) -> Result<(), AppError> {
+    chunked_in_execute(tx, ids, |placeholders| {
+        format!("DELETE FROM tracks WHERE id IN ({placeholders})")
+    })?;
+    Ok(())
+}

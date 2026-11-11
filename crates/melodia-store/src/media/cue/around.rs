@@ -5,10 +5,8 @@
 use std::collections::{BTreeSet, HashSet};
 use std::path::{Path, PathBuf};
 
-use super::parse;
-use super::plan::{CuePlan, PlanInput, settle};
+use super::plan::{CuePlan, PlanInput, read_cue, settle};
 use super::resolve::resolve;
-use super::text::read_sheet;
 use crate::database::queries::scan::SheetsAround;
 use crate::media::ingest::scan_pool::ScanPool;
 use crate::media::ingest::scanner::{MediaWalk, WalkIndex, list_media_files};
@@ -69,10 +67,7 @@ pub fn named_files(sheets: &[PathBuf]) -> Vec<Result<Vec<PathBuf>, AppError>> {
 }
 
 fn files_named_by(path: &Path, audio: &WalkIndex) -> Result<Vec<PathBuf>, AppError> {
-    let sheet = parse::parse(&read_sheet(path)?, path, parse::Files::Named);
-    if !sheet.places_a_track() {
-        return Err(AppError::metadata_msg(format!("{} places no track", path.display())));
-    }
+    let sheet = read_cue(path)?;
     let sheet_dir = path.parent().unwrap_or(Path::new(""));
     let mut files: Vec<PathBuf> = Vec::new();
     for name in &sheet.files {

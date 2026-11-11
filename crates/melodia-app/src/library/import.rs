@@ -84,10 +84,7 @@ pub(crate) async fn import_files(
         let opened: HashSet<PathBuf> = files.iter().map(PathBuf::from).collect();
         let owns = move |image: &Path| opened.contains(image);
         let reading = Reading { new_audio, sheets: unrecorded, around, owns };
-        let (chunk, pool) = read_in(reading, artwork_dir, cover_cache).await?;
-        let scan_timestamp = melodia_core::utils::now_rfc3339();
-        let result = queries::ingest::commit_import(db, chunk, scan_timestamp, pool).await?;
-        imported_count = result.inserted_count;
+        imported_count = ingest(db, reading, artwork_dir, cover_cache).await?;
         rows = queries::track::get_track_ids_by_paths(db, &files).await?;
     }
 
@@ -157,19 +154,20 @@ pub(super) struct Reading<Owns> {
     pub(super) owns: Owns,
 }
 
-/// Settles the sheets around what is new and reads it, each image a sheet claims or gives back
-/// included.
-pub(super) async fn read_in<Owns>(
+/// Settles the sheets around what is new, reads it, each image a sheet claims or gives back
+/// included, and commits it, answering how many rows it inserted.
+pub(super) async fn ingest<Owns>(
+    db: &DbPool,
     reading: Reading<Owns>,
     artwork_dir: &Path,
     cover_cache: &CoverCache,
-) -> Result<(ScanChunk, ScanPool), AppError>
+) -> Result<u32, AppError>
 where
     Owns: Fn(&Path) -> bool + Send + Sync + 'static,
 {
     let artwork_dir = artwork_dir.to_path_buf();
     let cover_cache = cover_cache.clone();
-    tokio::task::spawn_blocking(move || {
+    let (chunk, pool) = tokio::task::spawn_blocking(move || {
         let Reading { mut new_audio, sheets, around, owns } = reading;
         let written = new_audio.iter().chain(&sheets).cloned().collect();
         let plan = cue::settle_dirs(&around, written, owns);
@@ -183,7 +181,10 @@ where
         (ScanChunk { files, cue }, pool)
     })
     .await
-    .map_err(|e| AppError::scanner("Scan task failed", e))
+    .map_err(|e| AppError::scanner("Scan task failed", e))?;
+    let scan_timestamp = melodia_core::utils::now_rfc3339();
+    let result = queries::ingest::commit_import(db, chunk, scan_timestamp, pool).await?;
+    Ok(result.inserted_count)
 }
 
 /// Each opened item's tracks, a track met before left out where it repeats.
@@ -199,7 +200,7 @@ fn tracks_opened(items: &[(String, Vec<String>)], rows: &FileTracks) -> Vec<Vec<
 }
 
 /// The directories holding `files` and `sheets`, each once.
-fn parent_dirs(files: &[PathBuf], sheets: &[PathBuf]) -> Vec<String> {
+pub(super) fn parent_dirs(files: &[PathBuf], sheets: &[PathBuf]) -> Vec<String> {
     let dirs: BTreeSet<&Path> = files.iter().chain(sheets).filter_map(|p| p.parent()).collect();
     dirs.into_iter().map(|dir| dir.to_string_lossy().into_owned()).collect()
 }

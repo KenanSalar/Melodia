@@ -26,9 +26,10 @@ pub(crate) use lookups::{find_folder_for_path, track_exists_by_path};
 pub(crate) use moves::MoveCandidates;
 pub use mutations::{CuePlacement, INSERT_CHUNK_ROWS, NewTrackRow};
 pub(crate) use mutations::{
-    delete_track_by_path, delete_tracks_by_paths_batch, file_name_of, insert_track,
-    insert_tracks_batch, prune_orphans, roll_up_covers, update_album_artwork_from_tracks,
-    update_cue_track, update_track_location, update_track_metadata,
+    delete_track_by_path, delete_tracks_by_ids, delete_tracks_by_paths_batch, file_name_of,
+    insert_track, insert_tracks_batch, prune_orphans, roll_up_covers,
+    update_album_artwork_from_tracks, update_cue_track, update_track_location,
+    update_track_metadata,
 };
 pub(crate) use name_cache::NameCache;
 pub use retag::{Retag, RetaggedFile, commit_retag};

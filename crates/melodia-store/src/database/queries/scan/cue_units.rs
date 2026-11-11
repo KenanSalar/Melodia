@@ -8,20 +8,23 @@
 //! place; when it lets the image go, they take the image back where its first track sat. A play
 //! count, rating or favourite on the side going away stays with it: it belongs to no single track.
 
-use std::collections::{HashMap, HashSet};
+use std::collections::{BTreeSet, HashMap, HashSet};
 use std::path::Path;
 use std::sync::LazyLock;
 
 use rusqlite::Transaction;
 
 use super::{
-    CuePlacement, MoveCandidates, NameCache, NewTrackRow, TrackFolder, file_name_of,
-    insert_tracks_batch, resolve_track_context, track_exists_by_path, update_cue_track,
-    update_track_location,
+    CuePlacement, MoveCandidates, NameCache, NewTrackRow, TrackFolder, delete_tracks_by_ids,
+    file_name_of, insert_tracks_batch, resolve_track_context, track_exists_by_path,
+    update_cue_track, update_track_location,
 };
 use crate::database::queries::excluded_files;
-use crate::database::queries::playlist_carry::{merge_into_playlists, replace_in_playlists};
-use crate::database::queries::track::file_rows::WHOLE_FILE;
+use crate::database::queries::playlist::renumber_playlist_positions_tx;
+use crate::database::queries::playlist_carry::{move_playlist_places, replace_in_playlists};
+use crate::database::queries::track::file_rows::{
+    CARVED_BY_CUE, CARVED_INSIDE, SHEET_TRACK, WHOLE_FILE,
+};
 use crate::database::{chunked_in_execute, chunked_in_query, sql};
 use crate::media::cue::{CueRow, SheetJob, SheetRead, rows};
 use melodia_core::entities::cue::CueTrack;
@@ -154,13 +157,8 @@ impl<'a, 'conn> SheetWriter<'a, 'conn> {
         }
         self.carry_moved_rows(image, filing.folder.id())?;
 
-        let mut earlier: HashMap<CueTrack, i64> = sql::fetch_all(
-            tx,
-            "SELECT cue_track, id FROM tracks WHERE file_path = ? AND cue_track IS NOT NULL",
-            (path.as_ref(),),
-        )?
-        .into_iter()
-        .collect();
+        let mut earlier: HashMap<CueTrack, i64> =
+            sql::fetch_all(tx, SHEET_TRACKS_AT.as_str(), (path.as_ref(),))?.into_iter().collect();
         let mut placed: Vec<(CueTrack, i64)> = Vec::with_capacity(carved.len());
         let mut new_rows = Vec::new();
         let mut new_tracks = Vec::new();
@@ -187,9 +185,7 @@ impl<'a, 'conn> SheetWriter<'a, 'conn> {
         placed.extend(new_tracks.into_iter().zip(new_ids));
 
         let dropped: Vec<i64> = earlier.into_values().collect();
-        chunked_in_execute(tx, &dropped, |id_list| {
-            format!("DELETE FROM tracks WHERE id IN ({id_list})")
-        })?;
+        delete_tracks_by_ids(tx, &dropped)?;
 
         if let Some(whole_file) = whole_file_row(tx, &path)? {
             placed.sort_unstable_by_key(|&(track, _)| track);
@@ -261,17 +257,17 @@ enum Carver {
     Inside,
 }
 
+static CUE_CARVED_AT: LazyLock<String> =
+    LazyLock::new(|| format!("SELECT id FROM tracks WHERE file_path = ? AND {CARVED_BY_CUE}"));
+
+static INSIDE_CARVED_AT: LazyLock<String> =
+    LazyLock::new(|| format!("SELECT id FROM tracks WHERE file_path = ? AND {CARVED_INSIDE}"));
+
 impl Carver {
     fn rows(self) -> &'static str {
         match self {
-            Self::Cue => {
-                "SELECT id FROM tracks \
-                 WHERE file_path = ? AND cue_track IS NOT NULL AND cue_sheet_id IS NOT NULL"
-            }
-            Self::Inside => {
-                "SELECT id FROM tracks \
-                 WHERE file_path = ? AND cue_track IS NOT NULL AND cue_sheet_id IS NULL"
-            }
+            Self::Cue => CUE_CARVED_AT.as_str(),
+            Self::Inside => INSIDE_CARVED_AT.as_str(),
         }
     }
 
@@ -292,12 +288,17 @@ fn release_rows(tx: &Transaction<'_>, image: &str, carver: Carver) -> Result<boo
         return Ok(false);
     }
     // None where the image is kept out or failed to read, and its tracks go all the same.
-    if let Some(whole_file) = whole_file_row(tx, image)? {
-        merge_into_playlists(tx, &track_ids, whole_file)?;
+    let touched = match whole_file_row(tx, image)? {
+        Some(whole_file) => {
+            let keeper_of = track_ids.iter().map(|&id| (id, whole_file)).collect();
+            move_playlist_places(tx, &keeper_of)?
+        }
+        None => BTreeSet::new(),
+    };
+    delete_tracks_by_ids(tx, &track_ids)?;
+    for playlist_id in touched {
+        renumber_playlist_positions_tx(tx, playlist_id)?;
     }
-    chunked_in_execute(tx, &track_ids, |id_list| {
-        format!("DELETE FROM tracks WHERE id IN ({id_list})")
-    })?;
     log::info!("Gave {image} its own row back from {}", carver.sheet());
     Ok(true)
 }
@@ -319,12 +320,16 @@ pub(crate) fn embedded_images_among(
 ) -> Result<HashSet<String>, AppError> {
     let images: Vec<String> = chunked_in_query(tx, paths, |path_list| {
         format!(
-            "SELECT DISTINCT file_path FROM tracks WHERE file_path IN ({path_list}) \
-             AND cue_track IS NOT NULL AND cue_sheet_id IS NULL"
+            "SELECT DISTINCT file_path FROM tracks \
+             WHERE file_path IN ({path_list}) AND {CARVED_INSIDE}"
         )
     })?;
     Ok(images.into_iter().collect())
 }
+
+static SHEET_TRACKS_AT: LazyLock<String> = LazyLock::new(|| {
+    format!("SELECT cue_track, id FROM tracks WHERE file_path = ? AND {SHEET_TRACK}")
+});
 
 static WHOLE_FILE_ROW: LazyLock<String> =
     LazyLock::new(|| format!("SELECT id FROM tracks WHERE file_path = ? AND {WHOLE_FILE}"));
