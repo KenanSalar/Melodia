@@ -120,7 +120,7 @@ symphonia = { version = "0.6.1", default-features = false, features = [
 # registration into `decode::CODECS` over this. Pure Rust with no dependencies and no
 # `build.rs`: the libopus adapter would put CMake and a vendored C build in ten release slots
 # for a decoder that measured no better here.
-opus-pure = "0.2.2"
+opus-pure = "0.2.3"
 # The graphic EQ cascades this crate's `Type::PeakingEQ` filters. `DirectForm1` keeps
 # its delay line across a coefficient swap, so a slider drag injects no transient.
 biquad = "0.6.0"
@@ -136,7 +136,7 @@ realfft = "3.5.1"
 # `ItemKey` lookup on the `TaggedFile` a scan reads can reach it.
 lofty = "0.25.5"
 walkdir = "2.5"
-notify = "8.2.1"
+notify = "8.2.2"
 notify-debouncer-full = "0.7.0"
 rayon = "1.12"
 blake3 = "1.8.7"
@@ -238,7 +238,7 @@ open = "5.4.5"
 # The single-instance socket: one abstraction over a Linux abstract unix socket and
 # a Windows named pipe, whose *server* half would otherwise be `CreateNamedPipeW`, an
 # FFI site no Linux runner compiles. `tokio` would pull `tokio/net`, left off above.
-interprocess = "2.4.7"
+interprocess = "2.4.8"
 
 # Utilities
 rand = "0.10.3"
