@@ -75,7 +75,7 @@ parking_lot = "0.12.5"
 futures-util = { version = "0.3.34", default-features = false, features = ["std"] }
 
 # Database
-rusqlite = { version = "0.41.1", features = ["bundled", "collation"] }
+rusqlite = { version = "0.42.0", features = ["bundled", "collation"] }
 
 # Audio
 # The device stream `player::playback::output` opens, and the `ErrorKind`s
