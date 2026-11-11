@@ -3,7 +3,7 @@
 //! still reads it and refuses a newer database.
 
 use rusqlite::{Connection, Transaction};
-use std::collections::HashSet;
+use std::collections::HashMap;
 use std::time::Instant;
 
 use melodia_core::error::{AppError, MigrationError};
@@ -62,7 +62,7 @@ const RECORD: &str = "\
 
 const RECORD_TIME: &str = "UPDATE _sqlx_migrations SET execution_time = ?1 WHERE version = ?2";
 
-/// One row per reference to a missing row, read as a [`Dangling`].
+/// One row per reference to a missing row: `table`, `rowid`, `parent`, `fkid`.
 const FOREIGN_KEY_CHECK: &str = "PRAGMA foreign_key_check";
 
 struct Applied {
@@ -188,39 +188,33 @@ fn run_and_record(conn: &mut Connection, migration: &Migration) -> Result<(), Mi
 fn check_references(
     tx: &Transaction<'_>,
     version: i64,
-    before: &HashSet<Dangling>,
+    before: &DanglingCounts,
 ) -> Result<(), MigrationError> {
     let after = dangling(tx).map_err(|source| MigrationError::Apply { version, source })?;
-    match after.into_iter().find(|reference| !before.contains(reference)) {
-        Some(Dangling { table, parent, .. }) => {
+    let grew =
+        after.into_iter().find(|(pair, count)| before.get(pair).is_none_or(|was| count > was));
+    match grew {
+        Some(((table, parent), _)) => {
             Err(MigrationError::DanglingReference { version, table, parent })
         }
         None => Ok(()),
     }
 }
 
-#[derive(PartialEq, Eq, Hash)]
-struct Dangling {
-    table: String,
-    /// `None` in a `WITHOUT ROWID` table.
-    rowid: Option<i64>,
-    parent: String,
-    fkid: i64,
-}
+/// Dangling references per `(table, parent)`, counted rather than named: a rebuild may renumber
+/// the rowids and FK indexes that would name each one.
+type DanglingCounts = HashMap<(String, String), usize>;
 
 /// Read through a fetch: `execute_batch` steps each statement once and drops its rows, so a check
 /// inside a script would pass whatever it found.
-fn dangling(tx: &Transaction<'_>) -> rusqlite::Result<HashSet<Dangling>> {
+fn dangling(tx: &Transaction<'_>) -> rusqlite::Result<DanglingCounts> {
     let mut check = tx.prepare(FOREIGN_KEY_CHECK)?;
-    let references = check.query_map((), |row| {
-        Ok(Dangling {
-            table: row.get(0)?,
-            rowid: row.get(1)?,
-            parent: row.get(2)?,
-            fkid: row.get(3)?,
-        })
-    })?;
-    references.collect()
+    let pairs = check.query_map((), |row| Ok((row.get(0)?, row.get(2)?)))?;
+    let mut counts = DanglingCounts::new();
+    for pair in pairs {
+        *counts.entry(pair?).or_insert(0) += 1;
+    }
+    Ok(counts)
 }
 
 #[cfg(test)]

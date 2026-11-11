@@ -11,6 +11,7 @@ use rusqlite::Connection;
 
 use crate::database::queries::{excluded_files, folder, track};
 use melodia_core::error::AppError;
+use melodia_core::utils::holds_entries;
 
 type ByHash = HashMap<String, Vec<(i64, String)>>;
 
@@ -154,10 +155,4 @@ impl MoveCandidates {
 
 fn named<'a>(candidates: &'a [(i64, String)], name: Option<&OsStr>) -> Option<&'a (i64, String)> {
     candidates.iter().find(|(_, old)| Path::new(old).file_name() == name)
-}
-
-/// Whether a library folder has anything to read: an unmounted drive's mount point is there but
-/// empty.
-fn holds_entries(root: &Path) -> bool {
-    std::fs::read_dir(root).is_ok_and(|mut entries| entries.next().is_some())
 }

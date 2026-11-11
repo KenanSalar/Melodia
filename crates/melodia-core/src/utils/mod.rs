@@ -38,3 +38,9 @@ pub fn canonicalize_path<P: AsRef<Path>>(path: P) -> io::Result<PathBuf> {
 pub fn canonicalize_path<P: AsRef<Path>>(path: P) -> io::Result<PathBuf> {
     std::fs::canonicalize(path)
 }
+
+/// Whether the directory at `dir` has anything to read, which tells an offline library folder from
+/// one online: an unmounted drive's mount point is there but empty.
+pub fn holds_entries(dir: &Path) -> bool {
+    std::fs::read_dir(dir).is_ok_and(|mut entries| entries.next().is_some())
+}

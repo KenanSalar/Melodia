@@ -6,7 +6,7 @@ use std::path::Path;
 use crate::state::AppState;
 use melodia_core::entities::folder::Folder;
 use melodia_core::error::AppError;
-use melodia_core::utils::canonicalize_path;
+use melodia_core::utils::{canonicalize_path, holds_entries};
 use melodia_engine::player::engine::state::lock_state;
 use melodia_store::database::queries;
 
@@ -36,9 +36,11 @@ fn outside_folders(folders: &[Folder]) -> Vec<i64> {
         .collect()
 }
 
-/// Whether a library folder holds `dir`. The stored spelling answers first, so a nested folder
-/// whose drive is offline isn't swept as outside, and only one spelled elsewhere costs a stat.
+/// Whether a library folder holds `dir`, by the absorb's canonical rule while `dir` is there. Once
+/// gone, only an offline library folder its stored spelling places can still be holding it.
 fn awaits_absorb(dir: &Path, library: &[&Path]) -> bool {
-    let inside = |dir: &Path| library.iter().any(|root| dir.starts_with(root));
-    inside(dir) || canonicalize_path(dir).is_ok_and(|canonical| inside(&canonical))
+    match canonicalize_path(dir) {
+        Ok(canonical) => library.iter().any(|root| canonical.starts_with(root)),
+        Err(_) => library.iter().any(|root| dir.starts_with(root) && !holds_entries(root)),
+    }
 }

@@ -3,7 +3,8 @@
 Working doc. Delete when the feature ships.
 
 Status: **in progress**, Phase 8 and the branch review's fixes done, Phase 9's tests next on
-Kenan's go; Phase 3 owes Kenan's scrobble and Discord check · Created: 2026-11-04
+Kenan's go; Kenan's checks are owed by Phase 3 (scrobble and Discord) and by the boot sweep's
+second review fix · Created: 2026-11-04
 
 Issue [#78](https://github.com/KenanSalar/Melodia/issues/78).
 
@@ -1194,9 +1195,10 @@ A review of the whole branch against `main` (2026-11-11) found these, each fixed
 - [x] The upgrade sweep records its marker only once every whole-file FLAC was reached: one out of
       reach, its drive unmounted, is probed again next launch, while one that is there but won't
       read is taken as carrying nothing (`embedded_cue_probe::probe_file`).
-- [x] The boot sweep places a nested outside folder by its stored path before its canonical one,
-      so a library folder's offline drive doesn't sweep the import it is waiting to absorb, and
-      stats only the folders the stored path doesn't place (`library::outside::awaits_absorb`).
+- [x] The boot sweep spares a nested outside folder whose directory is gone only while the library
+      folder its stored path sits under is offline, so a drive unmounted at launch doesn't sweep the
+      import it is waiting to absorb, and one deleted from a drive that is there is still swept
+      (`library::outside::awaits_absorb`, `utils::holds_entries`).
 - [x] A `FILE` line repeating the one before it names the same file, so a sheet that restates its
       image ahead of every track splits it (`parse::Reader::read`).
 - [x] A `CUESHEET` comment's BOM is stripped where it is read, so its first line counts
@@ -1209,7 +1211,8 @@ A review of the whole branch against `main` (2026-11-11) found these, each fixed
       what follows statement by statement (`sql::in_savepoint`, `apply_changes`, `in_unit`), and an
       embedded file given back writes its whole-file row and the release as one unit.
 - [x] The migration's reference check refuses only a dangling reference it made, not one the
-      database already held (`migrate::check_references`).
+      database already held, counting them per table and the table they name, since a rebuild may
+      renumber the rowids and FK indexes that would name each (`migrate::check_references`).
 - [x] A park ticket is taken ahead of the open, so a stop landing during a preload's open voids it
       and leaves no decoder holding the image (`open_for_gapless`, `start_decoding`).
 - [x] The static gates.
@@ -1229,6 +1232,9 @@ A review of the whole branch against `main` (2026-11-11) found these, each fixed
   - [x] ten 2 s tracks of one image carried the decoder on at all nine joints, and sixteen stops
         across a track, most with its successor staged, each left no handle on the image
         (`/proc/<pid>/fd`).
+- [ ] Kenan's hand check of the boot sweep after its second fix: a nested import whose directory
+      was deleted under an online library folder is swept at the next launch, and one under a
+      library folder whose drive is unmounted survives it.
 
 ## Phase 9: Tests
 
