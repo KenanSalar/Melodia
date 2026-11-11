@@ -2,8 +2,8 @@
 
 Working doc. Delete when the feature ships.
 
-Status: **in progress**, Phase 8 through its static gates and hand pass, its measurement next;
-Phase 3 owes Kenan's scrobble and Discord check · Created: 2026-11-04
+Status: **in progress**, Phase 8 done, Phase 9's tests next on Kenan's go; Phase 3 owes Kenan's
+scrobble and Discord check · Created: 2026-11-04
 
 Issue [#78](https://github.com/KenanSalar/Melodia/issues/78).
 
@@ -1149,9 +1149,16 @@ a whole disc. *Files opened from outside the library* gives the model.
         whole row back, and the sheet back split it again;
   - [x] an edit on a copy rewrote the comment's two lines alone and dropped the stale override,
         the cover, other tags and decoded audio unchanged. An edit on the block was refused.
-- [ ] Scan cost, on Kenan's go: fresh release builds of `21a24283` and this phase. On the
-      50,500-track library, measure a full rescan's wall time and peak RSS for both, then the
-      probe sweep once.
+- [x] Scan cost on the 50,500-track library, 8,185 of its files FLACs and none carrying a sheet,
+      against `21a24283`. Run by Claude on Kenan's go (2026-11-11): fresh release builds, each run
+      on a copy of one root the older build migrated and compacted, ABAB, `21a24283` / `781c4a3f`:
+  - [x] a full re-read, every stamp blanked and every file's page cache dropped: 15.04, 15.14 /
+        15.12, 15.07 s; peak Anonymous 174.2, 170.7 / 181.2, 164.4 MiB; VmHWM 455.5, 464.8 /
+        458.5, 459.7 MiB; 47 threads in each;
+  - [x] the sweep, cold, on that root: its marker set 0.24 s after launch, 11 ms ahead of the boot
+        scan's walk, every FLAC's head read and no other file's; peak Anonymous 41.4 MiB;
+  - [x] idle Anonymous over 30 s after a 90 s settle, the sweep already marked: 36.77, 36.89 /
+        36.53, 36.74 MiB, RSS and threads level.
 - [x] Kenan's hand pass. Run by Claude on Kenan's go (2026-11-11): the debug builds of `21a24283`
       and this phase against `Melodia-dev` with watching on, on a null sink, restored after, the UI
       driven through ydotool and KWin scripts. The fixtures are built by `make_fixtures.py`, which
