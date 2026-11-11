@@ -2,8 +2,8 @@
 
 Working doc. Delete when the feature ships.
 
-Status: **in progress**, Phase 7 through its gates bar the review fixes' hand check, Phase 8 next;
-Phase 3 owes Kenan's scrobble and Discord check ·
+Status: **in progress**, Phase 7 through its gates, Phase 8 next; Phase 3 owes Kenan's scrobble
+and Discord check ·
 Created: 2026-11-04
 
 Issue [#78](https://github.com/KenanSalar/Melodia/issues/78).
@@ -332,11 +332,12 @@ one `PERFORMER` and one `SONGWRITER` per scope: a credit is written as it prints
 composers joined by `;`, which the scan splits as it splits a genre. Track number and total stay
 read-only, the number being the row's identity.
 
-The sheet's `PERFORMER` is also the artist of every track stating none, so an album artist edit
-first gives each such track that artist on a line of its own, leaving a track whose artist the edit
-changes. A sheet stating no `PERFORMER` has nothing to pin: its tracks read the image's artist, which
-the writer doesn't see, and take the new album artist as theirs. So does the hidden track, which has
-no lines of its own.
+The sheet's `PERFORMER` is also the artist of every track stating none, and where the sheet states
+none such a track reads the image's artist. So an album artist edit first gives each such track the
+artist its row shows on a line of its own, leaving a track whose artist the edit changes. A sheet so
+written states every track's performer, the layout rippers write, which leaves a reader no fallback
+to differ on. The hidden track, which has no lines of its own, takes the new album artist as its
+artist.
 
 How the rewrite works:
 
@@ -1006,6 +1007,9 @@ a whole disc. *Files opened from outside the library* gives the model.
       is a failure per sheet, so neither discards a file write already committed; the read-back's
       `owns` admits only the written sheets' images; an album artist edit pins each inheriting
       track's artist (`write.rs`, `pin_inherited_artists`).
+- [x] The pin takes the artist each row shows (`get_sheet_artists`, read with the sheet tracks
+      ahead of the file pass in `sheet_tags::SheetPass`), so a sheet stating no `PERFORMER` keeps
+      its tracks' image artists through an album artist edit too.
 - [x] Composers split on `;` (`metadata::split_list`), in `merge.rs`'s `with_composer`.
 - [x] The tag editor opens the fields the sheet can hold (`TagEditor.from-sheet`, `SheetField`, the
       composer). The rest stay read-only, and a hidden track keeps the whole dialog so
@@ -1044,11 +1048,24 @@ a whole disc. *Files opened from outside the library* gives the model.
   - [x] a star on a sheet track lands in the database alone, sheet and image byte-identical;
   - [x] an outside sheet track's title edit keeps its rows unlinked under their own folder, the
         library count unchanged.
-- [ ] Kenan's hand check of the review fixes:
-  - [ ] an outside folder holding two albums, each with its `.cue`: open one sheet and edit a
-        title, and the other album gains no rows;
-  - [ ] on a sheet with only a top-level `PERFORMER`, change one track's album artist: every track
-        keeps its artist, each now on a `PERFORMER` line of its own.
+- [x] Kenan's hand check of the review fixes. Run by Claude on Kenan's go (2026-11-11): the debug
+      build of `777bc710` against `Melodia-dev` as the pass above, restored after, the fixtures and
+      their originals kept in `~/Development/melodia-cue-test-files/phase7-review-fixes`:
+  - [x] an outside folder holding two albums, each with its `.cue`: open one sheet and edit a
+        title, and the other album gains no rows. Its sheet was left byte-identical, and no stamp
+        row was recorded for it;
+  - [x] on a sheet with only a top-level `PERFORMER`, change one track's album artist: every track
+        keeps its artist, each now on a `PERFORMER` line of its own. The album artist changed on
+        every row, and the hidden track took it as its artist, as *Edits go to the sheet* says.
+- [x] Kenan's hand check of the pin from the rows. Run by Claude on Kenan's go (2026-11-11): the
+      debug build of the working tree over `777bc710` against `Melodia-dev` as the passes above,
+      restored after, the fixtures and their originals kept in
+      `~/Development/melodia-cue-test-files/phase7-row-pin`:
+  - [x] on a sheet stating no `PERFORMER`, its image tagged with an artist, change one track's
+        album artist: every track keeps the image's artist, each now on a `PERFORMER` line of its
+        own, under a new top-level one ahead of `FILE`;
+  - [x] the top-level-only sheet of the check above, edited the same way, writes the same lines,
+        each track's artist now taken from its row.
 
 ## Phase 8: Embedded sheets
 

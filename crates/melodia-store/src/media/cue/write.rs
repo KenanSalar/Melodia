@@ -96,17 +96,27 @@ fn joined<'a>(names: impl Iterator<Item = &'a str>) -> Option<String> {
     (!names.is_empty()).then(|| names.join(&format!("{LIST_SEPARATOR} ")))
 }
 
-/// The sheet at `path` with `edit` written for its tracks numbered `tracks`, or `None` where it
-/// already states all of it. Blocking.
+/// One sheet's tracks as an edit meets them.
+#[derive(Default)]
+pub struct SheetRows {
+    /// The tracks the edit names.
+    pub edited: Vec<CueTrack>,
+    /// The artist each track shows, which one stating no `PERFORMER` keeps through an edit moving
+    /// the line it reads.
+    pub artists: Vec<(CueTrack, String)>,
+}
+
+/// The sheet at `path` with `edit` written for its tracks, or `None` where it already states all of
+/// it. Blocking.
 pub fn rewritten_sheet(
     path: &Path,
     edit: &SheetEdit,
-    tracks: &[CueTrack],
+    rows: &SheetRows,
 ) -> Result<Option<Vec<u8>>, AppError> {
     let sheet = EncodedSheet::read(path)?;
     let lines = sheet.lines();
     let mut rewrite = Rewrite::new(&lines);
-    rewrite.apply(edit, tracks);
+    rewrite.apply(edit, rows);
     if !rewrite.changes() {
         return Ok(None);
     }
@@ -217,9 +227,10 @@ impl<'a> Rewrite<'a> {
         }
     }
 
-    fn apply(&mut self, edit: &SheetEdit, tracks: &[CueTrack]) {
+    fn apply(&mut self, edit: &SheetEdit, rows: &SheetRows) {
+        let tracks = rows.edited.as_slice();
         self.write(Scope::Sheet, Keyword::Title, &edit.album);
-        self.pin_inherited_artists(edit, tracks);
+        self.pin_inherited_artists(edit, rows);
         self.write(Scope::Sheet, Keyword::Performer, &edit.album_artist);
         self.write(Scope::Sheet, Keyword::DiscNumber, &edit.disc_number);
         self.write(Scope::Sheet, Keyword::TotalDiscs, &edit.disc_total);
@@ -239,23 +250,22 @@ impl<'a> Rewrite<'a> {
         self.write_shared_fields(edit, tracks, &scopes);
     }
 
-    /// Gives each placed track reading the sheet's `PERFORMER` as its artist a line of its own,
-    /// where the edit replaces that one as the album artist. A track whose artist the edit changes
-    /// is left to it.
-    fn pin_inherited_artists(&mut self, edit: &SheetEdit, tracks: &[CueTrack]) {
-        // With none, the tracks read the image's artist, which the writer doesn't see.
-        let Some(inherited) = self.stated.fields.performer.clone() else {
-            return;
+    /// Gives each placed track stating no `PERFORMER` the artist it shows on a line of its own,
+    /// where the edit moves the sheet's `PERFORMER`: such a track reads that line as its artist, or
+    /// the image's artist where the sheet states none. A track whose artist the edit changes is
+    /// left to it.
+    fn pin_inherited_artists(&mut self, edit: &SheetEdit, rows: &SheetRows) {
+        let album_artist = match &edit.album_artist {
+            FieldEdit::Keep => return,
+            FieldEdit::Clear => None,
+            FieldEdit::Set(album_artist) => Some(one_line(album_artist)),
         };
-        let replaced = match &edit.album_artist {
-            FieldEdit::Keep => false,
-            FieldEdit::Clear => true,
-            FieldEdit::Set(album_artist) => one_line(album_artist) != inherited,
-        };
-        if !replaced {
+        let album_artist = album_artist.filter(|album_artist| !album_artist.is_empty());
+        if album_artist == self.stated.fields.performer {
             return;
         }
-        let edited = |number: &CueTrack| edit.artist != FieldEdit::Keep && tracks.contains(number);
+        let edited =
+            |number: &CueTrack| edit.artist != FieldEdit::Keep && rows.edited.contains(number);
         let inheriting: Vec<CueTrack> = self
             .stated
             .tracks
@@ -265,7 +275,9 @@ impl<'a> Rewrite<'a> {
             .filter(|number| !edited(number))
             .collect();
         for number in inheriting {
-            self.set(Scope::Track(number), Keyword::Performer, &inherited);
+            if let Some((_, artist)) = rows.artists.iter().find(|(track, _)| *track == number) {
+                self.set(Scope::Track(number), Keyword::Performer, &one_line(artist));
+            }
         }
     }
 

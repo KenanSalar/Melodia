@@ -211,6 +211,30 @@ pub async fn get_sheet_tracks_by_ids(
     Ok(rows.into_iter().map(|(id, sheet, track)| SheetTrack { id, sheet, track }).collect())
 }
 
+/// The artist each track of `sheets` shows, by sheet. A track showing none is left out.
+pub async fn get_sheet_artists(
+    db: &DbPool,
+    sheets: Vec<String>,
+) -> Result<HashMap<String, Vec<(CueTrack, String)>>, AppError> {
+    let rows: Vec<(String, CueTrack, Option<String>)> = db
+        .read(move |conn| {
+            chunked_in_query(conn, &sheets, |placeholders| {
+                format!(
+                    "SELECT c.path, t.cue_track, t.artist FROM cue_sheets c \
+                     JOIN tracks t ON t.cue_sheet_id = c.id WHERE c.path IN ({placeholders})"
+                )
+            })
+        })
+        .await?;
+    let mut by_sheet: HashMap<String, Vec<(CueTrack, String)>> = HashMap::new();
+    for (sheet, track, artist) in rows {
+        if let Some(artist) = artist.filter(|artist| !artist.is_empty()) {
+            by_sheet.entry(sheet).or_default().push((track, artist));
+        }
+    }
+    Ok(by_sheet)
+}
+
 /// The ids `statement` answers out of `ids`, which it reads from one `json_each` bind.
 fn ids_answering(
     conn: &Connection,

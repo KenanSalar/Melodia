@@ -20,4 +20,4 @@ pub(crate) use merge::{CueRow, rows};
 pub(crate) use plan::{Claim, SheetJob, SheetRead};
 pub use plan::{CueChunk, CuePlan, PlanInput, settle};
 pub use track_tags::read_track_tags;
-pub use write::{SheetEdit, replace_sheet, rewritten_sheet};
+pub use write::{SheetEdit, SheetRows, replace_sheet, rewritten_sheet};

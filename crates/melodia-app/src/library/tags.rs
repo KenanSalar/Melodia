@@ -253,25 +253,12 @@ pub(crate) async fn write_tag_edit(
         return Ok((TagEditReport::default(), Vec::new()));
     }
 
-    let sheet_edit = SheetEdit::from(edit);
     // Ahead of the file pass, so a failed lookup can't discard file writes already committed.
-    let sheet_tracks = if sheet_edit.is_empty() {
-        Vec::new()
-    } else {
-        queries::track::get_sheet_tracks_by_ids(db, ids).await?
-    };
+    let sheet_pass = sheet_tags::SheetPass::read(db, ids, SheetEdit::from(edit)).await?;
 
     let (mut report, mut updated_ids) =
         write_files(db, artwork_dir, cover_cache, self_writes, ids, edit, artwork_source).await?;
-    let sheets = sheet_tags::write_sheets(
-        db,
-        artwork_dir,
-        cover_cache,
-        self_writes,
-        sheet_tracks,
-        sheet_edit,
-    )
-    .await?;
+    let sheets = sheet_pass.write(db, artwork_dir, cover_cache, self_writes).await?;
     updated_ids.extend(sheets.updated);
     report.failures.extend(sheets.failures);
     report.updated = updated_ids.len();
