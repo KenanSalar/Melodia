@@ -154,3 +154,7 @@ impl EmbeddedWrite {
         })
     }
 }
+
+#[cfg(test)]
+#[path = "tests/embedded_tests.rs"]
+mod tests;

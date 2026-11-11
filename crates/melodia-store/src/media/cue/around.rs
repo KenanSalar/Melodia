@@ -82,3 +82,7 @@ fn files_named_by(path: &Path, audio: &WalkIndex) -> Result<Vec<PathBuf>, AppErr
     }
     Ok(files)
 }
+
+#[cfg(test)]
+#[path = "tests/around_tests.rs"]
+mod tests;

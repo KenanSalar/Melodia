@@ -250,3 +250,7 @@ fn forget_the_recording(meta: &mut ExtractedMetadata) {
     meta.rating = None;
     meta.sort.title = None;
 }
+
+#[cfg(test)]
+#[path = "tests/merge_tests.rs"]
+mod tests;

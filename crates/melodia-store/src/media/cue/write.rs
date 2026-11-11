@@ -537,3 +537,7 @@ fn one_line(value: &str) -> String {
 fn indent_of(line: &str) -> &str {
     &line[..line.len() - line.trim_start().len()]
 }
+
+#[cfg(test)]
+#[path = "tests/write_tests.rs"]
+mod tests;

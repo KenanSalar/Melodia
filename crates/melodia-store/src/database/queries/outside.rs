@@ -107,3 +107,7 @@ pub(crate) fn unlink_on(tx: &Transaction<'_>, ids: &[i64]) -> Result<(), AppErro
     }
     Ok(())
 }
+
+#[cfg(test)]
+#[path = "tests/outside_tests.rs"]
+mod tests;

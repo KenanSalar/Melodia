@@ -3,6 +3,8 @@
 use super::*;
 use std::time::SystemTime;
 
+use melodia_core::entities::cue::CueTrack;
+
 const TRACK: &str = "/music/Artist/Album/01 Song.mp3";
 
 fn track() -> LyricsKey {
@@ -275,5 +277,53 @@ fn a_miss_stamped_in_the_future_is_treated_as_spent() -> Result<(), AppError> {
     std::fs::File::options().write(true).open(&marker)?.set_modified(ahead)?;
 
     assert!(read(tmp.path(), &track()).is_none());
+    Ok(())
+}
+
+/// Track `number` of a cue sheet over [`TRACK`], every track of which shares its path.
+fn sheet_track(number: i64) -> LyricsKey {
+    LyricsKey { path: TRACK.to_owned(), cue_track: CueTrack::try_from(number).ok() }
+}
+
+#[test]
+fn each_track_of_one_image_keeps_its_own_answer() -> Result<(), AppError> {
+    let tmp = tempfile::TempDir::new()?;
+    write(tmp.path(), &sheet_track(1), Fetched::Sheet("[00:01.00]first\n"))?;
+    write(tmp.path(), &sheet_track(2), Fetched::Instrumental)?;
+
+    let answers = [
+        read(tmp.path(), &sheet_track(1)),
+        read(tmp.path(), &sheet_track(2)),
+        read(tmp.path(), &track()),
+    ];
+
+    assert!(
+        matches!(answers, [Some(LyricsOutcome::Sheet(_)), Some(LyricsOutcome::Instrumental), None]),
+        "{answers:?}"
+    );
+    Ok(())
+}
+
+#[test]
+fn forgetting_one_track_of_an_image_leaves_its_neighbours() -> Result<(), AppError> {
+    let tmp = tempfile::TempDir::new()?;
+    write(tmp.path(), &sheet_track(1), Fetched::Instrumental)?;
+    write(tmp.path(), &sheet_track(2), Fetched::Instrumental)?;
+
+    forget(tmp.path(), &sheet_track(1))?;
+
+    let answers = [read(tmp.path(), &sheet_track(1)), read(tmp.path(), &sheet_track(2))];
+    assert!(matches!(answers, [None, Some(LyricsOutcome::Instrumental)]), "{answers:?}");
+    Ok(())
+}
+
+#[test]
+fn a_whole_file_s_answer_is_filed_under_its_path_alone() -> Result<(), AppError> {
+    let tmp = tempfile::TempDir::new()?;
+    write(tmp.path(), &track(), Fetched::Instrumental)?;
+
+    let named_by_path = blake3::hash(TRACK.as_bytes()).to_hex()[..HASH_HEX_LEN].to_owned();
+
+    assert!(entry(tmp.path(), &named_by_path, INSTRUMENTAL_EXT).exists());
     Ok(())
 }

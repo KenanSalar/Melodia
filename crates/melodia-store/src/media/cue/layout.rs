@@ -105,3 +105,7 @@ fn hidden_track(sheet: &Sheet) -> Option<(usize, PlacedTrack)> {
     let span = CueSpan::new(lead_in.at, Some(start.at)).ok()?;
     Some((start.file, PlacedTrack { track: CueTrack::HIDDEN, span, source: None }))
 }
+
+#[cfg(test)]
+#[path = "tests/layout_tests.rs"]
+mod tests;

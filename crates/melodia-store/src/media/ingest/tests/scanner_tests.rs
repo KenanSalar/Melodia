@@ -60,6 +60,27 @@ fn ignores_non_audio_files() -> Result<(), AppError> {
     Ok(())
 }
 
+/// A sheet sent to the audio parse would be read, and counted, as a track of its own.
+#[test]
+fn a_cue_sheet_is_walked_as_a_sheet_and_never_as_audio() -> Result<(), AppError> {
+    let tmp = TempDir::new()?;
+    create_test_files(tmp.path(), &["album.flac", "album.cue", "other.CUE", "notes.txt"])?;
+    let walk = collect_media_files(tmp.path(), &Unobserved)
+        .ok_or_else(|| AppError::validation_msg("a walk nothing cancelled came back stopped"))?;
+
+    let names = |paths: &WalkedPaths| {
+        let mut names: Vec<String> = (0..paths.len())
+            .filter_map(|i| paths.path_at(i).file_name()?.to_str().map(str::to_owned))
+            .collect();
+        names.sort_unstable();
+        names
+    };
+
+    assert_eq!(names(&walk.files), ["album.flac"]);
+    assert_eq!(names(&walk.sheets), ["album.cue", "other.CUE"]);
+    Ok(())
+}
+
 #[test]
 fn handles_empty_directory() -> Result<(), AppError> {
     let tmp = TempDir::new()?;

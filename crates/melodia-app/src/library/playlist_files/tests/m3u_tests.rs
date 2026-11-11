@@ -1,4 +1,5 @@
 use super::{parse, serialize};
+use melodia_core::entities::cue::CueTrack;
 use melodia_core::entities::track::PlaylistExportRow;
 
 fn row(
@@ -136,4 +137,43 @@ fn serialize_neutralizes_newlines_in_title() {
     // The #PLAYLIST and #EXTINF lines must each stay single-line.
     assert!(text.contains("#PLAYLIST:Na me\n"));
     assert!(text.contains("#EXTINF:1,Art ist - Line1 Line2\n"));
+}
+
+/// Track `number` of a cue sheet over `/m/disc.flac`, which every track of it names as its path.
+fn cue_row(number: i64) -> PlaylistExportRow {
+    PlaylistExportRow {
+        cue_track: CueTrack::try_from(number).ok(),
+        ..row("/m/disc.flac", Some("H"), "T", None, 1000)
+    }
+}
+
+#[test]
+fn a_cue_track_is_exported_with_its_number_above_its_path() {
+    let text = serialize("X", &[cue_row(2)]);
+    assert!(text.ends_with("#MELODIA-HASH:H\n#MELODIA-CUE-TRACK:2\n/m/disc.flac\n"), "{text}");
+}
+
+#[test]
+fn a_whole_file_is_exported_with_no_number() {
+    let text = serialize("X", &[row("/m/a.flac", None, "A", None, 1000)]);
+    assert!(!text.contains("#MELODIA-CUE-TRACK"), "{text}");
+}
+
+#[test]
+fn each_cue_track_reads_back_its_own_number() {
+    let parsed =
+        parse(&serialize("X", &[cue_row(0), cue_row(2), row("/m/a.flac", None, "A", None, 1000)]));
+
+    let numbers: Vec<Option<u8>> =
+        parsed.entries.iter().map(|entry| entry.cue_track.map(CueTrack::number)).collect();
+
+    assert_eq!(numbers, [Some(0), Some(2), None]);
+}
+
+#[test]
+fn a_cue_track_number_out_of_range_or_unread_names_the_whole_file() {
+    for tag in ["#MELODIA-CUE-TRACK:100", "#MELODIA-CUE-TRACK:-1", "#MELODIA-CUE-TRACK:two"] {
+        let parsed = parse(&format!("#EXTM3U\n{tag}\n/m/disc.flac\n"));
+        assert_eq!(parsed.entries.first().map(|entry| entry.cue_track), Some(None), "{tag}");
+    }
 }

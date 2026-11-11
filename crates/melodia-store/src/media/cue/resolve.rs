@@ -50,3 +50,7 @@ fn written_path(name: &str, sheet_dir: &Path) -> Option<PathBuf> {
     }
     (path != sheet_dir).then_some(path)
 }
+
+#[cfg(test)]
+#[path = "tests/resolve_tests.rs"]
+mod tests;

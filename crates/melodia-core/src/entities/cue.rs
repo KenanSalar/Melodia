@@ -184,3 +184,7 @@ pub enum CueError {
     #[error("cue span ends at frame {end}, not after its start at frame {start}")]
     Span { start: u32, end: u32 },
 }
+
+#[cfg(test)]
+#[path = "tests/cue_tests.rs"]
+mod tests;

@@ -441,3 +441,7 @@ impl<'a> Settler<'a> {
         CuePlan { jobs, settled: owed.settled }
     }
 }
+
+#[cfg(test)]
+#[path = "tests/plan_tests.rs"]
+mod tests;

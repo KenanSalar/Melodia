@@ -351,3 +351,7 @@ pub(crate) fn forget_gone_sheet(tx: &Transaction<'_>, path: &str) -> Result<bool
     )?;
     Ok(forgotten > 0)
 }
+
+#[cfg(test)]
+#[path = "../tests/cue_units_tests.rs"]
+mod tests;

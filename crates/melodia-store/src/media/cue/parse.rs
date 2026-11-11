@@ -340,3 +340,7 @@ fn set(field: &mut Option<String>, rest: &str) {
         *field = Some(value);
     }
 }
+
+#[cfg(test)]
+#[path = "tests/parse_tests.rs"]
+mod tests;

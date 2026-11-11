@@ -44,3 +44,7 @@ fn awaits_absorb(dir: &Path, library: &[&Path]) -> bool {
         Err(_) => library.iter().any(|root| dir.starts_with(root) && !holds_entries(root)),
     }
 }
+
+#[cfg(test)]
+#[path = "tests/outside_tests.rs"]
+mod tests;

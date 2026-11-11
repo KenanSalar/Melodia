@@ -226,3 +226,7 @@ fn bomless_utf16(bytes: &[u8]) -> Option<&'static Encoding> {
         None
     }
 }
+
+#[cfg(test)]
+#[path = "tests/text_tests.rs"]
+mod tests;

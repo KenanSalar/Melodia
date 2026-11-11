@@ -109,3 +109,7 @@ impl ParkTicket {
         drop(released);
     }
 }
+
+#[cfg(test)]
+#[path = "tests/park_tests.rs"]
+mod tests;

@@ -35,3 +35,35 @@ pub(crate) fn shape(channels: u16, rate: u32) -> Shape {
 pub(crate) fn asset(name: &str) -> PathBuf {
     Path::new(ASSETS_DIR).join(name)
 }
+
+/// The rate of [`frame_indexed_wav`], at which a cue frame is 640 samples.
+pub(crate) const INDEXED_RATE: u32 = 48_000;
+
+/// Writes a mono 16-bit PCM WAV of `frames` frames at [`INDEXED_RATE`], each sample holding its own
+/// frame index, so a decoded sample says which frame of the file it is.
+pub(crate) fn frame_indexed_wav(path: &Path, frames: i16) -> std::io::Result<()> {
+    let data_len = u32::from(frames.unsigned_abs()) * 2;
+    let mut bytes = Vec::with_capacity(44 + usize::from(frames.unsigned_abs()) * 2);
+    bytes.extend(b"RIFF");
+    bytes.extend((36 + data_len).to_le_bytes());
+    bytes.extend(b"WAVEfmt ");
+    bytes.extend(16_u32.to_le_bytes());
+    bytes.extend(1_u16.to_le_bytes());
+    bytes.extend(1_u16.to_le_bytes());
+    bytes.extend(INDEXED_RATE.to_le_bytes());
+    bytes.extend((INDEXED_RATE * 2).to_le_bytes());
+    bytes.extend(2_u16.to_le_bytes());
+    bytes.extend(16_u16.to_le_bytes());
+    bytes.extend(b"data");
+    bytes.extend(data_len.to_le_bytes());
+    for frame in 0..frames {
+        bytes.extend(frame.to_le_bytes());
+    }
+    std::fs::write(path, bytes)
+}
+
+/// Whether `sample` is what [`frame_indexed_wav`] holds at `frame`, to within a quarter of a 16-bit
+/// step: the decoder scales a sample to `[-1, 1)` by 32,768.
+pub(crate) fn is_frame(sample: Option<&f32>, frame: i16) -> bool {
+    sample.is_some_and(|sample| (sample - f32::from(frame) / 32_768.0).abs() < 0.25 / 32_768.0)
+}
