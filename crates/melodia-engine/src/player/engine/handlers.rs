@@ -40,7 +40,7 @@ const PRELOAD_LEAD_MS: u64 = 1500;
 
 /// A cue track's feeder parks its decoder at its first wake within a ring's depth of the end, so
 /// the ring less one nap at the top speed has to outlast the lead, or the preload of the next track
-/// comes first and opens the file again. Feeders start on a poll, so their wakes trail it closely.
+/// comes first and opens the file again.
 const _: () = {
     let depth = decode_ahead::DEPTH.as_secs_f64();
     let nap = depth / decode_ahead::NAPS_PER_DEPTH as f64;
