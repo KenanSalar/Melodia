@@ -2,8 +2,8 @@
 
 Working doc. Delete when the feature ships.
 
-Status: **in progress**, Phase 7 through its gates, Phase 8 next; Phase 3 owes Kenan's scrobble
-and Discord check ·
+Status: **in progress**, Phase 7 through its gates bar the review fixes' hand check, Phase 8 next;
+Phase 3 owes Kenan's scrobble and Discord check ·
 Created: 2026-11-04
 
 Issue [#78](https://github.com/KenanSalar/Melodia/issues/78).
@@ -332,6 +332,12 @@ one `PERFORMER` and one `SONGWRITER` per scope: a credit is written as it prints
 composers joined by `;`, which the scan splits as it splits a genre. Track number and total stay
 read-only, the number being the row's identity.
 
+The sheet's `PERFORMER` is also the artist of every track stating none, so an album artist edit
+first gives each such track that artist on a line of its own, leaving a track whose artist the edit
+changes. A sheet stating no `PERFORMER` has nothing to pin: its tracks read the image's artist, which
+the writer doesn't see, and take the new album artist as theirs. So does the hidden track, which has
+no lines of its own.
+
 How the rewrite works:
 
 - The bytes are split into lines before they are decoded, so every line it doesn't touch stays
@@ -342,7 +348,8 @@ How the rewrite works:
   all. A new line goes under its `TRACK` line, or ahead of the first `FILE`.
 - The file is replaced atomically through the tag writer's rename.
 - The sheet is read back as a changed sheet is, through the import's commit, which files an
-  outside sheet under its own folder. So an edit is never undone by the next rescan.
+  outside sheet under its own folder. So an edit is never undone by the next rescan. The read-back
+  claims only the images the written sheets hold, so a sheet beside an outside one stays unopened.
 
 What a sheet can't hold (lyrics, BPM, cover art, mood) is read-only for these rows, with a note
 saying why, and the hidden track, which no line of the sheet states, is read-only whole. Ratings,
@@ -995,6 +1002,10 @@ a whole disc. *Files opened from outside the library* gives the model.
       with `self_writes`, and reads every changed sheet back in one `import::read_in` and
       `commit_import`. Ordinary tracks keep their path, and a rating's write-back projects to an
       empty `SheetEdit`. `forget_stored_lyrics` keys sheet tracks on their number.
+- [x] Review fixes: the sheet tracks are looked up ahead of the file pass, and a failed read-back
+      is a failure per sheet, so neither discards a file write already committed; the read-back's
+      `owns` admits only the written sheets' images; an album artist edit pins each inheriting
+      track's artist (`write.rs`, `pin_inherited_artists`).
 - [x] Composers split on `;` (`metadata::split_list`), in `merge.rs`'s `with_composer`.
 - [x] The tag editor opens the fields the sheet can hold (`TagEditor.from-sheet`, `SheetField`, the
       composer). The rest stay read-only, and a hidden track keeps the whole dialog so
@@ -1033,6 +1044,11 @@ a whole disc. *Files opened from outside the library* gives the model.
   - [x] a star on a sheet track lands in the database alone, sheet and image byte-identical;
   - [x] an outside sheet track's title edit keeps its rows unlinked under their own folder, the
         library count unchanged.
+- [ ] Kenan's hand check of the review fixes:
+  - [ ] an outside folder holding two albums, each with its `.cue`: open one sheet and edit a
+        title, and the other album gains no rows;
+  - [ ] on a sheet with only a top-level `PERFORMER`, change one track's album artist: every track
+        keeps its artist, each now on a `PERFORMER` line of its own.
 
 ## Phase 8: Embedded sheets
 

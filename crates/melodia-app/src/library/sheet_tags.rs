@@ -5,7 +5,7 @@
 //! The read lands through the import's commit, which files a sheet outside every library folder
 //! under a folder of its own and links its tracks to nothing; the watcher's would skip that sheet.
 
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::{BTreeMap, BTreeSet, HashSet};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
@@ -21,23 +21,21 @@ use melodia_store::media::cue::{self, SheetEdit};
 /// What the sheet pass did with each sheet behind the edited tracks.
 #[derive(Default)]
 pub(super) struct SheetWrites {
-    /// The tracks of every sheet now stating the edit.
+    /// The tracks whose rows now state the edit.
     pub(super) updated: Vec<i64>,
-    /// `(sheet, error)` for each sheet whose write failed.
+    /// `(sheet, error)` for each sheet whose write or read-back failed.
     pub(super) failures: Vec<(String, String)>,
 }
 
-/// Writes `edit` into the sheet behind each cue sheet track among `ids`, then reads every sheet it
-/// changed back in.
+/// Writes `edit` into the sheet behind each of `tracks`, then reads every sheet it changed back in.
 pub(super) async fn write_sheets(
     db: &DbPool,
     artwork_dir: &Path,
     cover_cache: &CoverCache,
     self_writes: &Arc<SelfWrites>,
-    ids: &[i64],
+    tracks: Vec<SheetTrack>,
     edit: SheetEdit,
 ) -> Result<SheetWrites, AppError> {
-    let tracks = queries::track::get_sheet_tracks_by_ids(db, ids).await?;
     if tracks.is_empty() {
         return Ok(SheetWrites::default());
     }
@@ -55,15 +53,11 @@ pub(super) async fn write_sheets(
     .map_err(|e| AppError::metadata("cue sheet write task panicked", e))?;
 
     let mut writes = SheetWrites::default();
-    let mut changed: Vec<PathBuf> = Vec::new();
+    let mut changed: Vec<(String, Vec<i64>)> = Vec::new();
     for SheetWrite { sheet, ids, outcome } in written {
         match outcome {
-            Ok(rewritten) => {
-                writes.updated.extend(ids);
-                if rewritten {
-                    changed.push(PathBuf::from(sheet));
-                }
-            }
+            Ok(true) => changed.push((sheet, ids)),
+            Ok(false) => writes.updated.extend(ids),
             Err(e) => {
                 let reason = describe(&e);
                 log::warn!("tag write failed for {sheet}: {reason}");
@@ -71,13 +65,20 @@ pub(super) async fn write_sheets(
             }
         }
     }
+    if changed.is_empty() {
+        return Ok(writes);
+    }
 
-    if !changed.is_empty()
-        && let Err(e) = read_back(db, artwork_dir, cover_cache, changed.clone()).await
-    {
-        // Unmarked so the watcher reads them, rather than leaving the rows stale.
-        self_writes.unmark(&changed);
-        return Err(e);
+    let paths: Vec<PathBuf> = changed.iter().map(|(sheet, _)| PathBuf::from(sheet)).collect();
+    match read_back(db, artwork_dir, cover_cache, paths.clone()).await {
+        Ok(()) => writes.updated.extend(changed.into_iter().flat_map(|(_, ids)| ids)),
+        Err(e) => {
+            // Unmarked so the watcher reads them, rather than leaving the rows stale.
+            self_writes.unmark(&paths);
+            let reason = describe(&e);
+            log::warn!("cue sheet read-back failed: {reason}");
+            writes.failures.extend(changed.into_iter().map(|(sheet, _)| (sheet, reason.clone())));
+        }
     }
     Ok(writes)
 }
@@ -123,8 +124,8 @@ fn write_sheet(
     Ok(true)
 }
 
-/// Reads `sheets` back in, every image they claim with them. Any image a sheet names is its to
-/// claim, as in a watcher batch, the sheet having held it a moment ago.
+/// Reads `sheets` back in with the images they hold, and claims no other: the settle reads every
+/// sheet beside them, and one beside a sheet opened from outside the library was never opened.
 async fn read_back(
     db: &DbPool,
     artwork_dir: &Path,
@@ -137,7 +138,14 @@ async fn read_back(
         .map(|dir| dir.to_string_lossy().into_owned())
         .collect();
     let around = scan::sheets_around(db, dirs.into_iter().collect(), Vec::new()).await?;
-    let reading = Reading { new_audio: Vec::new(), sheets, around, owns: |_: &Path| true };
+    let held: HashSet<PathBuf> = around
+        .claims
+        .iter()
+        .filter(|(_, sheet)| sheets.iter().any(|written| written == Path::new(sheet)))
+        .map(|(image, _)| PathBuf::from(image))
+        .collect();
+    let owns = move |image: &Path| held.contains(image);
+    let reading = Reading { new_audio: Vec::new(), sheets, around, owns };
     let (chunk, pool) = read_in(reading, artwork_dir, cover_cache).await?;
     let scan_timestamp = melodia_core::utils::now_rfc3339();
     queries::ingest::commit_import(db, chunk, scan_timestamp, pool).await?;

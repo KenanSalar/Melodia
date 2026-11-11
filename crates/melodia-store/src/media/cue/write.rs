@@ -10,7 +10,7 @@ use std::path::Path;
 
 use lofty::tag::items::Timestamp;
 
-use super::parse::{Command, Scope, Sheet, Statement, stated_value, statements};
+use super::parse::{Command, Scope, Sheet, SheetTrack, Statement, stated_value, statements};
 use super::text::{EncodedSheet, LineEnding, OutLine, RawLine};
 use crate::media::ingest::metadata::LIST_SEPARATOR;
 use melodia_core::entities::artist::ArtistCredit;
@@ -219,6 +219,7 @@ impl<'a> Rewrite<'a> {
 
     fn apply(&mut self, edit: &SheetEdit, tracks: &[CueTrack]) {
         self.write(Scope::Sheet, Keyword::Title, &edit.album);
+        self.pin_inherited_artists(edit, tracks);
         self.write(Scope::Sheet, Keyword::Performer, &edit.album_artist);
         self.write(Scope::Sheet, Keyword::DiscNumber, &edit.disc_number);
         self.write(Scope::Sheet, Keyword::TotalDiscs, &edit.disc_total);
@@ -236,6 +237,36 @@ impl<'a> Rewrite<'a> {
             self.write(scope, Keyword::Isrc, &edit.isrc);
         }
         self.write_shared_fields(edit, tracks, &scopes);
+    }
+
+    /// Gives each placed track reading the sheet's `PERFORMER` as its artist a line of its own,
+    /// where the edit replaces that one as the album artist. A track whose artist the edit changes
+    /// is left to it.
+    fn pin_inherited_artists(&mut self, edit: &SheetEdit, tracks: &[CueTrack]) {
+        // With none, the tracks read the image's artist, which the writer doesn't see.
+        let Some(inherited) = self.stated.fields.performer.clone() else {
+            return;
+        };
+        let replaced = match &edit.album_artist {
+            FieldEdit::Keep => false,
+            FieldEdit::Clear => true,
+            FieldEdit::Set(album_artist) => one_line(album_artist) != inherited,
+        };
+        if !replaced {
+            return;
+        }
+        let edited = |number: &CueTrack| edit.artist != FieldEdit::Keep && tracks.contains(number);
+        let inheriting: Vec<CueTrack> = self
+            .stated
+            .tracks
+            .iter()
+            .filter(|track| is_placed(track) && track.fields.performer.is_none())
+            .map(|track| track.number)
+            .filter(|number| !edited(number))
+            .collect();
+        for number in inheriting {
+            self.set(Scope::Track(number), Keyword::Performer, &inherited);
+        }
     }
 
     /// Composer, genre and date, which a sheet can state for every track at once: written there,
@@ -353,13 +384,8 @@ impl<'a> Rewrite<'a> {
         })
     }
 
-    /// The audio tracks the sheet places, the only ones a row can stand for.
     fn placed_tracks(&self) -> impl Iterator<Item = CueTrack> {
-        self.stated
-            .tracks
-            .iter()
-            .filter(|track| track.is_audio && track.index(1).is_some())
-            .map(|track| track.number)
+        self.stated.tracks.iter().filter(|track| is_placed(track)).map(|track| track.number)
     }
 
     fn track_scopes(&self) -> Vec<Scope> {
@@ -413,6 +439,11 @@ fn cleared<T>(edit: &FieldEdit<T>) -> FieldEdit<T> {
         FieldEdit::Keep => FieldEdit::Keep,
         FieldEdit::Clear | FieldEdit::Set(_) => FieldEdit::Clear,
     }
+}
+
+/// An audio track with an `INDEX 01`, the only kind a row stands for.
+fn is_placed(track: &SheetTrack) -> bool {
+    track.is_audio && track.index(1).is_some()
 }
 
 /// `value` on one line, a line break in it ending the line it is written on.

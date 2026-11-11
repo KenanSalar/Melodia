@@ -253,21 +253,28 @@ pub(crate) async fn write_tag_edit(
         return Ok((TagEditReport::default(), Vec::new()));
     }
 
+    let sheet_edit = SheetEdit::from(edit);
+    // Ahead of the file pass, so a failed lookup can't discard file writes already committed.
+    let sheet_tracks = if sheet_edit.is_empty() {
+        Vec::new()
+    } else {
+        queries::track::get_sheet_tracks_by_ids(db, ids).await?
+    };
+
     let (mut report, mut updated_ids) =
         write_files(db, artwork_dir, cover_cache, self_writes, ids, edit, artwork_source).await?;
-    let sheet_edit = SheetEdit::from(edit);
-    if !sheet_edit.is_empty() {
-        let sheets =
-            sheet_tags::write_sheets(db, artwork_dir, cover_cache, self_writes, ids, sheet_edit)
-                .await?;
-        updated_ids.extend(sheets.updated);
-        report.failures.extend(sheets.failures);
-    }
-
+    let sheets = sheet_tags::write_sheets(
+        db,
+        artwork_dir,
+        cover_cache,
+        self_writes,
+        sheet_tracks,
+        sheet_edit,
+    )
+    .await?;
+    updated_ids.extend(sheets.updated);
+    report.failures.extend(sheets.failures);
     report.updated = updated_ids.len();
-    // Here rather than in `apply_tag_edit`, so the rating write-back is covered too and no later
-    // `?` drops the report unrecorded.
-    report.log_unsupported();
     Ok((report, updated_ids))
 }
 
@@ -314,7 +321,12 @@ async fn write_files(
     };
 
     match run_commit(db, &files, edit, cached_artwork, &mut report).await {
-        Ok(updated_ids) => Ok((report, updated_ids)),
+        Ok(updated_ids) => {
+            // Here rather than in `apply_tag_edit`, so the rating write-back is covered too and no
+            // later `?` drops the report unrecorded.
+            report.log_unsupported();
+            Ok((report, updated_ids))
+        }
         Err(e) => {
             // Unmarked so the watcher re-ingests rather than leaving the rows stale.
             let marked: Vec<PathBuf> = files.iter().map(|f| PathBuf::from(&f.path)).collect();

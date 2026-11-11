@@ -126,8 +126,8 @@ impl EncodedSheet {
     }
 
     /// `lines` in this sheet's encoding behind its BOM, a kept line as its own bytes. Where a new
-    /// line holds a character the encoding can't, the whole sheet is written as UTF-8 with a BOM,
-    /// which every reader of sheets takes, and `origin` is logged.
+    /// line holds a character the encoding can't, the whole sheet is written as UTF-8 behind a BOM
+    /// naming it to the reader, and `origin` is logged.
     pub(super) fn encode(&self, lines: &[OutLine<'_>], origin: &Path) -> Vec<u8> {
         if let Some(bytes) = self.encode_in_place(lines) {
             return bytes;
