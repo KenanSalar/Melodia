@@ -8,6 +8,7 @@
 //! An exclusive claim is held through a pause and given back on stop, which a long pause can end
 //! in where the user asks.
 
+use std::path::Path;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, MutexGuard};
 use std::time::Duration;
@@ -312,14 +313,19 @@ impl PlaybackEngine {
     }
 
     /// Whether the output has to reopen for `audio`, which no crossfade can cross; a file that
-    /// won't open counts, so nothing fades into it. Opens the file on the first ask.
+    /// won't open counts, so nothing fades into it. Opens the file on the first ask without seeking
+    /// to a cue track, the shape asked being the whole file's.
     pub fn reopens_for(&self, audio: &TrackAudio) -> bool {
         let answer = self.recorded_answer(&audio.path);
-        let plays = answer.unwrap_or_else(|| match self.open_recorded(audio) {
-            Ok(decoded) => self.plays_without_reopen(decoded.shape(), decoded.format()),
-            Err(e) => {
-                log::debug!("Not crossfading into {audio}, which won't open: {}", describe(&e));
-                false
+        let plays = answer.unwrap_or_else(|| {
+            let opened = FileDecoder::open(Path::new(&audio.path));
+            self.record(audio.path.clone(), &opened);
+            match opened {
+                Ok(decoded) => self.plays_without_reopen(decoded.shape(), decoded.format()),
+                Err(e) => {
+                    log::debug!("Not crossfading into {audio}, which won't open: {}", describe(&e));
+                    false
+                }
             }
         });
         !plays
@@ -343,12 +349,13 @@ impl PlaybackEngine {
         let parked = self.park.take(audio);
         // After the take, which voids every ticket out.
         let ticket = self.park.ticket(audio);
-        let decoded = match parked {
-            Some(decoded) => {
-                log::debug!("Carrying the decoder on into {audio}");
-                decoded
-            }
-            None => self.open_recorded(audio)?,
+        let decoded = if let Some(decoded) = parked {
+            log::debug!("Carrying the decoder on into {audio}");
+            decoded
+        } else {
+            let opened = FileDecoder::open_track(audio);
+            self.record(audio.path.clone(), &opened);
+            opened?
         };
         // Left unstaged, it ends in `EndOfStream` and starts through `play_media`, which reopens.
         if !self.plays_without_reopen(decoded.shape(), decoded.format()) {
@@ -373,19 +380,13 @@ impl PlaybackEngine {
         })
     }
 
-    /// Opens `audio`, recording what its file holds for the asks after.
-    ///
-    /// # Errors
-    ///
-    /// Whatever [`FileDecoder::open_track`] refuses the file with.
-    fn open_recorded(&self, audio: &TrackAudio) -> Result<FileDecoder, AppError> {
-        let opened = FileDecoder::open_track(audio);
-        let found = match &opened {
+    /// Records what the file at `path` holds for the asks after.
+    fn record(&self, path: String, opened: &Result<FileDecoder, AppError>) {
+        let found = match opened {
             Ok(decoded) => Probed::Decodes(decoded.shape(), decoded.format()),
             Err(_) => Probed::Unreadable,
         };
-        *self.output.probed.lock() = Some((audio.path.clone(), found));
-        opened
+        *self.output.probed.lock() = Some((path, found));
     }
 
     /// Reopens the output for a track starting fresh, inside a transport op between its decode

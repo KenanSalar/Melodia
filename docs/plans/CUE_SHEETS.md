@@ -2,9 +2,9 @@
 
 Working doc. Delete when the feature ships.
 
-Status: **in progress**, Phase 8 and the branch review's fixes done, Phase 9's tests next on
-Kenan's go; Kenan's checks are owed by Phase 3 (scrobble and Discord) and by the boot sweep's
-second review fix · Created: 2026-11-04
+Status: **in progress**, Phase 8, the branch review's and the performance review's fixes done,
+Phase 9's tests next on Kenan's go; Kenan's checks are owed by Phase 3 (scrobble and Discord), by
+the boot sweep's second review fix and by the performance review · Created: 2026-11-04
 
 Issue [#78](https://github.com/KenanSalar/Melodia/issues/78).
 
@@ -1235,6 +1235,22 @@ A review of the whole branch against `main` (2026-11-11) found these, each fixed
 - [ ] Kenan's hand check of the boot sweep after its second fix: a nested import whose directory
       was deleted under an online library folder is swept at the next launch, and one under a
       library folder whose drive is unmounted survives it.
+
+## Performance review fixes
+
+A performance review of the branch against `main` (2026-11-11) found two costs worth removing:
+
+- [x] The boot sweep reads the rows under the outside folders through those folders, as
+      `OUTSIDE_IDS` does, rather than passing over the whole of `tracks` three times before the
+      first paint (`outside::over_swept`'s `swept_rows`).
+- [x] The crossfade's reopen check opens the next track's file without seeking to its cue track,
+      the shape it asks being the whole file's; the gapless open still enters the span
+      (`output::record`, `reopens_for`).
+- [x] The static gates, and the sweep's plans against a synthetic 50,500-track library: each read
+      of `tracks` searches `idx_tracks_folder_id`, the rows the same.
+- [ ] The sweep's statements timed against a copy of the 50,500-track root, on Kenan's go.
+- [ ] Kenan's hand check: crossfade on, a FLAC and an MP3 image started at a middle track, the
+      joints and fades as before.
 
 ## Phase 9: Tests
 

@@ -10,12 +10,15 @@ use crate::database::{DbPool, chunked_in_execute, sql};
 use melodia_core::error::AppError;
 
 /// `statement` over `swept`: the folders whose ids `?1` lists as a JSON array, less any enabled
-/// since the caller read them.
+/// since the caller read them. `swept_rows` is their tracks, read folder first for
+/// `file_rows::OUTSIDE_IDS`'s reason.
 macro_rules! over_swept {
     ($statement:literal) => {
         concat!(
             "WITH swept AS (SELECT f.id FROM folders f JOIN json_each(?1) j ON j.value = f.id \
-             WHERE NOT f.is_enabled) ",
+             WHERE NOT f.is_enabled), \
+             swept_rows AS (SELECT t.id, t.file_path FROM swept \
+             CROSS JOIN tracks t ON t.folder_id = swept.id) ",
             $statement
         )
     };
@@ -36,12 +39,11 @@ pub async fn sweep(db: &DbPool, folders: &[i64], queue: &[i64]) -> Result<(), Ap
         let deleted = sql::execute(
             tx,
             over_swept!(
-                "DELETE FROM tracks WHERE folder_id IN (SELECT id FROM swept) \
+                "DELETE FROM tracks WHERE id IN (SELECT id FROM swept_rows) \
                    AND file_path NOT IN ( \
-                       SELECT held.file_path FROM tracks held \
-                        WHERE held.folder_id IN (SELECT id FROM swept) \
-                          AND (EXISTS (SELECT 1 FROM playlist_items p WHERE p.track_id = held.id) \
-                               OR held.id IN (SELECT value FROM json_each(?2))))"
+                       SELECT held.file_path FROM swept_rows held \
+                        WHERE EXISTS (SELECT 1 FROM playlist_items p WHERE p.track_id = held.id) \
+                           OR held.id IN (SELECT value FROM json_each(?2)))"
             ),
             (folders.as_str(), queue.as_str()),
         )?;
@@ -73,12 +75,11 @@ fn unlink_linked(tx: &Transaction<'_>, folders: &str) -> Result<bool, AppError> 
     let linked: Vec<(i64, String)> = sql::fetch_all(
         tx,
         over_swept!(
-            "SELECT t.id, t.file_path FROM tracks t \
-              WHERE t.folder_id IN (SELECT id FROM swept) \
-                AND (t.artist_id IS NOT NULL OR t.album_id IS NOT NULL OR t.genre_id IS NOT NULL \
-                     OR EXISTS (SELECT 1 FROM track_artists j WHERE j.track_id = t.id) \
-                     OR EXISTS (SELECT 1 FROM track_genres j WHERE j.track_id = t.id) \
-                     OR EXISTS (SELECT 1 FROM track_credits j WHERE j.track_id = t.id))"
+            "SELECT t.id, t.file_path FROM swept_rows s JOIN tracks t ON t.id = s.id \
+              WHERE t.artist_id IS NOT NULL OR t.album_id IS NOT NULL OR t.genre_id IS NOT NULL \
+                 OR EXISTS (SELECT 1 FROM track_artists j WHERE j.track_id = t.id) \
+                 OR EXISTS (SELECT 1 FROM track_genres j WHERE j.track_id = t.id) \
+                 OR EXISTS (SELECT 1 FROM track_credits j WHERE j.track_id = t.id)"
         ),
         (folders,),
     )?;
