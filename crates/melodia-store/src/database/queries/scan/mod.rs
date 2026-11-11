@@ -17,7 +17,7 @@ mod sort_key;
 mod upserts;
 mod watch_batch;
 
-pub(crate) use cue_units::{CueWrites, SheetWriter};
+pub(crate) use cue_units::{CueWrites, SheetWriter, embedded_images_among, release_embedded};
 pub use finish::{Unwalked, commit_scan, purge_unwalked};
 pub use lookups::{
     SheetsAround, fold_folder_sheets, fold_folder_tracks, sheet_claims, sheets_around,

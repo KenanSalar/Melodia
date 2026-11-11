@@ -78,6 +78,12 @@ impl EncodedSheet {
         Ok(Self { bytes, encoding, bom })
     }
 
+    /// A sheet held as text rather than in a file of its own, as a FLAC's `CUESHEET` comment is.
+    pub(super) fn from_text(text: &str) -> Self {
+        let bom = if text.starts_with('\u{FEFF}') { '\u{FEFF}'.len_utf8() } else { 0 };
+        Self { bytes: text.as_bytes().to_vec(), encoding: UTF_8, bom }
+    }
+
     fn body(&self) -> &[u8] {
         &self.bytes[self.bom..]
     }

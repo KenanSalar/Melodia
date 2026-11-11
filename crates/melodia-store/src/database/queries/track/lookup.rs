@@ -12,7 +12,7 @@ use super::{columns, json_array};
 use crate::database::rows::FromRow;
 use crate::database::sql::{self, Sql};
 use crate::database::{DbPool, chunked_in_query, in_id_order, select_in_id_order};
-use melodia_core::entities::cue::{CueTrack, SheetTrack};
+use melodia_core::entities::cue::{CueTrack, SheetFile, SheetTrack};
 use melodia_core::entities::track;
 use melodia_core::entities::track_list::TrackListScope;
 use melodia_core::error::AppError;
@@ -192,41 +192,68 @@ pub async fn filed_outside(db: &DbPool, ids: &[i64]) -> Result<HashSet<i64>, App
     db.read(move |conn| ids_answering(conn, &ids, FILED_OUTSIDE.as_str())).await
 }
 
-/// Each of `ids` an external sheet carved out of its image, with that sheet.
+/// Each of `ids` a sheet carved out of its image, with where that sheet lives: a row no `.cue`
+/// names was carved by the sheet inside its image.
 pub async fn get_sheet_tracks_by_ids(
     db: &DbPool,
     ids: &[i64],
 ) -> Result<Vec<SheetTrack>, AppError> {
     let ids = ids.to_vec();
-    let rows: Vec<(i64, String, CueTrack)> = db
+    let rows: Vec<(i64, Option<String>, String, CueTrack)> = db
         .read(move |conn| {
             chunked_in_query(conn, &ids, |placeholders| {
                 format!(
-                    "SELECT t.id, c.path, t.cue_track FROM tracks t \
-                     JOIN cue_sheets c ON c.id = t.cue_sheet_id WHERE t.id IN ({placeholders})"
+                    "SELECT t.id, c.path, t.file_path, t.cue_track FROM tracks t \
+                     LEFT JOIN cue_sheets c ON c.id = t.cue_sheet_id \
+                     WHERE t.id IN ({placeholders}) AND t.cue_track IS NOT NULL"
                 )
             })
         })
         .await?;
-    Ok(rows.into_iter().map(|(id, sheet, track)| SheetTrack { id, sheet, track }).collect())
+    let tracks = rows.into_iter().map(|(id, cue, image, track)| {
+        let sheet = cue.map_or(SheetFile::Embedded(image), SheetFile::Cue);
+        SheetTrack { id, sheet, track }
+    });
+    Ok(tracks.collect())
 }
 
 /// The artist each track of `sheets` shows, by sheet. A track showing none is left out.
 pub async fn get_sheet_artists(
     db: &DbPool,
-    sheets: Vec<String>,
-) -> Result<HashMap<String, Vec<(CueTrack, String)>>, AppError> {
-    let rows: Vec<(String, CueTrack, Option<String>)> = db
+    sheets: Vec<SheetFile>,
+) -> Result<HashMap<SheetFile, Vec<(CueTrack, String)>>, AppError> {
+    let (cues, images): (Vec<SheetFile>, Vec<SheetFile>) =
+        sheets.into_iter().partition(|sheet| matches!(sheet, SheetFile::Cue(_)));
+    let cues: Vec<String> = cues.iter().map(|sheet| sheet.path().to_owned()).collect();
+    let images: Vec<String> = images.iter().map(|sheet| sheet.path().to_owned()).collect();
+    let (by_cue, by_image) = db
         .read(move |conn| {
-            chunked_in_query(conn, &sheets, |placeholders| {
-                format!(
-                    "SELECT c.path, t.cue_track, t.artist FROM cue_sheets c \
-                     JOIN tracks t ON t.cue_sheet_id = c.id WHERE c.path IN ({placeholders})"
-                )
-            })
+            let by_cue: Vec<(String, CueTrack, Option<String>)> =
+                chunked_in_query(conn, &cues, |placeholders| {
+                    format!(
+                        "SELECT c.path, t.cue_track, t.artist FROM cue_sheets c \
+                         JOIN tracks t ON t.cue_sheet_id = c.id WHERE c.path IN ({placeholders})"
+                    )
+                })?;
+            let by_image: Vec<(String, CueTrack, Option<String>)> =
+                chunked_in_query(conn, &images, |placeholders| {
+                    format!(
+                        "SELECT file_path, cue_track, artist FROM tracks \
+                         WHERE file_path IN ({placeholders}) \
+                         AND cue_track IS NOT NULL AND cue_sheet_id IS NULL"
+                    )
+                })?;
+            Ok((by_cue, by_image))
         })
         .await?;
-    let mut by_sheet: HashMap<String, Vec<(CueTrack, String)>> = HashMap::new();
+    let rows =
+        by_cue.into_iter().map(|(path, track, artist)| (SheetFile::Cue(path), track, artist));
+    let rows = rows.chain(
+        by_image
+            .into_iter()
+            .map(|(path, track, artist)| (SheetFile::Embedded(path), track, artist)),
+    );
+    let mut by_sheet: HashMap<SheetFile, Vec<(CueTrack, String)>> = HashMap::new();
     for (sheet, track, artist) in rows {
         if let Some(artist) = artist.filter(|artist| !artist.is_empty()) {
             by_sheet.entry(sheet).or_default().push((track, artist));
@@ -443,6 +470,24 @@ static UNRATED_WHOLE_FILES_AFTER: LazyLock<String> = LazyLock::new(|| {
          ORDER BY id LIMIT ?"
     )
 });
+
+static WHOLE_FLACS_AFTER: LazyLock<String> = LazyLock::new(|| {
+    format!(
+        "SELECT id, file_path FROM tracks
+         WHERE codec = 'Flac' AND id > ? AND {WHOLE_FILE} AND {IN_LIBRARY}
+         ORDER BY id LIMIT ?"
+    )
+});
+
+/// One page of the library's whole-file FLACs past `after_id`, the work list of the one-shot sweep
+/// for the sheets inside files read before the scan looked for them.
+pub async fn get_whole_flac_paths_after(
+    db: &DbPool,
+    after_id: i64,
+    limit: i64,
+) -> Result<Vec<(i64, String)>, AppError> {
+    db.read(move |conn| sql::fetch_all(conn, WHOLE_FLACS_AFTER.as_str(), (after_id, limit))).await
+}
 
 /// One page of unrated tracks past `after_id`, the one-shot rating import's work list.
 ///

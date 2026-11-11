@@ -14,8 +14,9 @@ use crate::database::queries::scan::{
 use crate::database::queries::track::file_rows::{LINKED_STAMP, WHOLE_FILE};
 use crate::database::sql::Sql;
 use crate::database::{DbPool, MAX_BINDS_PER_STATEMENT, placeholders, values_placeholders};
-use crate::media::cue::CueChunk;
+use crate::media::cue::{CueChunk, CueRow, embedded};
 use crate::media::ingest::scan_pool::ScanPool;
+use melodia_core::entities::cue::EmbeddedCue;
 use melodia_core::entities::scan::{ExtractedMetadata, FileStamp, ScannedFile};
 use melodia_core::error::AppError;
 
@@ -179,7 +180,8 @@ pub async fn commit_import(
 
 /// Ingests `chunk` within `tx`, each file and sheet filed as `source` says. An image a sheet claims
 /// goes to its sheet's job and never to the ordinary ingest, which runs first and writes the
-/// whole-file row an image given back takes its playlist places onto.
+/// whole-file row an image given back takes its playlist places onto. An image the sheet inside it
+/// splits is written next, ahead of the jobs, so one whose `.cue` lets it go keeps the tracks.
 fn ingest_chunk(
     tx: &Transaction<'_>,
     chunk: ScanChunk,
@@ -193,10 +195,21 @@ fn ingest_chunk(
     } else {
         files.into_iter().partition(|file| cue.claims(&file.path))
     };
-    let mut result = ingest_scanned_files(tx, &unclaimed, source, scan_timestamp, pool)?;
-    let mut moved = image_move_candidates(tx, &claimed, pool)?;
+    let Unclaimed { carved, ordinary, released } = sort_unclaimed(tx, unclaimed)?;
+    let mut result = ingest_scanned_files(tx, &ordinary, source, scan_timestamp, pool)?;
+    let released: Vec<&str> = released.iter().map(String::as_str).collect();
+    result.updated_count += queries::scan::release_embedded(tx, &released)?;
+
+    let images: Vec<&ScannedFile> =
+        claimed.iter().chain(carved.iter().map(|(image, _)| image)).collect();
+    let mut moved = image_move_candidates(tx, &images, pool)?;
     let mut sheets = SheetWriter::new(tx, &claimed, scan_timestamp, &mut moved);
     let mut folders = HashMap::new();
+    for (image, rows) in &carved {
+        if let Some(folder) = source.folder_of(tx, &image.path, &mut folders)? {
+            sheets.apply_embedded(image, rows, folder)?;
+        }
+    }
     for job in cue.jobs() {
         if let Some(folder) = source.folder_of(tx, &job.path, &mut folders)? {
             sheets.apply(job, folder)?;
@@ -204,6 +217,47 @@ fn ingest_chunk(
     }
     result.add_sheets(&sheets.into_writes());
     Ok(result)
+}
+
+/// A chunk's files no `.cue` claims, by what the sheet inside each says.
+struct Unclaimed {
+    /// The files the sheet inside splits, each with its tracks.
+    carved: Vec<(ScannedFile, Vec<CueRow>)>,
+    ordinary: Vec<ScannedFile>,
+    /// The ordinary files holding tracks a sheet inside them carved, which they carry no more.
+    released: Vec<String>,
+}
+
+/// Sorts `files` by the sheet inside each. A file whose tags didn't read keeps the tracks its sheet
+/// carved and writes nothing, so the next scan reads it again: a tagger's write caught half-done
+/// would otherwise cost a disc its play counts.
+fn sort_unclaimed(tx: &Transaction<'_>, files: Vec<ScannedFile>) -> Result<Unclaimed, AppError> {
+    let mut carved = Vec::new();
+    let mut whole = Vec::with_capacity(files.len());
+    for file in files {
+        match embedded::carve(&file.path, &file.metadata) {
+            Some(rows) => carved.push((file, rows)),
+            None => whole.push(file),
+        }
+    }
+    let paths: Vec<Cow<'_, str>> = whole.iter().map(|f| f.path.to_string_lossy()).collect();
+    let paths: Vec<&str> = paths.iter().map(AsRef::as_ref).collect();
+    let holding = queries::scan::embedded_images_among(tx, &paths)?;
+
+    let mut ordinary = Vec::with_capacity(whole.len());
+    let mut released = Vec::new();
+    for file in whole {
+        let path = file.path.to_string_lossy();
+        if !holding.contains(path.as_ref()) {
+            ordinary.push(file);
+        } else if file.metadata.embedded_cue == EmbeddedCue::Unread {
+            log::warn!("Kept the cue sheet tracks of {path}: its tags didn't read");
+        } else {
+            released.push(path.into_owned());
+            ordinary.push(file);
+        }
+    }
+    Ok(Unclaimed { carved, ordinary, released })
 }
 
 /// The caches [`resolve_ids`] reuses within one ingest transaction. Artist and genre are in
@@ -410,20 +464,19 @@ fn resolve_move_candidates(
     Ok(keep_gone(candidates, &new_files, pool))
 }
 
-/// The cue sheet images the `claimed` ones may have moved from, kept as
-/// [`resolve_move_candidates`] keeps a row.
+/// The cue sheet images `images` may have moved from, kept as [`resolve_move_candidates`] keeps a
+/// row.
 fn image_move_candidates(
     tx: &Transaction<'_>,
-    claimed: &[ScannedFile],
+    images: &[&ScannedFile],
     pool: &ScanPool,
 ) -> Result<MoveCandidates, AppError> {
-    if claimed.is_empty() {
+    if images.is_empty() {
         return Ok(MoveCandidates::default());
     }
-    let claimed: Vec<&ScannedFile> = claimed.iter().collect();
-    let hashes: Vec<&str> = claimed.iter().map(|f| f.metadata.file_hash.as_str()).collect();
+    let hashes: Vec<&str> = images.iter().map(|f| f.metadata.file_hash.as_str()).collect();
     let candidates = MoveCandidates::read_on(tx, &[], &hashes)?;
-    Ok(keep_gone(candidates, &claimed, pool))
+    Ok(keep_gone(candidates, images, pool))
 }
 
 fn keep_gone(

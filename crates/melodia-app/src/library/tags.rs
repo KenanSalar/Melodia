@@ -23,7 +23,7 @@ use melodia_core::entities::credits::RoleCredits;
 use melodia_core::entities::cue::{CueTrack, SheetTrack};
 use melodia_core::entities::genre::GenreList;
 use melodia_core::entities::scan::ExtractedMetadata;
-use melodia_core::entities::tags::{ArtworkEdit, FileTags, TagEdit, TagField};
+use melodia_core::entities::tags::{ArtworkEdit, EmbeddedSheetTags, FileTags, TagEdit, TagField};
 use melodia_core::entities::track::TagEditRow;
 use melodia_core::error::AppError;
 use melodia_core::error::describe;
@@ -141,6 +141,16 @@ pub fn read_sheet_track_tags(
     track: CueTrack,
 ) -> Result<FileTags, AppError> {
     cue::read_track_tags(sheet, image, track)
+}
+
+/// The sheet inside the image at `image`: whether an edit can be written into it, and the tags of
+/// `tracks`, each read over the image's as [`read_sheet_track_tags`] reads one. Blocking; the
+/// caller owns the `spawn_blocking`.
+pub fn read_embedded_sheet(
+    image: &Path,
+    tracks: &[CueTrack],
+) -> Result<EmbeddedSheetTags, AppError> {
+    cue::read_embedded(image, tracks)
 }
 
 /// The tracks among `ids` filed outside the library, whose tags only their files hold.

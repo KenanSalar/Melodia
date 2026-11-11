@@ -805,6 +805,10 @@ msgid "The hidden audio before a cue sheet's first track can't be edited here."
 msgstr "Скрытый звук перед первым треком CUE-файла здесь изменить нельзя."
 
 #: ui/components/dialog/tag-editor-body.slint
+msgid "This track's cue sheet is the track list inside its FLAC file, which holds no titles and can't be edited here."
+msgstr "CUE-файлом этого трека служит список треков внутри его FLAC-файла: в нём нет названий, и здесь его изменить нельзя."
+
+#: ui/components/dialog/tag-editor-body.slint
 msgid "Changes are saved to the cue sheet, where album, album artist, disc and barcode apply to every track it lists. Fields a cue sheet can't hold are read-only."
 msgstr "Изменения сохраняются в CUE-файл, где альбом, исполнитель альбома, диск и штрихкод относятся ко всем перечисленным в нём трекам. Поля, которые CUE-файл не может хранить, доступны только для чтения."
 

@@ -35,6 +35,11 @@ paths:
   rows, one sheet wins an image, and a sheet that fails to read keeps its claim. A new path that
   ingests a file a sheet may claim asks the planner, or the image gets a whole-file row beside its
   tracks.
+- **A sheet inside a FLAC is carved where the file's read is written** (`media::cue::embedded::carve`),
+  after a `.cue`'s images are taken out and ahead of its jobs (`ingest::ingest_chunk`, the
+  watcher's `handle_embedded`), so a `.cue` wins and one letting go hands the rows to the sheet
+  inside by number. A new path writing a file's read asks it too, or the image keeps a whole-file
+  row, and a file whose tags didn't read keeps the tracks its sheet carved.
 - **`utils::trash_dir` is the one trash-folder predicate**: a walk or watch that finds files by
   itself asks it, never a trash name of its own.
 - **Nothing inside a write transaction `stat`s a file**: a second `stat` can pair a new mtime with
@@ -53,10 +58,10 @@ paths:
   and a read of a file's tags or lyrics for one track skips a sheet's (`TagEditRow::is_sheet_track`,
   `lyrics::LyricsKey`) or lays its sheet over them (`cue::read_track_tags`).
 - **A sheet track's tags live in its sheet**: a tag edit writes what `media::cue::SheetEdit` carries
-  into the `.cue` (`library::sheet_tags`) and drops the rest. What Edit Tags leaves open for a
-  sheet track is `tag-editor-body.slint`'s `SheetField`s, the editors bound to `TagEditor.read-only`
-  alone and the Credits tab's composer, so a field joining one side joins the other, or it saves
-  into nothing.
+  into the `.cue`, or the FLAC's `CUESHEET` comment where the sheet is inside the image
+  (`library::sheet_tags`), and drops the rest. What Edit Tags leaves open for a sheet track is
+  `tag-editor-body.slint`'s `SheetField`s, the editors bound to `TagEditor.read-only` alone and the
+  Credits tab's composer, so a field joining one side joins the other, or it saves into nothing.
 
 ## Query shape
 

@@ -2,8 +2,8 @@
 
 Working doc. Delete when the feature ships.
 
-Status: **in progress**, Phase 7 through its gates bar the restated credit's hand check, Phase 8
-next; Phase 3 owes Kenan's scrobble and Discord check ·
+Status: **in progress**, Phase 8 through its static gates, its measurement and hand pass next, the
+latter holding Phase 7's restated-credit check; Phase 3 owes Kenan's scrobble and Discord check ·
 Created: 2026-11-04
 
 Issue [#78](https://github.com/KenanSalar/Melodia/issues/78).
@@ -372,14 +372,36 @@ The sources, in precedence order after an external sheet:
    cue frames, which is exact for anything imported from a sheet, since those offsets are multiples
    of `rate / 75`. Titles come from `CUE_TRACKnn_TITLE` where present.
 
-The block is read by a small reader over the metadata block chain, not through Symphonia's
-`chapters()`. Symphonia 0.6.1 maps the block there but drops the track numbers and the audio/data
-flag, and it would cost a second probe per file at scan time.
+The comment wins where it places a track. Only otherwise is the block read. The block is read by
+a small reader over the metadata block chain, not through Symphonia's `chapters()`. Symphonia
+0.6.1 maps the block there but drops the track numbers and the audio/data flag, and it would cost a
+second probe per file at scan time. lofty 0.25 skips the block altogether.
 
 The Vorbis comment comes from opening FLAC as lofty's concrete `FlacFile` and converting it into
-the `TaggedFile` the rest of `metadata::extract` already uses. That keeps the single-open discipline
-`crates/melodia/tests/lofty_open.rs` pins. Edits to rows from a `CUESHEET` tag rewrite that tag's
-text through the same writer. Rows from the native block alone are read-only.
+the `TaggedFile` the rest of `metadata::extract` already uses. lofty's generic tag carries a key it
+maps to nothing only in a private companion, which no getter reaches. That keeps the single-open
+discipline `crates/melodia/tests/lofty_open.rs` pins.
+
+**The sheet rides from the read to the write as read** (`ExtractedMetadata.embedded_cue`), and the
+rows are carved where the file's read is written, as an external sheet's are inside its job. The
+scan, an import and the watcher therefore carry it with no new plumbing, and a `.cue` wins by the
+write order alone: its images are taken out before the rest is read for a sheet inside.
+
+**A file whose tags don't read keeps the tracks its sheet carved**, rows and stamp alike, so the
+next scan reads it again. This is the embedded twin of "a failed sheet keeps its claim": a tagger's
+write caught half-done would otherwise cost a disc its play counts.
+
+**Edits to rows from a `CUESHEET` tag rewrite that tag's text through the same writer**, and drop
+each track's `CUE_TRACKnn_<FIELD>` for a field the edit states, so the sheet's line is what reads
+back. The image is saved as a whole `FlacFile`, never as a bare `VorbisComments`: lofty's FLAC
+write drops every picture block and writes back only the pictures of the tag it is handed, and a
+`FlacFile` keeps its pictures outside its comments. Rows from the native block alone are
+read-only, with a note of their own.
+
+**A library read before this splits its FLACs once.** A once-per-install sweep reads each
+whole-file FLAC's block headers and comment keys, and blanks the stamp of those carrying a sheet,
+so the next scan reads only them. Marking every FLAC stale would send the whole library's FLACs
+back through a hash and a full read.
 
 ### Files opened from outside the library
 
@@ -451,8 +473,9 @@ How Melodia holds one:
 | sheet + image tags → row fields | `media/cue/merge.rs` | the table above; produces the `ExtractedMetadata` shape the ordinary ingest already writes |
 | sheet rewrite | `media/cue/write.rs` | Phase 7: `SheetEdit`, the edits by scope. `text.rs` splits the lines and encodes them back, `parse.rs`'s reader answers each line's `Statement` |
 | the edit's sheet pass | `crates/melodia-app/src/library/sheet_tags.rs` | Phase 7: write, mark `self_writes`, read back through `import::read_in` and `commit_import` |
-| embedded sources | `media/cue/embedded.rs` | Phase 8: the CUESHEET block reader and the tag text |
-| store units of work | `crates/melodia-store/src/database/queries/scan/cue_units.rs` | `SheetWriter::apply`: per sheet job, the stamp, `apply_cue_unit` (a gone image's rows carried by hash, upsert by key, drop missing numbers, carry playlist entries off the whole-file row) and `release_image` (the reverse), `pub(crate)` on the caller's transaction: the scan chunk's, whose stats triggers drop and return inside it (`commit_scan_chunk`), or the watcher batch's (`handle_sheets`), each job filed under its sheet's folder |
+| embedded sources | `media/cue/embedded/` | Phase 8: which source wins and the carve (`mod.rs`), the block chain walker (`chain.rs`), the native block (`block.rs`), the `CUE_TRACKnn_*` overrides (`overrides.rs`), and the comment's rewrite and save |
+| the upgrade sweep | `crates/melodia-app/src/tasks/embedded_cue_probe.rs` | Phase 8: the one-shot probe of whole-file FLACs |
+| store units of work | `crates/melodia-store/src/database/queries/scan/cue_units.rs` | `SheetWriter::apply`: per sheet job, the stamp, `apply_cue_unit` (a gone image's rows carried by hash, upsert by key, drop missing numbers, carry playlist entries off the whole-file row) and `release_rows` (the reverse), `pub(crate)` on the caller's transaction: the scan chunk's, whose stats triggers drop and return inside it (`commit_scan_chunk`), or the watcher batch's (`handle_sheets`), each job filed under its sheet's folder |
 | playlist carry | `crates/melodia-store/src/database/queries/playlist_carry.rs` | `replace_in_playlists` and `merge_into_playlists`, beside the other playlist membership writers |
 | the planner | `crates/melodia-store/src/media/cue/plan.rs` | which sheet claims which image, settled in `discover` (`scan/mod.rs`) after the incremental filter, whose output decides which directories it reads again, and before the walk is cut into chunks. Each sheet's work is one job that `CuePlan::into_chunks` never splits, so a sheet's stamp commits with everything it caused. The scan calls it, and the watcher's `process_batch` (`file_event_processor/sheets.rs`) and an import (`library/import.rs`) call it over a few directories through `media/cue/around.rs`'s `settle_dirs` |
 | the span on a deck | `crates/melodia-audio/src/player/source/span.rs` | beside `aac_trim.rs`: the open-at-start, the counted end, the seek offset. `file_decode.rs` calls it |
@@ -805,7 +828,7 @@ Each item is a site from the map that breaks once twelve rows share a path:
 - [x] **M3U** (`playlist_files/m3u.rs`):
   - [x] Export writes `#MELODIA-CUE-TRACK:<n>` beside `#MELODIA-HASH`.
   - [x] Import matches path plus number, and a hash re-match hash plus number (`match_entries`).
-        A number no copy holds takes the file played whole, as `release_image` hands a playlist
+        A number no copy holds takes the file played whole, as `release_rows` hands a playlist
         the image once its sheet goes. An entry with no number takes every row of its file, and a
         `.cue` entry the rows of the files it names (`import::files_opened_by`).
 - [x] **Browse** (`browse.rs`): a claimed image lists its tracks in place, `TRACKS_IN_DIRECTORY`
@@ -1073,34 +1096,86 @@ a whole disc. *Files opened from outside the library* gives the model.
         own, under a new top-level one ahead of `FILE`;
   - [x] the top-level-only sheet of the check above, edited the same way, writes the same lines,
         each track's artist now taken from its row.
-- [ ] Kenan's hand check of the restated credit: a sheet stating no `PERFORMER` over a FLAC tagged
-      `ARTIST=A feat. B`, `ARTISTS=A` and `ARTISTS=B`. Change one track's album artist: every track
-      still reads "A feat. B" and stays on A's and B's artist pages, and the Artists grid gains no
-      "A feat. B" card.
+- [ ] Kenan's hand check of the restated credit: moved into Phase 8's hand pass (Kenan's call,
+      2026-11-11), which runs on the same debug build and fixture setup.
 
 ## Phase 8: Embedded sheets
 
-- [ ] `metadata::extract` opens FLAC as lofty's `FlacFile`, takes its `CUESHEET` and
-      `CUE_TRACKnn_*` comments, and converts it into the `TaggedFile` the rest of the function
-      reads: still one open (`lofty_open.rs`).
-- [ ] `media/cue/embedded.rs`: the CUESHEET block reader over the metadata block chain, RFC 9639
-      §8.7. It drops the lead-out and non-audio tracks and rounds offsets to cue frames.
-- [ ] Planner precedence: an external sheet, then the `CUESHEET` tag, then the block. Embedded rows
-      have no `cue_sheet_id`, and their stamp is the image's own.
-- [ ] Edit Tags reads an outside embedded-sheet track through its embedded sheet: `read_files`
-      (`callbacks/tags/open.rs`) finds a sheet only through `cue_sheet_id`, so such a track opens
-      with its genres, credits and release tags blank.
-- [ ] Edits on `CUESHEET`-tag rows rewrite the tag's text through `write.rs` and save it through the
-      concrete `VorbisComments`. Rows from the block alone are read-only.
-- [ ] Docs: `README.md`'s cue line covers embedded sheets.
+- [x] **The read:**
+  - [x] `metadata::read_tags_and_cue` opens a FLAC as lofty's `FlacFile`, takes its `CUESHEET` and
+        `CUE_TRACKnn_*` comments, and converts it into the `TaggedFile` `extract` reads. Every lofty
+        open still goes through `metadata.rs`'s one probe (`lofty_open.rs`).
+  - [x] The sheet rides on `ExtractedMetadata.embedded_cue` as read (`EmbeddedCue`, core). A file
+        whose tags didn't parse reads `Unread`.
+- [x] **`media/cue/embedded/`:**
+  - [x] the block chain walker (`chain.rs`);
+  - [x] the native block, RFC 9639 §8.7 (`block.rs`): lead-out and non-audio tracks dropped,
+        offsets rounded to cue frames at the stream's rate, the MCN as `CATALOG`;
+  - [x] the overrides (`overrides.rs`): TITLE, ARTIST, COMPOSER, GENRE, DATE and ISRC, at track
+        scope;
+  - [x] the carve (`carve`), through `parse` in a one-file mode (`parse::Files::Inside`),
+        `lay_out` and `merge::rows`.
+- [x] **Precedence by write order.** `ingest_chunk` sorts a chunk into claimed, carved, kept and
+      ordinary (`sort_unclaimed`), and writes ordinary files, then embedded units, then sheet jobs.
+      The watcher does the same per event (`handle_embedded`), and a released image carves before
+      its job (`apply_sheet_job`). `apply_cue_unit` takes `sheet_id: None` for embedded rows.
+      `release_rows` takes one `Carver`'s rows, so a `.cue` letting go releases only its own, and
+      `release_embedded` gives a file whose sheet inside is gone its whole-file row back.
+- [x] **The upgrade sweep** (`tasks/embedded_cue_probe.rs`, marker `embedded_cues_probed`):
+      `get_whole_flac_paths_after` pages the library's whole-file FLACs, `cue::carries_sheet`
+      probes each, and `mark_tracks_stale` blanks the carriers' stamps.
+- [x] **Edit Tags:**
+  - [x] `SheetTrack.sheet` is a `SheetFile`, `Cue` or `Embedded`. `get_sheet_tracks_by_ids`
+        left-joins `cue_sheets`, and `get_sheet_artists` reads embedded rows by image.
+  - [x] `sheet_tags` writes an embedded sheet through `cue::rewritten_embedded` and
+        `EmbeddedWrite::save`, and reads its image back as `new_audio`.
+  - [x] `read_files` reads each embedded image once (`cue::read_embedded`), an outside track's tags
+        included.
+  - [x] `TagEditor.lock` (`TagLock`) replaces `read-only` and `from-sheet`. `cue-block` locks a
+        native block's tracks with a note of its own.
+- [x] i18n: the new note through `scripts/update-translations.py`, every catalog finished.
+- [x] Docs: `README.md`'s cue line, `library-data.md`'s carve rule and sheet-tags rule, and
+      `cue/mod.rs`.
 
 **Gate:**
-- [ ] The static gates.
-- [ ] Kenan's hand pass:
+- [x] The static gates.
+- [x] A headless pass over the store path, run by Claude (2026-11-11). A throwaway example, deleted
+      after, drove the fixtures below through `extract_or_filename_row` and `commit_import` into an
+      in-memory database:
+  - [x] the comment titled its three tracks, the override retitling track 2;
+  - [x] the native block placed its tracks with their ISRCs, titled by the overrides and by the
+        stem past them;
+  - [x] a FLAC carrying both read the comment, and the one-track block kept its whole-file row;
+  - [x] a re-read whose tags didn't parse kept the tracks; one carrying no sheet gave the image its
+        whole row back, and the sheet back split it again;
+  - [x] an edit on a copy rewrote the comment's two lines alone and dropped the stale override,
+        the cover, other tags and decoded audio unchanged. An edit on the block was refused.
+- [ ] Scan cost, on Kenan's go: fresh release builds of `21a24283` and this phase. On the
+      50,500-track library, measure a full rescan's wall time and peak RSS for both, then the
+      probe sweep once.
+- [ ] Kenan's hand pass: the debug build against `Melodia-dev`, restored after. The fixtures are
+      built by `make_fixtures.py`, which writes the native block itself (`ffprobe` reads it back as
+      chapters), and kept in `~/Development/melodia-cue-test-files/phase8-embedded`:
   - [ ] a FLAC carrying a `CUESHEET` tag;
-  - [ ] one carrying only the native block, built with `metaflac --import-cuesheet-from`;
-  - [ ] one carrying both, plus an external sheet that should win;
-  - [ ] a per-track FLAC whose block lists one track, which must claim nothing.
+  - [ ] one carrying only the native block, titled by `CUE_TRACKnn_TITLE`;
+  - [ ] one carrying both, plus an external sheet that should win. Deleting the external sheet
+        hands its rows to the embedded one with every id kept;
+  - [ ] a per-track FLAC whose block lists one track, which must claim nothing;
+  - [ ] the upgrade: two such FLACs scanned whole on `21a24283`, one in a playlist. The new build's
+        sweep re-reads only them, and both split, the playlist holding the tracks;
+  - [ ] an edit on a `CUESHEET`-tag track:
+    - [ ] it rewrites the comment, the track's override goes, and the pictures survive
+          (`ffprobe`);
+    - [ ] ids, play counts and playlist places are kept;
+    - [ ] the watcher doesn't echo the write;
+  - [ ] a native-block track opens read-only with its note, and an outside embedded track shows
+        its genres and credits;
+  - [ ] stripping the comment while Melodia watches gives the image its whole row back in its
+        playlist;
+  - [ ] Phase 7's restated credit: a sheet stating no `PERFORMER` over a FLAC tagged
+        `ARTIST=A feat. B`, `ARTISTS=A` and `ARTISTS=B`. Change one track's album artist: every
+        track still reads "A feat. B" and stays on A's and B's artist pages, and the Artists grid
+        gains no "A feat. B" card.
 
 ## Phase 9: Tests
 

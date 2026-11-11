@@ -69,7 +69,7 @@ pub fn named_files(sheets: &[PathBuf]) -> Vec<Result<Vec<PathBuf>, AppError>> {
 }
 
 fn files_named_by(path: &Path, audio: &WalkIndex) -> Result<Vec<PathBuf>, AppError> {
-    let sheet = parse::parse(&read_sheet(path)?, path);
+    let sheet = parse::parse(&read_sheet(path)?, path, parse::Files::Named);
     if !sheet.places_a_track() {
         return Err(AppError::metadata_msg(format!("{} places no track", path.display())));
     }

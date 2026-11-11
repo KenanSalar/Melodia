@@ -18,7 +18,7 @@ use crate::media::ingest::metadata::{
 };
 use melodia_core::entities::artist::ArtistCredit;
 use melodia_core::entities::credits::{CreditRole, RoleCredit, RoleCredits};
-use melodia_core::entities::cue::{CueSpan, CueTrack};
+use melodia_core::entities::cue::{CueSpan, CueTrack, EmbeddedCue};
 use melodia_core::entities::scan::ExtractedMetadata;
 use melodia_core::entities::tags::FileTags;
 
@@ -59,6 +59,7 @@ pub(crate) fn rows(
         .map(|row| {
             let scopes = Scopes { track: row.source.map(|source| &sheet.tracks[source]), sheet };
             let mut meta = disc.clone();
+            meta.embedded_cue = EmbeddedCue::Absent;
             meta.title = scopes
                 .title()
                 .map_or_else(|| format!("{stem} {:02}", row.track.number()), ToOwned::to_owned);

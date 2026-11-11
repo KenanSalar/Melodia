@@ -457,14 +457,19 @@ pub fn read_lyrics(path: &Path) -> Result<Option<String>, AppError> {
 /// The tags the Edit-Tags dialog reads off a file, off one parse. Blocking.
 pub fn read_file_tags(path: &Path) -> Result<FileTags, AppError> {
     let tagged = metadata::read_tags(path, metadata::TagScope::TagsOnly)?;
+    Ok(file_tags_of(&tagged))
+}
+
+/// [`read_file_tags`] off a file already parsed.
+pub(crate) fn file_tags_of(tagged: &TaggedFile) -> FileTags {
     let tag = tagged.primary_tag().or_else(|| tagged.first_tag());
-    Ok(FileTags {
+    FileTags {
         lyrics: tag.and_then(lyrics_from),
         credits: metadata::credits_from_tag(tag),
         roles: tag.map(role_tags::read_roles).unwrap_or_default(),
         genres: metadata::read_genres(tag),
         release: metadata::read_release_tags(tag).into(),
-    })
+    }
 }
 
 fn lyrics_from(tag: &Tag) -> Option<String> {

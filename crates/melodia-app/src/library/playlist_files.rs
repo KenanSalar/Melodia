@@ -343,7 +343,7 @@ async fn match_entries(
 }
 
 /// What an entry naming `key` matches: the cue sheet track it names, else the file played whole,
-/// as a playlist holding the track keeps it once its sheet goes (`release_image`). An entry naming
+/// as a playlist holding the track keeps it once its sheet goes (`release_rows`). An entry naming
 /// no track takes every row of one file.
 fn rows_named(found: &FileTracks, key: &str, cue_track: Option<CueTrack>) -> Vec<i64> {
     match cue_track {

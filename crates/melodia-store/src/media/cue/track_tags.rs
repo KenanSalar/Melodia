@@ -4,7 +4,7 @@
 use std::path::Path;
 
 use super::merge::track_tags;
-use super::parse::parse;
+use super::parse::{Files, parse};
 use super::text::read_sheet;
 use crate::media::ingest::tag_writer::read_file_tags;
 use melodia_core::entities::cue::CueTrack;
@@ -14,6 +14,6 @@ use melodia_core::error::AppError;
 /// Track `track` of the sheet at `sheet`, read over the tags of its image at `image` as the scan
 /// merges them. Blocking.
 pub fn read_track_tags(sheet: &Path, image: &Path, track: CueTrack) -> Result<FileTags, AppError> {
-    let stated = parse(&read_sheet(sheet)?, sheet);
+    let stated = parse(&read_sheet(sheet)?, sheet, Files::Named);
     Ok(track_tags(&stated, track, read_file_tags(image)?))
 }

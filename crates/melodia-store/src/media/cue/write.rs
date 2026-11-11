@@ -10,7 +10,8 @@ use std::path::Path;
 
 use lofty::tag::items::Timestamp;
 
-use super::parse::{Command, Scope, Sheet, SheetTrack, Statement, stated_value, statements};
+use super::embedded::TrackField;
+use super::parse::{Command, Files, Scope, Sheet, SheetTrack, Statement, stated_value, statements};
 use super::text::{EncodedSheet, LineEnding, OutLine, RawLine};
 use crate::media::ingest::metadata::LIST_SEPARATOR;
 use melodia_core::entities::artist::ArtistCredit;
@@ -114,12 +115,44 @@ pub fn rewritten_sheet(
 ) -> Result<Option<Vec<u8>>, AppError> {
     let sheet = EncodedSheet::read(path)?;
     let lines = sheet.lines();
-    let mut rewrite = Rewrite::new(&lines);
+    let mut rewrite = Rewrite::new(&lines, Files::Named);
     rewrite.apply(edit, rows);
     if !rewrite.changes() {
         return Ok(None);
     }
     Ok(Some(sheet.encode(&rewrite.into_lines(), path)))
+}
+
+/// A `CUESHEET` comment's rewrite, and the track fields the edit states.
+pub(super) struct CommentRewrite {
+    /// `None` where the comment already states all of the edit.
+    pub(super) text: Option<String>,
+    track_fields: Vec<(CueTrack, TrackField)>,
+}
+
+impl CommentRewrite {
+    /// Whether the edit states `field` for its track, which an override of it would hide.
+    pub(super) fn states(&self, field: (CueTrack, TrackField)) -> bool {
+        self.track_fields.contains(&field)
+    }
+}
+
+/// The `CUESHEET` comment `text` of the image at `origin`, rewritten for `edit` as a `.cue` is.
+pub(super) fn rewritten_comment(
+    text: &str,
+    origin: &Path,
+    edit: &SheetEdit,
+    rows: &SheetRows,
+) -> CommentRewrite {
+    let sheet = EncodedSheet::from_text(text);
+    let lines = sheet.lines();
+    let mut rewrite = Rewrite::new(&lines, Files::Inside);
+    rewrite.apply(edit, rows);
+    let track_fields = std::mem::take(&mut rewrite.track_fields);
+    let text = rewrite.changes().then(|| {
+        String::from_utf8_lossy(&sheet.encode(&rewrite.into_lines(), origin)).into_owned()
+    });
+    CommentRewrite { text, track_fields }
 }
 
 /// Replaces the sheet at `path` with `bytes` through a copy renamed over it, so nothing reads half
@@ -159,6 +192,19 @@ impl Keyword {
             Self::Date => "REM DATE",
             Self::DiscNumber => "REM DISCNUMBER",
             Self::TotalDiscs => "REM TOTALDISCS",
+        }
+    }
+
+    /// The track field a line of this keyword states, as an override would.
+    fn track_field(self) -> Option<TrackField> {
+        match self {
+            Self::Title => Some(TrackField::Title),
+            Self::Performer => Some(TrackField::Artist),
+            Self::Songwriter | Self::RemComposer => Some(TrackField::Composer),
+            Self::Isrc => Some(TrackField::Isrc),
+            Self::Genre => Some(TrackField::Genre),
+            Self::Date => Some(TrackField::Date),
+            Self::Catalog | Self::DiscNumber | Self::TotalDiscs => None,
         }
     }
 
@@ -206,11 +252,13 @@ struct Rewrite<'a> {
     inserts: Vec<(usize, String)>,
     /// What a new line ends with: the sheet's own ending.
     ending: LineEnding,
+    /// Each track field the edit sets or clears, whether or not a line had to change for it.
+    track_fields: Vec<(CueTrack, TrackField)>,
 }
 
 impl<'a> Rewrite<'a> {
-    fn new(lines: &'a [RawLine<'a>]) -> Self {
-        let (stated, statements) = statements(lines.iter().map(|line| line.text.as_str()));
+    fn new(lines: &'a [RawLine<'a>], files: Files) -> Self {
+        let (stated, statements) = statements(lines.iter().map(|line| line.text.as_str()), files);
         let ending = lines
             .iter()
             .map(|line| line.ending)
@@ -223,6 +271,7 @@ impl<'a> Rewrite<'a> {
             edits: vec![LineEdit::Keep; lines.len()],
             inserts: Vec::new(),
             ending,
+            track_fields: Vec::new(),
         }
     }
 
@@ -321,6 +370,7 @@ impl<'a> Rewrite<'a> {
     }
 
     fn clear(&mut self, scope: Scope, keyword: Keyword) {
+        self.note_stated(scope, keyword);
         for index in self.lines_stating(scope, keyword) {
             self.edits[index] = LineEdit::Drop;
         }
@@ -329,6 +379,7 @@ impl<'a> Rewrite<'a> {
     /// Writes `value` over the scope's first line of `keyword` and drops the others, so the one
     /// line left reads back whichever of them the reader would have taken.
     fn set(&mut self, scope: Scope, keyword: Keyword, value: &str) {
+        self.note_stated(scope, keyword);
         if value.is_empty() {
             return self.clear(scope, keyword);
         }
@@ -344,6 +395,12 @@ impl<'a> Rewrite<'a> {
         self.edits[first] = LineEdit::Replace(keyword.spell(indent, value));
         for &index in others {
             self.edits[index] = LineEdit::Drop;
+        }
+    }
+
+    fn note_stated(&mut self, scope: Scope, keyword: Keyword) {
+        if let (Scope::Track(track), Some(field)) = (scope, keyword.track_field()) {
+            self.track_fields.push((track, field));
         }
     }
 

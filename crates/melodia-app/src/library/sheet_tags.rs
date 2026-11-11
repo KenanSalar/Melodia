@@ -1,6 +1,7 @@
 //! Edit Tags on a cue sheet's tracks: what the sheet holds is written into it, and its tracks are
 //! read back as a scan reads an edited sheet, so each keeps its id, play count and playlist places.
-//! Nothing reaches the image, whose tags state the whole disc.
+//! Nothing else of the image is touched, its tags stating the whole disc: a sheet inside the image
+//! is its `CUESHEET` comment alone.
 //!
 //! The read lands through the import's commit, which files a sheet outside every library folder
 //! under a folder of its own and links its tracks to nothing; the watcher's would skip that sheet.
@@ -11,7 +12,7 @@ use std::sync::Arc;
 
 use super::import::{Reading, read_in};
 use melodia_artwork::media::image::artwork::CoverCache;
-use melodia_core::entities::cue::SheetTrack;
+use melodia_core::entities::cue::{SheetFile, SheetTrack};
 use melodia_core::error::{AppError, describe};
 use melodia_core::utils::self_writes::SelfWrites;
 use melodia_store::database::queries::scan;
@@ -30,7 +31,7 @@ pub(super) struct SheetWrites {
 /// An edit and the sheets behind its tracks, read before anything is written.
 pub(super) struct SheetPass {
     edit: SheetEdit,
-    sheets: BTreeMap<String, SelectedTracks>,
+    sheets: BTreeMap<SheetFile, SelectedTracks>,
 }
 
 impl SheetPass {
@@ -42,8 +43,8 @@ impl SheetPass {
         }
         let mut sheets = by_sheet(queries::track::get_sheet_tracks_by_ids(db, ids).await?);
         if !sheets.is_empty() {
-            let paths = sheets.keys().cloned().collect();
-            let mut artists = queries::track::get_sheet_artists(db, paths).await?;
+            let keys = sheets.keys().cloned().collect();
+            let mut artists = queries::track::get_sheet_artists(db, keys).await?;
             for (sheet, selected) in &mut sheets {
                 selected.rows.artists = artists.remove(sheet).unwrap_or_default();
             }
@@ -65,8 +66,8 @@ impl SheetPass {
         }
         let marks = Arc::clone(self_writes);
         let written: Vec<SheetWrite> = tokio::task::spawn_blocking(move || {
-            let write = |(sheet, selected): (String, SelectedTracks)| {
-                let outcome = write_sheet(Path::new(&sheet), &selected.rows, &edit, &marks);
+            let write = |(sheet, selected): (SheetFile, SelectedTracks)| {
+                let outcome = write_sheet(&sheet, &selected.rows, &edit, &marks);
                 SheetWrite { sheet, ids: selected.ids, outcome }
             };
             sheets.into_iter().map(write).collect()
@@ -75,15 +76,15 @@ impl SheetPass {
         .map_err(|e| AppError::metadata("cue sheet write task panicked", e))?;
 
         let mut writes = SheetWrites::default();
-        let mut changed: Vec<(String, Vec<i64>)> = Vec::new();
+        let mut changed: Vec<(SheetFile, Vec<i64>)> = Vec::new();
         for SheetWrite { sheet, ids, outcome } in written {
             match outcome {
                 Ok(true) => changed.push((sheet, ids)),
                 Ok(false) => writes.updated.extend(ids),
                 Err(e) => {
                     let reason = describe(&e);
-                    log::warn!("tag write failed for {sheet}: {reason}");
-                    writes.failures.push((sheet, reason));
+                    log::warn!("tag write failed for {}: {reason}", sheet.path());
+                    writes.failures.push((sheet.path().to_owned(), reason));
                 }
             }
         }
@@ -91,15 +92,17 @@ impl SheetPass {
             return Ok(writes);
         }
 
-        let paths: Vec<PathBuf> = changed.iter().map(|(sheet, _)| PathBuf::from(sheet)).collect();
-        match read_back(db, artwork_dir, cover_cache, paths.clone()).await {
+        let sheets: Vec<SheetFile> = changed.iter().map(|(sheet, _)| sheet.clone()).collect();
+        match read_back(db, artwork_dir, cover_cache, &sheets).await {
             Ok(()) => writes.updated.extend(changed.into_iter().flat_map(|(_, ids)| ids)),
             Err(e) => {
                 // Unmarked so the watcher reads them, rather than leaving the rows stale.
+                let paths: Vec<PathBuf> = sheets.iter().map(|sheet| sheet.path().into()).collect();
                 self_writes.unmark(&paths);
                 let reason = describe(&e);
                 log::warn!("cue sheet read-back failed: {reason}");
-                let failed = changed.into_iter().map(|(sheet, _)| (sheet, reason.clone()));
+                let failed =
+                    changed.into_iter().map(|(sheet, _)| (sheet.path().to_owned(), reason.clone()));
                 writes.failures.extend(failed);
             }
         }
@@ -114,8 +117,8 @@ struct SelectedTracks {
     rows: SheetRows,
 }
 
-fn by_sheet(tracks: Vec<SheetTrack>) -> BTreeMap<String, SelectedTracks> {
-    let mut sheets: BTreeMap<String, SelectedTracks> = BTreeMap::new();
+fn by_sheet(tracks: Vec<SheetTrack>) -> BTreeMap<SheetFile, SelectedTracks> {
+    let mut sheets: BTreeMap<SheetFile, SelectedTracks> = BTreeMap::new();
     for SheetTrack { id, sheet, track } in tracks {
         let selected = sheets.entry(sheet).or_default();
         selected.ids.push(id);
@@ -126,35 +129,56 @@ fn by_sheet(tracks: Vec<SheetTrack>) -> BTreeMap<String, SelectedTracks> {
 
 /// One sheet's write, `Ok(false)` where it already stated the edit.
 struct SheetWrite {
-    sheet: String,
+    sheet: SheetFile,
     ids: Vec<i64>,
     outcome: Result<bool, AppError>,
 }
 
-/// Writes `edit` into `sheet` for its tracks `rows`, answering whether the file changed. Blocking.
+/// Writes `edit` into `sheet` for its tracks `rows`, answering whether the file changed. Each file
+/// is marked before its write and by the path on record, as a file's tag write marks it. Blocking.
 fn write_sheet(
-    sheet: &Path,
+    sheet: &SheetFile,
     rows: &SheetRows,
     edit: &SheetEdit,
     self_writes: &SelfWrites,
 ) -> Result<bool, AppError> {
-    let Some(bytes) = cue::rewritten_sheet(sheet, edit, rows)? else {
-        return Ok(false);
-    };
-    // Before the write and by the path on record, as a file's tag write marks it.
-    self_writes.mark(sheet);
-    cue::replace_sheet(sheet, &bytes)?;
+    let path = Path::new(sheet.path());
+    match sheet {
+        SheetFile::Cue(_) => {
+            let Some(bytes) = cue::rewritten_sheet(path, edit, rows)? else {
+                return Ok(false);
+            };
+            self_writes.mark(path);
+            cue::replace_sheet(path, &bytes)?;
+        }
+        SheetFile::Embedded(_) => {
+            let Some(image) = cue::rewritten_embedded(path, edit, rows)? else {
+                return Ok(false);
+            };
+            self_writes.mark(path);
+            image.save(path)?;
+        }
+    }
     Ok(true)
 }
 
-/// Reads `sheets` back in with the images they hold, and claims no other: the settle reads every
-/// sheet beside them, and one beside a sheet opened from outside the library was never opened.
+/// Reads `written` back in with the images they hold, and claims no other: the settle reads every
+/// sheet beside a written `.cue`, and one beside a sheet opened from outside the library was never
+/// opened. An image whose own sheet was written is read as an opened file is.
 async fn read_back(
     db: &DbPool,
     artwork_dir: &Path,
     cover_cache: &CoverCache,
-    sheets: Vec<PathBuf>,
+    written: &[SheetFile],
 ) -> Result<(), AppError> {
+    let mut sheets: Vec<PathBuf> = Vec::new();
+    let mut images: Vec<PathBuf> = Vec::new();
+    for sheet in written {
+        match sheet {
+            SheetFile::Cue(path) => sheets.push(path.into()),
+            SheetFile::Embedded(path) => images.push(path.into()),
+        }
+    }
     let dirs: BTreeSet<String> = sheets
         .iter()
         .filter_map(|sheet| sheet.parent())
@@ -168,7 +192,7 @@ async fn read_back(
         .map(|(image, _)| PathBuf::from(image))
         .collect();
     let owns = move |image: &Path| held.contains(image);
-    let reading = Reading { new_audio: Vec::new(), sheets, around, owns };
+    let reading = Reading { new_audio: images, sheets, around, owns };
     let (chunk, pool) = read_in(reading, artwork_dir, cover_cache).await?;
     let scan_timestamp = melodia_core::utils::now_rfc3339();
     queries::ingest::commit_import(db, chunk, scan_timestamp, pool).await?;

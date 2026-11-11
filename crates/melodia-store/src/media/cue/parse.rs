@@ -36,6 +36,12 @@ impl Fields {
     pub(crate) fn rem(&self, key: &str) -> Option<&str> {
         self.rems.iter().find(|(name, _)| name == key).map(|(_, value)| value.as_str())
     }
+
+    /// States `value` under the upper-cased `key` in place of whatever the lines did.
+    pub(crate) fn set_rem(&mut self, key: &str, value: String) {
+        self.rems.retain(|(name, _)| name != key);
+        self.rems.push((key.to_owned(), value));
+    }
 }
 
 pub(crate) struct SheetTrack {
@@ -47,8 +53,38 @@ pub(crate) struct SheetTrack {
 }
 
 impl SheetTrack {
+    /// A track of the one file a sheet is inside, at the index points `indexes` numbers.
+    pub(crate) fn inside(
+        number: CueTrack,
+        is_audio: bool,
+        isrc: Option<String>,
+        indexes: impl IntoIterator<Item = (u8, CueFrames)>,
+    ) -> Self {
+        let indexes = indexes.into_iter().map(|(number, at)| Index { number, at, file: 0 });
+        Self { number, is_audio, fields: Fields::default(), isrc, indexes: indexes.collect() }
+    }
+
     pub(crate) fn index(&self, number: u8) -> Option<Index> {
         self.indexes.iter().find(|index| index.number == number).copied()
+    }
+}
+
+/// What a sheet's `FILE` lines name.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub(crate) enum Files {
+    /// The audio files the lines under each place tracks in, as a `.cue` beside them names them.
+    Named,
+    /// Nothing: the sheet is inside the one file it splits, whatever file the ripper's lines name.
+    Inside,
+}
+
+impl Files {
+    /// The files a sheet starts out naming, which an [`Index`] counts in.
+    pub(super) fn at_start(self) -> Vec<String> {
+        match self {
+            Self::Named => Vec::new(),
+            Self::Inside => vec![String::new()],
+        }
     }
 }
 
@@ -62,8 +98,8 @@ pub(crate) struct Index {
 }
 
 /// Reads `text`, logging each line it drops against `origin`.
-pub(crate) fn parse(text: &str, origin: &Path) -> Sheet {
-    let mut reader = Reader::default();
+pub(crate) fn parse(text: &str, origin: &Path, files: Files) -> Sheet {
+    let mut reader = Reader::new(files);
     for (line_number, line) in text.lines().enumerate() {
         if reader.read(line).is_err() {
             log::warn!("Skipped line {} of {}: {}", line_number + 1, origin.display(), line.trim());
@@ -74,8 +110,11 @@ pub(crate) fn parse(text: &str, origin: &Path) -> Sheet {
 
 /// What each of `lines` states, in order, beside the sheet they state together. A line that can't
 /// be read states [`Command::Other`].
-pub(super) fn statements<'a>(lines: impl IntoIterator<Item = &'a str>) -> (Sheet, Vec<Statement>) {
-    let mut reader = Reader::default();
+pub(super) fn statements<'a>(
+    lines: impl IntoIterator<Item = &'a str>,
+    files: Files,
+) -> (Sheet, Vec<Statement>) {
+    let mut reader = Reader::new(files);
     let statements = lines
         .into_iter()
         .map(|line| {
@@ -127,17 +166,23 @@ pub(super) enum Command {
 /// A line that names something the sheet can't hold, such as an index with no file above it.
 struct Unreadable;
 
-#[derive(Default)]
 struct Reader {
     sheet: Sheet,
+    files: Files,
     /// Set by a `TRACK` line that couldn't be read, so its lines aren't taken for the track before.
     in_rejected_track: bool,
 }
 
 impl Reader {
+    fn new(files: Files) -> Self {
+        let sheet = Sheet { files: files.at_start(), ..Sheet::default() };
+        Self { sheet, files, in_rejected_track: false }
+    }
+
     fn read(&mut self, line: &str) -> Result<Command, Unreadable> {
         let (keyword, rest) = split_word(line);
         match keyword.to_ascii_uppercase().as_str() {
+            "FILE" if self.files == Files::Inside => Ok(Command::File),
             "FILE" => {
                 self.sheet.files.push(file_name(rest).ok_or(Unreadable)?);
                 Ok(Command::File)

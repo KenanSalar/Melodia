@@ -22,12 +22,12 @@ use melodia_app::state::AppState;
 use melodia_core::entities::album::ReleaseTagRow;
 use melodia_core::entities::artist::{ArtistCredit, JOIN_PHRASES};
 use melodia_core::entities::credits::RoleCredits;
-use melodia_core::entities::cue::{CueTrack, SheetTrack};
+use melodia_core::entities::cue::{CueTrack, SheetFile, SheetTrack};
 use melodia_core::entities::genre::GenreList;
 use melodia_core::entities::tags::{ArtworkEdit, FileTags, RoleCreditEdit};
 use melodia_core::entities::track::TagEditRow;
 use melodia_core::error::{AppError, describe};
-use melodia_ui::{AppWindow, Dialog, Settings, TagEditor};
+use melodia_ui::{AppWindow, Dialog, Settings, TagEditor, TagLock};
 
 use super::artwork::decode_cover_preview;
 use super::credits::{rows_from_credit, write_credit_rows};
@@ -68,7 +68,8 @@ pub(super) fn wire_request_edit(
             let single = rows.len() == 1;
             let outside =
                 or_logged(library::tags::get_tag_edit_outside(&s.db, &ids).await, "outside rows");
-            let files = read_files(&s, &rows, &outside).await;
+            let FileReads { tags: files, reads_cue_block } = read_files(&s, &rows, &outside).await;
+            let lock = tag_lock(&rows, reads_cue_block);
 
             // Lyrics live in the file, and so does the authoritative credit, join rows seeded from
             // `artist_id` alone knowing only the first name. A multi-selection takes the database
@@ -102,16 +103,7 @@ pub(super) fn wire_request_edit(
                 None
             };
 
-            // Decoded off the UI thread, a full-resolution source being able to jank it.
-            let cover_path = rows.iter().find_map(|r| {
-                r.artwork_path.as_deref().filter(|p| !p.is_empty()).map(PathBuf::from)
-            });
-            let cover = match cover_path {
-                Some(p) => {
-                    s.runtime.spawn_blocking(move || decode_cover_preview(&p)).await.ok().flatten()
-                }
-                None => None,
-            };
+            let cover = decode_first_cover(&s, &rows).await;
 
             // From the database, single selection included, as argued at
             // `library::tags::get_tag_edit_role_credits`, except for a track filed outside the
@@ -148,7 +140,17 @@ pub(super) fn wire_request_edit(
             populate(
                 &ui,
                 &session,
-                Fetched { rows, credits, roles, genre_lists, release, lyrics, resident, cover },
+                Fetched {
+                    rows,
+                    lock,
+                    credits,
+                    roles,
+                    genre_lists,
+                    release,
+                    lyrics,
+                    resident,
+                    cover,
+                },
             );
             // After `populate`, which resets to Tags. Lyrics and Summary are unmounted over many
             // rows, so only a single selection may open on the tab asked for.
@@ -159,6 +161,18 @@ pub(super) fn wire_request_edit(
             ui.global::<Dialog>().set_open(true);
         }));
     });
+}
+
+/// The first cover among `rows`, decoded off the UI thread, a full-resolution source being able to
+/// jank it.
+async fn decode_first_cover(
+    s: &AppState,
+    rows: &[TagEditRow],
+) -> Option<SharedPixelBuffer<Rgb8Pixel>> {
+    let path = rows
+        .iter()
+        .find_map(|r| r.artwork_path.as_deref().filter(|p| !p.is_empty()).map(PathBuf::from))?;
+    s.runtime.spawn_blocking(move || decode_cover_preview(&path)).await.ok().flatten()
 }
 
 /// What an opening fetch answered, or its default with a line in the log.
@@ -172,62 +186,98 @@ fn or_logged<T: Default>(result: Result<T, AppError>, what: &str) -> T {
     })
 }
 
-/// The tags of each track in `rows` the dialog reads off disk, by track id: the whole file a single
-/// selection opens on, and every track filed outside the library. A read that fails is logged and
-/// left to the database's answer.
-async fn read_files(
-    s: &AppState,
-    rows: &[TagEditRow],
-    outside: &HashSet<i64>,
-) -> HashMap<i64, FileTags> {
+/// What the dialog reads off disk for a selection.
+#[derive(Default)]
+struct FileReads {
+    /// Each track's tags read off disk, by track id: the whole file a single selection opens on,
+    /// and every track filed outside the library.
+    tags: HashMap<i64, FileTags>,
+    /// Whether a selected track's sheet is FLAC's native block, which holds no text to write.
+    reads_cue_block: bool,
+}
+
+/// Reads off disk what `rows` holds nowhere else. Every image whose sheet is inside it is read
+/// once, for whether that sheet can take an edit. A read that fails is logged and left to the
+/// database's answer.
+async fn read_files(s: &AppState, rows: &[TagEditRow], outside: &HashSet<i64>) -> FileReads {
     let single = rows.len() == 1;
-    let outside_sheet_tracks: Vec<i64> = rows
-        .iter()
-        .filter(|row| row.is_sheet_track() && outside.contains(&row.id))
-        .map(|row| row.id)
-        .collect();
-    let mut sheets: HashMap<i64, String> = if outside_sheet_tracks.is_empty() {
+    let sheet_tracks: Vec<i64> =
+        rows.iter().filter(|row| row.is_sheet_track()).map(|row| row.id).collect();
+    let mut sheets: HashMap<i64, SheetFile> = if sheet_tracks.is_empty() {
         HashMap::new()
     } else {
-        let read = library::tags::get_tag_edit_sheets(&s.db, &outside_sheet_tracks).await;
+        let read = library::tags::get_tag_edit_sheets(&s.db, &sheet_tracks).await;
         let tracks: Vec<SheetTrack> = or_logged(read, "cue sheets");
         tracks.into_iter().map(|track| (track.id, track.sheet)).collect()
     };
-    let wanted: Vec<(i64, FileRead)> = rows
-        .iter()
-        .filter_map(|row| {
-            let path = PathBuf::from(&row.file_path);
-            let read = match row.cue_track {
-                Some(track) => FileRead::SheetTrack {
-                    sheet: PathBuf::from(sheets.remove(&row.id)?),
-                    image: path,
-                    track,
-                },
-                None if single || outside.contains(&row.id) => FileRead::Whole(path),
-                None => return None,
-            };
-            Some((row.id, read))
-        })
-        .collect();
-    if wanted.is_empty() {
-        return HashMap::new();
+    let mut wanted: Vec<(i64, FileRead)> = Vec::new();
+    // Each image whose sheet is inside it, with the outside tracks whose tags it answers.
+    let mut embedded: HashMap<PathBuf, Vec<(i64, CueTrack)>> = HashMap::new();
+    for row in rows {
+        let path = PathBuf::from(&row.file_path);
+        let is_outside = outside.contains(&row.id);
+        match (row.cue_track, sheets.remove(&row.id)) {
+            (Some(track), Some(SheetFile::Embedded(_))) => {
+                let tracks = embedded.entry(path).or_default();
+                if is_outside {
+                    tracks.push((row.id, track));
+                }
+            }
+            (Some(track), Some(SheetFile::Cue(sheet))) if is_outside => {
+                let read = FileRead::SheetTrack { sheet: sheet.into(), image: path, track };
+                wanted.push((row.id, read));
+            }
+            (None, _) if single || is_outside => wanted.push((row.id, FileRead::Whole(path))),
+            _ => {}
+        }
+    }
+    if wanted.is_empty() && embedded.is_empty() {
+        return FileReads::default();
     }
     let read = s.runtime.spawn_blocking(move || {
-        wanted
-            .into_iter()
-            .filter_map(|(id, read)| match read.tags() {
-                Ok(tags) => Some((id, tags)),
+        let mut reads = FileReads::default();
+        for (id, read) in wanted {
+            match read.tags() {
+                Ok(tags) => {
+                    reads.tags.insert(id, tags);
+                }
                 Err(e) => {
                     log::warn!("tag edit: reading {}: {}", read.path().display(), describe(&e));
-                    None
                 }
-            })
-            .collect()
+            }
+        }
+        for (image, tracks) in embedded {
+            let numbers: Vec<CueTrack> = tracks.iter().map(|&(_, track)| track).collect();
+            match library::tags::read_embedded_sheet(&image, &numbers) {
+                Ok(sheet) => {
+                    reads.reads_cue_block |= !sheet.is_editable;
+                    let ids = tracks.iter().map(|&(id, _)| id);
+                    reads.tags.extend(ids.zip(sheet.tracks.into_iter().map(|(_, tags)| tags)));
+                }
+                Err(e) => {
+                    log::warn!("tag edit: reading {}: {}", image.display(), describe(&e));
+                }
+            }
+        }
+        reads
     });
     read.await.unwrap_or_else(|e| {
         log::warn!("tag edit: the file read failed: {}", describe(&e));
-        HashMap::new()
+        FileReads::default()
     })
+}
+
+/// The most restrictive lock a track of the selection asks for.
+fn tag_lock(rows: &[TagEditRow], reads_cue_block: bool) -> TagLock {
+    if rows.iter().any(TagEditRow::is_hidden_track) {
+        TagLock::HiddenTrack
+    } else if reads_cue_block {
+        TagLock::CueBlock
+    } else if rows.iter().any(TagEditRow::is_sheet_track) {
+        TagLock::Sheet
+    } else {
+        TagLock::None
+    }
 }
 
 /// Where the dialog reads one track's own tags.
@@ -267,6 +317,7 @@ fn placeholder(disagrees: bool, sentinel: &SharedString) -> SharedString {
 /// slices are per selected track and **parallel to `rows`**.
 struct Fetched {
     rows: Vec<TagEditRow>,
+    lock: TagLock,
     credits: Vec<(ArtistCredit, ArtistCredit)>,
     roles: Vec<RoleCredits>,
     genre_lists: Vec<GenreList>,
@@ -318,8 +369,10 @@ macro_rules! release {
 
 /// Fill the `TagEditor` global from the fetched rows and record the snapshot.
 fn populate(ui: &AppWindow, session: &RefCell<TagSession>, fetched: Fetched) {
-    let Fetched { rows, credits, roles, genre_lists, release, lyrics, resident, cover } = fetched;
+    let Fetched { rows, lock, credits, roles, genre_lists, release, lyrics, resident, cover } =
+        fetched;
     let te = ui.global::<TagEditor>();
+    te.set_lock(lock);
     let mut form = Form {
         te: &te,
         sentinel: ui.global::<Settings>().invoke_tag_multiple_values(),
@@ -547,8 +600,6 @@ fn finalize_populate(
     let single = rows.len() == 1;
     te.set_track_count(len_as_i32(rows.len()));
     te.set_active_tab(te.get_tab_tags());
-    te.set_read_only(rows.iter().any(TagEditRow::is_hidden_track));
-    te.set_from_sheet(rows.iter().any(TagEditRow::is_sheet_track));
     te.set_has_resident_lyrics(resident.is_some());
 
     if let Some(buf) = cover {

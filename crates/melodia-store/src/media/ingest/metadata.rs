@@ -1,16 +1,22 @@
-use std::io::Read;
+use std::io::{BufReader, Read};
 use std::path::Path;
 use std::time::UNIX_EPOCH;
 
-use lofty::file::{FileType, TaggedFile, TaggedFileExt};
+use lofty::config::ParseOptions;
+use lofty::error::FileParseError;
+use lofty::file::{AudioFile, FileType, TaggedFile, TaggedFileExt};
+use lofty::flac::FlacFile;
 use lofty::prelude::*;
+use lofty::probe::Probe;
 use lofty::properties::FileProperties;
 use lofty::tag::Tag;
 use lofty::tag::items::Timestamp;
 
 use super::{rating_tags, role_tags};
+use crate::media::cue::embedded;
 use melodia_artwork::media::image::artwork;
 use melodia_core::entities::artist::ArtistCredit;
+use melodia_core::entities::cue::EmbeddedCue;
 use melodia_core::entities::genre::GenreList;
 use melodia_core::entities::scan::{ExtractedMetadata, ReleaseTags, SortTags};
 use melodia_core::error::AppError;
@@ -99,19 +105,56 @@ pub enum TagScope {
     TagsOnly,
 }
 
-/// Probes `path` for tags. Every lofty open in the tree comes through here, `tag_writer`'s
-/// included, since a file the scan identifies by its header and the editor refuses by its
-/// extension has tags that are visible and unsavable.
+/// Probes `path` for tags.
+pub fn read_tags(path: &Path, scope: TagScope) -> Result<TaggedFile, AppError> {
+    let (probe, _) = probe(path, scope)?;
+    probe.read().map_err(|e| read_failed(path, e))
+}
+
+/// [`read_tags`], with the sheet a FLAC carries inside itself. lofty's generic tag keeps no key it
+/// maps to nothing, `CUESHEET` and `CUE_TRACKnn_*` among them, so a FLAC is read as its own type
+/// and converted after.
+pub(crate) fn read_tags_and_cue(
+    path: &Path,
+    scope: TagScope,
+) -> Result<(TaggedFile, EmbeddedCue), AppError> {
+    let (probe, parse_opts) = probe(path, scope)?;
+    if probe.file_type() != Some(FileType::Flac) {
+        let tagged = probe.read().map_err(|e| read_failed(path, e))?;
+        return Ok((tagged, EmbeddedCue::Absent));
+    }
+    let flac = FlacFile::read_from(&mut probe.into_inner(), parse_opts)
+        .map_err(|e| read_failed(path, e))?;
+    let cue = embedded::read(path, flac.vorbis_comments());
+    Ok((flac.into(), cue))
+}
+
+/// The FLAC at `path` as its own type, pictures and all, for a write of a comment the generic tag
+/// doesn't carry. Blocking.
+pub(crate) fn read_flac(path: &Path) -> Result<FlacFile, AppError> {
+    let (probe, parse_opts) = probe(path, TagScope::Full)?;
+    if probe.file_type() != Some(FileType::Flac) {
+        return Err(AppError::metadata_msg(format!("{} is not a FLAC file", path.display())));
+    }
+    FlacFile::read_from(&mut probe.into_inner(), parse_opts).map_err(|e| read_failed(path, e))
+}
+
+/// `path` opened for a parse at `scope`, with the options it parses under. Every lofty open in the
+/// tree comes through here, `tag_writer`'s included, since a file the scan identifies by its header
+/// and the editor refuses by its extension has tags that are visible and unsavable.
 ///
 /// lofty keys `Probe::open` on an extension map narrower than its parsers (`.oga` maps to
 /// nothing), so a file whose extension resolves to nothing is asked by its header. Only then,
 /// which keeps the extra open off the scan's hot path.
-pub fn read_tags(path: &Path, scope: TagScope) -> Result<TaggedFile, AppError> {
-    let parse_opts = lofty::config::ParseOptions::new()
+fn probe(
+    path: &Path,
+    scope: TagScope,
+) -> Result<(Probe<BufReader<std::fs::File>>, ParseOptions), AppError> {
+    let parse_opts = ParseOptions::new()
         .read_cover_art(scope == TagScope::Full)
         .read_properties(scope != TagScope::TagsOnly);
 
-    let mut probe = lofty::probe::Probe::open(path)
+    let mut probe = Probe::open(path)
         .map_err(|e| AppError::metadata(format!("Failed to open {}", path.display()), e))?
         .options(parse_opts);
 
@@ -128,10 +171,11 @@ pub fn read_tags(path: &Path, scope: TagScope) -> Result<TaggedFile, AppError> {
     if matches!(probe.file_type(), Some(FileType::Opus)) && opus_channel_count(path) == Some(0) {
         return Err(AppError::metadata_msg(format!("{} states no audio channels", path.display())));
     }
+    Ok((probe, parse_opts))
+}
 
-    probe
-        .read()
-        .map_err(|e| AppError::metadata(format!("Failed to read tags from {}", path.display()), e))
+fn read_failed(path: &Path, e: FileParseError) -> AppError {
+    AppError::metadata(format!("Failed to read tags from {}", path.display()), e)
 }
 
 /// Parses a `ReplayGain` gain like `"-6.50 dB"`. Rejects `nan` and `inf`, which `f64` parses and
@@ -205,7 +249,10 @@ fn extract(
     let (file_size, date_modified) = file_stat(path);
     let file_hash = compute_file_hash(path)?;
     let scope = if skip_artwork { TagScope::NoArtwork } else { TagScope::Full };
-    let tagged_file = open_tags(path, scope, on_unreadable)?;
+    let (tagged_file, embedded_cue) = match open_tags(path, scope, on_unreadable)? {
+        Some((tagged, cue)) => (Some(tagged), cue),
+        None => (None, EmbeddedCue::Unread),
+    };
     let audio = AudioProperties::read(path, tagged_file.as_ref());
 
     let tag =
@@ -291,6 +338,7 @@ fn extract(
         file_hash,
         date_modified,
         artwork_path,
+        embedded_cue,
     })
 }
 
@@ -302,13 +350,14 @@ fn file_stat(path: &Path) -> (i64, Option<String>) {
     (file_size, date_modified)
 }
 
-/// The parsed file, or `None` where the tags won't parse and the caller keeps a filename row.
+/// The parsed file and the sheet inside it, or `None` where the tags won't parse and the caller
+/// keeps a filename row.
 fn open_tags(
     path: &Path,
     scope: TagScope,
     on_unreadable: OnUnreadableTags,
-) -> Result<Option<TaggedFile>, AppError> {
-    match read_tags(path, scope) {
+) -> Result<Option<(TaggedFile, EmbeddedCue)>, AppError> {
+    match read_tags_and_cue(path, scope) {
         Ok(tagged) => Ok(Some(tagged)),
         Err(e) => match on_unreadable {
             OnUnreadableTags::Fail => Err(e),

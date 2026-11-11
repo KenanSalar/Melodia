@@ -7,6 +7,7 @@ pub mod artwork_sweep;
 pub mod audio_health;
 pub mod device_volume;
 pub mod discord_presence;
+pub mod embedded_cue_probe;
 pub mod file_event_processor;
 pub mod heap_trim;
 pub mod lyrics_cache;

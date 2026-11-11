@@ -1,5 +1,6 @@
 //! The cue sheet writes of a scan chunk or a watcher batch, on its transaction: each sheet's stamp,
-//! the rows it carves out of the images it claims, and the images it gives back.
+//! the rows it carves out of the images it claims, and the images it gives back. A sheet inside its
+//! image writes the same rows with no stamp of its own, the image's standing for it.
 //!
 //! A sheet track is keyed on its image and its number, so a reread sheet updates its rows in place
 //! and a corrected time or title keeps every row's play count, rating and playlist places. When a
@@ -7,7 +8,7 @@
 //! place; when it lets the image go, they take the image back where its first track sat. A play
 //! count, rating or favourite on the side going away stays with it: it belongs to no single track.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::path::Path;
 use std::sync::LazyLock;
 
@@ -18,12 +19,11 @@ use super::{
     insert_tracks_batch, resolve_track_context, track_exists_by_path, update_cue_track,
     update_track_location,
 };
-use crate::database::chunked_in_execute;
 use crate::database::queries::excluded_files;
 use crate::database::queries::playlist_carry::{merge_into_playlists, replace_in_playlists};
 use crate::database::queries::track::file_rows::WHOLE_FILE;
-use crate::database::sql;
-use crate::media::cue::{Claim, CueRow, SheetJob, SheetRead, rows};
+use crate::database::{chunked_in_execute, chunked_in_query, sql};
+use crate::media::cue::{CueRow, SheetJob, SheetRead, rows};
 use melodia_core::entities::cue::CueTrack;
 use melodia_core::entities::scan::{FileStamp, ScannedFile};
 use melodia_core::error::AppError;
@@ -55,17 +55,17 @@ pub(crate) struct SheetWriter<'a, 'conn> {
     writes: CueWrites,
 }
 
-/// One claimed image and the rows its sheet carves out of it.
+/// One image and the rows a sheet carves out of it.
 struct CueUnit<'u> {
-    claim: &'u Claim,
     image: &'u ScannedFile,
-    rows: Vec<CueRow>,
+    rows: &'u [CueRow],
 }
 
 /// Where a sheet's rows are filed.
 #[derive(Clone, Copy)]
 struct Filing {
-    sheet_id: i64,
+    /// `None` for the sheet inside the image.
+    sheet_id: Option<i64>,
     folder: TrackFolder,
 }
 
@@ -95,11 +95,21 @@ impl<'a, 'conn> SheetWriter<'a, 'conn> {
             self.apply_read_sheet(job, read, folder)?;
         }
         for image in &job.releases {
-            if release_image(self.tx, &image.to_string_lossy())? {
+            if release_rows(self.tx, &image.to_string_lossy(), Carver::Cue)? {
                 self.writes.updated += 1;
             }
         }
         Ok(())
+    }
+
+    /// Writes the rows the sheet inside `image` carves out of it, filed under `folder`.
+    pub(crate) fn apply_embedded(
+        &mut self,
+        image: &ScannedFile,
+        rows: &[CueRow],
+        folder: TrackFolder,
+    ) -> Result<(), AppError> {
+        self.apply_cue_unit(&CueUnit { image, rows }, Filing { sheet_id: None, folder })
     }
 
     pub(crate) fn into_writes(self) -> CueWrites {
@@ -112,21 +122,22 @@ impl<'a, 'conn> SheetWriter<'a, 'conn> {
         read: &SheetRead,
         folder: TrackFolder,
     ) -> Result<(), AppError> {
-        let units: Vec<CueUnit<'_>> = job
+        let carved: Vec<(&ScannedFile, Vec<CueRow>)> = job
             .claims
             .iter()
             .filter_map(|claim| {
                 let image = *self.images.get(claim.image.as_path())?;
                 let rows = rows(&read.sheet, &claim.layout, &claim.image, &image.metadata)?;
-                Some(CueUnit { claim, image, rows })
+                Some((image, rows))
             })
             .collect();
         // An image that couldn't be read, or that is too short for the sheet to split, keeps its
         // rows and leaves the sheet unstamped, so the next scan reads both again.
-        let stamp = (units.len() == job.claims.len()).then_some(&read.stamp);
+        let stamp = (carved.len() == job.claims.len()).then_some(&read.stamp);
         let sheet_id = upsert_sheet(self.tx, &job.path.to_string_lossy(), folder.id(), stamp)?;
-        for unit in &units {
-            self.apply_cue_unit(unit, Filing { sheet_id, folder })?;
+        let filing = Filing { sheet_id: Some(sheet_id), folder };
+        for (image, rows) in &carved {
+            self.apply_cue_unit(&CueUnit { image, rows }, filing)?;
         }
         Ok(())
     }
@@ -136,10 +147,10 @@ impl<'a, 'conn> SheetWriter<'a, 'conn> {
     /// whose playlist places they take. A kept-out image writes nothing but its exclusion's stamp.
     fn apply_cue_unit(&mut self, unit: &CueUnit<'_>, filing: Filing) -> Result<(), AppError> {
         let tx = self.tx;
-        let CueUnit { claim, image, rows: carved } = unit;
-        let path = claim.image.to_string_lossy();
+        let CueUnit { image, rows: carved } = *unit;
+        let path = image.path.to_string_lossy();
         if excluded_files::id_at_on(tx, &path)?.is_some() {
-            return excluded_files::restamp_on(tx, &[(claim.image.as_path(), &image.metadata)]);
+            return excluded_files::restamp_on(tx, &[(image.path.as_path(), &image.metadata)]);
         }
         self.carry_moved_rows(image, filing.folder.id())?;
 
@@ -155,8 +166,7 @@ impl<'a, 'conn> SheetWriter<'a, 'conn> {
         let mut new_tracks = Vec::new();
         for row in carved {
             let ids = resolve_track_context(tx, filing.folder, &row.meta, &mut self.names)?;
-            let cue =
-                CuePlacement { track: row.track, span: row.span, sheet_id: Some(filing.sheet_id) };
+            let cue = CuePlacement { track: row.track, span: row.span, sheet_id: filing.sheet_id };
             if let Some(id) = earlier.remove(&row.track) {
                 update_cue_track(tx, id, cue, &row.meta, &ids, &mut self.names)?;
                 placed.push((row.track, id));
@@ -165,7 +175,7 @@ impl<'a, 'conn> SheetWriter<'a, 'conn> {
             new_tracks.push(row.track);
             new_rows.push(NewTrackRow {
                 file_path: path.clone().into_owned(),
-                file_name: file_name_of(&claim.image),
+                file_name: file_name_of(&image.path),
                 cue: Some(cue),
                 meta: &row.meta,
                 ids,
@@ -242,14 +252,41 @@ fn upsert_sheet(
     )
 }
 
-/// Gives the image at `image` back its own row: the playlists holding any of its sheet tracks take
-/// the whole-file row the chunk's ingest wrote, and the tracks go. Whether it had any.
-fn release_image(tx: &Transaction<'_>, image: &str) -> Result<bool, AppError> {
-    let track_ids: Vec<i64> = sql::fetch_all(
-        tx,
-        "SELECT id FROM tracks WHERE file_path = ? AND cue_track IS NOT NULL",
-        (image,),
-    )?;
+/// Which sheet carved a row: one sheet's release leaves the other's rows alone, so an image whose
+/// `.cue` goes keeps the rows the sheet inside it carved in that same chunk.
+#[derive(Clone, Copy)]
+enum Carver {
+    Cue,
+    Inside,
+}
+
+impl Carver {
+    fn rows(self) -> &'static str {
+        match self {
+            Self::Cue => {
+                "SELECT id FROM tracks \
+                 WHERE file_path = ? AND cue_track IS NOT NULL AND cue_sheet_id IS NOT NULL"
+            }
+            Self::Inside => {
+                "SELECT id FROM tracks \
+                 WHERE file_path = ? AND cue_track IS NOT NULL AND cue_sheet_id IS NULL"
+            }
+        }
+    }
+
+    fn sheet(self) -> &'static str {
+        match self {
+            Self::Cue => "its cue sheet",
+            Self::Inside => "the cue sheet it no longer carries",
+        }
+    }
+}
+
+/// Gives the image at `image` back its own row: the playlists holding any of the tracks `carver`'s
+/// sheet carved take the whole-file row the batch wrote first, and those tracks go. Whether it had
+/// any.
+fn release_rows(tx: &Transaction<'_>, image: &str, carver: Carver) -> Result<bool, AppError> {
+    let track_ids: Vec<i64> = sql::fetch_all(tx, carver.rows(), (image,))?;
     if track_ids.is_empty() {
         return Ok(false);
     }
@@ -260,8 +297,32 @@ fn release_image(tx: &Transaction<'_>, image: &str) -> Result<bool, AppError> {
     chunked_in_execute(tx, &track_ids, |id_list| {
         format!("DELETE FROM tracks WHERE id IN ({id_list})")
     })?;
-    log::info!("Gave {image} its own row back from its cue sheet");
+    log::info!("Gave {image} its own row back from {}", carver.sheet());
     Ok(true)
+}
+
+/// Gives each of `images` its own row back from the sheet inside it, which its read no longer
+/// finds, answering how many had tracks.
+pub(crate) fn release_embedded(tx: &Transaction<'_>, images: &[&str]) -> Result<u32, AppError> {
+    let mut released = 0;
+    for image in images {
+        released += u32::from(release_rows(tx, image, Carver::Inside)?);
+    }
+    Ok(released)
+}
+
+/// Which of `paths` hold tracks the sheet inside the file carved.
+pub(crate) fn embedded_images_among(
+    tx: &Transaction<'_>,
+    paths: &[&str],
+) -> Result<HashSet<String>, AppError> {
+    let images: Vec<String> = chunked_in_query(tx, paths, |path_list| {
+        format!(
+            "SELECT DISTINCT file_path FROM tracks WHERE file_path IN ({path_list}) \
+             AND cue_track IS NOT NULL AND cue_sheet_id IS NULL"
+        )
+    })?;
+    Ok(images.into_iter().collect())
 }
 
 static WHOLE_FILE_ROW: LazyLock<String> =

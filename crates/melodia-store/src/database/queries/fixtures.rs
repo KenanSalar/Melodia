@@ -14,6 +14,7 @@ use crate::database::rows::FromRow;
 use crate::database::sql::Sql;
 use melodia_core::entities::artist::ArtistCredit;
 use melodia_core::entities::credits::RoleCredits;
+use melodia_core::entities::cue::EmbeddedCue;
 use melodia_core::entities::genre::GenreList;
 use melodia_core::entities::scan::{ExtractedMetadata, ReleaseTags, SortTags};
 use melodia_core::error::AppError;
@@ -81,6 +82,7 @@ pub fn make_test_metadata(title: &str) -> ExtractedMetadata {
         file_hash: blake3::hash(title.as_bytes()).to_hex().to_string(),
         date_modified: Some("2024-01-01T00:00:00+00:00".to_owned()),
         artwork_path: None,
+        embedded_cue: EmbeddedCue::Absent,
     }
 }
 

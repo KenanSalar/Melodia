@@ -1,5 +1,5 @@
 import { Theme } from "../../theme.slint";
-import { TagEditor } from "../../globals/dialog-forms.slint";
+import { TagEditor, TagLock } from "../../globals/dialog-forms.slint";
 import { LabeledInput } from "../labeled-input.slint";
 import { CreditEditor } from "./credit-editor.slint";
 import { NameListEditor } from "./name-list-editor.slint";
@@ -91,8 +91,10 @@ export component TagEditorBody inherits HorizontalLayout {
         spacing: Theme.pad-md;
 
         if TagEditor.file-tags-locked: Text {
-            text: TagEditor.read-only
+            text: TagEditor.lock == TagLock.hidden-track
                 ? @tr("The hidden audio before a cue sheet's first track can't be edited here.")
+                : TagEditor.lock == TagLock.cue-block
+                ? @tr("This track's cue sheet is the track list inside its FLAC file, which holds no titles and can't be edited here.")
                 : @tr("Changes are saved to the cue sheet, where album, album artist, disc and barcode apply to every track it lists. Fields a cue sheet can't hold are read-only.");
             color: Theme.subtext0;
             font-size: Theme.font-size-sm;

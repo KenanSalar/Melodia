@@ -115,12 +115,56 @@ impl CueSpan {
     }
 }
 
-/// A track an external sheet carves out of its image, with the sheet that states its tags.
+/// A track a sheet carves out of its image, with where that sheet states its tags.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct SheetTrack {
     pub id: i64,
-    pub sheet: String,
+    pub sheet: SheetFile,
     pub track: CueTrack,
+}
+
+/// Where a sheet lives: a `.cue` of its own, or inside the image it splits.
+#[derive(Clone, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub enum SheetFile {
+    Cue(String),
+    /// The image, its sheet in a `CUESHEET` comment or FLAC's native block.
+    Embedded(String),
+}
+
+impl SheetFile {
+    pub fn path(&self) -> &str {
+        match self {
+            Self::Cue(path) | Self::Embedded(path) => path,
+        }
+    }
+}
+
+/// What a file's read found of a sheet inside it, carried as read: the store parses it where the
+/// file's rows are written.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub enum EmbeddedCue {
+    /// No sheet inside, or a format that can't hold one.
+    #[default]
+    Absent,
+    /// The tags didn't read, so whether a sheet is inside is unknown.
+    Unread,
+    Present(EmbeddedSheet),
+}
+
+/// A sheet inside a file, with the `CUE_TRACKnn_<FIELD>` comments laid over its tracks.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct EmbeddedSheet {
+    pub source: EmbeddedSource,
+    /// Each override's key and value, as the file holds them.
+    pub overrides: Vec<(String, String)>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum EmbeddedSource {
+    /// A `CUESHEET` comment's text.
+    Comment(String),
+    /// FLAC's native CUESHEET block, with the stream's sample rate its offsets count in.
+    Block { sample_rate: u32, bytes: Vec<u8> },
 }
 
 #[derive(Debug, thiserror::Error)]

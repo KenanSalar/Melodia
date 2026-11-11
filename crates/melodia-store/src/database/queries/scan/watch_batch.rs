@@ -10,15 +10,17 @@ use rusqlite::Transaction;
 
 use super::cue_units::forget_gone_sheet;
 use super::{
-    MoveCandidates, NameCache, SheetWriter, TrackFolder, delete_track_by_path, file_name_of,
-    find_folder_for_path, insert_track, prune_orphans, resolve_track_context, roll_up_covers,
-    track_exists_by_path, update_track_location, update_track_metadata,
+    MoveCandidates, NameCache, SheetWriter, TrackFolder, delete_track_by_path,
+    embedded_images_among, file_name_of, find_folder_for_path, insert_track, prune_orphans,
+    release_embedded, resolve_track_context, roll_up_covers, track_exists_by_path,
+    update_track_location, update_track_metadata,
 };
 use crate::database::queries::ingest;
 use crate::database::queries::{excluded_files, stats};
 use crate::database::{DbPool, sql};
-use crate::media::cue::{CueChunk, SheetJob};
+use crate::media::cue::{CueChunk, CueRow, SheetJob, embedded};
 use crate::media::ingest::watcher::is_sheet_file;
+use melodia_core::entities::cue::EmbeddedCue;
 use melodia_core::entities::scan::{ExtractedMetadata, ScannedFile};
 use melodia_core::error::{AppError, describe};
 
@@ -182,14 +184,22 @@ fn log_failed(change: &WatchedChange, e: &AppError) {
 }
 
 /// The rows and kept-out files carrying a created file's hash, and the sheet images carrying a
-/// claimed image's, whose own file is gone from disk: moved, not duplicated. Read before the write
-/// transaction opens; a failed lookup costs the batch its move detection and nothing else.
+/// claimed or a created image's, whose own file is gone from disk: moved, not duplicated. Read
+/// before the write transaction opens; a failed lookup costs the batch its move detection and
+/// nothing else.
 async fn moved_candidates(db: &DbPool, changes: &[WatchedChange]) -> MoveCandidates {
     let mut hashes: Vec<String> = Vec::new();
     let mut image_hashes: Vec<String> = Vec::new();
     for change in changes {
         match change {
-            WatchedChange::Created { meta, .. } => hashes.push(meta.file_hash.clone()),
+            // Either kind may have moved: the sheet inside splits a file only where it places two
+            // tracks.
+            WatchedChange::Created { meta, .. } => {
+                hashes.push(meta.file_hash.clone());
+                if matches!(meta.embedded_cue, EmbeddedCue::Present(_)) {
+                    image_hashes.push(meta.file_hash.clone());
+                }
+            }
             WatchedChange::Sheets { cue, images } => {
                 let claimed = images.iter().filter(|image| cue.claims(&image.path));
                 image_hashes.extend(claimed.map(|image| image.metadata.file_hash.clone()));
@@ -239,10 +249,71 @@ fn handle_created(
     meta: &ExtractedMetadata,
     batch: &mut Batch,
 ) -> Result<bool, AppError> {
+    if let Some(wrote) = handle_embedded(tx, path, meta, batch)? {
+        return Ok(wrote);
+    }
     if track_exists_by_path(tx, &path.to_string_lossy())? {
         return Ok(false);
     }
     create_track(tx, path, meta, batch)
+}
+
+/// Writes a file whose rows the sheet inside it decides: the tracks it carves, or the whole-file
+/// row that takes their place once it carves none. Answers whether a row was written, or `None` to
+/// leave the file to the ordinary handlers. A file whose tags didn't read keeps its tracks, as a
+/// scan keeps them (`ingest::sort_unclaimed`).
+fn handle_embedded(
+    tx: &Transaction<'_>,
+    path: &Path,
+    meta: &ExtractedMetadata,
+    batch: &mut Batch,
+) -> Result<Option<bool>, AppError> {
+    if let Some(rows) = embedded::carve(path, meta) {
+        return Ok(Some(write_embedded(tx, path, meta, &rows, batch)));
+    }
+    let path_str = path.to_string_lossy();
+    if embedded_images_among(tx, &[path_str.as_ref()])?.is_empty() {
+        return Ok(None);
+    }
+    if meta.embedded_cue == EmbeddedCue::Unread {
+        log::warn!("Kept the cue sheet tracks of {path_str}: its tags didn't read");
+        return Ok(Some(false));
+    }
+    let wrote = create_track(tx, path, meta, batch)?;
+    let released = release_embedded(tx, &[path_str.as_ref()])? > 0;
+    Ok(Some(wrote || released))
+}
+
+/// Writes the tracks the sheet inside `path` carves out of it, in a savepoint of its own as a
+/// sheet's job is, answering whether any was written.
+fn write_embedded(
+    tx: &Transaction<'_>,
+    path: &Path,
+    meta: &ExtractedMetadata,
+    rows: &[CueRow],
+    batch: &mut Batch,
+) -> bool {
+    let image = ScannedFile { path: path.to_path_buf(), metadata: meta.clone() };
+    let mut image_batch = batch.clone();
+    let written = sql::in_savepoint(tx, || {
+        let Some(folder) = library_folder(tx, path, &path.to_string_lossy(), "Cue")? else {
+            return Ok(false);
+        };
+        let now = melodia_core::utils::now_rfc3339();
+        let mut sheets = SheetWriter::new(tx, &[], &now, &mut image_batch.moved);
+        sheets.apply_embedded(&image, rows, folder)?;
+        Ok(sheets.into_writes().any())
+    });
+    match written {
+        Ok(wrote) => {
+            *batch = image_batch;
+            wrote
+        }
+        Err(e) => {
+            log::warn!("Failed to apply the cue sheet inside {}: {}", path.display(), describe(&e));
+            false
+        }
+    }
 }
 
 /// [`handle_created`] past its guard, for a new file or an image its sheet gives back. A kept-out
@@ -407,10 +478,13 @@ fn handle_modified(
     meta: &ExtractedMetadata,
     batch: &mut Batch,
 ) -> Result<bool, AppError> {
+    if let Some(wrote) = handle_embedded(tx, path, meta, batch)? {
+        return Ok(wrote);
+    }
     let path_str = path.to_string_lossy().into_owned();
 
     if !track_exists_by_path(tx, &path_str)? {
-        return handle_created(tx, path, meta, batch);
+        return create_track(tx, path, meta, batch);
     }
 
     let Some(folder) = library_folder(tx, path, &path_str, "Modified")? else {
@@ -452,7 +526,8 @@ fn handle_sheets(
 }
 
 /// Writes `job` under its sheet's library folder. Each image it gives back takes its whole-file
-/// row first, for the job to carry the playlist places onto.
+/// row first, for the job to carry the playlist places onto, or the tracks the sheet inside it
+/// carves, which keep them.
 fn apply_sheet_job(
     tx: &Transaction<'_>,
     job: &SheetJob,
@@ -463,12 +538,19 @@ fn apply_sheet_job(
         return Ok(false);
     };
     let mut wrote = false;
+    let mut carved = Vec::new();
     for image in images.iter().filter(|image| job.releases.contains(&image.path)) {
-        wrote |= create_track(tx, &image.path, &image.metadata, batch)?;
+        match embedded::carve(&image.path, &image.metadata) {
+            Some(rows) => carved.push((image, rows)),
+            None => wrote |= create_track(tx, &image.path, &image.metadata, batch)?,
+        }
     }
 
     let now = melodia_core::utils::now_rfc3339();
     let mut sheets = SheetWriter::new(tx, images, &now, &mut batch.moved);
+    for (image, rows) in &carved {
+        sheets.apply_embedded(image, rows, folder)?;
+    }
     sheets.apply(job, folder)?;
     Ok(wrote || sheets.into_writes().any())
 }

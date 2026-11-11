@@ -6,6 +6,7 @@ use std::path::PathBuf;
 
 use super::artist::ArtistCredit;
 use super::credits::RoleCredits;
+use super::cue::EmbeddedCue;
 use super::genre::GenreList;
 
 /// The size and mtime the store last read a file at, a track's or a kept-out file's: a file that
@@ -144,6 +145,7 @@ pub struct ExtractedMetadata {
     pub file_hash: String,
     pub date_modified: Option<String>,
     pub artwork_path: Option<String>,
+    pub embedded_cue: EmbeddedCue,
 }
 
 #[cfg(test)]

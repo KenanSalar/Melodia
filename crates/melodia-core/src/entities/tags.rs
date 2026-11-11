@@ -4,6 +4,7 @@
 use super::album::ReleaseTagRow;
 use super::artist::ArtistCredit;
 use super::credits::{CreditRole, ROLES, RoleCredits};
+use super::cue::CueTrack;
 use super::genre::GenreList;
 
 /// What the user did rather than what they left, because empty is not clear: writing `""` leaves
@@ -206,6 +207,16 @@ pub struct FileTags {
     pub roles: RoleCredits,
     pub genres: GenreList,
     pub release: ReleaseTagRow,
+}
+
+/// What Edit Tags reads of an image whose cue sheet is inside it.
+#[derive(Debug, Clone, Default)]
+pub struct EmbeddedSheetTags {
+    /// Whether an edit can be written into the sheet: a `CUESHEET` comment holds text, and FLAC's
+    /// native block none.
+    pub is_editable: bool,
+    /// Each track asked for, with its tags read over the image's.
+    pub tracks: Vec<(CueTrack, FileTags)>,
 }
 
 /// A field a write can fail on: a stable name for the log and a translated word for the toast,
