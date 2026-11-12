@@ -9,8 +9,23 @@ use melodia_platform::services::platform::background_priority;
 /// core the UI or a scan may want.
 pub(super) const MEASURE_WORKERS: usize = 2;
 
-/// Built per pass and dropped with it, so no thread idles once the backlog is done.
-pub(super) fn build() -> AppResult<rayon::ThreadPool> {
+/// Built at a pass's first job and dropped with the pass, so neither a finished backlog nor a wake
+/// whose work is all out of reach leaves a thread behind.
+#[derive(Default)]
+pub(super) struct Workers(Option<rayon::ThreadPool>);
+
+impl Workers {
+    pub(super) fn spawn(&mut self, job: impl FnOnce() + Send + 'static) -> AppResult<()> {
+        let pool = match &mut self.0 {
+            Some(pool) => pool,
+            unbuilt @ None => unbuilt.insert(build()?),
+        };
+        pool.spawn(job);
+        Ok(())
+    }
+}
+
+fn build() -> AppResult<rayon::ThreadPool> {
     rayon::ThreadPoolBuilder::new()
         .num_threads(MEASURE_WORKERS)
         .thread_name(|i| format!("loudness-{i}"))

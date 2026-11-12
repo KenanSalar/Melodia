@@ -51,8 +51,8 @@ impl LoudnessControl {
         }
     }
 
-    /// Wakes the pass to look again at whether it should run, right after a live control it reads
-    /// moved: it reads no setting from disk, so a kick needn't wait for the persist.
+    /// Wakes the pass and the queue window right after a live control they read moved: neither
+    /// reads a setting from disk, so a kick needn't wait for the persist.
     pub fn kick(&self) {
         self.kick.bump();
     }

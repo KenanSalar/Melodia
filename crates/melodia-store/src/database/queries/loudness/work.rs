@@ -209,7 +209,6 @@ static ALBUM_MEMBERS: LazyLock<String> = LazyLock::new(|| {
     )
 });
 
-/// `albums` with their members, read on the connection that found them so both see one snapshot.
 fn album_jobs(conn: &Connection, albums: &[i64]) -> Result<Vec<AlbumJob>, AppError> {
     if albums.is_empty() {
         return Ok(Vec::new());

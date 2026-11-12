@@ -3,8 +3,10 @@
 //!
 //! A queue publish fetches what the window lacks, a library tick or a committed loudness
 //! measurement re-reads all of it (a retag, a star, a moved file or a new gain changes the record),
-//! and an owed start (`PlayerAction::StartWhenResolved`) fetches its track. Every pass ends by
-//! asking for that start, so a failed fetch is retried by the next wake.
+//! and an owed start (`PlayerAction::StartWhenResolved`) fetches its track. A loudness kick fetches
+//! what is missing too: measuring may have just come on, and the window is offered to the pass only
+//! while it is. Every pass ends by asking for that start, so a failed fetch is retried by the next
+//! wake.
 
 use crate::library::playback::player_replaygain_levels_measured;
 use crate::state::{AppState, LoudnessControl, PlaybackContext};
@@ -28,6 +30,7 @@ pub fn spawn(spawner: &TaskSpawner, state: &AppState) {
     let mut awaited_rx = state.sinks.awaited_start.subscribe();
     let mut library_rx = state.library_changed.subscribe();
     let mut measured_rx = state.loudness.subscribe_gains_measured();
+    let mut kick_rx = state.loudness.subscribe_kick();
 
     spawner.spawn_cancellable(move |shutdown| async move {
         loop {
@@ -57,6 +60,12 @@ pub fn spawn(spawner: &TaskSpawner, state: &AppState) {
                         break;
                     }
                     WindowFill::All
+                }
+                changed = kick_rx.changed() => {
+                    if changed.is_err() {
+                        break;
+                    }
+                    WindowFill::Missing
                 }
             };
             if let Err(e) = fill_window(&db, &player_state, &sinks, fill).await {

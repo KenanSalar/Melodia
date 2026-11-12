@@ -314,9 +314,11 @@ cheap when empty; the pass runs until it is empty or something stops it.
 
 **The queue goes first.** While measured gains are heard, the queue window task offers the ids of
 the window's tracks that no gain reaches (the slot behind, the playing one and the three ahead,
-`queue/mod.rs:12-17`) on a small `watch` in `LoudnessControl`. At each job boundary the pass takes
+`queue/mod.rs:12-17`) on a small `watch` in `LoudnessControl`, and offers them again on a kick, so
+switching measuring on mid-track puts the playing album first. At each job boundary the pass takes
 the work-list albums, and albumless tracks, among them before its next keyset item, and a per-pass
-set of those jobs makes the keyset skip them when it gets there. During a long first backlog,
+set of those jobs makes the keyset skip them when it gets there. A job that lands drops its queued
+copy, so one the keyset took first isn't measured twice. During a long first backlog,
 what is about to play is levelled first; once the backlog is done it does nothing, new tracks
 being measured as they arrive.
 
@@ -334,7 +336,8 @@ again.
 threads lower their own priority as they start, so the decode-ahead thread, the output and the UI
 take the CPU first. Dedicated, because a priority set on a blocking-pool thread outlives the job and
 lowers whatever runs there next, and `ScanPool` can take every core. The pool is `MEASURE_WORKERS`
-wide, built per pass and dropped with it, so no thread idles after the backlog. Its width is
+wide, built at a pass's first job and dropped with the pass, so no thread idles after the backlog
+and a wake whose work is all out of reach starts none, logging nothing at `info`. Its width is
 settled on the big library (Phase 6).
 
 - Linux: `rustix::process::setpriority_process` on the thread's own id, which on Linux sets that

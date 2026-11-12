@@ -2,7 +2,7 @@
 //! measuring are both on and the user hasn't stopped it this session. The files are never written.
 //!
 //! **Event-driven, never polled.** A pass runs at launch, then on a kick from the controls, a
-//! library change or a scan letting go, and never beside a scan, which reads the same disks and
+//! library change or a scan letting go, and steps aside for a scan, which reads the same disks and
 //! needs the one writer. Off or stopped, the loop waits on the kick alone, so the switch off costs
 //! one parked task and no database work.
 

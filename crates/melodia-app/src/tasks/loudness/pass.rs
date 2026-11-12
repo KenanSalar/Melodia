@@ -13,7 +13,7 @@ use std::time::Instant;
 use tokio::sync::{mpsc, watch};
 use tokio_util::sync::CancellationToken;
 
-use super::pool::{self, MEASURE_WORKERS};
+use super::pool::{MEASURE_WORKERS, Workers};
 use crate::library::playback::player_replaygain_levels_measured;
 use crate::state::{LoudnessControl, MeasurePhase, MeasureProgress, PlaybackContext, ScanControl};
 use melodia_audio::loudness::{
@@ -133,7 +133,6 @@ pub(super) async fn run(controls: &Arc<Controls>, out_of_reach: &mut HashSet<Job
     let mut tally = Tally::default();
     if let Err(e) = measure_owed(controls, &stop, out_of_reach, &mut tally).await {
         log::warn!("Loudness pass failed: {}", describe(&e));
-        stop.abandon();
     }
     if tally.dispatched {
         // A pass outlasts the startup trims, so it hands back what its decoders freed itself.
@@ -157,14 +156,9 @@ async fn measure_owed(
         return Ok(());
     }
     tally.total = pending.tracks;
-    log::info!(
-        "Loudness pass: {} track(s) owed a measurement, {} album(s) among them",
-        pending.tracks,
-        pending.albums
-    );
 
     let started = Instant::now();
-    let pool = pool::build()?;
+    let mut workers = Workers::default();
     let (landed_tx, mut landed) = mpsc::unbounded_channel();
     let mut work = WorkList::new(controls.db.clone(), controls.loudness.subscribe_queued());
     let mut in_flight: Vec<JobKey> = Vec::with_capacity(MEASURE_WORKERS);
@@ -176,16 +170,21 @@ async fn measure_owed(
                 };
                 if !tally.dispatched {
                     tally.dispatched = true;
+                    log::info!(
+                        "Loudness pass: {} track(s) owed a measurement, {} album(s) among them",
+                        pending.tracks,
+                        pending.albums
+                    );
                     publish_running(controls, tally, &work);
                 }
                 in_flight.push(job.key());
                 let stop = stop.clone();
                 let landed_tx = landed_tx.clone();
-                pool.spawn(move || {
+                workers.spawn(move || {
                     let key = job.key();
                     // A closed channel means the pass gave up on its jobs; there is nobody to tell.
                     let _ = landed_tx.send((key, job.measure(&stop)));
-                });
+                })?;
             }
             if in_flight.is_empty() {
                 return Ok(());
@@ -194,6 +193,7 @@ async fn measure_owed(
                 return Ok(());
             };
             in_flight.retain(|held| *held != key);
+            work.landed(key);
             if let Ok(done) = measured {
                 record(&controls.db, done, tally, out_of_reach).await?;
                 controls.loudness.gains_committed();
@@ -202,16 +202,21 @@ async fn measure_owed(
         }
     }
     .await;
-    log::info!(
-        "Loudness pass {} after {:.1}s: {} album(s) and {} track(s) measured, {} with nothing to \
-         level, {} out of reach",
-        stop.halted.get().map_or("finished", |halt| halt.ended()),
-        started.elapsed().as_secs_f64(),
-        tally.albums,
-        tally.measured,
-        tally.no_result,
-        tally.out_of_reach,
-    );
+    if outcome.is_err() {
+        stop.abandon();
+    }
+    if tally.dispatched {
+        log::info!(
+            "Loudness pass {} after {:.1}s: {} album(s) and {} track(s) measured, {} with nothing \
+             to level, {} out of reach",
+            stop.halted.get().map_or("finished", |halt| halt.ended()),
+            started.elapsed().as_secs_f64(),
+            tally.albums,
+            tally.measured,
+            tally.no_result,
+            tally.out_of_reach,
+        );
+    }
     outcome
 }
 
@@ -404,6 +409,11 @@ impl WorkList {
         }
     }
 
+    /// Drops the queue's copy of `key`, read while the keyset's ran, so it isn't measured twice.
+    fn landed(&mut self, key: JobKey) {
+        self.queued.retain(|job| job.key() != key);
+    }
+
     async fn next(
         &mut self,
         in_flight: &[JobKey],
@@ -444,23 +454,21 @@ impl WorkList {
                 return Ok(Some(job));
             }
             match self.stage {
+                // Only an empty page ends a stage: an album page reads its members apart from its
+                // ids, so an album emptied between the two leaves a full page looking short.
                 Stage::Albums { after } => {
                     let page = loudness::album_jobs_after(&self.db, after, ALBUMS_PER_PAGE).await?;
                     self.stage = match page.last() {
-                        Some(last) if came_back_full(page.len(), ALBUMS_PER_PAGE) => {
-                            Stage::Albums { after: last.album_id }
-                        }
-                        _ => Stage::Tracks { after: 0 },
+                        Some(last) => Stage::Albums { after: last.album_id },
+                        None => Stage::Tracks { after: 0 },
                     };
                     self.page.extend(page.into_iter().map(Job::Album));
                 }
                 Stage::Tracks { after } => {
                     let page = loudness::track_jobs_after(&self.db, after, TRACKS_PER_PAGE).await?;
                     self.stage = match page.last() {
-                        Some(last) if came_back_full(page.len(), TRACKS_PER_PAGE) => {
-                            Stage::Tracks { after: last.id }
-                        }
-                        _ => Stage::Done,
+                        Some(last) => Stage::Tracks { after: last.id },
+                        None => Stage::Done,
                     };
                     self.page.extend(page.into_iter().map(Job::Track));
                 }
@@ -468,9 +476,4 @@ impl WorkList {
             }
         }
     }
-}
-
-/// Whether a page filled its limit, so another may follow: a short one is the last.
-fn came_back_full(len: usize, limit: i64) -> bool {
-    usize::try_from(limit).is_ok_and(|limit| len == limit)
 }

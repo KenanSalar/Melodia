@@ -28,7 +28,7 @@ effect would be to move every allow into a `build.rs`-shaped workaround.
 Every `unsafe` in production is a call into an OS the type system can't reach. There is
 no other kind, and the list is short enough to keep here. **Twenty-one calls, in seventeen
 `unsafe` blocks, across eight files, under fourteen `#[allow(unsafe_code)]` attributes.** Say
-which of the four you mean when you quote a number, and re-derive it the same way — they
+which of the four you mean when you quote a number, and re-derive it the same way: they
 differ, and none of them is the count of rows below. (The attributes fall three short of the blocks
 because `dwm_titlebar.rs`'s first `#[allow]` sits on a function holding two of them, and
 `endpoint_volume.rs`'s `activate` on one holding three.)

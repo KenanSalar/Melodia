@@ -62,8 +62,9 @@ pub fn measure_album<'a>(
     members: impl IntoIterator<Item = &'a TrackAudio>,
     stop: impl Fn() -> bool,
 ) -> Result<AlbumOutcome, Stopped> {
+    let members = members.into_iter();
     let mut album_meters = AlbumMeters::default();
-    let mut tracks = Vec::new();
+    let mut tracks = Vec::with_capacity(members.size_hint().0);
     let mut read_through = true;
     let mut album_peak = 0.0_f64;
     for member in members {
