@@ -6,9 +6,8 @@ Status: **proposed**, no phase started · Created: 2026-11-12
 
 Issue [#156](https://github.com/KenanSalar/Melodia/issues/156).
 
-> Verified **2026-11-12** against this tree at `dc4c913a`, and the `ebur128` 0.1.10 source in the
-> registry with 0.1.11's changelog. Anything marked ⚠️ **re-verify** drifts or rests on an outside
-> fact; check it again on the day.
+> Verified **2026-11-12** against this tree at `00b74796`, the `ebur128` 0.1.11 source, and the
+> kernel's `include/linux/ioprio.h` and `block/mq-deadline.c`.
 
 ---
 
@@ -16,7 +15,7 @@ Issue [#156](https://github.com/KenanSalar/Melodia/issues/156).
 
 ReplayGain evens out the volume between tracks only when their files carry gain tags. A track with
 none plays at its mastered level: `compute_linear_gain` returns unity when there is no gain to read
-(`melodia-playback/src/player/playback/replaygain.rs:102-124`). So a library where only some
+(`melodia-playback/src/player/playback/replaygain.rs:102-137`). So a library where only some
 albums were tagged still jumps in loudness from one track to the next, which is exactly what
 ReplayGain is switched on to stop. In Album mode a single untagged track inside a tagged album
 stands out the same way.
@@ -36,17 +35,19 @@ affected and points them at an outside tool to tag the rest.
   mode alike, with the same preamp and clipping guard.
 - A file that carries tags keeps using them. A file that gains tags later switches to its own on
   the rescan that reads them.
-- A replaced file stops using its old measurement at once and is measured again. A track that
-  leaves the library takes its measurement with it.
+- A replaced file stops using its old measurement as soon as the library re-reads it, and is
+  measured again. A track that leaves the library takes its measurement with it.
 - Turning the switch on with a library in place measures the backlog in the background. After
   that, new tracks are measured as they arrive.
+- While a pass has work, the albums of upcoming queued tracks that have no gain go first.
 - A pass shows its progress under the switch and can be stopped.
 
 **What keeps working:**
 
 - Tagged tracks sound exactly as they do now.
-- With the switch off, nothing is measured and playback is today's: stored measurements stay in the
-  library but are not applied, so turning it back on is instant.
+- With the switch off, the default, nothing is measured and playback is today's: no pass, pool or
+  thread exists and the pass does no database work (**Off costs nothing**, below). Stored
+  measurements stay in the library but are not applied, so turning it back on is instant.
 - Playback stays smooth while a pass runs, and a pass waits for a library scan.
 - Memory doesn't grow with the library: a track is measured as it is decoded, never held whole, and
   the pass's threads exist only while it runs.
@@ -74,10 +75,11 @@ CREATE TABLE IF NOT EXISTS track_loudness (
     -- NULL: measured, nothing to level (silent, too short, unreadable)
     track_gain REAL,
     track_peak REAL,
-    -- set together, once the whole album was measured; album_tracks is its member count then
+    -- set together, once the whole album was measured: the album and its member count then
+    album_id INTEGER,
+    album_tracks INTEGER,
     album_gain REAL,
-    album_peak REAL,
-    album_tracks INTEGER
+    album_peak REAL
 );
 ```
 
@@ -88,11 +90,15 @@ re-read. They also have to keep saying what the file says, since "a file that ga
 to its own" is read from them.
 
 **Valid only while its key matches the row.** A read uses a measurement only where `file_hash`,
-`cue_start` and `cue_end` equal the track's current values. The hash is the whole-file BLAKE3
+`cue_start` and `cue_end` equal the track's current values, compared with `IS`: the span is `NULL`
+on a whole-file row, and `cue_end` on a sheet's last track. The hash is the whole-file BLAKE3
 every re-read writes (`metadata.rs:24-34`), so:
 
 - a replaced file stops matching the moment its re-read commits, with no write path having to
-  remember an invalidation;
+  remember an invalidation. A file renamed over a track's path, which a temp-file save does, is
+  not re-read until the next scan (`watch_batch::handle_created` leaves a path already holding
+  rows alone), so it keeps its old tags and measurement until then: a watcher gap of its own,
+  outside this plan;
 - a moved file keeps its hash and its id (`update_track_location`), so it keeps its measurement;
 - a cue sheet edit that moves a track's timing keeps the row's id but not its span, so it stops
   matching;
@@ -105,17 +111,29 @@ letting go of its rows.
 
 **Melodia's own tag writes carry the measurement forward.** A tag write changes the file's bytes,
 and so its hash, without touching its audio. Left alone, the rating write-back alone would send
-every rated track's album back to be decoded again. The two paths where Melodia writes only tags
-into a file (`commit_retag` for Edit Tags and the rating write-back, and the sheet-tags write into a
-FLAC's embedded `CUESHEET`) move `file_hash` from the old value to the new one, in the same
-transaction, on rows that matched the old. A tag edit by another program changes the hash the same
-way and is indistinguishable from a replaced file, so that track is measured again. That costs a
-decode, never a wrong level.
+every rated track's album back to be decoded again. Melodia writes only tags into a file on two
+paths, and each moves `file_hash` from the old value to the new one on rows that matched the old:
 
-**A file that can't be measured is recorded, not retried.** Silent audio, a file under one gating
-block, a decode that fails part-way and a shape change mid-file all write a row with `NULL` gains.
-The key makes it retry when the file changes, and never on every pass, which would decode the same
-broken file on every wake.
+- `commit_retag`, which every tag write goes through (Edit Tags with its artwork, the rating
+  write-back, the lyrics embed), inside its transaction and ahead of the row's own update, the old
+  hash being read from the row;
+- the sheet-tags write into a FLAC's embedded `CUESHEET`, which has no transaction of its own: its
+  read-back goes through the general ingest (`library/sheet_tags.rs`, `read_back`), and that never
+  carries a measurement, since a file another program replaced reaches it the same way. So it
+  reads the image's hash before writing and carries the rows right after the read-back commits. A
+  pass landing in between measures that album again, which costs a decode, never a wrong level. A
+  `.cue` write changes no audio file.
+
+A tag edit by another program changes the hash the same way and is indistinguishable from a
+replaced file, so that track is measured again, at the same cost.
+
+**A file that can't be measured is recorded, not retried; one out of reach waits.** Silent audio,
+a file under one gating block, a file that is there but won't open and a shape change mid-file all
+write a row with `NULL` gains. The key makes it retry when the file changes, and never on every
+pass, which would decode the same broken file on every wake. A file that isn't there (an unmounted
+drive, told apart with `try_exists`) or whose read fails part-way writes nothing: it may come back,
+so it is skipped for the session and tried again at the next launch, as `embedded_cue_probe`
+treats a file out of reach. Recorded, it would never be measured again, its hash unchanged.
 
 ### The album is measured as one whole
 
@@ -139,7 +157,10 @@ whatever the length, so a worker holds one track meter and one album meter. A tr
 exact (no histogram), its history bounded by the one file. Members are fed in disc and track order,
 so the blocks across a join hear it as an album played through, which is what "as one whole" means.
 An album whose members differ in rate or channel count gets one album meter per shape, combined
-through `loudness_global_multiple`, which accepts histogram states.
+through `loudness_global_multiple`, which accepts histogram states. The album meter carries no peak
+mode: the album peak is the loudest member's sample peak, read off the track meters. Feeding two
+meters runs the K-weighting filter twice over every sample; Phase 6 measures that share of the
+pass's CPU against decoding.
 
 **An album is complete only when every in-library member is untagged and measured**, its member
 count matching `album_tracks`. Then:
@@ -151,11 +172,18 @@ count matching `album_tracks`. Then:
 - an album with a tagged member never gets a measured album gain, and its untagged members get
   track gains, the scope ruling out re-measuring tagged files.
 
-**The album values sit on each member's row, with the count they were measured over.** A read is
-then one primary-key join. Each pass opens by stripping album values from rows whose album no
-longer has that many members, or now has a tagged or unmeasured one, which sends a joined or
-departed member's album back to the work list. Re-measuring means decoding the album again, for
-the energies reason above; an album gaining a track is rare next to the backlog.
+**The album values sit on each member's row, with the album and the count they were measured
+over.** A read is then one primary-key join, and it applies the album values only while the row's
+`album_id` is still the track's. Each pass opens by stripping album values from rows whose
+`album_id` is no longer the track's, whose album no longer has that many members, or whose album
+now has a tagged or unmeasured one, which sends a joined or departed member's album back to the
+work list. Re-measuring means decoding the album again, for the energies reason above; an album
+gaining a track is rare next to the backlog.
+
+The count alone misses a swap: two tracks retagged across two albums of one size each carry their
+old album's values through `carry_over`, and both counts still match. The id catches it, and the
+count stays beside it because a pruned album's id can be reused (`prune_orphans`). No foreign key:
+an album's delete would scan this table for want of an index.
 
 **Written as a unit.** An album's rows commit in one transaction or not at all, so a stop or a
 failure mid-album leaves no half-measured album. The write skips a row whose hash moved or which
@@ -175,16 +203,21 @@ gained tags since its job was read.
   keeps the samples Melodia produces under full scale, and a sample peak bounds exactly that; the
   soft-knee limiter (`equalizer.rs:50-55`) still runs behind any gain that isn't unity. A true peak
   would run an oversampling filter over every sample of every channel for the pass's whole length.
-  ⚠️ **re-verify** which peak common tagging tools write by default, so a measured track's guard caps
-  where a tagged one's does.
+  Tagging tools write a sample peak by default too, a true peak being their opt-in, so a measured
+  track's guard caps where a tagged one's does.
 - **The channel map comes from the decoder's channel positions**, never the crate's default map,
-  which drops a 7.1 file's side pair and mislabels 2.1 and 3.1: LFE unused, side and rear channels
-  at their surround weighting, front and centre at unity. A file whose positions are unknown takes
-  the default map by count.
-- **Mono is measured as dual mono.** A mono file plays on both speakers, so it is heard as two
-  identical channels; measured as one, it would be levelled 3 dB hotter than the same audio in
-  stereo. ⚠️ **re-verify** that the output maps a mono source to both channels, and compare one
-  mono file's measurement against the same file tagged by a tagging tool.
+  which drops a 7.1 file's side pair and mislabels 2.1 and 3.1. LFE is unused; side and back pairs
+  take the ±110° surround weighting; front, centre, front-of-centre and height channels sit at
+  unity. Side and back weigh alike because a 5.1 file labels its surround pair either way. The
+  crate's ±135° and 180° positions weigh unity, BS.1770's rear, so a back pair maps to the ±110°
+  positions, never to those. A buffer with no positions (`Channels::Discrete`) takes the default map
+  by count. A multichannel file is measured as authored, as a tag is; what a narrower output plays
+  of it is the output's fold (`output/convert.rs` keeps the first channels), outside this plan.
+- **Mono is measured as dual mono.** The output copies a mono source to both front channels at
+  unity (`output/convert.rs:341-348`), so it is heard as two identical channels; measured as one, it
+  would be levelled 3 dB hotter than the same audio in stereo. Tagging tools measure mono as one
+  channel unless their dual-mono option is set, so a mono file they tagged with their defaults
+  plays 3 dB hotter than one measured here; matching the same audio in stereo is the point.
 
 ### Measured through the playback decoder
 
@@ -201,9 +234,12 @@ Two things the iterator keeps to itself today, both added `pub(crate)` without c
 - **Why it ended.** `Cursor::next_sample` treats a failed read, a clean end and a shape change as
   one end (`decode.rs:286-297`), which is right for a deck. A measurement must not store a
   truncated decode as complete, so the cursor records which end it reached and the decoder answers
-  it.
-- **The channel positions**, kept from the codec parameters beside the count `Shape` already
-  carries (`decode.rs:333`).
+  it. A packet the decoder rejects is skipped and the stream goes on (`decode.rs:345`); playback
+  skips it too, so the measurement stands.
+- **The channel positions**, read from the decoded buffer's spec, the source the count in `Shape`
+  already comes from (`decode.rs:332-341`), and kept as `Position` bits beside that count
+  (`audio.rs:20`). Not from the codec parameters, which can lack them or disagree with the buffer,
+  and not as `Channels`, which isn't `Copy`.
 
 ### Play time: measured values ride the tag columns' path
 
@@ -212,7 +248,12 @@ Two things the iterator keeps to itself today, both added `pub(crate)` without c
   untagged condition, so the four gain fields carry the tags where the file has them and the
   measurement otherwise, and a new `replaygain_origin` column says which. Everything downstream,
   the queue window, `begin_track`, seek, crossfade and gapless preload, already carries those four
-  fields into `EqSource` unchanged.
+  fields into `EqSource` unchanged. The statement up to its `WHERE`, projection and join, is one
+  interned string handed to `select_in_id_order` in place of today's `SELECT {cols} FROM tracks`,
+  its columns qualified (`TRACK_SUMMARY.prefixed`) since the two tables share the key's column
+  names.
+- **A track measured while it plays keeps the level it started with** until it is next started or
+  seeked: a source bakes its gains when it is built, and a refetch replaces only the record.
 - **`TrackSummary` gains `replaygain_origin: GainOrigin { Tagged, Measured }`**, an enum in
   `melodia-core` with its `FromSql`, rather than a bare flag at the boundary.
   `TrackReplayGain::from(&TrackSummary)` carries it.
@@ -225,45 +266,81 @@ Two things the iterator keeps to itself today, both added `pub(crate)` without c
 - **The full `Track` entity stays tag-only**, so Edit Tags and the track's properties show what the
   file says.
 
+### Off costs nothing
+
+The switch is off by default, and off means:
+
+- no pass, pool or thread: the pool is built per pass, and the wake loop is one parked task waiting
+  on the kick alone, listening to no library or scan signal;
+- no database work from the pass: no settle, no work list, no count;
+- the queue window publishes no upcoming ids, and nothing bumps `gains_measured`;
+- measured gains play at unity, gated at the DSP, so playback is today's.
+
+Three things run whatever the switch says: the summary read's join and `carry_over` on a tag write,
+each a primary-key lookup into a table that stays empty until the switch is first turned on, and
+the scan's busy count, a counter each scan moves twice. `carry_over` keeps a turned-off library's
+measurements matching, so turning the switch back on is instant, and the join is what lets the DSP
+gate re-level the playing track the moment the switch moves.
+
 ### The pass
 
 **When it runs.** While ReplayGain and the switch are both on, the user hasn't stopped it this
 session, and no library scan is running. ReplayGain off (by hand or by bit-perfect's reset) stops
-it: measuring for a disabled feature only spends CPU.
+it: measuring for a disabled feature only spends CPU. The pass reads the engine's live controls,
+ReplayGain's `enabled` and the switch's `measured`, at each block beside its stop check. A
+bit-perfect reset turns ReplayGain off through `player_set_replaygain_enabled` and never through
+ReplayGain's persist, so only the live value sees it.
 
 **What wakes it.** Event-driven, never polled:
 
-- the settings kick, after the switch's or ReplayGain's persist commits;
+- launch, so a backlog a quit cut short resumes;
+- the kick, from the switch's and ReplayGain's handlers right after their live set. Nothing the
+  pass reads is on disk, so no persist sits between;
 - `library_changed`, which scans finishing, watcher batches, imports and edits already bump, so new
   tracks are measured as they arrive;
 - the scan going idle;
 - Resume.
 
-Each wake re-reads the work list, which is cheap when empty; the pass runs until it is empty or
-something stops it.
+While the switch is off it waits on the kick alone. Each wake re-reads the work list, which is
+cheap when empty; the pass runs until it is empty or something stops it.
+
+**The queue goes first.** While the switch is on and a pass has work, the queue window task
+publishes the ids of upcoming tracks whose four gain fields are all empty, on a small `watch` in
+`LoudnessControl`. At each album boundary the pass takes the work-list albums, and albumless
+tracks, among them before its next keyset item, and a per-pass set of those albums makes the
+keyset skip them when it gets there. During a long first backlog, what is about to play is levelled
+first; once the backlog is done it does nothing, new tracks being measured as they arrive.
 
 **It steps aside for a scan.** A scan reads the same disks and needs the one writer. The scan's
 progress channel can't say whether one is running: a reconcile pass clears it between folders
 (`library/scan/reconcile.rs:235`, `run.rs:107-111`). So `ScanControl` gains a busy count, held by an
-RAII guard that `reconcile::run_pass` and `scan_folder` take for their whole run, published on a
-`watch`. When it goes busy the pass stops mid-album, writing nothing for that album, and the busy
-count dropping to zero wakes it again.
+RAII guard, published on a `watch`. `reconcile::run_pass` takes its guard before its task spawns,
+and `scan_folder` holds one for its whole run, so its hand-off to the reconcile it starts
+(`library/scan/mod.rs:109-116`) leaves no idle gap. Watcher batches and imports hold none: they are
+short, and the pass's write already skips a row whose hash moved under it. When it goes busy the
+pass stops mid-album, writing nothing for that album, and the busy count dropping to zero wakes it
+again.
 
 **It steps aside for playback through the scheduler.** The work runs on a dedicated pool whose
 threads lower their own priority as they start, so the decode-ahead thread, the output and the UI
-take the CPU first, and on Linux the I/O priority follows the nice value under the CFQ and BFQ
-schedulers (⚠️ **re-verify** against the kernel's ioprio documentation). Dedicated, because a
-priority set on a blocking-pool thread outlives the job and lowers whatever runs there next, and
-`ScanPool` takes every core. The pool is `MEASURE_WORKERS` wide, built per pass and dropped with it,
-so no thread idles after the backlog. Its width is settled on the big library (Phase 6).
+take the CPU first. Dedicated, because a priority set on a blocking-pool thread outlives the job and
+lowers whatever runs there next, and `ScanPool` can take every core. The pool is `MEASURE_WORKERS`
+wide, built per pass and dropped with it, so no thread idles after the backlog. Its width is
+settled on the big library (Phase 6).
 
 - Linux: `rustix::process::setpriority_process` on the thread's own id, which on Linux sets that
-  thread alone. `rustix` is already in the tree (`melodia-playback`), with no new `unsafe`.
+  thread alone. `rustix` is already in the tree (`melodia-playback`), with no new `unsafe`. A thread
+  with no I/O priority of its own takes best-effort at a level its nice value sets
+  (`include/linux/ioprio.h`). BFQ honours that level, mq-deadline only the class, which nice leaves
+  at best-effort, and `none`, NVMe's default, has no priorities. The idle class needs `ioprio_set`
+  or `SCHED_IDLE`, neither of which `rustix` wraps, and `libc` is the allocator's alone, so the
+  pass's reads go unthrottled outside BFQ; Phase 6's no-dropout check covers that.
 - Windows: `SetThreadPriority(GetCurrentThread(), THREAD_MODE_BACKGROUND_BEGIN)` through
   `windows-sys`, which lowers CPU and I/O priority together. A new FFI call of the kind
-  `.claude/rules/unsafe-rust.md` already sanctions.
-- macOS: unchanged. A thread-level call there needs FFI the platform crate doesn't carry; the
-  narrow pool still leaves cores free.
+  `.claude/rules/unsafe-rust.md` already sanctions; `Win32_System_Threading` is already enabled.
+- macOS: unchanged. The thread-level call is `pthread_set_qos_class_self_np`, reachable only
+  through `libc` (the allocator's alone) or a hand-written `extern` block, which
+  `.claude/rules/unsafe-rust.md` rules out; the narrow pool still leaves cores free.
 
 **Stop holds for the session.** Stop cancels the pass, and nothing restarts it, new tracks
 included, until Measure is pressed, the switch is turned off and on, or the app is next launched.
@@ -273,9 +350,10 @@ included, until Measure is pressed, the switch is turned off and on, or the app 
 its members, published on a `watch` the Settings card paints.
 
 **A measurement reaches the queue.** Each committed job bumps a narrow `gains_measured` signal
-that the queue window task listens to beside its three others, refetching its window
-(`WindowFill::All`), so a queued track measured mid-pass plays measured. Not `library_changed`,
-which thirteen subscribers re-read on.
+that the queue window task listens to beside its three others, refetching its window with
+`WindowFill::All` (`Missing` fetches nothing, the ids being in the window already), so a queued
+track measured mid-pass plays measured. Not `library_changed`, which every library view re-reads
+on.
 
 **Memory.** Per worker: one decoder, one track meter, and one album meter per shape. Work lists are
 keyset pages, never a library-sized `fetch_all`. Nothing is held between passes but the table.
@@ -290,11 +368,12 @@ keyset pages, never a library-sized `fetch_all`. Nothing is held between passes 
 - **Radio has nothing to measure** and is untouched.
 - **A file opened from outside the library is not measured**: the work list takes `IN_LIBRARY`.
 - **No true peak and no loudness range.**
-- **A file that fails to measure is not retried until it changes.**
+- **A file that fails to measure is not retried until it changes**; one out of reach is tried
+  again at the next launch.
 - **Nothing is shared with #108's seek-bar shape yet.** That issue also decodes every file once.
   The pass's per-track decode feeding a meter is the seam: if #108 lands, its shape can read the
   same decode then, rather than an abstraction being built for it now.
-- **macOS gets no lowered priority.**
+- **macOS gets no lowered priority, and Linux no lowered I/O priority outside BFQ.**
 
 ---
 
@@ -303,20 +382,21 @@ keyset pages, never a library-sized `fetch_all`. Nothing is held between passes 
 | what | where | note |
 |---|---|---|
 | reference levels | `crates/melodia-core/src/entities/loudness.rs` | `REPLAYGAIN_REFERENCE_LUFS`, `R128_REFERENCE_LUFS`, `GainOrigin` with its `FromSql` and a `param_from!` line in `sql.rs`. The store's R128 offset derives from the two |
-| the decoder's end and positions | `crates/melodia-audio/src/player/source/{decode,file_decode}.rs` | `pub(crate)`; the iterator ends as it does today |
-| the meter | `crates/melodia-audio/src/loudness/` | `channels.rs`: positions to an `ebur128` channel map, mono as dual mono. `meter.rs`: the track meter and the album meters per shape, fed in blocks from the decoder. `mod.rs`: `measure_album` and `measure_track`, each polling a stop check per block and answering a typed outcome per track |
+| the decoder's end and positions | `crates/melodia-audio/src/player/source/{decode,file_decode,audio}.rs` | `pub(crate)`; the iterator ends as it does today; `Position` bits in `Shape` |
+| the meter | `crates/melodia-audio/src/loudness/` | `channels.rs`: positions to an `ebur128` channel map, mono as dual mono. `meter.rs`: the track meter and the album meters per shape, fed in blocks from the decoder. `mod.rs`: `measure_album` and `measure_track`, each polling a stop check per block and answering a typed outcome per track, out of reach among them |
 | the table | `migrations/<timestamp>_track_loudness.sql` | the schema above |
-| store units of work | `crates/melodia-store/src/database/queries/loudness.rs` | the album settle, the two keyset work lists, the pending count, the album and track writes, and `carry_over` (`pub(crate)` on the self-write paths' transactions) |
-| the summary read | `queries/track/lookup.rs` | one interned statement; `TRACK_SUMMARY` loses the four gain names to it |
+| store units of work | `crates/melodia-store/src/database/queries/loudness.rs` | the album settle, the two keyset work lists, the queue-first album lookup, the pending count, the album and track writes, and `carry_over` (`pub(crate)` for `commit_retag`'s transaction, a unit of its own for the sheet-tags read-back) |
+| the summary read | `queries/track/lookup.rs` | the statement up to its `WHERE`, interned and handed to `select_in_id_order`; `TRACK_SUMMARY` loses the four gain names to it |
 | the gate at the DSP | `crates/melodia-playback/src/player/playback/replaygain.rs` | `TrackReplayGain.origin`, `ReplayGainShared::set_measured`, the controls snapshot |
-| live setter | `crates/melodia-engine/.../backend/controls.rs`, `crates/melodia-app/src/library/playback.rs` | beside the other ReplayGain setters |
+| live controls | `crates/melodia-engine/.../backend/controls.rs`, `crates/melodia-app/src/library/playback.rs` | the setter beside the other ReplayGain setters, and the `enabled` and `measured` reads the pass polls |
 | the setting | `crates/melodia-app/src/services/settings/playback.rs` (`ReplayGainFlags.rg_measure_untagged`), `library/settings/replaygain.rs` | `serde(default)` off |
 | scan busy | `crates/melodia-app/src/state/scan.rs`, `library/scan/{reconcile,mod}.rs` | the count, its guard, the two holders |
-| pass state | `crates/melodia-app/src/state/loudness.rs` | `LoudnessControl`: progress `watch`, stop and resume, the kick and `gains_measured` signals |
-| the pass | `crates/melodia-app/src/tasks/loudness/` | `mod.rs`: the wake loop. `pass.rs`: settle, count, page, dispatch, write, publish. `pool.rs`: the dedicated pool and its width |
+| pass state | `crates/melodia-app/src/state/loudness.rs` | `LoudnessControl`: progress `watch`, the upcoming-ids `watch`, stop and resume, the kick and `gains_measured` signals |
+| the pass | `crates/melodia-app/src/tasks/loudness/` | `mod.rs`: the wake loop. `pass.rs`: settle, count, the queue-first albums, page, dispatch, write, publish. `pool.rs`: the dedicated pool and its width |
+| the queue window | `crates/melodia-app/src/tasks/queue_window.rs` | the `gains_measured` arm, and the upcoming ids published while the switch is on |
 | lowered priority | `crates/melodia-platform/src/services/platform/background_priority.rs` | one function, `cfg_select!` per OS |
 | Settings card | `crates/melodia-ui/ui/views/settings/replaygain-section.slint`, `globals/audio.slint`, `components/settings/replaygain-controls.slint` | the row and the progress row; strings on `ReplayGainText` |
-| Settings wiring | `crates/melodia-views/src/ui/replaygain/` | `mod.rs`: today's `install_replaygain`. `measure.rs`: the switch, the progress painter, stop and resume |
+| Settings wiring | `crates/melodia-views/src/ui/replaygain/` | today the one file `ui/replaygain.rs`, which becomes `mod.rs`: `install_replaygain`. `measure.rs`: the switch, the progress painter, stop and resume |
 
 `melodia-views` learns nothing about the table: it reads `LoudnessControl` through `melodia-app`.
 The store learns nothing about decoding beyond the edge it already has (`melodia-audio`).
@@ -350,11 +430,13 @@ The store learns nothing about decoding beyond the edge it already has (`melodia
 - [ ] `ebur128` 0.1.11 in the workspace and `melodia-audio`'s manifest (`cargo search` again on the
       day). 0.1.11 makes results independent of how input is split on non-x86 targets, which a
       block-fed meter relies on. `dasp_frame` is the one crate it adds to the lock file.
-- [ ] `Cursor` records how it ended; `FileDecoder` answers that and the channel positions.
+- [ ] `Cursor` records how it ended; `FileDecoder` answers that and the channel positions, read
+      from the decoded spec into `Position` bits in `Shape`.
 - [ ] `loudness/`: the channel map, the meters and `measure_album` / `measure_track`, with the
       outcomes:
   - [ ] `Measured { gain, peak }` per track, from the reference and a finite loudness;
-  - [ ] no result for silence, a short file, a failed read, a shape change;
+  - [ ] no result for silence, a short file, a file that won't open, a shape change;
+  - [ ] out of reach for a missing file or a read that fails part-way, kept apart from no result;
   - [ ] an album gain only with every member read to its end and some block above the gate;
   - [ ] a stop returns `Stopped`, no partial result.
 - [ ] The crate's doc comments carry the dual mono, sample peak and album meter arguments.
@@ -367,13 +449,13 @@ The store learns nothing about decoding beyond the edge it already has (`melodia
 - [ ] `GainOrigin`, `TrackSummary.replaygain_origin`, the summary statement.
 - [ ] `TrackReplayGain.origin`, `ReplayGainShared::set_measured`, the controls snapshot in
       `compute_linear_gain` and its caller (`equalizer.rs:429-440`).
-- [ ] The engine and app setters; `hydrate_audio_dsp` (`state/mod.rs:321-337`) seeds it.
+- [ ] The engine and app setters and reads; `hydrate_audio_dsp` (`state/mod.rs:321-353`) seeds it.
 - [ ] `ReplayGainFlags.rg_measure_untagged` and its setter.
-- [ ] `carry_over` called from `commit_retag` (`queries/scan/retag.rs`) and the sheet-tags embedded
-      write (`library/sheet_tags.rs`).
+- [ ] `carry_over` called from `commit_retag` (`queries/scan/retag.rs`) and after the sheet-tags
+      embedded write's read-back (`library/sheet_tags.rs`), never from the general ingest.
 - [ ] Docs: `.claude/rules/library-data.md` gains "a path where Melodia writes only tags into a file
       carries its loudness row (`queries::loudness::carry_over`), or the next pass decodes its
-      album again", violable from any new self-write path.
+      album again, and the general ingest never does", violable from any new self-write path.
 
 **Gate:**
 - [ ] The static gates, and the existing tests fixed where the new field or column breaks them.
@@ -383,21 +465,25 @@ The store learns nothing about decoding beyond the edge it already has (`melodia
         Album mode, and the signal path still shows ReplayGain on;
   - [ ] with it unset, the album plays at unity and tagged albums are unchanged either way;
   - [ ] an Edit Tags save and a rating write-back on one of those tracks leave its row matching;
-  - [ ] a file replaced on disk stops matching once the watcher has re-read it.
+  - [ ] an Edit Tags save moving one of them to another album stops it using the album gain at
+        once;
+  - [ ] a file replaced on disk by a copy over it stops matching once the watcher has re-read it.
 
 ## Phase 4: The pass
 
 - [ ] `LoudnessControl` and its signals on `AppState`.
-- [ ] The scan busy count and guard, taken by `run_pass` and `scan_folder`.
+- [ ] The scan busy count and guard, taken by `run_pass` before its task spawns and by
+      `scan_folder` for its whole run.
 - [ ] `queries/loudness.rs`: the settle, the album and track work lists (keyset, `IN_LIBRARY`,
-      untagged, hashed), the count and the two writes, each write skipping rows whose hash moved
-      or which gained tags.
+      untagged, hashed), the queue-first album lookup, the count and the two writes, each write
+      skipping rows whose hash moved or which gained tags.
 - [ ] `background_priority.rs`; the Windows call joins `unsafe-rust.md`'s table and counts.
-- [ ] `tasks/loudness/`: the wake loop, the pass and the pool. Threads named `loudness-{i}`, listed
-      in `packaging.rs`'s `RUNTIME_NAMED` with their width argued.
-- [ ] Spawned with the other tasks (`boot/tasks.rs`); the switch's and ReplayGain's persists kick
-      it.
-- [ ] The queue window's `gains_measured` arm (`tasks/queue_window.rs`).
+- [ ] `tasks/loudness/`: the wake loop, the pass with its queue-first albums and session skip set,
+      and the pool. Threads named `loudness-{i}`; the file naming them joins `packaging.rs`'s
+      `RUNTIME_NAMED`, with their width argued.
+- [ ] Spawned with the other tasks (`crates/melodia/src/boot/tasks.rs`), running a pass at launch;
+      the switch's and ReplayGain's handlers kick it after their live set.
+- [ ] The queue window's `gains_measured` arm and its upcoming ids (`tasks/queue_window.rs`).
 - [ ] Logging: a pass's start, end, counts and duration at `info`; each album's path, loudness and
       gain at `debug`, for the gate's comparison.
 
@@ -406,13 +492,20 @@ The store learns nothing about decoding beyond the edge it already has (`melodia
 - [ ] In the dev data folder, the switch on through `settings.json`:
   - [ ] the backlog is measured and the pass ends; a relaunch finds nothing to do;
   - [ ] measured gains agree with an independent reference, `ffmpeg`'s `ebur128` filter with
-        sample peaks, over a handful of files across codecs, an Opus file and a cue sheet track
-        among them;
+        `peak=sample`, and `dualmono=true` for a mono file, over a handful of files across
+        codecs, an Opus file, a cue sheet track and a multichannel file, where the library holds
+        one, among them;
   - [ ] tagged copies with their tags stripped (copies only) measure to what their tags said; the
         differences are read and explained before the phase closes;
-  - [ ] the mono check from Decisions;
+  - [ ] a mono file and a stereo copy of it with both channels equal measure to the same gain;
   - [ ] a scan started mid-pass stops the pass, which resumes once the scan ends;
+  - [ ] bit-perfect turned on mid-pass stops it;
   - [ ] a new file dropped into a watched folder is measured on its own;
+  - [ ] with a backlog running, an untagged album the pass hasn't reached, once queued, is measured
+        next, and only once;
+  - [ ] a file on an unmounted drive writes nothing, and is measured at the next launch once the
+        drive is back;
+  - [ ] with the switch off, a launch and a library change run no pass;
   - [ ] RSS sampled from `/proc` during the pass, and idle RSS after it, against a run with the
         switch off.
 
@@ -425,9 +518,12 @@ The store learns nothing about decoding beyond the edge it already has (`melodia
       it while a pass runs or stopped work remains. The card only: the overflow menu's dialog stays
       the live listening controls.
 - [ ] The card's description loses its claim that only tagged tracks are affected; its pointer to
-      tagging tools stays.
-- [ ] `ui/replaygain/`: `toggle_binding` for the switch (setter, then persist, then the kick on
-      `Ok`), the progress painter on the `watch`, Stop and Measure.
+      tagging tools stays. The overflow menu's dialog reads the same `enable-desc`
+      (`overflow-menu.slint:216-217`), where the switch isn't, so the new wording reads right in
+      both.
+- [ ] `ui/replaygain/`: the switch's handler is `toggle_binding` composed with the kick, since
+      `toggle_binding` persists fire-and-forget and the pass reads only live state; ReplayGain's own
+      toggle gains the same kick. The progress painter on the `watch`, Stop and Measure.
 - [ ] Strings through `@tr`, the counts as plurals; `scripts/update-translations.py` and every
       catalog finished.
 - [ ] `README.md`'s ReplayGain lines (`:17`, `:128`).
@@ -436,13 +532,13 @@ The store learns nothing about decoding beyond the edge it already has (`melodia
 - [ ] The static gates.
 - [ ] Kenan's hand pass: the switch on with a library in place shows progress; Stop holds through a
       new file arriving; Measure resumes; the switch off stops the pass and returns to tag-only
-      levels; the settings search finds the row.
+      levels; the settings search finds the row; the overflow dialog's description reads right.
 
 ## Phase 6: The big library
 
 - [ ] A whole-library pass on the big test library, measured and recorded here:
   - [ ] wall time, CPU, peak RSS sampled from `/proc` (never heaptrack on a pass this size), idle
-        RSS after;
+        RSS after, and the album meter's share of the CPU against decoding;
   - [ ] `MEASURE_WORKERS` decided from those figures, its doc saying what it trades;
   - [ ] whether the pass evicts the database's pages from the page cache (the UI slower after a
         pass than before). If it does, each file's pages are dropped once it is measured
@@ -465,12 +561,14 @@ Existing tests a phase breaks are fixed in that phase.
 - **Docs land in the phase that stales them**, held to the anchor rule: the arguments above move into
   the doc comments of `loudness/`, `queries/loudness.rs`, `tasks/loudness/` and the migration's
   comments as each lands.
-- **800 lines:** `metadata.rs` (597) and `lookup.rs` (507) gain lines, not bodies; everything new is
-  its own module.
-- **Memory:** `TrackSummary` gains one enum, and it lives only in the player's window. The pass's
-  cost is bounded per worker and gone when the pass ends; Phase 4 and Phase 6 measure both.
-- **Lock order** (ADR 0035) is untouched: the pass takes no player lock, and its measurements reach
-  the player through the queue window's existing fetch.
+- **800 lines:** `equalizer.rs` (662), `metadata.rs` (597), `library/playback.rs` (542) and
+  `lookup.rs` (507) gain lines, not bodies; everything new is its own module.
+- **Memory:** `TrackSummary` gains one enum, and it lives only in the player's window; the
+  upcoming-ids `watch` holds at most the window's ids. The pass's cost is bounded per worker and
+  gone when the pass ends; Phase 4 and Phase 6 measure both.
+- **Lock order** (ADR 0035) is untouched: the pass takes no player lock, its measurements reach the
+  player through the queue window's existing fetch, and the queue-first ids come from that same
+  fetch.
 - **The live public release:** the setting defaults off, the new JSON field is `serde(default)`, and
   the migration only adds a table.
 
