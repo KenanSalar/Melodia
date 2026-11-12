@@ -30,6 +30,8 @@ fn resolved(name: &str, root: &Path, sheet_dir: &str, audio: &WalkIndex) -> Opti
 }
 
 /// `Album.wav` sorts first and folds the same, so only the spelling as written picks the other.
+/// NTFS and APFS can't hold two names differing only in case, so the pair exists only on Linux.
+#[cfg(target_os = "linux")]
 #[test]
 fn a_name_resolves_as_written_first() -> Result<(), AppError> {
     let (tmp, audio) = walked(&["Album.wav", "album.wav"])?;
