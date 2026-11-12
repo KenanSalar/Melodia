@@ -44,6 +44,15 @@ impl PlaybackEngine {
         self.rg.set_prevent_clipping(on);
     }
 
+    /// Whether a gain Melodia measured levels its track.
+    pub fn set_replaygain_measured(&self, on: bool) {
+        self.rg.set_measured(on);
+    }
+
+    pub fn replaygain_levels_measured(&self) -> bool {
+        self.rg.levels_measured()
+    }
+
     /// For the crossfade integration test; the UI arms the cell [`Self::visualizer`] hands it.
     pub fn set_visualizer_enabled(&self, on: bool) {
         self.viz.set_enabled(on);

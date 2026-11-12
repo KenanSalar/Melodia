@@ -15,6 +15,7 @@
 //! A library-sized list holds no projection per track, only ids (`ui::paged_rows`).
 
 use crate::entities::cue::{CueSpan, CueTrack};
+use crate::entities::loudness::GainOrigin;
 
 /// What the player and the bar render, cloned into every published view model, so it carries
 /// playback identity and nothing a list draws.
@@ -44,6 +45,7 @@ pub struct TrackSummary {
     pub replaygain_track_peak: Option<f32>,
     pub replaygain_album_gain: Option<f32>,
     pub replaygain_album_peak: Option<f32>,
+    pub replaygain_origin: GainOrigin,
 }
 
 impl TrackSummary {
@@ -110,6 +112,7 @@ impl From<Track> for TrackSummary {
             replaygain_track_peak: rg_f64_to_f32(t.replaygain_track_peak),
             replaygain_album_gain: rg_f64_to_f32(t.replaygain_album_gain),
             replaygain_album_peak: rg_f64_to_f32(t.replaygain_album_peak),
+            replaygain_origin: GainOrigin::Tagged,
         }
     }
 }
@@ -136,6 +139,7 @@ impl From<&Track> for TrackSummary {
             replaygain_track_peak: rg_f64_to_f32(t.replaygain_track_peak),
             replaygain_album_gain: rg_f64_to_f32(t.replaygain_album_gain),
             replaygain_album_peak: rg_f64_to_f32(t.replaygain_album_peak),
+            replaygain_origin: GainOrigin::Tagged,
         }
     }
 }

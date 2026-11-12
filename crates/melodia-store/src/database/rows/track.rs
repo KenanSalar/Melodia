@@ -47,6 +47,7 @@ by_name!(TrackSummary {
     replaygain_track_peak,
     replaygain_album_gain,
     replaygain_album_peak,
+    replaygain_origin,
 });
 
 by_name!(TrackListRow {

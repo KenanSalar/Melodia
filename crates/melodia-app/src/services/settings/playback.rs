@@ -69,6 +69,8 @@ pub struct ReplayGainFlags {
     /// Extra preamp in dB, clamped to `RG_MIN_PREAMP_DB..=RG_MAX_PREAMP_DB`.
     pub rg_preamp: f32,
     pub rg_prevent_clipping: bool,
+    /// Measures files carrying no gain tags and levels them by the measurement.
+    pub rg_measure_untagged: bool,
 }
 
 impl Default for ReplayGainFlags {
@@ -78,6 +80,7 @@ impl Default for ReplayGainFlags {
             rg_mode: DEFAULT_MODE.to_owned(),
             rg_preamp: RG_DEFAULT_PREAMP_DB,
             rg_prevent_clipping: true,
+            rg_measure_untagged: false,
         }
     }
 }

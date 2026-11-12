@@ -11,6 +11,7 @@ use super::file_rows::{
 };
 use super::membership::Membership;
 use super::{columns, json_array};
+use crate::database::queries::loudness::MATCHING_MEASUREMENT;
 use crate::database::rows::FromRow;
 use crate::database::sql::{self, Sql};
 use crate::database::{DbPool, chunked_in_query, in_id_order, select_in_id_order};
@@ -84,12 +85,35 @@ pub async fn count_tracks(db: &DbPool) -> Result<i64, AppError> {
     db.read(|conn| sql::fetch_one(conn, LIBRARY_TRACK_COUNT.as_str(), ())).await
 }
 
+/// `TrackSummary`'s read up to its `WHERE`. A file with no gain tags plays its measurement in their
+/// place, each pair taken whole so a tag's peak never guards a measured gain, and the album pair
+/// only while the track is on the album it was measured with.
+static TRACK_SUMMARY_SELECT: LazyLock<String> = LazyLock::new(|| {
+    format!(
+        "SELECT {columns},
+                CASE WHEN l.track_id IS NULL THEN t.replaygain_track_gain ELSE l.track_gain END
+                    AS replaygain_track_gain,
+                CASE WHEN l.track_id IS NULL THEN t.replaygain_track_peak ELSE l.track_peak END
+                    AS replaygain_track_peak,
+                CASE WHEN l.track_id IS NULL THEN t.replaygain_album_gain
+                     WHEN l.album_id = t.album_id THEN l.album_gain END AS replaygain_album_gain,
+                CASE WHEN l.track_id IS NULL THEN t.replaygain_album_peak
+                     WHEN l.album_id = t.album_id THEN l.album_peak END AS replaygain_album_peak,
+                l.track_id IS NOT NULL AS replaygain_origin
+         FROM tracks t {MATCHING_MEASUREMENT}",
+        columns = columns::TRACK_SUMMARY.prefixed("t"),
+    )
+});
+
 /// `TrackSummary` rows for `ids`, in order: what the queue, Now Playing and playback read.
 pub async fn get_track_summaries_by_ids(
     db: &DbPool,
     ids: Vec<i64>,
 ) -> Result<Vec<track::TrackSummary>, AppError> {
-    rows_in_id_order(db, columns::TRACK_SUMMARY.joined(), ids, |t: &track::TrackSummary| t.id).await
+    db.read(move |conn| {
+        select_in_id_order(conn, &TRACK_SUMMARY_SELECT, &ids, |t: &track::TrackSummary| t.id)
+    })
+    .await
 }
 
 /// `TrackListRow` rows for `ids`, in order: the page a list holding only its ids draws.

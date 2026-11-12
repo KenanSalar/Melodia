@@ -2,7 +2,7 @@
 
 Working doc. Delete when the feature ships.
 
-Status: **Phases 1–2 landed**, Phase 3 next · Created: 2026-11-12
+Status: **Phases 1–2 landed**, Phase 3 built and hand-passed, Phase 4 next · Created: 2026-11-12
 
 Issue [#156](https://github.com/KenanSalar/Melodia/issues/156).
 
@@ -115,8 +115,8 @@ every rated track's album back to be decoded again. Melodia writes only tags int
 paths, and each moves `file_hash` from the old value to the new one on rows that matched the old:
 
 - `commit_retag`, which every tag write goes through (Edit Tags with its artwork, the rating
-  write-back, the lyrics embed), inside its transaction and ahead of the row's own update, the old
-  hash being read from the row;
+  write-back, the lyrics embed), inside its transaction: the old hash is read with the row ahead of
+  its update and carried right after it, the statement the sheet-tags path shares;
 - the sheet-tags write into a FLAC's embedded `CUESHEET`, which has no transaction of its own: its
   read-back goes through the general ingest (`library/sheet_tags.rs`, `read_back`), and that never
   carries a measurement, since a file another program replaced reaches it the same way. So it
@@ -292,8 +292,8 @@ gate re-level the playing track the moment the switch moves.
 session, and no library scan is running. ReplayGain off (by hand or by bit-perfect's reset) stops
 it: measuring for a disabled feature only spends CPU. The pass reads the engine's live controls,
 ReplayGain's `enabled` and the switch's `measured`, at each block beside its stop check. A
-bit-perfect reset turns ReplayGain off through `player_set_replaygain_enabled` and never through
-ReplayGain's persist, so only the live value sees it.
+bit-perfect reset turns ReplayGain off live through `player_set_replaygain_enabled` as well as in
+`settings.json` (`apply_bit_perfect_reset`), and the live controls are what the pass reads.
 
 **What wakes it.** Event-driven, never polled:
 
@@ -385,14 +385,14 @@ keyset pages, never a library-sized `fetch_all`. Nothing is held between passes 
 
 | what | where | note |
 |---|---|---|
-| reference levels | `crates/melodia-core/src/entities/loudness.rs` | `REPLAYGAIN_REFERENCE_LUFS`, `R128_REFERENCE_LUFS`, `GainOrigin` with its `FromSql` and a `param_from!` line in `sql.rs`. The store's R128 offset derives from the two |
+| reference levels | `crates/melodia-core/src/entities/loudness.rs` | `REPLAYGAIN_REFERENCE_LUFS`, `R128_REFERENCE_LUFS`, `GainOrigin` with its `FromSql`, read from whether a measurement stood in, so nothing binds one. The store's R128 offset derives from the two |
 | the decoder's end and positions | `crates/melodia-audio/src/player/source/{decode,file_decode,audio}.rs` | `pub(crate)`; the iterator ends as it does today; `Position` bits beside the cursor's `Shape` |
 | the meter | `crates/melodia-audio/src/loudness/` | `channels.rs`: positions to an `ebur128` channel map, mono as dual mono. `meter.rs`: the track meter and the album meters per shape, fed in blocks from the decoder. `mod.rs`: `measure_album` and `measure_track`, each polling a stop check per block and answering a typed outcome per track, out of reach among them |
 | the table | `migrations/<timestamp>_track_loudness.sql` | the schema above |
-| store units of work | `crates/melodia-store/src/database/queries/loudness.rs` | the album settle, the two keyset work lists, the queue-first album lookup, the pending count, the album and track writes, and `carry_over` (`pub(crate)` for `commit_retag`'s transaction, a unit of its own for the sheet-tags read-back) |
+| store units of work | `crates/melodia-store/src/database/queries/loudness.rs` | `MATCHING_MEASUREMENT`, the key's one home; the album settle, the two keyset work lists, the queue-first album lookup, the pending count, the album and track writes, and `carry_over` (`pub(crate)` for `commit_retag`'s transaction; `hashes_on_record` and `carry_over_rewritten` for the sheet-tags read-back) |
 | the summary read | `queries/track/lookup.rs` | the statement up to its `WHERE`, interned and handed to `select_in_id_order`; `TRACK_SUMMARY` loses the four gain names to it |
-| the gate at the DSP | `crates/melodia-playback/src/player/playback/replaygain.rs` | `TrackReplayGain.origin`, `ReplayGainShared::set_measured`, the controls snapshot |
-| live controls | `crates/melodia-engine/.../backend/controls.rs`, `crates/melodia-app/src/library/playback.rs` | the setter beside the other ReplayGain setters, and the `enabled` and `measured` reads the pass polls |
+| the gate at the DSP | `crates/melodia-playback/src/player/playback/replaygain.rs` | `TrackReplayGain.origin`, `ReplayGainShared::set_measured`, the `RgControls` snapshot |
+| live controls | `crates/melodia-engine/.../backend/controls.rs`, `crates/melodia-app/src/library/playback.rs` | the setter beside the other ReplayGain setters, and `levels_measured`, the one read the pass polls (`enabled` and `measured` together) |
 | the setting | `crates/melodia-app/src/services/settings/playback.rs` (`ReplayGainFlags.rg_measure_untagged`), `library/settings/replaygain.rs` | `serde(default)` off |
 | scan busy | `crates/melodia-app/src/state/scan.rs`, `library/scan/{reconcile,mod}.rs` | the count, its guard, the two holders |
 | pass state | `crates/melodia-app/src/state/loudness.rs` | `LoudnessControl`: progress `watch`, the upcoming-ids `watch`, stop and resume, the kick and `gains_measured` signals |
@@ -452,29 +452,29 @@ The store learns nothing about decoding beyond the edge it already has (`melodia
 
 ## Phase 3: Stored measurements play like tags
 
-- [ ] The migration.
-- [ ] `GainOrigin`, `TrackSummary.replaygain_origin`, the summary statement.
-- [ ] `TrackReplayGain.origin`, `ReplayGainShared::set_measured`, the controls snapshot in
+- [x] The migration.
+- [x] `GainOrigin`, `TrackSummary.replaygain_origin`, the summary statement.
+- [x] `TrackReplayGain.origin`, `ReplayGainShared::set_measured`, the controls snapshot in
       `compute_linear_gain` and its caller (`equalizer.rs:429-440`).
-- [ ] The engine and app setters and reads; `hydrate_audio_dsp` (`state/mod.rs:321-353`) seeds it.
-- [ ] `ReplayGainFlags.rg_measure_untagged` and its setter.
-- [ ] `carry_over` called from `commit_retag` (`queries/scan/retag.rs`) and after the sheet-tags
+- [x] The engine and app setters and reads; `hydrate_audio_dsp` (`state/mod.rs:321-353`) seeds it.
+- [x] `ReplayGainFlags.rg_measure_untagged` and its setter.
+- [x] `carry_over` called from `commit_retag` (`queries/scan/retag.rs`) and after the sheet-tags
       embedded write's read-back (`library/sheet_tags.rs`), never from the general ingest.
-- [ ] Docs: `.claude/rules/library-data.md` gains "a path where Melodia writes only tags into a file
+- [x] Docs: `.claude/rules/library-data.md` gains "a path where Melodia writes only tags into a file
       carries its loudness row (`queries::loudness::carry_over`), or the next pass decodes its
       album again, and the general ingest never does", violable from any new self-write path.
 
 **Gate:**
-- [ ] The static gates, and the existing tests fixed where the new field or column breaks them.
-- [ ] In the dev data folder, with a backup: rows inserted by hand with `/usr/bin/sqlite3` for one
+- [x] The static gates, and the existing tests fixed where the new field or column breaks them.
+- [x] In the dev data folder, with a backup: rows inserted by hand with `/usr/bin/sqlite3` for one
       untagged album, matching each track's hash and span, then:
-  - [ ] with `rg_measure_untagged` set in `settings.json`, the album plays levelled in Track and
+  - [x] with `rg_measure_untagged` set in `settings.json`, the album plays levelled in Track and
         Album mode, and the signal path still shows ReplayGain on;
-  - [ ] with it unset, the album plays at unity and tagged albums are unchanged either way;
-  - [ ] an Edit Tags save and a rating write-back on one of those tracks leave its row matching;
-  - [ ] an Edit Tags save moving one of them to another album stops it using the album gain at
+  - [x] with it unset, the album plays at unity and tagged albums are unchanged either way;
+  - [x] an Edit Tags save and a rating write-back on one of those tracks leave its row matching;
+  - [x] an Edit Tags save moving one of them to another album stops it using the album gain at
         once;
-  - [ ] a file replaced on disk by a copy over it stops matching once the watcher has re-read it.
+  - [x] a file replaced on disk by a copy over it stops matching once the watcher has re-read it.
 
 ## Phase 4: The pass
 

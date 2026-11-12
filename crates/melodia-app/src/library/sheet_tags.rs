@@ -15,6 +15,7 @@ use melodia_artwork::media::image::artwork::CoverCache;
 use melodia_core::entities::cue::{SheetFile, SheetTrack};
 use melodia_core::error::{AppError, describe};
 use melodia_core::utils::self_writes::SelfWrites;
+use melodia_store::database::queries::loudness::{self, HashOnRecord};
 use melodia_store::database::queries::scan;
 use melodia_store::database::{DbPool, queries};
 use melodia_store::media::cue::{self, SheetEdit, SheetRows};
@@ -32,6 +33,8 @@ pub(super) struct SheetWrites {
 pub(super) struct SheetPass {
     edit: SheetEdit,
     sheets: BTreeMap<SheetFile, SelectedTracks>,
+    /// The hashes of the images holding their sheet, which a `CUESHEET` write changes.
+    images_before: Vec<HashOnRecord>,
 }
 
 impl SheetPass {
@@ -39,7 +42,7 @@ impl SheetPass {
     /// shows. Empty where `edit` holds nothing a sheet does.
     pub(super) async fn read(db: &DbPool, ids: &[i64], edit: SheetEdit) -> Result<Self, AppError> {
         if edit.is_empty() {
-            return Ok(Self { edit, sheets: BTreeMap::new() });
+            return Ok(Self { edit, sheets: BTreeMap::new(), images_before: Vec::new() });
         }
         let mut sheets = by_sheet(queries::track::get_sheet_tracks_by_ids(db, ids).await?);
         if !sheets.is_empty() {
@@ -49,7 +52,8 @@ impl SheetPass {
                 selected.rows.artists = artists.remove(sheet).unwrap_or_default();
             }
         }
-        Ok(Self { edit, sheets })
+        let images_before = loudness::hashes_on_record(db, embedded_images(&sheets)).await?;
+        Ok(Self { edit, sheets, images_before })
     }
 
     /// Writes the edit into each sheet, then reads every sheet it changed back in.
@@ -60,7 +64,7 @@ impl SheetPass {
         cover_cache: &CoverCache,
         self_writes: &Arc<SelfWrites>,
     ) -> Result<SheetWrites, AppError> {
-        let Self { edit, sheets } = self;
+        let Self { edit, sheets, images_before } = self;
         if sheets.is_empty() {
             return Ok(SheetWrites::default());
         }
@@ -94,7 +98,10 @@ impl SheetPass {
 
         let sheets: Vec<SheetFile> = changed.iter().map(|(sheet, _)| sheet.clone()).collect();
         match read_back(db, artwork_dir, cover_cache, &sheets).await {
-            Ok(()) => writes.updated.extend(changed.into_iter().flat_map(|(_, ids)| ids)),
+            Ok(()) => {
+                carry_loudness(db, images_before).await;
+                writes.updated.extend(changed.into_iter().flat_map(|(_, ids)| ids));
+            }
             Err(e) => {
                 // Unmarked so the watcher reads them, rather than leaving the rows stale.
                 let paths: Vec<PathBuf> = sheets.iter().map(|sheet| sheet.path().into()).collect();
@@ -125,6 +132,14 @@ fn by_sheet(tracks: Vec<SheetTrack>) -> BTreeMap<SheetFile, SelectedTracks> {
         selected.rows.edited.push(track);
     }
     sheets
+}
+
+fn embedded_images(sheets: &BTreeMap<SheetFile, SelectedTracks>) -> Vec<String> {
+    sheets
+        .keys()
+        .filter(|sheet| matches!(sheet, SheetFile::Embedded(_)))
+        .map(|sheet| sheet.path().to_owned())
+        .collect()
 }
 
 /// One sheet's write, `Ok(false)` where it already stated the edit.
@@ -160,6 +175,14 @@ fn write_sheet(
         }
     }
     Ok(true)
+}
+
+/// Logged rather than failing the committed edit: a missed carry costs the album a decode, never a
+/// wrong level.
+async fn carry_loudness(db: &DbPool, images_before: Vec<HashOnRecord>) {
+    if let Err(e) = loudness::carry_over_rewritten(db, images_before).await {
+        log::warn!("loudness carry-over after a cue sheet write failed: {}", describe(&e));
+    }
 }
 
 /// Reads `written` back in with the images they hold, and claims no other: the settle reads every

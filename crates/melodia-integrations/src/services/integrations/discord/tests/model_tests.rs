@@ -2,6 +2,7 @@ use std::sync::Arc;
 
 use super::{Presence, PresenceState, Update, clamp_field};
 use melodia_core::entities::integrations::DiscordFlags;
+use melodia_core::entities::loudness::GainOrigin;
 use melodia_core::entities::track::TrackSummary;
 use melodia_engine::player::engine::fixtures::test_view_model;
 use melodia_engine::player::engine::state::PlayerViewModelLight;
@@ -36,6 +37,7 @@ fn track(
         replaygain_track_peak: None,
         replaygain_album_gain: None,
         replaygain_album_peak: None,
+        replaygain_origin: GainOrigin::Tagged,
     })
 }
 

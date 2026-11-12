@@ -4,6 +4,7 @@ use super::*;
 use crate::player::engine::fixtures::{cut_rows, whole_file};
 use crate::player::engine::queue::current_index_from_i32;
 use crate::player::engine::types::{PersistableQueue, PersistedPlayback, RepeatMode};
+use melodia_core::entities::loudness::GainOrigin;
 use melodia_core::error::AppError;
 use melodia_playback::player::playback::crossfade::CrossfadeDecision;
 use melodia_playback::player::playback::replaygain::TrackReplayGain;
@@ -42,6 +43,7 @@ fn make_summary(id: i64, title: &str, duration_ms: i64) -> Arc<TrackSummary> {
         replaygain_track_peak: None,
         replaygain_album_gain: None,
         replaygain_album_peak: None,
+        replaygain_origin: GainOrigin::Tagged,
     })
 }
 
@@ -623,6 +625,7 @@ fn test_restore_queue_with_last_position() {
         replaygain_track_peak: None,
         replaygain_album_gain: None,
         replaygain_album_peak: None,
+        replaygain_origin: GainOrigin::Tagged,
     });
 
     let persistable = PersistableQueue { track_ids: vec![1], current_index: 0 };

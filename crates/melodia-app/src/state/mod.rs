@@ -333,6 +333,7 @@ fn hydrate_audio_dsp(engine: &PlaybackEngine, settings: &settings::SettingsData)
         ),
     );
     engine.set_replaygain_prevent_clipping(settings.replaygain.rg_prevent_clipping);
+    engine.set_replaygain_measured(settings.replaygain.rg_measure_untagged);
     engine.set_replaygain_enabled(settings.replaygain.rg_enabled);
 
     engine.set_crossfade_duration_ms(settings.crossfade.crossfade_duration_ms);

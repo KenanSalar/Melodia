@@ -10,6 +10,7 @@ pub mod fixtures;
 pub mod folder;
 pub mod genre;
 pub mod ingest;
+pub mod loudness;
 pub mod outside;
 pub mod playlist;
 pub(crate) mod playlist_carry;

@@ -848,6 +848,7 @@ fn test_replaygain_defaults_when_absent() -> Result<(), AppError> {
     assert_eq!(settings.replaygain.rg_mode, "album");
     assert!((settings.replaygain.rg_preamp - 0.0).abs() < f32::EPSILON);
     assert!(settings.replaygain.rg_prevent_clipping);
+    assert!(!settings.replaygain.rg_measure_untagged);
     Ok(())
 }
 
@@ -859,6 +860,7 @@ fn test_replaygain_roundtrip() -> Result<(), AppError> {
             rg_mode: "track".to_owned(),
             rg_preamp: -3.0,
             rg_prevent_clipping: false,
+            rg_measure_untagged: true,
         },
         ..reading_env(SettingsData::default)
     };
@@ -868,6 +870,7 @@ fn test_replaygain_roundtrip() -> Result<(), AppError> {
     assert_eq!(deserialized.replaygain.rg_mode, "track");
     assert!((deserialized.replaygain.rg_preamp - (-3.0)).abs() < f32::EPSILON);
     assert!(!deserialized.replaygain.rg_prevent_clipping);
+    assert!(deserialized.replaygain.rg_measure_untagged);
     Ok(())
 }
 

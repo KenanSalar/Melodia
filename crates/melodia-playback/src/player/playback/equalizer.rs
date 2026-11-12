@@ -429,12 +429,7 @@ impl<S: AudioSource> EqSource<S> {
     fn rebuild(&mut self) {
         // First: `ReplayGain` is independent of the EQ toggle and the early returns below.
         let rg_gain = if self.rg_shared.enabled() {
-            replaygain::compute_linear_gain(
-                self.baked_rg,
-                self.rg_shared.mode(),
-                self.rg_shared.preamp(),
-                self.rg_shared.prevent_clipping(),
-            )
+            replaygain::compute_linear_gain(self.baked_rg, self.rg_shared.controls())
         } else {
             1.0
         };

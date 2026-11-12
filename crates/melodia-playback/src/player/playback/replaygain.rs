@@ -6,6 +6,7 @@
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicU8, Ordering};
 
+use melodia_core::entities::loudness::GainOrigin;
 use melodia_core::entities::track::TrackSummary;
 
 use super::dsp::{AtomicF32, Generation, db_to_linear};
@@ -78,13 +79,14 @@ impl RgMode {
     }
 }
 
-/// Gains in dB as tagged and peaks linear, 1.0 being full scale; all `None` is unity.
+/// Gains in dB and peaks linear, 1.0 being full scale, as tagged or measured; all `None` is unity.
 #[derive(Copy, Clone, Debug, Default, PartialEq)]
 pub struct TrackReplayGain {
     pub track_gain: Option<f32>,
     pub track_peak: Option<f32>,
     pub album_gain: Option<f32>,
     pub album_peak: Option<f32>,
+    pub origin: GainOrigin,
 }
 
 /// Here rather than on `TrackSummary`, a row type having no business naming this one.
@@ -95,20 +97,31 @@ impl From<&TrackSummary> for TrackReplayGain {
             track_peak: track.replaygain_track_peak,
             album_gain: track.replaygain_album_gain,
             album_peak: track.replaygain_album_peak,
+            origin: track.replaygain_origin,
         }
     }
 }
 
-/// Unity with no gain data, so an untagged track plays unchanged.
+/// The master controls a gain is computed under, read together at a rebuild.
+#[derive(Copy, Clone, Debug)]
+pub struct RgControls {
+    pub mode: RgMode,
+    pub preamp_db: f32,
+    pub prevent_clipping: bool,
+    /// Whether a measured gain levels its track, the Measure untagged tracks switch.
+    pub measured: bool,
+}
+
+/// Unity with no gain data, so an untagged track plays unchanged, as does a measured one while
+/// measuring is off.
 #[must_use]
-pub fn compute_linear_gain(
-    baked: TrackReplayGain,
-    mode: RgMode,
-    preamp_db: f32,
-    prevent_clipping: bool,
-) -> f32 {
+pub fn compute_linear_gain(baked: TrackReplayGain, controls: RgControls) -> f32 {
+    if baked.origin == GainOrigin::Measured && !controls.measured {
+        return 1.0;
+    }
+
     // The other pair where the mode's gain is absent, so the peak always matches the gain.
-    let pair = match mode {
+    let pair = match controls.mode {
         RgMode::Album => baked
             .album_gain
             .map(|g| (g, baked.album_peak))
@@ -123,10 +136,10 @@ pub fn compute_linear_gain(
         return 1.0;
     };
 
-    let mut lin = db_to_linear(gain_db + preamp_db);
+    let mut lin = db_to_linear(gain_db + controls.preamp_db);
 
     // Only with a known peak; otherwise the downstream limiter is the safety net.
-    if prevent_clipping
+    if controls.prevent_clipping
         && let Some(p) = peak
         && p > 0.0
     {
@@ -148,6 +161,7 @@ pub struct ReplayGainShared {
     mode: AtomicU8,
     preamp: AtomicF32,
     prevent_clipping: AtomicBool,
+    measured: AtomicBool,
     generation: Generation,
 }
 
@@ -160,6 +174,7 @@ impl ReplayGainShared {
             mode: AtomicU8::new(RgMode::Album.to_u8()),
             preamp: AtomicF32::new(RG_DEFAULT_PREAMP_DB),
             prevent_clipping: AtomicBool::new(true),
+            measured: AtomicBool::new(false),
             generation: Generation::new(),
         })
     }
@@ -188,24 +203,30 @@ impl ReplayGainShared {
         self.bump();
     }
 
+    pub fn set_measured(&self, on: bool) {
+        self.measured.store(on, Ordering::Relaxed);
+        self.bump();
+    }
+
     #[must_use]
     pub fn enabled(&self) -> bool {
         self.enabled.load(Ordering::Relaxed)
     }
 
+    /// Whether measured gains are heard: `ReplayGain` and measuring both on.
     #[must_use]
-    pub fn mode(&self) -> RgMode {
-        RgMode::from_u8(self.mode.load(Ordering::Relaxed))
+    pub fn levels_measured(&self) -> bool {
+        self.enabled() && self.measured.load(Ordering::Relaxed)
     }
 
     #[must_use]
-    pub fn preamp(&self) -> f32 {
-        self.preamp.load()
-    }
-
-    #[must_use]
-    pub fn prevent_clipping(&self) -> bool {
-        self.prevent_clipping.load(Ordering::Relaxed)
+    pub fn controls(&self) -> RgControls {
+        RgControls {
+            mode: RgMode::from_u8(self.mode.load(Ordering::Relaxed)),
+            preamp_db: self.preamp.load(),
+            prevent_clipping: self.prevent_clipping.load(Ordering::Relaxed),
+            measured: self.measured.load(Ordering::Relaxed),
+        }
     }
 
     #[must_use]
