@@ -2,7 +2,7 @@
 
 Working doc. Delete when the feature ships.
 
-Status: **proposed**, no phase started · Created: 2026-11-12
+Status: **Phases 1–2 landed**, Phase 3 next · Created: 2026-11-12
 
 Issue [#156](https://github.com/KenanSalar/Melodia/issues/156).
 
@@ -128,12 +128,13 @@ A tag edit by another program changes the hash the same way and is indistinguish
 replaced file, so that track is measured again, at the same cost.
 
 **A file that can't be measured is recorded, not retried; one out of reach waits.** Silent audio,
-a file under one gating block, a file that is there but won't open and a shape change mid-file all
-write a row with `NULL` gains. The key makes it retry when the file changes, and never on every
-pass, which would decode the same broken file on every wake. A file that isn't there (an unmounted
-drive, told apart with `try_exists`) or whose read fails part-way writes nothing: it may come back,
-so it is skipped for the session and tried again at the next launch, as `embedded_cue_probe`
-treats a file out of reach. Recorded, it would never be measured again, its hash unchanged.
+a file under one gating block, a shape change mid-file and a file that is there but fails to open
+or to read through all write a row with `NULL` gains. The key makes it retry when the file changes,
+and never on every pass, which would decode the same broken file on every wake. A failure, at the
+open or part-way, on a file that isn't there afterwards (an unmounted drive, told apart with
+`try_exists`, an error from it counting as not there) writes nothing: it may come back, so it is
+skipped for the session and tried again at the next launch, as `embedded_cue_probe` treats a file
+out of reach. Recorded, it would never be measured again, its hash unchanged.
 
 ### The album is measured as one whole
 
@@ -210,8 +211,8 @@ gained tags since its job was read.
   take the ±110° surround weighting; front, centre, front-of-centre and height channels sit at
   unity. Side and back weigh alike because a 5.1 file labels its surround pair either way. The
   crate's ±135° and 180° positions weigh unity, BS.1770's rear, so a back pair maps to the ±110°
-  positions, never to those. A buffer with no positions (`Channels::Discrete`) takes the default map
-  by count. A multichannel file is measured as authored, as a tag is; what a narrower output plays
+  positions, never to those. A buffer with no positions (`Channels::Discrete`, `Ambisonic` or
+  `Custom`) takes the default map by count. A multichannel file is measured as authored, as a tag is; what a narrower output plays
   of it is the output's fold (`output/convert.rs` keeps the first channels), outside this plan.
 - **Mono is measured as dual mono.** The output copies a mono source to both front channels at
   unity (`output/convert.rs:341-348`), so it is heard as two identical channels; measured as one, it
@@ -236,10 +237,12 @@ Two things the iterator keeps to itself today, both added `pub(crate)` without c
   truncated decode as complete, so the cursor records which end it reached and the decoder answers
   it. A packet the decoder rejects is skipped and the stream goes on (`decode.rs:345`); playback
   skips it too, so the measurement stands.
-- **The channel positions**, read from the decoded buffer's spec, the source the count in `Shape`
-  already comes from (`decode.rs:332-341`), and kept as `Position` bits beside that count
-  (`audio.rs:20`). Not from the codec parameters, which can lack them or disagree with the buffer,
-  and not as `Channels`, which isn't `Copy`.
+- **The channel positions**, read from the opening packet's decoded spec, the source the count in
+  `Shape` already comes from (`decode.rs:332-341`), and kept as `Position` bits beside the cursor's
+  `Shape`, never in it: `Shape`'s equality decides a gapless join (`output/voice.rs:506`), a
+  mount's reconnect (`stream_source.rs:627`) and the mid-track end (`decode.rs:294`), and the
+  output builds one with no positions to give. Not from the codec parameters, which can lack them
+  or disagree with the buffer, and not as `Channels`, which isn't `Copy`.
 
 ### Play time: measured values ride the tag columns' path
 
@@ -382,7 +385,7 @@ keyset pages, never a library-sized `fetch_all`. Nothing is held between passes 
 | what | where | note |
 |---|---|---|
 | reference levels | `crates/melodia-core/src/entities/loudness.rs` | `REPLAYGAIN_REFERENCE_LUFS`, `R128_REFERENCE_LUFS`, `GainOrigin` with its `FromSql` and a `param_from!` line in `sql.rs`. The store's R128 offset derives from the two |
-| the decoder's end and positions | `crates/melodia-audio/src/player/source/{decode,file_decode,audio}.rs` | `pub(crate)`; the iterator ends as it does today; `Position` bits in `Shape` |
+| the decoder's end and positions | `crates/melodia-audio/src/player/source/{decode,file_decode,audio}.rs` | `pub(crate)`; the iterator ends as it does today; `Position` bits beside the cursor's `Shape` |
 | the meter | `crates/melodia-audio/src/loudness/` | `channels.rs`: positions to an `ebur128` channel map, mono as dual mono. `meter.rs`: the track meter and the album meters per shape, fed in blocks from the decoder. `mod.rs`: `measure_album` and `measure_track`, each polling a stop check per block and answering a typed outcome per track, out of reach among them |
 | the table | `migrations/<timestamp>_track_loudness.sql` | the schema above |
 | store units of work | `crates/melodia-store/src/database/queries/loudness.rs` | the album settle, the two keyset work lists, the queue-first album lookup, the pending count, the album and track writes, and `carry_over` (`pub(crate)` for `commit_retag`'s transaction, a unit of its own for the sheet-tags read-back) |
@@ -405,9 +408,9 @@ The store learns nothing about decoding beyond the edge it already has (`melodia
 
 - **`ScanProgress` and the new progress row are one layout**: a bar, a status line and one action
   button. `ScanProgress` (`components/settings/scan-progress.slint`) splits into a generic
-  `JobProgress` taking `value`, `status`, `action-label`, `action-enabled` and `action()`, and a
-  `ScanProgress` that binds it to `LibrarySettings`, mounted where it is today. Landed before the
-  feature, with no behaviour change.
+  `JobProgress` taking `value`, `status`, `action-label`, `action-icon`, `action-enabled` and
+  `action()`, and a `ScanProgress` that binds it to `LibrarySettings`, mounted where it is today.
+  Landed before the feature, with no behaviour change.
 - **The R128 offset's literal** becomes the difference of the two references (above).
 - **`rustix`** moves to a workspace dependency, its one line shared by `melodia-playback` and
   `melodia-platform`.
@@ -416,32 +419,35 @@ The store learns nothing about decoding beyond the edge it already has (`melodia
 
 ## Phase 1: Groundwork (no behaviour change)
 
-- [ ] `entities/loudness.rs` with the two references; `metadata.rs`'s R128 offset derives from them.
-- [ ] `JobProgress` extracted from `ScanProgress`, `ScanProgress` a binding of it, both mounts
+- [x] `entities/loudness.rs` with the two references; `metadata.rs`'s R128 offset derives from them.
+- [x] `JobProgress` extracted from `ScanProgress`, `ScanProgress` a binding of it, both mounts
       (`library-section.slint:70`, `music-panel.slint:20`) unchanged.
-- [ ] `rustix` moved to the workspace's dependencies.
+- [x] `rustix` moved to the workspace's dependencies.
 
 **Gate:**
-- [ ] The static gates.
-- [ ] Kenan's hand pass: a scan from Settings and from onboarding shows and cancels as before.
+- [x] The static gates.
+- [x] Kenan's hand pass: a scan from Settings and from onboarding shows and cancels as before.
 
 ## Phase 2: Measuring an album (`melodia-audio`)
 
-- [ ] `ebur128` 0.1.11 in the workspace and `melodia-audio`'s manifest (`cargo search` again on the
+- [x] `ebur128` 0.1.11 in the workspace and `melodia-audio`'s manifest (`cargo search` again on the
       day). 0.1.11 makes results independent of how input is split on non-x86 targets, which a
       block-fed meter relies on. `dasp_frame` is the one crate it adds to the lock file.
-- [ ] `Cursor` records how it ended; `FileDecoder` answers that and the channel positions, read
-      from the decoded spec into `Position` bits in `Shape`.
-- [ ] `loudness/`: the channel map, the meters and `measure_album` / `measure_track`, with the
+- [x] `Cursor` records how it ended; `FileDecoder` answers that and the channel positions, read
+      from the opening packet's decoded spec into `Position` bits beside `Shape`.
+- [x] `loudness/`: the channel map, the meters and `measure_album` / `measure_track`, with the
       outcomes:
-  - [ ] `Measured { gain, peak }` per track, from the reference and a finite loudness;
-  - [ ] no result for silence, a short file, a file that won't open, a shape change;
-  - [ ] out of reach for a missing file or a read that fails part-way, kept apart from no result;
-  - [ ] an album gain only with every member read to its end and some block above the gate;
-  - [ ] a stop returns `Stopped`, no partial result.
-- [ ] The crate's doc comments carry the dual mono, sample peak and album meter arguments.
+  - [x] `Measured(Gain)` per track, from the reference and a finite loudness;
+  - [x] no result for silence, a short file, a shape change, and a file that is there but fails
+        to open or to read through;
+  - [x] out of reach for a failure, at the open or part-way, on a file that isn't there
+        afterwards, kept apart from no result;
+  - [x] an album gain only with every member read to its end and some block above the gate;
+  - [x] a stop returns `Stopped`, no partial result.
+- [x] The crate's doc comments carry the dual mono, sample peak and album meter arguments.
 
-**Gate:** the static gates. Nothing calls it yet, so the run gates wait for Phase 4.
+**Gate:**
+- [x] The static gates. Nothing calls it yet, so the run gates wait for Phase 4.
 
 ## Phase 3: Stored measurements play like tags
 

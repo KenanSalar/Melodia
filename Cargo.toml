@@ -128,6 +128,10 @@ biquad = "0.6.0"
 # transform, and its reusable scratch is what lets the per-frame analysis allocate
 # nothing.
 realfft = "3.5.1"
+# BS.1770 loudness for the tracks that carry no gain tags. 0.1.11 is a floor: below it, a
+# target without SSE2's flush-to-zero zeroed small filter state, so a result turned on how
+# the input was split into calls, and `loudness::meter` feeds it in blocks.
+ebur128 = "0.1.11"
 
 # Library scan and indexing
 # 0.25 is a floor: `ItemKey::R128{Track,Album}Gain` is what lets an Opus file's loudness tag reach
@@ -279,6 +283,9 @@ ksni = { version = "0.3.7", default-features = false, features = ["blocking", "a
 # otherwise ratchet up until nothing returns to the kernel, and `malloc_trim` hands
 # retained pages back.
 libc = "0.2.191"
+# Safe wrappers over the syscalls a member would otherwise reach through `libc`, which only
+# the allocator may name.
+rustix = { version = "1.1.6", features = ["process", "thread"] }
 
 # Windows
 # `GetUserDefaultLocaleName`, the DWM accent values `window_border` reads out of

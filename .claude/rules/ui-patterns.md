@@ -48,7 +48,8 @@ Paths are under `crates/melodia-ui/ui/components/` unless stated.
   without one, only over an opaque fill of exactly its `ground`; `TuckedFill` fills under a host's
   own rounded stroke.
 - **Settings.** `SectionCard`, `SettingRow`, `ChipGroup` for a short preset set and `ChoiceList`
-  for a long one, `ColorDotGrid`, `SettingSlider`, `PreampSlider`, and per effect a
+  for a long one, `ColorDotGrid`, `SettingSlider`, `PreampSlider`, `JobProgress` for a background
+  job's bar, status and one action (`ScanProgress` binding it to the scan), and per effect a
   `settings/*-controls.slint` plus a `*Text` global shared by its card and its dialog.
 
 ## Contracts

@@ -10,6 +10,7 @@ pub mod genre;
 pub mod grid_order;
 pub mod integrations;
 pub mod locale;
+pub mod loudness;
 pub mod lyrics;
 pub mod playlist;
 pub mod radio;

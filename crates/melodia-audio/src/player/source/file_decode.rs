@@ -8,6 +8,7 @@ use std::path::Path;
 use std::sync::Arc;
 use std::time::Duration;
 
+use symphonia::core::audio::Position;
 use symphonia::core::codecs::audio::AudioDecoder;
 use symphonia::core::codecs::audio::well_known::CODEC_ID_OPUS;
 use symphonia::core::formats::probe::Hint;
@@ -24,7 +25,7 @@ use super::audio::{
     AudioSource, ChannelCount, Sample, SampleRate, SeekError, SourceFormat, frames_in,
     frames_to_duration, interleaved,
 };
-use super::decode::{self, Rounding};
+use super::decode::{self, Ended, Rounding};
 use super::mkv_trim;
 use super::opus;
 use super::span::Span;
@@ -215,6 +216,20 @@ impl FileDecoder {
     /// the track after it, rather than on the end of the file or a failed read.
     pub(super) fn played_span_out(&self) -> bool {
         self.span.len.is_some() && matches!(self.end, Some(End::Counted(0)))
+    }
+
+    /// Why the decoder stopped handing samples out, or `None` while it still can. A stated length
+    /// running out is a finish, what lies past it being padding or the next cue track.
+    pub(crate) fn ended(&self) -> Option<Ended> {
+        match self.end {
+            Some(End::Counted(0)) => Some(Ended::Finished),
+            _ => self.cursor.ended(),
+        }
+    }
+
+    /// The speakers this source's channels feed, where its first packet named them.
+    pub(crate) fn channel_positions(&self) -> Option<Position> {
+        self.cursor.positions()
     }
 
     /// Lines this source's timeline up with the demuxer's. AAC's head comes off through

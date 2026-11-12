@@ -1,0 +1,46 @@
+import { Theme } from "../../theme.slint";
+import { ProgressBar } from "progress-bar.slint";
+import { SectionButton } from "section-button.slint";
+
+// A background job's bar, where it has got to, and the one action it offers. Every mount sits
+// behind an `if` dropped when the job ends, so nothing here may carry a `changed` handler.
+//
+// The action stays mounted, disabled, once it has nothing left to do, so the bar doesn't widen
+// under the pointer the moment it is pressed.
+export component JobProgress inherits HorizontalLayout {
+    in property <float> value;
+    in property <string> status;
+    in property <string> action-label;
+    in property <string> action-icon;
+    in property <bool> action-enabled: true;
+
+    callback action();
+
+    spacing: Theme.pad-md;
+    cross-axis-alignment: center;
+
+    VerticalLayout {
+        horizontal-stretch: 1;
+        spacing: Theme.pad-sm;
+
+        ProgressBar {
+            value: root.value;
+        }
+        Text {
+            text: root.status;
+            color: Theme.subtext0;
+            font-size: Theme.font-size-sm;
+            overflow: elide;
+        }
+    }
+
+    SectionButton {
+        label: root.action-label;
+        icon: root.action-icon;
+        primary: false;
+        button-enabled: root.action-enabled;
+        clicked => {
+            root.action();
+        }
+    }
+}

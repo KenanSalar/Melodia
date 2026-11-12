@@ -18,6 +18,7 @@ use melodia_artwork::media::image::artwork;
 use melodia_core::entities::artist::ArtistCredit;
 use melodia_core::entities::cue::EmbeddedCue;
 use melodia_core::entities::genre::GenreList;
+use melodia_core::entities::loudness::{R128_REFERENCE_LUFS, REPLAYGAIN_REFERENCE_LUFS};
 use melodia_core::entities::scan::{ExtractedMetadata, ReleaseTags, SortTags};
 use melodia_core::error::AppError;
 
@@ -189,10 +190,9 @@ pub(crate) fn parse_replaygain_peak(s: &str) -> Option<f64> {
     s.trim().parse::<f64>().ok().filter(|v| v.is_finite())
 }
 
-/// What an `R128_*_GAIN` value moves by to mean what a `REPLAYGAIN_*` one does: R128 normalises to
-/// −23 LUFS and `ReplayGain` 2.0 to −18, and RFC 7845 §5.2 fixes the reference the tag is written
-/// against.
-const R128_TO_REPLAYGAIN_DB: f64 = 5.0;
+/// What an `R128_*_GAIN` value moves by to mean what a `REPLAYGAIN_*` one does, the two levelling
+/// to different references.
+const R128_TO_REPLAYGAIN_DB: f64 = REPLAYGAIN_REFERENCE_LUFS - R128_REFERENCE_LUFS;
 
 /// Parses an `R128_*_GAIN` value, Q7.8 fixed-point dB like `"-1280"`, restated against
 /// `ReplayGain`'s reference. RFC 7845 states it as an `i16`, which caps it at ±128 dB and leaves no
