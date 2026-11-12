@@ -20,6 +20,7 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use melodia_engine::player::engine::backend::{PlaybackCheck, PlaybackEngine};
+use melodia_engine::player::engine::fixtures::whole_file;
 use melodia_playback::player::playback::decks::DECK_COUNT;
 use melodia_playback::player::playback::output::convert::Resampler;
 use melodia_playback::player::playback::output::mixer::{self, MixerPull};
@@ -272,12 +273,13 @@ fn player() -> std::io::Result<(Arc<PlaybackEngine>, MixerPull)> {
 }
 
 fn start(engine: &PlaybackEngine, path: &str) {
-    let r = engine.play_media(path, 1.0, 1.0, None, TrackReplayGain::default());
+    let r = engine.play_media(&whole_file(path), 1.0, 1.0, None, TrackReplayGain::default());
     assert!(r.is_ok(), "play_media failed: {:?}", r.err());
 }
 
 fn crossfade_into(engine: &PlaybackEngine, path: &str) {
-    let r = engine.begin_crossfade(path, TrackReplayGain::default(), FADE_MS, 1.0, 1.0);
+    let r =
+        engine.begin_crossfade(&whole_file(path), TrackReplayGain::default(), FADE_MS, 1.0, 1.0);
     assert!(r.is_ok(), "begin_crossfade failed: {:?}", r.err());
 }
 
@@ -365,7 +367,7 @@ async fn seeking_mid_crossfade_drops_the_outgoing_deck_and_restores_unity() -> s
     // The survivor is whatever `crossfade_into` brought in, so that is the file the seek rebuilds.
     let r = engine.clone();
     let survivor = fx.track_b.clone();
-    drive_until(&mut mix, move || r.seek(&survivor, 0, TrackReplayGain::default()));
+    drive_until(&mut mix, move || r.seek(&whole_file(&survivor), 0, TrackReplayGain::default()));
     assert!(!engine.is_crossfading(), "a seek must abort the crossfade");
 
     // The survivor ramps back to unity from its partial fade-in gain. Had the
@@ -417,7 +419,9 @@ fn assert_seeking_keeps_the_image(eq_on: bool) -> std::io::Result<()> {
         let position_ms = 500 + step * 37;
         let r = engine.clone();
         let seeked = path.clone();
-        drive_until(&mut mix, move || r.seek(&seeked, position_ms, TrackReplayGain::default()));
+        drive_until(&mut mix, move || {
+            r.seek(&whole_file(&seeked), position_ms, TrackReplayGain::default());
+        });
         pull_lenient(&mut mix, WARMUP_FRAMES);
 
         for (left, right) in pull_stereo(&mut mix, WARMUP_FRAMES) {
@@ -571,7 +575,7 @@ async fn stopping_with_a_gapless_track_staged_clears_both_decks_at_once() -> std
     start(&engine, &fx.track_a);
     let _ = pull(&mut mix, WARMUP_FRAMES);
 
-    engine.preload_gapless(&fx.track_b, TrackReplayGain::default());
+    engine.preload_gapless(&whole_file(&fx.track_b), TrackReplayGain::default());
     assert!(engine.is_gapless_preloaded(), "the next track must really be staged");
 
     let stopper = Arc::clone(&engine);
@@ -604,7 +608,7 @@ async fn pausing_with_a_gapless_track_staged_is_immediate() -> std::io::Result<(
     start(&engine, &fx.track_a);
     let _ = pull(&mut mix, WARMUP_FRAMES);
 
-    engine.preload_gapless(&fx.track_b, TrackReplayGain::default());
+    engine.preload_gapless(&whole_file(&fx.track_b), TrackReplayGain::default());
     assert!(engine.is_gapless_preloaded(), "the next track must really be staged");
 
     engine.pause_with_fade(melodia_playback::player::playback::crossfade::PAUSE_FADE_MS);
@@ -638,7 +642,7 @@ async fn a_deferred_clear_takes_a_late_preload_with_it() -> std::io::Result<()> 
 
     // Nothing staged yet, so the fade is allowed and the clear really defers.
     engine.stop_with_fade(melodia_playback::player::playback::crossfade::PAUSE_FADE_MS);
-    engine.preload_gapless(&fx.track_b, TrackReplayGain::default());
+    engine.preload_gapless(&whole_file(&fx.track_b), TrackReplayGain::default());
     assert!(
         engine.is_gapless_preloaded(),
         "a preload past the epoch bump must still be able to stage — that is the \
@@ -680,7 +684,7 @@ async fn a_preload_that_outlives_the_stop_it_raced_is_refused() -> std::io::Resu
     let stopper = Arc::clone(&engine);
     drive_until(&mut mix, move || stopper.stop());
 
-    engine.preload_gapless(&fx.track_b, TrackReplayGain::default());
+    engine.preload_gapless(&whole_file(&fx.track_b), TrackReplayGain::default());
 
     assert!(
         !engine.is_gapless_preloaded(),
@@ -720,7 +724,7 @@ fn past_a_gapless_handover() -> std::io::Result<Handover> {
     let (engine, mut mix) = player()?;
     start(&engine, &first);
     let _ = pull(&mut mix, WARMUP_FRAMES);
-    engine.preload_gapless(&next.to_string_lossy(), TrackReplayGain::default());
+    engine.preload_gapless(&whole_file(&next.to_string_lossy()), TrackReplayGain::default());
     assert!(engine.is_gapless_preloaded(), "the next track must really be staged");
 
     pull_lenient(&mut mix, frames_for_ms(1_100));
@@ -781,7 +785,7 @@ async fn a_seek_over_an_unclaimed_handover_is_refused() -> std::io::Result<()> {
 
     let mut fx = past_a_gapless_handover()?;
 
-    fx.engine.seek(&fx.first, SEEK_MS, TrackReplayGain::default());
+    fx.engine.seek(&whole_file(&fx.first), SEEK_MS, TrackReplayGain::default());
     pull_lenient(&mut fx.mix, frames_for_ms(20));
 
     let after = pull(&mut fx.mix, frames_for_ms(50));
@@ -877,7 +881,7 @@ async fn a_staged_gapless_track_takes_over_through_an_output_reopen() -> std::io
         engine.set_resampler(resampler);
         start(&engine, &first.to_string_lossy());
         let _ = pull(&mut mix, WARMUP_FRAMES);
-        engine.preload_gapless(&next.to_string_lossy(), TrackReplayGain::default());
+        engine.preload_gapless(&whole_file(&next.to_string_lossy()), TrackReplayGain::default());
         assert!(
             engine.is_gapless_preloaded(),
             "{resampler:?}: the next track must really be staged"

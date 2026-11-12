@@ -72,7 +72,7 @@ pub(crate) fn insert_track_credits(
 
 /// Every join row a freshly inserted track owes: its artist credit, its role credits, its genres.
 /// One entry point, since a path writing two of the three leaves a track displaying credits it
-/// can't be found by.
+/// can't be found by. A track filed outside the library owes none.
 pub(crate) fn insert_track_joins(
     tx: &Transaction<'_>,
     track_id: i64,
@@ -80,10 +80,13 @@ pub(crate) fn insert_track_joins(
     ids: &super::ResolvedIds,
     names: &mut NameCache,
 ) -> Result<(), AppError> {
+    let Some(links) = ids.links else {
+        return Ok(());
+    };
     let details = track_credit_details(meta);
-    insert_track_credits(tx, track_id, &meta.artist, ids.artist_id, details, names)?;
-    write_role_credits(tx, track_id, meta, ids.artist_id, names)?;
-    write_genres(tx, track_id, meta, ids.genre_id, names)
+    insert_track_credits(tx, track_id, &meta.artist, links.artist_id, details, names)?;
+    write_role_credits(tx, track_id, meta, links.artist_id, names)?;
+    write_genres(tx, track_id, meta, links.genre_id, names)
 }
 
 /// [`insert_track_joins`] for a track that may already carry rows: a re-ingest or a tag edit.

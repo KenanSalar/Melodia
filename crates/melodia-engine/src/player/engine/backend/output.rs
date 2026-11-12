@@ -15,6 +15,8 @@ use std::time::Duration;
 
 use melodia_audio::player::source::audio::{AudioSource, SampleRate, Shape, SourceFormat};
 use melodia_audio::player::source::file_decode::FileDecoder;
+use melodia_audio::player::source::park::ParkTicket;
+use melodia_core::entities::track::TrackAudio;
 use melodia_core::error::{AppError, describe};
 use melodia_playback::player::playback::decks::Decks;
 use melodia_playback::player::playback::output::device::{ExternalVolume, Lead};
@@ -310,39 +312,61 @@ impl PlaybackEngine {
         self.output.device.lock().as_ref().is_none_or(|output| output.serves(&wanted))
     }
 
-    /// Whether the output has to reopen for the file at `path`, which no crossfade can cross; a
-    /// file that won't open counts, so nothing fades into it. Opens the file on the first ask.
-    pub fn reopens_for(&self, path: &str) -> bool {
-        let plays = self.recorded_answer(path).unwrap_or_else(|| match self.open_recorded(path) {
-            Ok(decoded) => self.plays_without_reopen(decoded.shape(), decoded.format()),
-            Err(e) => {
-                log::debug!("Not crossfading into {path}, which won't open: {}", describe(&e));
-                false
+    /// Whether the output has to reopen for `audio`, which no crossfade can cross; a file that
+    /// won't open counts, so nothing fades into it. Opens the file on the first ask without seeking
+    /// to a cue track, the shape asked being the whole file's.
+    pub fn reopens_for(&self, audio: &TrackAudio) -> bool {
+        let answer = self.recorded_answer(&audio.path);
+        let plays = answer.unwrap_or_else(|| {
+            let opened = FileDecoder::open(Path::new(&audio.path));
+            self.record(audio.path.clone(), &opened);
+            match opened {
+                Ok(decoded) => self.plays_without_reopen(decoded.shape(), decoded.format()),
+                Err(e) => {
+                    log::debug!("Not crossfading into {audio}, which won't open: {}", describe(&e));
+                    false
+                }
             }
         });
         !plays
     }
 
-    /// Opens `path` to stage behind the playing track, `None` where the output would reopen for
-    /// it. Asked every tick until the track ends, so a refusal opens the file once.
+    /// Opens `audio` to stage behind the playing track, or carries on the decoder that played the
+    /// track before it in the same file, with the ticket its own decoder parks on. `None` where the
+    /// output would reopen for it. Asked every tick until the track ends, so a refusal opens the
+    /// file once.
     ///
     /// # Errors
     ///
-    /// Whatever [`FileDecoder::open`] refuses the file with, the first time it is asked about.
-    pub(super) fn open_for_gapless(&self, path: &str) -> Result<Option<FileDecoder>, AppError> {
-        if self.recorded_answer(path) == Some(false) {
+    /// Whatever [`FileDecoder::open_track`] refuses the file with, on the first ask.
+    pub(super) fn open_for_gapless(
+        &self,
+        audio: &TrackAudio,
+    ) -> Result<Option<(FileDecoder, Option<ParkTicket>)>, AppError> {
+        if self.recorded_answer(&audio.path) == Some(false) {
             return Ok(None);
         }
-        let decoded = self.open_recorded(path)?;
+        let parked = self.park.take(audio);
+        // After the take, which voids every ticket out.
+        let ticket = self.park.ticket(audio);
+        let decoded = if let Some(decoded) = parked {
+            log::debug!("Carrying the decoder on into {audio}");
+            decoded
+        } else {
+            let opened = FileDecoder::open_track(audio);
+            self.record(audio.path.clone(), &opened);
+            opened?
+        };
         // Left unstaged, it ends in `EndOfStream` and starts through `play_media`, which reopens.
         if !self.plays_without_reopen(decoded.shape(), decoded.format()) {
-            log::debug!("Not staging {path} gapless: the output reopens for its format");
+            log::debug!("Not staging {audio} gapless: the output reopens for its format");
             return Ok(None);
         }
-        Ok(Some(decoded))
+        Ok(Some((decoded, ticket)))
     }
 
-    /// `None` until something has opened `path`.
+    /// `None` until something has opened the file at `path`. Keyed on the file, every cue track
+    /// in it decoding to the same shape.
     fn recorded_answer(&self, path: &str) -> Option<bool> {
         let found = self
             .output
@@ -356,19 +380,13 @@ impl PlaybackEngine {
         })
     }
 
-    /// Opens `path`, recording what it holds for the asks after.
-    ///
-    /// # Errors
-    ///
-    /// Whatever [`FileDecoder::open`] refuses the file with.
-    fn open_recorded(&self, path: &str) -> Result<FileDecoder, AppError> {
-        let opened = FileDecoder::open(Path::new(path));
-        let found = match &opened {
+    /// Records what the file at `path` holds for the asks after.
+    fn record(&self, path: String, opened: &Result<FileDecoder, AppError>) {
+        let found = match opened {
             Ok(decoded) => Probed::Decodes(decoded.shape(), decoded.format()),
             Err(_) => Probed::Unreadable,
         };
-        *self.output.probed.lock() = Some((path.to_owned(), found));
-        opened
+        *self.output.probed.lock() = Some((path, found));
     }
 
     /// Reopens the output for a track starting fresh, inside a transport op between its decode

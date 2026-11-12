@@ -20,9 +20,12 @@ Decoding only, against 0.6.1.
 
 ## Seeking
 
-- **`SeekMode::Accurate` with `SeekTo::Time`, then reset the decoder every time.** Upstream asks
-  for it, and the reset is a no-op for PCM, ADPCM, ALAC and FLAC. MP3 rebuilds its state and AAC
-  and Vorbis clear an overlap buffer that would otherwise blend the audio either side of the jump.
+- **`SeekMode::Accurate` to a `SeekTo::Timestamp` in the track's timebase, then reset the decoder
+  every time.** Every demuxer turns a `SeekTo::Time` into that tick, rounding down, so the target
+  is counted in frames and converted once (`FileDecoder::seek_to_frame`); `SeekTo::Time` serves
+  only a track with no timebase. Upstream asks for the reset, a no-op for PCM, ADPCM, ALAC and
+  FLAC. MP3 rebuilds its state and AAC and Vorbis clear an overlap buffer that would otherwise
+  blend the audio either side of the jump.
 - **A demuxer seek lands on a packet boundary**, so the head is trimmed from
   `required_ts - actual_ts`. Nothing upstream does it.
 

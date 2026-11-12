@@ -276,7 +276,8 @@ async fn insert_track_stores_correct_fields() -> Result<(), AppError> {
         let album_id =
             queries::scan::upsert_album(tx, "Test Album", artist_id, &credit, &meta, &mut names)?;
         let genre_id = upserts::upsert_genre(tx, "Rock")?;
-        let ids = queries::ResolvedIds { artist_id, album_id, genre_id, folder_id: 1 };
+        let links = queries::scan::Links { artist_id, album_id, genre_id };
+        let ids = queries::ResolvedIds { folder_id: 1, links: Some(links) };
         queries::scan::insert_track(tx, "/music/my.mp3", "my.mp3", &meta, &ids, now, &mut names)
     })
     .await?;
@@ -623,30 +624,6 @@ async fn fold_folder_tracks_folds_nothing_for_an_unknown_folder() -> Result<(), 
     Ok(())
 }
 
-// === Tests for get_track_id_by_path ===
-
-#[tokio::test]
-async fn get_track_id_by_path_returns_id_when_exists() -> Result<(), AppError> {
-    let db = DbPool::test_pool().await?;
-    queries::folder::insert_folder(&db, "/music", true).await?;
-    let expected_id =
-        insert_test_track(&db, "/music/song.mp3", "Song", "Artist", "Album", "Rock").await?;
-
-    let id =
-        db.transaction(|tx| queries::scan::get_track_id_by_path(tx, "/music/song.mp3")).await?;
-    assert_eq!(id, Some(expected_id));
-    Ok(())
-}
-
-#[tokio::test]
-async fn get_track_id_by_path_returns_none_when_missing() -> Result<(), AppError> {
-    let db = DbPool::test_pool().await?;
-    let id =
-        db.transaction(|tx| queries::scan::get_track_id_by_path(tx, "/nonexistent.mp3")).await?;
-    assert!(id.is_none());
-    Ok(())
-}
-
 // === Tests for update_track_location ===
 
 #[tokio::test]
@@ -655,21 +632,21 @@ async fn update_track_location_repoints_existing_row() -> Result<(), AppError> {
     let folder = queries::folder::insert_folder(&db, "/music", true).await?;
     let id = insert_test_track(&db, "/music/old.mp3", "Song", "Artist", "Album", "Rock").await?;
 
-    let (repointed, moved) = db
+    let repointed = db
         .transaction(move |tx| {
-            let repointed = queries::scan::update_track_location(
+            queries::scan::update_track_location(
                 tx,
-                id,
+                "/music/old.mp3",
                 "/music/new.mp3",
                 "new.mp3",
                 folder.id,
                 None,
-            )?;
-            Ok((repointed, queries::scan::get_track_id_by_path(tx, "/music/new.mp3")?))
+            )
         })
         .await?;
+    let moved = queries::track::get_track_ids_by_paths(&db, &["/music/new.mp3".to_owned()]).await?;
     assert!(repointed);
-    assert_eq!(moved, Some(id));
+    assert_eq!(moved.ids("/music/new.mp3").collect::<Vec<_>>(), [id]);
     Ok(())
 }
 
@@ -681,14 +658,14 @@ async fn update_track_location_false_when_row_deleted_in_tx() -> Result<(), AppE
     // falls back to a fresh insert instead of silently dropping the track.
     let db = DbPool::test_pool().await?;
     let folder = queries::folder::insert_folder(&db, "/music", true).await?;
-    let id = insert_test_track(&db, "/music/old.mp3", "Song", "Artist", "Album", "Rock").await?;
+    insert_test_track(&db, "/music/old.mp3", "Song", "Artist", "Album", "Rock").await?;
 
     let (deleted, repointed) = db
         .transaction(move |tx| {
             let deleted = queries::scan::delete_track_by_path(tx, "/music/old.mp3")?;
             let repointed = queries::scan::update_track_location(
                 tx,
-                id,
+                "/music/old.mp3",
                 "/music/new.mp3",
                 "new.mp3",
                 folder.id,
@@ -814,12 +791,12 @@ async fn re_ingesting_a_track_leaves_none_of_its_old_join_rows() -> Result<(), A
     after.genres = GenreList::from_name("Rock");
     db.transaction(move |tx| {
         let mut names = queries::scan::NameCache::default();
-        let ids = queries::ResolvedIds {
+        let links = queries::scan::Links {
             artist_id: names.artist(tx, "Alice", 1)?,
             album_id: None,
             genre_id: names.genre(tx, "Rock")?,
-            folder_id: 1,
         };
+        let ids = queries::ResolvedIds { folder_id: 1, links: Some(links) };
         queries::scan::update_track_metadata(tx, "/music/1.mp3", &after, &ids, &mut names)
     })
     .await?;
@@ -876,12 +853,12 @@ async fn a_re_ingest_refolds_the_search_text() -> Result<(), AppError> {
     after.artist = ArtistCredit::from_name("Alice");
     db.transaction(move |tx| {
         let mut names = queries::scan::NameCache::default();
-        let ids = queries::ResolvedIds {
+        let links = queries::scan::Links {
             artist_id: names.artist(tx, "Alice", 1)?,
             album_id: None,
             genre_id: names.genre(tx, "Rock")?,
-            folder_id: 1,
         };
+        let ids = queries::ResolvedIds { folder_id: 1, links: Some(links) };
         queries::scan::update_track_metadata(tx, &path, &after, &ids, &mut names)
     })
     .await?;
@@ -935,12 +912,12 @@ async fn a_re_ingest_rekeys_the_row() -> Result<(), AppError> {
     after.genres = GenreList::default();
     db.transaction(move |tx| {
         let mut names = queries::scan::NameCache::default();
-        let ids = queries::ResolvedIds {
+        let links = queries::scan::Links {
             artist_id: names.artist(tx, "ΟΔΟΣ", 1)?,
             album_id: None,
             genre_id: None,
-            folder_id: 1,
         };
+        let ids = queries::ResolvedIds { folder_id: 1, links: Some(links) };
         queries::scan::update_track_metadata(tx, &path, &after, &ids, &mut names)
     })
     .await?;

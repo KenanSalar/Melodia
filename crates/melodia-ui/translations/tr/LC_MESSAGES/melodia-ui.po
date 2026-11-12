@@ -260,6 +260,10 @@ msgstr[1] "{n} kopya"
 msgid "Now Playing"
 msgstr "Şimdi Çalıyor"
 
+#: ui/components/dialog/duplicate-row.slint
+msgid "From a cue sheet"
+msgstr "CUE dosyasından"
+
 #. Translators: {} is the day the copy joined the library, as 2026-11-02.
 #: ui/components/dialog/duplicate-row.slint
 msgid "Added {}"
@@ -790,6 +794,18 @@ msgstr "Remiksçi"
 #: ui/components/dialog/tag-editor-body.slint
 msgid "Replace…"
 msgstr "Değiştir…"
+
+#: ui/components/dialog/tag-editor-body.slint
+msgid "The hidden audio before a cue sheet's first track can't be edited here."
+msgstr "Bir CUE dosyasının ilk parçasından önceki gizli ses burada düzenlenemez."
+
+#: ui/components/dialog/tag-editor-body.slint
+msgid "This track's cue sheet is the track list inside its FLAC file, which holds no titles and can't be edited here."
+msgstr "Bu parçanın CUE dosyası, FLAC dosyasının içindeki parça listesidir; başlık içermez ve burada düzenlenemez."
+
+#: ui/components/dialog/tag-editor-body.slint
+msgid "Changes are saved to the cue sheet, where album, album artist, disc and barcode apply to every track it lists. Fields a cue sheet can't hold are read-only."
+msgstr "Değişiklikler CUE dosyasına kaydedilir; albüm, albüm sanatçısı, disk ve barkod dosyada listelenen her parçaya uygulanır. Bir CUE dosyasının tutamayacağı alanlar salt okunurdur."
 
 #: ui/components/dialog/tag-editor-body.slint ui/settings.slint
 msgid "Details"

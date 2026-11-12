@@ -4,8 +4,8 @@ use rusqlite::Transaction;
 
 use crate::database::sql::{self, Sql};
 use crate::database::{
-    CASE_BINDS_PER_ROW, DbPool, MAX_BINDS_PER_STATEMENT, case_by_id, chunked_in_query,
-    chunked_in_statements, placeholders, values_placeholders,
+    CASE_BINDS_PER_ROW, DbPool, MAX_BINDS_PER_STATEMENT, case_by_id, chunked_in_execute,
+    chunked_in_query, chunked_in_statements, placeholders, values_placeholders,
 };
 use melodia_core::error::AppError;
 
@@ -151,6 +151,17 @@ pub async fn mark_every_track_stale(db: &DbPool) -> Result<u64, AppError> {
             "UPDATE tracks SET date_modified = NULL WHERE date_modified IS NOT NULL",
             (),
         )
+    })
+    .await
+}
+
+/// Blanks the `date_modified` of the rows `ids` names, for the next scan to read their files again,
+/// answering how many rows moved.
+pub async fn mark_tracks_stale(db: &DbPool, ids: Vec<i64>) -> Result<u64, AppError> {
+    db.transaction(move |tx| {
+        chunked_in_execute(tx, &ids, |id_list| {
+            format!("UPDATE tracks SET date_modified = NULL WHERE id IN ({id_list})")
+        })
     })
     .await
 }

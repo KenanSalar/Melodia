@@ -3,14 +3,17 @@
 //!
 //! Our exports add a `#MELODIA-HASH:<blake3-hex>` line per track, which other players skip as a
 //! comment, so a restored playlist re-matches a track whose file has moved. A tag edit changes the
-//! file's hash, which is why the import tries the path first.
+//! file's hash, which is why the import tries the path first. A cue sheet's track adds
+//! `#MELODIA-CUE-TRACK:<n>`, its path and hash being the image's, which every track of it shares.
 
+use melodia_core::entities::cue::CueTrack;
 use melodia_core::entities::track::PlaylistExportRow;
 
 const HEADER: &str = "#EXTM3U";
 const PLAYLIST_TAG: &str = "#PLAYLIST:";
 const EXTINF_TAG: &str = "#EXTINF:";
 const HASH_TAG: &str = "#MELODIA-HASH:";
+const CUE_TRACK_TAG: &str = "#MELODIA-CUE-TRACK:";
 
 /// A path line plus the tags above it. Every field but `path` is best-effort, foreign files
 /// omitting any of them.
@@ -20,6 +23,8 @@ pub struct ParsedEntry {
     pub path: String,
     /// Lowercased.
     pub hash: Option<String>,
+    /// The cue sheet track `path` names, `None` naming the whole file.
+    pub cue_track: Option<CueTrack>,
     /// Informational; `None` where missing, unparseable or negative.
     pub duration_secs: Option<i64>,
     /// "Artist - Title", for diagnostics only.
@@ -74,6 +79,12 @@ pub fn serialize(playlist_name: &str, tracks: &[PlaylistExportRow]) -> String {
             out.push('\n');
         }
 
+        if let Some(cue_track) = t.cue_track {
+            out.push_str(CUE_TRACK_TAG);
+            out.push_str(&cue_track.number().to_string());
+            out.push('\n');
+        }
+
         out.push_str(&one_line(&t.file_path));
         out.push('\n');
     }
@@ -105,6 +116,7 @@ pub fn parse(content: &str) -> ParsedM3u {
 
     let mut result = ParsedM3u::default();
     let mut pending_hash: Option<String> = None;
+    let mut pending_cue_track: Option<CueTrack> = None;
     let mut pending_dur: Option<i64> = None;
     let mut pending_display: Option<String> = None;
 
@@ -129,6 +141,9 @@ pub fn parse(content: &str) -> ParsedM3u {
                 if !h.is_empty() {
                     pending_hash = Some(h.to_ascii_lowercase());
                 }
+            } else if let Some(rest) = line.strip_prefix(CUE_TRACK_TAG) {
+                pending_cue_track =
+                    rest.trim().parse::<i64>().ok().and_then(|n| CueTrack::try_from(n).ok());
             }
             continue;
         }
@@ -136,6 +151,7 @@ pub fn parse(content: &str) -> ParsedM3u {
         result.entries.push(ParsedEntry {
             path: line.to_owned(),
             hash: pending_hash.take(),
+            cue_track: pending_cue_track.take(),
             duration_secs: pending_dur.take(),
             display: pending_display.take(),
         });

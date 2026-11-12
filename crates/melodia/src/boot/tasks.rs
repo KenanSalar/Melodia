@@ -29,10 +29,11 @@ pub fn spawn_background_tasks(
     tasks::search_text_backfill::spawn(spawner, state);
     tasks::artwork_restore::spawn(spawner, state);
     tasks::artwork_sweep::spawn(spawner, state);
-    // The three once-per-install passes, each gated on its own settings marker.
+    // The four once-per-install passes, each gated on its own settings marker.
     tasks::artwork_renormalize::spawn(spawner, state);
     tasks::rating_import::spawn(spawner, state);
     tasks::tag_backfill::spawn(spawner, state);
+    tasks::embedded_cue_probe::spawn(spawner, state);
     // Before any callback can set a rating.
     tasks::rating_writeback::spawn(spawner, state);
     tasks::heap_trim::spawn(spawner);
@@ -63,6 +64,15 @@ pub fn spawn_background_tasks(
 pub fn restore_persisted_playback(runtime: &tokio::runtime::Runtime, state: &AppState) {
     if let Err(e) = runtime.block_on(library::queue::restore_persisted_playback(state)) {
         log::warn!("Failed to restore persisted playback: {}", describe(&e));
+    }
+}
+
+/// Holds the files opened from outside the library to their rule: after
+/// [`restore_persisted_playback`], whose queue keeps what it holds, and before
+/// [`open_startup_files`] can import one.
+pub fn sweep_outside_files(runtime: &tokio::runtime::Runtime, state: &AppState) {
+    if let Err(e) = runtime.block_on(library::outside::sweep(state)) {
+        log::warn!("Failed to sweep the files opened from outside the library: {}", describe(&e));
     }
 }
 

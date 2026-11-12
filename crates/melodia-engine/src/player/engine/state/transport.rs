@@ -8,7 +8,7 @@ use super::{
     AwaitedStart, MAX_SPEED, MAX_VOLUME, MIN_SPEED, PlayerAction, PlayerState, RESTART_THRESHOLD_MS,
 };
 use crate::player::engine::types::{PlaybackSource, PlaybackStatus};
-use melodia_core::entities::track::TrackSummary;
+use melodia_core::entities::track::{TrackAudio, TrackSummary};
 use melodia_playback::player::playback::crossfade::CrossfadeDecision;
 use melodia_playback::player::playback::replaygain::TrackReplayGain;
 
@@ -92,7 +92,7 @@ impl PlayerState {
         let track = self.source.as_ref().and_then(PlaybackSource::track)?;
         Some(PlayerAction::Seek {
             position_ms,
-            file_path: track.file_path.clone(),
+            audio: track.audio(),
             replaygain: track.as_ref().into(),
         })
     }
@@ -307,7 +307,7 @@ impl PlayerState {
         let start = begin_track(self, track, None);
 
         actions.push(PlayerAction::BeginCrossfade {
-            file_path: start.file_path,
+            audio: start.audio,
             replaygain: start.replaygain,
             fade_ms: decision.fade_ms,
             volume: start.volume,
@@ -369,7 +369,7 @@ pub struct ReleaseDecision {
 
 /// What a start action needs about the track [`begin_track`] pointed the state at.
 struct TrackStart {
-    file_path: String,
+    audio: TrackAudio,
     replaygain: TrackReplayGain,
     volume: f64,
     speed: f64,
@@ -394,7 +394,7 @@ fn begin_track(
     state.position_ms = clamped_pos.unwrap_or(0);
 
     let start = TrackStart {
-        file_path: track.file_path.clone(),
+        audio: track.audio(),
         replaygain: track.as_ref().into(),
         volume: state.effective_volume(),
         speed: state.playback_speed,
@@ -423,7 +423,7 @@ pub fn play_track_inner(
     // No gapless preload here: the monitor stages one late, so a queue or repeat change mid-track
     // still counts.
     vec![PlayerAction::PlayMedia {
-        file_path: start.file_path,
+        audio: start.audio,
         volume: start.volume,
         speed: start.speed,
         start_position_ms: start.start_position_ms,

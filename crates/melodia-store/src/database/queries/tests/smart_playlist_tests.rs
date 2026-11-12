@@ -780,17 +780,13 @@ async fn a_capped_set_valued_rule_walks_its_order() -> Result<(), AppError> {
     Ok(())
 }
 
-/// Spelled as `first_cover` spells it. The first hit ends the walk, which an `IN` would pay for
+/// Through `first_cover`'s own statement. The first hit ends the walk, which an `IN` would pay for
 /// with every match.
 #[tokio::test]
 async fn a_cover_lookup_walks_the_natural_order() -> Result<(), AppError> {
     let db = DbPool::test_pool().await?;
-    let mut sql = Sql::new(
-        "EXPLAIN QUERY PLAN SELECT artwork_path FROM tracks \
-         WHERE artwork_path IS NOT NULL AND artwork_path != ''",
-    );
-    super::push_and_rules(&mut sql, &rock_rule());
-    sql.push(super::order_by_fragment(None)).push(" LIMIT 1");
+    let mut sql = Sql::new("EXPLAIN QUERY PLAN SELECT artwork_path");
+    super::push_first_cover(&mut sql, &rock_rule());
 
     let plan = plan_steps(&db, sql).await?;
 
@@ -810,7 +806,16 @@ async fn a_favorite_rule_reaches_its_partial_index() -> Result<(), AppError> {
 
     let plan = plan_steps(&db, sql).await?;
 
-    assert_eq!(plan, ["SEARCH tracks USING INDEX idx_tracks_is_favorite (is_favorite=?)"]);
+    assert_eq!(
+        plan,
+        [
+            "SEARCH tracks USING INDEX idx_tracks_is_favorite (is_favorite=?)",
+            "LIST SUBQUERY 1",
+            "SCAN f",
+            "SEARCH outside USING COVERING INDEX idx_tracks_folder_id (folder_id=?)",
+            "CREATE BLOOM FILTER",
+        ]
+    );
     Ok(())
 }
 

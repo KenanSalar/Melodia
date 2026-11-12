@@ -8,10 +8,15 @@ use rusqlite::Transaction;
 
 use crate::database::queries;
 use crate::database::queries::artist::UNKNOWN_ARTIST_ID;
-use crate::database::queries::scan::{MoveCandidates, NameCache, file_name_of};
+use crate::database::queries::scan::{
+    CueWrites, Links, MoveCandidates, NameCache, SheetWriter, TrackFolder, file_name_of,
+};
+use crate::database::queries::track::file_rows::{LINKED_STAMP, WHOLE_FILE};
 use crate::database::sql::Sql;
 use crate::database::{DbPool, MAX_BINDS_PER_STATEMENT, placeholders, values_placeholders};
+use crate::media::cue::{CueChunk, CueRow, embedded};
 use crate::media::ingest::scan_pool::ScanPool;
+use melodia_core::entities::cue::EmbeddedCue;
 use melodia_core::entities::scan::{ExtractedMetadata, FileStamp, ScannedFile};
 use melodia_core::error::AppError;
 
@@ -21,7 +26,7 @@ pub(crate) enum IngestSource {
     /// current row missing artwork takes the file's.
     FolderScan(i64),
     /// Files the user named, each taken as named and filed under the library folder holding it,
-    /// else under a folder made for its own directory.
+    /// else under a disabled folder made for its own directory ([`TrackFolder::Outside`]).
     Import,
 }
 
@@ -33,6 +38,20 @@ impl IngestSource {
     fn backfills_artwork(&self) -> bool {
         matches!(self, Self::FolderScan(_))
     }
+
+    /// The folder a file or a cue sheet at `path` is filed under, or `None` for one with no parent
+    /// directory, which is skipped. A scan reads only a library folder (`library::scan`).
+    fn folder_of(
+        &self,
+        tx: &Transaction<'_>,
+        path: &Path,
+        folder_cache: &mut HashMap<String, TrackFolder>,
+    ) -> Result<Option<TrackFolder>, AppError> {
+        match self {
+            Self::FolderScan(id) => Ok(Some(TrackFolder::Library(*id))),
+            Self::Import => import_folder_of(tx, path, folder_cache),
+        }
+    }
 }
 
 /// Result of ingesting scanned files into the database.
@@ -40,8 +59,16 @@ pub struct IngestResult {
     pub inserted_count: u32,
     pub moved_count: u32,
     pub updated_count: u32,
-    /// The freshly inserted tracks' ids, in **input order**.
+    /// The freshly inserted whole-file rows' ids, in **input order**.
     pub inserted_track_ids: Vec<i64>,
+}
+
+impl IngestResult {
+    fn add_sheets(&mut self, sheets: &CueWrites) {
+        self.inserted_count += sheets.inserted;
+        self.updated_count += sheets.updated;
+        self.moved_count += sheets.moved;
+    }
 }
 
 /// Rows a batch writes above which the stats triggers are dropped and the counts rebuilt by one
@@ -88,6 +115,12 @@ impl Ingested {
     }
 }
 
+/// Files read for one commit, and the cue sheet jobs whose images are among them.
+pub struct ScanChunk {
+    pub files: Vec<ScannedFile>,
+    pub cue: CueChunk,
+}
+
 /// One chunk of a folder scan, in a write transaction of its own.
 ///
 /// On the bulk path the stats triggers are dropped and recreated *inside* that transaction, so a
@@ -95,7 +128,7 @@ impl Ingested {
 /// them.
 pub async fn commit_scan_chunk(
     db: &DbPool,
-    scanned_files: Vec<ScannedFile>,
+    chunk: ScanChunk,
     folder_id: i64,
     scan_timestamp: String,
     pool: ScanPool,
@@ -106,13 +139,8 @@ pub async fn commit_scan_chunk(
         if is_bulk {
             queries::stats::disable_stats_triggers(tx)?;
         }
-        let result = ingest_scanned_files(
-            tx,
-            &scanned_files,
-            &IngestSource::FolderScan(folder_id),
-            &scan_timestamp,
-            &pool,
-        )?;
+        let source = IngestSource::FolderScan(folder_id);
+        let result = ingest_chunk(tx, chunk, &source, &scan_timestamp, &pool)?;
         if is_bulk {
             queries::stats::enable_stats_triggers(tx)?;
         }
@@ -121,31 +149,25 @@ pub async fn commit_scan_chunk(
     .await
 }
 
-/// Files dropped onto a playlist or the queue, filed as [`IngestSource::Import`] says, in one
+/// Files the user opened, dropped or brought back, filed as [`IngestSource::Import`] says, in one
 /// transaction with the album covers and stats brought up to date. A kept-out file among them comes
-/// back, the user having named it.
+/// back, the user having named it or a sheet naming it.
 pub async fn commit_import(
     db: &DbPool,
-    scanned_files: Vec<ScannedFile>,
+    chunk: ScanChunk,
     scan_timestamp: String,
     pool: ScanPool,
 ) -> Result<IngestResult, AppError> {
-    let bulk = is_bulk(scanned_files.len());
+    let bulk = is_bulk(chunk.files.len());
     db.transaction(move |tx| {
         let paths: Vec<Cow<'_, str>> =
-            scanned_files.iter().map(|f| f.path.to_string_lossy()).collect();
+            chunk.files.iter().map(|f| f.path.to_string_lossy()).collect();
         let paths: Vec<&str> = paths.iter().map(AsRef::as_ref).collect();
         queries::excluded_files::lift_on(tx, &paths)?;
         if bulk {
             queries::stats::disable_stats_triggers(tx)?;
         }
-        let result = ingest_scanned_files(
-            tx,
-            &scanned_files,
-            &IngestSource::Import,
-            &scan_timestamp,
-            &pool,
-        )?;
+        let result = ingest_chunk(tx, chunk, &IngestSource::Import, &scan_timestamp, &pool)?;
         queries::scan::update_album_artwork_from_tracks(tx)?;
         if bulk {
             queries::stats::recalculate_all_stats(tx)?;
@@ -156,12 +178,94 @@ pub async fn commit_import(
     .await
 }
 
+/// Ingests `chunk` within `tx`, each file and sheet filed as `source` says. An image a sheet claims
+/// goes to its sheet's job and never to the ordinary ingest, which runs first and writes the
+/// whole-file row an image given back takes its playlist places onto. An image the sheet inside it
+/// splits is written next, ahead of the jobs, so one whose `.cue` lets it go keeps the tracks.
+fn ingest_chunk(
+    tx: &Transaction<'_>,
+    chunk: ScanChunk,
+    source: &IngestSource,
+    scan_timestamp: &str,
+    pool: &ScanPool,
+) -> Result<IngestResult, AppError> {
+    let ScanChunk { files, cue } = chunk;
+    let (claimed, unclaimed): (Vec<_>, Vec<_>) = if cue.is_empty() {
+        (Vec::new(), files)
+    } else {
+        files.into_iter().partition(|file| cue.claims(&file.path))
+    };
+    let Unclaimed { carved, ordinary, released } = sort_unclaimed(tx, unclaimed)?;
+    let mut result = ingest_scanned_files(tx, &ordinary, source, scan_timestamp, pool)?;
+    let released: Vec<&str> = released.iter().map(String::as_str).collect();
+    result.updated_count += queries::scan::release_embedded(tx, &released)?;
+
+    let images: Vec<&ScannedFile> =
+        claimed.iter().chain(carved.iter().map(|(image, _)| image)).collect();
+    let mut moved = image_move_candidates(tx, &images, pool)?;
+    let mut sheets = SheetWriter::new(tx, &claimed, scan_timestamp, &mut moved);
+    let mut folders = HashMap::new();
+    for (image, rows) in &carved {
+        if let Some(folder) = source.folder_of(tx, &image.path, &mut folders)? {
+            sheets.apply_embedded(image, rows, folder)?;
+        }
+    }
+    for job in cue.jobs() {
+        if let Some(folder) = source.folder_of(tx, &job.path, &mut folders)? {
+            sheets.apply(job, folder)?;
+        }
+    }
+    result.add_sheets(&sheets.into_writes());
+    Ok(result)
+}
+
+/// A chunk's files no `.cue` claims, by what the sheet inside each says.
+struct Unclaimed {
+    /// The files the sheet inside splits, each with its tracks.
+    carved: Vec<(ScannedFile, Vec<CueRow>)>,
+    ordinary: Vec<ScannedFile>,
+    /// The ordinary files holding tracks a sheet inside them carved, which they carry no more.
+    released: Vec<String>,
+}
+
+/// Sorts `files` by the sheet inside each. A file read as [`EmbeddedCue::Unread`] keeps the tracks
+/// its sheet carved and writes nothing, so the next scan reads it again: a tagger's write caught
+/// half-done would otherwise cost a disc its play counts.
+fn sort_unclaimed(tx: &Transaction<'_>, files: Vec<ScannedFile>) -> Result<Unclaimed, AppError> {
+    let mut carved = Vec::new();
+    let mut whole = Vec::with_capacity(files.len());
+    for file in files {
+        match embedded::carve(&file.path, &file.metadata) {
+            Some(rows) => carved.push((file, rows)),
+            None => whole.push(file),
+        }
+    }
+    let paths: Vec<Cow<'_, str>> = whole.iter().map(|f| f.path.to_string_lossy()).collect();
+    let paths: Vec<&str> = paths.iter().map(AsRef::as_ref).collect();
+    let holding = queries::scan::embedded_images_among(tx, &paths)?;
+
+    let mut ordinary = Vec::with_capacity(whole.len());
+    let mut released = Vec::new();
+    for file in whole {
+        let path = file.path.to_string_lossy();
+        if !holding.contains(path.as_ref()) {
+            ordinary.push(file);
+        } else if file.metadata.embedded_cue == EmbeddedCue::Unread {
+            log::warn!("Kept the cue sheet tracks of {path}: its sheet didn't read");
+        } else {
+            released.push(path.into_owned());
+            ordinary.push(file);
+        }
+    }
+    Ok(Unclaimed { carved, ordinary, released })
+}
+
 /// The caches [`resolve_ids`] reuses within one ingest transaction. Artist and genre are in
 /// [`NameCache`], which the join writers reach too.
 struct ResolveCaches {
     names: NameCache,
     album: HashMap<String, HashMap<i64, Option<i64>>>,
-    folder: HashMap<String, i64>,
+    folder: HashMap<String, TrackFolder>,
 }
 
 impl ResolveCaches {
@@ -216,17 +320,17 @@ pub(crate) fn ingest_scanned_files(
                         .or_default()
                         .push(file_path_str.to_owned());
                 }
-            } else if let Some(ids) =
-                resolve_ids(tx, meta, source, file, file_path_str, &mut caches)?
-            {
-                queries::scan::update_track_metadata(
+            } else if let Some(ids) = resolve_ids(tx, meta, source, file, &mut caches)? {
+                let updated = queries::scan::update_track_metadata(
                     tx,
                     file_path_str,
                     meta,
                     &ids,
                     &mut caches.names,
                 )?;
-                updated_count += 1;
+                if updated {
+                    updated_count += 1;
+                }
             }
             continue;
         }
@@ -241,21 +345,22 @@ pub(crate) fn ingest_scanned_files(
         if let Some((existing_id, old_path)) =
             moved_from.track_for(meta.file_hash.as_str(), &file.path)
         {
-            let Some(folder_id) =
-                resolve_folder_id(tx, source, file, file_path_str, &mut caches.folder)?
-            else {
+            let Some(folder) = source.folder_of(tx, &file.path, &mut caches.folder)? else {
                 continue;
             };
             // Resolved inside this transaction, and nothing deletes ahead of this loop, so the
             // row is there.
             let _repointed = queries::scan::update_track_location(
                 tx,
-                existing_id,
+                &old_path,
                 file_path_str,
                 &file_name_of(&file.path),
-                folder_id,
+                folder.id(),
                 meta.date_modified.as_deref(),
             )?;
+            if let TrackFolder::Outside(_) = folder {
+                queries::outside::unlink_on(tx, &[existing_id])?;
+            }
             moved_from.spend_track(meta.file_hash.as_str(), existing_id);
             log::info!("Detected moved file: {old_path} -> {file_path_str}");
             moved_count += 1;
@@ -263,20 +368,20 @@ pub(crate) fn ingest_scanned_files(
         }
 
         if let Some((exclusion_id, old_path)) = moved_from.take_exclusion(&meta.file_hash)
-            && let Some(folder_id) =
-                resolve_folder_id(tx, source, file, file_path_str, &mut caches.folder)?
+            && let Some(folder) = source.folder_of(tx, &file.path, &mut caches.folder)?
         {
-            queries::excluded_files::repoint_on(tx, exclusion_id, file_path_str, folder_id)?;
+            queries::excluded_files::repoint_on(tx, exclusion_id, file_path_str, folder.id())?;
             log::info!("Kept-out file moved: {old_path} -> {file_path_str}");
             continue;
         }
 
-        let Some(ids) = resolve_ids(tx, meta, source, file, file_path_str, &mut caches)? else {
+        let Some(ids) = resolve_ids(tx, meta, source, file, &mut caches)? else {
             continue;
         };
         let row = queries::scan::NewTrackRow {
             file_path: file_path_str.to_owned(),
             file_name: file_name_of(&file.path),
+            cue: None,
             meta,
             ids,
         };
@@ -296,7 +401,8 @@ pub(crate) fn ingest_scanned_files(
     })
 }
 
-/// The stored size and mtime of each scanned path that already has a row.
+/// The stored size and mtime of each scanned path that already has a whole-file row, a row with no
+/// links stamped as never read, so a library folder absorbing an import's directory links it.
 ///
 /// Chunked over `scanned_files` itself, so a chunk's binds drop at its end rather than a `String`
 /// per scanned path living for the whole ingest.
@@ -308,7 +414,8 @@ fn load_existing(
     for chunk in scanned_files.chunks(MAX_BINDS_PER_STATEMENT) {
         let path_list = placeholders(chunk.len());
         let mut sql = Sql::vouched(format!(
-            "SELECT file_path, file_size, date_modified FROM tracks WHERE file_path IN ({path_list})"
+            "SELECT file_path, file_size, {LINKED_STAMP} FROM tracks \
+             WHERE file_path IN ({path_list}) AND {WHOLE_FILE}"
         ));
         for file in chunk {
             sql.bind(file.path.to_string_lossy().into_owned());
@@ -353,13 +460,36 @@ fn resolve_move_candidates(
         .collect();
     let new_path_hashes: Vec<&str> =
         new_files.iter().map(|f| f.metadata.file_hash.as_str()).collect();
-    let mut candidates = MoveCandidates::read_on(tx, &new_path_hashes)?;
+    let candidates = MoveCandidates::read_on(tx, &new_path_hashes, &[])?;
+    Ok(keep_gone(candidates, &new_files, pool))
+}
+
+/// The cue sheet images `images` may have moved from, kept as [`resolve_move_candidates`] keeps a
+/// row.
+fn image_move_candidates(
+    tx: &Transaction<'_>,
+    images: &[&ScannedFile],
+    pool: &ScanPool,
+) -> Result<MoveCandidates, AppError> {
+    if images.is_empty() {
+        return Ok(MoveCandidates::default());
+    }
+    let hashes: Vec<&str> = images.iter().map(|f| f.metadata.file_hash.as_str()).collect();
+    let candidates = MoveCandidates::read_on(tx, &[], &hashes)?;
+    Ok(keep_gone(candidates, images, pool))
+}
+
+fn keep_gone(
+    mut candidates: MoveCandidates,
+    new_files: &[&ScannedFile],
+    pool: &ScanPool,
+) -> MoveCandidates {
     let mut still_present = batch_still_on_disk(candidates.old_paths(), pool);
     if queries::DISK_IGNORES_CASE {
-        forget_respelled(&mut still_present, &new_files);
+        forget_respelled(&mut still_present, new_files);
     }
     candidates.retain_gone(&still_present);
-    Ok(candidates)
+    candidates
 }
 
 /// Drops the old paths a new file only respells: where the disk ignores case, two paths folding
@@ -495,7 +625,7 @@ fn flush_artwork_backfill(
             "WITH v(path, art) AS (VALUES {rows})
              UPDATE tracks
                 SET artwork_path = (SELECT art FROM v WHERE v.path = tracks.file_path)
-              WHERE file_path IN (SELECT path FROM v)
+              WHERE file_path IN (SELECT path FROM v) AND {WHOLE_FILE}
                 AND (artwork_path IS NULL OR artwork_path = '')"
         ));
         for (path, art) in chunk {
@@ -506,36 +636,28 @@ fn flush_artwork_backfill(
     Ok(())
 }
 
-/// The file's `folder_id`, or `None` for a file with no parent directory, which is skipped.
-fn resolve_folder_id(
+/// [`IngestSource::Import`]'s folder for `path`.
+fn import_folder_of(
     tx: &Transaction<'_>,
-    source: &IngestSource,
-    file: &ScannedFile,
-    file_path_str: &str,
-    folder_cache: &mut HashMap<String, i64>,
-) -> Result<Option<i64>, AppError> {
-    match source {
-        IngestSource::FolderScan(id) => Ok(Some(*id)),
-        IngestSource::Import => {
-            let parent_dir =
-                file.path.parent().map(|p| p.to_string_lossy().into_owned()).unwrap_or_default();
-            if parent_dir.is_empty() {
-                log::warn!("Skipping file with no parent directory: {file_path_str}");
-                return Ok(None);
-            }
-            if let Some(&id) = folder_cache.get(&parent_dir) {
-                return Ok(Some(id));
-            }
-            // A file inside a library folder is that folder's, so its scans pair the file with its
-            // row and removing the folder takes the track along.
-            let id = match queries::scan::find_folder_for_path(tx, file_path_str)? {
-                Some(id) => id,
-                None => queries::folder::upsert_folder(tx, &parent_dir)?,
-            };
-            folder_cache.insert(parent_dir, id);
-            Ok(Some(id))
-        }
+    path: &Path,
+    folder_cache: &mut HashMap<String, TrackFolder>,
+) -> Result<Option<TrackFolder>, AppError> {
+    let parent_dir = path.parent().map(|p| p.to_string_lossy().into_owned()).unwrap_or_default();
+    if parent_dir.is_empty() {
+        log::warn!("Skipping file with no parent directory: {}", path.display());
+        return Ok(None);
     }
+    if let Some(&folder) = folder_cache.get(&parent_dir) {
+        return Ok(Some(folder));
+    }
+    // A file inside a library folder is that folder's, so its scans pair the file with its row and
+    // removing the folder takes the track along.
+    let folder = match queries::scan::find_folder_for_path(tx, &path.to_string_lossy())? {
+        Some(id) => TrackFolder::Library(id),
+        None => TrackFolder::Outside(queries::folder::upsert_folder(tx, &parent_dir)?),
+    };
+    folder_cache.insert(parent_dir, folder);
+    Ok(Some(folder))
 }
 
 /// A track's artist, album, genre and folder ids, or `None` where the file is skipped.
@@ -544,12 +666,12 @@ fn resolve_ids(
     meta: &ExtractedMetadata,
     source: &IngestSource,
     file: &ScannedFile,
-    file_path_str: &str,
     caches: &mut ResolveCaches,
 ) -> Result<Option<queries::ResolvedIds>, AppError> {
-    let Some(folder_id) = resolve_folder_id(tx, source, file, file_path_str, &mut caches.folder)?
-    else {
-        return Ok(None);
+    let folder_id = match source.folder_of(tx, &file.path, &mut caches.folder)? {
+        None => return Ok(None),
+        Some(TrackFolder::Outside(id)) => return Ok(Some(queries::ResolvedIds::outside(id))),
+        Some(TrackFolder::Library(id)) => id,
     };
 
     // The **first** credited name, as `resolve_track_context` takes: a row keyed on the whole line
@@ -590,7 +712,8 @@ fn resolve_ids(
 
     let genre_id = caches.names.genre(tx, genre_name)?;
 
-    Ok(Some(queries::ResolvedIds { artist_id, album_id, genre_id, folder_id }))
+    let links = Links { artist_id, album_id, genre_id };
+    Ok(Some(queries::ResolvedIds { folder_id, links: Some(links) }))
 }
 
 #[cfg(test)]

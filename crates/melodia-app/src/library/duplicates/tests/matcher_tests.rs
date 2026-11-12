@@ -1,6 +1,7 @@
 //! What makes two tracks one song, how sure the match is, and which copy the picks keep.
 
 use melodia_core::entities::audio_quality::AudioFormat;
+use melodia_core::entities::cue::{CueFrames, CueSpan};
 
 use super::*;
 
@@ -15,6 +16,7 @@ fn copy(id: i64) -> DuplicateCopy {
         file_path: format!("{id}.mp3"),
         file_hash: None,
         file_size: Some(5_000_000),
+        span: None,
         title: "Song".to_owned(),
         artist: Some("Artist".to_owned()),
         album: Some("Album".to_owned()),
@@ -59,6 +61,45 @@ fn kinds(groups: &[DuplicateGroup]) -> Vec<MatchKind> {
 
 fn titled(id: i64, artist: Option<&str>, title: &str) -> DuplicateCopy {
     DuplicateCopy { artist: artist.map(str::to_owned), title: title.to_owned(), ..copy(id) }
+}
+
+/// A cue sheet track starting `start` cue frames into its image.
+fn span(start: i64) -> Option<CueSpan> {
+    CueSpan::new(CueFrames::try_from(start).ok()?, None).ok()
+}
+
+/// Copy `id` as a track of `disc.flac`, starting a second further in for each id.
+fn disc_track(id: i64) -> DuplicateCopy {
+    DuplicateCopy { file_path: "disc.flac".to_owned(), span: span(id * 75), ..copy(id) }
+}
+
+#[test]
+fn two_rows_of_one_file_never_group() {
+    let groups = group(vec![disc_track(1), disc_track(2)]);
+    assert_eq!(ids(&groups), Vec::<Vec<i64>>::new());
+}
+
+#[test]
+fn copies_of_one_image_are_identical_only_where_they_play_the_same_span() {
+    let rows = [
+        ("the same track", span(0), MatchKind::Identical),
+        ("two tracks", span(75), MatchKind::SameRelease),
+    ];
+    for (label, second_span, expected) in rows {
+        let first = DuplicateCopy { file_hash: Some("h".to_owned()), span: span(0), ..copy(1) };
+        let second =
+            DuplicateCopy { file_hash: Some("h".to_owned()), span: second_span, ..copy(2) };
+
+        let groups = group(vec![first, second]);
+
+        assert_eq!(kinds(&groups), [expected], "{label}");
+    }
+}
+
+#[test]
+fn a_file_two_of_whose_tracks_match_a_copy_elsewhere_groups_once() {
+    let groups = group(vec![disc_track(1), disc_track(2), copy(3)]);
+    assert_eq!(members(&groups), [[1, 3]]);
 }
 
 #[test]

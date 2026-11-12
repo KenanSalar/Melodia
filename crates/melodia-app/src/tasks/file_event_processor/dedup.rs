@@ -14,6 +14,7 @@ pub(super) fn deduplicate_events(events: Vec<FileEvent>) -> Vec<FileEvent> {
         Removed,
         Modified,
         Renamed { from: PathBuf },
+        DirectoryGone,
     }
 
     // An overflow makes every per-file event suspect, so the caller reconciles against disk.
@@ -55,6 +56,9 @@ pub(super) fn deduplicate_events(events: Vec<FileEvent>) -> Vec<FileEvent> {
                 state.remove(&to);
                 state.insert(to, DedupKind::Renamed { from });
             }
+            FileEvent::DirectoryGone(path) => {
+                state.insert(path, DedupKind::DirectoryGone);
+            }
             // Filtered above; deduplicate_events early-returns on both.
             FileEvent::RescanNeeded | FileEvent::DirectoryRenamed => unreachable!(),
         }
@@ -67,6 +71,7 @@ pub(super) fn deduplicate_events(events: Vec<FileEvent>) -> Vec<FileEvent> {
             DedupKind::Removed => FileEvent::Removed(path),
             DedupKind::Modified => FileEvent::Modified(path),
             DedupKind::Renamed { from } => FileEvent::Renamed { from, to: path },
+            DedupKind::DirectoryGone => FileEvent::DirectoryGone(path),
         })
         .collect()
 }

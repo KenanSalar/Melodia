@@ -6,7 +6,12 @@ use std::sync::Arc;
 use crate::player::engine::queue::{QueueCut, QueueEntry, QueueState};
 use crate::player::engine::state::PlayerViewModelLight;
 use crate::player::engine::types::{RadioNowPlaying, RepeatMode};
-use melodia_core::entities::track::TrackSummary;
+use melodia_core::entities::track::{TrackAudio, TrackSummary};
+
+/// The whole file at `path`, as a track no cue sheet claims plays.
+pub fn whole_file(path: &str) -> TrackAudio {
+    TrackAudio { path: path.to_owned(), span: None }
+}
 
 /// A queue of `ids` in their own order, nothing playing.
 pub fn queue_of(ids: &[i64]) -> QueueState {
@@ -47,6 +52,8 @@ pub fn test_track(title: &str, artist: Option<&str>, album: Option<&str>) -> Arc
         id: 7,
         file_path: String::new(),
         file_name: String::new(),
+        cue_track: None,
+        span: None,
         title: title.to_owned(),
         artist: artist.map(str::to_owned),
         album: album.map(str::to_owned),

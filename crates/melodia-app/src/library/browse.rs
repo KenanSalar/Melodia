@@ -88,9 +88,11 @@ pub async fn browse_directory(
     .map_err(AppError::io_source)??;
 
     let dir_str = scan.canonical.to_string_lossy();
-    let tracks = queries::track::get_tracks_in_directory(db, &dir_str).await?;
-    let mut track_map: HashMap<String, TrackListRow> =
-        tracks.into_iter().map(|t| (t.file_path, t.row)).collect();
+    // An image a cue sheet splits lists each of its tracks.
+    let mut track_map: HashMap<String, Vec<TrackListRow>> = HashMap::new();
+    for track in queries::track::get_tracks_in_directory(db, &dir_str).await? {
+        track_map.entry(track.file_path).or_default().push(track.row);
+    }
 
     let mut files: Vec<BrowseFile> = Vec::with_capacity(scan.audio_paths.len());
     for audio_path in &scan.audio_paths {
@@ -98,8 +100,13 @@ pub async fn browse_directory(
         let file_name =
             audio_path.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
 
-        if let Some(row) = track_map.remove(path_str.as_ref()) {
-            files.push(BrowseFile { row, file_name, in_library: true });
+        if let Some(rows) = track_map.remove(path_str.as_ref()) {
+            let in_library = rows.into_iter().map(|row| BrowseFile {
+                row,
+                file_name: file_name.clone(),
+                in_library: true,
+            });
+            files.extend(in_library);
         } else {
             // On disk but not in the database, just copied or refused by the scanner: an `id == 0`
             // row the shared `TrackList` renders dimmed and inert.

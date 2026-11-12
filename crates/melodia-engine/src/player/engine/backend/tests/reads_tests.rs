@@ -9,6 +9,7 @@ use std::path::Path;
 use std::time::Duration;
 
 use melodia_audio::player::source::audio::{Sample, Shape};
+use melodia_core::entities::track::TrackAudio;
 use melodia_core::error::AppError;
 use melodia_playback::player::playback::decks::DECK_COUNT;
 use melodia_playback::player::playback::output::mixer::{self, MixerPull};
@@ -16,6 +17,7 @@ use melodia_playback::player::playback::replaygain::TrackReplayGain;
 use melodia_testkit::ASSETS_DIR;
 
 use super::PlaybackEngine;
+use crate::player::engine::fixtures::whole_file;
 
 const RATE: u32 = 44_100;
 const CHANNELS: u16 = 2;
@@ -45,8 +47,8 @@ fn engine() -> Result<(PlaybackEngine, MixerPull), AppError> {
 }
 
 /// One second of silence.
-fn fixture() -> String {
-    Path::new(ASSETS_DIR).join("silence.wav").to_string_lossy().into_owned()
+fn fixture() -> TrackAudio {
+    whole_file(&Path::new(ASSETS_DIR).join("silence.wav").to_string_lossy())
 }
 
 fn play(engine: &PlaybackEngine) -> Result<(), AppError> {

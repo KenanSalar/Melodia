@@ -14,6 +14,7 @@ use crate::database::rows::FromRow;
 use crate::database::sql::Sql;
 use melodia_core::entities::artist::ArtistCredit;
 use melodia_core::entities::credits::RoleCredits;
+use melodia_core::entities::cue::EmbeddedCue;
 use melodia_core::entities::genre::GenreList;
 use melodia_core::entities::scan::{ExtractedMetadata, ReleaseTags, SortTags};
 use melodia_core::error::AppError;
@@ -81,6 +82,7 @@ pub fn make_test_metadata(title: &str) -> ExtractedMetadata {
         file_hash: blake3::hash(title.as_bytes()).to_hex().to_string(),
         date_modified: Some("2024-01-01T00:00:00+00:00".to_owned()),
         artwork_path: None,
+        embedded_cue: EmbeddedCue::Absent,
     }
 }
 
@@ -151,10 +153,8 @@ fn insert_tagged_on(
         std::path::Path::new(file_path).file_name().and_then(|f| f.to_str()).unwrap_or("test.mp3");
 
     let ids = queries::ResolvedIds {
-        artist_id,
-        album_id,
-        genre_id,
         folder_id: 1, // default folder
+        links: Some(queries::scan::Links { artist_id, album_id, genre_id }),
     };
 
     let now = melodia_core::utils::now_rfc3339();

@@ -85,20 +85,64 @@ pub(crate) fn folders_inside(outer: &Path, folders: &[folder::Folder]) -> Vec<Ne
         .collect()
 }
 
-pub async fn add_folder(state: &AppState, path: String) -> Result<folder::Folder, AppError> {
-    let folder = insert_validated(&state.db, &path).await?;
+/// A folder just added to the library.
+pub enum AddedFolder {
+    New(folder::Folder),
+    /// The directory a file opened from outside the library was filed under, with its tracks.
+    TookOver(folder::Folder),
+}
+
+impl AddedFolder {
+    pub fn id(&self) -> i64 {
+        match self {
+            Self::New(folder) | Self::TookOver(folder) => folder.id,
+        }
+    }
+
+    /// What cancelling its first scan does: a new folder goes, while one taken over keeps the
+    /// tracks it held before the add.
+    pub fn on_stop(&self) -> scan::OnStop {
+        match self {
+            Self::New(_) => scan::OnStop::Withdraw,
+            Self::TookOver(_) => scan::OnStop::Keep,
+        }
+    }
+}
+
+pub async fn add_folder(state: &AppState, path: String) -> Result<AddedFolder, AppError> {
+    let added = insert_validated(&state.db, &path).await?;
     // The scan's own bump waits for its last commit, and the row belongs on screen now.
     state.library_changed.bump();
     retarget_watcher(state);
-    Ok(folder)
+    Ok(added)
 }
 
 /// Deletes nothing, even around folders already in the library: they keep their tracks until its
-/// first completed scan absorbs them, so cancelling that scan leaves them as they were.
-async fn insert_validated(db: &DbPool, path: &str) -> Result<folder::Folder, AppError> {
-    let existing_folders = queries::folder::get_all_folders(db).await?;
-    let canonical = validate_folder_path(Path::new(path), &existing_folders)?;
-    queries::folder::insert_folder(db, &canonical.to_string_lossy(), true).await
+/// first completed scan absorbs them, so cancelling that scan leaves them as they were. Only the
+/// library's folders can refuse a path, an outside one at it being taken over.
+async fn insert_validated(db: &DbPool, path: &str) -> Result<AddedFolder, AppError> {
+    let folders = queries::folder::get_all_folders(db).await?;
+    let (library, outside): (Vec<folder::Folder>, Vec<folder::Folder>) =
+        folders.into_iter().partition(|f| f.is_enabled);
+    let canonical = validate_folder_path(Path::new(path), &library)?;
+    let canonical_str = canonical.to_string_lossy();
+    if let Some(id) = folder_at(&canonical, &outside) {
+        let folder = queries::folder::take_over_folder(db, id, &canonical_str).await?;
+        return Ok(AddedFolder::TookOver(folder));
+    }
+    let folder = queries::folder::insert_folder(db, &canonical_str, true).await?;
+    Ok(AddedFolder::New(folder))
+}
+
+/// The folder among `folders` whose directory is `canonical`, one stored in that spelling first.
+fn folder_at(canonical: &Path, folders: &[folder::Folder]) -> Option<i64> {
+    let same_spelling = folders.iter().find(|f| Path::new(&f.path) == canonical);
+    let found = same_spelling.or_else(|| {
+        folders.iter().find(|f| {
+            melodia_core::utils::canonicalize_path(&f.path).is_ok_and(|path| path == canonical)
+        })
+    });
+    found.map(|f| f.id)
 }
 
 pub async fn remove_folder(state: &AppState, id: i64) -> Result<(), AppError> {
@@ -115,8 +159,12 @@ pub async fn remove_folder(state: &AppState, id: i64) -> Result<(), AppError> {
     Ok(())
 }
 
+/// The library's folders. A file opened from outside them is filed under a disabled folder, which
+/// nothing scans or lists.
 pub async fn get_folders(db: &DbPool) -> Result<Vec<folder::Folder>, AppError> {
-    queries::folder::get_all_folders(db).await
+    let mut folders = queries::folder::get_all_folders(db).await?;
+    folders.retain(|f| f.is_enabled);
+    Ok(folders)
 }
 
 /// The platform's own Music folder, when adding it wouldn't be refused, for the welcome card to
@@ -125,8 +173,8 @@ pub async fn suggested_music_folder(db: &DbPool) -> Result<Option<PathBuf>, AppE
     let Some(music_dir) = dirs::audio_dir() else {
         return Ok(None);
     };
-    let existing = queries::folder::get_all_folders(db).await?;
-    let addable = validate_folder_path(&music_dir, &existing).is_ok();
+    let library = get_folders(db).await?;
+    let addable = validate_folder_path(&music_dir, &library).is_ok();
     Ok(addable.then_some(music_dir))
 }
 

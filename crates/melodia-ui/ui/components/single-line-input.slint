@@ -16,6 +16,7 @@ export component SingleLineInput inherits Rectangle {
     in property <string> placeholder;
     in property <brush> placeholder-color: Theme.overlay2;
     in property <InputType> input-type: InputType.text;
+    in property <bool> read-only;
     // The edit menu holds the keyboard while it is up, so the field reads as focused across it
     // rather than dimming under its own menu.
     out property <bool> has-focus: ti.has-focus || menu.is-open;
@@ -76,6 +77,7 @@ export component SingleLineInput inherits Rectangle {
             single-line: true;
             vertical-alignment: center;
             input-type: root.input-type;
+            read-only: root.read-only;
 
             cursor-position-changed(cursor-position) => {
                 if (cursor-position.x + self.scroll-x < root.edge-margin) {
@@ -93,6 +95,7 @@ export component SingleLineInput inherits Rectangle {
 
     menu := TextEditMenu {
         has-text: root.text != "";
+        read-only: root.read-only;
         cut => { ti.cut(); }
         copy => { ti.copy(); }
         paste => { ti.paste(); }

@@ -12,6 +12,8 @@ fn make_summary(id: i64) -> Arc<TrackSummary> {
         id,
         file_path: format!("/music/{id}.mp3"),
         file_name: format!("{id}.mp3"),
+        cue_track: None,
+        span: None,
         title: format!("Track {id}"),
         artist: None,
         album: None,
@@ -450,41 +452,7 @@ async fn a_restore_with_no_tracks_leaves_the_shuffle_setting_alone() -> Result<(
     Ok(())
 }
 
-// --- what a drop and a "Play Next" owe their input order ---
-
-/// A `TrackSummary` with a title of its own, since [`make_summary`] ties one to the id and the
-/// ordering tests need the two to vary apart.
-fn titled(id: i64, title: &str) -> Arc<TrackSummary> {
-    let mut summary = (*make_summary(id)).clone();
-    summary.title = title.to_owned();
-    Arc::new(summary)
-}
-
-/// Files from outside arrive in visual selection order on KDE and GNOME, not alphabetical, and
-/// `natord` is what puts "Track 2" ahead of "Track 10".
-#[test]
-fn a_dropped_batch_is_ordered_the_way_a_list_is() {
-    let mut batch = vec![titled(1, "Track 10"), titled(2, "Track 9"), titled(3, "Track 1")];
-
-    sort_for_queue(&mut batch);
-
-    assert_eq!(
-        batch.iter().map(|t| t.title.as_str()).collect::<Vec<_>>(),
-        ["Track 1", "Track 9", "Track 10"],
-        "a byte compare puts 10 ahead of 9, which is every numbered album out of order"
-    );
-}
-
-/// The sort is stable, so a batch the tags cannot tell apart keeps the order the file manager
-/// handed it over in rather than an arbitrary one.
-#[test]
-fn equal_titles_keep_the_order_the_drop_handed_over() {
-    let mut batch = vec![titled(7, "Untitled"), titled(3, "Untitled"), titled(5, "Untitled")];
-
-    sort_for_queue(&mut batch);
-
-    assert_eq!(batch.iter().map(|t| t.id).collect::<Vec<_>>(), [7, 3, 5]);
-}
+// --- what a "Play Next" owes its input order ---
 
 /// "Play Next" on a multi-row selection has to land in the order the rows were listed, as one
 /// block behind the current track, and nothing else in the queue moves.
@@ -546,7 +514,7 @@ async fn play_next_with_nothing_picked_does_not_reach_the_queue() -> Result<(), 
 // `boot::tasks::serve_file_opens`' backlog are all held somewhere; what they hand to was not.
 //
 // The queue order survives the round trip because `existing_in_order` keeps the ids in the order it
-// was given, so what `open_as_queue` sorts is what ends up on screen.
+// was given, so the play order the import answers is what ends up on screen.
 
 use melodia_artwork::media::image::artwork::new_cover_cache;
 use melodia_core::entities::tags::{FieldEdit, TagEdit};

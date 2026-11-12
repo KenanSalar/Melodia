@@ -23,7 +23,7 @@ use interprocess::local_socket::{GenericNamespaced, ListenerOptions, Name, Strea
 pub use interprocess::local_socket::Listener;
 
 use melodia_core::error::describe;
-use melodia_core::utils::audio_ext::is_audio_extension;
+use melodia_core::utils::audio_ext::is_library_extension;
 
 /// Checked against the *declared* length before a buffer is sized for it, so a hostile peer gets
 /// no allocation out of asking for more. A thousand paths fit.
@@ -66,14 +66,14 @@ pub enum Claim {
     Unenforced(io::Error),
 }
 
-/// Audio paths from the command line, made absolute against *this* process's working directory,
-/// which the primary doesn't share. The extension filter also drops every flag.
-pub fn audio_files_from_argv() -> Vec<PathBuf> {
+/// Audio and cue sheet paths from the command line, made absolute against *this* process's working
+/// directory, which the primary doesn't share. The extension filter also drops every flag.
+pub fn library_files_from_argv() -> Vec<PathBuf> {
     std::env::args_os()
         .skip(1)
         .map(PathBuf::from)
         .filter(|path| {
-            path.extension().and_then(|ext| ext.to_str()).is_some_and(is_audio_extension)
+            path.extension().and_then(|ext| ext.to_str()).is_some_and(is_library_extension)
         })
         .filter_map(|path| std::path::absolute(path).ok())
         .collect()

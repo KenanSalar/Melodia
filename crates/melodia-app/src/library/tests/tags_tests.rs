@@ -588,10 +588,9 @@ async fn a_track_imported_from_outside_the_library_takes_the_edit() -> Result<()
     let imported =
         import_files(&db, &artwork_dir, &cover_cache, &[path.to_string_lossy().into_owned()])
             .await?;
-    let [id] = imported.track_ids.as_slice() else {
+    let [id] = imported.opened.concat()[..] else {
         return Err(AppError::not_found_msg("expected exactly the one imported track"));
     };
-    let id = *id;
     let folder_query = format!(
         "SELECT t.folder_id, f.is_enabled FROM tracks t \
          JOIN folders f ON f.id = t.folder_id WHERE t.id = {id}"

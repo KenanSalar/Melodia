@@ -14,6 +14,8 @@
 //!
 //! A library-sized list holds no projection per track, only ids (`ui::paged_rows`).
 
+use crate::entities::cue::{CueSpan, CueTrack};
+
 /// What the player and the bar render, cloned into every published view model, so it carries
 /// playback identity and nothing a list draws.
 #[derive(Clone, Debug, PartialEq)]
@@ -21,6 +23,9 @@ pub struct TrackSummary {
     pub id: i64,
     pub file_path: String,
     pub file_name: String,
+    pub cue_track: Option<CueTrack>,
+    /// The part of the file a cue sheet track plays, `None` playing all of it.
+    pub span: Option<CueSpan>,
     pub title: String,
     pub artist: Option<String>,
     pub album: Option<String>,
@@ -41,6 +46,40 @@ pub struct TrackSummary {
     pub replaygain_album_peak: Option<f32>,
 }
 
+impl TrackSummary {
+    pub fn audio(&self) -> TrackAudio {
+        TrackAudio { path: self.file_path.clone(), span: self.span }
+    }
+
+    /// Whether a cue sheet carves this track out of its file.
+    pub fn is_sheet_track(&self) -> bool {
+        self.cue_track.is_some()
+    }
+}
+
+/// The audio a deck plays for a track: a file, or the stretch of one a cue sheet names. One value
+/// so nothing on the way from the queue to the decoder can drop the span and play the whole disc.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct TrackAudio {
+    pub path: String,
+    pub span: Option<CueSpan>,
+}
+
+/// The path, and the span in cue frames where there is one, for the action log.
+impl std::fmt::Display for TrackAudio {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&self.path)?;
+        let Some(span) = self.span else {
+            return Ok(());
+        };
+        write!(f, " [cue frames {}..", i64::from(span.start()))?;
+        if let Some(end) = span.end() {
+            write!(f, "{}", i64::from(end))?;
+        }
+        f.write_str("]")
+    }
+}
+
 #[expect(
     clippy::cast_possible_truncation,
     reason = "ReplayGain dB/peak values are tiny and well within f32 range; the narrowing is intentional"
@@ -55,6 +94,8 @@ impl From<Track> for TrackSummary {
             id: t.id,
             file_path: t.file_path,
             file_name: t.file_name,
+            cue_track: t.cue_track,
+            span: t.span,
             title: t.title,
             artist: t.artist,
             album: t.album,
@@ -79,6 +120,8 @@ impl From<&Track> for TrackSummary {
             id: t.id,
             file_path: t.file_path.clone(),
             file_name: t.file_name.clone(),
+            cue_track: t.cue_track,
+            span: t.span,
             title: t.title.clone(),
             artist: t.artist.clone(),
             album: t.album.clone(),
@@ -126,6 +169,7 @@ pub struct TrackListRow {
 #[derive(Clone, Debug, PartialEq)]
 pub struct PlaylistExportRow {
     pub file_path: String,
+    pub cue_track: Option<CueTrack>,
     pub file_hash: Option<String>,
     pub title: String,
     pub artist: Option<String>,
@@ -152,6 +196,7 @@ pub struct TrackMeta {
 pub struct TagEditRow {
     pub id: i64,
     pub file_path: String,
+    pub cue_track: Option<CueTrack>,
     pub title: String,
     pub artist: Option<String>,
     pub album_artist: Option<String>,
@@ -188,6 +233,20 @@ pub struct TagEditRow {
     pub file_hash: Option<String>,
 }
 
+impl TagEditRow {
+    /// Whether a cue sheet carves this track out of its file, whose own tags then state the
+    /// whole disc rather than this track.
+    pub fn is_sheet_track(&self) -> bool {
+        self.cue_track.is_some()
+    }
+
+    /// Whether this is the audio hidden before a sheet's first track, which no line of the sheet
+    /// states.
+    pub fn is_hidden_track(&self) -> bool {
+        self.cue_track == Some(CueTrack::HIDDEN)
+    }
+}
+
 /// What a scrobble needs, native columns only; `ScrobbleTrack::from_row` converts it.
 #[derive(Clone, Debug, PartialEq)]
 pub struct ScrobbleRow {
@@ -219,6 +278,9 @@ pub struct Track {
     pub file_path: String,
     pub file_name: String,
     pub file_hash: Option<String>,
+    /// The cue sheet track this row plays, `None` for a row playing its whole file.
+    pub cue_track: Option<CueTrack>,
+    pub span: Option<CueSpan>,
 
     // Core metadata
     pub title: String,

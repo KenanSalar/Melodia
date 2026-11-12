@@ -30,6 +30,8 @@ blake3.workspace = true
 image.workspace = true
 chrono.workspace = true
 log.workspace = true
+chardetng.workspace = true
+encoding_rs.workspace = true
 
 [target.'cfg(target_os = "windows")'.dependencies]
 dunce.workspace = true

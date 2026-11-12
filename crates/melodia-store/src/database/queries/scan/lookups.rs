@@ -1,9 +1,14 @@
 //! The reads the scan and the watcher batch make.
 
+use std::collections::HashMap;
+use std::path::MAIN_SEPARATOR_STR;
+use std::sync::LazyLock;
+
 use rusqlite::Transaction;
 
-use crate::database::DbPool;
-use crate::database::sql;
+use crate::database::queries::track::file_rows::LINKED_STAMP;
+use crate::database::queries::track::subtree_bounds;
+use crate::database::{DbPool, chunked_in_query, sql};
 use melodia_core::entities::scan::FileStamp;
 use melodia_core::error::AppError;
 
@@ -40,11 +45,36 @@ pub(crate) fn find_folder_for_path(
     )
 }
 
+static FOLDER_TRACK_STAMPS: LazyLock<String> = LazyLock::new(|| {
+    format!("SELECT file_path, file_size, {LINKED_STAMP} FROM tracks WHERE folder_id = ?")
+});
+
 /// Folds each of a folder's rows into `init` through `step`, with the columns the incremental-scan
 /// filter needs, one row at a time, so the folder's paths are never all held at once. Read through
 /// the read pool, before the scan's writer transaction opens.
 pub async fn fold_folder_tracks<A: Send + 'static>(
     db: &DbPool,
+    folder_id: i64,
+    init: A,
+    step: impl FnMut(&mut A, String, FileStamp) + Send + 'static,
+) -> Result<A, AppError> {
+    fold_stamps(db, FOLDER_TRACK_STAMPS.as_str(), folder_id, init, step).await
+}
+
+/// [`fold_folder_tracks`] for the folder's cue sheets.
+pub async fn fold_folder_sheets<A: Send + 'static>(
+    db: &DbPool,
+    folder_id: i64,
+    init: A,
+    step: impl FnMut(&mut A, String, FileStamp) + Send + 'static,
+) -> Result<A, AppError> {
+    let rows = "SELECT path, file_size, date_modified FROM cue_sheets WHERE folder_id = ?";
+    fold_stamps(db, rows, folder_id, init, step).await
+}
+
+async fn fold_stamps<A: Send + 'static>(
+    db: &DbPool,
+    rows: &'static str,
     folder_id: i64,
     init: A,
     mut step: impl FnMut(&mut A, String, FileStamp) + Send + 'static,
@@ -53,7 +83,7 @@ pub async fn fold_folder_tracks<A: Send + 'static>(
         let mut acc = init;
         sql::fetch_each(
             conn,
-            "SELECT file_path, file_size, date_modified FROM tracks WHERE folder_id = ?",
+            rows,
             (folder_id,),
             |(path, file_size, date_modified): (String, Option<i64>, Option<String>)| {
                 step(&mut acc, path, FileStamp { file_size, date_modified });
@@ -64,9 +94,75 @@ pub async fn fold_folder_tracks<A: Send + 'static>(
     .await
 }
 
-pub(crate) fn get_track_id_by_path(
-    tx: &Transaction<'_>,
-    file_path: &str,
-) -> Result<Option<i64>, AppError> {
-    sql::fetch_optional(tx, "SELECT id FROM tracks WHERE file_path = ? LIMIT 1", (file_path,))
+/// The cue sheets on record around a watcher batch or the files an import opens, and the claims a
+/// re-plan of them starts from.
+pub struct SheetsAround {
+    /// The directories asked about.
+    pub dirs: Vec<String>,
+    /// The sheets directly inside `dirs`.
+    pub sheets: Vec<String>,
+    /// Each image those sheets claim, and each claimed image among the audio asked about, mapped
+    /// to its sheet's path.
+    pub claims: HashMap<String, String>,
+}
+
+impl SheetsAround {
+    pub fn is_empty(&self) -> bool {
+        self.sheets.is_empty() && self.claims.is_empty()
+    }
+}
+
+const SHEETS_IN_DIRECTORY: &str = "SELECT path FROM cue_sheets \
+     WHERE path >= ?1 AND path < ?2 AND instr(substr(path, length(?1) + 1), ?3) = 0";
+
+/// Each image a sheet claims, beside that sheet's path.
+const SHEET_CLAIMS: &str = "SELECT DISTINCT tracks.file_path, cue_sheets.path \
+     FROM cue_sheets JOIN tracks ON tracks.cue_sheet_id = cue_sheets.id";
+
+/// The sheets on record directly inside `dirs`, and the claims of those sheets and of the images
+/// among `audio`. A library holding no sheet answers empty from its first statement.
+pub async fn sheets_around(
+    db: &DbPool,
+    dirs: Vec<String>,
+    audio: Vec<String>,
+) -> Result<SheetsAround, AppError> {
+    db.read(move |conn| {
+        let holds_sheets: bool =
+            sql::fetch_one(conn, "SELECT EXISTS (SELECT 1 FROM cue_sheets)", ())?;
+        if !holds_sheets {
+            return Ok(SheetsAround { dirs, sheets: Vec::new(), claims: HashMap::new() });
+        }
+        let mut sheets: Vec<String> = Vec::new();
+        for dir in &dirs {
+            let (from, before) = subtree_bounds(dir);
+            let bind = (from.as_str(), before.as_str(), MAIN_SEPARATOR_STR);
+            let inside: Vec<String> = sql::fetch_all(conn, SHEETS_IN_DIRECTORY, bind)?;
+            sheets.extend(inside);
+        }
+        let by_sheet: Vec<(String, String)> = chunked_in_query(conn, &sheets, |path_list| {
+            format!("{SHEET_CLAIMS} WHERE cue_sheets.path IN ({path_list})")
+        })?;
+        let by_image: Vec<(String, String)> = chunked_in_query(conn, &audio, |path_list| {
+            format!("{SHEET_CLAIMS} WHERE tracks.file_path IN ({path_list})")
+        })?;
+        let claims = by_sheet.into_iter().chain(by_image).collect();
+        Ok(SheetsAround { dirs, sheets, claims })
+    })
+    .await
+}
+
+static CLAIMS_IN_FOLDER: LazyLock<String> =
+    LazyLock::new(|| format!("{SHEET_CLAIMS} WHERE cue_sheets.folder_id = ?"));
+
+/// Each image a cue sheet in the folder claims, mapped to that sheet's path.
+pub async fn sheet_claims(
+    db: &DbPool,
+    folder_id: i64,
+) -> Result<HashMap<String, String>, AppError> {
+    db.read(move |conn| {
+        let rows: Vec<(String, String)> =
+            sql::fetch_all(conn, CLAIMS_IN_FOLDER.as_str(), (folder_id,))?;
+        Ok(rows.into_iter().collect())
+    })
+    .await
 }

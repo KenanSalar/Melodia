@@ -9,7 +9,7 @@ use serde::{Deserialize, Serialize};
 #[serde(default)]
 #[expect(
     clippy::struct_excessive_bools,
-    reason = "five independent settings.json keys, three of them one-shot markers; any grouping would be a container invented for the lint rather than one describing something"
+    reason = "six independent settings.json keys, four of them one-shot markers; any grouping would be a container invented for the lint rather than one describing something"
 )]
 pub struct LibraryFlags {
     pub folder_watching_enabled: bool,
@@ -27,6 +27,9 @@ pub struct LibraryFlags {
     /// Whether the files' tags have been re-read since the ingest widened: the migrations seeded
     /// only what the database knew, and `file_is_current` never re-reads on its own.
     pub tags_backfilled: bool,
+    /// Whether the FLACs read before the scan looked for a cue sheet inside a file have been
+    /// probed for one, `file_is_current` never reading an unchanged file again.
+    pub embedded_cues_probed: bool,
 }
 
 impl Default for LibraryFlags {
@@ -37,6 +40,7 @@ impl Default for LibraryFlags {
             write_ratings_to_tags: true,
             ratings_imported_from_tags: false,
             tags_backfilled: false,
+            embedded_cues_probed: false,
         }
     }
 }

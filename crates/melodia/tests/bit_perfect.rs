@@ -12,6 +12,7 @@ use std::time::{Duration, Instant};
 
 use melodia_audio::player::source::decode_ahead;
 use melodia_engine::player::engine::backend::PlaybackEngine;
+use melodia_engine::player::engine::fixtures::whole_file;
 use melodia_playback::player::playback::decks::DECK_COUNT;
 use melodia_playback::player::playback::output::encode::{BlockEncoder, DeviceFormat};
 use melodia_playback::player::playback::output::mixer::{self, MixerPull};
@@ -96,9 +97,9 @@ fn play_through(path: &Path, case: &Case, eq_on: bool) -> std::io::Result<Vec<u8
     }
 
     let starting = Arc::clone(&engine);
-    let path = path.to_string_lossy().into_owned();
+    let audio = whole_file(&path.to_string_lossy());
     let start = std::thread::spawn(move || {
-        starting.play_media(&path, 1.0, 1.0, None, TrackReplayGain::default())
+        starting.play_media(&audio, 1.0, 1.0, None, TrackReplayGain::default())
     });
     let mut out = Vec::new();
     let began = Instant::now();

@@ -43,8 +43,15 @@ async fn every_walked_songs_order_reads_its_index_without_a_sort() -> Result<(),
             let plan = db.read(move |conn| library_plan(conn, order)).await?;
             assert_eq!(
                 plan,
-                [format!("SCAN t USING COVERING INDEX {index}")],
-                "Songs by {field:?} {}",
+                [
+                    format!("SCAN t USING COVERING INDEX {index}"),
+                    "LIST SUBQUERY 1".to_owned(),
+                    "SCAN f".to_owned(),
+                    "SEARCH outside USING COVERING INDEX idx_tracks_folder_id (folder_id=?)"
+                        .to_owned(),
+                    "CREATE BLOOM FILTER".to_owned(),
+                ],
+                "Songs by {field:?} {}, the outside rows read off the disabled folders",
                 dir.as_str()
             );
         }

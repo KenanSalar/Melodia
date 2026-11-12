@@ -1,5 +1,5 @@
 import { Theme } from "../../theme.slint";
-import { TagEditor } from "../../globals/dialog-forms.slint";
+import { TagEditor, TagLock } from "../../globals/dialog-forms.slint";
 import { LabeledInput } from "../labeled-input.slint";
 import { CreditEditor } from "./credit-editor.slint";
 import { NameListEditor } from "./name-list-editor.slint";
@@ -34,6 +34,16 @@ component SummaryRow inherits HorizontalLayout {
     }
 }
 
+component TagField inherits LabeledInput {
+    read-only: TagEditor.file-tags-locked;
+}
+
+// A field a cue sheet holds, which `media::cue::SheetEdit` writes into the sheet: one opened here
+// that it doesn't carry would save into nothing.
+component SheetField inherits LabeledInput {
+    read-only: TagEditor.read-only;
+}
+
 // The Edit Track Information body: a cover panel beside the tabbed fields. Every input two-way
 // binds a `TagEditor` field, and Rust owns the snapshot and the diff. The single-track tabs leave
 // the chip list in multi mode and unmount, rather than disable or hide.
@@ -61,12 +71,12 @@ export component TagEditorBody inherits HorizontalLayout {
             tile-radius: Theme.radius-md;
             fallback-icon: "album";
         }
-        PillButton {
+        if !TagEditor.file-tags-locked: PillButton {
             text: @tr("Replace…");
             icon: "image";
             clicked => { TagEditor.pick-artwork(); }
         }
-        if TagEditor.has-cover: PillButton {
+        if !TagEditor.file-tags-locked && TagEditor.has-cover: PillButton {
             text: @tr("Remove");
             icon: "delete";
             danger: true;
@@ -79,6 +89,17 @@ export component TagEditorBody inherits HorizontalLayout {
     VerticalLayout {
         horizontal-stretch: 1;
         spacing: Theme.pad-md;
+
+        if TagEditor.file-tags-locked: Text {
+            text: TagEditor.lock == TagLock.hidden-track
+                ? @tr("The hidden audio before a cue sheet's first track can't be edited here.")
+                : TagEditor.lock == TagLock.cue-block
+                ? @tr("This track's cue sheet is the track list inside its FLAC file, which holds no titles and can't be edited here.")
+                : @tr("Changes are saved to the cue sheet, where album, album artist, disc and barcode apply to every track it lists. Fields a cue sheet can't hold are read-only.");
+            color: Theme.subtext0;
+            font-size: Theme.font-size-sm;
+            wrap: word-wrap;
+        }
 
         ChipGroup {
             options: TagEditor.track-count == 1
@@ -95,7 +116,7 @@ export component TagEditorBody inherits HorizontalLayout {
                 width: 100%;
                 height: 100%;
 
-                LabeledInput {
+                SheetField {
                     label: @tr("Title");
                     placeholder: TagEditor.title-placeholder;
                     text <=> TagEditor.title;
@@ -106,8 +127,9 @@ export component TagEditorBody inherits HorizontalLayout {
                     placeholder: TagEditor.artist-placeholder;
                     preview: TagEditor.artist-preview;
                     field: TagEditor.field-artist;
+                    read-only: TagEditor.read-only;
                 }
-                LabeledInput {
+                SheetField {
                     label: @tr("Album");
                     placeholder: TagEditor.album-placeholder;
                     text <=> TagEditor.album;
@@ -118,11 +140,13 @@ export component TagEditorBody inherits HorizontalLayout {
                     placeholder: TagEditor.album-artist-placeholder;
                     preview: TagEditor.album-artist-preview;
                     field: TagEditor.field-album-artist;
+                    read-only: TagEditor.read-only;
                 }
                 NameListEditor {
                     label: @tr("Genre");
                     names: TagEditor.genres;
                     placeholder: TagEditor.genre-placeholder;
+                    read-only: TagEditor.read-only;
                     set-name(row, t) => { TagEditor.set-genre-name(row, t); }
                     add => { TagEditor.add-genre(); }
                     remove(row) => { TagEditor.remove-genre(row); }
@@ -132,31 +156,31 @@ export component TagEditorBody inherits HorizontalLayout {
                 // value over a typo.
                 HorizontalLayout {
                     spacing: Theme.pad-sm;
-                    LabeledInput {
+                    SheetField {
                         label: @tr("Year");
                         placeholder: TagEditor.year-placeholder;
                         input-type: InputType.number;
                         text <=> TagEditor.year;
                     }
-                    LabeledInput {
+                    TagField {
                         label: @tr("Track");
                         placeholder: TagEditor.track-number-placeholder;
                         input-type: InputType.number;
                         text <=> TagEditor.track-number;
                     }
-                    LabeledInput {
+                    TagField {
                         label: @tr("Total");
                         placeholder: TagEditor.track-total-placeholder;
                         input-type: InputType.number;
                         text <=> TagEditor.track-total;
                     }
-                    LabeledInput {
+                    SheetField {
                         label: @tr("Disc");
                         placeholder: TagEditor.disc-number-placeholder;
                         input-type: InputType.number;
                         text <=> TagEditor.disc-number;
                     }
-                    LabeledInput {
+                    SheetField {
                         label: @tr("Total");
                         placeholder: TagEditor.disc-total-placeholder;
                         input-type: InputType.number;
@@ -164,7 +188,7 @@ export component TagEditorBody inherits HorizontalLayout {
                     }
                 }
 
-                LabeledInput {
+                TagField {
                     label: @tr("Original Year");
                     placeholder: TagEditor.original-year-placeholder;
                     input-type: InputType.number;
@@ -172,12 +196,12 @@ export component TagEditorBody inherits HorizontalLayout {
                 }
                 // Free text: a tempo can be fractional, and `decimal` would take the locale's
                 // comma, which the commit's parse rejects.
-                LabeledInput {
+                TagField {
                     label: @tr("BPM");
                     placeholder: TagEditor.bpm-placeholder;
                     text <=> TagEditor.bpm;
                 }
-                LabeledInput {
+                TagField {
                     label: @tr("Comment");
                     placeholder: TagEditor.comment-placeholder;
                     text <=> TagEditor.comment;
@@ -194,6 +218,8 @@ export component TagEditorBody inherits HorizontalLayout {
                     label: label;
                     names: TagEditor.role-names[i];
                     placeholder: TagEditor.role-placeholders[i];
+                    // The composer, first, is the one role a cue sheet holds.
+                    read-only: i == 0 ? TagEditor.read-only : TagEditor.file-tags-locked;
                     set-name(row, t) => { TagEditor.set-role-name(i, row, t); }
                     add => { TagEditor.add-role(i); }
                     remove(row) => { TagEditor.remove-role(i, row); }
@@ -204,41 +230,41 @@ export component TagEditorBody inherits HorizontalLayout {
                 width: 100%;
                 height: 100%;
 
-                LabeledInput {
+                TagField {
                     label: @tr("Subtitle");
                     placeholder: TagEditor.subtitle-placeholder;
                     text <=> TagEditor.subtitle;
                 }
-                LabeledInput {
+                TagField {
                     label: @tr("Disc Subtitle");
                     placeholder: TagEditor.disc-subtitle-placeholder;
                     text <=> TagEditor.disc-subtitle;
                 }
-                LabeledInput {
+                TagField {
                     label: @tr("Grouping");
                     placeholder: TagEditor.grouping-placeholder;
                     text <=> TagEditor.grouping;
                 }
-                LabeledInput {
+                TagField {
                     label: @tr("Work");
                     placeholder: TagEditor.work-placeholder;
                     text <=> TagEditor.work;
                 }
                 HorizontalLayout {
                     spacing: Theme.pad-sm;
-                    LabeledInput {
+                    TagField {
                         label: @tr("Movement");
                         placeholder: TagEditor.movement-placeholder;
                         text <=> TagEditor.movement;
                     }
-                    LabeledInput {
+                    TagField {
                         // Translators: the movement's number, as in movement 2 of 4
                         label: @tr("Number");
                         placeholder: TagEditor.movement-number-placeholder;
                         input-type: InputType.number;
                         text <=> TagEditor.movement-number;
                     }
-                    LabeledInput {
+                    TagField {
                         label: @tr("Total");
                         placeholder: TagEditor.movement-total-placeholder;
                         input-type: InputType.number;
@@ -248,30 +274,30 @@ export component TagEditorBody inherits HorizontalLayout {
 
                 HorizontalLayout {
                     spacing: Theme.pad-sm;
-                    LabeledInput {
+                    TagField {
                         // Translators: a musical key, as in A minor
                         label: @tr("Key");
                         placeholder: TagEditor.initial-key-placeholder;
                         text <=> TagEditor.initial-key;
                     }
-                    LabeledInput {
+                    TagField {
                         label: @tr("Mood");
                         placeholder: TagEditor.mood-placeholder;
                         text <=> TagEditor.mood;
                     }
-                    LabeledInput {
+                    TagField {
                         label: @tr("Language");
                         placeholder: TagEditor.language-placeholder;
                         text <=> TagEditor.language;
                     }
                 }
 
-                LabeledInput {
+                SheetField {
                     label: @tr("ISRC");
                     placeholder: TagEditor.isrc-placeholder;
                     text <=> TagEditor.isrc;
                 }
-                LabeledInput {
+                TagField {
                     label: @tr("Copyright");
                     placeholder: TagEditor.copyright-placeholder;
                     text <=> TagEditor.copyright;
@@ -279,12 +305,12 @@ export component TagEditorBody inherits HorizontalLayout {
 
                 HorizontalLayout {
                     spacing: Theme.pad-sm;
-                    LabeledInput {
+                    TagField {
                         label: @tr("Record Label");
                         placeholder: TagEditor.label-placeholder;
                         text <=> TagEditor.label;
                     }
-                    LabeledInput {
+                    TagField {
                         label: @tr("Catalog Number");
                         placeholder: TagEditor.catalog-number-placeholder;
                         text <=> TagEditor.catalog-number;
@@ -292,12 +318,12 @@ export component TagEditorBody inherits HorizontalLayout {
                 }
                 HorizontalLayout {
                     spacing: Theme.pad-sm;
-                    LabeledInput {
+                    SheetField {
                         label: @tr("Barcode");
                         placeholder: TagEditor.barcode-placeholder;
                         text <=> TagEditor.barcode;
                     }
-                    LabeledInput {
+                    TagField {
                         // Translators: the physical medium a release came out on: CD, vinyl
                         label: @tr("Media");
                         placeholder: TagEditor.media-placeholder;
@@ -306,12 +332,12 @@ export component TagEditorBody inherits HorizontalLayout {
                 }
                 HorizontalLayout {
                     spacing: Theme.pad-sm;
-                    LabeledInput {
+                    TagField {
                         label: @tr("Release Type");
                         placeholder: TagEditor.release-type-placeholder;
                         text <=> TagEditor.release-type;
                     }
-                    LabeledInput {
+                    TagField {
                         label: @tr("Release Country");
                         placeholder: TagEditor.release-country-placeholder;
                         text <=> TagEditor.release-country;
@@ -321,6 +347,7 @@ export component TagEditorBody inherits HorizontalLayout {
                 DialogToggleRow {
                     label: @tr("Part of a compilation");
                     checked <=> TagEditor.compilation;
+                    enabled: !TagEditor.file-tags-locked;
                 }
             }
 
@@ -333,7 +360,7 @@ export component TagEditorBody inherits HorizontalLayout {
 
                     // Above the field rather than beside Save: it fills the box for the reader to
                     // check, where Save commits the whole dialog.
-                    if TagEditor.has-resident-lyrics: HorizontalLayout {
+                    if !TagEditor.file-tags-locked && TagEditor.has-resident-lyrics: HorizontalLayout {
                         alignment: start;
                         vertical-stretch: 0;
                         PillButton {
@@ -347,6 +374,7 @@ export component TagEditorBody inherits HorizontalLayout {
                         vertical-stretch: 1;
                         placeholder: TagEditor.lyrics-placeholder;
                         text <=> TagEditor.lyrics;
+                        read-only: TagEditor.file-tags-locked;
                     }
                 }
             }

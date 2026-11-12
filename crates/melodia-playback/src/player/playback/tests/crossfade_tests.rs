@@ -2,11 +2,12 @@
 //! predicates that decide when a transition becomes a crossfade.
 
 use super::{
-    ABORT_RAMP_MS, CrossfadeSettings, CrossfadeShared, DEFAULT_CROSSFADE_MS, FadeShared,
+    ABORT_RAMP_MS, CrossfadeSettings, CrossfadeShared, DEFAULT_CROSSFADE_MS, FadeShared, Joint,
     MAX_CROSSFADE_MS, MIN_CROSSFADE_MS, MIN_FADE_MS, clamp_crossfade_ms, crossfade_eligible,
-    crossfade_ms_to_secs, is_unity_target, manual_fade_ms, ramp_gain, same_album,
+    crossfade_ms_to_secs, is_unity_target, joint, manual_fade_ms, ramp_gain, same_album,
     secs_to_crossfade_ms, should_crossfade,
 };
+use melodia_core::entities::cue::{CueFrames, CueSpan, CueTrack};
 use melodia_core::entities::track::TrackSummary;
 
 // --- helpers ---------------------------------------------------------------
@@ -30,6 +31,8 @@ fn track(album: Option<&str>, artist: Option<&str>) -> TrackSummary {
         id: 1,
         file_path: "/music/a.flac".into(),
         file_name: "a.flac".into(),
+        cue_track: None,
+        span: None,
         title: "A".into(),
         artist: artist.map(Into::into),
         album: album.map(Into::into),
@@ -232,39 +235,123 @@ fn same_album_distinguishes_albums_and_artists() {
     assert!(!same_album(&a, &track(None, Some("Radiohead"))));
 }
 
+// --- joint -----------------------------------------------------------------
+
+/// Track `track` of a cue sheet over `path`, from `start` to `end` in cue frames.
+fn cue_track(path: &str, track: i64, start: u32, end: Option<u32>) -> TrackSummary {
+    let frames = |count: u32| CueFrames::try_from(i64::from(count)).ok();
+    TrackSummary {
+        file_path: path.into(),
+        cue_track: CueTrack::try_from(track).ok(),
+        span: frames(start).and_then(|start| CueSpan::new(start, end.and_then(frames)).ok()),
+        ..self::track(Some("Disc"), Some(&format!("Performer {track}")))
+    }
+}
+
+#[test]
+fn the_next_track_of_one_image_starting_where_this_one_ends_continues_it() {
+    let first = cue_track("/music/disc.flac", 1, 0, Some(13_500));
+    let second = cue_track("/music/disc.flac", 2, 13_500, None);
+
+    assert_eq!(joint(Some(&first), &second), Joint::Continuous);
+}
+
+#[test]
+fn two_tracks_of_one_image_not_meeting_are_the_same_album() {
+    let rows = [
+        (
+            "skipping a track",
+            cue_track("/music/disc.flac", 1, 0, Some(13_500)),
+            cue_track("/music/disc.flac", 3, 31_500, None),
+        ),
+        (
+            "played backwards",
+            cue_track("/music/disc.flac", 2, 13_500, Some(31_500)),
+            cue_track("/music/disc.flac", 1, 0, Some(13_500)),
+        ),
+        (
+            "the last track then the first",
+            cue_track("/music/disc.flac", 3, 31_500, None),
+            cue_track("/music/disc.flac", 1, 0, Some(13_500)),
+        ),
+    ];
+    for (label, current, next) in rows {
+        assert_eq!(joint(Some(&current), &next), Joint::SameAlbum, "{label}");
+    }
+}
+
+/// A span starting where this one ends means nothing in another file.
+#[test]
+fn a_cue_track_of_another_file_meets_by_its_tags() {
+    let first = cue_track("/music/disc-1.flac", 1, 0, Some(13_500));
+    let same_tags = cue_track("/music/disc-2.flac", 1, 13_500, None);
+    let other_album = TrackSummary { album: Some("Other".into()), ..same_tags.clone() };
+
+    let joints = [joint(Some(&first), &same_tags), joint(Some(&first), &other_album)];
+
+    assert_eq!(joints, [Joint::SameAlbum, Joint::Unrelated]);
+}
+
+#[test]
+fn a_whole_file_meets_by_its_tags() {
+    let kid_a = track(Some("Kid A"), Some("Radiohead"));
+    let rows = [
+        (track(Some("Kid A"), Some("Radiohead")), Joint::SameAlbum),
+        (track(Some("Amnesiac"), Some("Radiohead")), Joint::Unrelated),
+    ];
+    for (next, expected) in rows {
+        assert_eq!(joint(Some(&kid_a), &next), expected, "{:?}", next.album);
+    }
+}
+
+#[test]
+fn nothing_playing_meets_nothing() {
+    assert_eq!(joint(None, &track(Some("Kid A"), Some("Radiohead"))), Joint::Unrelated);
+}
+
 // --- crossfade_eligible ----------------------------------------------------
+
+/// A fade there would be heard as a dip mid-song.
+#[test]
+fn a_continuous_joint_never_fades_whatever_the_settings() {
+    let mut allow = settings();
+    allow.skip_same_album = false;
+    for (label, xf) in [("skipping same album", settings()), ("fading every joint", allow)] {
+        assert!(!crossfade_eligible(xf, false, Some(Joint::Continuous)), "{label}");
+    }
+}
 
 #[test]
 fn eligible_in_the_ordinary_case() {
-    assert!(crossfade_eligible(settings(), false, true, false));
+    assert!(crossfade_eligible(settings(), false, Some(Joint::Unrelated)));
 }
 
 #[test]
 fn ineligible_when_disabled_or_zero_length_or_last_track() {
     let mut off = settings();
     off.enabled = false;
-    assert!(!crossfade_eligible(off, false, true, false));
+    assert!(!crossfade_eligible(off, false, Some(Joint::Unrelated)));
 
     let mut zero = settings();
     zero.duration_ms = 0;
-    assert!(!crossfade_eligible(zero, false, true, false));
+    assert!(!crossfade_eligible(zero, false, Some(Joint::Unrelated)));
 
-    assert!(!crossfade_eligible(settings(), false, false, false), "no next track");
+    assert!(!crossfade_eligible(settings(), false, None), "no next track");
 }
 
 #[test]
 fn ineligible_when_the_sleep_timer_will_pause_at_track_end() {
     // The track has to drain to `EndOfStream` — the only boundary that gate sees.
-    assert!(!crossfade_eligible(settings(), true, true, false));
+    assert!(!crossfade_eligible(settings(), true, Some(Joint::Unrelated)));
 }
 
 #[test]
 fn same_album_is_skipped_only_when_the_option_is_on() {
-    assert!(!crossfade_eligible(settings(), false, true, true));
+    assert!(!crossfade_eligible(settings(), false, Some(Joint::SameAlbum)));
 
     let mut allow = settings();
     allow.skip_same_album = false;
-    assert!(crossfade_eligible(allow, false, true, true));
+    assert!(crossfade_eligible(allow, false, Some(Joint::SameAlbum)));
 }
 
 // --- should_crossfade ------------------------------------------------------

@@ -6,8 +6,8 @@ use std::collections::HashMap;
 use rusqlite::Transaction;
 
 use super::{
-    NameCache, ResolvedIds, prune_orphans, resolve_track_context, update_album_artwork_from_tracks,
-    update_track_metadata,
+    NameCache, ResolvedIds, TrackFolder, prune_orphans, resolve_track_context,
+    update_album_artwork_from_tracks, update_track_metadata,
 };
 use crate::database::queries::{album, playlist, track};
 use crate::database::{DbPool, chunked_in_query};
@@ -36,7 +36,7 @@ pub enum Retag {
 ///
 /// **Ids only**: a hit skips `upsert_album`'s release columns, so the first file to resolve a key
 /// writes them. Right for the dialog, where every selected file receives the same values.
-type ResolveKey = (i64, String, String, String, Option<i32>, String);
+type ResolveKey = (TrackFolder, String, String, String, Option<i32>, String);
 
 /// Resolves ids for each file, refreshes its row and applies the artwork override the metadata
 /// UPDATE can't express, answering in `files`' order.
@@ -84,7 +84,7 @@ fn refresh_rows(
 
     for file in files {
         // A tag edit moves no file, so the row stays under its folder, an import's included.
-        let Some(&folder_id) = folder_of.get(&file.id) else {
+        let Some(&folder) = folder_of.get(&file.id) else {
             outcomes.push(Retag::Gone);
             continue;
         };
@@ -92,7 +92,7 @@ fn refresh_rows(
         // The **first** credited names, as `resolve_track_context` reads them, or a hit answers
         // with ids it would never produce.
         let key: ResolveKey = (
-            folder_id,
+            folder,
             meta.artist.primary_name().to_owned(),
             meta.album.clone().unwrap_or_default(),
             meta.album_artist.primary_name().to_owned(),
@@ -102,17 +102,20 @@ fn refresh_rows(
         let rids = if let Some(cached) = resolve_cache.get(&key) {
             *cached
         } else {
-            let resolved = resolve_track_context(tx, folder_id, meta, &mut names)?;
+            let resolved = resolve_track_context(tx, folder, meta, &mut names)?;
             resolve_cache.insert(key, resolved);
             resolved
         };
 
-        update_track_metadata(tx, &file.path, meta, &rids, &mut names)?;
+        if !update_track_metadata(tx, &file.path, meta, &rids, &mut names)? {
+            outcomes.push(Retag::Gone);
+            continue;
+        }
         updated_ids.push(file.id);
         outcomes.push(Retag::Updated);
 
         if !cleared_release.is_empty()
-            && let Some(aid) = rids.album_id
+            && let Some(aid) = rids.album_id()
             && !cleared_album_ids.contains(&aid)
         {
             cleared_album_ids.push(aid);
@@ -122,7 +125,7 @@ fn refresh_rows(
         // Replaced file re-extracts to the *external* cover, which shadows the one just embedded.
         match edit.artwork {
             ArtworkEdit::Replace => {
-                if let Some(aid) = rids.album_id {
+                if let Some(aid) = rids.album_id() {
                     album_ids.push(aid);
                 }
             }
@@ -168,13 +171,29 @@ fn refresh_rows(
     Ok(outcomes)
 }
 
-/// `track id → folder_id` of the rows behind `files`. A row deleted since the edit began has none.
-fn folder_ids(tx: &Transaction<'_>, files: &[RetaggedFile]) -> Result<HashMap<i64, i64>, AppError> {
+/// `track id → folder` of the rows behind `files`. A row deleted since the edit began has none.
+fn folder_ids(
+    tx: &Transaction<'_>,
+    files: &[RetaggedFile],
+) -> Result<HashMap<i64, TrackFolder>, AppError> {
     let ids: Vec<i64> = files.iter().map(|file| file.id).collect();
-    let rows: Vec<(i64, i64)> = chunked_in_query(tx, &ids, |placeholders| {
-        format!("SELECT id, folder_id FROM tracks WHERE id IN ({placeholders})")
+    let rows: Vec<(i64, i64, bool)> = chunked_in_query(tx, &ids, |placeholders| {
+        format!(
+            "SELECT t.id, t.folder_id, f.is_enabled FROM tracks t \
+             JOIN folders f ON f.id = t.folder_id WHERE t.id IN ({placeholders})"
+        )
     })?;
-    Ok(rows.into_iter().collect())
+    Ok(rows
+        .into_iter()
+        .map(|(id, folder_id, in_library)| {
+            let folder = if in_library {
+                TrackFolder::Library(folder_id)
+            } else {
+                TrackFolder::Outside(folder_id)
+            };
+            (id, folder)
+        })
+        .collect())
 }
 
 /// Overwrites every updated track's and album's cover with the one just cached, the roll-up only

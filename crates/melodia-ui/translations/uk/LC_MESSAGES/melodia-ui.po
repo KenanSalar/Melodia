@@ -260,6 +260,10 @@ msgstr[2] "{n} копій"
 msgid "Now Playing"
 msgstr "Зараз грає"
 
+#: ui/components/dialog/duplicate-row.slint
+msgid "From a cue sheet"
+msgstr "З CUE-файлу"
+
 #. Translators: {} is the day the copy joined the library, as 2026-11-02.
 #: ui/components/dialog/duplicate-row.slint
 msgid "Added {}"
@@ -795,6 +799,18 @@ msgstr "Автор реміксу"
 #: ui/components/dialog/tag-editor-body.slint
 msgid "Replace…"
 msgstr "Замінити…"
+
+#: ui/components/dialog/tag-editor-body.slint
+msgid "The hidden audio before a cue sheet's first track can't be edited here."
+msgstr "Прихований звук перед першим треком CUE-файлу тут змінити не можна."
+
+#: ui/components/dialog/tag-editor-body.slint
+msgid "This track's cue sheet is the track list inside its FLAC file, which holds no titles and can't be edited here."
+msgstr "CUE-файлом цього треку є список треків усередині його FLAC-файлу: у ньому немає назв, і тут його змінити не можна."
+
+#: ui/components/dialog/tag-editor-body.slint
+msgid "Changes are saved to the cue sheet, where album, album artist, disc and barcode apply to every track it lists. Fields a cue sheet can't hold are read-only."
+msgstr "Зміни зберігаються в CUE-файл, де альбом, виконавець альбому, диск і штрихкод стосуються всіх перелічених у ньому треків. Поля, яких CUE-файл не може зберігати, доступні лише для читання."
 
 #: ui/components/dialog/tag-editor-body.slint ui/settings.slint
 msgid "Details"

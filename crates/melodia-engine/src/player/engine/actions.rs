@@ -34,18 +34,18 @@ fn run<B: PlayerBackend>(
         // Per action is fine: nothing periodic reaches here.
         log::debug!("player: {action}");
         match action {
-            PlayerAction::PlayMedia { file_path, volume, speed, start_position_ms, replaygain } => {
+            PlayerAction::PlayMedia { audio, volume, speed, start_position_ms, replaygain } => {
                 start_or_skip(
                     &mut pending,
                     engine,
                     player_state,
                     sinks,
-                    &file_path,
+                    &audio.path,
                     StartMode::Fresh,
-                    || engine.play_media(&file_path, volume, speed, start_position_ms, replaygain),
+                    || engine.play_media(&audio, volume, speed, start_position_ms, replaygain),
                 );
             }
-            PlayerAction::BeginCrossfade { file_path, replaygain, fade_ms, volume, speed } => {
+            PlayerAction::BeginCrossfade { audio, replaygain, fade_ms, volume, speed } => {
                 // Already advanced onto this track, so a failure's skip lands on the one after,
                 // stepping off a `RepeatMode::One` track too.
                 start_or_skip(
@@ -53,16 +53,16 @@ fn run<B: PlayerBackend>(
                     engine,
                     player_state,
                     sinks,
-                    &file_path,
+                    &audio.path,
                     StartMode::Crossfade,
-                    || engine.begin_crossfade(&file_path, replaygain, fade_ms, volume, speed),
+                    || engine.begin_crossfade(&audio, replaygain, fade_ms, volume, speed),
                 );
             }
             PlayerAction::Resume => engine.resume(),
             PlayerAction::Pause { fade_ms } => engine.pause_with_fade(fade_ms),
             PlayerAction::Stop { fade_ms } => engine.stop_with_fade(fade_ms),
-            PlayerAction::Seek { position_ms, file_path, replaygain } => {
-                engine.seek(&file_path, position_ms, replaygain);
+            PlayerAction::Seek { position_ms, audio, replaygain } => {
+                engine.seek(&audio, position_ms, replaygain);
                 if let Some(mc) = sinks.media_controls.as_ref() {
                     mc.seeked(position_ms);
                 }

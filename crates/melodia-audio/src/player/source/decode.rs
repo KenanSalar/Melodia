@@ -85,6 +85,14 @@ pub(super) fn ticks_to_frames(
     u64::try_from(frames).ok()
 }
 
+/// [`ticks_to_frames`]' inverse, rounded down as the demuxers round a `Time`; exact wherever the
+/// timebase is the sample rate's.
+pub(super) fn frames_to_ticks(frames: u64, time_base: TimeBase, rate: SampleRate) -> Option<u64> {
+    let scaled = u128::from(frames) * u128::from(time_base.denom.get());
+    let denom = u128::from(time_base.numer.get()) * u128::from(rate.get());
+    u64::try_from(scaled / denom).ok()
+}
+
 /// By value, to rewrite an HE-AAC config on the way past ([`super::aac_config`]). The error goes
 /// back unwrapped, the caller being the one that can name the file or station.
 pub(super) fn make_decoder(

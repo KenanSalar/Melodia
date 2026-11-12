@@ -1,4 +1,5 @@
 use melodia_core::entities::audio_quality::AudioFormat;
+use melodia_core::entities::cue::CueSpan;
 use melodia_core::entities::duplicates::{DuplicateCopy, KeptOutFile};
 
 use super::by_name;
@@ -10,6 +11,7 @@ by_name!(DuplicateCopy {
     file_path,
     file_hash,
     file_size,
+    span: Option<CueSpan>,
     title,
     artist,
     album,

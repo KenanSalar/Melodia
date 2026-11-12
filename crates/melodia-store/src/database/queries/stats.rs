@@ -3,10 +3,10 @@ use rusqlite::Transaction;
 use crate::database::sql::{self, Sql};
 use melodia_core::error::AppError;
 
-// Must match the stats triggers `migrations/20260910000000_tag_vocabulary.sql` creates: the three
-// `tracks_stats_*` in its second half, the six join-table ones in its first. The artist and genre
-// counts mean "credited on", so their arms sit on the join tables, and only the duration still
-// moves with a `tracks` row.
+// Must match the stats triggers the migrations last created: the two on `album_artists` in
+// `migrations/20260910000000_tag_vocabulary.sql`, the rest in `20261110000000_cue_tracks.sql`. The
+// artist and genre counts mean "credited on", so their arms sit on the join tables, and only the
+// duration still moves with a `tracks` row.
 
 const CREATE_TRACKS_STATS_INSERT: &str = r"
 CREATE TRIGGER IF NOT EXISTS tracks_stats_insert AFTER INSERT ON tracks BEGIN

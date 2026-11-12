@@ -10,6 +10,8 @@ import { FocusLossWatcher } from "focus-loss-watcher.slint";
 export component TextEditMenu inherits Rectangle {
     // An empty field has nothing to cut, copy or select.
     in property <bool> has-text;
+    // A read-only field offers only what leaves it as it is.
+    in property <bool> read-only;
     out property <bool> is-open: menu.is-open;
 
     callback cut();
@@ -48,7 +50,7 @@ export component TextEditMenu inherits Rectangle {
                 padding: ContextMenuMetrics.inset;
                 spacing: 0;
 
-                if root.has-text: MenuItem {
+                if root.has-text && !root.read-only: MenuItem {
                     label: @tr("Cut");
                     icon: "content_cut";
                     clicked => { root.cut(); }
@@ -58,7 +60,7 @@ export component TextEditMenu inherits Rectangle {
                     icon: "content_copy";
                     clicked => { root.copy(); }
                 }
-                MenuItem {
+                if !root.read-only: MenuItem {
                     label: @tr("Paste");
                     icon: "content_paste";
                     clicked => { root.paste(); }

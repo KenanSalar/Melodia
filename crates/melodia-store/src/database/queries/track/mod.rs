@@ -6,6 +6,7 @@ mod credits;
 mod duplicate_merge;
 mod duplicates;
 mod entity_ids;
+pub(crate) mod file_rows;
 #[cfg(test)]
 mod full_rows;
 mod keyset;
@@ -33,7 +34,7 @@ pub use search_text::*;
 pub use write::*;
 
 /// `ids` as the JSON array `json_each` reads, so a set of any size is one bind.
-fn json_array(ids: &[i64]) -> String {
+pub(crate) fn json_array(ids: &[i64]) -> String {
     let items: Vec<String> = ids.iter().map(i64::to_string).collect();
     format!("[{}]", items.join(","))
 }

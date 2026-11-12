@@ -7,6 +7,7 @@ import { ToggleSwitch } from "../settings/toggle-switch.slint";
 export component DialogToggleRow inherits HorizontalLayout {
     in property <string> label;
     in-out property <bool> checked;
+    in property <bool> enabled: true;
 
     callback toggled(bool);
 
@@ -16,6 +17,7 @@ export component DialogToggleRow inherits HorizontalLayout {
 
     ToggleSwitch {
         checked <=> root.checked;
+        enabled: root.enabled;
         toggled(v) => { root.toggled(v); }
     }
     Text {

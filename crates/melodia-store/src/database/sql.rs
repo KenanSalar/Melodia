@@ -14,6 +14,7 @@ use rusqlite::{
     CachedStatement, Connection, OptionalExtension, Params, Statement, ToSql, params_from_iter,
 };
 
+use melodia_core::entities::cue::{CueFrames, CueTrack};
 use melodia_core::entities::duplicates::DismissalSet;
 use melodia_core::error::AppError;
 
@@ -66,6 +67,29 @@ pub(crate) fn fetch_each<T: FromRow>(
         each(T::from_row(row, &columns)?);
     }
     Ok(())
+}
+
+/// Runs `unit` as one piece of the caller's transaction: what it wrote is rolled back if it fails,
+/// and the transaction goes on. What the caller cached from those writes is its own to roll back.
+///
+/// A full disk or an I/O error can roll the whole transaction back instead, leaving the connection
+/// in autocommit, where every later write commits on its own. A caller going on past a failed unit
+/// asks [`Connection::is_autocommit`] first, and gives up the batch where it answers `true`.
+pub(crate) fn in_savepoint<T>(
+    conn: &Connection,
+    unit: impl FnOnce() -> Result<T, AppError>,
+) -> Result<T, AppError> {
+    execute(conn, "SAVEPOINT unit", ())?;
+    let outcome = unit();
+    if conn.is_autocommit() {
+        // The savepoint went with the transaction, and a `ROLLBACK TO` would hide why.
+        return outcome;
+    }
+    if outcome.is_err() {
+        execute(conn, "ROLLBACK TO unit", ())?;
+    }
+    execute(conn, "RELEASE unit", ())?;
+    outcome
 }
 
 /// Escapes `%`, `_` and `\` for a `LIKE ? ESCAPE '\'` pattern.
@@ -239,6 +263,8 @@ param_from!(
     i32 => Integer,
     bool => Integer,
     DismissalSet => Integer,
+    CueTrack => Integer,
+    CueFrames => Integer,
     f64 => Real,
     String => Text,
     &str => Text,

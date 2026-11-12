@@ -6,13 +6,13 @@ use tokio::sync::watch;
 use crate::player::engine::actions::{emit_and_execute, execute_actions, start_awaited};
 use crate::player::engine::backend::PlayerBackend;
 use crate::player::engine::event_sink::{MediaControlsSync, PlayerSinks};
-use crate::player::engine::fixtures::test_track;
+use crate::player::engine::fixtures::{test_track, whole_file};
 use crate::player::engine::state::{
     AwaitedStart, PlayerAction, PlayerState, PlayerStateHandle, PlayerViewModelLight, lock_state,
     with_state_emit,
 };
 use crate::player::engine::types::{PlaybackStatus, RepeatMode};
-use melodia_core::entities::track::TrackSummary;
+use melodia_core::entities::track::{TrackAudio, TrackSummary};
 use melodia_core::error::AppError;
 use melodia_playback::player::playback::replaygain::TrackReplayGain;
 
@@ -20,7 +20,7 @@ use melodia_playback::player::playback::replaygain::TrackReplayGain;
 #[derive(Debug, Default)]
 struct MockBackendInner {
     play_media_calls: Vec<(String, f64, f64, Option<u64>)>,
-    /// `(file_path, fade_ms, volume, speed)` per `begin_crossfade`.
+    /// `(path, fade_ms, volume, speed)` per `begin_crossfade`.
     begin_crossfade_calls: Vec<(String, u64, f64, f64)>,
     resume_count: u32,
     /// `fade_ms` per `pause_with_fade`, including the `0`s that mean "immediate".
@@ -86,7 +86,7 @@ impl MockBackend {
 impl PlayerBackend for MockBackend {
     fn play_media(
         &self,
-        file_path: &str,
+        audio: &TrackAudio,
         volume: f64,
         speed: f64,
         start_position_ms: Option<u64>,
@@ -96,13 +96,13 @@ impl PlayerBackend for MockBackend {
         if inner.play_media_should_fail {
             return Err(AppError::player_msg("mock failure"));
         }
-        inner.play_media_calls.push((file_path.to_owned(), volume, speed, start_position_ms));
+        inner.play_media_calls.push((audio.path.clone(), volume, speed, start_position_ms));
         Ok(())
     }
 
     fn begin_crossfade(
         &self,
-        file_path: &str,
+        audio: &TrackAudio,
         _baked_rg: TrackReplayGain,
         fade_ms: u64,
         volume: f64,
@@ -112,7 +112,7 @@ impl PlayerBackend for MockBackend {
         if inner.begin_crossfade_should_fail {
             return Err(AppError::player_msg("mock crossfade failure"));
         }
-        inner.begin_crossfade_calls.push((file_path.to_owned(), fade_ms, volume, speed));
+        inner.begin_crossfade_calls.push((audio.path.clone(), fade_ms, volume, speed));
         Ok(())
     }
 
@@ -130,8 +130,8 @@ impl PlayerBackend for MockBackend {
         inner.stop_fade_calls.push(fade_ms);
         inner.stop_count += 1;
     }
-    fn seek(&self, file_path: &str, position_ms: u64, _baked_rg: TrackReplayGain) {
-        self.inner().seek_calls.push((file_path.to_owned(), position_ms));
+    fn seek(&self, audio: &TrackAudio, position_ms: u64, _baked_rg: TrackReplayGain) {
+        self.inner().seek_calls.push((audio.path.clone(), position_ms));
     }
     fn set_volume(&self, volume: f64) {
         self.inner().volume_calls.push(volume);
@@ -194,7 +194,7 @@ async fn execute_play_media_calls_backend() -> Result<(), AppError> {
     let mock = MockBackend::new();
 
     let actions = vec![PlayerAction::PlayMedia {
-        file_path: fx.track_path.clone(),
+        audio: whole_file(&fx.track_path),
         volume: 0.8,
         speed: 1.0,
         start_position_ms: Some(5000),
@@ -223,7 +223,7 @@ async fn execute_play_media_decode_failure_triggers_auto_skip() -> Result<(), Ap
     let mock = MockBackend::with_play_failure();
 
     let actions = vec![PlayerAction::PlayMedia {
-        file_path: fx.track_path.clone(),
+        audio: whole_file(&fx.track_path),
         volume: 0.5,
         speed: 1.0,
         start_position_ms: None,
@@ -247,7 +247,7 @@ async fn execute_play_media_vanished_file_pre_flights() -> Result<(), AppError> 
     let mock = MockBackend::new();
 
     let actions = vec![PlayerAction::PlayMedia {
-        file_path: "/nonexistent/track.mp3".to_owned(),
+        audio: whole_file("/nonexistent/track.mp3"),
         volume: 1.0,
         speed: 1.0,
         start_position_ms: None,
@@ -319,7 +319,7 @@ async fn execute_begin_crossfade_calls_backend() -> Result<(), AppError> {
     let mock = MockBackend::new();
 
     let actions = vec![PlayerAction::BeginCrossfade {
-        file_path: fx.track_path.clone(),
+        audio: whole_file(&fx.track_path),
         replaygain: TrackReplayGain::default(),
         fade_ms: 1_800,
         volume: 0.8,
@@ -347,7 +347,7 @@ async fn execute_begin_crossfade_vanished_file_skips_without_stopping() -> Resul
     let mock = MockBackend::new();
 
     let actions = vec![PlayerAction::BeginCrossfade {
-        file_path: "/nonexistent/track.mp3".to_owned(),
+        audio: whole_file("/nonexistent/track.mp3"),
         replaygain: TrackReplayGain::default(),
         fade_ms: 2_000,
         volume: 1.0,
@@ -368,7 +368,7 @@ async fn execute_begin_crossfade_decode_failure_triggers_auto_skip() -> Result<(
     let mock = MockBackend::with_crossfade_failure();
 
     let actions = vec![PlayerAction::BeginCrossfade {
-        file_path: fx.track_path.clone(),
+        audio: whole_file(&fx.track_path),
         replaygain: TrackReplayGain::default(),
         fade_ms: 2_000,
         volume: 1.0,
@@ -390,7 +390,7 @@ async fn execute_seek_calls_backend() -> Result<(), AppError> {
 
     let actions = vec![PlayerAction::Seek {
         position_ms: 30_000,
-        file_path: "/music/a.flac".to_owned(),
+        audio: whole_file("/music/a.flac"),
         replaygain: TrackReplayGain::default(),
     }];
 
@@ -433,7 +433,7 @@ fn a_seek_tells_the_media_controls_where_it_landed() -> Result<(), AppError> {
     let sinks = PlayerSinks { media_controls: Some(media_controls), ..make_test_sinks() };
     let actions = vec![PlayerAction::Seek {
         position_ms: 30_000,
-        file_path: "/music/a.flac".to_owned(),
+        audio: whole_file("/music/a.flac"),
         replaygain: TrackReplayGain::default(),
     }];
 
@@ -465,7 +465,7 @@ async fn execute_multiple_actions_in_order() -> Result<(), AppError> {
 
     let actions = vec![
         PlayerAction::PlayMedia {
-            file_path: fx.track_path.clone(),
+            audio: whole_file(&fx.track_path),
             volume: 1.0,
             speed: 1.0,
             start_position_ms: None,

@@ -2,15 +2,16 @@
 //! into a `TempDir`.
 //!
 //! What is worth pinning here is not the ingest underneath, which the scan suites already cover,
-//! but the two decisions this module makes over it: which of a dropped batch is refused before
-//! the scan runs at all, and the existing-versus-new split that decides whether a file the user
-//! drops twice is imported twice.
+//! but the decisions this module makes over it: which of a dropped batch is refused before the
+//! scan runs at all, the existing-versus-new split that decides whether a file the user drops
+//! twice is imported twice, and the order the batch plays in.
 
 use tempfile::TempDir;
 
 use super::*;
 use melodia_artwork::media::image::artwork;
 use melodia_core::error::AppError;
+use melodia_engine::player::engine::fixtures::test_track;
 use melodia_testkit::ASSETS_DIR;
 
 /// A staging root plus the artwork directory the scan writes any embedded cover into.
@@ -49,7 +50,7 @@ async fn a_drop_keeps_what_it_can_read_and_names_the_rest() -> Result<(), AppErr
     let result = import_files(&db, &artwork_dir, &artwork::new_cover_cache(), &batch).await?;
 
     assert_eq!(result.imported_count, 1, "the readable file must survive its neighbours");
-    assert_eq!(result.track_ids.len(), 1);
+    assert_eq!(result.opened.concat().len(), 1);
     assert_eq!(result.failed_paths.len(), 2, "both refusals owe the user a named path");
     Ok(())
 }
@@ -68,7 +69,7 @@ async fn a_drop_with_nothing_importable_reports_every_path_and_imports_none() ->
 
     let result = import_files(&db, &artwork_dir, &artwork::new_cover_cache(), &batch).await?;
 
-    assert!(result.track_ids.is_empty());
+    assert!(result.opened.is_empty());
     assert_eq!(result.imported_count, 0);
     assert_eq!(result.failed_paths.len(), 2);
     Ok(())
@@ -90,8 +91,41 @@ async fn a_file_already_in_the_library_keeps_its_id_and_is_not_imported_again()
 
     let second = import_files(&db, &artwork_dir, &cover_cache, &batch).await?;
     assert_eq!(second.imported_count, 0, "the same file is not an import the second time");
-    assert_eq!(second.track_ids, first.track_ids, "and comes back as the row it already was");
+    assert_eq!(second.opened, first.opened, "and comes back as the row it already was");
     Ok(())
+}
+
+/// One opened file's track titled `title`, under `id`.
+fn opened(id: i64, title: &str) -> Vec<Arc<TrackSummary>> {
+    let mut summary = (*test_track(title, None, None)).clone();
+    summary.id = id;
+    vec![Arc::new(summary)]
+}
+
+/// Files from outside arrive in visual selection order on KDE and GNOME, not alphabetical, and
+/// `natord` is what puts "Track 2" ahead of "Track 10".
+#[test]
+fn a_dropped_batch_is_ordered_the_way_a_list_is() {
+    let batch = vec![opened(1, "Track 10"), opened(2, "Track 9"), opened(3, "Track 1")];
+
+    let played = in_play_order(batch);
+
+    assert_eq!(
+        played.iter().map(|t| t.title.as_str()).collect::<Vec<_>>(),
+        ["Track 1", "Track 9", "Track 10"],
+        "a byte compare puts 10 ahead of 9, which is every numbered album out of order"
+    );
+}
+
+/// The sort is stable, so a batch the tags cannot tell apart keeps the order the file manager
+/// handed it over in rather than an arbitrary one.
+#[test]
+fn equal_titles_keep_the_order_the_drop_handed_over() {
+    let batch = vec![opened(7, "Untitled"), opened(3, "Untitled"), opened(5, "Untitled")];
+
+    let played = in_play_order(batch);
+
+    assert_eq!(played.iter().map(|t| t.id).collect::<Vec<_>>(), [7, 3, 5]);
 }
 
 /// `summaries` is the only thing separating the two entry points, and the queue's drop path reads
@@ -105,8 +139,8 @@ async fn summaries_arrive_one_per_id_and_the_ids_only_half_fetches_none() -> Res
     let batch = vec![drop_file(tmp.path(), "a.mp3")?, drop_file(tmp.path(), "b.mp3")?];
 
     let summarized = import_and_summarize(&db, &artwork_dir, &cover_cache, &batch).await?;
-    assert_eq!(summarized.track_ids.len(), 2);
-    assert_eq!(summarized.summaries.len(), summarized.track_ids.len());
+    assert_eq!(summarized.opened.concat().len(), 2);
+    assert_eq!(summarized.summaries.len(), summarized.opened.concat().len());
 
     let ids_only = import_files(&db, &artwork_dir, &cover_cache, &batch).await?;
     assert!(ids_only.summaries.is_empty());

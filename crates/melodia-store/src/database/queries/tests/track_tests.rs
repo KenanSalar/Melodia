@@ -305,11 +305,10 @@ async fn get_track_ids_by_paths() -> Result<(), AppError> {
         "/music/beta.mp3".to_owned(),
         "/nonexistent.mp3".to_owned(),
     ];
-    let map = queries::track::get_track_ids_by_paths(&db, &paths).await?;
-    assert_eq!(map.len(), 2);
-    assert!(map.contains_key("/music/alpha.mp3"));
-    assert!(map.contains_key("/music/beta.mp3"));
-    assert!(!map.contains_key("/nonexistent.mp3"));
+    let found = queries::track::get_track_ids_by_paths(&db, &paths).await?;
+    assert_eq!(found.ids("/music/alpha.mp3").count(), 1);
+    assert_eq!(found.ids("/music/beta.mp3").count(), 1);
+    assert!(!found.contains("/nonexistent.mp3"));
     Ok(())
 }
 
@@ -322,21 +321,23 @@ async fn get_track_ids_by_hashes() -> Result<(), AppError> {
     let beta = blake3::hash(b"Beta").to_hex().to_string();
     let unknown = blake3::hash(b"Nope").to_hex().to_string();
 
-    let map = queries::track::get_track_ids_by_hashes(
+    let found = queries::track::get_track_ids_by_hashes(
         &db,
         vec![alpha.clone(), beta.clone(), unknown.clone()],
     )
     .await?;
 
-    assert_eq!(map.len(), 2);
-    assert!(map.contains_key(&alpha));
-    assert!(map.contains_key(&beta));
-    assert!(!map.contains_key(&unknown));
+    assert!(found.contains(&alpha));
+    assert!(found.contains(&beta));
+    assert!(!found.contains(&unknown));
 
     // The alpha hash resolves to the same id as the alpha path.
     let by_path =
         queries::track::get_track_ids_by_paths(&db, &["/music/alpha.mp3".to_owned()]).await?;
-    assert_eq!(map.get(&alpha), by_path.get("/music/alpha.mp3"));
+    assert_eq!(
+        found.ids(&alpha).collect::<Vec<_>>(),
+        by_path.ids("/music/alpha.mp3").collect::<Vec<_>>()
+    );
     Ok(())
 }
 
@@ -909,16 +910,16 @@ async fn get_tag_edit_rows_by_ids_projects_and_preserves_order() -> Result<(), A
 }
 
 #[tokio::test]
-async fn get_track_paths_by_ids_returns_pairs_in_input_order() -> Result<(), AppError> {
+async fn get_whole_file_paths_by_ids_returns_pairs_in_input_order() -> Result<(), AppError> {
     let db = seed_db().await?;
     let ids = ids_in_insert_order(&db).await?;
 
-    let pairs = queries::track::get_track_paths_by_ids(&db, &[ids[2], ids[0]]).await?;
+    let pairs = queries::track::get_whole_file_paths_by_ids(&db, &[ids[2], ids[0]]).await?;
     assert_eq!(pairs.len(), 2);
     assert_eq!(pairs[0], (ids[2], "/music/gamma.mp3".to_owned()));
     assert_eq!(pairs[1], (ids[0], "/music/alpha.mp3".to_owned()));
 
-    let empty = queries::track::get_track_paths_by_ids(&db, &[]).await?;
+    let empty = queries::track::get_whole_file_paths_by_ids(&db, &[]).await?;
     assert!(empty.is_empty());
     Ok(())
 }

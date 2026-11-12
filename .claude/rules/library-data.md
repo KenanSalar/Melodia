@@ -1,8 +1,10 @@
 ---
 paths:
   - crates/melodia-app/src/library/**/*.rs
+  - crates/melodia-app/src/tasks/file_event_processor/**/*.rs
   - crates/melodia-store/src/database/**/*.rs
   - crates/melodia-store/src/media/ingest/**/*.rs
+  - crates/melodia-store/src/media/cue/**/*.rs
   - crates/melodia-core/src/utils/audio_ext.rs
   - crates/melodia-core/src/utils/fold.rs
   - crates/melodia-core/src/utils/trash_dir.rs
@@ -11,6 +13,7 @@ paths:
   - crates/melodia-views/src/ui/playlists/**/*.rs
   - crates/melodia-ui/ui/views/my-library/playlist-detail.slint
   - crates/melodia-ui/ui/components/track-list/track-context-menu.slint
+  - crates/melodia-ui/ui/components/dialog/tag-editor-body.slint
   - migrations/**/*.sql
 ---
 
@@ -23,18 +26,55 @@ paths:
 - **A column naming a stored file joins `queries::artwork::ARTWORK_COLUMNS` in the migration that
   adds it**, or the artwork sweep deletes what it names. An undo that writes back a row naming a
   file nothing can rebuild holds it in an `ArtworkHold` taken before the delete commits.
-- **`utils::audio_ext::is_audio_extension` is the one audio-extension predicate**; never re-roll a
-  lowercase-and-contains at a new call site.
+- **`utils::audio_ext::is_audio_extension` is the one audio-extension predicate**, and
+  `is_cue_sheet` the one cue-sheet one; never re-roll a lowercase-and-contains at a new call site.
+- **An image a cue sheet claims never reaches the ordinary ingest**: the planner
+  (`media::cue::plan`) takes it out of a scan's files, a watcher batch's events
+  (`file_event_processor::sheets`) and an import's files (`library::import`), and its sheet's job
+  writes its tracks (`queries::scan::cue_units`). A sheet claims a file it carves into two or more
+  rows, one sheet wins an image, and a sheet that fails to read keeps its claim. A new path that
+  ingests a file a sheet may claim asks the planner, or the image gets a whole-file row beside its
+  tracks.
+- **A sheet inside a FLAC is carved where the file's read is written** (`media::cue::embedded::carve`),
+  after a `.cue`'s images are taken out and ahead of its jobs (`ingest::ingest_chunk`, the
+  watcher's `handle_embedded`), so a `.cue` wins and one letting go hands the rows to the sheet
+  inside by number. A new path writing a file's read asks it too, or the image keeps a whole-file
+  row, and a file read as `EmbeddedCue::Unread` keeps the tracks its sheet carved.
 - **`utils::trash_dir` is the one trash-folder predicate**: a walk or watch that finds files by
   itself asks it, never a trash name of its own.
 - **Nothing inside a write transaction `stat`s a file**: a second `stat` can pair a new mtime with
   the previous scan's size, which then reads as current (`queries::scan::watch_batch`).
 - **A new ingest path consults `excluded_files` inside its inserting transaction, and a rename,
   move or rewrite carries an exclusion as it carries a row** (`queries::excluded_files`,
-  `scan::moves`), or a removed duplicate comes back.
+  `scan::moves`), or a removed duplicate comes back. An exclusion covers a whole file, so nothing
+  excludes a cue sheet's track (`DuplicateCopy::is_removable`).
+- **A track filed outside the library links to no album, artist or genre**
+  (`queries::scan::TrackFolder`): a write path resolves its ids through `resolve_track_context`
+  with the row's own folder, or a file opened from Downloads lands on the album, artist and genre
+  pages and in their counts. A library scan reads a row with no links as unstamped
+  (`file_rows::LINKED_STAMP`), which is what links an import a library folder absorbs.
+- **A cue sheet's track owns no file**: its image's tags, cover, lyrics and rating state the whole
+  disc. A write into a file reaches only rows that play it whole (`get_whole_file_paths_by_ids`),
+  and a read of a file's tags or lyrics for one track skips a sheet's (`TagEditRow::is_sheet_track`,
+  `lyrics::LyricsKey`) or lays its sheet over them (`cue::read_track_tags`).
+- **A sheet track's tags live in its sheet**: a tag edit writes what `media::cue::SheetEdit` carries
+  into the `.cue`, or the FLAC's `CUESHEET` comment where the sheet is inside the image
+  (`library::sheet_tags`), and drops the rest. What Edit Tags leaves open for a sheet track is
+  `tag-editor-body.slint`'s `SheetField`s, the editors bound to `TagEditor.read-only` alone and the
+  Credits tab's composer, so a field joining one side joins the other, or it saves into nothing.
 
 ## Query shape
 
+- **A statement keyed on a file's path says which of its rows it means**
+  (`queries::track::file_rows`): one reading or writing the file's own tags adds `WHOLE_FILE`, and
+  a move or a delete takes every row of the path, a file moving with all its rows. A cue sheet
+  splits one file into a row per track, so a bare `file_path = ?` reaches every one of them. A
+  lookup of ids by path or hash answers every row with its number (`queries::track::FileTracks`),
+  the caller matching on it or taking one file's rows whole, never one row picked at random.
+- **A statement listing, counting, searching or ranking the library's tracks adds `IN_LIBRARY`**
+  (`queries::track::file_rows`), or a file opened from outside every library folder shows in it.
+  Such a file keeps a row, which the queue, a playlist and every read by id reach, so
+  `missing_ids_on` asks every row, never the `Library` scope.
 - **`database::placeholders(n)` builds every IN list**, paired with `chunked_in_query`,
   `chunked_in_execute` for a statement that returns no rows, and `chunked_in_statements` for one
   binding a value ahead of its list; never re-roll `repeat_n("?", n)`, or the chunk loop for any of

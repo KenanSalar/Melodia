@@ -12,6 +12,7 @@ export component ControlledInput inherits FieldFrame {
     in property <string> text;
     in property <string> placeholder;
     in property <InputType> input-type: InputType.text;
+    in property <bool> read-only;
     callback edited(string);
 
     // Matches the `LabeledInput`s it sits between in the Tags tab, where a shorter field reads as a
@@ -27,6 +28,7 @@ export component ControlledInput inherits FieldFrame {
             text: root.text;
             placeholder: root.placeholder;
             input-type: root.input-type;
+            read-only: root.read-only;
             edited(t) => { root.edited(t); }
         }
     }

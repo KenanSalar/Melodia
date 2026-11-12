@@ -77,6 +77,7 @@ fn copy_row(copy: &DuplicateCopy, dismissed: bool) -> DuplicateRow {
     DuplicateRow {
         id: clamp_i64_to_i32(copy.id),
         dismissed,
+        removable: copy.is_removable(),
         file_name,
         format: format_label(&copy.format).into(),
         lossless: copy.format.is_lossless(),

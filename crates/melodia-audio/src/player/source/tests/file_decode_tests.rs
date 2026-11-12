@@ -8,10 +8,14 @@ use std::fs::File;
 use std::path::Path;
 use std::time::Duration;
 
+use tempfile::TempDir;
+
 use super::{FileDecoder, probe_duration};
 use crate::player::source::aac_trim;
 use crate::player::source::audio::{AudioSource, SourceFormat};
-use crate::player::source::tests::helpers::asset;
+use crate::player::source::tests::helpers::{asset, frame_indexed_wav, is_frame};
+use melodia_core::entities::cue::{CueFrames, CueSpan};
+use melodia_core::entities::track::TrackAudio;
 use melodia_core::error::AppError;
 
 /// The function exists for the containers lofty can't identify, so those are the cases worth
@@ -340,6 +344,94 @@ fn write_smpb(path: &Path, value: &str) -> Result<(), AppError> {
     ));
     ilst.save_to_path(path, WriteOptions::default())
         .map_err(|e| AppError::player("could not write iTunSMPB", e))
+}
+
+/// 30,000 frames at 48 kHz, 46.875 cue frames: every index fits a 16-bit sample.
+const INDEXED_FRAMES: i16 = 30_000;
+
+/// A cue track of a frame-indexed image from `start` to `end`, in cue frames of 640 samples.
+fn indexed_track(tmp: &TempDir, start: u32, end: Option<u32>) -> Result<TrackAudio, AppError> {
+    let path = tmp.path().join("image.wav");
+    frame_indexed_wav(&path, INDEXED_FRAMES)?;
+    let frames = |count: u32| CueFrames::try_from(i64::from(count));
+    let span = frames(start)
+        .and_then(|start| CueSpan::new(start, end.map(frames).transpose()?))
+        .map_err(|e| AppError::player("the test's cue span", e))?;
+    Ok(TrackAudio { path: path.to_string_lossy().into_owned(), span: Some(span) })
+}
+
+fn played(audio: &TrackAudio) -> Result<Vec<f32>, AppError> {
+    Ok(FileDecoder::open_track(audio)?.collect())
+}
+
+/// The sheet's boundaries land on samples 9,600 and 19,200, and the last sample played is the one
+/// before the end.
+#[test]
+fn a_cue_track_plays_from_its_first_sample_to_its_last() -> Result<(), AppError> {
+    let tmp = TempDir::new()?;
+
+    let samples = played(&indexed_track(&tmp, 15, Some(30))?)?;
+
+    let shape = (samples.len(), is_frame(samples.first(), 9_600), is_frame(samples.last(), 19_199));
+    assert_eq!(shape, (9_600, true, true), "{:?}..{:?}", samples.first(), samples.last());
+    Ok(())
+}
+
+#[test]
+fn the_last_cue_track_plays_to_the_end_of_its_file() -> Result<(), AppError> {
+    let tmp = TempDir::new()?;
+
+    let samples = played(&indexed_track(&tmp, 15, None)?)?;
+
+    let shape = (samples.len(), is_frame(samples.first(), 9_600), is_frame(samples.last(), 29_999));
+    assert_eq!(shape, (20_400, true, true), "{:?}..{:?}", samples.first(), samples.last());
+    Ok(())
+}
+
+#[test]
+fn a_cue_track_states_its_own_length() -> Result<(), AppError> {
+    let tmp = TempDir::new()?;
+    let rows = [(Some(30), 200), (None, 425)];
+    for (end, millis) in rows {
+        let decoder = FileDecoder::open_track(&indexed_track(&tmp, 15, end)?)?;
+        assert_eq!(decoder.total_duration(), Some(Duration::from_millis(millis)), "to {end:?}");
+    }
+    Ok(())
+}
+
+#[test]
+fn a_seek_counts_from_the_cue_track_s_first_sample() -> Result<(), AppError> {
+    let tmp = TempDir::new()?;
+    let mut decoder = FileDecoder::open_track(&indexed_track(&tmp, 15, Some(30))?)?;
+
+    decoder.try_seek(Duration::from_millis(50)).map_err(|e| AppError::player("seek", e))?;
+
+    assert!(is_frame(decoder.next().as_ref(), 12_000));
+    Ok(())
+}
+
+#[test]
+fn a_seek_past_a_cue_track_s_end_stops_short_of_it() -> Result<(), AppError> {
+    let tmp = TempDir::new()?;
+    let mut decoder = FileDecoder::open_track(&indexed_track(&tmp, 15, Some(30))?)?;
+
+    decoder.try_seek(Duration::from_secs(10)).map_err(|e| AppError::player("seek", e))?;
+
+    let rest: Vec<f32> = decoder.collect();
+    assert_eq!((rest.len(), is_frame(rest.first(), 14_400)), (4_800, true));
+    Ok(())
+}
+
+#[test]
+fn a_decoder_has_played_its_span_out_only_on_a_counted_end() -> Result<(), AppError> {
+    let tmp = TempDir::new()?;
+    let rows = [(Some(30), true), (None, false)];
+    for (end, played_out) in rows {
+        let mut decoder = FileDecoder::open_track(&indexed_track(&tmp, 15, end)?)?;
+        decoder.by_ref().for_each(drop);
+        assert_eq!(decoder.played_span_out(), played_out, "to {end:?}");
+    }
+    Ok(())
 }
 
 /// The window a container's trailing padding is held back in.

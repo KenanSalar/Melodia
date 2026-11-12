@@ -11,6 +11,7 @@ component NameRowView inherits HorizontalLayout {
     in property <string> name;
     in property <bool> is-only;
     in property <string> placeholder;
+    in property <bool> read-only;
     callback set-name(string);
     callback remove();
 
@@ -22,13 +23,14 @@ component NameRowView inherits HorizontalLayout {
         min-width: 120px;
         text: root.name;
         placeholder: root.placeholder;
+        read-only: root.read-only;
         edited(t) => { root.set-name(t); }
     }
 
     // Hidden on a lone row for `CreditRowView`'s reason: a field with no entries is a state the
     // editor should not be able to reach, the save reading it as "cleared" rather than as the
     // removal it was. Unmounted rather than hidden, since a hidden button still claims its spacing.
-    if !root.is-only: RemoveRowButton {
+    if !root.read-only && !root.is-only: RemoveRowButton {
         clicked => { root.remove(); }
     }
 }
@@ -41,6 +43,7 @@ export component NameListEditor inherits VerticalLayout {
     in property <string> label;
     in property <[string]> names;
     in property <string> placeholder;
+    in property <bool> read-only;
 
     callback set-name(int /*row*/, string);
     callback add();
@@ -59,11 +62,12 @@ export component NameListEditor inherits VerticalLayout {
         // Only the first row carries the ‹multiple values› hint; repeating it down a list would
         // read as one hint per entry.
         placeholder: i == 0 ? root.placeholder : "";
+        read-only: root.read-only;
         set-name(t) => { root.set-name(i, t); }
         remove => { root.remove(i); }
     }
 
-    HorizontalLayout {
+    if !root.read-only: HorizontalLayout {
         alignment: start;
         PillButton {
             icon: "add";

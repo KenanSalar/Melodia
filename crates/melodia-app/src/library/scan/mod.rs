@@ -20,6 +20,7 @@ pub use reconcile::{
 };
 pub use repair::restore_missing_artwork;
 
+use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
@@ -30,12 +31,13 @@ use melodia_core::entities::folder::Folder;
 use melodia_core::entities::scan::ScannedFile;
 use melodia_core::error::{AppError, describe};
 use melodia_core::utils::toast::{self, ToastKind};
-use melodia_store::database::queries::ingest::Ingested;
+use melodia_store::database::queries::ingest::{Ingested, ScanChunk};
 use melodia_store::database::queries::scan::Unwalked;
 use melodia_store::database::{DbPool, queries};
+use melodia_store::media::cue::{self, CueChunk, CuePlan, PlanInput};
 use melodia_store::media::ingest::scan_pool::ScanPool;
 use melodia_store::media::ingest::scanner::{
-    ScanObserver, WalkIndex, collect_media_files, scan_files_parallel,
+    MediaWalk, ScanObserver, WalkIndex, collect_media_files, scan_files_parallel,
 };
 use reconcile::Reach;
 use repair::RestoreNotice;
@@ -178,12 +180,17 @@ async fn scan_one(
 ) -> Result<ScanOutcome, AppError> {
     let folder = queries::folder::get_folder_by_id(&state.db, folder_id).await?;
 
+    // A disabled folder holds files opened from outside the library, which a scan would link and
+    // fill with the rest of their directory.
+    if !folder.is_enabled {
+        return Err(AppError::scanner_msg(format!("Not a library folder: {}", folder.path)));
+    }
     if !Path::new(&folder.path).exists() {
         return Err(AppError::scanner_msg(format!("Folder does not exist: {}", folder.path)));
     }
     let scope = Arc::new(ScanScope::of(&state.db, &folder).await?);
 
-    let Some(Discovery { walked, to_scan, unwalked, pool }) =
+    let Some(Discovery { walked, to_scan, cue, unwalked, pool }) =
         discover(&state.db, folder.id, Arc::clone(&scope), Arc::clone(run)).await?
     else {
         return Ok(ScanOutcome::Stopped { rewrote_existing: false });
@@ -193,51 +200,48 @@ async fn scan_one(
         return Ok(ScanOutcome::Completed { inserted: 0 });
     }
 
-    let skipped = walked - to_scan.len();
+    let to_read = to_scan.len() + cue.images();
+    let skipped = walked.saturating_sub(to_read);
     if skipped > 0 {
         log::info!(
             "Incremental scan of '{}': {skipped} file(s) skipped as unchanged or a nested folder's, \
-             {} to (re)parse",
+             {to_read} to (re)parse",
             folder.path,
-            to_scan.len()
         );
     }
 
     // Decided before the chunk loop consumes `to_scan`. The orphans count too, so a purge of
     // most of a folder runs with the triggers dropped rather than paying them per row.
-    let mut ingested = Ingested::for_delta(to_scan.len() + unwalked.tracks.len());
-    run.begin_reading(u32::try_from(to_scan.len()).unwrap_or(u32::MAX));
-
-    let scan_timestamp = melodia_core::utils::now_rfc3339();
+    let ingested = Ingested::for_delta(to_scan.len() + cue.rows() + unwalked.tracks.len());
+    run.begin_reading(u32::try_from(to_read).unwrap_or(u32::MAX));
 
     // --- Stage 1: a write transaction per chunk, so interactive writes don't queue behind a long
     // first scan. `library_changed` bumps only after the final commit, and a crash between chunks
     // leaves committed tracks the next scan's gate skips. A cancel mid-read still writes what it
     // read.
+    let mut writer = ChunkWriter {
+        state,
+        folder_id: folder.id,
+        scan_timestamp: melodia_core::utils::now_rfc3339(),
+        pool: &pool,
+        run,
+        ingested,
+    };
     let mut remaining = to_scan.into_iter();
     while !run.is_cancelled() {
         let chunk: Vec<PathBuf> = remaining.by_ref().take(TX_CHUNK_FILES).collect();
         if chunk.is_empty() {
             break;
         }
-        let chunk_len = u32::try_from(chunk.len()).unwrap_or(u32::MAX);
-        let scanned_files = parse_chunk(state, chunk, &pool, Arc::clone(run)).await?;
-        run.chunk_read(chunk_len);
-        if scanned_files.is_empty() {
-            continue;
-        }
-
-        let result = queries::ingest::commit_scan_chunk(
-            &state.db,
-            scanned_files,
-            folder.id,
-            scan_timestamp.clone(),
-            pool.clone(),
-            &ingested,
-        )
-        .await?;
-        ingested.add(&result);
+        writer.write(chunk, CueChunk::default()).await?;
     }
+    for chunk in cue.into_chunks(TX_CHUNK_FILES) {
+        if run.is_cancelled() {
+            break;
+        }
+        writer.write(chunk.images(), chunk).await?;
+    }
+    let ingested = writer.ingested;
     drop(pool);
 
     // --- Stage 2. `queries::scan::commit_scan` argues what a stopped scan still owes.
@@ -286,19 +290,56 @@ impl ScanScope {
     }
 }
 
+/// Reads a scan's chunks and commits each in a write transaction of its own.
+struct ChunkWriter<'a> {
+    state: &'a AppState,
+    folder_id: i64,
+    scan_timestamp: String,
+    pool: &'a ScanPool,
+    run: &'a Arc<ScanRun>,
+    ingested: Ingested,
+}
+
+impl ChunkWriter<'_> {
+    /// Reads `paths` and commits them with `cue`'s sheet jobs, whose images are among them. A chunk
+    /// of sheet jobs commits even with nothing read, for the stamps of sheets that claim nothing.
+    async fn write(&mut self, paths: Vec<PathBuf>, cue: CueChunk) -> Result<(), AppError> {
+        let read = u32::try_from(paths.len()).unwrap_or(u32::MAX);
+        let files = parse_chunk(self.state, paths, self.pool, Arc::clone(self.run)).await?;
+        self.run.chunk_read(read);
+        if files.is_empty() && cue.is_empty() {
+            return Ok(());
+        }
+        let result = queries::ingest::commit_scan_chunk(
+            &self.state.db,
+            ScanChunk { files, cue },
+            self.folder_id,
+            self.scan_timestamp.clone(),
+            self.pool.clone(),
+            &self.ingested,
+        )
+        .await?;
+        self.ingested.add(&result);
+        Ok(())
+    }
+}
+
 /// What the walk found, and what the incremental filter left to read.
 struct Discovery {
     /// How many audio files the walk found.
     walked: usize,
     to_scan: Vec<PathBuf>,
+    /// The cue sheet work, whose images `to_scan` leaves out.
+    cue: CuePlan,
     unwalked: Unwalked,
     /// One pool serves the sort, the filter, the parse and the ingest's stat, and ends with the
     /// ingest.
     pool: ScanPool,
 }
 
-/// Walks the folder, pairs each file with its row, and filters the walk to the files that are new
-/// or whose size or mtime moved, or answers `None` once the scan is cancelled.
+/// Walks the folder, pairs each file and cue sheet with its row, filters the walk to the files that
+/// are new or whose size or mtime moved, and settles the sheets around them, or answers `None` once
+/// the scan is cancelled.
 ///
 /// The walk and the filter are synchronous syscall loops, so they go to the blocking pool rather
 /// than pin a runtime worker through a cold-cache boot reconcile. The rows are read between them
@@ -314,24 +355,35 @@ async fn discover(
     let walk_scope = Arc::clone(&scope);
     let walk_run = Arc::clone(&run);
     let walked = tokio::task::spawn_blocking(move || {
-        let walk = collect_media_files(&walk_scope.root, walk_run.as_ref())?;
-        let pool = ScanPool::for_files(walk.files.len());
-        let index = pool.install(|| WalkIndex::new(walk));
-        Some((index, pool))
+        let MediaWalk { files, sheets, unreadable } =
+            collect_media_files(&walk_scope.root, walk_run.as_ref())?;
+        let pool = ScanPool::for_files(files.len());
+        let indexes = pool.install(|| {
+            (WalkIndex::new(files, unreadable.clone()), WalkIndex::new(sheets, unreadable))
+        });
+        Some((indexes, pool))
     })
     .await
     .map_err(|e| AppError::scanner("Scan walk task failed", e))?;
-    let Some((mut index, pool)) = walked else {
+    let Some(((mut index, mut sheets), pool)) = walked else {
         return Ok(None);
     };
 
     // `scan_one` purges nothing after an empty walk, so its rows would be read only to be dropped.
     let mut kept_out = Vec::new();
+    let mut gone_sheets = Vec::new();
+    let mut claims = HashMap::new();
     if !index.is_empty() {
         index = queries::scan::fold_folder_tracks(db, folder_id, index, WalkIndex::add_row).await?;
         for (path, stamp) in queries::excluded_files::in_folder(db, folder_id).await? {
             index.add_kept_out(&path, stamp);
             kept_out.push(path);
+        }
+        sheets =
+            queries::scan::fold_folder_sheets(db, folder_id, sheets, WalkIndex::add_row).await?;
+        gone_sheets = sheets.take_orphans();
+        if !sheets.is_empty() || !gone_sheets.is_empty() {
+            claims = queries::scan::sheet_claims(db, folder_id).await?;
         }
     }
 
@@ -339,15 +391,26 @@ async fn discover(
         // Reads only what this folder owns, but the walk stays whole: the purge checks the
         // folder's rows against it, and some can sit inside a nested folder's directory. A
         // kept-out file is read only once it has changed, for the ingest to restamp it.
-        let to_scan =
-            pool.install(|| index.changed(|path| !run.is_cancelled() && scope.owns(path)));
+        let keep = |path: &Path| !run.is_cancelled() && scope.owns(path);
+        let (mut to_scan, changed_sheets) =
+            pool.install(|| (index.changed(keep), sheets.changed(keep)));
         if run.is_cancelled() {
             return None;
         }
+        let input = PlanInput {
+            audio: &index,
+            sheets: &sheets,
+            changed_audio: &to_scan,
+            changed_sheets: &changed_sheets,
+            gone_sheets: &gone_sheets,
+            claims: &claims,
+        };
+        let cue = pool.install(|| cue::settle(&input, |path| scope.owns(path)));
+        cue.take_out_of(&mut to_scan);
         let walked = index.len();
         let exclusions = index.unwalked(kept_out);
-        let unwalked = Unwalked { tracks: index.into_orphans(), exclusions };
-        Some(Discovery { walked, to_scan, unwalked, pool })
+        let unwalked = Unwalked { tracks: index.take_orphans(), exclusions, sheets: gone_sheets };
+        Some(Discovery { walked, to_scan, cue, unwalked, pool })
     })
     .await
     .map_err(|e| AppError::scanner("Scan filter task failed", e))

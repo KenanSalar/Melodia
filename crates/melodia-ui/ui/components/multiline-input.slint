@@ -13,6 +13,7 @@ import { OverlayScrollbar } from "overlay-scrollbar.slint";
 export component MultilineInput inherits FieldFrame {
     in property <string> placeholder;
     in-out property <string> text;
+    in property <bool> read-only;
 
     private property <length> pad: Theme.pad-sm;
 
@@ -36,6 +37,7 @@ export component MultilineInput inherits FieldFrame {
             font-size: Theme.font-size-md;
             single-line: false;
             wrap: word-wrap;
+            read-only: root.read-only;
             page-height: sv.visible-height;
             // Keeps the caret on screen: upstream's y-branch alone, word-wrap making x inert, with
             // the line height off the font size rather than hardcoded.

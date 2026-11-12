@@ -223,17 +223,15 @@ async fn import_into_playlist(
     playlist_id: i64,
     file_paths: &[String],
 ) -> Result<ImportToPlaylistResult, AppError> {
-    // Sorted as `queue_import_files` sorts a drop, so "9.mp3, 10.mp3" lands as 9 then 10 rather
+    // In the play order a drop on the queue takes, so "9.mp3, 10.mp3" lands as 9 then 10 rather
     // than in whatever order the filesystem returned.
-    let mut result = import_and_summarize(db, artwork_dir, cover_cache, file_paths).await?;
+    let result = import_and_summarize(db, artwork_dir, cover_cache, file_paths).await?;
 
     let added_count = if result.summaries.is_empty() {
         0
     } else {
-        let mut summaries = std::mem::take(&mut result.summaries);
-        summaries.sort_by(|a, b| natord::compare(&a.title, &b.title));
-        let sorted_ids: Vec<i64> = summaries.iter().map(|s| s.id).collect();
-        queries::playlist::add_tracks_to_playlist(db, playlist_id, sorted_ids).await?.len()
+        let ids: Vec<i64> = result.summaries.iter().map(|s| s.id).collect();
+        queries::playlist::add_tracks_to_playlist(db, playlist_id, ids).await?.len()
     };
 
     Ok(ImportToPlaylistResult {

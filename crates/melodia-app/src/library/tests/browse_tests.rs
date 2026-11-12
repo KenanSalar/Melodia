@@ -83,10 +83,10 @@ async fn a_path_outside_every_library_folder_is_refused() -> Result<(), AppError
     Ok(())
 }
 
-/// The same guard from the other side: a folder the user switched off is not a folder to browse,
-/// and disabling one is how they hide it.
+/// The same guard from the other side: a disabled folder holds files opened from outside the
+/// library, and only a library folder is browsed.
 #[tokio::test]
-async fn a_path_inside_a_disabled_library_folder_is_refused() -> Result<(), AppError> {
+async fn a_path_inside_a_disabled_folder_is_refused() -> Result<(), AppError> {
     let db = DbPool::test_pool().await?;
     let tmp = TempDir::new()?;
     let folders = [library_folder(tmp.path(), false)];

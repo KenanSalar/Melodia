@@ -3,6 +3,12 @@ import { ArtistCreditRow, SmartRuleRow } from "../models.slint";
 // The form-shaped dialogs' state, apart from `Dialog` because its dispatcher imports these and
 // never the reverse.
 
+// What a cue sheet's track among the selection leaves open. A sheet track's image tags describe
+// the whole disc, so only what its sheet holds opens (`sheet`); nothing does where no line of a
+// sheet is the track's own (`hidden-track`, the audio before track 1) or the sheet holds no text
+// (`cue-block`, FLAC's native CUESHEET block).
+export enum TagLock { none, sheet, hidden-track, cue-block }
+
 // Owned by `ui::playlists::callbacks::smart`, which raises the dialog from a fresh tick: Rust
 // writing `Dialog` synchronously inside the click trips the recursion guard.
 export global SmartEditor {
@@ -150,6 +156,9 @@ export global TagEditor {
 
     // 1 = single selection (Lyrics + Summary available), >1 = batch.
     in property <int> track-count;
+    in property <TagLock> lock;
+    out property <bool> read-only: lock == TagLock.hidden-track || lock == TagLock.cue-block;
+    out property <bool> file-tags-locked: lock != TagLock.none;
     // Reset to `tab-tags` by every populate, then set to the tab the request asked for.
     in-out property <int> active-tab;
 
@@ -164,7 +173,6 @@ export global TagEditor {
     // `has-cover` gates Remove.
     in-out property <image> cover;
     in property <bool> has-cover;
-    in property <bool> lyrics-enabled;
 
     // Preformatted by Rust.
     in property <string> summary-path;

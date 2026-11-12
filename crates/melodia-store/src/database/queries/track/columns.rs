@@ -46,6 +46,9 @@ pub(crate) static TRACK_SUMMARY: Columns = Columns::new(&[
     "id",
     "file_path",
     "file_name",
+    "cue_track",
+    "cue_start",
+    "cue_end",
     "title",
     "artist",
     "album",
@@ -85,7 +88,7 @@ pub(crate) static TRACK_LIST: Columns = Columns::new(&[
 
 /// `PlaylistExportRow`: one Extended-M3U8 line.
 pub(crate) static PLAYLIST_EXPORT: Columns =
-    Columns::new(&["file_path", "file_hash", "title", "artist", "duration_ms"]);
+    Columns::new(&["file_path", "cue_track", "file_hash", "title", "artist", "duration_ms"]);
 
 /// `TrackMeta`: the Now Playing view's technical chips.
 pub(crate) static TRACK_META: Columns = Columns::new(&[
@@ -103,6 +106,7 @@ pub(crate) static TRACK_META: Columns = Columns::new(&[
 pub(crate) static TRACK_TAG_EDIT: Columns = Columns::new(&[
     "id",
     "file_path",
+    "cue_track",
     "title",
     "artist",
     "album_artist",

@@ -2,9 +2,11 @@
 //!
 //! Copies match on artist and title through `fold_words`, then on length: tags alone would join
 //! different songs a tagger named alike. Length is measured from the group's shortest copy, so a
-//! run of near misses can't chain into one group.
+//! run of near misses can't chain into one group. Two rows of one file never match: they are a cue
+//! sheet's tracks of one image, however alike they are named.
 
 use std::cmp::Ordering;
+use std::collections::HashSet;
 use std::hash::{DefaultHasher, Hash, Hasher};
 
 use melodia_core::entities::duplicates::{
@@ -77,6 +79,7 @@ pub(super) fn group(copies: Vec<DuplicateCopy>) -> Vec<DuplicateGroup> {
         {
             copies.push(copy);
         }
+        let copies = one_per_file(copies);
         if copies.len() > 1 {
             let group = build_group(copies, &words);
             groups.push((words, group));
@@ -87,6 +90,14 @@ pub(super) fn group(copies: Vec<DuplicateCopy>) -> Vec<DuplicateGroup> {
         a.kind.cmp(&b.kind).then_with(|| a_words.cmp(b_words))
     });
     groups.into_iter().map(|(_, group)| group).collect()
+}
+
+/// `copies` with one row per file, the keeper's.
+fn one_per_file(mut copies: Vec<DuplicateCopy>) -> Vec<DuplicateCopy> {
+    copies.sort_by(keeper_first);
+    let mut files = HashSet::with_capacity(copies.len());
+    copies.retain(|copy| files.insert(copy.file_path.clone()));
+    copies
 }
 
 fn build_group(mut copies: Vec<DuplicateCopy>, words: &SongWords) -> DuplicateGroup {
@@ -111,12 +122,15 @@ fn kind_of(copies: &[DuplicateCopy], words: &SongWords) -> MatchKind {
     review_reason(copies, words).map_or(MatchKind::SameRelease, MatchKind::Review)
 }
 
-/// One hash on every copy. A row the hash backfill hasn't reached yet matches nothing here.
+/// One hash and one span on every copy, a cue sheet's tracks sharing their image's hash. A row the
+/// hash backfill hasn't reached yet matches nothing here.
 fn is_identical(copies: &[DuplicateCopy]) -> bool {
     let Some((first, rest)) = copies.split_first() else {
         return false;
     };
-    first.file_hash.is_some() && rest.iter().all(|copy| copy.file_hash == first.file_hash)
+    let plays_the_same =
+        |copy: &DuplicateCopy| copy.file_hash == first.file_hash && copy.span == first.span;
+    first.file_hash.is_some() && rest.iter().all(plays_the_same)
 }
 
 /// The first doubt that holds, in [`ReviewReason`]'s precedence.

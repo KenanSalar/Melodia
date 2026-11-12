@@ -3,6 +3,7 @@
 
 mod dedup;
 mod reconcile;
+mod sheets;
 
 use tokio::sync::mpsc;
 use tokio::time::{Duration, Instant};
@@ -11,6 +12,7 @@ use crate::state::AppState;
 use crate::tasks::TaskSpawner;
 use melodia_core::error::describe;
 use melodia_core::utils::self_writes::SelfWrites;
+use melodia_store::database::{DbPool, queries};
 use melodia_store::media::ingest::watcher::FileEvent;
 
 use dedup::deduplicate_events;
@@ -36,14 +38,14 @@ enum BatchPlan {
     Nothing,
     /// The watcher overflowed, so its per-file stream is truncated and untrustworthy.
     Rescan,
-    /// A directory was renamed, which the per-file stream says nothing about.
+    /// A directory holding audio was renamed or removed, which the per-file stream misses.
     Reconcile,
     /// Apply these, the echo of our own tag writes already dropped.
     Process(Vec<FileEvent>),
 }
 
 /// The `any`s make this correct for an undeduplicated batch too, since `process_batch`
-/// `unreachable!()`s on a `RescanNeeded` or a `DirectoryRenamed`.
+/// `unreachable!()`s on a `RescanNeeded` or a directory event.
 ///
 /// The rescan is answered *before* the suppression because `take_recent` consumes: spending a mark
 /// on a batch discarded for a full reconcile would leave the real echo unsuppressed inside its TTL.
@@ -55,7 +57,8 @@ fn plan_batch(mut batch: Vec<FileEvent>, self_writes: &SelfWrites) -> BatchPlan 
     if batch.iter().any(|e| matches!(e, FileEvent::RescanNeeded)) {
         return BatchPlan::Rescan;
     }
-    if batch.iter().any(|e| matches!(e, FileEvent::DirectoryRenamed)) {
+    if batch.iter().any(|e| matches!(e, FileEvent::DirectoryRenamed | FileEvent::DirectoryGone(_)))
+    {
         return BatchPlan::Reconcile;
     }
 
@@ -67,6 +70,33 @@ fn plan_batch(mut batch: Vec<FileEvent>, self_writes: &SelfWrites) -> BatchPlan 
     }
 
     if batch.is_empty() { BatchPlan::Nothing } else { BatchPlan::Process(batch) }
+}
+
+/// Drops the gone paths the library holds no tracks under, a file it never indexed or a directory
+/// without audio, so only one that held tracks costs a reconcile. A failed read keeps them: a
+/// needless reconcile costs less than rows left on files that are gone.
+async fn drop_gone_paths_without_tracks(db: &DbPool, mut batch: Vec<FileEvent>) -> Vec<FileEvent> {
+    let gone: Vec<String> = batch
+        .iter()
+        .filter_map(|event| match event {
+            FileEvent::DirectoryGone(path) => Some(path.to_string_lossy().into_owned()),
+            _ => None,
+        })
+        .collect();
+    if gone.is_empty() {
+        return batch;
+    }
+    let held_tracks = queries::track::holds_tracks_under(db, gone).await.unwrap_or_else(|e| {
+        log::warn!(
+            "Reconciling, as the tracks under a gone path couldn't be read: {}",
+            describe(&e)
+        );
+        true
+    });
+    if !held_tracks {
+        batch.retain(|event| !matches!(event, FileEvent::DirectoryGone(_)));
+    }
+    batch
 }
 
 pub fn spawn(spawner: &TaskSpawner, state: &AppState, mut rx: mpsc::Receiver<FileEvent>) {
@@ -89,7 +119,8 @@ pub fn spawn(spawner: &TaskSpawner, state: &AppState, mut rx: mpsc::Receiver<Fil
                 batch.push(event);
             }
 
-            match plan_batch(deduplicate_events(batch), &state.self_writes) {
+            let batch = drop_gone_paths_without_tracks(&state.db, deduplicate_events(batch)).await;
+            match plan_batch(batch, &state.self_writes) {
                 BatchPlan::Nothing => {}
                 BatchPlan::Rescan => {
                     log::warn!("Rescan requested via watcher overflow flag");
@@ -97,7 +128,9 @@ pub fn spawn(spawner: &TaskSpawner, state: &AppState, mut rx: mpsc::Receiver<Fil
                     state.rescan_notice.bump();
                 }
                 BatchPlan::Reconcile => {
-                    log::info!("A directory holding audio was renamed, reconciling the library");
+                    log::info!(
+                        "A directory holding audio was renamed or removed, reconciling the library"
+                    );
                     crate::library::scan::reconcile_after_missed_events(&state);
                 }
                 BatchPlan::Process(batch) => {

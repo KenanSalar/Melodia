@@ -19,7 +19,9 @@ mod romanize;
 mod sidecar;
 mod store;
 
-use std::path::{Path, PathBuf};
+pub use store::LyricsKey;
+
+use std::path::Path;
 use std::sync::Arc;
 
 use crate::state::AppState;
@@ -76,13 +78,12 @@ async fn romanized(state: &AppState, outcome: LyricsOutcome) -> Result<LyricsOut
 
 /// Which of the four sources answers for this track.
 async fn resolve(state: &AppState, track: &TrackSummary) -> Result<LyricsOutcome, AppError> {
-    let path = PathBuf::from(&track.file_path);
+    let key = LyricsKey::from(track);
     let paths = Arc::clone(&state.paths);
-    let track_path = track.file_path.clone();
 
     let local = state
         .runtime
-        .spawn_blocking(move || read_local(&path, &paths.lyrics_dir, &track_path))
+        .spawn_blocking(move || read_local(&paths.lyrics_dir, &key))
         .await
         .map_err(AppError::io_source)??;
 
@@ -107,30 +108,27 @@ async fn resolve(state: &AppState, track: &TrackSummary) -> Result<LyricsOutcome
 /// The sheet this track already has, as raw text for the tag editor to write into the file.
 /// **Local only**, so a dialog over a selection spends no request per track; raw, since
 /// re-serializing a parsed sheet would drop its `[offset:]` tag and gloss separator.
-pub async fn resident_text(state: &AppState, track_path: &str) -> Result<Option<String>, AppError> {
-    let path = PathBuf::from(track_path);
+pub async fn resident_text(state: &AppState, track: LyricsKey) -> Result<Option<String>, AppError> {
     let paths = Arc::clone(&state.paths);
-    let track_path = track_path.to_owned();
 
     state
         .runtime
-        .spawn_blocking(move || read_local_text(&path, &paths.lyrics_dir, &track_path))
+        .spawn_blocking(move || read_local_text(&paths.lyrics_dir, &track))
         .await
         .map_err(AppError::io_source)?
 }
 
 /// [`read_local`]'s three homes as text, **in [`resolve`]'s order**, so the editor is offered the
 /// sheet the panel shows. Blocking.
-fn read_local_text(
-    path: &Path,
-    lyrics_dir: &Path,
-    track_path: &str,
-) -> Result<Option<String>, AppError> {
-    if let Some(text) = sidecar::read_text(path)? {
+fn read_local_text(lyrics_dir: &Path, track: &LyricsKey) -> Result<Option<String>, AppError> {
+    let stored = store::read_text(lyrics_dir, track);
+    if track.is_sheet_track() {
+        return Ok(stored);
+    }
+    if let Some(text) = sidecar::read_text(track.path())? {
         return Ok(Some(text));
     }
-    let own = crate::library::tags::read_lyrics(path)?;
-    let stored = store::read_text(lyrics_dir, track_path);
+    let own = crate::library::tags::read_lyrics(track.path())?;
 
     if own.as_deref().is_some_and(lrc::is_timed) {
         return Ok(own);
@@ -164,16 +162,20 @@ fn timed_first(fetched: LyricsOutcome, own: Option<Lyrics>) -> LyricsOutcome {
     }
 }
 
-/// The three sources that need no network, in the order a user's own file wins. Blocking.
-fn read_local(path: &Path, lyrics_dir: &Path, track_path: &str) -> Result<Local, AppError> {
-    if let Some(lyrics) = sidecar::read(path)? {
+/// The three sources that need no network, in the order a user's own file wins, a cue sheet's
+/// track having the store alone (`LyricsKey::is_sheet_track`). Blocking.
+fn read_local(lyrics_dir: &Path, track: &LyricsKey) -> Result<Local, AppError> {
+    if track.is_sheet_track() {
+        return Ok(Local { own: None, is_sidecar: false, stored: store::read(lyrics_dir, track) });
+    }
+    if let Some(lyrics) = sidecar::read(track.path())? {
         return Ok(Local { own: Some(lyrics), is_sidecar: true, stored: None });
     }
-    let own = embedded::read(path)?;
+    let own = embedded::read(track.path())?;
     // Nothing stored could better a timed tag.
     let stored = match &own {
         Some(lyrics) if lyrics.is_synced() => None,
-        _ => store::read(lyrics_dir, track_path),
+        _ => store::read(lyrics_dir, track),
     };
     Ok(Local { own, is_sidecar: false, stored })
 }
@@ -186,21 +188,21 @@ fn online_lookup_enabled(state: &AppState) -> bool {
 
 /// Forget what the directory said about this track, so the next lookup asks again: the whole of
 /// what a refresh is. Only the store; a sidecar and a lyrics tag are the user's own files.
-pub async fn forget(state: &AppState, track_path: &str) -> Result<(), AppError> {
-    forget_all(state, vec![track_path.to_owned()]).await
+pub async fn forget(state: &AppState, track: LyricsKey) -> Result<(), AppError> {
+    forget_all(state, vec![track]).await
 }
 
-/// [`forget`] over a retagged batch, in one hop. Every path is attempted, one failure being no
+/// [`forget`] over a retagged batch, in one hop. Every track is attempted, one failure being no
 /// reason to leave the rest stale, and the first error comes back.
-pub async fn forget_all(state: &AppState, track_paths: Vec<String>) -> Result<(), AppError> {
+pub async fn forget_all(state: &AppState, tracks: Vec<LyricsKey>) -> Result<(), AppError> {
     let paths = Arc::clone(&state.paths);
 
     state
         .runtime
         .spawn_blocking(move || {
             let mut first_error = None;
-            for track_path in &track_paths {
-                if let Err(e) = store::forget(&paths.lyrics_dir, track_path) {
+            for track in &tracks {
+                if let Err(e) = store::forget(&paths.lyrics_dir, track) {
                     first_error = first_error.or(Some(e));
                 }
             }

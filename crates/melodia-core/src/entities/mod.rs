@@ -3,6 +3,7 @@ pub mod artist;
 pub mod audio_quality;
 pub mod browse;
 pub mod credits;
+pub mod cue;
 pub mod duplicates;
 pub mod folder;
 pub mod genre;

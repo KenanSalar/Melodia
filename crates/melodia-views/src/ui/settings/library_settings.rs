@@ -8,7 +8,6 @@ use slint::{ComponentHandle, ModelRc, SharedString, VecModel, Weak};
 
 use crate::ui::util::{clamp_i64_to_i32, count_as_i32};
 use melodia_app::library;
-use melodia_app::library::scan::OnStop;
 use melodia_app::state::{AppState, ScanProgressTick};
 use melodia_core::error::{AppError, describe};
 use melodia_ui::{AppWindow, Dialog, FolderListRow, LibrarySettings, ScanPhase};
@@ -107,7 +106,7 @@ pub async fn refresh_folders(ui: Weak<AppWindow>, state: AppState) {
 pub async fn add_folder_and_scan(state: &AppState, ui: &Weak<AppWindow>, path: String) {
     match library::settings::add_folder(state, path).await {
         // The bump inside `add_folder` puts the new row on screen, so nothing here refetches it.
-        Ok(folder) => library::scan::start(state, folder.id, OnStop::Withdraw),
+        Ok(added) => library::scan::start(state, added.id(), added.on_stop()),
         Err(AppError::Validation { msg, .. }) => show_error(ui, "Cannot add folder", msg),
         Err(AppError::Io(io_error)) => show_error(ui, "Cannot add folder", describe(&io_error)),
         Err(e) => show_error(ui, "Cannot add folder", describe(&e)),

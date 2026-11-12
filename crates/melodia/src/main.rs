@@ -51,7 +51,7 @@ fn main() -> AppResult<()> {
 
     // Ahead of the logger, so a forwarding launch never opens the shared file, and of everything
     // expensive, so forwarding costs a socket write and a return.
-    let startup_files = platform::single_instance::audio_files_from_argv();
+    let startup_files = platform::single_instance::library_files_from_argv();
     let mut unenforced_reason = None;
     let file_open_listener = match platform::single_instance::claim(&paths.data_dir, &startup_files)
     {
@@ -79,6 +79,7 @@ fn main() -> AppResult<()> {
     let spawner = tasks::TaskSpawner::from_state(&state);
     boot::tasks::spawn_background_tasks(&spawner, &state, channels);
     boot::tasks::restore_persisted_playback(&runtime, &state);
+    boot::tasks::sweep_outside_files(&runtime, &state);
 
     let startup_settings: Option<services::settings::SettingsData> =
         library::settings::get_settings(&state.paths).ok();

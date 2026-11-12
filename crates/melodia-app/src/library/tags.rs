@@ -1,31 +1,35 @@
 //! Edit Track Information: rewrite the files, then land them through the scan pipeline
-//! ([`extract_metadata`], then [`queries::scan::commit_retag`]), whose triggers reindex.
+//! ([`extract_metadata`], then [`queries::scan::commit_retag`]), whose triggers reindex. A cue
+//! sheet's tracks are written into their sheet instead ([`sheet_tags`]).
 //!
 //! Do **not** shortcut this into a hand-built `UPDATE` from the form values: a tag write rewrites
 //! the file's bytes, and a fresh `date_modified` beside a stale `file_hash` is the one state
 //! `scanner::file_is_current` reads as current from then on. The re-extract keeps hash, size and
 //! mtime honest together.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, LazyLock};
 
 use rayon::prelude::*;
 
+use super::sheet_tags;
 use crate::library::lyrics;
 use crate::state::AppState;
 use melodia_artwork::media::image::artwork::{self, CoverCache};
 use melodia_core::entities::album::ReleaseTagRow;
 use melodia_core::entities::artist::ArtistCredit;
 use melodia_core::entities::credits::RoleCredits;
+use melodia_core::entities::cue::{CueTrack, SheetTrack};
 use melodia_core::entities::genre::GenreList;
 use melodia_core::entities::scan::ExtractedMetadata;
-use melodia_core::entities::tags::{ArtworkEdit, TagEdit, TagField};
+use melodia_core::entities::tags::{ArtworkEdit, EmbeddedSheetTags, FileTags, TagEdit, TagField};
 use melodia_core::entities::track::TagEditRow;
 use melodia_core::error::AppError;
 use melodia_core::error::describe;
 use melodia_core::utils::self_writes::SelfWrites;
 use melodia_store::database::{DbPool, queries};
+use melodia_store::media::cue::{self, SheetEdit};
 use melodia_store::media::ingest::metadata::extract_metadata;
 use melodia_store::media::ingest::{cover_embed, tag_writer};
 
@@ -111,23 +115,52 @@ pub async fn get_tag_edit_rows(db: &DbPool, ids: &[i64]) -> Result<Vec<TagEditRo
 }
 
 /// A file's lyrics tag as the tag held it, judged by `library::lyrics`. Apart from
-/// [`read_lyrics_and_credits`] because that caller wants nothing else. Blocking; the caller owns
-/// the `spawn_blocking`.
+/// [`read_file_tags`] because that caller wants nothing else. Blocking; the caller owns the
+/// `spawn_blocking`.
 pub fn read_lyrics(path: &Path) -> Result<Option<String>, AppError> {
     tag_writer::read_lyrics(path)
 }
 
-/// The lyrics tag and both artist credits off one open, for the dialog's single selection.
+/// A file's own tags off one open: the lyrics and credits for the dialog's single selection, and
+/// everything else for a track filed outside the library, which no album or join row holds.
 ///
 /// The credit comes from the file, not the database: a track whose join rows were seeded from
 /// `artist_id` alone would otherwise open showing one name for a credit the file spells with three.
 /// A multi-selection reads [`queries::track::get_track_credits_by_ids`] instead, N file reads on
 /// the open path being what `TagEditRow` exists to avoid. Blocking; the caller owns the
 /// `spawn_blocking`.
-pub fn read_lyrics_and_credits(
-    path: &Path,
-) -> Result<(Option<String>, (ArtistCredit, ArtistCredit)), AppError> {
-    tag_writer::read_lyrics_and_credits(path)
+pub fn read_file_tags(path: &Path) -> Result<FileTags, AppError> {
+    tag_writer::read_file_tags(path)
+}
+
+/// [`read_file_tags`] for a cue sheet's track filed outside the library: its sheet read over its
+/// image, as the scan merges them. Blocking; the caller owns the `spawn_blocking`.
+pub fn read_sheet_track_tags(
+    sheet: &Path,
+    image: &Path,
+    track: CueTrack,
+) -> Result<FileTags, AppError> {
+    cue::read_track_tags(sheet, image, track)
+}
+
+/// The sheet inside the image at `image`: whether an edit can be written into it, and the tags of
+/// `tracks`, each read over the image's as [`read_sheet_track_tags`] reads one. Blocking; the
+/// caller owns the `spawn_blocking`.
+pub fn read_embedded_sheet(
+    image: &Path,
+    tracks: &[CueTrack],
+) -> Result<EmbeddedSheetTags, AppError> {
+    cue::read_embedded(image, tracks)
+}
+
+/// The tracks among `ids` filed outside the library, whose tags only their files hold.
+pub async fn get_tag_edit_outside(db: &DbPool, ids: &[i64]) -> Result<HashSet<i64>, AppError> {
+    queries::track::filed_outside(db, ids).await
+}
+
+/// Each cue sheet track among `ids`, with its sheet.
+pub async fn get_tag_edit_sheets(db: &DbPool, ids: &[i64]) -> Result<Vec<SheetTrack>, AppError> {
+    queries::track::get_sheet_tracks_by_ids(db, ids).await
 }
 
 /// The credit behind each selected track, for the dialog's multi-selection path.
@@ -195,23 +228,25 @@ pub async fn apply_tag_edit(
     Ok(report)
 }
 
-/// Drop what the lyrics directory answered for each retagged track: the store is keyed on the path,
-/// so a month-long miss would outlive the corrected tags. Best-effort, the edit having committed.
+/// Drop what the lyrics directory answered for each retagged track: the store is keyed on the
+/// track, not its tags, so a month-long miss would outlive the corrected ones. Best-effort, the
+/// edit having committed.
 async fn forget_stored_lyrics(state: &AppState, ids: &[i64]) {
-    let paths = match queries::track::get_track_paths_by_ids(&state.db, ids).await {
-        Ok(rows) => rows.into_iter().map(|(_, path)| path).collect(),
+    let tracks = match get_tag_edit_rows(&state.db, ids).await {
+        Ok(rows) => rows.iter().map(lyrics::LyricsKey::from).collect(),
         Err(e) => {
             log::debug!("tags: lyrics store kept: {}", describe(&e));
             return;
         }
     };
-    if let Err(e) = lyrics::forget_all(state, paths).await {
+    if let Err(e) = lyrics::forget_all(state, tracks).await {
         log::debug!("tags: lyrics store kept: {}", describe(&e));
     }
 }
 
-/// Rewrite each file, re-extract, and land the batch in one write transaction, returning the report
-/// and the refreshed ids. Takes no `AppState`, so a `test_pool` and temp files can drive it.
+/// Write the edit into each file and each cue sheet behind `ids`, and land what was written,
+/// returning the report and the refreshed ids. Takes no `AppState`, so a `test_pool` and temp files
+/// can drive it.
 pub(crate) async fn write_tag_edit(
     db: &DbPool,
     artwork_dir: &Path,
@@ -221,16 +256,37 @@ pub(crate) async fn write_tag_edit(
     edit: &TagEdit,
     artwork_source: Option<&Path>,
 ) -> Result<(TagEditReport, Vec<i64>), AppError> {
-    let mut report = TagEditReport::default();
-
     // lofty rewrites the tag whether or not anything differs, so a reflexive Save would rewrite
     // the whole album and hand the watcher every file back. Here rather than at the door because
     // `library::ratings` calls this directly.
     if edit.is_noop() {
-        return Ok((report, Vec::new()));
+        return Ok((TagEditReport::default(), Vec::new()));
     }
 
-    let rows = queries::track::get_track_paths_by_ids(db, ids).await?;
+    // Ahead of the file pass, so a failed lookup can't discard file writes already committed.
+    let sheet_pass = sheet_tags::SheetPass::read(db, ids, SheetEdit::from(edit)).await?;
+
+    let (mut report, mut updated_ids) =
+        write_files(db, artwork_dir, cover_cache, self_writes, ids, edit, artwork_source).await?;
+    let sheets = sheet_pass.write(db, artwork_dir, cover_cache, self_writes).await?;
+    updated_ids.extend(sheets.updated);
+    report.failures.extend(sheets.failures);
+    report.updated = updated_ids.len();
+    Ok((report, updated_ids))
+}
+
+/// Rewrite each file played whole, re-extract, and land the batch in one write transaction.
+async fn write_files(
+    db: &DbPool,
+    artwork_dir: &Path,
+    cover_cache: &CoverCache,
+    self_writes: &Arc<SelfWrites>,
+    ids: &[i64],
+    edit: &TagEdit,
+    artwork_source: Option<&Path>,
+) -> Result<(TagEditReport, Vec<i64>), AppError> {
+    let mut report = TagEditReport::default();
+    let rows = queries::track::get_whole_file_paths_by_ids(db, ids).await?;
     if rows.is_empty() {
         return Ok((report, Vec::new()));
     }
@@ -261,21 +317,20 @@ pub(crate) async fn write_tag_edit(
         .map_err(|e| AppError::metadata("tag write task panicked", e))??
     };
 
-    let updated_ids = match run_commit(db, &files, edit, cached_artwork, &mut report).await {
-        Ok(ids) => ids,
+    match run_commit(db, &files, edit, cached_artwork, &mut report).await {
+        Ok(updated_ids) => {
+            // Here rather than in `apply_tag_edit`, so the rating write-back is covered too and no
+            // later `?` drops the report unrecorded.
+            report.log_unsupported();
+            Ok((report, updated_ids))
+        }
         Err(e) => {
             // Unmarked so the watcher re-ingests rather than leaving the rows stale.
             let marked: Vec<PathBuf> = files.iter().map(|f| PathBuf::from(&f.path)).collect();
             self_writes.unmark(&marked);
-            return Err(e);
+            Err(e)
         }
-    };
-
-    report.updated = updated_ids.len();
-    // Here rather than in `apply_tag_edit`, so the rating write-back is covered too and no later
-    // `?` drops the report unrecorded.
-    report.log_unsupported();
-    Ok((report, updated_ids))
+    }
 }
 
 /// Decode-validate the picked cover, lofty sniffing only 8 bytes, and copy the original into the

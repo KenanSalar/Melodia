@@ -14,7 +14,7 @@ use super::upserts::{upsert_artist, upsert_genre};
 /// entry to say what they already said. Keyed on the exact spelling: two spellings share one
 /// `NOCASE` row with the newer standing, and one seen again after another doesn't win it back.
 /// Dropped with the transaction, so it holds one chunk's names, never the library's.
-#[derive(Default)]
+#[derive(Default, Clone)]
 pub(crate) struct NameCache {
     artists: HashMap<String, i64>,
     genres: HashMap<String, Option<i64>>,

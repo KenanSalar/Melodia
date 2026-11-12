@@ -242,6 +242,7 @@ fn all_desktop_sources_agree_on_mime_and_wmclass() {
         "audio/x-aiff",
         "audio/x-aifc",
         "audio/x-matroska",
+        "application/x-cue",
     ];
 
     let sources = [

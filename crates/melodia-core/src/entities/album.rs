@@ -1,3 +1,5 @@
+use super::scan::ReleaseTags;
+
 #[derive(Clone, Debug, PartialEq)]
 pub struct AlbumStats {
     pub id: i64,
@@ -39,4 +41,19 @@ pub struct ReleaseTagRow {
     pub release_type: String,
     pub release_country: String,
     pub is_compilation: bool,
+}
+
+/// A file's own release tags, as a track with no album row reads them.
+impl From<ReleaseTags> for ReleaseTagRow {
+    fn from(tags: ReleaseTags) -> Self {
+        Self {
+            label: tags.label.unwrap_or_default(),
+            catalog_number: tags.catalog_number.unwrap_or_default(),
+            barcode: tags.barcode.unwrap_or_default(),
+            media: tags.media.unwrap_or_default(),
+            release_type: tags.release_type.unwrap_or_default(),
+            release_country: tags.release_country.unwrap_or_default(),
+            is_compilation: tags.is_compilation,
+        }
+    }
 }

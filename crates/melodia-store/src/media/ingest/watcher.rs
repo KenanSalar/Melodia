@@ -11,7 +11,7 @@ use tokio::sync::mpsc;
 use walkdir::WalkDir;
 
 use melodia_core::error::{AppError, describe};
-use melodia_core::utils::audio_ext::is_audio_extension;
+use melodia_core::utils::audio_ext::{is_audio_extension, is_cue_sheet, is_library_extension};
 use melodia_core::utils::trash_dir::in_trash_dir;
 
 /// Classified file system event sent through the mpsc channel to the event processor.
@@ -30,6 +30,11 @@ pub enum FileEvent {
     /// A directory holding audio was renamed or moved. The OS reports nothing for the files inside
     /// it, so the library is reconciled rather than leave their rows on the old paths.
     DirectoryRenamed,
+    /// A path that reads as neither audio nor a cue sheet was removed or moved out of the watch,
+    /// which may have been a directory: the debouncer folds a deleted directory's file removals
+    /// into its own, and one moved out reports nothing for its files. The library is reconciled if
+    /// it holds tracks under the path.
+    DirectoryGone(PathBuf),
 }
 
 /// The recommended watcher, minus the access events nothing here reads.
@@ -188,7 +193,7 @@ impl FolderWatcher {
     }
 }
 
-/// The `FileEvent`s a notify event means for audio files.
+/// The `FileEvent`s a notify event means for the library's files, audio and cue sheets.
 fn classify_event(kind: EventKind, paths: &[PathBuf]) -> Vec<FileEvent> {
     if relocates_an_audio_directory(kind, paths) {
         return vec![FileEvent::DirectoryRenamed];
@@ -207,14 +212,24 @@ fn classify_event(kind: EventKind, paths: &[PathBuf]) -> Vec<FileEvent> {
                 }
             }
         }
-        // Cross-directory rename source side: only one path visible.
-        EventKind::Remove(RemoveKind::File | RemoveKind::Any)
-        | EventKind::Modify(ModifyKind::Name(RenameMode::From)) => {
+        // inotify watches a new directory only once its creation has been read, so the files a copy
+        // writes into it before then raise no event of their own.
+        EventKind::Create(CreateKind::Folder) => {
+            for dir in paths {
+                events.extend(library_files_under(dir).map(FileEvent::Created));
+            }
+        }
+        EventKind::Remove(RemoveKind::File) => {
             for path in paths {
                 if is_library_file(path) {
                     events.push(FileEvent::Removed(path.clone()));
                 }
             }
+        }
+        // Cross-directory rename source side: only one path visible.
+        EventKind::Remove(RemoveKind::Folder | RemoveKind::Any)
+        | EventKind::Modify(ModifyKind::Name(RenameMode::From)) => {
+            events.extend(paths.iter().filter_map(|path| left_the_watch(path)));
         }
         EventKind::Modify(ModifyKind::Name(RenameMode::Both)) => {
             if paths.len() >= 2 {
@@ -267,13 +282,36 @@ fn holds_audio(dir: &Path) -> bool {
     WalkDir::new(dir).into_iter().flatten().any(|entry| is_audio_file(entry.path()))
 }
 
-/// Audio outside every trash folder: a trashed file reads as removed, a restored one as created.
+fn library_files_under(dir: &Path) -> impl Iterator<Item = PathBuf> {
+    WalkDir::new(dir)
+        .into_iter()
+        .flatten()
+        .filter(|entry| entry.file_type().is_file() && is_library_file(entry.path()))
+        .map(walkdir::DirEntry::into_path)
+}
+
+/// A path gone from the watch, read by its name alone since it no longer exists: a removed track or
+/// sheet if it reads as one, else a directory that may have held some.
+fn left_the_watch(path: &Path) -> Option<FileEvent> {
+    if is_library_file(path) {
+        return Some(FileEvent::Removed(path.to_path_buf()));
+    }
+    (!in_trash_dir(path)).then(|| FileEvent::DirectoryGone(path.to_path_buf()))
+}
+
+/// Audio or a cue sheet outside every trash folder: a trashed file reads as removed, a restored one
+/// as created.
 fn is_library_file(path: &Path) -> bool {
-    is_audio_file(path) && !in_trash_dir(path)
+    let ext = path.extension().and_then(|e| e.to_str());
+    ext.is_some_and(is_library_extension) && !in_trash_dir(path)
 }
 
 pub(crate) fn is_audio_file(path: &Path) -> bool {
     path.extension().and_then(|e| e.to_str()).is_some_and(is_audio_extension)
+}
+
+pub fn is_sheet_file(path: &Path) -> bool {
+    path.extension().and_then(|e| e.to_str()).is_some_and(is_cue_sheet)
 }
 
 #[cfg(test)]

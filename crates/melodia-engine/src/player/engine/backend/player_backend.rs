@@ -1,6 +1,7 @@
 //! The seam a test stands a mock in at: every transport op the action layer issues and nothing
 //! else, so `execute_actions` runs against `MockBackend` with no audio device.
 
+use melodia_core::entities::track::TrackAudio;
 use melodia_core::error::AppError;
 
 use super::PlaybackEngine;
@@ -9,7 +10,7 @@ use melodia_playback::player::playback::replaygain::TrackReplayGain;
 pub trait PlayerBackend: Send + Sync {
     fn play_media(
         &self,
-        file_path: &str,
+        audio: &TrackAudio,
         volume: f64,
         speed: f64,
         start_position_ms: Option<u64>,
@@ -17,7 +18,7 @@ pub trait PlayerBackend: Send + Sync {
     ) -> Result<(), AppError>;
     fn begin_crossfade(
         &self,
-        file_path: &str,
+        audio: &TrackAudio,
         baked_rg: TrackReplayGain,
         fade_ms: u64,
         volume: f64,
@@ -29,7 +30,7 @@ pub trait PlayerBackend: Send + Sync {
     fn stop(&self);
     /// `0` stops at once.
     fn stop_with_fade(&self, fade_ms: u64);
-    fn seek(&self, file_path: &str, position_ms: u64, baked_rg: TrackReplayGain);
+    fn seek(&self, audio: &TrackAudio, position_ms: u64, baked_rg: TrackReplayGain);
     fn set_volume(&self, volume: f64);
     fn set_speed(&self, speed: f64);
     /// Fails where nothing is staged under `generation`, which is how a superseded station is
@@ -40,23 +41,23 @@ pub trait PlayerBackend: Send + Sync {
 impl PlayerBackend for PlaybackEngine {
     fn play_media(
         &self,
-        file_path: &str,
+        audio: &TrackAudio,
         volume: f64,
         speed: f64,
         start_position_ms: Option<u64>,
         baked_rg: TrackReplayGain,
     ) -> Result<(), AppError> {
-        self.play_media(file_path, volume, speed, start_position_ms, baked_rg)
+        self.play_media(audio, volume, speed, start_position_ms, baked_rg)
     }
     fn begin_crossfade(
         &self,
-        file_path: &str,
+        audio: &TrackAudio,
         baked_rg: TrackReplayGain,
         fade_ms: u64,
         volume: f64,
         speed: f64,
     ) -> Result<(), AppError> {
-        self.begin_crossfade(file_path, baked_rg, fade_ms, volume, speed)
+        self.begin_crossfade(audio, baked_rg, fade_ms, volume, speed)
     }
     fn resume(&self) {
         self.resume();
@@ -70,8 +71,8 @@ impl PlayerBackend for PlaybackEngine {
     fn stop_with_fade(&self, fade_ms: u64) {
         self.stop_with_fade(fade_ms);
     }
-    fn seek(&self, file_path: &str, position_ms: u64, baked_rg: TrackReplayGain) {
-        self.seek(file_path, position_ms, baked_rg);
+    fn seek(&self, audio: &TrackAudio, position_ms: u64, baked_rg: TrackReplayGain) {
+        self.seek(audio, position_ms, baked_rg);
     }
     fn set_volume(&self, volume: f64) {
         self.set_volume(volume);

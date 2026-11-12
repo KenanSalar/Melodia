@@ -82,10 +82,10 @@ impl Library {
             library::settings::add_folder(&booted.state, dir.to_string_lossy().into_owned())
                 .await?;
 
-        let first = library::scan::scan_folder(&booted.state, folder.id, OnStop::Keep).await?;
+        let first = library::scan::scan_folder(&booted.state, folder.id(), OnStop::Keep).await?;
 
         assert_eq!(first, ScanOutcome::Completed { inserted: 2 }, "the first scan of the two");
-        Ok(Self { booted, dir, folder_id: folder.id, _tmp: tmp })
+        Ok(Self { booted, dir, folder_id: folder.id(), _tmp: tmp })
     }
 
     fn state(&self) -> &AppState {
@@ -119,7 +119,7 @@ async fn headless_scan_persists_track() -> Result<(), AppError> {
     let folder =
         library::settings::add_folder(state, fixtures.to_string_lossy().into_owned()).await?;
 
-    let outcome = library::scan::scan_folder(state, folder.id, OnStop::Keep).await?;
+    let outcome = library::scan::scan_folder(state, folder.id(), OnStop::Keep).await?;
     assert_eq!(
         outcome,
         ScanOutcome::Completed { inserted: 1 },

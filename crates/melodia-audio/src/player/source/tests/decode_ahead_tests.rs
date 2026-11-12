@@ -25,7 +25,7 @@ fn decoded_directly() -> Result<Vec<Sample>, AppError> {
 }
 
 fn decoded_ahead(depth: Duration) -> Result<DecodeAhead, AppError> {
-    DecodeAhead::start(FileDecoder::open(&asset(FIXTURE))?, depth)
+    DecodeAhead::start(FileDecoder::open(&asset(FIXTURE))?, depth, None)
 }
 
 /// Pulls as a deck does, only while the source is ready, until it ends, `most` samples are in hand

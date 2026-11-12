@@ -20,6 +20,8 @@ fn track(
         id,
         file_path: String::new(),
         file_name: String::new(),
+        cue_track: None,
+        span: None,
         title: title.to_owned(),
         artist: artist.map(str::to_owned),
         album: album.map(str::to_owned),

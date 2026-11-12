@@ -58,6 +58,7 @@ use melodia_playback::player::playback::output::mixer;
 use melodia_audio::player::source::prebuffer::StreamShared;
 
 use super::PlaybackEngine;
+use crate::player::engine::fixtures::whole_file;
 use melodia_core::error::AppError;
 use melodia_testkit::ASSETS_DIR;
 
@@ -155,10 +156,10 @@ async fn the_next_tracks_file_is_opened_once_for_every_ask_about_it() -> Result<
     let dir = tempfile::tempdir()?;
     let next = dir.path().join("next.wav");
     std::fs::copy(Path::new(ASSETS_DIR).join("silence.wav"), &next)?;
-    let first = engine.reopens_for(&next.to_string_lossy());
+    let first = engine.reopens_for(&whole_file(&next.to_string_lossy()));
     std::fs::remove_file(&next)?;
 
-    let second = engine.reopens_for(&next.to_string_lossy());
+    let second = engine.reopens_for(&whole_file(&next.to_string_lossy()));
 
     assert_eq!((first, second), (false, false), "(before the delete, after it)");
     Ok(())
@@ -170,7 +171,7 @@ async fn a_next_track_that_wont_open_is_never_faded_into() -> Result<(), AppErro
     let engine = engine_without_a_card()?;
     let dir = tempfile::tempdir()?;
 
-    let reopens = engine.reopens_for(&dir.path().join("gone.wav").to_string_lossy());
+    let reopens = engine.reopens_for(&whole_file(&dir.path().join("gone.wav").to_string_lossy()));
 
     assert!(reopens);
     Ok(())
@@ -182,7 +183,7 @@ async fn a_next_track_that_plays_as_it_is_is_handed_back_to_stage() -> Result<()
     let engine = engine_without_a_card()?;
     let next = Path::new(ASSETS_DIR).join("silence.wav");
 
-    let staged = engine.open_for_gapless(&next.to_string_lossy());
+    let staged = engine.open_for_gapless(&whole_file(&next.to_string_lossy()));
 
     assert!(matches!(staged, Ok(Some(_))));
     Ok(())
@@ -197,10 +198,10 @@ async fn a_next_track_that_wont_open_is_opened_once_for_every_gapless_ask() -> R
     let dir = tempfile::tempdir()?;
     let next = dir.path().join("next.wav");
     std::fs::write(&next, b"not audio")?;
-    let first = engine.open_for_gapless(&next.to_string_lossy());
+    let first = engine.open_for_gapless(&whole_file(&next.to_string_lossy()));
     std::fs::copy(Path::new(ASSETS_DIR).join("silence.wav"), &next)?;
 
-    let second = engine.open_for_gapless(&next.to_string_lossy());
+    let second = engine.open_for_gapless(&whole_file(&next.to_string_lossy()));
 
     let asks = (first.is_err(), second.map(|decoded| decoded.is_some()).ok());
     assert_eq!(asks, (true, Some(false)), "(the first refused, the second staged)");
@@ -215,10 +216,10 @@ async fn the_crossfade_and_the_preload_share_one_open_of_the_next_track() -> Res
     let dir = tempfile::tempdir()?;
     let next = dir.path().join("next.wav");
     std::fs::write(&next, b"not audio")?;
-    let _reopens = engine.reopens_for(&next.to_string_lossy());
+    let _reopens = engine.reopens_for(&whole_file(&next.to_string_lossy()));
     std::fs::copy(Path::new(ASSETS_DIR).join("silence.wav"), &next)?;
 
-    let staged = engine.open_for_gapless(&next.to_string_lossy());
+    let staged = engine.open_for_gapless(&whole_file(&next.to_string_lossy()));
 
     assert!(matches!(staged, Ok(None)), "the preload opened the file again");
     Ok(())

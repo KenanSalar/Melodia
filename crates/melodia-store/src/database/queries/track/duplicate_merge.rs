@@ -4,19 +4,18 @@
 //! The library can move while the finder is open, so every copy is read again here, and a removal
 //! whose keeper has gone is skipped rather than merged into nothing.
 
-use std::collections::{BTreeSet, HashMap};
+use std::collections::HashMap;
 
 use rusqlite::Transaction;
 
 use crate::database::queries::excluded_files::{self, NewExclusion};
 use crate::database::queries::ingest::is_bulk;
-use crate::database::queries::playlist::{self, NewItem};
+use crate::database::queries::playlist_carry::move_playlist_places;
 use crate::database::queries::{scan, stats};
 use crate::database::rows::by_name;
 use crate::database::sql::Sql;
-use crate::database::{
-    DbPool, MAX_BINDS_PER_STATEMENT, chunked_in_execute, chunked_in_query, values_placeholders,
-};
+use crate::database::{DbPool, MAX_BINDS_PER_STATEMENT, chunked_in_query, values_placeholders};
+use melodia_core::entities::cue::CueTrack;
 use melodia_core::entities::duplicates::GroupRemoval;
 use melodia_core::error::AppError;
 
@@ -37,6 +36,7 @@ pub struct RemovedDuplicates {
 struct CopyFacts {
     id: i64,
     file_path: String,
+    cue_track: Option<CueTrack>,
     file_hash: Option<String>,
     file_size: Option<i64>,
     date_modified: Option<String>,
@@ -52,6 +52,7 @@ struct CopyFacts {
 by_name!(CopyFacts {
     id,
     file_path,
+    cue_track,
     file_hash,
     file_size,
     date_modified,
@@ -98,17 +99,12 @@ fn merge(tx: &Transaction<'_>, removals: &[GroupRemoval]) -> Result<RemovedDupli
         stats::disable_stats_triggers(tx)?;
     }
     write_keepers(tx, &plan.keepers)?;
-    let touched = move_playlist_places(tx, &plan.keeper_of)?;
+    move_playlist_places(tx, &plan.keeper_of)?;
     let exclusions: Vec<NewExclusion<'_>> =
         plan.spares.iter().map(|spare| spare.exclusion()).collect();
     excluded_files::exclude_on(tx, &exclusions)?;
     let spare_ids: Vec<i64> = plan.spares.iter().map(|spare| spare.id).collect();
-    chunked_in_execute(tx, &spare_ids, |placeholders| {
-        format!("DELETE FROM tracks WHERE id IN ({placeholders})")
-    })?;
-    for playlist_id in touched {
-        playlist::renumber_playlist_positions_tx(tx, playlist_id)?;
-    }
+    scan::delete_tracks_by_ids(tx, &spare_ids)?;
     scan::roll_up_covers(tx)?;
     scan::prune_orphans(tx)?;
     if bulk {
@@ -128,8 +124,8 @@ fn read_facts(
         .collect();
     let rows: Vec<CopyFacts> = chunked_in_query(tx, &ids, |placeholders| {
         format!(
-            "SELECT id, file_path, file_hash, file_size, date_modified, folder_id, play_count, \
-                    skip_count, last_played, rating, is_favorite, date_added \
+            "SELECT id, file_path, cue_track, file_hash, file_size, date_modified, folder_id, \
+                    play_count, skip_count, last_played, rating, is_favorite, date_added \
              FROM tracks WHERE id IN ({placeholders})"
         )
     })?;
@@ -157,8 +153,13 @@ impl<'a> MergePlan<'a> {
                 plan.outcome.skipped += removal.spares.len();
                 continue;
             };
-            let spares: Vec<&CopyFacts> =
-                removal.spares.iter().filter_map(|id| facts.get(id)).collect();
+            // A cue sheet's track is skipped too, for `DuplicateCopy::is_removable`'s reason.
+            let spares: Vec<&CopyFacts> = removal
+                .spares
+                .iter()
+                .filter_map(|id| facts.get(id))
+                .filter(|spare| spare.cue_track.is_none())
+                .collect();
             plan.outcome.skipped += removal.spares.len() - spares.len();
             if spares.is_empty() {
                 continue;
@@ -243,42 +244,6 @@ fn write_keepers(tx: &Transaction<'_>, keepers: &[(i64, History)]) -> Result<(),
         sql.execute(tx)?;
     }
     Ok(())
-}
-
-/// Gives each keeper its spares' playlist places, at its first spare's position and with that
-/// spare's added date, returning the playlists touched. An insert rather than a re-point, since
-/// the playlist stats triggers watch only inserts and deletes; a playlist the keeper is already in
-/// keeps the keeper's own place.
-fn move_playlist_places(
-    tx: &Transaction<'_>,
-    keeper_of: &HashMap<i64, i64>,
-) -> Result<BTreeSet<i64>, AppError> {
-    let spare_ids: Vec<i64> = keeper_of.keys().copied().collect();
-    let mut places: Vec<(i64, i64, i32, String)> =
-        chunked_in_query(tx, &spare_ids, |placeholders| {
-            format!(
-                "SELECT playlist_id, track_id, position, added_at FROM playlist_items \
-                 WHERE track_id IN ({placeholders})"
-            )
-        })?;
-    // Lowest first, since the first insert wins; in Rust, as an ORDER BY holds per chunk only.
-    places.sort_unstable_by_key(|&(_, _, position, _)| position);
-
-    let mut by_playlist: HashMap<i64, Vec<NewItem<'_>>> = HashMap::new();
-    for (playlist_id, spare_id, position, added_at) in &places {
-        let Some(&keeper) = keeper_of.get(spare_id) else {
-            continue;
-        };
-        by_playlist.entry(*playlist_id).or_default().push(NewItem {
-            track_id: keeper,
-            position: *position,
-            added_at,
-        });
-    }
-    for (playlist_id, items) in &by_playlist {
-        playlist::insert_items_tx(tx, *playlist_id, items)?;
-    }
-    Ok(by_playlist.into_keys().collect())
 }
 
 #[cfg(test)]

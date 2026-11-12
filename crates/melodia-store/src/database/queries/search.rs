@@ -11,6 +11,7 @@
 use std::sync::LazyLock;
 
 use crate::database::queries::track::columns;
+use crate::database::queries::track::file_rows::IN_LIBRARY;
 use crate::database::{DbPool, sql};
 use melodia_core::entities::search::SearchResults;
 use melodia_core::entities::{album, artist, genre, track};
@@ -48,7 +49,7 @@ static TRACK_MATCHES: LazyLock<String> = LazyLock::new(|| {
     format!(
         "SELECT {} FROM tracks t
          JOIN tracks_fts fts ON fts.rowid = t.id
-         WHERE tracks_fts MATCH ?
+         WHERE tracks_fts MATCH ? AND {IN_LIBRARY}
          ORDER BY rank LIMIT 50",
         columns::TRACK_LIST.prefixed("t")
     )
