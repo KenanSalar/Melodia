@@ -2,8 +2,8 @@
 //!
 //! **A measurement applies only while its key matches the track**: the whole-file hash and the cue
 //! span it was taken over. A replaced file stops matching once its re-read commits, and a track
-//! whose cue timing moved once its sheet is read, with no write path owing an invalidation. Melodia's
-//! own tag writes are the exception, changing the hash and not the audio ([`carry_over`]).
+//! whose cue timing moved once its sheet is read, with no write path owing an invalidation.
+//! Melodia's own tag writes are the exception, changing the hash, not the audio ([`carry_over`]).
 
 use rusqlite::Transaction;
 

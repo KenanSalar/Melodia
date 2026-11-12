@@ -55,8 +55,8 @@ pub use radio::{
 };
 pub use ratings::set_write_ratings_to_tags;
 pub use replaygain::{
-    set_replaygain_enabled, set_replaygain_mode, set_replaygain_preamp,
-    set_replaygain_prevent_clipping,
+    set_replaygain_enabled, set_replaygain_measure_untagged, set_replaygain_mode,
+    set_replaygain_preamp, set_replaygain_prevent_clipping,
 };
 pub use scrobble::{
     set_scrobble_lastfm_enabled, set_scrobble_lastfm_love_enabled,

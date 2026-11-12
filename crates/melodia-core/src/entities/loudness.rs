@@ -1,5 +1,5 @@
 //! The loudness targets a gain is reckoned against, one home for each so a measured gain and a
-//! tagged one level to the same place.
+//! tagged one level to the same place, and which of the two a track plays.
 
 use rusqlite::types::{FromSql, FromSqlResult, ValueRef};
 

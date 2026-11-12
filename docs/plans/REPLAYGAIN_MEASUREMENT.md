@@ -2,7 +2,7 @@
 
 Working doc. Delete when the feature ships.
 
-Status: **Phases 1–2 landed**, Phase 3 built and hand-passed, Phase 4 next · Created: 2026-11-12
+Status: **Phases 1–3 landed**, Phase 4 next · Created: 2026-11-12
 
 Issue [#156](https://github.com/KenanSalar/Melodia/issues/156).
 
