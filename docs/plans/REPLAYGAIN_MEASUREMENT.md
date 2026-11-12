@@ -212,8 +212,9 @@ gained tags since its job was read.
   unity. Side and back weigh alike because a 5.1 file labels its surround pair either way. The
   crate's ±135° and 180° positions weigh unity, BS.1770's rear, so a back pair maps to the ±110°
   positions, never to those. A buffer with no positions (`Channels::Discrete`, `Ambisonic` or
-  `Custom`) takes the default map by count. A multichannel file is measured as authored, as a tag is; what a narrower output plays
-  of it is the output's fold (`output/convert.rs` keeps the first channels), outside this plan.
+  `Custom`) takes the default map by count. A multichannel file is measured as authored, as a tag
+  is; what a narrower output plays of it is the output's fold (`output/convert.rs` keeps the first
+  channels), outside this plan.
 - **Mono is measured as dual mono.** The output copies a mono source to both front channels at
   unity (`output/convert.rs:341-348`), so it is heard as two identical channels; measured as one, it
   would be levelled 3 dB hotter than the same audio in stereo. Tagging tools measure mono as one
@@ -500,7 +501,10 @@ The store learns nothing about decoding beyond the edge it already has (`melodia
   - [ ] measured gains agree with an independent reference, `ffmpeg`'s `ebur128` filter with
         `peak=sample`, and `dualmono=true` for a mono file, over a handful of files across
         codecs, an Opus file, a cue sheet track and a multichannel file, where the library holds
-        one, among them;
+        one, among them. A back centre (6.1) differs by design: ffmpeg weighs it 1.41
+        (`BACK_MASK` in the installed 8.1's `f_ebur128.c`, `WEIGHT_1_41_MASK` on master),
+        `channels.rs` at unity, BS.1770's weight at 180°. 8.1 also weighs the top back channels
+        1.41, which master and `channels.rs` keep at unity as height channels;
   - [ ] tagged copies with their tags stripped (copies only) measure to what their tags said; the
         differences are read and explained before the phase closes;
   - [ ] a mono file and a stereo copy of it with both channels equal measure to the same gain;

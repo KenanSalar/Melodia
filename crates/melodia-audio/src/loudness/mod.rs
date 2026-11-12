@@ -31,6 +31,7 @@ pub struct Gain {
     pub peak: f64,
 }
 
+/// What a track's measurement leaves to record. [`Self::OutOfReach`] alone records nothing.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum TrackOutcome {
     Measured(Gain),
@@ -42,6 +43,7 @@ pub enum TrackOutcome {
     OutOfReach,
 }
 
+/// Each member's outcome, and the album's gain metered over all of them as one whole.
 #[derive(Debug, Clone, PartialEq)]
 pub struct AlbumOutcome {
     /// One per member, in the order given.
@@ -65,7 +67,8 @@ pub fn measure_album(
     let mut read_through = true;
     let mut album_peak = 0.0_f64;
     for member in members {
-        let read = read(member, Some(&mut album_meters), &stop)?;
+        // A member short of its end already rules the album gain out.
+        let read = read(member, read_through.then_some(&mut album_meters), &stop)?;
         match read {
             Read::Through { peak, .. } => album_peak = album_peak.max(peak),
             Read::Failed | Read::OutOfReach => read_through = false,
@@ -118,8 +121,9 @@ fn read(
             return Ok(short_of_end(path));
         }
     };
-    let Ok(mut meters) = MemberMeters::new(Layout::of(&decoder), album) else {
-        return Ok(Read::Failed);
+    let mut meters = match MemberMeters::new(Layout::of(&decoder), album) {
+        Ok(meters) => meters,
+        Err(e) => return Ok(meter_refused(path, e)),
     };
 
     let mut block = Vec::new();
@@ -131,19 +135,27 @@ fn read(
         if block.is_empty() {
             break;
         }
-        if meters.add(&block).is_err() {
-            return Ok(Read::Failed);
+        if let Err(e) = meters.add(&block) {
+            return Ok(meter_refused(path, e));
         }
     }
 
-    Ok(match decoder.ended() {
+    let ended = decoder.ended();
+    let short = match ended {
         Some(Ended::Finished) => {
             let track = meters.into_track();
-            Read::Through { gain: track.gain(), peak: track.peak() }
+            return Ok(Read::Through { gain: track.gain(), peak: track.peak() });
         }
         Some(Ended::Failed) => short_of_end(path),
         Some(Ended::ShapeChanged) | None => Read::Failed,
-    })
+    };
+    log::debug!("Loudness not measured: {} stopped short ({ended:?})", path.display());
+    Ok(short)
+}
+
+fn meter_refused(path: &Path, e: ebur128::Error) -> Read {
+    log::debug!("Loudness not measured: the meter refused {}: {}", path.display(), describe(&e));
+    Read::Failed
 }
 
 /// Leaves `block` empty once the decoder has ended.

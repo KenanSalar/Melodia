@@ -347,7 +347,7 @@ impl Cursor {
 /// fails to decode, or decodes to nothing
 /// ([symphonia#403](https://github.com/pdeljanov/Symphonia/issues/403)), is skipped. A
 /// `ResetRequired` does end it: recovering a chained Ogg means rebuilding the decoder against
-/// parameters that may have moved. A failed read stays apart from a clean end for [`Cursor::open`].
+/// parameters that may have moved. A failed read stays apart from a clean end for [`Cursor`].
 fn fill(
     format: &mut dyn FormatReader,
     decoder: &mut dyn AudioDecoder,
