@@ -57,6 +57,11 @@ impl TrackSummary {
     pub fn is_sheet_track(&self) -> bool {
         self.cue_track.is_some()
     }
+
+    /// Whether a gain reaches the player, tagged or measured. A peak alone levels nothing.
+    pub fn has_gain(&self) -> bool {
+        self.replaygain_track_gain.is_some() || self.replaygain_album_gain.is_some()
+    }
 }
 
 /// The audio a deck plays for a track: a file, or the stretch of one a cue sheet names. One value

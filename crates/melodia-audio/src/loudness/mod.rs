@@ -58,12 +58,12 @@ pub struct Stopped;
 
 /// Measures `members` as one album, fed in the order given, which the caller makes disc and track
 /// order. `stop` is asked between blocks.
-pub fn measure_album(
-    members: &[TrackAudio],
+pub fn measure_album<'a>(
+    members: impl IntoIterator<Item = &'a TrackAudio>,
     stop: impl Fn() -> bool,
 ) -> Result<AlbumOutcome, Stopped> {
     let mut album_meters = AlbumMeters::default();
-    let mut tracks = Vec::with_capacity(members.len());
+    let mut tracks = Vec::new();
     let mut read_through = true;
     let mut album_peak = 0.0_f64;
     for member in members {

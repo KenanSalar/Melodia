@@ -28,7 +28,8 @@ paths:
 - **This tree's global pool is two threads** (`main.rs`'s `GLOBAL_RAYON_THREADS`), shared with
   every JPEG decoded outside a pool, so a bare `par_iter` from a blocking task is neither wide nor
   alone there. Bulk work over library files runs under
-  `melodia_store::media::ingest::scan_pool::ScanPool::install`, which argues why.
+  `melodia_store::media::ingest::scan_pool::ScanPool::install`, which argues why, the loudness pass
+  excepted, on its own low-priority pool (`tasks::loudness::pool`).
 - Custom pools via `ThreadPoolBuilder::new().num_threads(n).build()` — use `pool.install(|| ...)`
   to run work on it
 

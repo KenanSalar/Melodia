@@ -7,6 +7,7 @@
 
 pub mod allocator;
 pub mod always_on_top;
+pub mod background_priority;
 #[cfg(target_os = "windows")]
 pub mod color_mode;
 pub mod crash_report;

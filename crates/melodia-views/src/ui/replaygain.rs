@@ -24,12 +24,20 @@ pub fn install_replaygain(ui: &AppWindow, state: &AppState) {
     rg.set_min_preamp(replaygain::RG_MIN_PREAMP_DB);
     rg.set_max_preamp(replaygain::RG_MAX_PREAMP_DB);
 
-    rg.on_set_enabled(toggle_binding(
-        state,
-        "persist rg_enabled",
-        library::playback::player_set_replaygain_enabled,
-        library::settings::set_replaygain_enabled,
-    ));
+    {
+        let mut set_enabled = toggle_binding(
+            state,
+            "persist rg_enabled",
+            library::playback::player_set_replaygain_enabled,
+            library::settings::set_replaygain_enabled,
+        );
+        let loudness = state.loudness.clone();
+        rg.on_set_enabled(move |on| {
+            set_enabled(on);
+            // Ahead of the persist, as `LoudnessControl::kick` allows.
+            loudness.kick();
+        });
+    }
 
     // Track / Album, chip index 0 / 1.
     {

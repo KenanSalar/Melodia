@@ -22,6 +22,11 @@ impl TrackWindow {
         wanted.iter().copied().filter(|&id| self.get(id).is_none()).collect()
     }
 
+    /// The ids of the records no gain reaches, neither tagged nor measured.
+    pub fn ungained(&self) -> Vec<i64> {
+        self.records.iter().filter(|record| !record.has_gain()).map(|record| record.id).collect()
+    }
+
     /// Take `fresh` over whatever it held for the same ids, then keep only what `wanted` names.
     pub fn seat(&mut self, wanted: &[i64], fresh: impl IntoIterator<Item = Arc<TrackSummary>>) {
         for record in fresh {

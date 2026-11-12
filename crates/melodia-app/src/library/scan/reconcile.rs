@@ -8,10 +8,9 @@ use parking_lot::Mutex;
 use tokio_util::sync::CancellationToken;
 
 use super::finish::purge_held;
-use super::repair::RestoreNotice;
 use super::run::ScanRun;
 use super::{Orphans, forget_missing_artwork, scan_one};
-use crate::state::AppState;
+use crate::state::{AppState, Hold};
 use crate::tasks::TaskSpawner;
 use melodia_core::entities::folder::Folder;
 use melodia_core::error::describe;
@@ -141,7 +140,7 @@ pub fn finish_interrupted_imports(state: &AppState) {
 
 /// Starts a pass over the folders `reach` covers, holding up a restore notice a scan has already
 /// raised until it ends.
-pub(super) fn start(state: &AppState, reach: Reach, restoring: Option<RestoreNotice>) {
+pub(super) fn start(state: &AppState, reach: Reach, restoring: Option<Hold>) {
     let Some(claim) = PassClaim::take(&PASS, reach) else {
         log::debug!("reconcile_watched_folders: already in flight, merging into it");
         return;
@@ -153,13 +152,15 @@ fn run_pass(
     state: &AppState,
     mut claim: PassClaim<'static>,
     reach: Reach,
-    restoring: Option<RestoreNotice>,
+    restoring: Option<Hold>,
 ) {
     let spawner = TaskSpawner::from_state(state);
     let state = state.clone();
     let cancel = state.scan.token();
+    // Ahead of the spawn, so a folder scan handing over to this pass is never seen idle between.
+    let busy = state.scan.hold_busy();
     spawner.spawn(async move {
-        let _handed_over = restoring;
+        let _handed_over = (restoring, busy);
         let mut reach = reach;
         loop {
             let ended = round(&state, reach, &cancel).await;

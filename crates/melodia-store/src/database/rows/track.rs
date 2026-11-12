@@ -4,7 +4,7 @@ use rusqlite::{Row, Statement};
 use melodia_core::entities::browse::DirectoryTrack;
 use melodia_core::entities::cue::{CueFrames, CueSpan};
 use melodia_core::entities::track::{
-    MostPlayedFavorite, PlaylistExportRow, ScrobbleRow, TagEditRow, Track, TrackLinks,
+    MostPlayedFavorite, PlaylistExportRow, ScrobbleRow, TagEditRow, Track, TrackAudio, TrackLinks,
     TrackListRow, TrackMeta, TrackSummary,
 };
 
@@ -26,6 +26,9 @@ impl FromRow for Option<CueSpan> {
             .map_err(|e| rusqlite::Error::FromSqlConversionFailure(end, Type::Integer, Box::new(e)))
     }
 }
+
+// The path comes from a column named `path`, so a projection selects `file_path AS path`.
+by_name!(TrackAudio { path, span: Option<CueSpan> });
 
 by_name!(TrackSummary {
     id,

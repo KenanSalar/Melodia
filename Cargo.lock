@@ -3582,6 +3582,7 @@ dependencies = [
  "melodia-core",
  "melodia-testkit",
  "parking_lot",
+ "rustix 1.1.6",
  "serde",
  "serde_json",
  "tempfile",

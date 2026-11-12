@@ -11,39 +11,21 @@ use std::path::{Path, PathBuf};
 
 use rayon::iter::Either;
 use rayon::prelude::*;
-use tokio::sync::watch;
 
-use crate::state::AppState;
+use crate::state::{AppState, Hold, HoldCount};
 use melodia_core::config::Paths;
 use melodia_core::error::AppError;
 use melodia_store::database::{DbPool, queries};
 use melodia_store::media::ingest::scan_pool::ScanPool;
 
-/// Raises `AppState::artwork_restoring` for as long as it lives, so a scan that stops or fails
-/// part way can't leave the notice up.
-pub(super) struct RestoreNotice(watch::Sender<u32>);
-
-impl RestoreNotice {
-    fn raise(restoring: &watch::Sender<u32>) -> Self {
-        restoring.send_modify(|count| *count += 1);
-        Self(restoring.clone())
-    }
-}
-
-impl Drop for RestoreNotice {
-    fn drop(&mut self) {
-        self.0.send_modify(|count| *count = count.saturating_sub(1));
-    }
-}
-
 /// Re-points every library reference the current store still holds and clears the rest,
-/// answering with the notice to hold while the scan puts the cleared covers back, or `None` when
-/// nothing was cleared.
+/// answering with a hold on `restoring` to keep while the scan puts the cleared covers back, or
+/// `None` when nothing was cleared.
 pub(super) async fn forget_missing(
     db: &DbPool,
     paths: &Paths,
-    restoring: &watch::Sender<u32>,
-) -> Result<Option<RestoreNotice>, AppError> {
+    restoring: &HoldCount,
+) -> Result<Option<Hold>, AppError> {
     let MissingReferences { relocated, gone } = missing_references(db, paths).await?;
     if !relocated.is_empty() {
         let repointed = queries::artwork::repoint_all(db, relocated).await?;
@@ -59,7 +41,7 @@ pub(super) async fn forget_missing(
     log::info!(
         "Artwork store is missing {missing} file(s); cleared {cleared} reference(s) to restore"
     );
-    Ok(Some(RestoreNotice::raise(restoring)))
+    Ok(Some(restoring.hold()))
 }
 
 /// Starts a library reconcile when a cover the library names is gone, for a cache that found one

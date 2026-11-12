@@ -25,7 +25,7 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use crate::library::settings::folders::{NestedFolder, folders_inside};
-use crate::state::AppState;
+use crate::state::{AppState, Hold};
 use crate::tasks::TaskSpawner;
 use melodia_core::entities::folder::Folder;
 use melodia_core::entities::scan::ScannedFile;
@@ -40,7 +40,6 @@ use melodia_store::media::ingest::scanner::{
     MediaWalk, ScanObserver, WalkIndex, collect_media_files, scan_files_parallel,
 };
 use reconcile::Reach;
-use repair::RestoreNotice;
 use run::ScanRun;
 
 /// How a scan ended, when it didn't fail.
@@ -82,6 +81,8 @@ pub async fn scan_folder(
     folder_id: i64,
     on_stop: OnStop,
 ) -> Result<ScanOutcome, AppError> {
+    // Held to the return, past the reconcile below taking its own.
+    let _busy = state.scan.hold_busy();
     // Read ahead of the token, so a cancel landing between the two can't stop this scan unseen.
     let cancels_at_start = state.scan.user_cancels();
     let cancel = state.scan.token();
@@ -119,7 +120,7 @@ pub async fn scan_folder(
 
 /// The repair every scan entry runs before reading anything. A failure is logged rather than
 /// returned: a scan that couldn't check the artwork store is still worth running.
-async fn forget_missing_artwork(state: &AppState) -> Option<RestoreNotice> {
+async fn forget_missing_artwork(state: &AppState) -> Option<Hold> {
     let repaired = repair::forget_missing(&state.db, &state.paths, &state.artwork_restoring).await;
     repaired.unwrap_or_else(|e| {
         log::warn!("Artwork check before the scan failed: {}", describe(&e));

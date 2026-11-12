@@ -10,6 +10,7 @@ pub mod discord_presence;
 pub mod embedded_cue_probe;
 pub mod file_event_processor;
 pub mod heap_trim;
+pub mod loudness;
 pub mod lyrics_cache;
 pub mod material_you;
 pub mod one_shot;
