@@ -136,3 +136,7 @@ impl Default for LoudnessControl {
         Self::new()
     }
 }
+
+#[cfg(test)]
+#[path = "tests/loudness_tests.rs"]
+mod tests;

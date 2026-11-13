@@ -173,3 +173,7 @@ fn fill_block(decoder: &mut FileDecoder, block: &mut Vec<f32>) {
 fn short_of_end(path: &Path) -> Read {
     if matches!(path.try_exists(), Ok(true)) { Read::Failed } else { Read::OutOfReach }
 }
+
+#[cfg(test)]
+#[path = "tests/loudness_tests.rs"]
+mod tests;

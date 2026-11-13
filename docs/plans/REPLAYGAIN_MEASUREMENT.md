@@ -2,7 +2,7 @@
 
 Working doc. Delete when the feature ships.
 
-Status: **Phases 1–6 landed**, Phase 7 waits for Kenan's go; the Windows build check and hand
+Status: **Phases 1–7 landed on Linux**; Phase 7's Windows check, the Windows build check and hand
 test pending · Created: 2026-11-12
 
 Issue [#156](https://github.com/KenanSalar/Melodia/issues/156).
@@ -674,6 +674,14 @@ first. The library was the dev library's 525 tracks, `melodia-test-library-50500
 
 Tests are added where the landed change earns them, on Kenan's go, after the hand passes above.
 Existing tests a phase breaks are fixed in that phase.
+
+- [x] Linux (2026-11-13): the meter, the channel map, the DSP gate, the store's loudness queries,
+      `LoudnessControl`, `HoldCount`, the pass's work list and end, and the thread priority, each
+      test failing under a mutation of what it guards.
+- [ ] Windows: whether `background_priority.rs`'s `SetThreadPriority` path earns a test of its own
+      (Kenan).
+- [ ] Open: a confirmation test for b0db7247 needs a `PassEnd` built from the tally and the work
+      list, a production seam waiting on Kenan's answer.
 
 ---
 

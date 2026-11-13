@@ -1,5 +1,5 @@
 use super::*;
-use crate::player::playback::tests::helpers::assert_approx as approx;
+use crate::player::playback::tests::helpers::{approx_eq, assert_approx as approx};
 
 // `db_to_linear` itself is pinned in `dsp_tests` — these exercise what
 // `ReplayGain` builds on top of it.
@@ -93,6 +93,51 @@ fn prevent_clipping_does_not_clamp_attenuation() {
         ..Default::default()
     };
     approx(compute_linear_gain(baked, controls(RgMode::Album, 0.0, true)), 0.5);
+}
+
+/// The switch moves measured gains alone: a tagged track plays its tags either way.
+#[test]
+fn a_measured_gain_levels_only_while_measuring_is_on() {
+    let rows = [
+        (GainOrigin::Tagged, false, 0.5),
+        (GainOrigin::Tagged, true, 0.5),
+        (GainOrigin::Measured, false, 1.0),
+        (GainOrigin::Measured, true, 0.5),
+    ];
+    for (origin, measured, expected) in rows {
+        let baked = TrackReplayGain { album_gain: Some(-6.020_6), origin, ..Default::default() };
+        let controls = RgControls { measured, ..controls(RgMode::Album, 0.0, false) };
+
+        let gain = compute_linear_gain(baked, controls);
+
+        assert!(approx_eq(gain, expected), "{origin:?} with measuring {measured}: {gain}");
+    }
+}
+
+/// What the loudness pass and the queue window ask before doing any work.
+#[test]
+fn measured_gains_are_heard_only_with_replaygain_and_measuring_both_on() {
+    let rows =
+        [(false, false, false), (false, true, false), (true, false, false), (true, true, true)];
+    for (enabled, measured, heard) in rows {
+        let shared = ReplayGainShared::new();
+        shared.set_enabled(enabled);
+        shared.set_measured(measured);
+
+        assert_eq!(shared.levels_measured(), heard, "enabled {enabled}, measuring {measured}");
+    }
+}
+
+/// The generation is what makes a playing source rebuild, so the switch re-levels the track
+/// already playing.
+#[test]
+fn switching_measuring_moves_the_generation() {
+    let shared = ReplayGainShared::new();
+    let before = shared.generation();
+
+    shared.set_measured(true);
+
+    assert!(shared.generation() > before);
 }
 
 #[test]

@@ -42,22 +42,34 @@ pub(crate) const INDEXED_RATE: u32 = 48_000;
 /// Writes a mono 16-bit PCM WAV of `frames` frames at [`INDEXED_RATE`], each sample holding its own
 /// frame index, so a decoded sample says which frame of the file it is.
 pub(crate) fn frame_indexed_wav(path: &Path, frames: i16) -> std::io::Result<()> {
-    let data_len = u32::from(frames.unsigned_abs()) * 2;
-    let mut bytes = Vec::with_capacity(44 + usize::from(frames.unsigned_abs()) * 2);
+    let samples: Vec<i16> = (0..frames).collect();
+    pcm_wav(path, 1, INDEXED_RATE, &samples)
+}
+
+/// Writes `samples`, interleaved over `channels`, as a 16-bit PCM WAV at `rate`.
+pub(crate) fn pcm_wav(
+    path: &Path,
+    channels: u16,
+    rate: u32,
+    samples: &[i16],
+) -> std::io::Result<()> {
+    let data_len = u32::try_from(samples.len() * 2).map_err(std::io::Error::other)?;
+    let block_align = channels * 2;
+    let mut bytes = Vec::with_capacity(44 + samples.len() * 2);
     bytes.extend(b"RIFF");
     bytes.extend((36 + data_len).to_le_bytes());
     bytes.extend(b"WAVEfmt ");
     bytes.extend(16_u32.to_le_bytes());
     bytes.extend(1_u16.to_le_bytes());
-    bytes.extend(1_u16.to_le_bytes());
-    bytes.extend(INDEXED_RATE.to_le_bytes());
-    bytes.extend((INDEXED_RATE * 2).to_le_bytes());
-    bytes.extend(2_u16.to_le_bytes());
+    bytes.extend(channels.to_le_bytes());
+    bytes.extend(rate.to_le_bytes());
+    bytes.extend((rate * u32::from(block_align)).to_le_bytes());
+    bytes.extend(block_align.to_le_bytes());
     bytes.extend(16_u16.to_le_bytes());
     bytes.extend(b"data");
     bytes.extend(data_len.to_le_bytes());
-    for frame in 0..frames {
-        bytes.extend(frame.to_le_bytes());
+    for sample in samples {
+        bytes.extend(sample.to_le_bytes());
     }
     std::fs::write(path, bytes)
 }

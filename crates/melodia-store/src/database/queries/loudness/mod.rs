@@ -120,3 +120,7 @@ pub async fn carry_over_rewritten(db: &DbPool, before: Vec<HashOnRecord>) -> Res
     })
     .await
 }
+
+#[cfg(test)]
+#[path = "../tests/loudness_tests.rs"]
+mod tests;

@@ -35,3 +35,7 @@ fn weighted(position: Position) -> Channel {
         Channel::Center
     }
 }
+
+#[cfg(test)]
+#[path = "tests/channels_tests.rs"]
+mod tests;

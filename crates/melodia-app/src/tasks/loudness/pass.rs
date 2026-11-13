@@ -481,3 +481,7 @@ impl WorkList {
         }
     }
 }
+
+#[cfg(test)]
+#[path = "../tests/loudness_pass_tests.rs"]
+mod tests;

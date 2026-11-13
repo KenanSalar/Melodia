@@ -94,3 +94,7 @@ impl Drop for Hold {
         self.0.send_modify(|count| *count = count.saturating_sub(1));
     }
 }
+
+#[cfg(test)]
+#[path = "tests/signal_tests.rs"]
+mod tests;
