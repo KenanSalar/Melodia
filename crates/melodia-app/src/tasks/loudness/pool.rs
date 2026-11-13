@@ -5,8 +5,8 @@
 use melodia_core::error::{AppError, AppResult};
 use melodia_platform::services::platform::background_priority;
 
-/// Jobs decoding at once. Each holds a decoder and its meters, and each past the first takes a
-/// core the UI or a scan may want.
+/// Jobs decoding at once. Width buys wall time, not less work: each added worker holds a core
+/// playback or the UI may want, and another reader on the library's disk.
 pub(super) const MEASURE_WORKERS: usize = 2;
 
 /// Built at a pass's first job and dropped with the pass, so neither a finished backlog nor a wake

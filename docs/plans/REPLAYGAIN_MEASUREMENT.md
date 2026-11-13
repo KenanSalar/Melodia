@@ -2,8 +2,8 @@
 
 Working doc. Delete when the feature ships.
 
-Status: **Phases 1–4 landed**, Phase 5 built and hand-passed, Phase 6 next; Phase 4's Windows
-build check pending · Created: 2026-11-12
+Status: **Phases 1–6 landed**, Phase 7 waits for Kenan's go; the Windows build check and hand
+test pending · Created: 2026-11-12
 
 Issue [#156](https://github.com/KenanSalar/Melodia/issues/156).
 
@@ -163,8 +163,9 @@ blocks across a join hear it as the album plays through, which is what "as one w
 An album whose members differ in rate or channel count gets one album meter per shape, combined
 through `loudness_global_multiple`, which accepts histogram states. The album meter carries no peak
 mode: the album peak is the loudest member's sample peak, read off the track meters. Feeding two
-meters runs the K-weighting filter twice over every sample; Phase 6 measures that share of the
-pass's CPU against decoding.
+meters runs the K-weighting filter and the block gating twice over every sample, about a quarter
+of the pass's CPU on the big library (Phase 6): the price of memory that stays flat however long
+the album.
 
 **An album is complete only when every in-library member is untagged and measured**, its member
 count matching `album_tracks`. Then:
@@ -337,8 +338,8 @@ threads lower their own priority as they start, so the decode-ahead thread, the 
 take the CPU first. Dedicated, because a priority set on a blocking-pool thread outlives the job and
 lowers whatever runs there next, and `ScanPool` can take every core. The pool is `MEASURE_WORKERS`
 wide, built at a pass's first job and dropped with the pass, so no thread idles after the backlog
-and a wake whose work is all out of reach starts none, logging nothing at `info`. Its width is
-settled on the big library (Phase 6).
+and a wake whose work is all out of reach starts none, logging nothing at `info`. Its width stays
+two: the pass is CPU-bound, so a wider pool buys only wall time (Phase 6).
 
 - Linux: `rustix::process::setpriority_process` on the thread's own id, which on Linux sets that
   thread alone. `rustix` is already in the tree (`melodia-playback`), with no new `unsafe`. A thread
@@ -346,7 +347,7 @@ settled on the big library (Phase 6).
   (`include/linux/ioprio.h`). BFQ honours that level, mq-deadline only the class, which nice leaves
   at best-effort, and `none`, NVMe's default, has no priorities. The idle class needs `ioprio_set`
   or `SCHED_IDLE`, neither of which `rustix` wraps, and `libc` is the allocator's alone, so the
-  pass's reads go unthrottled outside BFQ; Phase 6's no-dropout check covers that.
+  pass's reads go unthrottled outside BFQ; Phase 6's no-dropout check passed with them so.
 - Windows: `SetThreadPriority(GetCurrentThread(), THREAD_MODE_BACKGROUND_BEGIN)` through
   `windows-sys`, which lowers CPU and I/O priority together. A new FFI call of the kind
   `.claude/rules/unsafe-rust.md` already sanctions; `Win32_System_Threading` is already enabled.
@@ -511,6 +512,7 @@ The store learns nothing about decoding beyond the edge it already has (`melodia
 **Gate:**
 - [x] The static gates.
 - [ ] Windows: `background_priority.rs`'s `SetThreadPriority` call builds (no Windows target here).
+      The PR's `clippy-windows` job checks it, and Phase 6's Windows hand test builds it.
 - [x] In the dev data folder, the switch on through `settings.json` (2026-11-12, release build,
       the 525-track dev library plus scratch fixtures in two added folders, on a null sink;
       restored after):
@@ -597,18 +599,76 @@ The store learns nothing about decoding beyond the edge it already has (`melodia
 
 ## Phase 6: The big library
 
-- [ ] A whole-library pass on the big test library, measured and recorded here:
-  - [ ] wall time, CPU, peak RSS sampled from `/proc` (never heaptrack on a pass this size), idle
-        RSS after, and the album meter's share of the CPU against decoding;
-  - [ ] `MEASURE_WORKERS` decided from those figures, its doc saying what it trades;
-  - [ ] whether the pass evicts the database's pages from the page cache (the UI slower after a
-        pass than before). If it does, each file's pages are dropped once it is measured
-        (`posix_fadvise(DONTNEED)` through `rustix` on Linux), and the check runs again.
-- [ ] The issue's hand list:
-  - [ ] a library mixing tagged and untagged albums, in Album mode;
-  - [ ] an album with a single untagged track;
-  - [ ] a file replaced while a pass runs;
-  - [ ] music playing through a large pass, gapless and crossfaded, with no dropout.
+Run by Claude on Kenan's go, 2026-11-13: release builds, the dev data folder with a backup (restored
+after, a dry run against it coming back empty), a null sink, and each run's page cache dropped
+first. The library was the dev library's 525 tracks, `melodia-test-library-50500` (50,500 files,
+35 GB, 212.5 h of MP3, M4A, FLAC up to 96 kHz, Opus, Vorbis, WAV and AIFF) and 16 fixture tracks:
+51,041 tracks, 51,036 of them untagged, in 4,848 albums, about 300 h, on NVMe (scheduler `none`),
+16 cores, 60 GB.
+
+- [x] A whole-library pass on the big test library, measured and recorded here:
+  - [x] wall time, CPU, peak RSS sampled from `/proc`, idle RSS after, and the album meter's share:
+
+    | workers | wall    | loudness threads' CPU | cores busy | peak `RssAnon` | idle after |
+    |---------|---------|-----------------------|------------|----------------|------------|
+    | 2       | 825.8 s | 1,595.8 s             | 1.93       | 55.5 MiB       | 46.2 MiB   |
+    | 4       | 429.2 s | 1,595.5 s             | 3.72       | 60.1 MiB       | 49.5 MiB   |
+
+    Every pass measured all 51,036 tracks, none with nothing to level and none out of reach. Idle
+    with the switch off: 36.4 and 37.1 MiB. One worker wasn't run: the CPU is the same at two and
+    four and two kept 1.93 cores busy, so one would take the same 1,596 s on one core.
+    `perf record -e cycles:u` over 60 s mid-pass at two: `ebur128` 48.8% of the loudness threads'
+    cycles (`Filter::process` 31.7%, `calc_gating_block` 17.1%), the decoders about 35% (MP3
+    24.1%), and the decoder's per-sample iterator (`FileDecoder::next`, `Cursor::next_sample`)
+    12.6%. Both meters run the same filter and gating over every sample, so the album meter is half
+    of `ebur128`'s share, about a quarter of the pass. Its A/B wasn't run: the alternative, every
+    member's meter kept alive, is the memory "The album is measured as one whole" rules out, so no
+    decimal changes the decision;
+  - [x] `MEASURE_WORKERS` stays 2, its doc saying width buys wall time and not less work, at a core
+        and a disk reader per added worker. Four halves a backlog's wall time for the same CPU and
+        4.6 MiB more peak; two keeps cores free on a small machine and readers few on a spinning
+        disk;
+  - [x] the pass doesn't evict the database's pages. In a scope at `MemoryHigh=400M` with swap off,
+        the database dropped from the cache before launch so the app's reads charged it to the
+        scope: the boot read 82.3 MiB of it, and through three minutes of pass the scope sat at its
+        cap reclaiming the stream's inactive pages while the database stayed at 82.2 MiB resident
+        (`fincore` every 2 s). No `posix_fadvise` change;
+  - [x] idle after a pass sits 9.8 MiB (two workers) and 12.4 MiB (four) above the switch-off run,
+        where Phase 4's 525 tracks showed no gap. Not the end-of-pass trim's timing: a live
+        `malloc_trim(0)` at idle returned 1.9 MiB. `malloc_info` against the switch-off run: 25.1
+        against 16.6 MiB in use in the arenas, and 8.87 against 3.75 MiB free in 4,142 against
+        2,437 chunks too small to hand back. Under the 20 MB heaptrack gate; an open question below;
+  - [x] the launch pass starts before the launch reconcile takes the scan guard
+        (`spawn_background_tasks`, which spawns it, at `main.rs:80`, `spawn_resume_watching` at
+        `:97`) and steps aside within 0.1 s with nothing measured, Phase 5's "Waiting for a library
+        scan" row.
+- [x] The issue's hand list, on sines at known levels played through the null sink and read back
+      per tone:
+  - [x] a library mixing tagged and untagged albums, in Album mode: `Tagged` (`rsgain` album tags)
+        played at its tag, -8.89 dB, and `Untagged` at its measured album gain, -6.87, each within
+        0.01 dB;
+  - [x] an album with a single untagged track: `One untagged`'s two tagged tracks at their album
+        tag, -4.93 dB, and the bare one at its measured track gain, +8.54, the album holding no
+        measured album gain;
+  - [x] a file replaced while a pass runs: overwritten in place 14 ms after the pass opened the
+        album's next track. The album was written 2 of 3, skipping the moved row, and the library
+        change woke a pass that measured it again: all three rows match their hashes, the new file
+        at -24.51 LUFS against ffmpeg's -24.5;
+  - [x] music playing through a large pass, gapless and crossfaded, with no dropout: four sine
+        tracks recorded for 72 s each while the pass kept 1.98 and 1.99 cores busy. No run of 32
+        silent samples, no 5 ms envelope dip, no underrun line. Gapless joins switch inside one
+        20 ms hop; the 2 s crossfade is linear, its two levels summing to 1.000 throughout.
+- [ ] Windows, Kenan's hand test on a release build (no Windows machine here), the switch on with a
+      large library:
+  - [ ] it builds, `background_priority.rs`'s `SetThreadPriority` call included;
+  - [ ] the `loudness-{i}` threads run at background priority while a pass runs (Process
+        Explorer, the process's Threads tab);
+  - [ ] Private Bytes before a pass, at its peak and two minutes after it ends, against a launch
+        with the switch off: the end-of-pass trim (`HeapOptimizeResources`) hands the decoders'
+        memory back, the gap compared with Linux's 9.8 MiB at two workers;
+  - [ ] music plays through a pass with no dropout, gapless and crossfaded;
+  - [ ] Stop and the switch off end the pass, and with the switch off a launch and a library change
+        start none.
 
 ## Phase 7: Tests
 
@@ -635,5 +695,8 @@ Existing tests a phase breaks are fixed in that phase.
 
 ## Open questions
 
-- `MEASURE_WORKERS`, settled in Phase 6.
 - Whether Stop should hold across launches. This plan holds it for the session.
+- What holds the 8.5 MiB more in use in the arenas after a whole-library pass (Phase 6). Under the
+  20 MB heaptrack gate; a heaptrack window over part of a pass, in its own scope, would tell.
+- Whether a bulk read off the decoder is worth it for the pass: its per-sample iterator is 12.6% of
+  a pass's CPU (Phase 6), and it is the deck's read too.
