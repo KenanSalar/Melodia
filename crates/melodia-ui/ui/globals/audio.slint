@@ -1,4 +1,4 @@
-// Every callback here applies to the live player *and* persists, the drag pairs on release as
+// Every setter here applies to the live player *and* persists, the drag pairs on release as
 // `set-volume` and `commit-volume` split it.
 
 // `band-gains` is dB per band, low to high. `preset-idx`'s last entry is the synthetic "Custom" a
@@ -24,6 +24,9 @@ export global Equalizer {
     callback commit-preamp(float /*dB*/);
 }
 
+// Mirrors `state::MeasurePhase`.
+export enum MeasurePhase { idle, running, waiting-for-scan, stopped }
+
 // `mode-idx` matches `player::replaygain::RgMode`.
 export global ReplayGain {
     in-out property <bool> enabled;
@@ -33,11 +36,23 @@ export global ReplayGain {
     in property <float> min-preamp;
     in property <float> max-preamp;
 
+    in-out property <bool> measure-untagged;
+    in property <MeasurePhase> measure-phase: MeasurePhase.idle;
+    in property <int> measured-count;
+    in property <int> measure-total;
+    out property <float> measure-progress: root.measure-total > 0
+        ? root.measured-count / root.measure-total
+        : 0;
+
     callback set-enabled(bool);
     callback set-mode(int /*0 = Track, 1 = Album*/);
     callback set-prevent-clipping(bool);
     callback set-preamp(float /*dB*/);
     callback commit-preamp(float /*dB*/);
+    callback set-measure-untagged(bool);
+    // Neither persists: a Stop holds for the session.
+    callback stop-measuring();
+    callback resume-measuring();
 }
 
 // `enabled` decides only whether the strip mounts; `set-active`, off the mount, arms the tap.

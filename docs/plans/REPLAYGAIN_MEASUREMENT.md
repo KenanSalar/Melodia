@@ -2,8 +2,8 @@
 
 Working doc. Delete when the feature ships.
 
-Status: **Phases 1–4 landed**, Phase 5 next; Phase 4's Windows build check pending · Created:
-2026-11-12
+Status: **Phases 1–4 landed**, Phase 5 built and hand-passed, Phase 6 next; Phase 4's Windows
+build check pending · Created: 2026-11-12
 
 Issue [#156](https://github.com/KenanSalar/Melodia/issues/156).
 
@@ -410,7 +410,7 @@ the startup trims have run.
 | the queue window | `crates/melodia-app/src/tasks/queue_window.rs`, `melodia-engine`'s `window_ungained` | the `gains_measured` arm, and the window's ungained ids offered while measured gains are heard |
 | lowered priority | `crates/melodia-platform/src/services/platform/background_priority.rs` | one function, `cfg_select!` per OS |
 | Settings card | `crates/melodia-ui/ui/views/settings/replaygain-section.slint`, `globals/audio.slint`, `components/settings/replaygain-controls.slint` | the row and the progress row; strings on `ReplayGainText` |
-| Settings wiring | `crates/melodia-views/src/ui/replaygain/` | today the one file `ui/replaygain.rs`, which becomes `mod.rs`: `install_replaygain`. `measure.rs`: the switch, the progress painter, stop and resume |
+| Settings wiring | `crates/melodia-views/src/ui/replaygain/` | `mod.rs`: `install_replaygain`. `measure.rs`: the switch, the progress painter, stop and resume |
 
 `melodia-views` learns nothing about the table: it reads `LoudnessControl` through `melodia-app`.
 The store learns nothing about decoding beyond the edge it already has (`melodia-audio`).
@@ -557,28 +557,43 @@ The store learns nothing about decoding beyond the edge it already has (`melodia
 
 ## Phase 5: The switch, progress and Stop in Settings
 
-- [ ] `ReplayGain` global: `measure-untagged` and its callback, the progress state (running,
+- [x] `ReplayGain` global: `measure-untagged` and its callback, the progress state (running,
       waiting for a scan, stopped with work left, idle), done and total, `stop-measuring()` and
       `resume-measuring()`.
-- [ ] `replaygain-section.slint`: the switch row while ReplayGain is on, and a `JobProgress` under
+- [x] `replaygain-section.slint`: the switch row while ReplayGain is on, and a `JobProgress` under
       it while a pass runs or stopped work remains. The card only: the overflow menu's dialog stays
       the live listening controls.
-- [ ] The card's description loses its claim that only tagged tracks are affected; its pointer to
+- [x] The card's description loses its claim that only tagged tracks are affected; its pointer to
       tagging tools stays. The overflow menu's dialog reads the same `enable-desc`
       (`overflow-menu.slint:216-217`), where the switch isn't, so the new wording reads right in
       both.
-- [ ] `ui/replaygain/`: the switch's handler is `toggle_binding` composed with the kick, since
-      `toggle_binding` persists fire-and-forget and the pass reads only live state; ReplayGain's own
-      toggle gains the same kick. The progress painter on the `watch`, Stop and Measure.
-- [ ] Strings through `@tr`, the counts as plurals; `scripts/update-translations.py` and every
+- [x] `ui/replaygain/`: the switch's handler is `toggle_binding` composed with `resume`, which
+      kicks, since `toggle_binding` persists fire-and-forget and the pass reads only live state.
+      Moved either way it clears a Stop, so off reads as idle. ReplayGain's own toggle keeps its
+      kick. The progress painter on the `watch`, Stop and Measure.
+- [x] Strings through `@tr`, the counts as plurals; `scripts/update-translations.py` and every
       catalog finished.
-- [ ] `README.md`'s ReplayGain lines (`:17`, `:128`).
+- [x] `README.md`'s ReplayGain lines (`:17`, `:128`).
 
 **Gate:**
-- [ ] The static gates.
-- [ ] Kenan's hand pass: the switch on with a library in place shows progress; Stop holds through a
-      new file arriving; Measure resumes; the switch off stops the pass and returns to tag-only
-      levels; the settings search finds the row; the overflow dialog's description reads right.
+- [x] The static gates.
+- [x] Kenan's hand pass, run by Claude on his go (2026-11-13, debug build, the 525-track dev library
+      on a null sink, restored after; clicks through `ydotool`):
+  - [x] the switch on with a library in place shows progress: at launch "39 / 525 tracks
+        measured" with Stop, and on a click mid-session "26 / 516"; the row leaves when the pass
+        ends (93 albums, 525 tracks);
+  - [x] Stop holds through a new file arriving: "Stopped · 39 / 516" with Measure, and an untagged
+        FLAC dropped into a watched folder was imported with no pass and no row;
+  - [x] Measure resumes: a pass owing 478, the arrival among them;
+  - [x] the switch off stops the pass ("stopped as measuring was switched off") and the row goes;
+        the playing track, of an album measured at -8.05 dB with the preamp at 0, stepped -8.15 dB
+        at the switch on and +7.72 dB at the switch off in the null sink's recording;
+  - [x] the settings search finds the card by "measure" and, through the new row alone, by
+        "untagged";
+  - [x] the overflow dialog's description reads right, its controls unchanged;
+  - [x] "Waiting for a library scan · 0 / 525 tracks measured" with Stop, while a launch scan
+        parsed six reflink copies of the music folder and held the pass for 6.5 s; the pass came
+        back as "0 / 3525" once it let go. The library's own scans hold it for milliseconds.
 
 ## Phase 6: The big library
 

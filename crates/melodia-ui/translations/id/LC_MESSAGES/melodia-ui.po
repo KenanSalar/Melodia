@@ -1567,8 +1567,8 @@ msgid "Enable ReplayGain"
 msgstr "Aktifkan ReplayGain"
 
 #: ui/components/settings/replaygain-controls.slint
-msgid "ReplayGain only affects tracks that already have loudness tags. Scan your library with a tool like rsgain or loudgain to add them."
-msgstr "ReplayGain hanya berlaku untuk lagu yang sudah memiliki tag kenyaringan. Pindai pustaka Anda dengan alat seperti rsgain atau loudgain untuk menambahkannya."
+msgid "Evens out the volume between tracks using their loudness tags. Add them with a tool like rsgain or loudgain, or have Melodia measure the tracks that lack them."
+msgstr "Menyamakan volume antarlagu berdasarkan tag kenyaringannya. Tambahkan tag dengan alat seperti rsgain atau loudgain, atau biarkan Melodia mengukur lagu yang belum memilikinya."
 
 #: ui/components/settings/replaygain-controls.slint
 msgid "Normalization mode"
@@ -1577,6 +1577,40 @@ msgstr "Mode normalisasi"
 #: ui/components/settings/replaygain-controls.slint
 msgid "Prevent clipping"
 msgstr "Cegah clipping"
+
+#: ui/components/settings/replaygain-controls.slint
+msgid "Measure untagged tracks"
+msgstr "Ukur lagu tanpa tag"
+
+#: ui/components/settings/replaygain-controls.slint
+msgid "Measures the loudness of tracks without tags in the background, so they're evened out too. Your files are left unchanged."
+msgstr "Mengukur kenyaringan lagu tanpa tag di latar belakang agar ikut diratakan. Berkas Anda tidak diubah."
+
+#. Translators: tracks measured so far, then the total
+#: ui/components/settings/replaygain-controls.slint
+msgid "Waiting for a library scan · {} / {n} track measured"
+msgid_plural "Waiting for a library scan · {} / {n} tracks measured"
+msgstr[0] "Menunggu pemindaian pustaka · {} / {n} lagu diukur"
+
+#. Translators: tracks measured so far, then the total
+#: ui/components/settings/replaygain-controls.slint
+msgid "Stopped · {} / {n} track measured"
+msgid_plural "Stopped · {} / {n} tracks measured"
+msgstr[0] "Dihentikan · {} / {n} lagu diukur"
+
+#. Translators: tracks measured so far, then the total
+#: ui/components/settings/replaygain-controls.slint
+msgid "{} / {n} track measured"
+msgid_plural "{} / {n} tracks measured"
+msgstr[0] "{} / {n} lagu diukur"
+
+#: ui/components/settings/replaygain-controls.slint
+msgid "Measure"
+msgstr "Ukur"
+
+#: ui/components/settings/replaygain-controls.slint
+msgid "Stop"
+msgstr "Hentikan"
 
 #: ui/components/settings/scan-progress.slint
 msgid "Looking for music… {n} file found"

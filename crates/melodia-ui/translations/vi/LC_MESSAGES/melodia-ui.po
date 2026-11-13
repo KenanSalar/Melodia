@@ -1567,8 +1567,8 @@ msgid "Enable ReplayGain"
 msgstr "Bật ReplayGain"
 
 #: ui/components/settings/replaygain-controls.slint
-msgid "ReplayGain only affects tracks that already have loudness tags. Scan your library with a tool like rsgain or loudgain to add them."
-msgstr "ReplayGain chỉ áp dụng cho các bản nhạc đã có thẻ độ lớn âm thanh. Hãy quét thư viện bằng công cụ như rsgain hoặc loudgain để thêm các thẻ này."
+msgid "Evens out the volume between tracks using their loudness tags. Add them with a tool like rsgain or loudgain, or have Melodia measure the tracks that lack them."
+msgstr "Cân bằng âm lượng giữa các bản nhạc dựa trên thẻ độ lớn âm thanh của chúng. Hãy thêm thẻ bằng công cụ như rsgain hoặc loudgain, hoặc để Melodia đo các bản nhạc chưa có thẻ."
 
 #: ui/components/settings/replaygain-controls.slint
 msgid "Normalization mode"
@@ -1577,6 +1577,40 @@ msgstr "Chế độ chuẩn hóa"
 #: ui/components/settings/replaygain-controls.slint
 msgid "Prevent clipping"
 msgstr "Ngăn méo tiếng"
+
+#: ui/components/settings/replaygain-controls.slint
+msgid "Measure untagged tracks"
+msgstr "Đo các bản nhạc chưa có thẻ"
+
+#: ui/components/settings/replaygain-controls.slint
+msgid "Measures the loudness of tracks without tags in the background, so they're evened out too. Your files are left unchanged."
+msgstr "Đo độ lớn âm thanh của các bản nhạc chưa có thẻ ở chế độ nền để chúng cũng được cân bằng. Tệp của bạn được giữ nguyên."
+
+#. Translators: tracks measured so far, then the total
+#: ui/components/settings/replaygain-controls.slint
+msgid "Waiting for a library scan · {} / {n} track measured"
+msgid_plural "Waiting for a library scan · {} / {n} tracks measured"
+msgstr[0] "Đang chờ quét thư viện · Đã đo {} / {n} bản nhạc"
+
+#. Translators: tracks measured so far, then the total
+#: ui/components/settings/replaygain-controls.slint
+msgid "Stopped · {} / {n} track measured"
+msgid_plural "Stopped · {} / {n} tracks measured"
+msgstr[0] "Đã dừng · Đã đo {} / {n} bản nhạc"
+
+#. Translators: tracks measured so far, then the total
+#: ui/components/settings/replaygain-controls.slint
+msgid "{} / {n} track measured"
+msgid_plural "{} / {n} tracks measured"
+msgstr[0] "Đã đo {} / {n} bản nhạc"
+
+#: ui/components/settings/replaygain-controls.slint
+msgid "Measure"
+msgstr "Đo"
+
+#: ui/components/settings/replaygain-controls.slint
+msgid "Stop"
+msgstr "Dừng"
 
 #: ui/components/settings/scan-progress.slint
 msgid "Looking for music… {n} file found"

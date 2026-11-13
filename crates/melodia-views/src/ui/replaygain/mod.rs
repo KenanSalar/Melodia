@@ -2,6 +2,8 @@
 //! menu's dialog both drive the one `ReplayGain` global, in [`crate::ui::equalizer`]'s shape,
 //! the preamp taking the live `set-preamp` / release `commit-preamp` split.
 
+mod measure;
+
 use slint::ComponentHandle;
 
 use crate::ui::settings_bind::{read_or_default, toggle_binding};
@@ -10,7 +12,7 @@ use melodia_app::state::AppState;
 use melodia_playback::player::playback::replaygain::{self, RgMode};
 use melodia_ui::{AppWindow, ReplayGain};
 
-pub fn install_replaygain(ui: &AppWindow, state: &AppState) {
+pub fn install_replaygain(ui: &AppWindow, state: &AppState) -> Result<(), slint::EventLoopError> {
     let flags = read_or_default(state, "replaygain").replaygain;
     let mode = RgMode::from_settings_str(&flags.rg_mode);
 
@@ -19,6 +21,7 @@ pub fn install_replaygain(ui: &AppWindow, state: &AppState) {
     rg.set_mode_idx(i32::from(mode.to_u8()));
     rg.set_preamp(replaygain::clamp_rg_preamp(flags.rg_preamp));
     rg.set_prevent_clipping(flags.rg_prevent_clipping);
+    rg.set_measure_untagged(flags.rg_measure_untagged);
 
     // The slider's range is the DSP's constants, seeded before either surface can mount.
     rg.set_min_preamp(replaygain::RG_MIN_PREAMP_DB);
@@ -79,4 +82,6 @@ pub fn install_replaygain(ui: &AppWindow, state: &AppState) {
             });
         });
     }
+
+    measure::install(ui, state)
 }

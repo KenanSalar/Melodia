@@ -1,14 +1,15 @@
+import { Theme } from "../../theme.slint";
 import { SettingsPage } from "../../globals/settings-page.slint";
-import { ReplayGain } from "../../globals/audio.slint";
+import { ReplayGain, MeasurePhase } from "../../globals/audio.slint";
 import { SectionCard } from "../../components/settings/section-card.slint";
 import { SettingRow } from "../../components/settings/setting-row.slint";
 import { SettingRowStacked } from "../../components/settings/setting-row-stacked.slint";
 import { ToggleSwitch } from "../../components/settings/toggle-switch.slint";
-import { ReplayGainText, RgModePicker, RgPreampSlider } from "../../components/settings/replaygain-controls.slint";
+import { ReplayGainText, RgMeasureProgress, RgModePicker, RgPreampSlider } from "../../components/settings/replaygain-controls.slint";
 
-// Loudness normalization, the equalizer card's shape: the mode, preamp and clipping guard mount only
-// while the switch is on. The controls are `replaygain-controls.slint`'s, shared with the overflow
-// menu's dialog.
+// Loudness normalization, the equalizer card's shape: every row below the switch mounts only while
+// it is on. The controls are `replaygain-controls.slint`'s, shared with the overflow menu's dialog
+// but for measuring, a library job rather than a listening control.
 export component ReplayGainSection inherits Rectangle {
     horizontal-stretch: 1;
     vertical-stretch: 0;
@@ -25,7 +26,8 @@ export component ReplayGainSection inherits Rectangle {
     out property <bool> has-matches: row-visible(ReplayGainText.enable-label, ReplayGainText.enable-desc)
         || row-visible(ReplayGainText.mode-label, "")
         || row-visible(ReplayGainText.preamp-label, "")
-        || row-visible(ReplayGainText.clipping-label, "");
+        || row-visible(ReplayGainText.clipping-label, "")
+        || row-visible(ReplayGainText.measure-label, ReplayGainText.measure-desc);
 
     property <bool> show-details: root.has-matches && ReplayGain.enabled;
 
@@ -62,6 +64,22 @@ export component ReplayGainSection inherits Rectangle {
                     checked <=> ReplayGain.prevent-clipping;
                     toggled(v) => { ReplayGain.set-prevent-clipping(v); }
                 }
+            }
+
+            if root.show-details: SettingRow {
+                icon: "show_chart";
+                label: ReplayGainText.measure-label;
+                description: ReplayGainText.measure-desc;
+                ToggleSwitch {
+                    checked <=> ReplayGain.measure-untagged;
+                    toggled(v) => { ReplayGain.set-measure-untagged(v); }
+                }
+            }
+
+            // On the switch as well as the phase, so the bar goes with it before the pass answers.
+            if root.show-details && ReplayGain.measure-untagged
+                && ReplayGain.measure-phase != MeasurePhase.idle: RgMeasureProgress {
+                padding: Theme.pad-lg;
             }
         }
     }

@@ -1589,8 +1589,8 @@ msgid "Enable ReplayGain"
 msgstr "Включить ReplayGain"
 
 #: ui/components/settings/replaygain-controls.slint
-msgid "ReplayGain only affects tracks that already have loudness tags. Scan your library with a tool like rsgain or loudgain to add them."
-msgstr "ReplayGain действует только на треки, в которых уже есть теги громкости. Чтобы добавить их, просканируйте медиатеку программой вроде rsgain или loudgain."
+msgid "Evens out the volume between tracks using their loudness tags. Add them with a tool like rsgain or loudgain, or have Melodia measure the tracks that lack them."
+msgstr "Выравнивает громкость между треками по их тегам громкости. Добавьте их программой вроде rsgain или loudgain или позвольте Melodia измерить треки без них."
 
 #: ui/components/settings/replaygain-controls.slint
 msgid "Normalization mode"
@@ -1599,6 +1599,46 @@ msgstr "Режим нормализации"
 #: ui/components/settings/replaygain-controls.slint
 msgid "Prevent clipping"
 msgstr "Предотвращать клиппинг"
+
+#: ui/components/settings/replaygain-controls.slint
+msgid "Measure untagged tracks"
+msgstr "Измерять треки без тегов"
+
+#: ui/components/settings/replaygain-controls.slint
+msgid "Measures the loudness of tracks without tags in the background, so they're evened out too. Your files are left unchanged."
+msgstr "Измеряет в фоне громкость треков без тегов, чтобы выровнять и их. Ваши файлы остаются без изменений."
+
+#. Translators: tracks measured so far, then the total
+#: ui/components/settings/replaygain-controls.slint
+msgid "Waiting for a library scan · {} / {n} track measured"
+msgid_plural "Waiting for a library scan · {} / {n} tracks measured"
+msgstr[0] "Ожидание сканирования медиатеки · измерено треков: {} / {n}"
+msgstr[1] "Ожидание сканирования медиатеки · измерено треков: {} / {n}"
+msgstr[2] "Ожидание сканирования медиатеки · измерено треков: {} / {n}"
+
+#. Translators: tracks measured so far, then the total
+#: ui/components/settings/replaygain-controls.slint
+msgid "Stopped · {} / {n} track measured"
+msgid_plural "Stopped · {} / {n} tracks measured"
+msgstr[0] "Остановлено · измерено треков: {} / {n}"
+msgstr[1] "Остановлено · измерено треков: {} / {n}"
+msgstr[2] "Остановлено · измерено треков: {} / {n}"
+
+#. Translators: tracks measured so far, then the total
+#: ui/components/settings/replaygain-controls.slint
+msgid "{} / {n} track measured"
+msgid_plural "{} / {n} tracks measured"
+msgstr[0] "Измерено треков: {} / {n}"
+msgstr[1] "Измерено треков: {} / {n}"
+msgstr[2] "Измерено треков: {} / {n}"
+
+#: ui/components/settings/replaygain-controls.slint
+msgid "Measure"
+msgstr "Измерить"
+
+#: ui/components/settings/replaygain-controls.slint
+msgid "Stop"
+msgstr "Остановить"
 
 #: ui/components/settings/scan-progress.slint
 msgid "Looking for music… {n} file found"

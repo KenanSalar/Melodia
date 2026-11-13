@@ -14,7 +14,7 @@
 ## Highlights
 
 - **Bit-perfect exclusive output** on Linux and Windows, with a Signal Path panel that grades every stage from the file to the device
-- **Gapless playback and crossfade**, a 10-band equalizer, ReplayGain, and playback speed from 0.25× to 2.0×
+- **Gapless playback and crossfade**, a 10-band equalizer, ReplayGain that can measure untagged tracks itself, and playback speed from 0.25× to 2.0×
 - **Timed lyrics** from `.lrc` files, tags, or an opt-in online lookup, romanized for around a hundred scripts
 - **Internet radio** from a worldwide directory or your own stream URLs, off until you switch it on
 - **Six theme families** in light and dark, and Material You colors drawn from the playing artwork
@@ -125,7 +125,7 @@ Shrink the window and the full UI collapses into a mini-player that grows with i
 - Gapless, including the AAC encoder delay and padding read back from `iTunSMPB` or the MP4 edit list, and the trailing padding a Matroska file states
 - Crossfade (1–12 s) across two decks with a clip-safe ramp, optionally skipped between same-album tracks, and under exclusive output too wherever the next track needs no change of device format
 - 10-band equalizer (31 Hz – 16 kHz) with preamp, presets, and a soft-knee limiter, from the player bar's overflow menu or Settings ▸ Effects
-- ReplayGain in track or album mode, with preamp and peak-based clip prevention, reached the same two ways
+- ReplayGain in track or album mode, with preamp and peak-based clip prevention, reached the same two ways. Tracks without loudness tags can be measured in the background, opt-in under Settings ▸ Effects, with albums measured as a whole and the files left unchanged
 - A queue with shuffle and repeat in a resizable side panel, which floats over the page once the window is too narrow to dock it. Playing from any list queues that list behind your pick
 - Drag tracks, albums, artists, genres, playlists, or files from your file manager into the queue or a playlist where you let go; a selection reorders together in the queue, Up Next, and the mini-player
 - Hold Previous or Next to scan through a track in audible jumps that grow the longer you hold, and hold Play/Pause to stop

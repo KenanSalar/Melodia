@@ -1583,8 +1583,8 @@ msgid "Enable ReplayGain"
 msgstr "ReplayGain'i etkinleştir"
 
 #: ui/components/settings/replaygain-controls.slint
-msgid "ReplayGain only affects tracks that already have loudness tags. Scan your library with a tool like rsgain or loudgain to add them."
-msgstr "ReplayGain yalnızca ses düzeyi etiketleri olan parçaları etkiler. Bunları eklemek için kitaplığınızı rsgain veya loudgain gibi bir araçla tarayın."
+msgid "Evens out the volume between tracks using their loudness tags. Add them with a tool like rsgain or loudgain, or have Melodia measure the tracks that lack them."
+msgstr "Parçalar arasındaki ses düzeyini, ses düzeyi etiketlerine göre eşitler. Bunları rsgain veya loudgain gibi bir araçla ekleyin ya da etiketi olmayan parçaları Melodia'nın ölçmesine izin verin."
 
 #: ui/components/settings/replaygain-controls.slint
 msgid "Normalization mode"
@@ -1593,6 +1593,43 @@ msgstr "Normalleştirme modu"
 #: ui/components/settings/replaygain-controls.slint
 msgid "Prevent clipping"
 msgstr "Kırpılmayı önle"
+
+#: ui/components/settings/replaygain-controls.slint
+msgid "Measure untagged tracks"
+msgstr "Etiketsiz parçaları ölç"
+
+#: ui/components/settings/replaygain-controls.slint
+msgid "Measures the loudness of tracks without tags in the background, so they're evened out too. Your files are left unchanged."
+msgstr "Etiketi olmayan parçaların ses düzeyini arka planda ölçer, böylece onlar da eşitlenir. Dosyalarınız değiştirilmez."
+
+#. Translators: tracks measured so far, then the total
+#: ui/components/settings/replaygain-controls.slint
+msgid "Waiting for a library scan · {} / {n} track measured"
+msgid_plural "Waiting for a library scan · {} / {n} tracks measured"
+msgstr[0] "Kitaplık taraması bekleniyor · {} / {n} parça ölçüldü"
+msgstr[1] "Kitaplık taraması bekleniyor · {} / {n} parça ölçüldü"
+
+#. Translators: tracks measured so far, then the total
+#: ui/components/settings/replaygain-controls.slint
+msgid "Stopped · {} / {n} track measured"
+msgid_plural "Stopped · {} / {n} tracks measured"
+msgstr[0] "Durduruldu · {} / {n} parça ölçüldü"
+msgstr[1] "Durduruldu · {} / {n} parça ölçüldü"
+
+#. Translators: tracks measured so far, then the total
+#: ui/components/settings/replaygain-controls.slint
+msgid "{} / {n} track measured"
+msgid_plural "{} / {n} tracks measured"
+msgstr[0] "{} / {n} parça ölçüldü"
+msgstr[1] "{} / {n} parça ölçüldü"
+
+#: ui/components/settings/replaygain-controls.slint
+msgid "Measure"
+msgstr "Ölç"
+
+#: ui/components/settings/replaygain-controls.slint
+msgid "Stop"
+msgstr "Durdur"
 
 # Turkish doesn't pluralize a noun after a numeral, so both forms are the same.
 #: ui/components/settings/scan-progress.slint

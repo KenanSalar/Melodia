@@ -49,8 +49,8 @@ Paths are under `crates/melodia-ui/ui/components/` unless stated.
   own rounded stroke.
 - **Settings.** `SectionCard`, `SettingRow`, `ChipGroup` for a short preset set and `ChoiceList`
   for a long one, `ColorDotGrid`, `SettingSlider`, `PreampSlider`, `JobProgress` for a background
-  job's bar, status and one action (`ScanProgress` binding it to the scan), and per effect a
-  `settings/*-controls.slint` plus a `*Text` global shared by its card and its dialog.
+  job's bar, status and one action (`ScanProgress` and `RgMeasureProgress` bind it), and per
+  effect a `settings/*-controls.slint` plus a `*Text` global shared by its card and its dialog.
 
 ## Contracts
 
