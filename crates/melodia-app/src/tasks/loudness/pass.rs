@@ -202,6 +202,7 @@ async fn measure_owed(
         }
     }
     .await;
+    tally.total = reachable_total(tally, &work);
     if outcome.is_err() {
         stop.abandon();
     }
@@ -233,12 +234,15 @@ impl Halt {
 }
 
 fn publish_running(controls: &Controls, tally: &Tally, work: &WorkList) {
-    let total = tally.total.saturating_sub(work.skipped_tracks).max(tally.done);
     controls.loudness.publish(MeasureProgress {
         phase: MeasurePhase::Running,
         done: tally.done,
-        total,
+        total: reachable_total(tally, work),
     });
+}
+
+fn reachable_total(tally: &Tally, work: &WorkList) -> u32 {
+    tally.total.saturating_sub(work.skipped_tracks).max(tally.done)
 }
 
 /// What a pass has done, for its progress and its closing line.
