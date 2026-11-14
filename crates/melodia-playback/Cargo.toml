@@ -28,11 +28,11 @@ thiserror.workspace = true
 # The exclusive backend. `alsa` stays on the version cpal already resolves, since a newer one
 # is a second copy of it and of `alsa-sys`. `zbus` carries the card reservation and the
 # real-time request, on its blocking API only (see the root manifest). `rustix` supplies the
-# thread id and the RT-time limit rtkit asks for, and keeps `libc` out of this crate.
+# thread id and the RT-time limit rtkit asks for.
 [target.'cfg(target_os = "linux")'.dependencies]
 alsa = "0.11.0"
 zbus.workspace = true
-rustix = { version = "1.1.6", features = ["process", "thread"] }
+rustix.workspace = true
 
 # The exclusive backend on Windows. `wasapi` wraps COM over the same `windows` release cpal
 # resolves, so it adds no second copy of it. `windows-sys` supplies the WASAPI error codes and

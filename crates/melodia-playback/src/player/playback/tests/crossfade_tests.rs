@@ -8,6 +8,7 @@ use super::{
     secs_to_crossfade_ms, should_crossfade,
 };
 use melodia_core::entities::cue::{CueFrames, CueSpan, CueTrack};
+use melodia_core::entities::loudness::GainOrigin;
 use melodia_core::entities::track::TrackSummary;
 
 // --- helpers ---------------------------------------------------------------
@@ -47,6 +48,7 @@ fn track(album: Option<&str>, artist: Option<&str>) -> TrackSummary {
         replaygain_track_peak: None,
         replaygain_album_gain: None,
         replaygain_album_peak: None,
+        replaygain_origin: GainOrigin::Tagged,
     }
 }
 

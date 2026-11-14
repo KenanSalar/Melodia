@@ -1,4 +1,4 @@
-//! The two shared cells [`super::AppState`] hands out by the handful, so no field hand-rolls one.
+//! The three shared cells [`super::AppState`] hands out by the handful, so no field hand-rolls one.
 
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -54,3 +54,47 @@ impl Default for Signal {
         Self::new()
     }
 }
+
+/// How many of something are under way, each counted for as long as its [`Hold`] lives. A count
+/// rather than a flag, so two that overlap can't clear each other.
+#[derive(Clone)]
+pub struct HoldCount(watch::Sender<u32>);
+
+impl HoldCount {
+    pub fn new() -> Self {
+        Self(watch::Sender::new(0))
+    }
+
+    pub fn hold(&self) -> Hold {
+        self.0.send_modify(|count| *count += 1);
+        Hold(self.0.clone())
+    }
+
+    pub fn is_held(&self) -> bool {
+        *self.0.borrow() > 0
+    }
+
+    pub fn subscribe(&self) -> watch::Receiver<u32> {
+        self.0.subscribe()
+    }
+}
+
+impl Default for HoldCount {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+/// One count on a [`HoldCount`], released on drop, so work that stops or fails part way can't
+/// leave it raised.
+pub struct Hold(watch::Sender<u32>);
+
+impl Drop for Hold {
+    fn drop(&mut self) {
+        self.0.send_modify(|count| *count = count.saturating_sub(1));
+    }
+}
+
+#[cfg(test)]
+#[path = "tests/signal_tests.rs"]
+mod tests;

@@ -27,7 +27,7 @@ const MIN_THREAD_NAMES: usize = 5;
 
 /// The files that compute a name rather than spelling one, where reading the literal measures
 /// nothing. Paths are relative to the crate root that holds them.
-const RUNTIME_NAMED: [&str; 4] = [
+const RUNTIME_NAMED: [&str; 5] = [
     // `tag-write-{i}` over `TAG_WRITE_THREADS`.
     "library/tags.rs",
     // `cover-decode-{i}`, whose budget is the prefix plus the widest index the decode pool's
@@ -37,6 +37,8 @@ const RUNTIME_NAMED: [&str; 4] = [
     "media/ingest/scan_pool.rs",
     // `rayon-{i}` over `GLOBAL_RAYON_THREADS`.
     "melodia/main.rs",
+    // `loudness-{i}` over `MEASURE_WORKERS`, which leaves the index six digits.
+    "tasks/loudness/pool.rs",
 ];
 
 /// Linux keeps `TASK_COMM_LEN` bytes of a thread name and std truncates ahead of it rather than

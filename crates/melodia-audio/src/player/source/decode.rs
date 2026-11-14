@@ -9,7 +9,7 @@
 use std::sync::LazyLock;
 use std::time::Duration;
 
-use symphonia::core::audio::GenericAudioBufferRef;
+use symphonia::core::audio::{Channels, GenericAudioBufferRef, Position};
 use symphonia::core::codecs::CodecParameters;
 use symphonia::core::codecs::audio::well_known::{
     CODEC_ID_AAC, CODEC_ID_ADPCM_IMA_QT, CODEC_ID_ADPCM_IMA_WAV, CODEC_ID_ADPCM_MS, CODEC_ID_MP1,
@@ -233,14 +233,27 @@ fn playing_time(format: &dyn FormatReader, track: &Track) -> Option<Duration> {
     Some(Duration::new(u64::try_from(seconds).ok()?, nanos))
 }
 
+/// Why a [`Cursor`] stopped handing samples out. Playback ends alike on all three; a measurement
+/// counts only a finish as having heard the whole source.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum Ended {
+    Finished,
+    /// A read or a decode failed past what [`fill`] skips.
+    Failed,
+    ShapeChanged,
+}
+
 /// The packet being handed out. Both decoders own one and add nothing, so the refill, the shape
 /// check and the end latch can't drift between them.
 pub(super) struct Cursor {
     samples: Vec<f32>,
     next: usize,
     shape: Shape,
+    /// The first packet's, beside the shape rather than in it: a deck's converter and a gapless
+    /// join compare shapes, and a packet relabelling its channels plays on.
+    positions: Option<Position>,
     /// Set once there is nothing more to hand out.
-    ended: bool,
+    ended: Option<Ended>,
 }
 
 impl Cursor {
@@ -256,7 +269,13 @@ impl Cursor {
         let Some(packet) = fill(format, decoder, track, &mut samples)? else {
             return Ok(None);
         };
-        let cursor = Self { samples, next: 0, shape: packet.shape, ended: false };
+        let cursor = Self {
+            samples,
+            next: 0,
+            shape: packet.shape,
+            positions: packet.positions,
+            ended: None,
+        };
         Ok(Some((cursor, packet.format)))
     }
 
@@ -264,12 +283,20 @@ impl Cursor {
         self.shape
     }
 
+    pub(super) fn positions(&self) -> Option<Position> {
+        self.positions
+    }
+
+    pub(super) fn ended(&self) -> Option<Ended> {
+        self.ended
+    }
+
     /// Steps past the buffered packet, reporting the channel of the frame the puller was part way
     /// through so a seek can put it back there.
     pub(super) fn discard_buffered(&mut self) -> usize {
         let channel_phase = self.next % usize::from(self.shape.channels.get());
         self.next = self.samples.len();
-        self.ended = false;
+        self.ended = None;
         channel_phase
     }
 
@@ -279,27 +306,40 @@ impl Cursor {
         decoder: &mut dyn AudioDecoder,
         track: u32,
     ) -> Option<f32> {
-        if self.ended {
+        if self.ended.is_some() {
             return None;
         }
-        if self.next >= self.samples.len() {
-            // A failed read and a clean end are one here: an iterator has no error to hand back,
-            // and ending is the only move the caller has.
-            let Ok(Some(packet)) = fill(format, decoder, track, &mut self.samples) else {
-                self.ended = true;
-                return None;
-            };
-            // The deck's converter is fixed to the shape at the append, so a mid-track change ends
-            // here; on a mount it is a reconnect the feed thread then refuses.
-            if packet.shape != self.shape {
-                self.ended = true;
-                return None;
-            }
-            self.next = 0;
+        if self.next >= self.samples.len()
+            && let Err(ended) = self.refill(format, decoder, track)
+        {
+            self.ended = Some(ended);
+            return None;
         }
         let sample = *self.samples.get(self.next)?;
         self.next += 1;
         Some(sample)
+    }
+
+    fn refill(
+        &mut self,
+        format: &mut dyn FormatReader,
+        decoder: &mut dyn AudioDecoder,
+        track: u32,
+    ) -> Result<(), Ended> {
+        // A failed read ends the source as a clean end does: an iterator has no error to hand
+        // back, and ending is the only move the caller has.
+        let packet = match fill(format, decoder, track, &mut self.samples) {
+            Ok(Some(packet)) => packet,
+            Ok(None) => return Err(Ended::Finished),
+            Err(_) => return Err(Ended::Failed),
+        };
+        // The deck's converter is fixed to the shape at the append, so a mid-track change ends
+        // here; on a mount it is a reconnect the feed thread then refuses.
+        if packet.shape != self.shape {
+            return Err(Ended::ShapeChanged);
+        }
+        self.next = 0;
+        Ok(())
     }
 }
 
@@ -307,7 +347,7 @@ impl Cursor {
 /// fails to decode, or decodes to nothing
 /// ([symphonia#403](https://github.com/pdeljanov/Symphonia/issues/403)), is skipped. A
 /// `ResetRequired` does end it: recovering a chained Ogg means rebuilding the decoder against
-/// parameters that may have moved. A failed read stays apart from a clean end for [`Cursor::open`].
+/// parameters that may have moved. A failed read stays apart from a clean end for [`Cursor`].
 fn fill(
     format: &mut dyn FormatReader,
     decoder: &mut dyn AudioDecoder,
@@ -339,7 +379,12 @@ fn fill(
                         ));
                     };
                     let shape = Shape { channels, rate };
-                    return Ok(Some(Packet { shape, format: decoded_format(&decoded) }));
+                    let positions = match spec.channels() {
+                        Channels::Positioned(positions) => Some(*positions),
+                        _ => None,
+                    };
+                    let format = decoded_format(&decoded);
+                    return Ok(Some(Packet { shape, positions, format }));
                 }
             }
             Err(SymphoniaError::DecodeError(_)) => {}
@@ -351,6 +396,7 @@ fn fill(
 /// What [`fill`] decoded, as far as anything above it asks.
 struct Packet {
     shape: Shape,
+    positions: Option<Position>,
     format: SourceFormat,
 }
 

@@ -272,6 +272,9 @@ pub struct EqSource<S> {
     /// here moves only this voice.
     fade: Arc<FadeShared>,
     last_fade_generation: u64,
+    /// A ramp armed before this source was built was armed for another, so its start is ignored: a
+    /// gapless successor would otherwise replay a crossfade's fade-in from silence.
+    fade_generation_at_build: u64,
     /// `false` is unity, keeping the bit-identical bypass available.
     fade_engaged: bool,
     fade_ramping: bool,
@@ -331,7 +334,8 @@ impl<S: AudioSource> EqSource<S> {
         // up a ramp already armed on its deck.
         let last_generation = shared.generation().wrapping_sub(1);
         let last_rg_generation = rg_shared.generation().wrapping_sub(1);
-        let last_fade_generation = fade.generation().wrapping_sub(1);
+        let fade_generation_at_build = fade.generation();
+        let last_fade_generation = fade_generation_at_build.wrapping_sub(1);
         Self {
             input,
             shared,
@@ -341,6 +345,7 @@ impl<S: AudioSource> EqSource<S> {
             last_rg_generation,
             fade,
             last_fade_generation,
+            fade_generation_at_build,
             fade_engaged: false,
             fade_ramping: false,
             fade_start: 1.0,
@@ -366,15 +371,16 @@ impl<S: AudioSource> EqSource<S> {
         }
     }
 
-    fn apply_fade_cmd(&mut self) {
+    fn apply_fade_cmd(&mut self, generation: u64) {
         let Some(cmd) = self.fade.snapshot() else {
             self.fade_engaged = false;
             self.fade_ramping = false;
             self.fade_gain = 1.0;
             return;
         };
+        let start = if generation == self.fade_generation_at_build { None } else { cmd.start };
         // No start ramps from wherever the source sits, so an aborted crossfade takes no step.
-        self.fade_start = cmd.start.unwrap_or(self.fade_gain);
+        self.fade_start = start.unwrap_or(self.fade_gain);
         self.fade_target = cmd.target;
         self.fade_gain = self.fade_start;
         self.fade_pos = 0;
@@ -429,12 +435,7 @@ impl<S: AudioSource> EqSource<S> {
     fn rebuild(&mut self) {
         // First: `ReplayGain` is independent of the EQ toggle and the early returns below.
         let rg_gain = if self.rg_shared.enabled() {
-            replaygain::compute_linear_gain(
-                self.baked_rg,
-                self.rg_shared.mode(),
-                self.rg_shared.preamp(),
-                self.rg_shared.prevent_clipping(),
-            )
+            replaygain::compute_linear_gain(self.baked_rg, self.rg_shared.controls())
         } else {
             1.0
         };
@@ -503,7 +504,7 @@ impl<S: AudioSource> EqSource<S> {
         }
         let fade_generation = self.fade.generation();
         if fade_generation != self.last_fade_generation {
-            self.apply_fade_cmd();
+            self.apply_fade_cmd(fade_generation);
             self.last_fade_generation = fade_generation;
         }
     }

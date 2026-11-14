@@ -48,6 +48,9 @@ paths:
   move or rewrite carries an exclusion as it carries a row** (`queries::excluded_files`,
   `scan::moves`), or a removed duplicate comes back. An exclusion covers a whole file, so nothing
   excludes a cue sheet's track (`DuplicateCopy::is_removable`).
+- **A path where Melodia writes only tags into a file carries its loudness row**
+  (`queries::loudness::carry_over`), or the next pass decodes its album again, and the general
+  ingest never does.
 - **A track filed outside the library links to no album, artist or genre**
   (`queries::scan::TrackFolder`): a write path resolves its ids through `resolve_track_context`
   with the row's own folder, or a file opened from Downloads lands on the album, artist and genre

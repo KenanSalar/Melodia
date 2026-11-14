@@ -8,11 +8,13 @@ use tokio_util::task::TaskTracker;
 pub mod contexts;
 #[cfg(test)]
 pub(crate) mod fixtures;
+pub mod loudness;
 pub mod scan;
 pub mod signal;
 pub use contexts::PlaybackContext;
+pub use loudness::{LoudnessControl, MeasurePhase, MeasureProgress};
 pub use scan::{ScanControl, ScanPhase, ScanProgressTick};
-pub use signal::{SharedFlag, Signal};
+pub use signal::{Hold, HoldCount, SharedFlag, Signal};
 
 use crate::services::search_history::SearchHistoryState;
 use crate::services::settings;
@@ -75,9 +77,11 @@ pub struct AppState {
     pub audio_device_lost: Signal,
     /// How many scans are restoring cover art whose stored file went missing, for the notice. A
     /// count rather than a [`Signal`], since the boot scan can start before the notice subscribes.
-    pub artwork_restoring: watch::Sender<u32>,
+    pub artwork_restoring: HoldCount,
     /// The folder scan in flight: its progress for the Library settings bar, and its cancel.
     pub scan: Arc<ScanControl>,
+    /// The loudness pass over untagged tracks: its progress, and its stop, resume and wake.
+    pub loudness: Arc<LoudnessControl>,
     pub play_count_flush: PlayCountFlush,
     pub watcher: Arc<parking_lot::Mutex<FolderWatcher>>,
     /// Files this process just wrote (tag edits), so the watcher drops the `Modified` events of
@@ -207,8 +211,9 @@ impl AppState {
             rescan_notice: Signal::new(),
             auto_check_changed: Signal::new(),
             audio_device_lost: Signal::new(),
-            artwork_restoring: watch::Sender::new(0),
+            artwork_restoring: HoldCount::new(),
             scan,
+            loudness: Arc::new(LoudnessControl::new()),
             play_count_flush,
             watcher,
             self_writes: Arc::new(SelfWrites::default()),
@@ -333,6 +338,7 @@ fn hydrate_audio_dsp(engine: &PlaybackEngine, settings: &settings::SettingsData)
         ),
     );
     engine.set_replaygain_prevent_clipping(settings.replaygain.rg_prevent_clipping);
+    engine.set_replaygain_measured(settings.replaygain.rg_measure_untagged);
     engine.set_replaygain_enabled(settings.replaygain.rg_enabled);
 
     engine.set_crossfade_duration_ms(settings.crossfade.crossfade_duration_ms);

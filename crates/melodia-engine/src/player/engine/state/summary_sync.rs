@@ -62,6 +62,12 @@ pub fn window_wanted(state: &PlayerStateHandle, fill: WindowFill) -> Vec<i64> {
     }
 }
 
+/// The window's tracks no gain reaches, for a loudness pass to measure ahead of its backlog: the
+/// playing one, the one behind and those about to play.
+pub fn window_ungained(state: &PlayerStateHandle) -> Vec<i64> {
+    lock_state(state).window.ungained()
+}
+
 /// Seats what the window task fetched against the queue as it stands now. Only a changed playing
 /// track emits, which is how a retag reaches Now Playing.
 pub fn seat_window_records(

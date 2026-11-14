@@ -62,7 +62,7 @@ pub async fn track_ids(
 
 /// The order a detail page defaults to for `field`, ascending, for a query over `tracks t` that
 /// has to agree with that page without being one of its keysets.
-pub(super) fn detail_order(field: TrackSortField) -> String {
+pub(crate) fn detail_order(field: TrackSortField) -> String {
     order_by(Page::Detail, TrackOrder { field, dir: SortDir::Asc }, None)
 }
 

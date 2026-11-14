@@ -1579,8 +1579,8 @@ msgid "Enable ReplayGain"
 msgstr "Ενεργοποίηση ReplayGain"
 
 #: ui/components/settings/replaygain-controls.slint
-msgid "ReplayGain only affects tracks that already have loudness tags. Scan your library with a tool like rsgain or loudgain to add them."
-msgstr "Το ReplayGain επηρεάζει μόνο κομμάτια που έχουν ήδη ετικέτες έντασης ήχου. Σαρώστε τη βιβλιοθήκη σας με ένα εργαλείο όπως το rsgain ή το loudgain για να τις προσθέσετε."
+msgid "Evens out the volume between tracks using their loudness tags. Add them with a tool like rsgain or loudgain, or have Melodia measure the tracks that lack them."
+msgstr "Εξισορροπεί την ένταση μεταξύ κομματιών με βάση τις ετικέτες έντασης ήχου τους. Προσθέστε τις με ένα εργαλείο όπως το rsgain ή το loudgain, ή αφήστε το Melodia να μετρήσει τα κομμάτια που δεν τις έχουν."
 
 #: ui/components/settings/replaygain-controls.slint
 msgid "Normalization mode"
@@ -1589,6 +1589,43 @@ msgstr "Λειτουργία κανονικοποίησης"
 #: ui/components/settings/replaygain-controls.slint
 msgid "Prevent clipping"
 msgstr "Αποτροπή ψαλιδίσματος"
+
+#: ui/components/settings/replaygain-controls.slint
+msgid "Measure untagged tracks"
+msgstr "Μέτρηση κομματιών χωρίς ετικέτες"
+
+#: ui/components/settings/replaygain-controls.slint
+msgid "Measures the loudness of tracks without tags in the background, so they're evened out too. Your files are left unchanged."
+msgstr "Μετρά στο παρασκήνιο την ένταση των κομματιών χωρίς ετικέτες, ώστε να εξισορροπούνται κι αυτά. Τα αρχεία σας μένουν αμετάβλητα."
+
+#. Translators: tracks measured so far, then the total
+#: ui/components/settings/replaygain-controls.slint
+msgid "Waiting for a library scan · {} / {n} track measured"
+msgid_plural "Waiting for a library scan · {} / {n} tracks measured"
+msgstr[0] "Αναμονή για σάρωση βιβλιοθήκης · {} / {n} κομμάτι μετρήθηκε"
+msgstr[1] "Αναμονή για σάρωση βιβλιοθήκης · {} / {n} κομμάτια μετρήθηκαν"
+
+#. Translators: tracks measured so far, then the total
+#: ui/components/settings/replaygain-controls.slint
+msgid "Stopped · {} / {n} track measured"
+msgid_plural "Stopped · {} / {n} tracks measured"
+msgstr[0] "Διακόπηκε · {} / {n} κομμάτι μετρήθηκε"
+msgstr[1] "Διακόπηκε · {} / {n} κομμάτια μετρήθηκαν"
+
+#. Translators: tracks measured so far, then the total
+#: ui/components/settings/replaygain-controls.slint
+msgid "{} / {n} track measured"
+msgid_plural "{} / {n} tracks measured"
+msgstr[0] "{} / {n} κομμάτι μετρήθηκε"
+msgstr[1] "{} / {n} κομμάτια μετρήθηκαν"
+
+#: ui/components/settings/replaygain-controls.slint
+msgid "Measure"
+msgstr "Μέτρηση"
+
+#: ui/components/settings/replaygain-controls.slint
+msgid "Stop"
+msgstr "Διακοπή"
 
 #: ui/components/settings/scan-progress.slint
 msgid "Looking for music… {n} file found"

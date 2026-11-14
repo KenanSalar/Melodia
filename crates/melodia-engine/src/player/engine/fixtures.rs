@@ -6,6 +6,7 @@ use std::sync::Arc;
 use crate::player::engine::queue::{QueueCut, QueueEntry, QueueState};
 use crate::player::engine::state::PlayerViewModelLight;
 use crate::player::engine::types::{RadioNowPlaying, RepeatMode};
+use melodia_core::entities::loudness::GainOrigin;
 use melodia_core::entities::track::{TrackAudio, TrackSummary};
 
 /// The whole file at `path`, as a track no cue sheet claims plays.
@@ -68,6 +69,7 @@ pub fn test_track(title: &str, artist: Option<&str>, album: Option<&str>) -> Arc
         replaygain_track_peak: None,
         replaygain_album_gain: None,
         replaygain_album_peak: None,
+        replaygain_origin: GainOrigin::Tagged,
     })
 }
 

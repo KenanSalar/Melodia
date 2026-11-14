@@ -433,6 +433,15 @@ pub fn player_set_replaygain_prevent_clipping(ctx: &PlaybackContext, on: bool) {
     ctx.engine.set_replaygain_prevent_clipping(on);
 }
 
+pub fn player_set_replaygain_measured(ctx: &PlaybackContext, on: bool) {
+    ctx.engine.set_replaygain_measured(on);
+}
+
+/// Whether measured gains are heard, read from the live controls.
+pub fn player_replaygain_levels_measured(ctx: &PlaybackContext) -> bool {
+    ctx.engine.replaygain_levels_measured()
+}
+
 pub fn player_set_crossfade_enabled(ctx: &PlaybackContext, enabled: bool) {
     ctx.engine.set_crossfade_enabled(enabled);
 }

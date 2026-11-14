@@ -37,6 +37,8 @@ tempfile.workspace = true
 zbus.workspace = true
 ksni.workspace = true
 libc.workspace = true
+# `background_priority`'s per-thread nice value.
+rustix.workspace = true
 
 [target.'cfg(target_os = "windows")'.dependencies]
 windows-sys.workspace = true

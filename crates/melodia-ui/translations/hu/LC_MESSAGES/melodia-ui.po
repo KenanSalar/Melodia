@@ -1580,8 +1580,8 @@ msgid "Enable ReplayGain"
 msgstr "ReplayGain bekapcsolása"
 
 #: ui/components/settings/replaygain-controls.slint
-msgid "ReplayGain only affects tracks that already have loudness tags. Scan your library with a tool like rsgain or loudgain to add them."
-msgstr "A ReplayGain csak azokra a számokra hat, amelyekben már vannak hangosságcímkék. Ezek hozzáadásához dolgozd fel a könyvtáradat például az rsgain vagy a loudgain eszközzel."
+msgid "Evens out the volume between tracks using their loudness tags. Add them with a tool like rsgain or loudgain, or have Melodia measure the tracks that lack them."
+msgstr "Kiegyenlíti a számok közötti hangerőt a hangosságcímkéik alapján. Add hozzá őket például az rsgain vagy a loudgain eszközzel, vagy hagyd, hogy a Melodia megmérje a címke nélküli számokat."
 
 #: ui/components/settings/replaygain-controls.slint
 msgid "Normalization mode"
@@ -1590,6 +1590,43 @@ msgstr "Normalizálási mód"
 #: ui/components/settings/replaygain-controls.slint
 msgid "Prevent clipping"
 msgstr "Túlvezérlés megelőzése"
+
+#: ui/components/settings/replaygain-controls.slint
+msgid "Measure untagged tracks"
+msgstr "Címke nélküli számok mérése"
+
+#: ui/components/settings/replaygain-controls.slint
+msgid "Measures the loudness of tracks without tags in the background, so they're evened out too. Your files are left unchanged."
+msgstr "A háttérben megméri a címke nélküli számok hangosságát, hogy azok is kiegyenlítődjenek. A fájljaid nem változnak."
+
+#. Translators: tracks measured so far, then the total
+#: ui/components/settings/replaygain-controls.slint
+msgid "Waiting for a library scan · {} / {n} track measured"
+msgid_plural "Waiting for a library scan · {} / {n} tracks measured"
+msgstr[0] "Várakozás a könyvtár feldolgozására · {}/{n} szám megmérve"
+msgstr[1] "Várakozás a könyvtár feldolgozására · {}/{n} szám megmérve"
+
+#. Translators: tracks measured so far, then the total
+#: ui/components/settings/replaygain-controls.slint
+msgid "Stopped · {} / {n} track measured"
+msgid_plural "Stopped · {} / {n} tracks measured"
+msgstr[0] "Leállítva · {}/{n} szám megmérve"
+msgstr[1] "Leállítva · {}/{n} szám megmérve"
+
+#. Translators: tracks measured so far, then the total
+#: ui/components/settings/replaygain-controls.slint
+msgid "{} / {n} track measured"
+msgid_plural "{} / {n} tracks measured"
+msgstr[0] "{}/{n} szám megmérve"
+msgstr[1] "{}/{n} szám megmérve"
+
+#: ui/components/settings/replaygain-controls.slint
+msgid "Measure"
+msgstr "Mérés"
+
+#: ui/components/settings/replaygain-controls.slint
+msgid "Stop"
+msgstr "Leállítás"
 
 #: ui/components/settings/scan-progress.slint
 msgid "Looking for music… {n} file found"

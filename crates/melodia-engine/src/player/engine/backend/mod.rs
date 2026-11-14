@@ -444,8 +444,8 @@ impl PlaybackEngine {
         true
     }
 
-    /// Cancels a crossfade ahead of a seek, which would otherwise rebuild the incoming source and
-    /// replay its fade-in from silence. The rebuilt source starts at unity;
+    /// Cancels a crossfade ahead of a seek, which would otherwise leave the outgoing deck fading
+    /// under the new position. The rebuilt source starts at unity;
     /// [`crossfade::ABORT_RAMP_MS`] is the glide a seek that bails still gets.
     fn abort_crossfade(&self) {
         if !self.crossfade_armed.swap(false, Ordering::AcqRel) {
@@ -575,7 +575,7 @@ impl PlaybackEngine {
 
         let decks = self.lock_decks();
         let deck = decks.active();
-        deck.voice.replace(self.build_source(source, baked_rg, deck), position, handovers);
+        deck.replace(position, handovers, |d| self.build_source(source, baked_rg, d));
         self.land(&deck.voice);
     }
 

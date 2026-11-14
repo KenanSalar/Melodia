@@ -169,8 +169,9 @@ paths:
 - The WAL checkpoints itself at SQLite's default 1000 pages, and a checkpoint resets it without
   truncating it unless `journal_size_limit` is set. The last connection to close checkpoints and
   deletes it (`DbPool::close`'s order)
-- A read holds its snapshot for its whole closure, and no checkpoint passes a live snapshot: a
-  write landing during a library-sized `fetch_each` grows the WAL until the fold returns
+- A statement holds its snapshot until it finishes, and no checkpoint passes a live snapshot: a
+  write landing during a library-sized `fetch_each` grows the WAL until the fold returns.
+  `db.read` opens no transaction, so two statements in one closure see two snapshots
 - `PRAGMA optimize` keeps `sqlite_stat1` current and is usually a no-op. `DbPool::close` runs it
   on the writer at quit, the readers being read-only, with the mask `STATS_OPTIMIZE` argues. A
   mask replaces the default whole, so a bit is added on top of the default `0xfffe`, never alone

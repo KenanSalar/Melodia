@@ -7,6 +7,8 @@ use parking_lot::Mutex;
 use tokio::sync::watch;
 use tokio_util::sync::CancellationToken;
 
+use super::signal::{Hold, HoldCount};
+
 /// Where a folder scan has got to. Only the first two can still be cancelled.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ScanPhase {
@@ -51,6 +53,9 @@ pub struct ScanControl {
     /// Moved by [`cancel`](Self::cancel) alone, so a scan can tell the user stopping it from the
     /// app closing, even once both have happened.
     user_cancels: AtomicU64,
+    /// Whether a scan is running, for work that steps aside for one. Not the progress channel,
+    /// which a reconcile clears between its folders.
+    busy: HoldCount,
 }
 
 impl ScanControl {
@@ -61,11 +66,25 @@ impl ScanControl {
             epoch: Mutex::new(shutdown.child_token()),
             shutdown: shutdown.clone(),
             user_cancels: AtomicU64::new(0),
+            busy: HoldCount::new(),
         }
     }
 
     pub fn subscribe(&self) -> watch::Receiver<Option<ScanProgressTick>> {
         self.progress.subscribe()
+    }
+
+    /// Counts a scan as running for as long as the hold lives.
+    pub(crate) fn hold_busy(&self) -> Hold {
+        self.busy.hold()
+    }
+
+    pub(crate) fn is_busy(&self) -> bool {
+        self.busy.is_held()
+    }
+
+    pub(crate) fn subscribe_busy(&self) -> watch::Receiver<u32> {
+        self.busy.subscribe()
     }
 
     /// Returns the token a scan starting now stops on.

@@ -1,6 +1,7 @@
-import { ReplayGain } from "../../globals/audio.slint";
+import { ReplayGain, MeasurePhase } from "../../globals/audio.slint";
 import { ChipGroup } from "chip-group.slint";
 import { PreampSlider } from "preamp-slider.slint";
+import { JobProgress } from "job-progress.slint";
 
 // ReplayGain's controls, `equalizer-controls.slint`'s split for the same two surfaces: the Settings
 // ▸ Effects card and the overflow menu's dialog. The switches stay in each surface's own row, being
@@ -9,12 +10,13 @@ import { PreampSlider } from "preamp-slider.slint";
 export global ReplayGainText {
     out property <string> title: @tr("ReplayGain");
     out property <string> enable-label: @tr("Enable ReplayGain");
-    // The one thing to know before switching it on: it reads precomputed loudness tags, so it does
-    // nothing on a library no tagging tool has scanned.
-    out property <string> enable-desc: @tr("ReplayGain only affects tracks that already have loudness tags. Scan your library with a tool like rsgain or loudgain to add them.");
+    // Also the dialog's message, where the measure switch isn't, so it names no control.
+    out property <string> enable-desc: @tr("Evens out the volume between tracks using their loudness tags. Add them with a tool like rsgain or loudgain, or have Melodia measure the tracks that lack them.");
     out property <string> mode-label: @tr("Normalization mode");
     out property <string> preamp-label: @tr("Preamp");
     out property <string> clipping-label: @tr("Prevent clipping");
+    out property <string> measure-label: @tr("Measure untagged tracks");
+    out property <string> measure-desc: @tr("Measures the loudness of tracks without tags in the background, so they're evened out too. Your files are left unchanged.");
 }
 
 export component RgModePicker inherits ChipGroup {
@@ -33,4 +35,32 @@ export component RgPreampSlider inherits PreampSlider {
     is-disabled: !ReplayGain.enabled;
     changed(db) => { ReplayGain.set-preamp(db); }
     committed(db) => { ReplayGain.commit-preamp(db); }
+}
+
+// The loudness pass in flight or stopped short, mounted by the Settings card alone.
+export component RgMeasureProgress inherits JobProgress {
+    property <bool> stopped: ReplayGain.measure-phase == MeasurePhase.stopped;
+
+    value: ReplayGain.measure-progress;
+    status: ReplayGain.measure-phase == MeasurePhase.waiting-for-scan
+        // Translators: tracks measured so far, then the total
+        ? @tr("Waiting for a library scan · {} / {n} track measured"
+              | "Waiting for a library scan · {} / {n} tracks measured"
+              % ReplayGain.measure-total, ReplayGain.measured-count)
+        : root.stopped
+            // Translators: tracks measured so far, then the total
+            ? @tr("Stopped · {} / {n} track measured" | "Stopped · {} / {n} tracks measured"
+                  % ReplayGain.measure-total, ReplayGain.measured-count)
+            // Translators: tracks measured so far, then the total
+            : @tr("{} / {n} track measured" | "{} / {n} tracks measured"
+                  % ReplayGain.measure-total, ReplayGain.measured-count);
+    action-label: root.stopped ? @tr("Measure") : @tr("Stop");
+    action-icon: root.stopped ? "play_arrow" : "stop";
+    action => {
+        if root.stopped {
+            ReplayGain.resume-measuring();
+        } else {
+            ReplayGain.stop-measuring();
+        }
+    }
 }

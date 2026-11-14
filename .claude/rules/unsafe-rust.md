@@ -26,10 +26,10 @@ effect would be to move every allow into a `build.rs`-shaped workaround.
 ## The one sanctioned category: platform FFI
 
 Every `unsafe` in production is a call into an OS the type system can't reach. There is
-no other kind, and the list is short enough to keep here. **Nineteen calls, in sixteen `unsafe`
-blocks, across seven files, under thirteen `#[allow(unsafe_code)]` attributes.** Say which of
-the four you mean when you quote a number, and re-derive it the same way — they differ,
-and none of them is the count of rows below. (The attributes fall three short of the blocks
+no other kind, and the list is short enough to keep here. **Twenty-one calls, in seventeen
+`unsafe` blocks, across eight files, under fourteen `#[allow(unsafe_code)]` attributes.** Say
+which of the four you mean when you quote a number, and re-derive it the same way: they
+differ, and none of them is the count of rows below. (The attributes fall three short of the blocks
 because `dwm_titlebar.rs`'s first `#[allow]` sits on a function holding two of them, and
 `endpoint_volume.rs`'s `activate` on one holding three.)
 
@@ -39,6 +39,7 @@ because `dwm_titlebar.rs`'s first `#[allow]` sits on a function holding two of t
 | `crates/melodia-platform/…/allocator.rs` | `libc::mallopt` ×3 (the glibc arena / mmap / trim knobs), `libc::malloc_trim`, `GetProcessHeap` and `HeapSetInformation` (Windows' trim) |
 | `crates/melodia-platform/…/dwm_titlebar.rs` | `DwmSetWindowAttribute` ×3 |
 | `crates/melodia-platform/…/registry.rs` | `RegGetValueW` (the DWM accent a window border takes, and the Windows app mode) |
+| `crates/melodia-platform/…/background_priority.rs` | `GetCurrentThread` and `SetThreadPriority` (the loudness pass's threads, lowered to background mode for CPU and I/O together) |
 | `crates/melodia-app/…/settings/data.rs` | `GetUserDefaultLocaleName` |
 | `crates/melodia-playback/…/output/mmcss.rs` | `AvSetMmThreadCharacteristicsW` and `AvRevertMmThreadCharacteristics` (the exclusive writer's MMCSS registration, reverted on the same thread) |
 | `crates/melodia-playback/…/output/endpoint_volume.rs` | `CoCreateInstance`, `IMMDeviceEnumerator::GetDevice` and `IMMDevice::Activate` (reaching the endpoint volume `wasapi` doesn't wrap), `Get`/`SetMasterVolumeLevelScalar` (the claimed device's own volume control, on the exclusive writer's thread) |

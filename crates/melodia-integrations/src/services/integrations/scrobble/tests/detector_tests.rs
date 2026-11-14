@@ -1,6 +1,7 @@
 use std::sync::Arc;
 
 use super::{DetectorState, Effect};
+use melodia_core::entities::loudness::GainOrigin;
 use melodia_core::entities::track::TrackSummary;
 use melodia_engine::player::engine::fixtures::test_view_model;
 use melodia_engine::player::engine::state::{PlayerViewModelLight, PositionTick};
@@ -31,6 +32,7 @@ fn summary(id: i64, duration_ms: i64) -> Arc<TrackSummary> {
         replaygain_track_peak: None,
         replaygain_album_gain: None,
         replaygain_album_peak: None,
+        replaygain_origin: GainOrigin::Tagged,
     })
 }
 

@@ -15,6 +15,7 @@ use crate::player::engine::fixtures::whole_file;
 use crate::player::engine::state::PlayerViewModelLight;
 use melodia_audio::player::source::audio::{Sample, Shape};
 use melodia_audio::player::source::decode_ahead;
+use melodia_core::entities::loudness::GainOrigin;
 use melodia_core::entities::track::TrackSummary;
 use melodia_core::error::AppError;
 use melodia_playback::player::playback::crossfade::CrossfadeSettings;
@@ -44,6 +45,7 @@ fn track(id: i64, album: Option<&str>) -> Arc<TrackSummary> {
         replaygain_track_peak: None,
         replaygain_album_gain: None,
         replaygain_album_peak: None,
+        replaygain_origin: GainOrigin::Tagged,
     })
 }
 

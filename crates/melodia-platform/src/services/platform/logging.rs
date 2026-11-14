@@ -36,14 +36,17 @@ const NORMAL_LEVEL: &str = "info";
 /// dependencies say.
 const VERBOSE_LEVEL: &str = "debug";
 
-/// Two dependency modules warning about what we already know: `layer3`'s bit-reservoir underflow
-/// fires per *frame* on a stream not opened at byte zero while the decoder plays it fine, and
+/// Dependency modules warning about what we already know: `layer3`'s bit-reservoir underflow fires
+/// per *frame* on a stream not opened at byte zero while the decoder plays it fine, `probe` calls
+/// the box size ahead of every MP4's `ftyp` marker junk, once per file opened, and
 /// `sctk_adwaita::buttons` names controls on the titlebar winit builds and hides in
 /// custom-titlebar mode.
 ///
-/// Scoped by module, never by crate, each being the only `warn!` in its own. Shared by both specs:
+/// Scoped by module, so the rest of each crate still warns. `probe`'s one other `warn!`, a
+/// trailing tag it failed to read, goes with it, tags being lofty's to read. Shared by both specs:
 /// a verbose spec dropping `layer3` buries the detail the switch was flipped for.
-const SPEC_TAIL: &str = "symphonia_bundle_mp3::layer3=error, sctk_adwaita::buttons=error";
+const SPEC_TAIL: &str = "symphonia_bundle_mp3::layer3=error, \
+    symphonia_core::formats::probe=error, sctk_adwaita::buttons=error";
 
 /// Dependency warnings, our own narrative at `level`, and nothing else, a bare `"info"` spending
 /// the rotation budget on every crate in the graph. `RUST_LOG` overrides it.

@@ -31,3 +31,9 @@ pub fn set_replaygain_prevent_clipping(paths: &Paths, on: bool) -> Result<(), Ap
         settings.replaygain.rg_prevent_clipping = on;
     })
 }
+
+pub fn set_replaygain_measure_untagged(paths: &Paths, on: bool) -> Result<(), AppError> {
+    services::settings::mutate_settings(paths, move |settings| {
+        settings.replaygain.rg_measure_untagged = on;
+    })
+}

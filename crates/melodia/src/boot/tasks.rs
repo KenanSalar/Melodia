@@ -25,6 +25,7 @@ pub fn spawn_background_tasks(
     tasks::queue_prune::spawn(spawner, state);
     // Before the restore, whose first window change it has to see.
     tasks::queue_window::spawn(spawner, state);
+    tasks::loudness::spawn(spawner, state);
     tasks::retroactive_hash::spawn(spawner, state);
     tasks::search_text_backfill::spawn(spawner, state);
     tasks::artwork_restore::spawn(spawner, state);

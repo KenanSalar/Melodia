@@ -41,7 +41,7 @@ impl Columns {
     }
 }
 
-/// `TrackSummary`: what the queue, the Now Playing bar and the playback path read.
+/// `TrackSummary`, but for the gains its read picks (`lookup::TRACK_SUMMARY_SELECT`).
 pub(crate) static TRACK_SUMMARY: Columns = Columns::new(&[
     "id",
     "file_path",
@@ -59,10 +59,6 @@ pub(crate) static TRACK_SUMMARY: Columns = Columns::new(&[
     "last_position",
     "is_favorite",
     "rating",
-    "replaygain_track_gain",
-    "replaygain_track_peak",
-    "replaygain_album_gain",
-    "replaygain_album_peak",
 ]);
 
 /// `TrackListRow`: every track list.

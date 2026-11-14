@@ -1,5 +1,6 @@
 use std::sync::Arc;
 
+use melodia_core::entities::loudness::GainOrigin;
 use melodia_core::entities::track::TrackSummary;
 use melodia_core::error::AppError;
 use melodia_engine::player::engine::state::{PlayerState, lock_state};
@@ -28,6 +29,7 @@ fn make_summary(id: i64) -> Arc<TrackSummary> {
         replaygain_track_peak: None,
         replaygain_album_gain: None,
         replaygain_album_peak: None,
+        replaygain_origin: GainOrigin::Tagged,
     })
 }
 

@@ -9,7 +9,7 @@ use super::{
     NameCache, ResolvedIds, TrackFolder, prune_orphans, resolve_track_context,
     update_album_artwork_from_tracks, update_track_metadata,
 };
-use crate::database::queries::{album, playlist, track};
+use crate::database::queries::{album, loudness, playlist, track};
 use crate::database::{DbPool, chunked_in_query};
 use melodia_core::entities::scan::ExtractedMetadata;
 use melodia_core::entities::tags::{ArtworkEdit, ClearedReleaseTags, TagEdit};
@@ -38,8 +38,8 @@ pub enum Retag {
 /// writes them. Right for the dialog, where every selected file receives the same values.
 type ResolveKey = (TrackFolder, String, String, String, Option<i32>, String);
 
-/// Resolves ids for each file, refreshes its row and applies the artwork override the metadata
-/// UPDATE can't express, answering in `files`' order.
+/// Resolves ids for each file, refreshes its row, carries its loudness measurement and applies the
+/// artwork override the metadata UPDATE can't express, answering in `files`' order.
 pub async fn commit_retag(
     db: &DbPool,
     files: Vec<RetaggedFile>,
@@ -80,14 +80,15 @@ fn refresh_rows(
     // The release fields `upsert_album` can't empty, and the albums owed the statement that can.
     let cleared_release = edit.cleared_release;
     let mut cleared_album_ids: Vec<i64> = Vec::new();
-    let folder_of = folder_ids(tx, files)?;
+    let on_record = rows_on_record(tx, files)?;
 
     for file in files {
-        // A tag edit moves no file, so the row stays under its folder, an import's included.
-        let Some(&folder) = folder_of.get(&file.id) else {
+        let Some(row) = on_record.get(&file.id) else {
             outcomes.push(Retag::Gone);
             continue;
         };
+        // A tag edit moves no file, so the row stays under its folder, an import's included.
+        let folder = row.folder;
         let meta = &file.meta;
         // The **first** credited names, as `resolve_track_context` reads them, or a hit answers
         // with ids it would never produce.
@@ -110,6 +111,9 @@ fn refresh_rows(
         if !update_track_metadata(tx, &file.path, meta, &rids, &mut names)? {
             outcomes.push(Retag::Gone);
             continue;
+        }
+        if let Some(old_hash) = &row.file_hash {
+            loudness::carry_over(tx, &file.path, old_hash)?;
         }
         updated_ids.push(file.id);
         outcomes.push(Retag::Updated);
@@ -171,27 +175,33 @@ fn refresh_rows(
     Ok(outcomes)
 }
 
-/// `track id → folder` of the rows behind `files`. A row deleted since the edit began has none.
-fn folder_ids(
+/// A retagged file's row as it stood before the refresh.
+struct RowOnRecord {
+    folder: TrackFolder,
+    file_hash: Option<String>,
+}
+
+/// The rows behind `files` by track id; one deleted since the edit began is missing.
+fn rows_on_record(
     tx: &Transaction<'_>,
     files: &[RetaggedFile],
-) -> Result<HashMap<i64, TrackFolder>, AppError> {
+) -> Result<HashMap<i64, RowOnRecord>, AppError> {
     let ids: Vec<i64> = files.iter().map(|file| file.id).collect();
-    let rows: Vec<(i64, i64, bool)> = chunked_in_query(tx, &ids, |placeholders| {
+    let rows: Vec<(i64, i64, bool, Option<String>)> = chunked_in_query(tx, &ids, |placeholders| {
         format!(
-            "SELECT t.id, t.folder_id, f.is_enabled FROM tracks t \
+            "SELECT t.id, t.folder_id, f.is_enabled, t.file_hash FROM tracks t \
              JOIN folders f ON f.id = t.folder_id WHERE t.id IN ({placeholders})"
         )
     })?;
     Ok(rows
         .into_iter()
-        .map(|(id, folder_id, in_library)| {
+        .map(|(id, folder_id, in_library, file_hash)| {
             let folder = if in_library {
                 TrackFolder::Library(folder_id)
             } else {
                 TrackFolder::Outside(folder_id)
             };
-            (id, folder)
+            (id, RowOnRecord { folder, file_hash })
         })
         .collect())
 }

@@ -3,9 +3,9 @@
 use std::path::{Path, PathBuf};
 
 use tempfile::TempDir;
-use tokio::sync::watch;
 
 use super::forget_missing;
+use crate::state::HoldCount;
 use melodia_core::config::Paths;
 use melodia_core::error::AppError;
 use melodia_store::database::queries::fixtures::{
@@ -20,7 +20,7 @@ struct Library {
     db: DbPool,
     paths: Paths,
     track: i64,
-    restoring: watch::Sender<u32>,
+    restoring: HoldCount,
     tmp: TempDir,
 }
 
@@ -35,7 +35,7 @@ impl Library {
         let track =
             insert_test_track(&db, &as_str(&music.join("a.mp3")), "A", "Artist", "Album", "Rock")
                 .await?;
-        Ok(Self { db, paths, track, restoring: watch::Sender::new(0), tmp })
+        Ok(Self { db, paths, track, restoring: HoldCount::new(), tmp })
     }
 
     /// Where the store of a data root that has since moved kept `name`.
@@ -127,10 +127,10 @@ async fn the_restore_notice_is_up_exactly_as_long_as_it_is_held() -> Result<(), 
     library.set_cover(library.track, &library.paths.artwork_dir.join(STORED_NAME)).await?;
 
     let notice = forget_missing(&library.db, &library.paths, &library.restoring).await?;
-    let while_held = *library.restoring.borrow();
+    let while_held = library.restoring.is_held();
     drop(notice);
 
-    assert_eq!((while_held, *library.restoring.borrow()), (1, 0));
+    assert_eq!((while_held, library.restoring.is_held()), (true, false));
     Ok(())
 }
 
