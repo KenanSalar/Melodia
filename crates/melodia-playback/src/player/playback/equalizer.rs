@@ -37,7 +37,7 @@ pub const MAX_PREAMP_DB: f32 = 6.0;
 
 /// Quality factor for the peaking filters. ~1.4 gives musically sensible
 /// overlap for octave-spaced bands without ringing.
-const BAND_Q: f32 = 1.41;
+const BAND_Q: f64 = 1.41;
 
 /// Bands within this many dB of unity are treated as off (skipped in the
 /// filter chain) so a near-flat EQ stays close to free.
@@ -186,10 +186,32 @@ impl EqShared {
     }
 }
 
+/// The engine-wide state every [`EqSource`] polls.
+#[derive(Clone)]
+pub struct DspControls {
+    pub eq: Arc<EqShared>,
+    pub rg: Arc<ReplayGainShared>,
+}
+
+impl Default for DspControls {
+    fn default() -> Self {
+        Self { eq: EqShared::new(false, &[0.0; NUM_BANDS]), rg: ReplayGainShared::new() }
+    }
+}
+
 /// Passthrough coefficients, only to construct the banks — [`EqSource::rebuild`]
 /// overwrites a band before it is ever run.
-fn identity_coeffs() -> Coefficients<f32> {
+fn identity_coeffs() -> Coefficients<f64> {
     Coefficients { a1: 0.0, a2: 0.0, b0: 1.0, b1: 0.0, b2: 0.0 }
+}
+
+#[expect(
+    clippy::cast_possible_truncation,
+    reason = "the cascade's output is an audio sample, far inside f32's range, and rounding it back to the sample width is the point"
+)]
+#[inline]
+fn narrow_sample(sample: f64) -> f32 {
+    sample as f32
 }
 
 /// One-pole smoothing coefficient for a time constant at a given update rate:
@@ -262,8 +284,7 @@ impl Limiter {
 )]
 pub struct EqSource<S> {
     input: S,
-    shared: Arc<EqShared>,
-    rg_shared: Arc<ReplayGainShared>,
+    controls: DspControls,
     baked_rg: TrackReplayGain,
     /// RG polled apart, so an RG-only change still rebuilds.
     last_generation: u64,
@@ -295,8 +316,9 @@ pub struct EqSource<S> {
     sample_rate: f32,
     sample_rate_hz: u64,
     channels: u64,
-    /// `[channel][band]`, its length the channel count.
-    banks: Vec<[DirectForm1<f32>; NUM_BANDS]>,
+    /// `[channel][band]`, its length the channel count. In f64: a low band at a high rate puts its
+    /// poles near z = 1, where f32 coefficients and state stop holding the curve.
+    banks: Vec<[DirectForm1<f64>; NUM_BANDS]>,
     /// A band is inactive at unity gain or outside Nyquist.
     band_active: [bool; NUM_BANDS],
     preamp_gain: f32,
@@ -312,8 +334,7 @@ pub struct EqSource<S> {
 impl<S: AudioSource> EqSource<S> {
     pub fn new(
         input: S,
-        shared: Arc<EqShared>,
-        rg_shared: Arc<ReplayGainShared>,
+        controls: DspControls,
         baked_rg: TrackReplayGain,
         fade: Arc<FadeShared>,
     ) -> Self {
@@ -325,21 +346,20 @@ impl<S: AudioSource> EqSource<S> {
         )]
         let sample_rate = input.sample_rate().get() as f32;
         let banks = (0..channels)
-            .map(|_| std::array::from_fn(|_| DirectForm1::<f32>::new(identity_coeffs())))
+            .map(|_| std::array::from_fn(|_| DirectForm1::<f64>::new(identity_coeffs())))
             .collect();
         // Already per channel: dividing by the channel count runs the limiter that many times too
         // fast against the biquads.
         let frame_rate = sample_rate;
         // One behind the live values, so the first `next()` rebuilds and a gapless successor picks
         // up a ramp already armed on its deck.
-        let last_generation = shared.generation().wrapping_sub(1);
-        let last_rg_generation = rg_shared.generation().wrapping_sub(1);
+        let last_generation = controls.eq.generation().wrapping_sub(1);
+        let last_rg_generation = controls.rg.generation().wrapping_sub(1);
         let fade_generation_at_build = fade.generation();
         let last_fade_generation = fade_generation_at_build.wrapping_sub(1);
         Self {
             input,
-            shared,
-            rg_shared,
+            controls,
             baked_rg,
             last_generation,
             last_rg_generation,
@@ -434,38 +454,39 @@ impl<S: AudioSource> EqSource<S> {
 
     fn rebuild(&mut self) {
         // First: `ReplayGain` is independent of the EQ toggle and the early returns below.
-        let rg_gain = if self.rg_shared.enabled() {
-            replaygain::compute_linear_gain(self.baked_rg, self.rg_shared.controls())
+        let rg_gain = if self.controls.rg.enabled() {
+            replaygain::compute_linear_gain(self.baked_rg, self.controls.rg.controls())
         } else {
             1.0
         };
         self.rg_gain = rg_gain;
         let rg_is_unity = replaygain::is_unity_gain(rg_gain);
 
-        if !self.shared.enabled() {
+        if !self.controls.eq.enabled() {
             self.disable_bands(rg_is_unity);
             return;
         }
 
-        let preamp_db = self.shared.preamp();
+        let preamp_db = self.controls.eq.preamp();
         self.preamp_gain = db_to_linear(preamp_db);
         let preamp_is_unity = preamp_db.abs() < PREAMP_EPSILON_DB;
 
-        let Ok(fs) = Hertz::<f32>::from_hz(self.sample_rate) else {
+        let Ok(fs) = Hertz::<f64>::from_hz(self.sample_rate) else {
             self.disable_bands(rg_is_unity);
             return;
         };
 
         let mut any_active = false;
         for band in 0..NUM_BANDS {
-            let gain = self.shared.gain(band);
+            let gain = self.controls.eq.gain(band);
 
             // A band past this source's Nyquist yields no coefficients.
             let coeffs = if gain.abs() < GAIN_EPSILON_DB {
                 None
             } else {
-                Hertz::<f32>::from_hz(BAND_FREQS[band]).ok().and_then(|f0| {
-                    Coefficients::<f32>::from_params(Type::PeakingEQ(gain), fs, f0, BAND_Q).ok()
+                Hertz::<f64>::from_hz(BAND_FREQS[band]).ok().and_then(|f0| {
+                    let peaking = Type::PeakingEQ(f64::from(gain));
+                    Coefficients::<f64>::from_params(peaking, fs, f0, BAND_Q).ok()
                 })
             };
 
@@ -495,8 +516,8 @@ impl<S: AudioSource> EqSource<S> {
     /// half frame, flipping that deck's mixer channel parity for good.
     #[inline]
     fn poll_generations(&mut self) {
-        let generation = self.shared.generation();
-        let rg_generation = self.rg_shared.generation();
+        let generation = self.controls.eq.generation();
+        let rg_generation = self.controls.rg.generation();
         if generation != self.last_generation || rg_generation != self.last_rg_generation {
             self.rebuild();
             self.last_generation = generation;
@@ -546,13 +567,14 @@ impl<S: AudioSource> EqSource<S> {
         let mut frame_len = 0;
         for (bank, slot) in self.banks.iter_mut().zip(self.frame.iter_mut()) {
             let Some(x) = self.input.next() else { break };
-            let mut out = x * self.preamp_gain * self.rg_gain;
+            // Widened after the gains, so a path with no band active round-trips exactly.
+            let mut out = f64::from(x * self.preamp_gain * self.rg_gain);
             for (filter, &active) in bank.iter_mut().zip(self.band_active.iter()) {
                 if active {
                     out = filter.run(out);
                 }
             }
-            *slot = out;
+            *slot = narrow_sample(out);
             frame_len += 1;
         }
         self.frame_len = frame_len;

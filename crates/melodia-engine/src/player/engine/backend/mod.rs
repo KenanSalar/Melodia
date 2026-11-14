@@ -34,11 +34,11 @@ use melodia_audio::player::source::prebuffer::StreamShared;
 use melodia_audio::player::source::stream_source::PreparedStream;
 use melodia_playback::player::playback::crossfade::{self, CrossfadeShared};
 use melodia_playback::player::playback::decks::{Deck, Decks, DeferredOp, lock_decks};
-use melodia_playback::player::playback::equalizer::{self, EqShared, EqSource};
+use melodia_playback::player::playback::equalizer::{DspControls, EqSource};
 use melodia_playback::player::playback::output::AudioOutput;
 use melodia_playback::player::playback::output::convert::Resampler;
 use melodia_playback::player::playback::output::mixer::Mixer;
-use melodia_playback::player::playback::replaygain::{ReplayGainShared, TrackReplayGain};
+use melodia_playback::player::playback::replaygain::TrackReplayGain;
 use melodia_playback::player::playback::visualizer::{VisualizerShared, VisualizerTap};
 
 /// Result of checking what is on the active deck in a single lock acquisition.
@@ -84,8 +84,7 @@ pub struct PlaybackEngine {
     // `preload_gapless` re-check it under the decks lock and bail if it moved.
     deck_epoch: Arc<AtomicU64>,
     // Master state shared by every `EqSource`, so a change reaches the staged track too.
-    eq: Arc<EqShared>,
-    rg: Arc<ReplayGainShared>,
+    dsp: DspControls,
     // Read by the control layer only, so no generation counter.
     xf: Arc<CrossfadeShared>,
     // One ring per deck, read as their sum; disarmed until Now Playing is on screen.
@@ -123,8 +122,7 @@ impl PlaybackEngine {
             gapless_pending: Arc::new(AtomicBool::new(false)),
             crossfade_armed: AtomicBool::new(false),
             deck_epoch: Arc::new(AtomicU64::new(0)),
-            eq: EqShared::new(false, &[0.0; equalizer::NUM_BANDS]),
-            rg: ReplayGainShared::new(),
+            dsp: DspControls::default(),
             xf: CrossfadeShared::new(),
             viz: VisualizerShared::new(false),
             staged_stream: Mutex::new(None),
@@ -423,7 +421,7 @@ impl PlaybackEngine {
         deck: &Deck,
     ) -> VisualizerTap<EqSource<S>> {
         VisualizerTap::new(
-            EqSource::new(input, self.eq.clone(), self.rg.clone(), baked_rg, deck.fade.clone()),
+            EqSource::new(input, self.dsp.clone(), baked_rg, deck.fade.clone()),
             &self.viz,
             deck.viz_slot,
         )

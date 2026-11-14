@@ -10,7 +10,11 @@ pub mod pacer;
 pub mod radio_blocklist;
 pub mod radio_browser;
 
+use std::time::Duration;
+
 use melodia_core::error::{AppError, describe};
+use reqwest::StatusCode;
+use reqwest::header::{ETAG, HeaderValue, IF_NONE_MATCH};
 
 /// The process-wide shared client, built on the first real request so rustls and the pool load
 /// only then. The deadline is **per read**, not whole-body: a slow download may take minutes, but
@@ -18,8 +22,8 @@ use melodia_core::error::{AppError, describe};
 /// options, hence a logged fallback rather than an error.
 pub fn build_http_client() -> reqwest::Client {
     reqwest::Client::builder()
-        .connect_timeout(std::time::Duration::from_secs(10))
-        .read_timeout(std::time::Duration::from_mins(1))
+        .connect_timeout(Duration::from_secs(10))
+        .read_timeout(Duration::from_mins(1))
         .pool_max_idle_per_host(4)
         .user_agent(concat!("Melodia/", env!("CARGO_PKG_VERSION")))
         .build()
@@ -51,33 +55,24 @@ pub fn is_http(url: &reqwest::Url) -> bool {
     matches!(url.scheme(), "http" | "https") && url.has_host()
 }
 
-/// GET `url` and read at most `max_bytes` of it, refusing a non-success status or an oversized
-/// `Content-Length` before a byte is read. The header is a courtesy a host can omit or lie about,
-/// which is why [`read_capped`] still bounds the stream. `what` is a capitalized noun phrase
-/// naming the body in every error, so a refusal points at the right half of a two-request fetch.
+/// One kind of body a capped GET reads.
+pub struct CappedGet {
+    /// A capitalized noun phrase naming the body in every error, so a refusal points at the right
+    /// half of a two-request fetch.
+    pub what: &'static str,
+    /// The whole request's, body included, where the client's own deadline is per read.
+    pub timeout: Duration,
+    pub max_bytes: u64,
+}
+
+/// GET `url` and read at most `spec.max_bytes` of it.
 pub async fn get_capped(
     client: &reqwest::Client,
     url: &reqwest::Url,
-    what: &str,
-    timeout: std::time::Duration,
-    max_bytes: u64,
+    spec: &CappedGet,
 ) -> Result<Vec<u8>, AppError> {
-    let response = client
-        .get(url.clone())
-        .timeout(timeout)
-        .send()
-        .await
-        .map_err(|e| AppError::network(format!("{what} could not be fetched"), e))?;
-    if !response.status().is_success() {
-        return Err(AppError::network_msg(format!(
-            "{what} request returned HTTP {}",
-            response.status().as_u16()
-        )));
-    }
-    if response.content_length().is_some_and(|len| len > max_bytes) {
-        return Err(AppError::network_msg(format!("{what} is larger than {max_bytes} bytes")));
-    }
-    read_capped(response, what, max_bytes).await
+    let response = send(client.get(url.clone()), spec).await?;
+    read_success(response, spec).await
 }
 
 /// [`get_capped`] for text. `from_utf8` moves where `from_utf8_lossy` copies; lossy stays on the
@@ -85,13 +80,70 @@ pub async fn get_capped(
 pub async fn get_capped_text(
     client: &reqwest::Client,
     url: &reqwest::Url,
-    what: &str,
-    timeout: std::time::Duration,
-    max_bytes: u64,
+    spec: &CappedGet,
 ) -> Result<String, AppError> {
-    let body = get_capped(client, url, what, timeout, max_bytes).await?;
+    let body = get_capped(client, url, spec).await?;
     Ok(String::from_utf8(body)
         .unwrap_or_else(|e| String::from_utf8_lossy(e.as_bytes()).into_owned()))
+}
+
+/// What [`get_capped_if_changed`] found.
+#[derive(Debug)]
+pub enum IfChanged {
+    NotModified,
+    Fresh { body: Vec<u8>, etag: Option<String> },
+}
+
+/// [`get_capped`], sending `If-None-Match` when `cached_etag` holds a tag, so an unchanged body
+/// costs an empty `304`.
+pub async fn get_capped_if_changed(
+    client: &reqwest::Client,
+    url: &reqwest::Url,
+    cached_etag: Option<&str>,
+    spec: &CappedGet,
+) -> Result<IfChanged, AppError> {
+    let mut request = client.get(url.clone());
+    if let Some(tag) = cached_etag
+        && !tag.is_empty()
+        && let Ok(value) = HeaderValue::from_str(tag)
+    {
+        request = request.header(IF_NONE_MATCH, value);
+    }
+    let response = send(request, spec).await?;
+    if response.status() == StatusCode::NOT_MODIFIED {
+        return Ok(IfChanged::NotModified);
+    }
+    let etag = response.headers().get(ETAG).and_then(|v| v.to_str().ok()).map(str::to_owned);
+    let body = read_success(response, spec).await?;
+    Ok(IfChanged::Fresh { body, etag })
+}
+
+async fn send(
+    request: reqwest::RequestBuilder,
+    spec: &CappedGet,
+) -> Result<reqwest::Response, AppError> {
+    request
+        .timeout(spec.timeout)
+        .send()
+        .await
+        .map_err(|e| AppError::network(format!("{} could not be fetched", spec.what), e))
+}
+
+/// Refuses a non-success status or an oversized `Content-Length` before a byte is read. The header
+/// is a courtesy a host can omit or lie about, which is why [`read_capped`] still bounds the stream.
+async fn read_success(response: reqwest::Response, spec: &CappedGet) -> Result<Vec<u8>, AppError> {
+    let what = spec.what;
+    if !response.status().is_success() {
+        return Err(AppError::network_msg(format!(
+            "{what} request returned HTTP {}",
+            response.status().as_u16()
+        )));
+    }
+    let max_bytes = spec.max_bytes;
+    if response.content_length().is_some_and(|len| len > max_bytes) {
+        return Err(AppError::network_msg(format!("{what} is larger than {max_bytes} bytes")));
+    }
+    read_capped(response, what, max_bytes).await
 }
 
 /// Ceiling on the capacity a `Content-Length` may reserve up front: enough to skip the small

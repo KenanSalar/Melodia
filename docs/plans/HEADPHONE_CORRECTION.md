@@ -2,7 +2,7 @@
 
 Working doc. Delete when the feature ships.
 
-Status: **proposed** · Created: 2026-11-14
+Status: **Phase 1 in progress** · Created: 2026-11-14
 
 Issue [#144](https://github.com/KenanSalar/Melodia/issues/144).
 
@@ -285,7 +285,9 @@ it a set.
   argument per stage.
 - **The updater's conditional fetch** (`services/updater/github.rs:40-63`: `If-None-Match`, the 304,
   the `ETag`, the capped read) becomes `get_capped_if_changed` beside `get_capped`, sharing its
-  status and length checks; the AutoEq list is its second caller.
+  status and length checks; the AutoEq list is its second caller. The body's name, deadline and
+  cap travel as one `CappedGet`, which every capped fetch declares as a `const`, so no fetch
+  function takes more than four parameters.
 - **`PICKER_ROW_CAP`** moves out of `ui/radio/facets.rs` to `ui/row_match.rs`, its doc saying what
   both pickers share: a cap on the drawing, never on what the needle searches.
 - **One filter precision**: the bands move to f64 with the stage, not beside it.
@@ -294,12 +296,13 @@ it a set.
 
 ## Phase 1: Groundwork (no audible change)
 
-- [ ] `DspControls` (EQ, ReplayGain) built once in the backend and handed to `EqSource::new`.
-- [ ] The ten bands on `DirectForm1<f64>` with f64 coefficients, widened once and narrowed once.
+- [x] `DspControls` (EQ, ReplayGain) built once in the backend and handed to `EqSource::new`.
+- [x] The ten bands on `DirectForm1<f64>` with f64 coefficients, widened once and narrowed once.
       Bypass paths stay bit-identical; the active path moves in its last bits.
-- [ ] `get_capped_if_changed` in `melodia-net`; the updater's manifest step on it. Its one change:
-      the manifest fetch takes a named deadline where it relied on the client's per-read timeout.
-- [ ] `PICKER_ROW_CAP` in `ui/row_match.rs`, the facet picker reading it there, its doc saying
+- [x] `get_capped_if_changed` in `melodia-net`, `get_capped` and `get_capped_text` moved onto
+      `CappedGet` with their radio callers; the updater's manifest step on it. Its one change: the
+      manifest fetch takes a named deadline where it relied on the client's per-read timeout.
+- [x] `PICKER_ROW_CAP` in `ui/row_match.rs`, the facet picker reading it there, its doc saying
       what both pickers share.
 
 **Gate:**

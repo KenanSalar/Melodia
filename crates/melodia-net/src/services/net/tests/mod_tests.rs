@@ -7,7 +7,8 @@ use melodia_core::error::AppError;
 use melodia_testkit::http::{TestResponse, TestServer};
 
 use super::{
-    build_http_client, get_capped, get_capped_text, http_url, is_http, is_http_url, read_capped,
+    CappedGet, build_http_client, get_capped, get_capped_text, http_url, is_http, is_http_url,
+    read_capped,
 };
 
 type TestResult = Result<(), Box<dyn std::error::Error>>;
@@ -18,6 +19,8 @@ const CAP: u64 = 32;
 
 /// Well clear of anything a loopback server can take, so a failure here is never the deadline.
 const TIMEOUT: std::time::Duration = std::time::Duration::from_secs(30);
+
+const TEST_GET: CappedGet = CappedGet { what: "Test body", timeout: TIMEOUT, max_bytes: CAP };
 
 /// `len` bytes of filler. Every size here is a few dozen bytes, so the narrowing cannot fail.
 fn filler(len: u64) -> Vec<u8> {
@@ -32,7 +35,7 @@ async fn response_from(server: &TestServer) -> Result<reqwest::Response, reqwest
 /// [`get_capped`] against `server`'s root, with the shared cap and timeout.
 async fn get_from(server: &TestServer) -> Result<Vec<u8>, AppError> {
     let url = http_url(&server.base_url()).ok_or_else(|| AppError::network_msg("bad base url"))?;
-    get_capped(&reqwest::Client::new(), &url, "Test body", TIMEOUT, CAP).await
+    get_capped(&reqwest::Client::new(), &url, &TEST_GET).await
 }
 
 // ---- what may be fetched ----
@@ -165,7 +168,7 @@ async fn a_text_body_that_is_not_utf8_comes_back_lossy_rather_than_failing() -> 
     let server = TestServer::start(|_| TestResponse::ok(vec![b'A', 0xFF, b'B']))?;
     let url = reqwest::Url::parse(&server.base_url())?;
 
-    let text = get_capped_text(&reqwest::Client::new(), &url, "Test body", TIMEOUT, CAP).await?;
+    let text = get_capped_text(&reqwest::Client::new(), &url, &TEST_GET).await?;
 
     assert_eq!(text, "A\u{fffd}B");
     Ok(())
@@ -178,7 +181,7 @@ async fn the_shared_client_names_melodia_and_its_version() -> TestResult {
     let server = TestServer::start(|_| TestResponse::ok(""))?;
     let url = reqwest::Url::parse(&server.base_url())?;
 
-    get_capped(&build_http_client(), &url, "Test body", TIMEOUT, CAP).await?;
+    get_capped(&build_http_client(), &url, &TEST_GET).await?;
 
     let sent = server.requests();
     let agent = sent.first().and_then(|request| request.header("user-agent"));

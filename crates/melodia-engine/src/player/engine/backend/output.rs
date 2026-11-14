@@ -235,8 +235,8 @@ impl PlaybackEngine {
         Some(signal_path::evaluate(SignalInputs {
             negotiated,
             source,
-            eq_on: self.eq.enabled(),
-            rg_on: self.rg.enabled(),
+            eq_on: self.dsp.eq.enabled(),
+            rg_on: self.dsp.rg.enabled(),
             transport,
         }))
     }

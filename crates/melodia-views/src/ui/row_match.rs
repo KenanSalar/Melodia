@@ -1,4 +1,4 @@
-//! Whether a row matches a filter box's needle.
+//! Whether a row matches a filter box's needle, and how many matches a picker draws.
 //!
 //! Every per-view `SearchBar` narrows a list rather than re-querying `tracks_fts`, a second answer
 //! to "what does this query match", and this module is what keeps it the same answer for the lists
@@ -9,6 +9,11 @@
 use melodia_core::entities::track::TrackListRow;
 use melodia_core::entities::track_search::SearchFields;
 use melodia_core::utils::needle::Needle;
+
+/// How many rows a picker draws, typed into or not: a cap on the drawing, never on what the needle
+/// searches. The needle is unthrottled, so uncapped a long list would build a row per match on
+/// every keystroke.
+pub const PICKER_ROW_CAP: usize = 500;
 
 /// Folded substring match across a track row's five text fields and its year. An empty
 /// needle matches every row, so an unfiltered list needs no branch.
