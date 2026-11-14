@@ -121,7 +121,7 @@ const KIND_RAMP: u8 = 1;
 
 #[derive(Copy, Clone, Debug, PartialEq)]
 pub struct FadeCmd {
-    /// `None` ramps from the source's current gain.
+    /// `None` ramps from the source's current gain, as does every source built after the arm.
     pub start: Option<f32>,
     pub target: f32,
     /// Media milliseconds, which only the source can convert.

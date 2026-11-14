@@ -462,8 +462,11 @@ fn a_fade_out_ends_the_source_when_the_ramp_lands() {
 #[test]
 fn a_fade_in_climbs_to_unity_and_restores_the_bypass() {
     let fade = FadeShared::idle();
+    // Built before the arm, as `Decks::crossfade_to` builds its incoming source: a source built
+    // after joins the ramp from its own gain.
+    let source = faded_source(vec![1.0; 300], 1, fade.clone());
     fade.arm(Some(0.0), 1.0, 100, false);
-    let out: Vec<f32> = faded_source(vec![1.0; 300], 1, fade).collect();
+    let out: Vec<f32> = source.collect();
 
     assert_eq!(out.len(), 300, "a fade-in must never end the source");
     assert!(approx(out[0], 0.0));
@@ -478,12 +481,15 @@ fn complementary_ramps_on_two_decks_never_sum_past_unity() {
     // The property that keeps the unclamped mixer safe. Both "decks" run a
     // full-scale signal; their summed output must stay inside full scale.
     let out_fade = FadeShared::idle();
-    out_fade.arm(None, 0.0, 200, true);
     let in_fade = FadeShared::idle();
+    let outgoing = faded_source(vec![1.0; 400], 1, out_fade.clone());
+    let incoming = faded_source(vec![1.0; 400], 1, in_fade.clone());
+    // Armed after both builds, the order `Decks::crossfade_to` keeps.
+    out_fade.arm(None, 0.0, 200, true);
     in_fade.arm(Some(0.0), 1.0, 200, false);
 
-    let outgoing: Vec<f32> = faded_source(vec![1.0; 400], 1, out_fade).collect();
-    let incoming: Vec<f32> = faded_source(vec![1.0; 400], 1, in_fade).collect();
+    let outgoing: Vec<f32> = outgoing.collect();
+    let incoming: Vec<f32> = incoming.collect();
 
     for (i, o) in outgoing.iter().enumerate() {
         let sum = o + incoming[i];

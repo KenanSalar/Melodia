@@ -2,8 +2,8 @@
 
 Working doc. Delete when the feature ships.
 
-Status: **Phases 1–7 landed on Linux**; Phase 7's Windows check, the Windows build check and hand
-test pending · Created: 2026-11-12
+Status: **Phases 1–7 landed on Linux**, the Windows hand test passed (2026-11-14); Phase 7's Windows
+check pending · Created: 2026-11-12
 
 Issue [#156](https://github.com/KenanSalar/Melodia/issues/156).
 
@@ -511,8 +511,8 @@ The store learns nothing about decoding beyond the edge it already has (`melodia
 
 **Gate:**
 - [x] The static gates.
-- [ ] Windows: `background_priority.rs`'s `SetThreadPriority` call builds (no Windows target here).
-      The PR's `clippy-windows` job checks it, and Phase 6's Windows hand test builds it.
+- [x] Windows: `background_priority.rs`'s `SetThreadPriority` call builds. The workspace's clippy
+      and test gates pass on Windows (2026-11-14, 4,565 tests).
 - [x] In the dev data folder, the switch on through `settings.json` (2026-11-12, release build,
       the 525-track dev library plus scratch fixtures in two added folders, on a null sink;
       restored after):
@@ -658,17 +658,35 @@ first. The library was the dev library's 525 tracks, `melodia-test-library-50500
         tracks recorded for 72 s each while the pass kept 1.98 and 1.99 cores busy. No run of 32
         silent samples, no 5 ms envelope dip, no underrun line. Gapless joins switch inside one
         20 ms hop; the 2 s crossfade is linear, its two levels summing to 1.000 throughout.
-- [ ] Windows, Kenan's hand test on a release build (no Windows machine here), the switch on with a
-      large library:
-  - [ ] it builds, `background_priority.rs`'s `SetThreadPriority` call included;
-  - [ ] the `loudness-{i}` threads run at background priority while a pass runs (Process
-        Explorer, the process's Threads tab);
-  - [ ] Private Bytes before a pass, at its peak and two minutes after it ends, against a launch
-        with the switch off: the end-of-pass trim (`HeapOptimizeResources`) hands the decoders'
-        memory back, the gap compared with Linux's 9.8 MiB at two workers;
-  - [ ] music plays through a pass with no dropout, gapless and crossfaded;
-  - [ ] Stop and the switch off end the pass, and with the switch off a launch and a library change
-        start none.
+- [x] Windows, run by Claude on Kenan's go (2026-11-14, release build at `8c57008c`, scratch copies
+      of the dev data folder: the 51,012-track library plus fixtures, the Realtek endpoint muted
+      and its WASAPI loopback recorded; clicks only on Kenan's go):
+  - [x] it builds, `background_priority.rs`'s `SetThreadPriority` call included;
+  - [x] the `loudness-{i}` threads run at background priority while a pass runs: base priority 4
+        against 8, I/O priority Very Low and memory priority 1 against Normal and 5, set again on
+        the pool a scan stop rebuilds;
+  - [x] Private Bytes on a fresh seed against the switch-off run on the same timeline: 151.6 MiB
+        before the pass had dispatched much, a 191.7 MiB peak, and 174.2 MiB two minutes after it
+        ended against 160.3 MiB switched off, so 13.9 MiB held against Linux's 9.8, no `loudness-`
+        thread left. A fresh build's first launch and `PrintWindow` captures each inflate commit
+        by tens of MiB, so a run with either doesn't count;
+  - [x] music plays through a pass with no dropout: 160 s of loopback with the pass at 1.6–1.9
+        cores, no zero run, no gap, crossfades linear. A gapless join inside an album entered by a
+        crossfade faded the next track in from silence, measuring on or off: fixed in `EqSource`,
+        which joins a ramp armed before it was built from its own gain;
+  - [x] Stop and the switch off end the pass, and with the switch off a launch and a library change
+        start none. Stop held through a dropped file and Measure resumed owing the rest plus the
+        arrival; ReplayGain off and Make Bit-Perfect stopped it too, the latter for good;
+  - [x] Phases 3–5 again: gains within 0.009 dB of ffmpeg across codecs, cue spans and both 5.1
+        layouts, mono equal to its stereo copy, album gains within the histogram's 0.05 dB; Album,
+        Track and switch-off levels within 0.002 dB; the live gate re-levelled a playing track
+        both ways at once; the queue first and once; a scan mid-pass; a `subst` drive out of reach
+        until it came back; files replaced in place, mid-read too; Edit Tags and a rating carried
+        their rows, an album move re-measured both albums; search, the overflow dialog and the
+        progress rows. Measuring the whole library took 1,145 s against Linux's 826;
+  - [x] the pass logged symphonia's probe warning, `skipped 4 bytes of junk at 0`, once per MP4 it
+        decoded at the default level, 9,317 of the run's 9,319 WARN lines: `SPEC_TAIL` mutes
+        `symphonia_core::formats::probe`.
 
 ## Phase 7: Tests
 
