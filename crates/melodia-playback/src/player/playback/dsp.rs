@@ -1,8 +1,14 @@
-//! Primitives the DSP paths share: the state cells on the audio thread, and the visualizer's
-//! analysis on the UI thread.
+//! Primitives the DSP paths share: the state cells and the flat biquad on the audio thread, and the
+//! visualizer's analysis on the UI thread.
 
 use std::fmt::Write as _;
 use std::sync::atomic::{AtomicU32, AtomicU64, Ordering};
+
+use biquad::Coefficients;
+
+/// Flat at every frequency: what a filter holds before its first design.
+pub(crate) const PASSTHROUGH: Coefficients<f64> =
+    Coefficients { a1: 0.0, a2: 0.0, b0: 1.0, b1: 0.0, b2: 0.0 };
 
 /// What a falling bar or trace keeps per frame, shared so every style falls by one law. The settle
 /// in wall time is this against the strip's one Timer interval (`visualizer-strip.slint`).

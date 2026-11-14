@@ -2,7 +2,7 @@
 
 Working doc. Delete when the feature ships.
 
-Status: **Phase 1 in progress** · Created: 2026-11-14
+Status: **Phase 3 next** · Created: 2026-11-14
 
 Issue [#144](https://github.com/KenanSalar/Melodia/issues/144).
 
@@ -72,15 +72,15 @@ plays on every device.
 ### Where the stage sits
 
 **Inside `EqSource`, per deck, before the ten bands and the limiter**
-(`melodia-playback/src/player/playback/equalizer.rs:539-581`). The per-sample order becomes:
-decoder sample × Preamp × ReplayGain × headroom, then the correction filters, then the active
-bands, then the limiter, the clamp and the deck's fade. Both decks read one shared correction, as
-they read one `EqShared` today.
+(`melodia-playback/src/player/playback/equalizer.rs:578-626`). The per-sample order is: decoder
+sample × Preamp × ReplayGain, then the correction filters with each bank's output scaled by its
+headroom, then the active bands, then the limiter, the clamp and the deck's fade. Both decks read
+one shared correction, as they read one `EqShared`.
 
 - Not after the mixer: the limiter is per source, and the correction's boosts are what it has to
   catch. Moving the limiter would change today's sound.
-- The correction has its own switch, so the Equalizer's toggle doesn't gate it, the way it
-  doesn't gate ReplayGain (`rebuild`, `equalizer.rs:435-447`).
+- The correction's switch is the engine's, so the Equalizer's toggle doesn't gate it, the way it
+  doesn't gate ReplayGain (`rebuild`, `equalizer.rs:457-471`).
 - `dsp_engaged` reports it, so the signal path grades it (`signal_path.rs:124`).
 
 ### Every filter runs in 64-bit
@@ -90,59 +90,64 @@ one narrowing after the last. Form 1 stays, its delay line holding across a coef
 (`equalizer.rs:1-3`). A filter's poles crowd towards z = 1 as its frequency falls against the
 rate, a 105 Hz shelf at 192 kHz opening every AutoEq profile read for this plan, and that is where
 32-bit coefficients and state stop holding the curve. The cascade is serially dependent at either
-width, so nothing vectorised is given up; Phase 3's profile records what it costs.
+width, so nothing vectorised is given up; the hand tests' profile records what it costs.
 
 - **No new filter crate.** `biquad` 0.6.0 is generic over the coefficient and sample types, and its
   `LowShelf`, `HighShelf` and `PeakingEQ` are the RBJ cookbook's forms with `alpha = sin(w0)/(2Q)`
   (`src/coefficients.rs:228-286`), the same formulas AutoEq optimises its filters against
   (`autoeq/peq.py`). A shelf defined any other way would draw another curve from the same file.
-- A filter at or past the source's Nyquist is inactive, as a band is today (`equalizer.rs:463-470`).
+- A filter at or past the source's Nyquist is inactive, as a band is (`equalizer.rs:499-506`).
 
 ### The level: headroom from the combined response
 
 - **Headroom is the loudest point of the active correction filters and the active bands
   together**, evaluated at the source's own rate. `|H(e^jw)|²` of each biquad multiplies across the
-  cascade at each point, so a rebuild takes one `log10` at the end and none per filter. The grid
-  is fixed log spacing from 20 Hz to the lower of 20 kHz and the source's band edge
-  (`GRID_STEPS_PER_OCTAVE`, a twenty-fourth to start), plus each active filter's own centre, where
-  the peaks sit. The fixed points' cosines are built once per source in `EqSource::new`, which
-  runs on the control thread (`backend/mod.rs:290`); a rebuild allocates nothing.
-- The gain is `min(1, 1 / peak)`: the level only comes down. The file's `Preamp:` line is read and
-  not applied.
+  cascade at each point, each filter's divided out on its own so the product can't underflow, and
+  a rebuild ends in one square root. The grid is fixed log spacing from 20 Hz to the lower of
+  20 kHz and the source's band edge (`GRID_STEPS_PER_OCTAVE`, a twenty-fourth to start), the edge
+  itself, and each active filter's own centre clamped into that band, where the peaks sit. The
+  fixed points' cosines are built once per source in `EqSource::new`, which runs on the control
+  thread (`backend/mod.rs:287-288`); a rebuild allocates nothing.
+- The gain is `min(1, 1 / sqrt(peak power))`: the level only comes down. Each bank's output takes
+  its own, which equals scaling the input and lets a swap's mix carry both levels. The file's
+  `Preamp:` line is read and not applied.
 - Only while a correction is engaged. With it off nothing is added, so today's sound holds.
 - **A slider move takes the new headroom at once**, as the Preamp does today; only a correction
   swap ramps (below).
 - The Preamp slider stays the user's, outside the headroom, and the limiter stays the net
-  (`equalizer.rs:50-55`).
+  (`equalizer.rs:53-58`).
 
 ### A swap crossfades two banks
 
 A swap is any change of the correction itself: an apply, a clear, the switch, a device switch.
 
 - The stage holds two banks per channel. On a swap the current bank becomes the outgoing one and
-  the incoming is built from rest; for `CORRECTION_SWAP` (50 ms to start, set by ear in Phase 3)
-  both run and their outputs mix linearly, frame by frame. Linear, because the two are the same
+  the incoming is built from rest; for `CORRECTION_SWAP_MS` (50 ms to start, set by ear in the
+  hand tests) both run and their outputs mix linearly, frame by frame. Linear, because the two are the same
   signal through two filters, where an equal-power curve would bump the level mid-ramp. Each bank
   carries its own headroom, so the level moves with the ramp.
 - Coefficient interpolation is not the answer here: a swap changes the filter count and the
   filter types, and interpolating between two unrelated sets passes through curves neither asked
   for.
-- A swap arriving mid-ramp is taken when the ramp ends, the poll leaving its generation unread
-  until then.
+- A swap arriving mid-ramp is taken when the ramp ends, the poll leaving its sequence unread
+  until then. A swap between two banks with nothing running takes no ramp.
 - A new source (next track, a gapless successor, a seek's replacement) takes the set as it is,
   with no ramp. A seek resets both banks and ends a ramp at its target, as it resets the bands
-  (`equalizer.rs:637-650`).
+  (`equalizer.rs:682-696`).
 - Bypass needs the stage inert as well: no correction engaged and no ramp in flight
-  (`equalizer.rs:490`).
+  (`equalizer.rs:469-470`).
 
 ### Publishing a set to the audio thread
 
-`CorrectionShared` holds up to 20 filter cells, the switch and a sequence counter. The one writer,
-the engine behind its correction lock, makes the counter odd, rewrites the cells, then makes it
-even. A source reads the counter, the cells, then the counter again; an odd or moved count keeps
-the set it has and tries at the next frame. The audio thread never spins and never allocates.
+`CorrectionShared` holds up to 20 filter cells and a sequence counter, and no switch: the engine
+publishes an empty set while correction is off, so the stage knows only the set to play.
+`CorrectionWriter`, not `Clone` and publishing through `&mut self`, is the one handle that writes;
+the engine keeps it inside its correction lock. A write makes the counter odd, rewrites the cells,
+then makes it even. A source reads the counter, the cells, then the counter again; an odd or moved
+count keeps the set it has and tries at the next frame. The audio thread never spins and never
+allocates.
 
-The `Generation` pattern alone (`dsp.rs:56-74`) isn't enough here: a reader landing during the
+The `Generation` pattern alone (`dsp.rs:62-80`) isn't enough here: a reader landing during the
 next write would build a set mixing two headphones and ramp to it.
 
 ### One correction per device
@@ -262,7 +267,7 @@ persists it (`library/settings/playback.rs:71-80`).
 | what | where | note |
 |---|---|---|
 | boundary types | `crates/melodia-core/src/entities/correction.rs` | `FilterKind`, `CorrectionFilter`, `CorrectionFilters` (newtype, `TryFrom`), `MAX_CORRECTION_FILTERS`, `Correction`, `CorrectionOrigin`, `DeviceCorrections::for_device`, `AutoEqEntry`, the parse result and its refusals |
-| the stage | `crates/melodia-playback/src/player/playback/correction/` | `shared.rs`: `CorrectionShared` and its sequence counter. `bank.rs`: the per-channel banks and the swap ramp. `response.rs`: the grid, `\|H\|²` and the headroom |
+| the stage | `crates/melodia-playback/src/player/playback/correction/` | `shared.rs`: `CorrectionShared`, its sequence counter and `CorrectionWriter`. `bank.rs`: `CorrectionStage`, the per-channel banks and the swap ramp. `response.rs`: the grid, `\|H\|²` and the headroom |
 | the wrapper | `player/playback/equalizer.rs` | `DspControls` in, the stage polled with the other two generations, the f64 bands, bypass and seek |
 | engine | `crates/melodia-engine/src/player/engine/backend/{mod,controls,output}.rs`, `signal_path.rs` | `DspControls` owned once; the correction lock, the map, `select_correction`; `OutputChoice::heard_device`; `SignalInputs.correction_on` |
 | net | `crates/melodia-net/src/services/net/mod.rs`, `services/net/autoeq/` | `get_capped_if_changed`; the URLs and their guard, the list fetch, the profile fetch, the list parser |
@@ -307,31 +312,40 @@ it a set.
 
 **Gate:**
 - [x] The static gates, and the existing tests fixed where `EqSource::new`'s signature breaks them.
-- [ ] Kenan's hand pass: every preset and a hand curve sound as before; an update check against an
-      unchanged release logs its 304; the radio Tag picker draws and narrows as before.
 
 ## Phase 2: The correction stage (`melodia-core`, `melodia-playback`)
 
-- [ ] `entities/correction.rs`: the types, the newtype's checks, `MAX_CORRECTION_FILTERS`.
-- [ ] `correction/shared.rs`: the cells, the counter, `publish` (writer) and `try_read` (source).
-- [ ] `correction/response.rs`: the grid built per source, `|H|²`, the headroom over the correction
+- [x] `entities/correction.rs`: `MAX_CORRECTION_FILTERS`, the three value ranges (about twice
+      AutoEq's own optimiser bounds), `FilterKind`, `CorrectionFilter` and its `check`, the
+      `CorrectionFilters` newtype through `TryFrom`, and their two error types. The rest of the
+      table's row lands with its first user.
+- [x] `correction/shared.rs`: the cells, the counter, `CorrectionWriter` (`publish`, `clear`) and
+      `read_if_changed` (source).
+- [x] `correction/response.rs`: the grid built per source, `|H|²`, the headroom over the correction
       and the bands.
-- [ ] `correction/bank.rs`: building a bank from a set at a rate, inactive past Nyquist; the two
-      banks and the linear ramp over `CORRECTION_SWAP`; a mid-ramp swap waits; seek resets.
-- [ ] `EqSource`: the stage in `DspControls`, its generation polled at the frame boundary with the
-      other two, the headroom in the input gain, bypass and `dsp_engaged` counting it.
-- [ ] Docs: the stage's order and its why at `equalizer.rs`'s `//!` and `correction/`'s;
-      `.claude/rules/unsafe-rust.md`'s hot-path lines ("ten cascaded biquads", `next_active`'s
-      zipped loops) where the stage makes them wrong. ADR 0010's shape (one wrapper, lock-free
-      state) holds, so it stays.
+- [x] `correction/bank.rs`: building a bank from a set at a rate, inactive past Nyquist; the two
+      banks and the linear ramp over `CORRECTION_SWAP_MS`; a mid-ramp swap waits; seek resets.
+- [x] `EqSource`: the stage in `DspControls`, its sequence polled at the frame boundary with the
+      other two generations, the headroom at each bank's output, bypass and `dsp_engaged` counting
+      it. `dsp::PASSTHROUGH` replaces the private identity coefficients.
+- [x] Docs: the stage's order and its why at `equalizer.rs`'s, `playback/mod.rs`'s and
+      `correction/`'s `//!`; `.claude/rules/unsafe-rust.md`'s hot-path lines. ADR 0010's shape
+      (one wrapper, lock-free state) holds, so it stays.
 
 **Gate:**
-- [ ] The static gates. Nothing sets a correction yet, so the run gates wait for Phase 3.
+- [x] The static gates, the existing equalizer suite passing unchanged once its `DspControls`
+      literals take `..DspControls::default()`.
 
 ## Phase 3: One correction per device (`melodia-engine`, `melodia-app`)
 
+- [ ] `entities/correction.rs`: `Correction`, `CorrectionOrigin`, `DeviceCorrections::for_device`,
+      and the serde derives (`CorrectionFilters` through `try_from`).
 - [ ] `OutputChoice::heard_device`; the engine's map, `set_corrections`, `set_correction_enabled`,
-      `select_correction`, and `set_output_choice` selecting after its reopen.
+      `select_correction`, and `set_output_choice` selecting after its reopen. The correction lock
+      holds the map with the `CorrectionWriter`, so the backend builds `DspControls` around the
+      writer's `shared()` rather than through `default()`. `select_correction` publishes only when
+      the effective set changes: the same set again would still crossfade, into a bank starting
+      from rest.
 - [ ] `SignalInputs.correction_on`, fed where `eq_on` and `rg_on` are.
 - [ ] `CorrectionFlags` and its setters; the `AppState` shadow; `output_changed`;
       `player_set_corrections`, `player_set_correction_enabled`; `hydrate_audio_dsp`.
@@ -341,28 +355,14 @@ it a set.
 
 **Gate:**
 - [ ] The static gates.
-- [ ] In the dev data folder with a backup, corrections written into `settings.json` by hand from
-      two AutoEq profiles, one for a card and one for System default (Kenan's hand pass, or run by
-      Claude on his go):
-  - [ ] the switch on: the signal path names the stage and the sound changes; a big bass boost on a
-        loudly mastered track neither clips nor pumps;
-  - [ ] switching device mid-track switches the correction, with no click and no jump in level;
-        `CORRECTION_SWAP` settled by ear and recorded here;
-  - [ ] a device with nothing set plays uncorrected; System default plays its own;
-  - [ ] the switch off: exclusive output reads Bit-perfect with the Equalizer off, and a flat
-        Equalizer is bit-identical (`bit_perfect.rs`'s rig);
-  - [ ] Make Bit-Perfect turns the correction off and keeps both corrections;
-  - [ ] the curve: sines at 44.1, 96 and 192 kHz through the null sink, read back per tone against
-        the analytic response of the correction plus the bands, every tone within 0.1 dB, the
-        table recorded here (the issue's 192 kHz check);
-  - [ ] the rebuild on the audio thread with a 20-filter correction at 192 kHz during a slider
-        drag: `perf record` on the output thread, `rebuild`'s share recorded here.
 
 ## Phase 4: AutoEq online (`melodia-net`, `melodia-app`)
 
 - [ ] `services/net/autoeq/`: the base, the list URL, the profile URL and its guard; the
       conditional list fetch; the profile fetch; the list parser and its skip count.
-- [ ] `services/correction/parametric.rs`, its refusals typed.
+- [ ] `entities/correction.rs`: `AutoEqEntry` and the parse result.
+- [ ] `services/correction/parametric.rs`, its refusals typed, each filter line through
+      `CorrectionFilter::check`.
 - [ ] `library/correction/`: the online seam, the cache and its recheck, apply from the list,
       import a file or text, clear; each write through the shadow, the engine, then the persist,
       kicking only after the write commits.
@@ -372,7 +372,7 @@ it a set.
       the facade's `//!` argues the seam, as `library/radio/mod.rs:8-10` does.
 
 **Gate:**
-- [ ] The static gates. The card is the only caller, so the run gates wait for Phase 5.
+- [ ] The static gates.
 
 ## Phase 5: The card, the picker and the import (`melodia-ui`, `melodia-views`)
 
@@ -399,31 +399,63 @@ it a set.
 
 **Gate:**
 - [ ] The static gates, and the onboarding and settings tests fixed where the new rows break them.
-- [ ] Kenan's hand pass (or run by Claude on his go), in the dev data folder:
-  - [ ] the picker finds a model by part of its name, applies it, and the card shows it; a second
-        open with nothing changed sends one conditional request;
-  - [ ] the picker offline: with a cache it lists, without one it says it couldn't reach AutoEq;
-        a hand-corrupted cache says the list couldn't be read; Import works either way;
-  - [ ] importing a file with lines it can't use lists them before applying; a per-ear file and a
-        30-filter file are refused; a paste applies;
-  - [ ] the switch gives a before and after with no click; Clear on one device leaves the other;
-  - [ ] the online switch off: Find headphones is unavailable and nothing reaches GitHub, Import
-        still applies; the onboarding row flips the same switch;
-  - [ ] the settings search finds the card by "headphone", "correction" and "AutoEq".
 
-## Phase 6: Windows and memory
+## Phase 6: Testing
 
-- [ ] Windows (on Kenan's go): it builds; switching between two endpoints in shared mode switches
-      the correction; System default plays its own; whether a shared stream on System default
-      follows a change of the Windows default, recorded here as the answer to the issue's open
-      note.
-- [ ] Memory: RSS sampled from `/proc` with the picker open on the full list and two minutes after
-      it closes, against a run that never opened it; idle after close within noise, recorded here.
+Every phase before this one stops at its static gates. The hand tests come first, once the whole
+feature has landed; the tests follow them.
 
-## Phase 7: Tests
+### Hand tests
 
-Tests are added where the landed change earns them, on Kenan's go, after the hand passes above.
-Existing tests a phase breaks are fixed in that phase. The facade's corpus walk lands here, and
+Kenan's hand pass, or run by Claude on his go, in the dev data folder with a backup.
+
+**Groundwork:**
+- [ ] With the correction off, every preset and a hand curve sound as before.
+- [ ] An update check against an unchanged release logs its 304.
+- [ ] The radio Tag picker draws and narrows as before.
+
+**One correction per device**, corrections written into `settings.json` by hand from two AutoEq
+profiles, one for a card and one for System default:
+- [ ] The switch on: the signal path names the stage and the sound changes; a big bass boost on a
+      loudly mastered track neither clips nor pumps.
+- [ ] Switching device mid-track switches the correction, with no click and no jump in level;
+      `CORRECTION_SWAP_MS` settled by ear and recorded here.
+- [ ] A device with nothing set plays uncorrected; System default plays its own.
+- [ ] The switch off: exclusive output reads Bit-perfect with the Equalizer off, and a flat
+      Equalizer is bit-identical (`bit_perfect.rs`'s rig).
+- [ ] Make Bit-Perfect turns the correction off and keeps both corrections.
+- [ ] The curve: sines at 44.1, 96 and 192 kHz through the null sink, read back per tone against
+      the analytic response of the correction plus the bands, every tone within 0.1 dB, the table
+      recorded here (the issue's 192 kHz check).
+- [ ] The rebuild on the audio thread with a 20-filter correction at 192 kHz during a slider drag:
+      `perf record` on the output thread, `rebuild`'s share recorded here.
+
+**The card, the picker and the import:**
+- [ ] The picker finds a model by part of its name, applies it, and the card shows it; a second
+      open with nothing changed sends one conditional request.
+- [ ] The picker offline: with a cache it lists, without one it says it couldn't reach AutoEq; a
+      hand-corrupted cache says the list couldn't be read; Import works either way.
+- [ ] Importing a file with lines it can't use lists them before applying; a per-ear file and a
+      30-filter file are refused; a paste applies.
+- [ ] The switch gives a before and after with no click; Clear on one device leaves the other.
+- [ ] The online switch off: Find headphones is unavailable and nothing reaches GitHub, Import
+      still applies; the onboarding row flips the same switch.
+- [ ] The settings search finds the card by "headphone", "correction" and "AutoEq".
+
+**Windows** (on Kenan's go):
+- [ ] It builds; switching between two endpoints in shared mode switches the correction; System
+      default plays its own.
+- [ ] Whether a shared stream on System default follows a change of the Windows default, recorded
+      here as the answer to the issue's open note.
+
+**Memory:**
+- [ ] RSS sampled from `/proc` with the picker open on the full list and two minutes after it
+      closes, against a run that never opened it; idle after close within noise, recorded here.
+
+### Tests
+
+Added where the landed change earns them, on Kenan's go, after the hand tests above. Existing
+tests a phase breaks are fixed in that phase. The facade's corpus walk lands here, and
 `CLAUDE.md`'s facade line then names its file.
 
 ---
@@ -432,12 +464,12 @@ Existing tests a phase breaks are fixed in that phase. The facade's corpus walk 
 
 - **Docs land in the phase that stales them**, each argument above moving to the doc comment of
   what it constrains as that lands.
-- **800 lines:** `equalizer.rs` (685) gains wiring, not the stage; if it passes 760 the limiter
-  moves to its own file first. `backend/mod.rs` (669) holds every stage's cells in one
+- **800 lines:** `equalizer.rs` (709 with the stage wired) gains no more; if it passes 760 the
+  limiter moves to its own file first. `backend/mod.rs` (669) holds every stage's cells in one
   `DspControls`. `app-window.slint` (750) gains its export lines only. `library/playback.rs` (551) gains two
   setters. Everything else new is its own module.
 - **Memory:** two banks of 20 f64 filters per channel per source, a few KiB; the list only while
-  the picker is open. Phase 6 measures it.
+  the picker is open. The hand tests measure it.
 - **Lock order** (ADR 0035) is untouched: the correction lock is a leaf, and the audio thread reads
   through the counter, never a lock.
 - **The live public release:** both switches default off, every new field is `serde(default)`, and
@@ -445,6 +477,6 @@ Existing tests a phase breaks are fixed in that phase. The facade's corpus walk 
 
 ## Open questions
 
-- Whether System default should key by the endpoint Windows resolves it to, which Phase 6's answer
-  decides is worth asking.
+- Whether System default should key by the endpoint Windows resolves it to, which the Windows hand
+  test's answer decides is worth asking.
 - Whether the full index joins the picker later, each row then naming its rig.

@@ -2,10 +2,10 @@
 //! one [`DirectForm1`] per band per channel, Form 1 because its delay line stays valid across a
 //! live coefficient swap, so a slider drag injects no transient.
 //!
-//! [`EqSource`] also carries two stages the EQ toggle doesn't gate, each polled through its own
-//! generation: the track's `ReplayGain` before the bands, so the limiter guards a boost, and the
-//! deck's crossfade ramp after the clamp, so two decks can't sum past unity in the unclamped
-//! mixer. With all three inert it is a bit-identical passthrough.
+//! [`EqSource`] also carries three stages the EQ toggle doesn't gate, each polled on its own: the
+//! track's `ReplayGain` and the headphone correction before the bands, so the limiter guards their
+//! boosts, and the deck's crossfade ramp after the clamp, so two decks can't sum past unity in the
+//! unclamped mixer. With all four inert it is a bit-identical passthrough.
 
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -13,8 +13,11 @@ use std::time::Duration;
 
 use biquad::{Biquad, Coefficients, DirectForm1, Hertz, Type};
 
+use super::correction::bank::CorrectionStage;
+use super::correction::response::FilterResponse;
+use super::correction::shared::{CorrectionShared, CorrectionWriter};
 use super::crossfade::{self, FadeShared};
-use super::dsp::{AtomicF32, Generation, db_to_linear, linear_to_db};
+use super::dsp::{AtomicF32, Generation, PASSTHROUGH, db_to_linear, linear_to_db};
 use super::replaygain::{self, ReplayGainShared, TrackReplayGain};
 use melodia_audio::player::source::audio::{
     AudioSource, ChannelCount, Sample, SampleRate, SeekError, SourceFormat,
@@ -48,7 +51,7 @@ const GAIN_EPSILON_DB: f32 = 0.05;
 const PREAMP_EPSILON_DB: f32 = 0.01;
 
 // The safety limiter: transparent until near full scale, then it pins peaks at the threshold. In
-// the active path only, so EQ-off audio is never touched.
+// the active path only, so audio with nothing engaged is never touched.
 const LIMITER_THRESHOLD_DB: f32 = -1.0;
 const LIMITER_KNEE_DB: f32 = 4.0;
 const LIMITER_ATTACK_S: f32 = 0.005;
@@ -191,18 +194,18 @@ impl EqShared {
 pub struct DspControls {
     pub eq: Arc<EqShared>,
     pub rg: Arc<ReplayGainShared>,
+    pub correction: Arc<CorrectionShared>,
 }
 
+/// Its writer dropped, the correction stays empty for these sources' lives.
 impl Default for DspControls {
     fn default() -> Self {
-        Self { eq: EqShared::new(false, &[0.0; NUM_BANDS]), rg: ReplayGainShared::new() }
+        Self {
+            eq: EqShared::new(false, &[0.0; NUM_BANDS]),
+            rg: ReplayGainShared::new(),
+            correction: CorrectionWriter::default().shared(),
+        }
     }
-}
-
-/// Passthrough coefficients, only to construct the banks — [`EqSource::rebuild`]
-/// overwrites a band before it is ever run.
-fn identity_coeffs() -> Coefficients<f64> {
-    Coefficients { a1: 0.0, a2: 0.0, b0: 1.0, b1: 0.0, b2: 0.0 }
 }
 
 #[expect(
@@ -321,6 +324,9 @@ pub struct EqSource<S> {
     banks: Vec<[DirectForm1<f64>; NUM_BANDS]>,
     /// A band is inactive at unity gain or outside Nyquist.
     band_active: [bool; NUM_BANDS],
+    /// For the correction's headroom, the banks' own coefficients being private to `biquad`.
+    band_responses: [FilterResponse; NUM_BANDS],
+    correction: CorrectionStage,
     preamp_gain: f32,
     rg_gain: f32,
     limiter: Limiter,
@@ -346,8 +352,9 @@ impl<S: AudioSource> EqSource<S> {
         )]
         let sample_rate = input.sample_rate().get() as f32;
         let banks = (0..channels)
-            .map(|_| std::array::from_fn(|_| DirectForm1::<f64>::new(identity_coeffs())))
+            .map(|_| std::array::from_fn(|_| DirectForm1::<f64>::new(PASSTHROUGH)))
             .collect();
+        let correction = CorrectionStage::new(channels, input.sample_rate());
         // Already per channel: dividing by the channel count runs the limiter that many times too
         // fast against the biquads.
         let frame_rate = sample_rate;
@@ -381,6 +388,8 @@ impl<S: AudioSource> EqSource<S> {
             channels: u64::try_from(channels).unwrap_or(1),
             banks,
             band_active: [false; NUM_BANDS],
+            band_responses: [FilterResponse::FLAT; NUM_BANDS],
+            correction,
             preamp_gain: 1.0,
             rg_gain: 1.0,
             limiter: Limiter::new(frame_rate),
@@ -445,26 +454,33 @@ impl<S: AudioSource> EqSource<S> {
         g
     }
 
-    /// `ReplayGain` applies either way, so it alone decides whether this is a passthrough.
-    fn disable_bands(&mut self, rg_is_unity: bool) {
-        self.preamp_gain = 1.0;
-        self.band_active = [false; NUM_BANDS];
-        self.bypass = rg_is_unity;
-    }
-
+    /// `ReplayGain` and the correction apply whether or not the EQ is on, so they join the bands in
+    /// deciding whether this is a passthrough.
     fn rebuild(&mut self) {
-        // First: `ReplayGain` is independent of the EQ toggle and the early returns below.
         let rg_gain = if self.controls.rg.enabled() {
             replaygain::compute_linear_gain(self.baked_rg, self.controls.rg.controls())
         } else {
             1.0
         };
         self.rg_gain = rg_gain;
-        let rg_is_unity = replaygain::is_unity_gain(rg_gain);
+        let bands_engaged = self.rebuild_bands();
+        // After the bands, whose curve the correction's headroom counts.
+        self.correction.update_headroom(&self.band_responses);
+        self.bypass =
+            !bands_engaged && replaygain::is_unity_gain(rg_gain) && !self.correction.engaged();
+    }
 
+    fn disable_bands(&mut self) {
+        self.preamp_gain = 1.0;
+        self.band_active = [false; NUM_BANDS];
+        self.band_responses = [FilterResponse::FLAT; NUM_BANDS];
+    }
+
+    /// Returns whether a band or the preamp is engaged.
+    fn rebuild_bands(&mut self) -> bool {
         if !self.controls.eq.enabled() {
-            self.disable_bands(rg_is_unity);
-            return;
+            self.disable_bands();
+            return false;
         }
 
         let preamp_db = self.controls.eq.preamp();
@@ -472,8 +488,8 @@ impl<S: AudioSource> EqSource<S> {
         let preamp_is_unity = preamp_db.abs() < PREAMP_EPSILON_DB;
 
         let Ok(fs) = Hertz::<f64>::from_hz(self.sample_rate) else {
-            self.disable_bands(rg_is_unity);
-            return;
+            self.disable_bands();
+            return false;
         };
 
         let mut any_active = false;
@@ -490,25 +506,26 @@ impl<S: AudioSource> EqSource<S> {
                 })
             };
 
-            match coeffs {
-                Some(c) => {
-                    let was_active = self.band_active[band];
-                    for bank in &mut self.banks {
-                        // A band coming on starts clean so stale state can't pop; an active one
-                        // keeps its state across the swap, which DF1 allows.
-                        if !was_active {
-                            bank[band].reset_state();
-                        }
-                        bank[band].update_coefficients(c);
-                    }
-                    self.band_active[band] = true;
-                    any_active = true;
+            let Some(c) = coeffs else {
+                self.band_active[band] = false;
+                self.band_responses[band] = FilterResponse::FLAT;
+                continue;
+            };
+            let was_active = self.band_active[band];
+            for bank in &mut self.banks {
+                // A band coming on starts clean so stale state can't pop; an active one keeps its
+                // state across the swap, which DF1 allows.
+                if !was_active {
+                    bank[band].reset_state();
                 }
-                None => self.band_active[band] = false,
+                bank[band].update_coefficients(c);
             }
+            self.band_active[band] = true;
+            self.band_responses[band] = self.correction.response(&c, f64::from(BAND_FREQS[band]));
+            any_active = true;
         }
 
-        self.bypass = !any_active && preamp_is_unity && rg_is_unity;
+        any_active || !preamp_is_unity
     }
 
     /// Only ever on a frame boundary, and not as an optimization: a rebuild can flip `bypass` off,
@@ -518,7 +535,11 @@ impl<S: AudioSource> EqSource<S> {
     fn poll_generations(&mut self) {
         let generation = self.controls.eq.generation();
         let rg_generation = self.controls.rg.generation();
-        if generation != self.last_generation || rg_generation != self.last_rg_generation {
+        let reshaped = self.correction.poll(&self.controls.correction);
+        if reshaped
+            || generation != self.last_generation
+            || rg_generation != self.last_rg_generation
+        {
             self.rebuild();
             self.last_generation = generation;
             self.last_rg_generation = rg_generation;
@@ -554,21 +575,23 @@ impl<S: AudioSource> EqSource<S> {
         Some(s.clamp(-1.0, 1.0) * self.frame_fade_gain)
     }
 
-    /// One whole frame through the bands, then the coupled limiter and the ramp across it; the rest
-    /// drains through [`Iterator::next`]'s fast path.
+    /// One whole frame through the filters, then the coupled limiter and the ramp across it; the
+    /// rest drains through [`Iterator::next`]'s fast path.
     #[inline]
     fn next_active(&mut self) -> Option<Sample> {
         if self.fade_ended() {
             return None;
         }
 
-        // Zipping `banks`/`frame` rather than indexing keeps the inner work
-        // free of bounds checks.
+        let mix = self.correction.frame_mix();
+        // Zipping the channels' state with `frame` rather than indexing keeps the inner work free
+        // of bounds checks.
+        let channels = self.banks.iter_mut().zip(self.correction.channels_mut());
         let mut frame_len = 0;
-        for (bank, slot) in self.banks.iter_mut().zip(self.frame.iter_mut()) {
+        for ((bank, correction), slot) in channels.zip(self.frame.iter_mut()) {
             let Some(x) = self.input.next() else { break };
-            // Widened after the gains, so a path with no band active round-trips exactly.
-            let mut out = f64::from(x * self.preamp_gain * self.rg_gain);
+            // Widened after the gains, so a path with no filter engaged round-trips exactly.
+            let mut out = correction.run(f64::from(x * self.preamp_gain * self.rg_gain), mix);
             for (filter, &active) in bank.iter_mut().zip(self.band_active.iter()) {
                 if active {
                     out = filter.run(out);
@@ -665,6 +688,7 @@ impl<S: AudioSource> AudioSource for EqSource<S> {
                 filter.reset_state();
             }
         }
+        self.correction.reset();
         self.limiter.reset();
         // The rest of the frame in hand drains and `frame_phase` stays: dropping owed samples
         // leaves every later frame a channel out of step.
