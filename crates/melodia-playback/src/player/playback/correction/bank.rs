@@ -13,7 +13,7 @@ use crate::player::playback::dsp::PASSTHROUGH;
 use melodia_audio::player::source::audio::SampleRate;
 use melodia_core::entities::correction::{CorrectionFilter, FilterKind, MAX_CORRECTION_FILTERS};
 
-/// Long enough to hide the incoming bank settling from rest.
+/// The crossfade a swap takes, the incoming bank settling from rest as it fades in.
 const CORRECTION_SWAP_MS: u64 = 50;
 
 type Filters = [DirectForm1<f64>; MAX_CORRECTION_FILTERS];

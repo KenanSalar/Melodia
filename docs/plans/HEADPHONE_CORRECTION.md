@@ -123,16 +123,16 @@ A swap is any change of the correction itself: an apply, a clear, the switch, a 
 
 - The stage holds two banks per channel. On a swap the current bank becomes the outgoing one and
   the incoming is built from rest; for `CORRECTION_SWAP_MS` (50 ms to start, set by ear in the
-  hand tests) both run and their outputs mix linearly, frame by frame. Linear, because the two are the same
-  signal through two filters, where an equal-power curve would bump the level mid-ramp. Each bank
-  carries its own headroom, so the level moves with the ramp.
+  hand tests) both run and their outputs mix linearly, frame by frame. Linear, because the two are
+  the same signal through two filters, where an equal-power curve would bump the level mid-ramp.
+  Each bank carries its own headroom, so the level moves with the ramp.
 - Coefficient interpolation is not the answer here: a swap changes the filter count and the
   filter types, and interpolating between two unrelated sets passes through curves neither asked
   for.
 - A swap arriving mid-ramp is taken when the ramp ends, the poll leaving its sequence unread
   until then. A swap between two banks with nothing running takes no ramp.
 - A new source (next track, a gapless successor, a seek's replacement) takes the set as it is,
-  with no ramp. A seek resets both banks and ends a ramp at its target, as it resets the bands
+  with no ramp. A seek resets the current bank and ends a ramp at its target, as it resets the bands
   (`equalizer.rs:682-696`).
 - Bypass needs the stage inert as well: no correction engaged and no ramp in flight
   (`equalizer.rs:469-470`).
@@ -419,7 +419,8 @@ profiles, one for a card and one for System default:
 - [ ] The switch on: the signal path names the stage and the sound changes; a big bass boost on a
       loudly mastered track neither clips nor pumps.
 - [ ] Switching device mid-track switches the correction, with no click and no jump in level;
-      `CORRECTION_SWAP_MS` settled by ear and recorded here.
+      `CORRECTION_SWAP_MS` settled by ear and recorded here, once more against a profile with a
+      high-Q sub-bass peak, which settles from rest for longer than the swap.
 - [ ] A device with nothing set plays uncorrected; System default plays its own.
 - [ ] The switch off: exclusive output reads Bit-perfect with the Equalizer off, and a flat
       Equalizer is bit-identical (`bit_perfect.rs`'s rig).
@@ -466,8 +467,8 @@ tests a phase breaks are fixed in that phase. The facade's corpus walk lands her
   what it constrains as that lands.
 - **800 lines:** `equalizer.rs` (709 with the stage wired) gains no more; if it passes 760 the
   limiter moves to its own file first. `backend/mod.rs` (669) holds every stage's cells in one
-  `DspControls`. `app-window.slint` (750) gains its export lines only. `library/playback.rs` (551) gains two
-  setters. Everything else new is its own module.
+  `DspControls`. `app-window.slint` (750) gains its export lines only. `library/playback.rs` (551)
+  gains two setters. Everything else new is its own module.
 - **Memory:** two banks of 20 f64 filters per channel per source, a few KiB; the list only while
   the picker is open. The hand tests measure it.
 - **Lock order** (ADR 0035) is untouched: the correction lock is a leaf, and the audio thread reads

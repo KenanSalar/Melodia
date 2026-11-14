@@ -25,7 +25,7 @@ pub enum FilterKind {
     HighShelf,
 }
 
-/// One filter as a profile states it. Plain data; [`CorrectionFilters`] is where it is checked.
+/// One filter as a profile states it. Plain data; [`CorrectionFilters`] holds only checked ones.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct CorrectionFilter {
     pub kind: FilterKind,
@@ -35,7 +35,7 @@ pub struct CorrectionFilter {
 }
 
 impl CorrectionFilter {
-    /// A NaN or an infinity sits in no range, so it is refused with the rest.
+    /// Refuses a value outside its range, a NaN or an infinity among them.
     pub fn check(&self) -> Result<(), FilterError> {
         if !FREQUENCY_RANGE_HZ.contains(&self.freq_hz) {
             return Err(FilterError::Frequency(self.freq_hz));

@@ -2,10 +2,10 @@
 //! one [`DirectForm1`] per band per channel, Form 1 because its delay line stays valid across a
 //! live coefficient swap, so a slider drag injects no transient.
 //!
-//! [`EqSource`] also carries three stages the EQ toggle doesn't gate, each polled on its own: the
-//! track's `ReplayGain` and the headphone correction before the bands, so the limiter guards their
-//! boosts, and the deck's crossfade ramp after the clamp, so two decks can't sum past unity in the
-//! unclamped mixer. With all four inert it is a bit-identical passthrough.
+//! [`EqSource`] also carries three stages the EQ toggle doesn't gate, each polled on its own and
+//! each arguing its place in its own module: the track's `ReplayGain` and the headphone correction
+//! before the bands, and the deck's crossfade ramp after the clamp. With all four inert it is a
+//! bit-identical passthrough.
 
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
