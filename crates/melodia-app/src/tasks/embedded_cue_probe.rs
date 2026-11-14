@@ -12,6 +12,7 @@ use crate::library;
 use crate::state::AppState;
 use crate::tasks::{TaskSpawner, one_shot};
 use melodia_core::error::{AppError, AppResult, describe};
+use melodia_core::utils::reach;
 use melodia_store::database::DbPool;
 use melodia_store::database::queries;
 use melodia_store::media::cue;
@@ -113,14 +114,14 @@ fn probe_page(rows: &[(i64, String)]) -> ProbedPage {
 }
 
 /// A file that is there but won't read holds nothing the scan could split either, while one out of
-/// reach, its drive unmounted, may carry a sheet once it is back.
+/// reach may carry a sheet once it reads.
 fn probe_file(path: &Path) -> Probed {
     match cue::carries_sheet(path) {
         Ok(true) => Probed::Sheet,
         Ok(false) => Probed::NoSheet,
         Err(e) => {
             log::debug!("Embedded cue sheet probe: {}", describe(&e));
-            if matches!(path.try_exists(), Ok(true)) { Probed::NoSheet } else { Probed::OutOfReach }
+            if reach::is_out_of_reach(path, &e) { Probed::OutOfReach } else { Probed::NoSheet }
         }
     }
 }

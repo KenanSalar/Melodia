@@ -51,6 +51,6 @@ fn lower_windows() -> std::io::Result<()> {
     Ok(())
 }
 
-#[cfg(all(test, target_os = "linux"))]
+#[cfg(all(test, any(target_os = "linux", target_os = "windows")))]
 #[path = "tests/background_priority_tests.rs"]
 mod tests;

@@ -9,7 +9,8 @@ mod meter;
 use std::path::Path;
 
 use melodia_core::entities::track::TrackAudio;
-use melodia_core::error::describe;
+use melodia_core::error::{AppError, describe};
+use melodia_core::utils::reach;
 
 use self::meter::{AlbumMeters, Layout, MemberMeters};
 use crate::player::source::audio::AudioSource;
@@ -38,8 +39,8 @@ pub enum TrackOutcome {
     /// Nothing to level: silent, under one gating block, or a file that is there but would not
     /// open or read through, which would fail the same way next time.
     NoResult,
-    /// The decode failed on a file that isn't there afterwards, as on an unmounted drive, which may
-    /// come back.
+    /// The decode failed on a file that has gone, as on an unmounted drive, or that another program
+    /// held locked, either of which may come back.
     OutOfReach,
 }
 
@@ -93,7 +94,7 @@ enum Read {
     Through { gain: Option<Gain>, peak: f64 },
     /// Short of its end on a file that is still there.
     Failed,
-    /// Short of its end on a file that isn't.
+    /// Short of its end on a file that has gone or was held locked.
     OutOfReach,
 }
 
@@ -117,10 +118,7 @@ fn read(
     let path = Path::new(&track.path);
     let mut decoder = match FileDecoder::open_track(track) {
         Ok(decoder) => decoder,
-        Err(e) => {
-            log::debug!("Loudness not measured: {}", describe(&e));
-            return Ok(short_of_end(path));
-        }
+        Err(e) => return Ok(open_refused(path, &e)),
     };
     let mut meters = match MemberMeters::new(Layout::of(&decoder), album) {
         Ok(meters) => meters,
@@ -154,6 +152,11 @@ fn read(
     Ok(short)
 }
 
+fn open_refused(path: &Path, e: &AppError) -> Read {
+    log::debug!("Loudness not measured: {}", describe(e));
+    if reach::is_out_of_reach(path, e) { Read::OutOfReach } else { Read::Failed }
+}
+
 fn meter_refused(path: &Path, e: ebur128::Error) -> Read {
     log::debug!("Loudness not measured: the meter refused {}: {}", path.display(), describe(&e));
     Read::Failed
@@ -168,10 +171,9 @@ fn fill_block(decoder: &mut FileDecoder, block: &mut Vec<f32>) {
     block.truncate(block.len() - block.len() % channels);
 }
 
-/// Out of reach only where the file has gone: one still there would fail the same way at every
-/// launch, so it is recorded instead.
+/// The file was open, so no lock refused it, and only its going puts it out of reach.
 fn short_of_end(path: &Path) -> Read {
-    if matches!(path.try_exists(), Ok(true)) { Read::Failed } else { Read::OutOfReach }
+    if reach::is_gone(path) { Read::OutOfReach } else { Read::Failed }
 }
 
 #[cfg(test)]

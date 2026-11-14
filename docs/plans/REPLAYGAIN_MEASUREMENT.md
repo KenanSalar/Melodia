@@ -134,9 +134,10 @@ a file under one gating block, a shape change mid-file and a file that is there 
 or to read through all write a row with `NULL` gains. The key makes it retry when the file changes,
 and never on every pass, which would decode the same broken file on every wake. A failure, at the
 open or part-way, on a file that isn't there afterwards (an unmounted drive, told apart with
-`try_exists`, an error from it counting as not there) writes nothing: it may come back, so it is
-skipped for the session and tried again at the next launch, as `embedded_cue_probe` treats a file
-out of reach. Recorded, it would never be measured again, its hash unchanged.
+`try_exists`, an error from it counting as not there), or an open Windows refuses because another
+program holds the file without sharing, writes nothing: it may come back, so it is skipped for the
+session and tried again at the next launch. `melodia_core::utils::reach` holds the test, shared
+with `embedded_cue_probe`. Recorded, it would never be measured again, its hash unchanged.
 
 ### The album is measured as one whole
 
@@ -455,7 +456,7 @@ The store learns nothing about decoding beyond the edge it already has (`melodia
   - [x] no result for silence, a short file, a shape change, and a file that is there but fails
         to open or to read through;
   - [x] out of reach for a failure, at the open or part-way, on a file that isn't there
-        afterwards, kept apart from no result;
+        afterwards, or an open refused by another program's lock, kept apart from no result;
   - [x] an album gain only with every member read to its end and some block above the gate;
   - [x] a stop returns `Stopped`, no partial result.
 - [x] The crate's doc comments carry the dual mono, sample peak and album meter arguments.

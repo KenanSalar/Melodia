@@ -182,6 +182,23 @@ fn a_track_with_no_level_or_no_file_answers_which() -> Result<(), AppError> {
     Ok(())
 }
 
+/// The lock lifts, so the track is left for a later launch rather than recorded as having nothing
+/// to level, though the file is still there.
+#[cfg(target_os = "windows")]
+#[test]
+fn a_track_held_open_without_sharing_is_left_for_a_later_launch() -> Result<(), AppError> {
+    use std::os::windows::fs::OpenOptionsExt;
+
+    let dir = TempDir::new()?;
+    let track = tones(&dir, "locked.wav", STEREO, &[-24.0])?;
+    let _lock = std::fs::File::options().read(true).share_mode(0).open(&track.path)?;
+
+    let outcome = track_outcome(&track)?;
+
+    assert_eq!(outcome, TrackOutcome::OutOfReach);
+    Ok(())
+}
+
 #[test]
 fn a_member_short_of_its_end_leaves_the_album_without_a_gain() -> Result<(), AppError> {
     let dir = TempDir::new()?;
