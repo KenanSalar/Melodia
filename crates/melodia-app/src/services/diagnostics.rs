@@ -120,6 +120,7 @@ fn settings_block(paths: &Paths) -> String {
          crossfade : {crossfade}\n\
          equalizer : {equalizer}\n\
          replaygain: {replaygain}\n\
+         correction: {correction}\n\
          autoupdate: {autoupdate}\n\
          verbose   : {verbose}\n",
         theme = settings.theme_id,
@@ -131,6 +132,7 @@ fn settings_block(paths: &Paths) -> String {
         crossfade = settings.crossfade.crossfade_enabled,
         equalizer = settings.equalizer.eq_enabled,
         replaygain = settings.replaygain.rg_enabled,
+        correction = settings.correction.correction_enabled,
         autoupdate = settings.updates.auto_check_enabled,
         // Says whether a thin log tail means a quiet session or detail nobody asked for.
         verbose = settings.diagnostics.verbose_logging,

@@ -273,7 +273,7 @@ impl PlaybackEngine {
     /// Takes the card or gives it back now rather than at the next track. With nothing loaded an
     /// exclusive choice waits for the first play to claim, and a shared one reopens shared, which
     /// is what hands the card back. The correction follows once the reopen returns, so the outgoing
-    /// device never plays the incoming one's. Blocking.
+    /// device doesn't play the incoming one's as it closes. Blocking.
     pub fn set_output_choice(&self, choice: OutputChoice) {
         *self.output.choice.lock() = choice;
         self.reopen_for_choice();

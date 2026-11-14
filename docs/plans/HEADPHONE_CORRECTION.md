@@ -161,8 +161,8 @@ next write would build a set mixing two headphones and ramp to it.
   behind the engine's correction lock. `set_corrections`, `set_correction_enabled` and the aim
   ending `set_output_choice` all end in it, so the picker, boot and the bit-perfect switch switch
   it the same way. `set_output_choice` aims once its reopen returns (`backend/output.rs:277-314`),
-  so the old device never plays the new device's correction, and reads the choice under the
-  correction lock, so two switches crossing land on the newer.
+  so the old device doesn't play the new device's correction as it closes, and reads the choice
+  under the correction lock, so two switches crossing land on the newer.
 - **The map:** `DeviceCorrections { system_default: Option<Correction>, devices: BTreeMap<String,
   Correction> }` in `melodia-core`, two fields rather than a sentinel key a device id could share.
   `Correction` carries its origin, which names it (an AutoEq model with its source, a file by its
@@ -258,7 +258,9 @@ persists it (`library/settings/playback.rs:71-81`).
   headphone plug on Linux or a default endpoint move on Windows, keeps System default's correction.
   On Linux in shared mode the sound always reaches the default, so whatever card is picked for
   exclusive, shared playback is corrected as System default.
-- **An exclusive claim that falls back to shared** keeps the chosen device's correction.
+- **A stand-in for the chosen device keeps its correction**: an exclusive claim falling back to
+  shared, a missing or refusing shared device on Windows with the default playing instead, and a
+  reopen refused whole, the previous device carrying on.
 - **No editing a correction's filters, no new targets, no drawn curve, no per-song equalizer**, and
   no per-ear correction.
 - **Not in the overflow menu's Equalizer dialog**: the correction is set once per device, not mid
@@ -354,8 +356,8 @@ it a set.
 - [x] `CorrectionFlags { correction_enabled, corrections }` and its setters;
       `player_set_corrections`, `player_set_correction_enabled`; `hydrate_audio_dsp`.
 - [x] Make Bit-Perfect and `apply_bit_perfect_reset` turn it off.
-- [x] Lock order: the correction lock is a leaf, taken after the decks and output guards of a
-      reopen have dropped, holding only the output choice's while it reads it.
+- [x] Lock order: the correction lock is taken after the decks and output guards of a reopen have
+      dropped, and only the output choice's is taken under it.
 
 The `AppState` shadow and `correction_online` moved to Phase 4 and `output_changed` to Phase 5,
 each landing with its first user.
@@ -486,8 +488,8 @@ tests a phase breaks are fixed in that phase. The facade's corpus walk lands her
   own module.
 - **Memory:** two banks of 20 f64 filters per channel per source, a few KiB; the list only while
   the picker is open. The hand tests measure it.
-- **Lock order** (ADR 0035) is untouched: the correction lock is a leaf, and the audio thread reads
-  through the counter, never a lock.
+- **Lock order** (ADR 0035) is untouched: only the output choice's lock is taken under the
+  correction's, and the audio thread reads through the counter, never a lock.
 - **The live public release:** both switches default off, every new field is `serde(default)`, and
   there is no migration.
 
@@ -496,3 +498,5 @@ tests a phase breaks are fixed in that phase. The facade's corpus walk lands her
 - Whether System default should key by the endpoint Windows resolves it to, which the Windows hand
   test's answer decides is worth asking.
 - Whether the full index joins the picker later, each row then naming its rig.
+- Whether a stand-in plays System default's correction, which needs every reopen to re-aim (a
+  track start's, the health check's `reopen_output`).

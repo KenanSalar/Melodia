@@ -3,8 +3,8 @@
 //!
 //! One file because everything here races something else here, over the decks lock,
 //! [`PlaybackEngine::deck_epoch`] or a station's generation, and those arguments read only side by
-//! side. The submodules race nothing: [`controls`], [`correction`], [`reads`], [`player_backend`],
-//! and [`output`], which a transport op calls with the decks lock held.
+//! side. The submodules race none of those: [`controls`], [`correction`], [`reads`],
+//! [`player_backend`], and [`output`], which a transport op calls with the decks lock held.
 
 mod controls;
 mod correction;
@@ -87,8 +87,8 @@ pub struct PlaybackEngine {
     deck_epoch: Arc<AtomicU64>,
     // Master state shared by every `EqSource`, so a change reaches the staged track too.
     dsp: DspControls,
-    // Which set `dsp.correction` plays. A leaf, taken with the decks and output locks dropped and
-    // holding only the output choice's.
+    // Which set `dsp.correction` plays. Taken with the decks and output locks dropped, and only
+    // the output choice's is taken under it.
     correction: Mutex<CorrectionControl>,
     // Read by the control layer only, so no generation counter.
     xf: Arc<CrossfadeShared>,
