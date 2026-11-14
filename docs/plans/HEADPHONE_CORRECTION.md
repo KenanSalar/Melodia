@@ -2,7 +2,7 @@
 
 Working doc. Delete when the feature ships.
 
-Status: **Phase 3 next** · Created: 2026-11-14
+Status: **Phase 4 next** · Created: 2026-11-14
 
 Issue [#144](https://github.com/KenanSalar/Melodia/issues/144).
 
@@ -157,23 +157,28 @@ next write would build a set mixing two headphones and ramp to it.
   (`:47-51`), which names a device on Windows and none on Linux. `None` is System default. A
   device's key is `OutputDevice.id`, stable across reboots and replugs
   (`output/request.rs:113-117`).
-- **The engine selects, in one place.** `set_output_choice`, `set_corrections` and
-  `set_correction_enabled` all end in `select_correction`, so the picker, boot and the bit-perfect
-  switch all switch it the same way. `set_output_choice` selects once its reopen returns
-  (`:265-290`), so the old device never plays the new device's correction.
+- **The engine selects, in one place**: `CorrectionControl::select` (`backend/correction.rs`),
+  behind the engine's correction lock. `set_corrections`, `set_correction_enabled` and the aim
+  ending `set_output_choice` all end in it, so the picker, boot and the bit-perfect switch switch
+  it the same way. `set_output_choice` aims once its reopen returns (`backend/output.rs:277-314`),
+  so the old device never plays the new device's correction, and reads the choice under the
+  correction lock, so two switches crossing land on the newer.
 - **The map:** `DeviceCorrections { system_default: Option<Correction>, devices: BTreeMap<String,
   Correction> }` in `melodia-core`, two fields rather than a sentinel key a device id could share.
-  `Correction` carries its label, origin (an AutoEq model with its source, a file, a paste), the
-  device's name when it was set (for display while unplugged) and `CorrectionFilters`, a newtype
-  holding at most 20 finite filters in range, built through `TryFrom` (serde `try_from`), so a
-  hand-edited `settings.json` can't hand the DSP a bad one.
-- **Persisted in `settings.json`** as `CorrectionFlags { correction_enabled, correction_online,
-  corrections }`, flattened and `serde(default)` like its siblings. Several writers (apply, import,
-  clear) share one synchronous shadow on `AppState`, set before each persist, which writes the
-  shadow's latest; the engine gets a copy at each write.
-- The card learns of a device switch through a new `AppState.output_changed` `Signal`, bumped by
-  `library::playback::player_set_output_choice`, the funnel every device change in the views goes
-  through.
+  `Correction` carries its origin, which names it (an AutoEq model with its source, a file by its
+  name, a paste, which the card names in Slint since `@tr` takes literals only), the device's name
+  when it was set (for display while unplugged) and `CorrectionFilters`, a newtype holding at most
+  20 finite filters in range, built through `TryFrom` (serde `try_from`), so a hand-edited
+  `settings.json` can't hand the DSP a bad one. A bad one fails the `corrections` key alone, which
+  the loader resets and logs (`utils/atomic_file.rs:36-66`).
+- **Persisted in `settings.json`** as `CorrectionFlags { correction_enabled, corrections }`,
+  flattened and `serde(default)` like its siblings, `correction_online` joining in Phase 4. Several
+  writers (apply, import, clear) share one synchronous shadow on `AppState`, set before each
+  persist, which writes the shadow's latest; the engine gets a copy at each write.
+- The card learns of a device switch through a new `AppState.output_changed` `Signal`, bumped
+  where every device change in the views passes. `library::playback::player_set_output_choice` is
+  that funnel, but it takes a `PlaybackContext`, which carries no `Signal`
+  (`state/contexts.rs:20-30`), so Phase 5 settles where the bump goes.
 
 ### Online, the way radio and lyrics are
 
@@ -242,8 +247,8 @@ The Equalizer APO syntax AutoEq writes, parsed in `melodia-app`
 ### Bit-perfect
 
 Make Bit-Perfect turns the correction's switch off with the Equalizer and ReplayGain
-(`library/playback.rs:529-545`), its corrections kept as the curve is, and `apply_bit_perfect_reset`
-persists it (`library/settings/playback.rs:71-80`).
+(`library/playback.rs:538-555`), its corrections kept as the curve is, and `apply_bit_perfect_reset`
+persists it (`library/settings/playback.rs:71-81`).
 
 ---
 
@@ -269,12 +274,12 @@ persists it (`library/settings/playback.rs:71-80`).
 | boundary types | `crates/melodia-core/src/entities/correction.rs` | `FilterKind`, `CorrectionFilter`, `CorrectionFilters` (newtype, `TryFrom`), `MAX_CORRECTION_FILTERS`, `Correction`, `CorrectionOrigin`, `DeviceCorrections::for_device`, `AutoEqEntry`, the parse result and its refusals |
 | the stage | `crates/melodia-playback/src/player/playback/correction/` | `shared.rs`: `CorrectionShared`, its sequence counter and `CorrectionWriter`. `bank.rs`: `CorrectionStage`, the per-channel banks and the swap ramp. `response.rs`: the grid, `\|H\|²` and the headroom |
 | the wrapper | `player/playback/equalizer.rs` | `DspControls` in, the stage polled with the other two generations, the f64 bands, bypass and seek |
-| engine | `crates/melodia-engine/src/player/engine/backend/{mod,controls,output}.rs`, `signal_path.rs` | `DspControls` owned once; the correction lock, the map, `select_correction`; `OutputChoice::heard_device`; `SignalInputs.correction_on` |
+| engine | `crates/melodia-engine/src/player/engine/backend/{mod,correction,output}.rs`, `signal_path.rs` | `DspControls` owned once; `correction.rs`: `CorrectionControl` (the writer, the map, the switch, the heard device) and its `select`; `OutputChoice::heard_device` and the aim; `SignalInputs.correction_on` |
 | net | `crates/melodia-net/src/services/net/mod.rs`, `services/net/autoeq/` | `get_capped_if_changed`; the URLs and their guard, the list fetch, the profile fetch, the list parser |
 | parser | `crates/melodia-app/src/services/correction/parametric.rs` | the format above |
 | settings | `crates/melodia-app/src/services/settings/playback.rs`, `library/settings/correction.rs` | `CorrectionFlags` beside `EqualizerFlags`; the setters through `mutate_settings` |
 | facade | `crates/melodia-app/src/library/correction/` | `mod.rs`: `ensure_online`, `autoeq_client`, the shadow. `list.rs`: the cache, the recheck, the states. `apply.rs`: apply from the list, import a file or text, clear |
-| app glue | `library/playback.rs`, `state/{mod,signal}.rs`, `crates/melodia-core/src/config.rs` | the player setters and Make Bit-Perfect; `hydrate_audio_dsp` seeds the map and switch before `set_output_choice` (`state/mod.rs:329-359`); `output_changed`; the two list paths |
+| app glue | `library/playback.rs`, `state/{mod,signal}.rs`, `crates/melodia-core/src/config.rs` | the player setters and Make Bit-Perfect; `hydrate_audio_dsp` seeds the map and switch (`state/mod.rs:329-362`); `output_changed`; the two list paths |
 | card | `crates/melodia-ui/ui/views/settings/correction-section.slint`, `components/settings/correction-controls.slint`, `globals/audio.slint` | `CorrectionText` shared by the card and both dialogs, the `HeadphoneCorrection` global |
 | dialogs | `components/dialog/headphone-picker-body.slint`, `correction-import-body.slint`, `globals/dialog.slint`, `components/dialog/dialog.slint` | two kinds; the import's step in its own global |
 | views | `crates/melodia-views/src/ui/correction/` | `mod.rs`: install, seed, repaint on `output_changed`. `picker.rs`: load, filter, apply, release. `import.rs`: file, paste, review |
@@ -338,23 +343,25 @@ it a set.
 
 ## Phase 3: One correction per device (`melodia-engine`, `melodia-app`)
 
-- [ ] `entities/correction.rs`: `Correction`, `CorrectionOrigin`, `DeviceCorrections::for_device`,
+- [x] `entities/correction.rs`: `Correction`, `CorrectionOrigin`, `DeviceCorrections::for_device`,
       and the serde derives (`CorrectionFilters` through `try_from`).
-- [ ] `OutputChoice::heard_device`; the engine's map, `set_corrections`, `set_correction_enabled`,
-      `select_correction`, and `set_output_choice` selecting after its reopen. The correction lock
-      holds the map with the `CorrectionWriter`, so the backend builds `DspControls` around the
-      writer's `shared()` rather than through `default()`. `select_correction` publishes only when
-      the effective set changes: the same set again would still crossfade, into a bank starting
-      from rest.
-- [ ] `SignalInputs.correction_on`, fed where `eq_on` and `rg_on` are.
-- [ ] `CorrectionFlags` and its setters; the `AppState` shadow; `output_changed`;
+- [x] `OutputChoice::heard_device`; `backend/correction.rs`'s `CorrectionControl` and its
+      `select`, publishing only when the set heard changes, since the same set again would still
+      crossfade into a bank starting from rest; the engine's `set_corrections` and
+      `set_correction_enabled`; `set_output_choice` aiming after its reopen. The backend builds
+      `DspControls` around the writer's `shared()` rather than through `default()`.
+- [x] `SignalInputs.correction_on`, fed where `eq_on` and `rg_on` are.
+- [x] `CorrectionFlags { correction_enabled, corrections }` and its setters;
       `player_set_corrections`, `player_set_correction_enabled`; `hydrate_audio_dsp`.
-- [ ] Make Bit-Perfect and `apply_bit_perfect_reset` turn it off.
-- [ ] Lock order: the correction lock is a leaf, taken after the decks and output guards of a
-      reopen have dropped, and holding nothing else.
+- [x] Make Bit-Perfect and `apply_bit_perfect_reset` turn it off.
+- [x] Lock order: the correction lock is a leaf, taken after the decks and output guards of a
+      reopen have dropped, holding only the output choice's while it reads it.
+
+The `AppState` shadow and `correction_online` moved to Phase 4 and `output_changed` to Phase 5,
+each landing with its first user.
 
 **Gate:**
-- [ ] The static gates.
+- [x] The static gates, `signal_path_tests.rs`'s inputs taking the new field.
 
 ## Phase 4: AutoEq online (`melodia-net`, `melodia-app`)
 
@@ -363,11 +370,15 @@ it a set.
 - [ ] `entities/correction.rs`: `AutoEqEntry` and the parse result.
 - [ ] `services/correction/parametric.rs`, its refusals typed, each filter line through
       `CorrectionFilter::check`.
+- [ ] The map's shadow on `AppState`. First, the Output card's `Shadowed` and its `apply_latest`
+      (`melodia-views`' `ui/settings/output_settings.rs:56-75`) move into `melodia-app` and both
+      share it: the value under one lock and the apply under another, so an older write can't
+      land after a newer.
 - [ ] `library/correction/`: the online seam, the cache and its recheck, apply from the list,
       import a file or text, clear; each write through the shadow, the engine, then the persist,
       kicking only after the write commits.
-- [ ] `correction_online` as a `SharedFlag` with its setter; the two `Paths` entries, in
-      `rooted_at`.
+- [ ] `correction_online`: its `CorrectionFlags` field, a `SharedFlag` and its setter; the two
+      `Paths` entries, in `rooted_at`.
 - [ ] Docs: `CLAUDE.md`'s Facades gains "Nothing outside `library::correction` names `autoeq`";
       the facade's `//!` argues the seam, as `library/radio/mod.rs:8-10` does.
 
@@ -388,6 +399,9 @@ it a set.
 - [ ] `MultilineInput` gains the right-click edit menu `SingleLineInput` has
       (`single-line-input.slint:96-103`): a paste box with no Paste entry is the obvious gap. It is
       the tree's one wrapping box, so the tag editor's lyrics tab gains the menu too.
+- [ ] `AppState.output_changed`, bumped where every device change passes, repainting the card.
+- [ ] `show_bit_perfect_reset` (`ui/settings/signal_path.rs:47-53`) turns the card's switch off
+      with the Equalizer's.
 - [ ] The onboarding row, its label and description the Settings row's.
 - [ ] The signal path panel names the correction.
 - [ ] `headphones` (and any other new ligature) into `scripts/icons.txt`, the re-subset and a clean
@@ -466,9 +480,10 @@ tests a phase breaks are fixed in that phase. The facade's corpus walk lands her
 - **Docs land in the phase that stales them**, each argument above moving to the doc comment of
   what it constrains as that lands.
 - **800 lines:** `equalizer.rs` (709 with the stage wired) gains no more; if it passes 760 the
-  limiter moves to its own file first. `backend/mod.rs` (669) holds every stage's cells in one
-  `DspControls`. `app-window.slint` (750) gains its export lines only. `library/playback.rs` (551)
-  gains two setters. Everything else new is its own module.
+  limiter moves to its own file first. `backend/mod.rs` (677 with the correction's field) holds
+  every stage's cells in one `DspControls`. `app-window.slint` (750) gains its export lines only.
+  `library/playback.rs` (561 with its two setters) gains nothing more. Everything else new is its
+  own module.
 - **Memory:** two banks of 20 f64 filters per channel per source, a few KiB; the list only while
   the picker is open. The hand tests measure it.
 - **Lock order** (ADR 0035) is untouched: the correction lock is a leaf, and the audio thread reads

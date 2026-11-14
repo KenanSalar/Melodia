@@ -5,6 +5,7 @@ use tokio::sync::mpsc::UnboundedReceiver;
 
 use crate::state::PlaybackContext;
 use melodia_audio::player::source::stream_source;
+use melodia_core::entities::correction::DeviceCorrections;
 use melodia_core::error::AppError;
 use melodia_core::error::describe;
 use melodia_core::utils::event_bridge::EventBridge;
@@ -411,6 +412,14 @@ pub fn player_set_eq_preamp(ctx: &PlaybackContext, preamp_db: f32) {
     ctx.engine.set_eq_preamp(preamp_db);
 }
 
+pub fn player_set_corrections(ctx: &PlaybackContext, corrections: DeviceCorrections) {
+    ctx.engine.set_corrections(corrections);
+}
+
+pub fn player_set_correction_enabled(ctx: &PlaybackContext, enabled: bool) {
+    ctx.engine.set_correction_enabled(enabled);
+}
+
 // The per-track gain is baked per source at play time (`player::playback::replaygain`).
 
 pub fn player_set_replaygain_enabled(ctx: &PlaybackContext, enabled: bool) {
@@ -529,6 +538,7 @@ pub fn player_set_output_choice(ctx: &PlaybackContext, choice: OutputChoice) {
 pub fn player_make_bit_perfect(ctx: &PlaybackContext) -> u32 {
     player_set_eq_enabled(ctx, false);
     player_set_replaygain_enabled(ctx, false);
+    player_set_correction_enabled(ctx, false);
     let volume_on_device =
         ctx.engine.negotiated().is_some_and(|negotiated| negotiated.hardware_volume);
     let mut volume = MAX_VOLUME;

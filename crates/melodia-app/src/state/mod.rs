@@ -341,6 +341,9 @@ fn hydrate_audio_dsp(engine: &PlaybackEngine, settings: &settings::SettingsData)
     engine.set_replaygain_measured(settings.replaygain.rg_measure_untagged);
     engine.set_replaygain_enabled(settings.replaygain.rg_enabled);
 
+    engine.set_corrections(settings.correction.corrections.clone());
+    engine.set_correction_enabled(settings.correction.correction_enabled);
+
     engine.set_crossfade_duration_ms(settings.crossfade.crossfade_duration_ms);
     engine.set_crossfade_manual(settings.crossfade.crossfade_manual);
     engine.set_crossfade_skip_same_album(settings.crossfade.crossfade_skip_same_album);

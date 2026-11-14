@@ -5,6 +5,7 @@ use std::time::Duration;
 
 use serde::{Deserialize, Serialize};
 
+use melodia_core::entities::correction::DeviceCorrections;
 use melodia_engine::player::engine::backend::OutputChoice;
 use melodia_engine::player::engine::types::RepeatMode;
 use melodia_playback::player::playback::crossfade::DEFAULT_CROSSFADE_MS;
@@ -57,6 +58,14 @@ impl Default for EqualizerFlags {
             eq_preamp: 0.0,
         }
     }
+}
+
+/// Ships off and empty.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(default)]
+pub struct CorrectionFlags {
+    pub correction_enabled: bool,
+    pub corrections: DeviceCorrections,
 }
 
 /// Ships off, with `rg_prevent_clipping` on for once it isn't. `rg_mode` is a lowercase token, an

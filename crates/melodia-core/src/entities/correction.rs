@@ -2,7 +2,10 @@
 //! hand-edited settings file or an imported profile can't hand the audio thread a curve it can't
 //! run.
 
+use std::collections::BTreeMap;
 use std::ops::RangeInclusive;
+
+use serde::{Deserialize, Serialize};
 
 /// The most filters one correction holds; a set with more is refused, never cut.
 pub const MAX_CORRECTION_FILTERS: usize = 20;
@@ -18,7 +21,8 @@ pub const GAIN_RANGE_DB: RangeInclusive<f64> = -30.0..=30.0;
 pub const Q_RANGE: RangeInclusive<f64> = 0.05..=20.0;
 
 /// The filter shapes a correction runs: the RBJ cookbook's, which the profiles are fitted against.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
 pub enum FilterKind {
     Peaking,
     LowShelf,
@@ -26,7 +30,7 @@ pub enum FilterKind {
 }
 
 /// One filter as a profile states it. Plain data; [`CorrectionFilters`] holds only checked ones.
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
 pub struct CorrectionFilter {
     pub kind: FilterKind,
     pub freq_hz: f64,
@@ -71,7 +75,8 @@ pub enum FilterError {
 }
 
 /// One to [`MAX_CORRECTION_FILTERS`] filters, each in range: the only form the DSP accepts.
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(try_from = "Vec<CorrectionFilter>")]
 pub struct CorrectionFilters(Box<[CorrectionFilter]>);
 
 impl CorrectionFilters {
@@ -107,4 +112,49 @@ pub enum FilterSetError {
 
     #[error("filter {} is out of range", .index + 1)]
     Filter { index: usize, source: FilterError },
+}
+
+/// One device's correction.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct Correction {
+    pub origin: CorrectionOrigin,
+    /// The name the device was listed under when this was set, to name it by while it's unplugged.
+    /// `None` for System default.
+    pub device_name: Option<String>,
+    pub filters: CorrectionFilters,
+}
+
+/// Where a correction came from, which names it too: a paste has no name of its own.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum CorrectionOrigin {
+    /// `source` is whose measurement it is.
+    AutoEq {
+        model: String,
+        source: String,
+    },
+    File {
+        name: String,
+    },
+    Paste,
+}
+
+/// Every device's correction, keyed by the device the output is aimed at.
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+#[serde(default)]
+pub struct DeviceCorrections {
+    /// Its own field rather than a key in `devices`, which no device id can then collide with.
+    pub system_default: Option<Correction>,
+    /// By `OutputDevice::id`.
+    pub devices: BTreeMap<String, Correction>,
+}
+
+impl DeviceCorrections {
+    /// `None` names System default.
+    pub fn for_device(&self, device: Option<&str>) -> Option<&Correction> {
+        match device {
+            Some(id) => self.devices.get(id),
+            None => self.system_default.as_ref(),
+        }
+    }
 }

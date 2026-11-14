@@ -9,8 +9,8 @@ use super::about::{DiagnosticsFlags, OnboardingFlags, SupportFlags, UpdateFlags}
 use super::interface::{BackdropFlags, LayoutFlags, QueuePanelLayout, TrayFlags, WindowFlags};
 use super::library::LibraryFlags;
 use super::playback::{
-    CrossfadeFlags, EqualizerFlags, OutputFlags, PlaybackFlags, QueueFlags, ReplayGainFlags,
-    VisualizerFlags,
+    CorrectionFlags, CrossfadeFlags, EqualizerFlags, OutputFlags, PlaybackFlags, QueueFlags,
+    ReplayGainFlags, VisualizerFlags,
 };
 use super::services::{LyricsFlags, RadioFlags};
 use super::undo::UndoFlags;
@@ -131,6 +131,8 @@ pub struct SettingsData {
     #[serde(flatten)]
     pub equalizer: EqualizerFlags,
     #[serde(flatten)]
+    pub correction: CorrectionFlags,
+    #[serde(flatten)]
     pub replaygain: ReplayGainFlags,
     #[serde(flatten)]
     pub crossfade: CrossfadeFlags,
@@ -202,6 +204,7 @@ impl Default for SettingsData {
             locale: default_locale(),
             playback: PlaybackFlags::default(),
             equalizer: EqualizerFlags::default(),
+            correction: CorrectionFlags::default(),
             replaygain: ReplayGainFlags::default(),
             crossfade: CrossfadeFlags::default(),
             output: OutputFlags::default(),
