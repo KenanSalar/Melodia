@@ -65,7 +65,7 @@ pub struct CappedGet {
     pub max_bytes: u64,
 }
 
-/// GET `url` and read at most `spec.max_bytes` of it.
+/// GET `url` and read at most `spec.max_bytes` of it, a non-success status refused before the body.
 pub async fn get_capped(
     client: &reqwest::Client,
     url: &reqwest::Url,
@@ -130,7 +130,7 @@ async fn send(
 }
 
 /// Refuses a non-success status or an oversized `Content-Length` before a byte is read. The header
-/// is a courtesy a host can omit or lie about, which is why [`read_capped`] still bounds the stream.
+/// is a courtesy a host can omit or lie about, so [`read_capped`] still bounds the stream.
 async fn read_success(response: reqwest::Response, spec: &CappedGet) -> Result<Vec<u8>, AppError> {
     let what = spec.what;
     if !response.status().is_success() {

@@ -281,13 +281,13 @@ it a set.
 **The duplication this collapses first** (Phase 1):
 
 - **`EqSource::new`'s engine-wide cells become one `DspControls`**, the Equalizer and ReplayGain
-  now and the correction in Phase 2, so the one call site (`backend/mod.rs:426`) stops growing an
+  now and the correction in Phase 2, so the one call site (`backend/mod.rs:424`) stops growing an
   argument per stage.
-- **The updater's conditional fetch** (`services/updater/github.rs:40-63`: `If-None-Match`, the 304,
-  the `ETag`, the capped read) becomes `get_capped_if_changed` beside `get_capped`, sharing its
+- **The updater's conditional fetch** (`services/updater/github.rs`: `If-None-Match`, the 304, the
+  `ETag`, the capped read) becomes `get_capped_if_changed` beside `get_capped`, sharing its
   status and length checks; the AutoEq list is its second caller. The body's name, deadline and
-  cap travel as one `CappedGet`, which every capped fetch declares as a `const`, so no fetch
-  function takes more than four parameters.
+  cap travel as one `CappedGet`, which every `get_capped` caller declares as a `const`, so no
+  fetch function takes more than four parameters.
 - **`PICKER_ROW_CAP`** moves out of `ui/radio/facets.rs` to `ui/row_match.rs`, its doc saying what
   both pickers share: a cap on the drawing, never on what the needle searches.
 - **One filter precision**: the bands move to f64 with the stage, not beside it.
@@ -306,7 +306,7 @@ it a set.
       what both pickers share.
 
 **Gate:**
-- [ ] The static gates, and the existing tests fixed where `EqSource::new`'s signature breaks them.
+- [x] The static gates, and the existing tests fixed where `EqSource::new`'s signature breaks them.
 - [ ] Kenan's hand pass: every preset and a hand curve sound as before; an update check against an
       unchanged release logs its 304; the radio Tag picker draws and narrows as before.
 
@@ -432,9 +432,9 @@ Existing tests a phase breaks are fixed in that phase. The facade's corpus walk 
 
 - **Docs land in the phase that stales them**, each argument above moving to the doc comment of
   what it constrains as that lands.
-- **800 lines:** `equalizer.rs` (663) gains wiring, not the stage; if it passes 760 the limiter
-  moves to its own file first. `backend/mod.rs` (671) loses two fields to `DspControls`.
-  `app-window.slint` (750) gains its export lines only. `library/playback.rs` (551) gains two
+- **800 lines:** `equalizer.rs` (685) gains wiring, not the stage; if it passes 760 the limiter
+  moves to its own file first. `backend/mod.rs` (669) holds every stage's cells in one
+  `DspControls`. `app-window.slint` (750) gains its export lines only. `library/playback.rs` (551) gains two
   setters. Everything else new is its own module.
 - **Memory:** two banks of 20 f64 filters per channel per source, a few KiB; the list only while
   the picker is open. Phase 6 measures it.

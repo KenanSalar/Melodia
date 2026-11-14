@@ -11,7 +11,7 @@ use crate::player::source::prebuffer::StreamShared;
 use crate::player::source::stream_source::ABANDON_POLL;
 use melodia_core::error::AppError;
 use melodia_core::error::describe;
-use melodia_net::services::net::CappedGet;
+use melodia_net::services::net::{CappedGet, get_capped, get_capped_text};
 
 use super::playlist::{self, MediaPlaylist, Playlist};
 use super::segment::SegmentReader;
@@ -309,11 +309,11 @@ impl Scheduler {
 }
 
 async fn fetch_manifest(client: &reqwest::Client, url: &Url) -> Result<String, AppError> {
-    melodia_net::services::net::get_capped_text(client, url, &MANIFEST_GET).await
+    get_capped_text(client, url, &MANIFEST_GET).await
 }
 
 async fn fetch_segment(client: &reqwest::Client, url: &Url) -> Result<Vec<u8>, AppError> {
-    melodia_net::services::net::get_capped(client, url, &SEGMENT_GET).await
+    get_capped(client, url, &SEGMENT_GET).await
 }
 
 #[cfg(test)]

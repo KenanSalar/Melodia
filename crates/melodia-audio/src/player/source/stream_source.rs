@@ -27,7 +27,7 @@ use symphonia::core::codecs::audio::well_known::{
 
 use melodia_core::error::AppError;
 use melodia_core::error::describe;
-use melodia_net::services::net::CappedGet;
+use melodia_net::services::net::{CappedGet, get_capped_text, is_http_url};
 
 use super::audio::{Shape, SourceFormat};
 use super::hls;
@@ -487,7 +487,7 @@ async fn follow_playlist(
 }
 
 async fn fetch_playlist(client: &reqwest::Client, url: &Url) -> Result<String, AppError> {
-    melodia_net::services::net::get_capped_text(client, url, &PLAYLIST_GET).await
+    get_capped_text(client, url, &PLAYLIST_GET).await
 }
 
 /// Off the path alone, a mount routinely carrying a session parameter after the name.
@@ -518,9 +518,7 @@ fn first_stream_url(body: &str) -> Option<String> {
         }
         let readings =
             [quoted_href(line), line.split_once('=').map(|(_, value)| value.trim()), Some(line)];
-        if let Some(url) =
-            readings.into_iter().flatten().find(|c| melodia_net::services::net::is_http_url(c))
-        {
+        if let Some(url) = readings.into_iter().flatten().find(|c| is_http_url(c)) {
             return Some(url.to_owned());
         }
     }

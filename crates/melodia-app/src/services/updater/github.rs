@@ -37,7 +37,6 @@ pub async fn fetch_latest_manifest(
     base_url: &str,
     cached_etag: Option<&str>,
 ) -> UpdateResult<FetchOutcome> {
-    let signature_url = format!("{base_url}/latest.json.minisig");
     let manifest_url = http_url(&format!("{base_url}/latest.json"))
         .ok_or_else(|| AppError::updater_msg("the releases base is not an http(s) URL"))?;
 
@@ -47,6 +46,7 @@ pub async fn fetch_latest_manifest(
         IfChanged::Fresh { body, etag } => (body, etag),
     };
 
+    let signature_url = format!("{manifest_url}.minisig");
     let sig_resp = http
         .get(&signature_url)
         .send()
