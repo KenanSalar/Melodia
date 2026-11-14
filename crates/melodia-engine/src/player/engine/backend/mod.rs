@@ -575,7 +575,7 @@ impl PlaybackEngine {
 
         let decks = self.lock_decks();
         let deck = decks.active();
-        deck.voice.replace(self.build_source(source, baked_rg, deck), position, handovers);
+        deck.replace(position, handovers, |d| self.build_source(source, baked_rg, d));
         self.land(&deck.voice);
     }
 

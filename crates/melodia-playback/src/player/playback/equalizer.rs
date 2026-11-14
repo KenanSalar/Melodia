@@ -331,7 +331,7 @@ impl<S: AudioSource> EqSource<S> {
         // fast against the biquads.
         let frame_rate = sample_rate;
         // One behind the live values, so the first `next()` rebuilds and a gapless successor picks
-        // up a ramp already armed on its deck, from its own gain.
+        // up a ramp already armed on its deck.
         let last_generation = shared.generation().wrapping_sub(1);
         let last_rg_generation = rg_shared.generation().wrapping_sub(1);
         let fade_generation_at_build = fade.generation();

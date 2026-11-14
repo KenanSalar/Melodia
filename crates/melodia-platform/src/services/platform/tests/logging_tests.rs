@@ -41,7 +41,7 @@ fn both_specs_parse_into_the_directives_they_spell() {
             Some(LevelFilter::Error),
             "{level}: the per-frame bit-reservoir warning would be back, at a frame a line"
         );
-        // The least observable of the four: it only fires on Wayland under a desktop
+        // The least observable of them: it only fires on Wayland under a desktop
         // whose button-layout answer sctk-adwaita can't parse, once per launch, for a
         // titlebar we ask winit not to draw. Nothing on this machine reports it going
         // missing, which is exactly why it is asserted here.

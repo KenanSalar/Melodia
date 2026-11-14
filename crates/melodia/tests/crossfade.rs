@@ -370,8 +370,8 @@ async fn seeking_mid_crossfade_drops_the_outgoing_deck_and_restores_unity() -> s
     drive_until(&mut mix, move || r.seek(&whole_file(&survivor), 0, TrackReplayGain::default()));
     assert!(!engine.is_crossfading(), "a seek must abort the crossfade");
 
-    // The survivor ramps back to unity from its partial fade-in gain. Had the
-    // abort left it stranded, this would sit low.
+    // The rebuild plays at unity on its own: an outgoing deck left fading
+    // under it would lift this past `AMPLITUDE`.
     let after = pull(&mut mix, WARMUP_FRAMES * 2);
     assert_holds_at(&after[WARMUP_FRAMES..], AMPLITUDE, 1e-3, "surviving deck after abort");
 

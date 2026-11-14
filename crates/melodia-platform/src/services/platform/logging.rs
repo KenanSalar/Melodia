@@ -42,9 +42,9 @@ const VERBOSE_LEVEL: &str = "debug";
 /// `sctk_adwaita::buttons` names controls on the titlebar winit builds and hides in
 /// custom-titlebar mode.
 ///
-/// Scoped by module, never by crate. `probe`'s one other `warn!`, a trailing tag it failed to
-/// read, goes with it, tags being lofty's to read. Shared by both specs: a verbose spec dropping
-/// `layer3` buries the detail the switch was flipped for.
+/// Scoped by module, so the rest of each crate still warns. `probe`'s one other `warn!`, a
+/// trailing tag it failed to read, goes with it, tags being lofty's to read. Shared by both specs:
+/// a verbose spec dropping `layer3` buries the detail the switch was flipped for.
 const SPEC_TAIL: &str = "symphonia_bundle_mp3::layer3=error, \
     symphonia_core::formats::probe=error, sctk_adwaita::buttons=error";
 

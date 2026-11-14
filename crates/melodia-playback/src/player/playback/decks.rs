@@ -1,9 +1,9 @@
 //! The two voices the player alternates between. A voice sequences its sources, so overlap needs
 //! two summed by the mixer; both live for the mixer's life, an idle one costing nothing.
 //!
-//! Nothing lands on a deck except through the three primitives taking a builder ([`Decks::cut_to`],
-//! [`Decks::crossfade_to`], [`Deck::stage`]), so a source's [`FadeShared`] cell and ring slot can
-//! only be the deck's it lands on.
+//! Nothing lands on a deck except through the four primitives taking a builder ([`Decks::cut_to`],
+//! [`Decks::crossfade_to`], [`Deck::stage`], [`Deck::replace`]), so a source's [`FadeShared`] cell
+//! and ring slot can only be the deck's it lands on.
 
 use std::sync::Arc;
 use std::sync::{Mutex, MutexGuard};
@@ -45,6 +45,14 @@ impl Deck {
         S: AudioSource + 'static,
     {
         self.voice.stage(build(self));
+    }
+
+    /// A seek, `build`'s source already at `position` ([`Voice::replace`]).
+    pub fn replace<S>(&self, position: Duration, handovers: u64, build: impl FnOnce(&Self) -> S)
+    where
+        S: AudioSource + 'static,
+    {
+        self.voice.replace(build(self), position, handovers);
     }
 
     pub fn reset(&self) {
