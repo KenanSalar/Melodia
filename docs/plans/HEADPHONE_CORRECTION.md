@@ -37,7 +37,12 @@ plays on every device.
   in Melodia switches the correction with it, through a short ramp. Clear removes the current
   device's alone and offers Undo, which Settings ▸ Accessibility can turn off as its own kind.
 - **Find corrections online**, a switch of its own, off by default, gates every request to AutoEq.
-  Import works with it off. The onboarding card's "What Melodia can reach" gains the same row.
+  Import works with it off. On the card it shows only while the correction is on, as Radio's rows
+  do, keeping its value while hidden. The onboarding card's "What Melodia can reach" gains the
+  same row, shown whatever the correction's switch says, as the lyrics lookup's is.
+- The curves live in `eq.json`, the switches over them in `settings.json` with the other
+  preferences: every device's correction, and the equalizer's bands, preset and preamp, moved out
+  of a `settings.json` older than it at the first boot.
 - The level comes down by exactly the loudest point of the correction and the ten sliders
   together, recomputed as a slider moves, so a boost doesn't clip.
 - The Output card's signal path names the correction as a stage, and Make Bit-Perfect turns it off.
@@ -169,14 +174,22 @@ next write would build a set mixing two headphones and ramp to it.
   name, a paste, which the card names in Slint since `@tr` takes literals only), the device's name
   when it was set (for display while unplugged) and `CorrectionFilters`, a newtype holding at most
   20 finite filters in range, built through `TryFrom` (serde `try_from`), so a hand-edited
-  `settings.json` can't hand the DSP a bad one. A bad one fails the `corrections` key alone, which
-  the loader resets and logs (`utils/atomic_file.rs:36-66`).
-- **Persisted in `settings.json`** as `CorrectionFlags { correction_enabled, corrections,
-  correction_online }`, flattened and `serde(default)` like its siblings. Apply, import and clear
+  `eq.json` can't hand the DSP a bad one. A bad one fails the `corrections` key alone, which the
+  loader resets and logs (`utils/atomic_file.rs:36-66`).
+- **Persisted in `eq.json`, its switches in `settings.json`.** `eq.json` (`services::settings::eq`)
+  holds the curves: the map as `corrections`, and the equalizer's `band_gains`, `preset` and
+  `preamp`. Its read-mutate-write is `settings.json`'s, one `LockedFile` each (`settings/io.rs`).
+  The switches stay prefs, `CorrectionFlags { correction_enabled, correction_online }` beside
+  `EqualizerFlags { eq_enabled }`, so Make Bit-Perfect stays one write. Apply, import and clear
   share one synchronous shadow, `AppState.corrections`, a `Shadowed` (`state/signal.rs`, the Output
   card's too) edited before each persist; `library::correction::commit` is the one writer, its
   `apply_latest` handing the engine and the file the map as it stands. Nothing reads the map off
   disk, so nothing is kicked after the write.
+- **The equalizer's curve has shipped in `settings.json`, so boot moves it**
+  (`move_legacy_eq`): `LegacyEq` reads the old keys, `eq.json` is written from them, and only
+  then are they dropped, so a failed write leaves them for the next boot. It runs ahead of the
+  engine's seed, which a `one_shot` sweep would come too late for. An `eq.json` already there
+  wins.
 - **A write's device comes from the caller** (`CorrectionTarget`), as the card named it when the
   user acted, so a profile still downloading as the output moves lands where it was asked for.
 - **The card names the device the engine heard**, never the Output card's copy, which may not
@@ -296,7 +309,7 @@ persists it (`library/settings/playback.rs:71-81`).
 | the wrapper | `player/playback/equalizer.rs` | `DspControls` in, the stage polled with the other two generations, the f64 bands, bypass and seek |
 | engine | `crates/melodia-engine/src/player/engine/backend/{mod,correction,output}.rs`, `signal_path.rs` | `DspControls` owned once; `correction.rs`: `CorrectionControl` (the writer, the map, the switch, the heard device) and its `select`; `OutputChoice::heard_device` and the aim; `SignalInputs.correction_on` |
 | net | `crates/melodia-net/src/services/net/mod.rs`, `services/net/autoeq/` | `get_capped_if_changed`; `autoeq/mod.rs`: the URLs and their guard, the list fetch, the profile fetch. `autoeq/list.rs`: the list parser |
-| settings | `crates/melodia-app/src/services/settings/playback.rs`, `library/settings/correction.rs` | `CorrectionFlags` beside `EqualizerFlags`; the setters through `mutate_settings` |
+| settings | `crates/melodia-app/src/services/settings/{playback,eq,io}.rs`, `library/settings/correction.rs` | `CorrectionFlags` beside `EqualizerFlags`, the switches; `eq.rs`'s `EqData` for `eq.json`, the curves, and `move_legacy_eq`; `io.rs`'s `LockedFile` both files share; the setters through `mutate_settings` and `mutate_eq` |
 | facade | `crates/melodia-app/src/library/correction/` | `mod.rs`: `autoeq_client`, `CorrectionTarget`, `heard`, `correction_for`, `commit` (the map's one writer), `clear`, `restore` (Clear's undo). `list.rs`: the cache, the recheck, `ListAnswer`. `apply.rs`: apply from the list, import a file or a paste, apply. `parametric.rs`: the format above |
 | app glue | `library/playback.rs`, `state/{mod,signal}.rs`, `crates/melodia-core/src/config.rs` | the player setters and Make Bit-Perfect; `hydrate_audio_dsp` seeds the engine's map and switch (`state/mod.rs:337-370`); `Shadowed`, `AppState.corrections` and `correction_online`; `output_changed`; the two list paths |
 | card | `crates/melodia-ui/ui/views/settings/correction-section.slint`, `components/settings/correction-controls.slint`, `globals/audio.slint` | `CorrectionText` shared by the card and both dialogs, the `HeadphoneCorrection` global |
@@ -440,11 +453,15 @@ each landing with its first user.
 - [x] Docs: `README.md`'s effects, undo and data-folder lines and its acknowledgments;
       `.claude/rules/ui-patterns.md`'s contract for an answer landing on a dialog already up. The
       picker body is the correction's own, so the catalogue gains no entry.
+- [x] The curves into `eq.json`: `EqData` and its `LockedFile` beside `settings.json`'s, the
+      shipped equalizer keys moved at boot by `move_legacy_eq`, the switches left in
+      `settings.json`. `CLAUDE.md`'s state-file line and README's data-folder table name it.
+- [x] The online row mounts only while the correction is on, keeping its value.
 
 **Gate:**
 - [ ] The static gates, and the onboarding and settings tests fixed where the new rows break them.
-      fmt, clippy and the whole suite pass, the catalogs included, and no test needed fixing;
-      `scripts/check-icons.py` waits on the re-subset.
+      fmt and clippy pass, and the whole suite with the catalogs; the bit-perfect reset's test
+      reads the curve from `eq.json`. `scripts/check-icons.py` waits on the re-subset.
 
 ## Phase 6: Testing
 
@@ -460,7 +477,7 @@ Kenan's hand pass, or run by Claude on his go, in the dev data folder with a bac
 - [ ] An update check against an unchanged release logs its 304.
 - [ ] The radio Tag picker draws and narrows as before.
 
-**One correction per device**, corrections written into `settings.json` by hand from two AutoEq
+**One correction per device**, corrections written into `eq.json` by hand from two AutoEq
 profiles, one for a card and one for System default:
 - [ ] The switch on: the signal path names the stage and the sound changes; a big bass boost on a
       loudly mastered track neither clips nor pumps.
@@ -486,7 +503,10 @@ profiles, one for a card and one for System default:
       30-filter file are refused; a paste applies.
 - [ ] The switch gives a before and after with no click; Clear on one device leaves the other.
 - [ ] The online switch off: Find headphones is unavailable and nothing reaches GitHub, Import
-      still applies; the onboarding row flips the same switch.
+      still applies; the onboarding row flips the same switch. With the correction off the online
+      row is gone, and turning the correction back on shows it as it was left.
+- [ ] A `settings.json` from the released build, a curve on its equalizer: the first boot writes
+      `eq.json` with that curve, drops the three keys from `settings.json`, and the curve plays.
 - [ ] The settings search finds the card by "headphone", "correction" and "AutoEq".
 
 **Windows** (on Kenan's go):
@@ -520,8 +540,8 @@ tests a phase breaks are fixed in that phase. The facade's corpus walk lands her
   the picker is open. The hand tests measure it.
 - **Lock order** (ADR 0035) is untouched: only the output choice's lock is taken under the
   correction's, and the audio thread reads through the counter, never a lock.
-- **The live public release:** both switches default off, every new field is `serde(default)`, and
-  there is no migration.
+- **The live public release:** both switches default off and every new field is `serde(default)`.
+  The one migration is the equalizer's curve, moved from `settings.json` to `eq.json` at boot.
 
 ## Open questions
 

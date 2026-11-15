@@ -112,7 +112,9 @@ cargo llvm-cov --workspace --html          # coverage → target/llvm-cov/html/
   spawned, and a `views.json` index goes through `IndexPersist` (`index_persist.rs`).
 - **A once-per-install sweep is `one_shot::spawn`**, never a hand-rolled copy of its shape.
 - **A dev build never shares the installed data root** (`config::Paths::data_root`). Prefs go in
-  `settings.json`, per-view state in `views.json`, and a map in any JSON state file is a `BTreeMap`.
+  `settings.json`, the equalizer's and the headphone corrections' curves in `eq.json` (the switches
+  over them staying prefs), per-view state in `views.json`, and a map in any JSON state file is a
+  `BTreeMap`.
 - **Migrations run after a backup, and a failed backup is fatal.** A shipped migration is never
   edited: the store's `build.rs` pins the ones sqlx applied and `database::migrate` checksums the
   rest, so an edit fails the build or the next run of every database that applied it.

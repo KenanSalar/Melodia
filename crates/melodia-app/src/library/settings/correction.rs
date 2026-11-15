@@ -11,11 +11,9 @@ pub fn set_correction_enabled(paths: &Paths, enabled: bool) -> Result<(), AppErr
     })
 }
 
-/// Every device's correction at once, the map being one field on disk.
+/// Every device's correction at once, the map being one field of `eq.json`.
 pub fn set_corrections(paths: &Paths, corrections: DeviceCorrections) -> Result<(), AppError> {
-    services::settings::mutate_settings(paths, move |settings| {
-        settings.correction.corrections = corrections;
-    })
+    services::settings::mutate_eq(paths, move |eq| eq.corrections = corrections)
 }
 
 pub fn set_correction_online(paths: &Paths, enabled: bool) -> Result<(), AppError> {

@@ -1,6 +1,5 @@
 //! A headphone correction's filters as the DSP takes them, checked once where they enter, so a
-//! hand-edited settings file or an imported profile can't hand the audio thread a curve it can't
-//! run.
+//! hand-edited `eq.json` or an imported profile can't hand the audio thread a curve it can't run.
 
 use std::collections::BTreeMap;
 use std::ops::RangeInclusive;

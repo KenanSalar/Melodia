@@ -461,6 +461,7 @@ Everything lives under the OS application-data directory, `~/.local/share/Melodi
 |---------------|---------|
 | `melodia.db` | The music library (SQLite, WAL + FTS5) |
 | `settings.json`, `views.json`, `queue.json` | Preferences, per-view UI state, and the queue with the station tuned over it |
+| `eq.json` | The equalizer's bands, preset and preamp, and each output device's headphone correction |
 | `scrobble_*.json` | Last.fm session key and ListenBrainz token (`0600` on Unix), plus the offline queue |
 | `artwork/`, `artists/`, `radio-logos/` | Cached album, artist, and station images. A deleted cover is put back from your music files on the next scan |
 | `lyrics/` | Sheets the online lookup found, and a marker for the tracks it found none for |

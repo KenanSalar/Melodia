@@ -7,7 +7,7 @@
 //! Both then persist on the blocking pool, and a failed disk write must not undo what was already
 //! applied: the warn from [`AppState::persist_blocking`] is the only report.
 
-use melodia_app::services::settings::{self, SettingsData};
+use melodia_app::services::settings::{self, EqData, SettingsData};
 use melodia_app::state::{AppState, PlaybackContext, SharedFlag};
 use melodia_core::config::Paths;
 use melodia_core::error::{AppError, describe};
@@ -18,6 +18,14 @@ pub fn read_or_default(state: &AppState, what: &str) -> SettingsData {
     settings::read_settings(&state.paths).unwrap_or_else(|e| {
         log::warn!("read settings for {what}: {}", describe(&e));
         SettingsData::default()
+    })
+}
+
+/// [`read_or_default`] for `eq.json`'s curves.
+pub fn read_eq_or_default(state: &AppState) -> EqData {
+    settings::read_eq(&state.paths).unwrap_or_else(|e| {
+        log::warn!("read eq.json: {}", describe(&e));
+        EqData::default()
     })
 }
 

@@ -8,7 +8,7 @@ use std::rc::Rc;
 
 use slint::{ComponentHandle, Model, ModelRc, VecModel};
 
-use crate::ui::settings_bind::{read_or_default, toggle_binding};
+use crate::ui::settings_bind::{read_eq_or_default, read_or_default, toggle_binding};
 use crate::ui::undo::{Removal, UndoWindow};
 use melodia_app::library;
 use melodia_app::library::settings::EqCurve;
@@ -47,8 +47,8 @@ impl ResetUndo {
     }
 }
 
-/// Every write of a whole curve: the band model, the engine, the global and `settings.json`
-/// together, so the card, the dialog and what plays never disagree.
+/// Every write of a whole curve: the band model, the engine, the global and `eq.json` together,
+/// so the card, the dialog and what plays never disagree.
 struct CurveWriter {
     state: AppState,
     model: Rc<VecModel<f32>>,
@@ -114,16 +114,17 @@ fn preset_name(slot: i32) -> &'static str {
 /// Write the persisted state onto the global, handing back the `band-gains` model the callbacks
 /// share with the card and the dialog.
 fn seed(ui: &AppWindow, state: &AppState) -> Rc<VecModel<f32>> {
-    let flags = read_or_default(state, "equalizer").equalizer;
-    let gains = equalizer::normalize_gains(&flags.eq_band_gains);
+    let enabled = read_or_default(state, "equalizer").equalizer.eq_enabled;
+    let curve = read_eq_or_default(state);
+    let gains = equalizer::normalize_gains(&curve.band_gains);
 
     let model: Rc<VecModel<f32>> = Rc::new(VecModel::from(gains.to_vec()));
 
     let eq = ui.global::<Equalizer>();
-    eq.set_enabled(flags.eq_enabled);
+    eq.set_enabled(enabled);
     eq.set_band_gains(ModelRc::from(model.clone()));
-    eq.set_preset_idx(preset_slot(&flags.eq_selected_preset));
-    eq.set_preamp(equalizer::clamp_preamp(flags.eq_preamp));
+    eq.set_preset_idx(preset_slot(&curve.preset));
+    eq.set_preamp(equalizer::clamp_preamp(curve.preamp));
 
     // The sliders' ranges are the DSP's constants, seeded before either surface can mount.
     eq.set_min_gain(equalizer::MIN_GAIN_DB);

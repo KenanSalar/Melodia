@@ -10,7 +10,6 @@
 use std::time::Duration;
 
 use crate::services;
-use crate::services::settings::SettingsData;
 use crate::state::fixtures::{seeded_root, seeded_root_with};
 use melodia_core::config::Paths;
 use melodia_core::error::AppError;
@@ -165,25 +164,29 @@ fn the_bit_perfect_reset_writes_every_stage_it_cleared() -> Result<(), AppError>
 fn the_bit_perfect_reset_keeps_how_each_stage_it_cleared_was_set() -> Result<(), AppError> {
     let (_tmp, paths) = seeded_root_with(|settings| {
         settings.equalizer.eq_enabled = true;
-        settings.equalizer.eq_band_gains.fill(6.0);
-        settings.equalizer.eq_preamp = -4.0;
         settings.replaygain.rg_enabled = true;
         settings.replaygain.rg_preamp = 3.0;
     })?;
-    let tuning = |s: &SettingsData| {
-        (
-            s.equalizer.eq_band_gains.clone(),
-            s.equalizer.eq_preamp.to_bits(),
-            s.equalizer.eq_selected_preset.clone(),
+    services::settings::mutate_eq(&paths, |eq| {
+        eq.band_gains.fill(6.0);
+        eq.preamp = -4.0;
+    })?;
+    let tuning = |paths: &Paths| -> Result<_, AppError> {
+        let (s, eq) =
+            (services::settings::read_settings(paths)?, services::settings::read_eq(paths)?);
+        Ok((
+            eq.band_gains,
+            eq.preamp.to_bits(),
+            eq.preset,
             s.replaygain.rg_preamp.to_bits(),
-            s.replaygain.rg_mode.clone(),
-        )
+            s.replaygain.rg_mode,
+        ))
     };
-    let before = tuning(&services::settings::read_settings(&paths)?);
+    let before = tuning(&paths)?;
 
     reset_for_bit_perfect(&paths, MAX_VOLUME)?;
 
-    let after = tuning(&services::settings::read_settings(&paths)?);
+    let after = tuning(&paths)?;
     assert_eq!(after, before, "(curve, preamp bits, preset, ReplayGain preamp bits, mode)");
     Ok(())
 }

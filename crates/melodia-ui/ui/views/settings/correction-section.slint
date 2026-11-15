@@ -10,9 +10,9 @@ import { SettingRowStacked } from "../../components/settings/setting-row-stacked
 import { ToggleSwitch } from "../../components/settings/toggle-switch.slint";
 import { CorrectionText } from "../../components/settings/correction-controls.slint";
 
-// Headphone correction, one cluster on the equalizer card's shape: the device row mounts only
-// while the switch is on. The online row names github.com for the lyrics lookup's reason, and stays
-// put with the switch off, being a default set before the first model is looked up.
+// Headphone correction, one cluster on the equalizer card's shape: the rows under the switch mount
+// only while it is on, as Radio's do, the online one keeping its value while hidden. That row names
+// github.com for the lyrics lookup's reason.
 export component CorrectionSection inherits Rectangle {
     horizontal-stretch: 1;
     vertical-stretch: 0;
@@ -98,7 +98,7 @@ export component CorrectionSection inherits Rectangle {
                 }
             }
 
-            SettingRow {
+            if root.show-details: SettingRow {
                 icon: "travel_explore";
                 label: CorrectionText.online-label;
                 description: CorrectionText.online-desc;

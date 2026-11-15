@@ -7,6 +7,9 @@ pub struct Paths {
     pub data_dir: PathBuf,
     pub db_path: PathBuf,
     pub settings_path: PathBuf,
+    /// The equalizer's curve and every device's headphone correction, apart from the switches
+    /// `settings.json` keeps.
+    pub eq_path: PathBuf,
     pub view_state_path: PathBuf,
     pub queue_path: PathBuf,
     pub search_history_path: PathBuf,
@@ -74,6 +77,7 @@ impl Paths {
         Self {
             db_path: data_dir.join("melodia.db"),
             settings_path: data_dir.join("settings.json"),
+            eq_path: data_dir.join("eq.json"),
             view_state_path: data_dir.join("views.json"),
             queue_path: data_dir.join("queue.json"),
             search_history_path: data_dir.join("search_history.json"),

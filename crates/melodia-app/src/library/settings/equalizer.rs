@@ -11,12 +11,10 @@ pub fn set_eq_enabled(paths: &Paths, enabled: bool) -> Result<(), AppError> {
     })
 }
 
-/// Clamped, so a malformed write can't reach `settings.json`.
+/// Clamped, so a malformed write can't reach `eq.json`.
 pub fn set_eq_preamp(paths: &Paths, preamp_db: f32) -> Result<(), AppError> {
     let preamp_db = equalizer::clamp_preamp(preamp_db);
-    services::settings::mutate_settings(paths, move |settings| {
-        settings.equalizer.eq_preamp = preamp_db;
-    })
+    services::settings::mutate_eq(paths, move |eq| eq.preamp = preamp_db)
 }
 
 /// Everything the equalizer's dropdown, bands and preamp say at once, as a preset pick writes it
@@ -48,10 +46,10 @@ pub fn set_eq_curve(paths: &Paths, curve: &EqCurve) -> Result<(), AppError> {
     let gains = equalizer::normalize_gains(&curve.gains).to_vec();
     let preset = curve.preset.to_owned();
     let preamp_db = equalizer::clamp_preamp(curve.preamp_db);
-    services::settings::mutate_settings(paths, move |settings| {
-        settings.equalizer.eq_band_gains = gains;
-        settings.equalizer.eq_selected_preset = preset;
-        settings.equalizer.eq_preamp = preamp_db;
+    services::settings::mutate_eq(paths, move |eq| {
+        eq.band_gains = gains;
+        eq.preset = preset;
+        eq.preamp = preamp_db;
     })
 }
 
@@ -63,8 +61,8 @@ pub fn set_eq_band_gains_and_preset(
     preset: String,
 ) -> Result<(), AppError> {
     let norm = equalizer::normalize_gains(gains).to_vec();
-    services::settings::mutate_settings(paths, move |settings| {
-        settings.equalizer.eq_band_gains = norm;
-        settings.equalizer.eq_selected_preset = preset;
+    services::settings::mutate_eq(paths, move |eq| {
+        eq.band_gains = norm;
+        eq.preset = preset;
     })
 }

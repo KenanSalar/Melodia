@@ -149,10 +149,7 @@ pub struct StartupChannels {
 impl AppState {
     pub async fn init(paths: Paths, runtime: Handle) -> AppResult<(Self, StartupChannels)> {
         // Ahead of the output, which opens differently under exclusive output.
-        let settings = settings::read_settings(&paths).unwrap_or_else(|e| {
-            log::warn!("Failed to read settings on startup: {}; using defaults", describe(&e));
-            settings::SettingsData::default()
-        });
+        let (settings, eq) = read_startup_settings(&paths);
 
         let audio_health = Arc::new(AudioStreamHealth::default());
         let audio_output = open_output(&settings, audio_health.clone())?;
@@ -161,7 +158,7 @@ impl AppState {
         let db = database::init_database(&paths).await?;
 
         let player_state = seeded_player_state(&engine, &settings);
-        hydrate_audio_dsp(&engine, &settings);
+        hydrate_audio_dsp(&engine, &settings, &eq);
 
         let cover_cache: CoverCache = melodia_artwork::media::image::artwork::new_cover_cache();
 
@@ -241,7 +238,7 @@ impl AppState {
             lyrics_pacer: Arc::new(crate::library::lyrics::pacer()),
             write_ratings_to_tags: SharedFlag::new(settings.library.write_ratings_to_tags),
             correction_online: SharedFlag::new(settings.correction.correction_online),
-            corrections: Arc::new(Shadowed::new(settings.correction.corrections.clone())),
+            corrections: Arc::new(Shadowed::new(eq.corrections)),
             media_controls: Some(mc_handle),
             http_client,
             task_tracker: TaskTracker::new(),
@@ -335,12 +332,33 @@ fn seeded_player_state(
     player_state
 }
 
+/// Both files, each falling back to its defaults, `eq.json` after the curve an older
+/// `settings.json` kept has moved into it.
+fn read_startup_settings(paths: &Paths) -> (settings::SettingsData, settings::EqData) {
+    let settings = settings::read_settings(paths).unwrap_or_else(|e| {
+        log::warn!("Failed to read settings on startup: {}; using defaults", describe(&e));
+        settings::SettingsData::default()
+    });
+    if let Err(e) = settings::move_legacy_eq(paths, &settings) {
+        log::warn!("Failed to move the equalizer's curve to eq.json: {}", describe(&e));
+    }
+    let eq = settings::read_eq(paths).unwrap_or_else(|e| {
+        log::warn!("Failed to read eq.json on startup: {}; using defaults", describe(&e));
+        settings::EqData::default()
+    });
+    (settings, eq)
+}
+
 /// Seed the engine's lock-free DSP cells from persisted settings before playback starts, so the
 /// first track is already processed. Values first and each `enabled` last, the enable's generation
 /// bump publishing a fully seeded state to the audio thread.
-fn hydrate_audio_dsp(engine: &PlaybackEngine, settings: &settings::SettingsData) {
-    engine.set_eq_gains(&settings.equalizer.eq_band_gains);
-    engine.set_eq_preamp(settings.equalizer.eq_preamp);
+fn hydrate_audio_dsp(
+    engine: &PlaybackEngine,
+    settings: &settings::SettingsData,
+    eq: &settings::EqData,
+) {
+    engine.set_eq_gains(&eq.band_gains);
+    engine.set_eq_preamp(eq.preamp);
     engine.set_eq_enabled(settings.equalizer.eq_enabled);
 
     engine.set_replaygain_preamp(settings.replaygain.rg_preamp);
@@ -353,7 +371,7 @@ fn hydrate_audio_dsp(engine: &PlaybackEngine, settings: &settings::SettingsData)
     engine.set_replaygain_measured(settings.replaygain.rg_measure_untagged);
     engine.set_replaygain_enabled(settings.replaygain.rg_enabled);
 
-    engine.set_corrections(settings.correction.corrections.clone());
+    engine.set_corrections(eq.corrections.clone());
     engine.set_correction_enabled(settings.correction.correction_enabled);
 
     engine.set_crossfade_duration_ms(settings.crossfade.crossfade_duration_ms);
