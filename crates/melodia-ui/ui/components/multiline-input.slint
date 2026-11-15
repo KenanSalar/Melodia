@@ -13,7 +13,7 @@ import { TextEditMenu } from "text-edit-menu.slint";
 // the text into a texture. `FieldFrame` paints fill and border as one shape, and the `ScrollView`
 // clips its viewport square, inset by `pad` so nothing scrolled reaches the border.
 //
-// The scroller and the input pass a right click on, so the area round them opens the edit menu.
+// The scroller and the input pass a right click on to the area under them, which opens the menu.
 export component MultilineInput inherits FieldFrame {
     in property <string> placeholder;
     in-out property <string> text;

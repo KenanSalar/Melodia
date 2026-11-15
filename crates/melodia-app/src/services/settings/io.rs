@@ -23,7 +23,7 @@ pub(crate) fn write_settings(paths: &Paths, settings: &SettingsData) -> AppResul
 /// A JSON state file written whole, its lock held across the read, mutate and write so a burst of
 /// UI events can't interleave snapshots and lose updates. A bare read stays unlocked, so writing
 /// back what one returned is the lost update this exists to stop.
-pub(crate) struct LockedFile<T: 'static> {
+pub(crate) struct LockedFile<T> {
     lock: parking_lot::Mutex<()>,
     read: fn(&Paths) -> AppResult<T>,
     write: fn(&Paths, &T) -> AppResult<()>,

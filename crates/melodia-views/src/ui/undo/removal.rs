@@ -177,7 +177,7 @@ impl Removal {
     }
 
     /// Answers a failed write, for the one failure notice. The equalizer's, the correction's and the
-    /// queue's can't fail here: the first two's settings writes log their own, and the queue's arms
+    /// queue's can't fail here: the first two's writes log their own, and the queue's arms
     /// write nothing, a replace's resume reporting an unplayable track as any start does.
     pub(super) async fn restore(
         self,

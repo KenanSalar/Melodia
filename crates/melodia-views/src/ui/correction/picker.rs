@@ -146,11 +146,12 @@ impl Picker {
         *self.fetch.borrow_mut() = Some(fetch.abort_handle());
         let ticket = self.ticket.get();
         self.after_any_ticket("AutoEq profile", fetch, move |ui, picker, applied| {
-            picker.fetch.take();
             picker.card.paint();
+            // A close already took this handle, and the slot may hold a later fetch's.
             if !picker.ticket.holds(ticket, ui) {
                 return;
             }
+            picker.fetch.take();
             let g = ui.global::<HeadphonePicker>();
             g.set_applying(false);
             match applied {
