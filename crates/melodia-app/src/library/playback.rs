@@ -420,6 +420,11 @@ pub fn player_set_correction_enabled(ctx: &PlaybackContext, enabled: bool) {
     ctx.engine.set_correction_enabled(enabled);
 }
 
+/// The device whose correction plays, `None` naming System default.
+pub fn player_heard_device(ctx: &PlaybackContext) -> Option<String> {
+    ctx.engine.heard_device()
+}
+
 // The per-track gain is baked per source at play time (`player::playback::replaygain`).
 
 pub fn player_set_replaygain_enabled(ctx: &PlaybackContext, enabled: bool) {
@@ -528,6 +533,7 @@ pub fn output_devices() -> Vec<OutputDevice> {
 /// on the blocking pool rather than the UI thread.
 pub fn player_set_output_choice(ctx: &PlaybackContext, choice: OutputChoice) {
     ctx.engine.set_output_choice(choice);
+    ctx.output_changed.bump();
 }
 
 /// Turn off everything the user chose that changes the samples, and follow the file's rate,

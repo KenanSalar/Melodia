@@ -143,6 +143,84 @@ msgstr "Nama dan stream stasiun ini dikelola oleh direktori. Kolom yang dibiarka
 msgid "Checking the stream…"
 msgstr "Memeriksa stream…"
 
+#: ui/components/dialog/correction-import-body.slint
+msgid "Switched off"
+msgstr "Dimatikan"
+
+#: ui/components/dialog/correction-import-body.slint
+msgid "A filter type Melodia doesn't run"
+msgstr "Jenis filter yang tidak dijalankan Melodia"
+
+#: ui/components/dialog/correction-import-body.slint
+msgid "Frequency out of range"
+msgstr "Frekuensi di luar rentang"
+
+#: ui/components/dialog/correction-import-body.slint
+msgid "Gain out of range"
+msgstr "Gain di luar rentang"
+
+#: ui/components/dialog/correction-import-body.slint
+msgid "Q out of range"
+msgstr "Q di luar rentang"
+
+#: ui/components/dialog/correction-import-body.slint
+msgid "Not a line Melodia can read"
+msgstr "Bukan baris yang dapat dibaca Melodia"
+
+#. Translators: {} is the line's number in the file, then why it goes unused.
+#: ui/components/dialog/correction-import-body.slint
+msgid "Line {}: {}"
+msgstr "Baris {}: {}"
+
+#: ui/components/dialog/correction-import-body.slint
+msgid "Paste a parametric EQ profile, as AutoEq writes it, or choose its file."
+msgstr "Tempel profil EQ parametrik, seperti yang ditulis AutoEq, atau pilih berkasnya."
+
+#: ui/components/dialog/correction-import-body.slint
+msgid "Choose File…"
+msgstr "Pilih berkas…"
+
+#: ui/components/dialog/correction-import-body.slint
+msgid "The file couldn't be read."
+msgstr "Berkas tidak dapat dibaca."
+
+#: ui/components/dialog/correction-import-body.slint
+msgid "That's larger than a correction profile can be."
+msgstr "Ukurannya lebih besar daripada yang dapat dimiliki profil koreksi."
+
+#: ui/components/dialog/correction-import-body.slint
+msgid "This profile sets each ear apart, and a correction applies to both."
+msgstr "Profil ini mengatur tiap telinga secara terpisah, sedangkan koreksi berlaku untuk keduanya."
+
+#: ui/components/dialog/correction-import-body.slint
+msgid "There's no filter here Melodia can run."
+msgstr "Tidak ada filter di sini yang dapat dijalankan Melodia."
+
+#: ui/components/dialog/correction-import-body.slint
+msgid "This profile holds {n} filter, more than a correction can."
+msgid_plural "This profile holds {n} filters, more than a correction can."
+msgstr[0] "Profil ini berisi {n} filter, lebih banyak daripada yang dapat ditampung koreksi."
+
+#. Translators: {} is the imported file's name.
+#: ui/components/dialog/correction-import-body.slint
+#: ui/components/settings/correction-controls.slint
+msgid "From {}"
+msgstr "Dari {}"
+
+#: ui/components/dialog/correction-import-body.slint
+msgid "{n} filter will be applied."
+msgid_plural "{n} filters will be applied."
+msgstr[0] "{n} filter akan diterapkan."
+
+#: ui/components/dialog/correction-import-body.slint
+msgid "Every line will be used."
+msgstr "Setiap baris akan digunakan."
+
+#: ui/components/dialog/correction-import-body.slint
+msgid "{n} line won't be used:"
+msgid_plural "{n} lines won't be used:"
+msgstr[0] "{n} baris tidak akan digunakan:"
+
 #: ui/components/dialog/credit-editor.slint
 #: ui/components/dialog/name-list-editor.slint ui/globals/dialog.slint
 #: ui/views/radio/tab-pills.slint
@@ -215,6 +293,15 @@ msgstr "Lanjutkan"
 #: ui/views/settings/library-section.slint
 msgid "Remove"
 msgstr "Hapus"
+
+#: ui/components/dialog/dialog.slint ui/globals/dialog.slint
+#: ui/views/settings/correction-section.slint
+msgid "Apply"
+msgstr "Terapkan"
+
+#: ui/components/dialog/dialog.slint
+msgid "Review"
+msgstr "Tinjau"
 
 #: ui/components/dialog/duplicate-row.slint
 msgid "Identical files"
@@ -369,6 +456,49 @@ msgstr "Tidak ada playlist untuk diekspor"
 msgid "Several playlists are saved as one .zip file, which you can import directly without extracting it."
 msgstr "Beberapa playlist disimpan sebagai satu berkas .zip yang dapat Anda impor langsung tanpa mengekstraknya."
 
+#. Translators: {} names who measured the headphones, as oratory1990.
+#: ui/components/dialog/headphone-picker-body.slint
+msgid "Measured by {}"
+msgstr "Diukur oleh {}"
+
+#: ui/components/dialog/headphone-picker-body.slint
+msgid "Find a model…"
+msgstr "Cari model…"
+
+#: ui/components/dialog/headphone-picker-body.slint
+#: ui/components/dialog/kept-out-body.slint ui/views/radio/browse-tab.slint
+#: ui/views/radio/facet-chip.slint
+msgid "Loading…"
+msgstr "Memuat…"
+
+#: ui/components/dialog/headphone-picker-body.slint
+msgid "Couldn't reach AutoEq"
+msgstr "Tidak dapat menjangkau AutoEq"
+
+#: ui/components/dialog/headphone-picker-body.slint
+msgid "AutoEq's list couldn't be read"
+msgstr "Daftar AutoEq tidak dapat dibaca"
+
+#: ui/components/dialog/headphone-picker-body.slint
+msgid "No model matches"
+msgstr "Tidak ada model yang cocok"
+
+#: ui/components/dialog/headphone-picker-body.slint
+msgid "A correction file can still be imported from the card."
+msgstr "Berkas koreksi masih dapat diimpor dari kartu."
+
+#: ui/components/dialog/headphone-picker-body.slint
+msgid "Couldn't reach AutoEq. Check your connection and try again."
+msgstr "Tidak dapat menjangkau AutoEq. Periksa koneksi Anda lalu coba lagi."
+
+#: ui/components/dialog/headphone-picker-body.slint
+msgid "AutoEq's profile for this model holds lines Melodia can't read."
+msgstr "Profil AutoEq untuk model ini berisi baris yang tidak dapat dibaca Melodia."
+
+#: ui/components/dialog/headphone-picker-body.slint
+msgid "Couldn't apply the correction. See the log for details."
+msgstr "Koreksi tidak dapat diterapkan. Lihat log untuk detailnya."
+
 #. Translators: {} is the day the copy left the library, as 2026-11-02.
 #: ui/components/dialog/kept-out-body.slint
 msgid "Removed {}"
@@ -390,11 +520,6 @@ msgstr "Kembalikan Semua"
 #: ui/components/dialog/kept-out-body.slint
 msgid "Bringing back…"
 msgstr "Mengembalikan…"
-
-#: ui/components/dialog/kept-out-body.slint ui/views/radio/browse-tab.slint
-#: ui/views/radio/facet-chip.slint
-msgid "Loading…"
-msgstr "Memuat…"
 
 #: ui/components/dialog/kept-out-body.slint
 msgid "Couldn't read the list."
@@ -418,6 +543,7 @@ msgstr "{} / 4 dipilih"
 
 #: ui/components/dialog/playlist-mosaic-picker.slint
 #: ui/views/queue-panel/queue-panel.slint
+#: ui/views/settings/correction-section.slint
 msgid "Clear"
 msgstr "Bersihkan"
 
@@ -1490,6 +1616,64 @@ msgstr "Rating untuk {}"
 msgid "Search…"
 msgstr "Cari…"
 
+#: ui/components/settings/correction-controls.slint
+#: ui/views/settings/output-section.slint ui/views/settings/undo-section.slint
+msgid "Headphone correction"
+msgstr "Koreksi headphone"
+
+#: ui/components/settings/correction-controls.slint
+msgid "Enable headphone correction"
+msgstr "Aktifkan koreksi headphone"
+
+#: ui/components/settings/correction-controls.slint
+msgid "Even out how your headphones color the sound, with a correction measured for their model"
+msgstr "Meratakan cara headphone Anda mewarnai suara, dengan koreksi yang diukur untuk modelnya"
+
+#: ui/components/settings/correction-controls.slint
+msgid "Find corrections online"
+msgstr "Cari koreksi secara online"
+
+#: ui/components/settings/correction-controls.slint
+msgid "Look headphone models up in AutoEq's list on github.com"
+msgstr "Cari model headphone di daftar AutoEq di github.com"
+
+#: ui/components/settings/correction-controls.slint
+msgid "Find Headphones"
+msgstr "Cari headphone"
+
+#: ui/components/settings/correction-controls.slint
+#: ui/views/my-library/tab-pills.slint ui/views/radio/tab-pills.slint
+msgid "Import"
+msgstr "Impor"
+
+#: ui/components/settings/correction-controls.slint ui/settings.slint
+msgid "System Default"
+msgstr "Bawaan Sistem"
+
+#: ui/components/settings/correction-controls.slint
+#: ui/views/settings/output-section.slint
+#: ui/views/settings/scrobbling-section.slint
+msgid "Not connected"
+msgstr "Tidak terhubung"
+
+#. Translators: {} is an output device's name.
+#: ui/components/settings/correction-controls.slint
+msgid "{} (not connected)"
+msgstr "{} (tidak terhubung)"
+
+#. Translators: a headphone model, then who measured it.
+#: ui/components/settings/correction-controls.slint
+msgid "{} · measured by {}"
+msgstr "{} · diukur oleh {}"
+
+#: ui/components/settings/correction-controls.slint
+msgid "Pasted profile"
+msgstr "Profil yang ditempel"
+
+#: ui/components/settings/correction-controls.slint
+msgid "No correction set for this device"
+msgstr "Belum ada koreksi untuk perangkat ini"
+
 #: ui/components/settings/equalizer-controls.slint
 #: ui/views/settings/animations-section.slint
 #: ui/views/settings/output-section.slint ui/views/settings/undo-section.slint
@@ -1638,6 +1822,7 @@ msgstr "{} / {} berkas"
 #: ui/components/settings/scan-progress.slint ui/globals/dialog-forms.slint
 #: ui/globals/dialog.slint ui/views/queue-panel/queue-panel.slint
 #: ui/views/radio/tab-pills.slint ui/views/settings/appearance-section.slint
+#: ui/views/settings/correction-section.slint
 #: ui/views/settings/duplicates-section.slint
 #: ui/views/settings/library-section.slint
 #: ui/views/settings/output-section.slint
@@ -1940,10 +2125,6 @@ msgid "Edit Artwork"
 msgstr "Edit Sampul"
 
 #: ui/globals/dialog.slint
-msgid "Apply"
-msgstr "Terapkan"
-
-#: ui/globals/dialog.slint
 msgid "Export Playlists"
 msgstr "Ekspor Playlist"
 
@@ -2090,6 +2271,10 @@ msgid "Equalizer reset"
 msgstr "Equalizer diatur ulang"
 
 #: ui/globals/undo-text.slint
+msgid "Headphone correction cleared"
+msgstr "Koreksi headphone dihapus"
+
+#: ui/globals/undo-text.slint
 msgid "Recent searches cleared"
 msgstr "Pencarian terbaru dihapus"
 
@@ -2168,10 +2353,6 @@ msgstr "Perluas"
 #: ui/layout/sidebar.slint
 msgid "Collapse"
 msgstr "Ciutkan"
-
-#: ui/settings.slint
-msgid "System Default"
-msgstr "Bawaan Sistem"
 
 #: ui/settings.slint
 msgid "File watching disabled"
@@ -2657,10 +2838,6 @@ msgstr "Buat playlist dari aturan"
 msgid "More playlist actions"
 msgstr "Tindakan playlist lainnya"
 
-#: ui/views/my-library/tab-pills.slint ui/views/radio/tab-pills.slint
-msgid "Import"
-msgstr "Impor"
-
 #: ui/views/now-playing-view.slint ui/views/radio/tab-pills.slint
 msgid "Vote"
 msgstr "Beri suara"
@@ -3050,6 +3227,18 @@ msgstr "Monokrom"
 msgid "Changing the backdrop style requires restarting Melodia. Restart now?"
 msgstr "Mengubah gaya latar memerlukan mulai ulang Melodia. Mulai ulang sekarang?"
 
+#: ui/views/settings/correction-section.slint
+msgid "Find Your Headphones"
+msgstr "Temukan headphone Anda"
+
+#: ui/views/settings/correction-section.slint
+msgid "AutoEq's corrections, one measurement for each model."
+msgstr "Koreksi dari AutoEq, satu pengukuran untuk tiap model."
+
+#: ui/views/settings/correction-section.slint
+msgid "Import a Correction"
+msgstr "Impor koreksi"
+
 #: ui/views/settings/diagnostics-section.slint
 msgid "Diagnostics"
 msgstr "Diagnostik"
@@ -3367,9 +3556,15 @@ msgstr "perangkat tidak dapat dibuka"
 msgid "No effects"
 msgstr "Tanpa efek"
 
+#. Translators: two effects' names, as ReplayGain and Equalizer.
 #: ui/views/settings/output-section.slint
-msgid "Equalizer and ReplayGain"
-msgstr "Equalizer dan ReplayGain"
+msgid "{} and {}"
+msgstr "{} dan {}"
+
+#. Translators: three effects' names, in the order they apply.
+#: ui/views/settings/output-section.slint
+msgid "{}, {} and {}"
+msgstr "{}, {} dan {}"
 
 #: ui/views/settings/output-section.slint
 msgid "Shared"
@@ -3378,11 +3573,6 @@ msgstr "Bersama"
 #: ui/views/settings/output-section.slint
 msgid "Exclusive"
 msgstr "Eksklusif"
-
-#: ui/views/settings/output-section.slint
-#: ui/views/settings/scrobbling-section.slint
-msgid "Not connected"
-msgstr "Tidak terhubung"
 
 #: ui/views/settings/output-section.slint
 msgid "Play Through the System Mixer"
@@ -3734,6 +3924,10 @@ msgstr "Stasiun yang dihapus dari Favorit atau Terakhir Diputar."
 #: ui/views/settings/undo-section.slint
 msgid "Resetting the equalizer."
 msgstr "Mengatur ulang equalizer."
+
+#: ui/views/settings/undo-section.slint
+msgid "Clearing a device's headphone correction."
+msgstr "Menghapus koreksi headphone suatu perangkat."
 
 #: ui/views/settings/undo-section.slint
 msgid "Recent searches"

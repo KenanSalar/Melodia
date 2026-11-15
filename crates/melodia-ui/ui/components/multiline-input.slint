@@ -1,7 +1,9 @@
 import { ScrollView } from "std-widgets.slint";
 import { Theme } from "../theme.slint";
+import { ContextClick } from "context-menu.slint";
 import { FieldFrame } from "field-frame.slint";
 import { OverlayScrollbar } from "overlay-scrollbar.slint";
+import { TextEditMenu } from "text-edit-menu.slint";
 
 // The tree's only wrapping text box: std-widgets' `TextEdit` forwards no appearance properties, so
 // it can't be themed to match a dialog. The scrolling recipe is Slint's own
@@ -10,6 +12,8 @@ import { OverlayScrollbar } from "overlay-scrollbar.slint";
 // **No `border-radius` + `clip: true` on the box holding the `TextInput`**: a rounded clip renders
 // the text into a texture. `FieldFrame` paints fill and border as one shape, and the `ScrollView`
 // clips its viewport square, inset by `pad` so nothing scrolled reaches the border.
+//
+// The scroller and the input pass a right click on, so the area round them opens the edit menu.
 export component MultilineInput inherits FieldFrame {
     in property <string> placeholder;
     in-out property <string> text;
@@ -17,7 +21,18 @@ export component MultilineInput inherits FieldFrame {
 
     private property <length> pad: Theme.pad-sm;
 
-    focused: ti.has-focus;
+    // Across the menu too, for `SingleLineInput.has-focus`'s reason.
+    focused: ti.has-focus || menu.is-open;
+
+    TouchArea {
+        pointer-event(event) => {
+            if (ContextClick.raises-menu(event, self.mouse-x, self.mouse-y, self.width, self.height)) {
+                // First, so the popup hands the keyboard back to the box when it closes.
+                ti.focus();
+                menu.show-at(self.mouse-x, self.mouse-y);
+            }
+        }
+    }
 
     sv := ScrollView {
         x: root.pad;
@@ -75,5 +90,14 @@ export component MultilineInput inherits FieldFrame {
         content-size: sv.content-height;
         offset: -sv.content-y;
         scroll-to(o) => { sv.content-y = -o; }
+    }
+
+    menu := TextEditMenu {
+        has-text: root.text != "";
+        read-only: root.read-only;
+        cut => { ti.cut(); }
+        copy => { ti.copy(); }
+        paste => { ti.paste(); }
+        select-all => { ti.select-all(); }
     }
 }

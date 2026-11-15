@@ -55,6 +55,34 @@ export global ReplayGain {
     callback resume-measuring();
 }
 
+// What the correction card says of the device it speaks for, `pending` until Rust has named it.
+export enum HeardDevice { pending, system-default, connected, not-connected }
+
+// Where the device's correction came from, which names it on the card.
+export enum CorrectionFrom { none, autoeq, file, paste }
+
+// `set-enabled` applies to the live player and persists; `online` gates every request to AutoEq,
+// Import working without it. The device and its correction are Rust's, repainted on each output
+// change and each write.
+export global HeadphoneCorrection {
+    in-out property <bool> enabled;
+    in-out property <bool> online;
+    in property <HeardDevice> device: HeardDevice.pending;
+    // The listed name, or the one the device's correction stored while it isn't connected.
+    in property <string> device-name;
+    in property <CorrectionFrom> origin: CorrectionFrom.none;
+    // The model or the file's name.
+    in property <string> origin-name;
+    // Whose measurement an AutoEq model is.
+    in property <string> origin-source;
+
+    callback set-enabled(bool);
+    callback set-online(bool);
+    // From the device row's mount; output changes and writes repaint it otherwise.
+    callback refresh();
+    callback clear();
+}
+
 // `enabled` decides only whether the strip mounts; `set-active`, off the mount, arms the tap.
 //
 // `style` and `style-idx` are one choice in two shapes: the strip mounts on the key, so reordering

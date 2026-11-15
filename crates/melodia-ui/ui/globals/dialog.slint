@@ -1,6 +1,7 @@
 import { PlaylistPickRow, PlaylistExportPickRow, RadioStationRow } from "../models.slint";
 import { SmartEditor, TagEditor, ScrobbleUi, RadioForm } from "dialog-forms.slint";
 import { DuplicatesUi, KeptOutUi } from "duplicates.slint";
+import { CorrectionImport, HeadphonePicker, ImportStep } from "correction-dialogs.slint";
 import { Radio } from "radio.slint";
 import { LibrarySettings } from "library-settings.slint";
 import { Playlists, PlaylistDetail } from "playlists.slint";
@@ -37,6 +38,8 @@ export enum DialogKind {
     replaygain,
     duplicates,
     kept-out-files,
+    headphone-picker,
+    correction-import,
 }
 
 // Why a removal asks first where an undo would otherwise follow, each with its own message.
@@ -184,6 +187,14 @@ export global Dialog {
             } else {
                 DuplicatesUi.confirming = true;
             }
+        } else if (root.kind == DialogKind.headphone-picker) {
+            HeadphonePicker.apply(HeadphonePicker.picked);
+        } else if (root.kind == DialogKind.correction-import) {
+            if (CorrectionImport.step == ImportStep.paste) {
+                CorrectionImport.review(CorrectionImport.text);
+            } else {
+                CorrectionImport.apply();
+            }
         }
     }
     cancelled => { }
@@ -214,6 +225,12 @@ export global Dialog {
         DuplicatesUi.confirming = false;
         DuplicatesUi.released();
         KeptOutUi.released();
+        HeadphonePicker.filter = "";
+        HeadphonePicker.picked = -1;
+        HeadphonePicker.released();
+        CorrectionImport.step = ImportStep.paste;
+        CorrectionImport.text = "";
+        CorrectionImport.released();
         root.export-pick-rows = [];
         root.export-select-all = false;
         root.export-selected-count = 0;

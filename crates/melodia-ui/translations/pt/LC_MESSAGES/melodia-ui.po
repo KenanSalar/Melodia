@@ -143,6 +143,87 @@ msgstr "O nome e a emissão desta estação vêm do diretório. O que ficou em b
 msgid "Checking the stream…"
 msgstr "A verificar a emissão…"
 
+#: ui/components/dialog/correction-import-body.slint
+msgid "Switched off"
+msgstr "Desligado"
+
+#: ui/components/dialog/correction-import-body.slint
+msgid "A filter type Melodia doesn't run"
+msgstr "Um tipo de filtro que o Melodia não executa"
+
+#: ui/components/dialog/correction-import-body.slint
+msgid "Frequency out of range"
+msgstr "Frequência fora do intervalo"
+
+#: ui/components/dialog/correction-import-body.slint
+msgid "Gain out of range"
+msgstr "Ganho fora do intervalo"
+
+#: ui/components/dialog/correction-import-body.slint
+msgid "Q out of range"
+msgstr "Q fora do intervalo"
+
+#: ui/components/dialog/correction-import-body.slint
+msgid "Not a line Melodia can read"
+msgstr "Não é uma linha que o Melodia consiga ler"
+
+#. Translators: {} is the line's number in the file, then why it goes unused.
+#: ui/components/dialog/correction-import-body.slint
+msgid "Line {}: {}"
+msgstr "Linha {}: {}"
+
+#: ui/components/dialog/correction-import-body.slint
+msgid "Paste a parametric EQ profile, as AutoEq writes it, or choose its file."
+msgstr "Cole um perfil de EQ paramétrico, tal como o AutoEq o escreve, ou escolha o seu ficheiro."
+
+#: ui/components/dialog/correction-import-body.slint
+msgid "Choose File…"
+msgstr "Escolher ficheiro…"
+
+#: ui/components/dialog/correction-import-body.slint
+msgid "The file couldn't be read."
+msgstr "Não foi possível ler o ficheiro."
+
+#: ui/components/dialog/correction-import-body.slint
+msgid "That's larger than a correction profile can be."
+msgstr "É maior do que um perfil de correção pode ser."
+
+#: ui/components/dialog/correction-import-body.slint
+msgid "This profile sets each ear apart, and a correction applies to both."
+msgstr "Este perfil ajusta cada ouvido em separado, e uma correção aplica-se aos dois."
+
+#: ui/components/dialog/correction-import-body.slint
+msgid "There's no filter here Melodia can run."
+msgstr "Não há aqui nenhum filtro que o Melodia consiga executar."
+
+#: ui/components/dialog/correction-import-body.slint
+msgid "This profile holds {n} filter, more than a correction can."
+msgid_plural "This profile holds {n} filters, more than a correction can."
+msgstr[0] "Este perfil tem {n} filtro, mais do que uma correção admite."
+msgstr[1] "Este perfil tem {n} filtros, mais do que uma correção admite."
+
+#. Translators: {} is the imported file's name.
+#: ui/components/dialog/correction-import-body.slint
+#: ui/components/settings/correction-controls.slint
+msgid "From {}"
+msgstr "De {}"
+
+#: ui/components/dialog/correction-import-body.slint
+msgid "{n} filter will be applied."
+msgid_plural "{n} filters will be applied."
+msgstr[0] "Será aplicado {n} filtro."
+msgstr[1] "Serão aplicados {n} filtros."
+
+#: ui/components/dialog/correction-import-body.slint
+msgid "Every line will be used."
+msgstr "Todas as linhas serão usadas."
+
+#: ui/components/dialog/correction-import-body.slint
+msgid "{n} line won't be used:"
+msgid_plural "{n} lines won't be used:"
+msgstr[0] "{n} linha não será usada:"
+msgstr[1] "{n} linhas não serão usadas:"
+
 #: ui/components/dialog/credit-editor.slint
 #: ui/components/dialog/name-list-editor.slint ui/globals/dialog.slint
 #: ui/views/radio/tab-pills.slint
@@ -217,6 +298,15 @@ msgstr "Continuar"
 #: ui/views/settings/library-section.slint
 msgid "Remove"
 msgstr "Remover"
+
+#: ui/components/dialog/dialog.slint ui/globals/dialog.slint
+#: ui/views/settings/correction-section.slint
+msgid "Apply"
+msgstr "Aplicar"
+
+#: ui/components/dialog/dialog.slint
+msgid "Review"
+msgstr "Rever"
 
 #: ui/components/dialog/duplicate-row.slint
 msgid "Identical files"
@@ -377,6 +467,49 @@ msgstr "Nenhuma playlist para exportar"
 msgid "Several playlists are saved as one .zip file, which you can import directly without extracting it."
 msgstr "Várias playlists são guardadas num único ficheiro .zip, que pode importar diretamente sem o extrair."
 
+#. Translators: {} names who measured the headphones, as oratory1990.
+#: ui/components/dialog/headphone-picker-body.slint
+msgid "Measured by {}"
+msgstr "Medido por {}"
+
+#: ui/components/dialog/headphone-picker-body.slint
+msgid "Find a model…"
+msgstr "Procurar um modelo…"
+
+#: ui/components/dialog/headphone-picker-body.slint
+#: ui/components/dialog/kept-out-body.slint ui/views/radio/browse-tab.slint
+#: ui/views/radio/facet-chip.slint
+msgid "Loading…"
+msgstr "A carregar…"
+
+#: ui/components/dialog/headphone-picker-body.slint
+msgid "Couldn't reach AutoEq"
+msgstr "Não foi possível contactar o AutoEq"
+
+#: ui/components/dialog/headphone-picker-body.slint
+msgid "AutoEq's list couldn't be read"
+msgstr "Não foi possível ler a lista do AutoEq"
+
+#: ui/components/dialog/headphone-picker-body.slint
+msgid "No model matches"
+msgstr "Nenhum modelo corresponde"
+
+#: ui/components/dialog/headphone-picker-body.slint
+msgid "A correction file can still be imported from the card."
+msgstr "Ainda pode importar um ficheiro de correção a partir do cartão."
+
+#: ui/components/dialog/headphone-picker-body.slint
+msgid "Couldn't reach AutoEq. Check your connection and try again."
+msgstr "Não foi possível contactar o AutoEq. Verifique a sua ligação e tente novamente."
+
+#: ui/components/dialog/headphone-picker-body.slint
+msgid "AutoEq's profile for this model holds lines Melodia can't read."
+msgstr "O perfil do AutoEq para este modelo tem linhas que o Melodia não consegue ler."
+
+#: ui/components/dialog/headphone-picker-body.slint
+msgid "Couldn't apply the correction. See the log for details."
+msgstr "Não foi possível aplicar a correção. Consulte o registo para mais detalhes."
+
 #. Translators: {} is the day the copy left the library, as 2026-11-02.
 #: ui/components/dialog/kept-out-body.slint
 msgid "Removed {}"
@@ -400,11 +533,6 @@ msgstr "Repor tudo"
 msgid "Bringing back…"
 msgstr "A repor…"
 
-#: ui/components/dialog/kept-out-body.slint ui/views/radio/browse-tab.slint
-#: ui/views/radio/facet-chip.slint
-msgid "Loading…"
-msgstr "A carregar…"
-
 #: ui/components/dialog/kept-out-body.slint
 msgid "Couldn't read the list."
 msgstr "Não foi possível ler a lista."
@@ -427,6 +555,7 @@ msgstr "{} / 4 selecionadas"
 
 #: ui/components/dialog/playlist-mosaic-picker.slint
 #: ui/views/queue-panel/queue-panel.slint
+#: ui/views/settings/correction-section.slint
 msgid "Clear"
 msgstr "Limpar"
 
@@ -1501,6 +1630,64 @@ msgstr "Classificação de {}"
 msgid "Search…"
 msgstr "Pesquisar…"
 
+#: ui/components/settings/correction-controls.slint
+#: ui/views/settings/output-section.slint ui/views/settings/undo-section.slint
+msgid "Headphone correction"
+msgstr "Correção de auscultadores"
+
+#: ui/components/settings/correction-controls.slint
+msgid "Enable headphone correction"
+msgstr "Ativar a correção de auscultadores"
+
+#: ui/components/settings/correction-controls.slint
+msgid "Even out how your headphones color the sound, with a correction measured for their model"
+msgstr "Compense a forma como os seus auscultadores colorem o som, com uma correção medida para o modelo deles"
+
+#: ui/components/settings/correction-controls.slint
+msgid "Find corrections online"
+msgstr "Procurar correções online"
+
+#: ui/components/settings/correction-controls.slint
+msgid "Look headphone models up in AutoEq's list on github.com"
+msgstr "Procurar modelos de auscultadores na lista do AutoEq em github.com"
+
+#: ui/components/settings/correction-controls.slint
+msgid "Find Headphones"
+msgstr "Procurar auscultadores"
+
+#: ui/components/settings/correction-controls.slint
+#: ui/views/my-library/tab-pills.slint ui/views/radio/tab-pills.slint
+msgid "Import"
+msgstr "Importar"
+
+#: ui/components/settings/correction-controls.slint ui/settings.slint
+msgid "System Default"
+msgstr "Predefinição do sistema"
+
+#: ui/components/settings/correction-controls.slint
+#: ui/views/settings/output-section.slint
+#: ui/views/settings/scrobbling-section.slint
+msgid "Not connected"
+msgstr "Não ligado"
+
+#. Translators: {} is an output device's name.
+#: ui/components/settings/correction-controls.slint
+msgid "{} (not connected)"
+msgstr "{} (não ligado)"
+
+#. Translators: a headphone model, then who measured it.
+#: ui/components/settings/correction-controls.slint
+msgid "{} · measured by {}"
+msgstr "{} · medido por {}"
+
+#: ui/components/settings/correction-controls.slint
+msgid "Pasted profile"
+msgstr "Perfil colado"
+
+#: ui/components/settings/correction-controls.slint
+msgid "No correction set for this device"
+msgstr "Nenhuma correção definida para este dispositivo"
+
 #: ui/components/settings/equalizer-controls.slint
 #: ui/views/settings/animations-section.slint
 #: ui/views/settings/output-section.slint ui/views/settings/undo-section.slint
@@ -1653,6 +1840,7 @@ msgstr "{} / {} ficheiros"
 #: ui/components/settings/scan-progress.slint ui/globals/dialog-forms.slint
 #: ui/globals/dialog.slint ui/views/queue-panel/queue-panel.slint
 #: ui/views/radio/tab-pills.slint ui/views/settings/appearance-section.slint
+#: ui/views/settings/correction-section.slint
 #: ui/views/settings/duplicates-section.slint
 #: ui/views/settings/library-section.slint
 #: ui/views/settings/output-section.slint
@@ -1961,10 +2149,6 @@ msgid "Edit Artwork"
 msgstr "Editar capa"
 
 #: ui/globals/dialog.slint
-msgid "Apply"
-msgstr "Aplicar"
-
-#: ui/globals/dialog.slint
 msgid "Export Playlists"
 msgstr "Exportar playlists"
 
@@ -2118,6 +2302,10 @@ msgid "Equalizer reset"
 msgstr "Equalizador reposto"
 
 #: ui/globals/undo-text.slint
+msgid "Headphone correction cleared"
+msgstr "Correção de auscultadores removida"
+
+#: ui/globals/undo-text.slint
 msgid "Recent searches cleared"
 msgstr "Pesquisas recentes limpas"
 
@@ -2202,10 +2390,6 @@ msgstr "Expandir"
 #: ui/layout/sidebar.slint
 msgid "Collapse"
 msgstr "Recolher"
-
-#: ui/settings.slint
-msgid "System Default"
-msgstr "Predefinição do sistema"
 
 #: ui/settings.slint
 msgid "File watching disabled"
@@ -2705,10 +2889,6 @@ msgstr "Criar uma playlist a partir de regras"
 msgid "More playlist actions"
 msgstr "Mais ações de playlist"
 
-#: ui/views/my-library/tab-pills.slint ui/views/radio/tab-pills.slint
-msgid "Import"
-msgstr "Importar"
-
 #: ui/views/now-playing-view.slint ui/views/radio/tab-pills.slint
 msgid "Vote"
 msgstr "Votar"
@@ -3104,6 +3284,18 @@ msgstr "Monocromático"
 msgid "Changing the backdrop style requires restarting Melodia. Restart now?"
 msgstr "Alterar o estilo do fundo requer reiniciar o Melodia. Reiniciar agora?"
 
+#: ui/views/settings/correction-section.slint
+msgid "Find Your Headphones"
+msgstr "Encontre os seus auscultadores"
+
+#: ui/views/settings/correction-section.slint
+msgid "AutoEq's corrections, one measurement for each model."
+msgstr "As correções do AutoEq, uma medição por modelo."
+
+#: ui/views/settings/correction-section.slint
+msgid "Import a Correction"
+msgstr "Importar uma correção"
+
 #: ui/views/settings/diagnostics-section.slint
 msgid "Diagnostics"
 msgstr "Diagnóstico"
@@ -3422,9 +3614,15 @@ msgstr "não foi possível abrir o dispositivo"
 msgid "No effects"
 msgstr "Sem efeitos"
 
+#. Translators: two effects' names, as ReplayGain and Equalizer.
 #: ui/views/settings/output-section.slint
-msgid "Equalizer and ReplayGain"
-msgstr "Equalizador e ReplayGain"
+msgid "{} and {}"
+msgstr "{} e {}"
+
+#. Translators: three effects' names, in the order they apply.
+#: ui/views/settings/output-section.slint
+msgid "{}, {} and {}"
+msgstr "{}, {} e {}"
 
 #: ui/views/settings/output-section.slint
 msgid "Shared"
@@ -3433,11 +3631,6 @@ msgstr "Partilhado"
 #: ui/views/settings/output-section.slint
 msgid "Exclusive"
 msgstr "Exclusivo"
-
-#: ui/views/settings/output-section.slint
-#: ui/views/settings/scrobbling-section.slint
-msgid "Not connected"
-msgstr "Não ligado"
 
 #: ui/views/settings/output-section.slint
 msgid "Play Through the System Mixer"
@@ -3789,6 +3982,10 @@ msgstr "Estações removidas dos favoritos ou de Ouvidas recentemente."
 #: ui/views/settings/undo-section.slint
 msgid "Resetting the equalizer."
 msgstr "Repor o equalizador."
+
+#: ui/views/settings/undo-section.slint
+msgid "Clearing a device's headphone correction."
+msgstr "Remover a correção de auscultadores de um dispositivo."
 
 #: ui/views/settings/undo-section.slint
 msgid "Recent searches"

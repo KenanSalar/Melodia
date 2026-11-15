@@ -1,0 +1,112 @@
+import { Theme } from "../../theme.slint";
+import { SettingsPage } from "../../globals/settings-page.slint";
+import { CorrectionFrom, HeadphoneCorrection, HeardDevice } from "../../globals/audio.slint";
+import { CorrectionImport, HeadphonePicker, ImportStep, PickerPhase } from "../../globals/correction-dialogs.slint";
+import { Dialog, DialogKind } from "../../globals/dialog.slint";
+import { SectionButton } from "../../components/settings/section-button.slint";
+import { SectionCard } from "../../components/settings/section-card.slint";
+import { SettingRow } from "../../components/settings/setting-row.slint";
+import { SettingRowStacked } from "../../components/settings/setting-row-stacked.slint";
+import { ToggleSwitch } from "../../components/settings/toggle-switch.slint";
+import { CorrectionText } from "../../components/settings/correction-controls.slint";
+
+// Headphone correction, one cluster on the equalizer card's shape: the device row mounts only
+// while the switch is on. The online row names github.com for the lyrics lookup's reason, and stays
+// put with the switch off, being a default set before the first model is looked up.
+export component CorrectionSection inherits Rectangle {
+    horizontal-stretch: 1;
+    vertical-stretch: 0;
+
+    in property <string> category-name;
+
+    pure function row-visible(label: string, desc: string) -> bool {
+        return SettingsPage.row-visible(root.category-name, CorrectionText.title,
+                                        label + " " + desc,
+                                        SettingsPage.search-query);
+    }
+
+    out property <bool> has-matches: row-visible(CorrectionText.enable-label, CorrectionText.enable-desc)
+        || row-visible(CorrectionText.find-label + " " + CorrectionText.import-label, "")
+        || row-visible(CorrectionText.online-label, CorrectionText.online-desc);
+
+    property <bool> show-details: root.has-matches && HeadphoneCorrection.enabled;
+    property <bool> device-named: HeadphoneCorrection.device != HeardDevice.pending;
+
+    VerticalLayout {
+        if has-matches: SectionCard {
+            title: CorrectionText.title;
+
+            SettingRow {
+                icon: "headphones";
+                label: CorrectionText.enable-label;
+                description: CorrectionText.enable-desc;
+                ToggleSwitch {
+                    checked <=> HeadphoneCorrection.enabled;
+                    toggled(v) => { HeadphoneCorrection.set-enabled(v); }
+                }
+            }
+
+            // Stacked so the three buttons never contend with the device's name for the width.
+            if root.show-details: SettingRowStacked {
+                icon: "volume_up";
+                label: CorrectionText.device;
+                description: CorrectionText.correction;
+                init => { HeadphoneCorrection.refresh(); }
+
+                HorizontalLayout {
+                    alignment: start;
+                    spacing: Theme.pad-sm;
+
+                    SectionButton {
+                        label: CorrectionText.find-label;
+                        icon: "search";
+                        button-enabled: root.device-named && HeadphoneCorrection.online;
+                        clicked => {
+                            Dialog.title = @tr("Find Your Headphones");
+                            Dialog.message = @tr("AutoEq's corrections, one measurement for each model.");
+                            Dialog.confirm-label = @tr("Apply");
+                            Dialog.cancel-label = @tr("Cancel");
+                            Dialog.destructive = false;
+                            Dialog.kind = DialogKind.headphone-picker;
+                            HeadphonePicker.phase = PickerPhase.loading;
+                            Dialog.open = true;
+                            HeadphonePicker.load();
+                        }
+                    }
+                    SectionButton {
+                        label: CorrectionText.import-label;
+                        icon: "upload";
+                        primary: false;
+                        button-enabled: root.device-named;
+                        clicked => {
+                            Dialog.title = @tr("Import a Correction");
+                            Dialog.message = "";
+                            Dialog.cancel-label = @tr("Cancel");
+                            Dialog.destructive = false;
+                            Dialog.kind = DialogKind.correction-import;
+                            CorrectionImport.step = ImportStep.paste;
+                            Dialog.open = true;
+                        }
+                    }
+                    SectionButton {
+                        label: @tr("Clear");
+                        icon: "delete";
+                        primary: false;
+                        button-enabled: HeadphoneCorrection.origin != CorrectionFrom.none;
+                        clicked => { HeadphoneCorrection.clear(); }
+                    }
+                }
+            }
+
+            SettingRow {
+                icon: "travel_explore";
+                label: CorrectionText.online-label;
+                description: CorrectionText.online-desc;
+                ToggleSwitch {
+                    checked <=> HeadphoneCorrection.online;
+                    toggled(v) => { HeadphoneCorrection.set-online(v); }
+                }
+            }
+        }
+    }
+}

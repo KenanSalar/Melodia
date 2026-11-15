@@ -44,6 +44,8 @@ export component UndoSection inherits Rectangle {
     property <string> radio-desc: @tr("Stations removed from Favorites or Recently Played.");
     property <string> equalizer-label: @tr("Equalizer");
     property <string> equalizer-desc: @tr("Resetting the equalizer.");
+    property <string> correction-label: @tr("Headphone correction");
+    property <string> correction-desc: @tr("Clearing a device's headphone correction.");
     property <string> recent-label: @tr("Recent searches");
     property <string> recent-desc: @tr("Clearing recent searches.");
     property <string> notice-label: @tr("Keep the notice up");
@@ -56,6 +58,7 @@ export component UndoSection inherits Rectangle {
         || row-visible(favorites-label, favorites-desc)
         || row-visible(radio-label, radio-desc)
         || row-visible(equalizer-label, equalizer-desc)
+        || row-visible(correction-label, correction-desc)
         || row-visible(recent-label, recent-desc)
         || row-visible(notice-label, notice-desc);
     property <bool> show-details: root.show-undo && UndoSettings.enabled;
@@ -137,6 +140,16 @@ export component UndoSection inherits Rectangle {
             ToggleSwitch {
                 checked <=> UndoSettings.equalizer;
                 toggled(v) => { UndoSettings.kind-changed(UndoKind.equalizer, v); }
+            }
+        }
+
+        if root.show-details: SettingRow {
+            icon: "headphones";
+            label: root.correction-label;
+            description: root.correction-desc;
+            ToggleSwitch {
+                checked <=> UndoSettings.correction;
+                toggled(v) => { UndoSettings.kind-changed(UndoKind.correction, v); }
             }
         }
 

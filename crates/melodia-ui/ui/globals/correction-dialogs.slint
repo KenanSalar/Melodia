@@ -1,0 +1,56 @@
+import { CorrectionPickRow, SkippedLineRow } from "../models.slint";
+
+// What the picker shows behind its search box: `unreachable` is no cached list and no answer, and
+// `unreadable` a list, cached or fetched, that holds no entry Melodia can read.
+export enum PickerPhase { loading, listing, unreachable, unreadable }
+
+// Why a pick wasn't applied, told apart by Rust from the error's variant.
+export enum ApplyFailure { none, unreachable, refused, failed }
+
+// The Find headphones dialog, owned by `ui::correction::picker`. Rust holds the whole list while
+// the dialog is open and hands over only what the filter leaves, capped.
+export global HeadphonePicker {
+    in property <[CorrectionPickRow]> rows;
+    // Raised by the opener, so the dialog opens on Loading rather than on an empty list.
+    in-out property <PickerPhase> phase;
+    in-out property <string> filter;
+    // Bumped by a row's click, the box having no click-outside of its own.
+    in-out property <int> blur-tick;
+    // A `CorrectionPickRow.index`, -1 for none.
+    in-out property <int> picked: -1;
+    in property <bool> applying;
+    in property <ApplyFailure> failure;
+
+    callback load();
+    callback filter-changed(string);
+    callback apply(int /*picked*/);
+    // From every kind's teardown, as `KeptOutUi.released` is.
+    callback released();
+}
+
+// The import's two steps, one dialog kind: the paste box, then the lines that won't be used.
+export enum ImportStep { paste, review }
+
+// Why an import was refused whole, shown at the paste step.
+export enum ImportRefusal { none, unread, too-large, one-ear, no-filters, too-many }
+
+// The Import dialog, owned by `ui::correction::import`. A file chosen at the paste step lands
+// straight on the review, as a paste does once Rust has read it.
+export global CorrectionImport {
+    in-out property <ImportStep> step;
+    in-out property <string> text;
+    in property <[SkippedLineRow]> skipped;
+    in property <int> filter-count;
+    // While a chosen file is read, so a second choice can't race the first.
+    in property <bool> busy;
+    in property <ImportRefusal> refusal;
+    // How many filters a `too-many` file held.
+    in property <int> refused-count;
+    // The file under review, empty for a paste.
+    in property <string> file-name;
+
+    callback choose-file();
+    callback review(string /*text*/);
+    callback apply();
+    callback released();
+}

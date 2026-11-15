@@ -18,7 +18,7 @@ use std::time::Duration;
 use tempfile::TempDir;
 use tokio::sync::watch;
 
-use super::PlaybackContext;
+use super::{PlaybackContext, Signal};
 use crate::services::settings::{SettingsData, write_settings};
 use melodia_audio::player::source::audio::{Sample, Shape};
 use melodia_audio::player::source::decode_ahead;
@@ -125,6 +125,7 @@ impl TestPlayback {
                 db,
                 paths: Arc::new(paths),
                 http: Arc::new(OnceLock::new()),
+                output_changed: Signal::new(),
             },
             tmp,
             callback: Some(Callback { stop, thread }),

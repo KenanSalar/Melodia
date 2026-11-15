@@ -2,7 +2,7 @@
 
 Working doc. Delete when the feature ships.
 
-Status: **Phase 5 next** · Created: 2026-11-14
+Status: **Phase 5 in progress** · Created: 2026-11-14
 
 Issue [#144](https://github.com/KenanSalar/Melodia/issues/144).
 
@@ -28,14 +28,14 @@ plays on every device.
   has none.
 - **Find headphones** opens a picker over AutoEq's recommended list, one entry per model, each row
   saying whose measurement it is. Apply fetches that model's profile once and keeps it.
-- **Import** takes a file or pasted text in the parametric format AutoEq and autoeq.app write.
-  Before applying, it lists every line it won't use and why; a file setting each ear separately,
-  or holding more filters than a correction may, is refused whole.
+- **Import** opens a paste box with a Choose File chip beside it, for the parametric format AutoEq
+  and autoeq.app write. Before applying, it lists every line it won't use and why; a file setting
+  each ear separately, or holding more filters than a correction may, is refused whole.
 - The card's switch turns correction off and on for a before and after, every device's correction
   kept.
 - Each output device keeps its own correction, System default counting as one. Switching device
   in Melodia switches the correction with it, through a short ramp. Clear removes the current
-  device's alone.
+  device's alone and offers Undo, which Settings ▸ Accessibility can turn off as its own kind.
 - **Find corrections online**, a switch of its own, off by default, gates every request to AutoEq.
   Import works with it off. The onboarding card's "What Melodia can reach" gains the same row.
 - The level comes down by exactly the loudest point of the correction and the ten sliders
@@ -179,10 +179,14 @@ next write would build a set mixing two headphones and ramp to it.
   disk, so nothing is kicked after the write.
 - **A write's device comes from the caller** (`CorrectionTarget`), as the card named it when the
   user acted, so a profile still downloading as the output moves lands where it was asked for.
-- The card learns of a device switch through a new `AppState.output_changed` `Signal`, bumped
-  where every device change in the views passes. `library::playback::player_set_output_choice` is
-  that funnel, but it takes a `PlaybackContext`, which carries no `Signal`
-  (`state/contexts.rs:20-30`), so Phase 5 settles where the bump goes.
+- **The card names the device the engine heard**, never the Output card's copy, which may not
+  have listed a device this run: `PlaybackEngine::heard_device` reads `CorrectionControl`'s, and
+  `library::correction::heard` (blocking) names it through `output_devices()`, an unlisted device
+  by its correction's stored name. System default lists nothing.
+- **`AppState.output_changed` is bumped inside `player_set_output_choice`**, after the engine
+  call returns and so after the aim, carried on `PlaybackContext` for it. Only
+  `output_settings.rs`' `apply` and its bit-perfect switch change the choice; boot calls the
+  engine before any subscriber exists.
 
 ### Online, the way radio and lyrics are
 
@@ -293,11 +297,12 @@ persists it (`library/settings/playback.rs:71-81`).
 | engine | `crates/melodia-engine/src/player/engine/backend/{mod,correction,output}.rs`, `signal_path.rs` | `DspControls` owned once; `correction.rs`: `CorrectionControl` (the writer, the map, the switch, the heard device) and its `select`; `OutputChoice::heard_device` and the aim; `SignalInputs.correction_on` |
 | net | `crates/melodia-net/src/services/net/mod.rs`, `services/net/autoeq/` | `get_capped_if_changed`; `autoeq/mod.rs`: the URLs and their guard, the list fetch, the profile fetch. `autoeq/list.rs`: the list parser |
 | settings | `crates/melodia-app/src/services/settings/playback.rs`, `library/settings/correction.rs` | `CorrectionFlags` beside `EqualizerFlags`; the setters through `mutate_settings` |
-| facade | `crates/melodia-app/src/library/correction/` | `mod.rs`: `autoeq_client`, `CorrectionTarget`, `commit` (the map's one writer), `clear`. `list.rs`: the cache, the recheck, `ListAnswer`. `apply.rs`: apply from the list, import a file or a paste, apply. `parametric.rs`: the format above |
+| facade | `crates/melodia-app/src/library/correction/` | `mod.rs`: `autoeq_client`, `CorrectionTarget`, `heard`, `correction_for`, `commit` (the map's one writer), `clear`, `restore` (Clear's undo). `list.rs`: the cache, the recheck, `ListAnswer`. `apply.rs`: apply from the list, import a file or a paste, apply. `parametric.rs`: the format above |
 | app glue | `library/playback.rs`, `state/{mod,signal}.rs`, `crates/melodia-core/src/config.rs` | the player setters and Make Bit-Perfect; `hydrate_audio_dsp` seeds the engine's map and switch (`state/mod.rs:337-370`); `Shadowed`, `AppState.corrections` and `correction_online`; `output_changed`; the two list paths |
 | card | `crates/melodia-ui/ui/views/settings/correction-section.slint`, `components/settings/correction-controls.slint`, `globals/audio.slint` | `CorrectionText` shared by the card and both dialogs, the `HeadphoneCorrection` global |
-| dialogs | `components/dialog/headphone-picker-body.slint`, `correction-import-body.slint`, `globals/dialog.slint`, `components/dialog/dialog.slint` | two kinds; the import's step in its own global |
-| views | `crates/melodia-views/src/ui/correction/` | `mod.rs`: install, seed, repaint on `output_changed`. `picker.rs`: load, filter, apply, release. `import.rs`: file, paste, review |
+| dialogs | `components/dialog/headphone-picker-body.slint`, `correction-import-body.slint`, `globals/correction-dialogs.slint`, `globals/dialog.slint`, `components/dialog/dialog.slint` | two kinds; `HeadphonePicker` and `CorrectionImport`, the import's step in the second |
+| views | `crates/melodia-views/src/ui/correction/`, `ui/dialog_landing.rs` | `mod.rs`: install, seed, repaint on `output_changed`, Clear and its undo. `picker.rs`: load, filter, apply, release. `import.rs`: file, paste, review. `dialog_landing.rs`: the ticket both dialogs and the duplicates pair land through |
+| undo | `crates/melodia-core/src/entities/undo.rs`, `melodia-views/src/ui/undo/removal.rs`, `undo-section.slint` | `UndoKind::Correction`, `Removal::Correction`, its Accessibility row |
 
 `melodia-views` learns nothing about the network: it reads `AutoEqEntry` and the parse result from
 `melodia-core` through `library::correction`. The DSP learns nothing about devices: the engine hands
@@ -316,6 +321,9 @@ it a set.
 - **`PICKER_ROW_CAP`** moves out of `ui/radio/facets.rs` to `ui/row_match.rs`, its doc saying what
   both pickers share: a cap on the drawing, never on what the needle searches.
 - **One filter precision**: the bands move to f64 with the stage, not beside it.
+- **The dialog ticket** (Phase 5): `DialogTicket` and `TicketedDialog` move out of
+  `ui/duplicates/landing.rs` to `ui/dialog_landing.rs`, the paged-row fetch staying behind as
+  `DialogRows`, so the picker and the import land as the duplicates pair do.
 
 ---
 
@@ -404,32 +412,39 @@ each landing with its first user.
 
 ## Phase 5: The card, the picker and the import (`melodia-ui`, `melodia-views`)
 
-- [ ] The card above `EqualizerSection` (`effects-page.slint`, its "two stages" comment made
+- [x] The card above `EqualizerSection` (`effects-page.slint`, its "two stages" comment made
       three): the switch; while on, the device and its correction with Find headphones, Import and
       Clear; the online switch, its description naming github.com as the lyrics row names
-      lrclib.net. Every row's label and description declared once for `row-visible`.
-- [ ] The picker: a `SearchBar` over a `ListView` with `OverlayScrollbar` and drag-pan off, rows of
+      lrclib.net. Every row's words declared once in `CorrectionText`.
+- [x] The picker: a `SearchBar` over a `ListView` with `OverlayScrollbar` and drag-pan off, rows of
       name and source, filtered in Rust through `Needle`, Apply, the three states, released on
-      close.
-- [ ] The import: one dialog kind with two steps, its step in its own global (paste, then review);
-      a file skips to review. A raise after the file dialog's await owes a `DialogClaim`.
-- [ ] `MultilineInput` gains the right-click edit menu `SingleLineInput` has
+      close, a fetch still running aborted by the close.
+- [x] The import: one dialog kind with two steps, its step in its own global (paste, then review).
+      The paste step's Choose File chip lands a file on the review through the dialog ticket:
+      `DialogClaim` holds only while no dialog is open, so it can't guard an answer for one up.
+- [x] `MultilineInput` gains the right-click edit menu `SingleLineInput` has
       (`single-line-input.slint:96-103`): a paste box with no Paste entry is the obvious gap. It is
       the tree's one wrapping box, so the tag editor's lyrics tab gains the menu too.
-- [ ] `AppState.output_changed`, bumped where every device change passes, repainting the card.
-- [ ] `show_bit_perfect_reset` (`ui/settings/signal_path.rs:47-53`) turns the card's switch off
+- [x] `AppState.output_changed`, bumped in `player_set_output_choice`, repainting the card; the
+      engine's `heard_device` and the facade's `heard` naming what it shows.
+- [x] Clear offers Undo, `UndoKind::Correction` with its own Accessibility switch.
+- [x] `show_bit_perfect_reset` (`ui/settings/signal_path.rs:47-53`) turns the card's switch off
       with the Equalizer's.
-- [ ] The onboarding row, its label and description the Settings row's.
-- [ ] The signal path panel names the correction.
-- [ ] `headphones` (and any other new ligature) into `scripts/icons.txt`, the re-subset and a clean
-      `scripts/check-icons.py`.
-- [ ] Strings through `@tr`, counts as plurals; `scripts/update-translations.py` and all fifteen
+- [x] The onboarding row, its label and description `CorrectionText`'s.
+- [x] The signal path panel names the correction, the Effects row naming up to three effects in
+      the order the samples meet them.
+- [ ] `headphones` into `scripts/icons.txt`, the re-subset and a clean `scripts/check-icons.py`.
+      The list holds it; the re-subset waits on fontTools.
+- [x] Strings through `@tr`, counts as plurals; `scripts/update-translations.py` and all fifteen
       catalogs finished.
-- [ ] Docs: `README.md`'s effects lines; `.claude/rules/ui-patterns.md`'s catalogue if the picker
-      body is shaped for reuse.
+- [x] Docs: `README.md`'s effects, undo and data-folder lines and its acknowledgments;
+      `.claude/rules/ui-patterns.md`'s contract for an answer landing on a dialog already up. The
+      picker body is the correction's own, so the catalogue gains no entry.
 
 **Gate:**
 - [ ] The static gates, and the onboarding and settings tests fixed where the new rows break them.
+      fmt, clippy and the whole suite pass, the catalogs included, and no test needed fixing;
+      `scripts/check-icons.py` waits on the re-subset.
 
 ## Phase 6: Testing
 
@@ -498,9 +513,9 @@ tests a phase breaks are fixed in that phase. The facade's corpus walk lands her
   what it constrains as that lands.
 - **800 lines:** `equalizer.rs` (709 with the stage wired) gains no more; if it passes 760 the
   limiter moves to its own file first. `backend/mod.rs` (677 with the correction's field) holds
-  every stage's cells in one `DspControls`. `app-window.slint` (750) gains its export lines only.
-  `library/playback.rs` (561 with its two setters) gains nothing more. Everything else new is its
-  own module.
+  every stage's cells in one `DspControls`. `app-window.slint` (751) gained its export lines only.
+  `library/playback.rs` (567 with the heard-device getter and the bump) gains nothing more.
+  Everything else new is its own module.
 - **Memory:** two banks of 20 f64 filters per channel per source, a few KiB; the list only while
   the picker is open. The hand tests measure it.
 - **Lock order** (ADR 0035) is untouched: only the output choice's lock is taken under the

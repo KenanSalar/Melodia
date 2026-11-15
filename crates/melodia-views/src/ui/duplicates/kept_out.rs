@@ -9,9 +9,10 @@ use std::rc::{Rc, Weak};
 use slint::{ComponentHandle, ModelRc};
 use tokio::runtime::Handle;
 
-use super::landing::{DialogTicket, TicketedDialog};
+use super::landing::DialogRows;
 use super::rows::{day_of, file_and_folder};
 use crate::ui::callbacks::clipboard::spawn_copy;
+use crate::ui::dialog_landing::{DialogTicket, TicketedDialog};
 use crate::ui::paged_rows::{Keyset, PagedRow, PagedRows, ReadStamp, RowRequest};
 use crate::ui::shell::notifications::{Completion, NotificationsUi, RowText};
 use crate::ui::signal::on_signal;
@@ -228,7 +229,6 @@ impl KeptOutList {
 
 impl TicketedDialog for KeptOutList {
     const LABEL: &'static str = "kept-out files";
-    const ROWS_LABEL: &'static str = "kept-out rows";
 
     fn window(&self) -> &slint::Weak<AppWindow> {
         &self.ui
@@ -241,6 +241,10 @@ impl TicketedDialog for KeptOutList {
     fn runtime(&self) -> &Handle {
         &self.state.runtime
     }
+}
+
+impl DialogRows for KeptOutList {
+    const ROWS_LABEL: &'static str = "kept-out rows";
 }
 
 impl PagedRow for KeptOutRow {

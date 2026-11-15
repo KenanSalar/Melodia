@@ -72,4 +72,10 @@ impl PlaybackEngine {
     pub fn set_correction_enabled(&self, enabled: bool) {
         self.correction.lock().set_enabled(enabled);
     }
+
+    /// The device whose correction plays, `None` naming System default; it moves once a reopen
+    /// has returned.
+    pub fn heard_device(&self) -> Option<String> {
+        self.correction.lock().heard.clone()
+    }
 }

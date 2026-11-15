@@ -2,7 +2,7 @@
 //!
 //! No second context exists: elsewhere in `library` a function takes the one field it reads or the
 //! whole state, and a struct between the two would only rename one of them. The context owns its
-//! `Arc`s rather than borrowing from `AppState`, so building one is six clones and it moves into
+//! `Arc`s rather than borrowing from `AppState`, so building one is seven clones and it moves into
 //! an `async move` without a lifetime to satisfy.
 
 use std::sync::{Arc, OnceLock};
@@ -13,7 +13,7 @@ use melodia_engine::player::engine::event_sink::PlayerSinks;
 use melodia_engine::player::engine::state::{PlayerAction, PlayerState, PlayerStateHandle};
 use melodia_store::database::DbPool;
 
-use super::AppState;
+use super::{AppState, Signal};
 
 /// Dependency slice consumed by `library::playback::*`.
 #[derive(Clone)]
@@ -27,6 +27,8 @@ pub struct PlaybackContext {
     /// Carried rather than passed per call, resuming a paused station being a transport command
     /// like any other and `player_play` having only this.
     pub http: Arc<OnceLock<reqwest::Client>>,
+    /// [`AppState::output_changed`], carried so the one function that aims the engine bumps it.
+    pub output_changed: Signal,
 }
 
 impl PlaybackContext {
@@ -55,6 +57,7 @@ impl AppState {
             db: self.db.clone(),
             paths: self.paths.clone(),
             http: self.http_client_cell(),
+            output_changed: self.output_changed.clone(),
         }
     }
 }

@@ -1,7 +1,7 @@
 //! The duplicate finder's dialog: a find as it opens, the removal picks over its groups, Not
 //! Duplicates, and the Remove behind its Confirm step. `kept_out` is the list of what Remove left.
 //!
-//! Every answer but Remove's lands under the ticket it was sent with (`landing`).
+//! Every answer but Remove's lands under the ticket it was sent with (`ui::dialog_landing`).
 
 mod apply;
 mod kept_out;
@@ -16,10 +16,11 @@ use std::rc::{Rc, Weak};
 use slint::{ComponentHandle, ModelRc};
 use tokio::runtime::Handle;
 
+use crate::ui::dialog_landing::{DialogTicket, TicketedDialog};
 use crate::ui::paged_rows::{Keyset, PagedRows, ReadStamp, RowRequest};
 use crate::ui::shell::notifications::NotificationsUi;
 use crate::ui::util::{format_size, len_as_i32};
-use landing::{DialogTicket, TicketedDialog};
+use landing::DialogRows;
 use melodia_app::library;
 use melodia_app::state::AppState;
 use melodia_core::error::describe;
@@ -199,7 +200,6 @@ impl Finder {
 
 impl TicketedDialog for Finder {
     const LABEL: &'static str = "duplicates";
-    const ROWS_LABEL: &'static str = "duplicate rows";
 
     fn window(&self) -> &slint::Weak<AppWindow> {
         &self.ui
@@ -212,6 +212,10 @@ impl TicketedDialog for Finder {
     fn runtime(&self) -> &Handle {
         &self.state.runtime
     }
+}
+
+impl DialogRows for Finder {
+    const ROWS_LABEL: &'static str = "duplicate rows";
 }
 
 /// Reads the rows on screen by id, a header through its best copy.

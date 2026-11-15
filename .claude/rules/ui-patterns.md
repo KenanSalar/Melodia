@@ -75,6 +75,8 @@ Paths are under `crates/melodia-ui/ui/components/` unless stated.
 - **A raise that crosses an `await` owes a `DialogClaim`, and a deferred raise is an opener too**,
   single caller or not: inline chrome bumps nothing. `dialog_openers.rs` walks only the kinds it
   lists, so a new dialog is on its own.
+- **An answer for a dialog already up lands through `ui::dialog_landing`'s ticket**, which a close
+  moves; `DialogClaim` can't guard it, holding only while no dialog is open.
 - **A dialog with two steps is one kind whose step its own global holds**, the Dialog unable to
   open a second over itself. The footer in `components/dialog/dialog.slint` reads the step for its
   labels and gate, `accepted` advances it, the kind stays open after accept, and the step is reset

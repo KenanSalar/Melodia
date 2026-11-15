@@ -11,6 +11,11 @@ export global UndoText {
         return @tr("Equalizer reset");
     }
 
+    pure callback correction-cleared() -> string;
+    correction-cleared() => {
+        return @tr("Headphone correction cleared");
+    }
+
     pure callback recent-searches-cleared() -> string;
     recent-searches-cleared() => {
         return @tr("Recent searches cleared");

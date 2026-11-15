@@ -45,6 +45,7 @@ folder_off
 folder_open
 graphic_eq
 grid_view
+headphones
 heart_minus
 history
 home

@@ -143,6 +143,87 @@ msgstr "Az állomás nevét és adatfolyamát a katalógus adja. Amit üresen ha
 msgid "Checking the stream…"
 msgstr "Adatfolyam ellenőrzése…"
 
+#: ui/components/dialog/correction-import-body.slint
+msgid "Switched off"
+msgstr "Kikapcsolva"
+
+#: ui/components/dialog/correction-import-body.slint
+msgid "A filter type Melodia doesn't run"
+msgstr "Olyan szűrőtípus, amelyet a Melodia nem futtat"
+
+#: ui/components/dialog/correction-import-body.slint
+msgid "Frequency out of range"
+msgstr "A frekvencia a tartományon kívül esik"
+
+#: ui/components/dialog/correction-import-body.slint
+msgid "Gain out of range"
+msgstr "Az erősítés a tartományon kívül esik"
+
+#: ui/components/dialog/correction-import-body.slint
+msgid "Q out of range"
+msgstr "A Q a tartományon kívül esik"
+
+#: ui/components/dialog/correction-import-body.slint
+msgid "Not a line Melodia can read"
+msgstr "Nem olyan sor, amelyet a Melodia be tud olvasni"
+
+#. Translators: {} is the line's number in the file, then why it goes unused.
+#: ui/components/dialog/correction-import-body.slint
+msgid "Line {}: {}"
+msgstr "{}. sor: {}"
+
+#: ui/components/dialog/correction-import-body.slint
+msgid "Paste a parametric EQ profile, as AutoEq writes it, or choose its file."
+msgstr "Illessz be egy parametrikus EQ-profilt úgy, ahogy az AutoEq írja, vagy válaszd ki a fájlját."
+
+#: ui/components/dialog/correction-import-body.slint
+msgid "Choose File…"
+msgstr "Fájl kiválasztása…"
+
+#: ui/components/dialog/correction-import-body.slint
+msgid "The file couldn't be read."
+msgstr "A fájlt nem sikerült beolvasni."
+
+#: ui/components/dialog/correction-import-body.slint
+msgid "That's larger than a correction profile can be."
+msgstr "Ez nagyobb, mint amekkora egy korrekciós profil lehet."
+
+#: ui/components/dialog/correction-import-body.slint
+msgid "This profile sets each ear apart, and a correction applies to both."
+msgstr "Ez a profil külön állítja a két fület, a korrekció viszont mindkettőre vonatkozik."
+
+#: ui/components/dialog/correction-import-body.slint
+msgid "There's no filter here Melodia can run."
+msgstr "Nincs itt olyan szűrő, amelyet a Melodia futtatni tud."
+
+#: ui/components/dialog/correction-import-body.slint
+msgid "This profile holds {n} filter, more than a correction can."
+msgid_plural "This profile holds {n} filters, more than a correction can."
+msgstr[0] "Ez a profil {n} szűrőt tartalmaz, többet, mint amennyit egy korrekció elbír."
+msgstr[1] "Ez a profil {n} szűrőt tartalmaz, többet, mint amennyit egy korrekció elbír."
+
+#. Translators: {} is the imported file's name.
+#: ui/components/dialog/correction-import-body.slint
+#: ui/components/settings/correction-controls.slint
+msgid "From {}"
+msgstr "Forrás: {}"
+
+#: ui/components/dialog/correction-import-body.slint
+msgid "{n} filter will be applied."
+msgid_plural "{n} filters will be applied."
+msgstr[0] "{n} szűrő lesz alkalmazva."
+msgstr[1] "{n} szűrő lesz alkalmazva."
+
+#: ui/components/dialog/correction-import-body.slint
+msgid "Every line will be used."
+msgstr "Minden sor fel lesz használva."
+
+#: ui/components/dialog/correction-import-body.slint
+msgid "{n} line won't be used:"
+msgid_plural "{n} lines won't be used:"
+msgstr[0] "{n} sor nem lesz felhasználva:"
+msgstr[1] "{n} sor nem lesz felhasználva:"
+
 #: ui/components/dialog/credit-editor.slint
 #: ui/components/dialog/name-list-editor.slint ui/globals/dialog.slint
 #: ui/views/radio/tab-pills.slint
@@ -219,6 +300,15 @@ msgstr "Tovább"
 #: ui/views/settings/library-section.slint
 msgid "Remove"
 msgstr "Eltávolítás"
+
+#: ui/components/dialog/dialog.slint ui/globals/dialog.slint
+#: ui/views/settings/correction-section.slint
+msgid "Apply"
+msgstr "Alkalmaz"
+
+#: ui/components/dialog/dialog.slint
+msgid "Review"
+msgstr "Ellenőrzés"
 
 #: ui/components/dialog/duplicate-row.slint
 msgid "Identical files"
@@ -379,6 +469,49 @@ msgstr "Nincs exportálható lejátszási lista"
 msgid "Several playlists are saved as one .zip file, which you can import directly without extracting it."
 msgstr "Több lejátszási lista egyetlen .zip fájlba kerül, amelyet kicsomagolás nélkül, közvetlenül importálhatsz."
 
+#. Translators: {} names who measured the headphones, as oratory1990.
+#: ui/components/dialog/headphone-picker-body.slint
+msgid "Measured by {}"
+msgstr "Mérte: {}"
+
+#: ui/components/dialog/headphone-picker-body.slint
+msgid "Find a model…"
+msgstr "Modell keresése…"
+
+#: ui/components/dialog/headphone-picker-body.slint
+#: ui/components/dialog/kept-out-body.slint ui/views/radio/browse-tab.slint
+#: ui/views/radio/facet-chip.slint
+msgid "Loading…"
+msgstr "Betöltés…"
+
+#: ui/components/dialog/headphone-picker-body.slint
+msgid "Couldn't reach AutoEq"
+msgstr "Az AutoEq nem érhető el"
+
+#: ui/components/dialog/headphone-picker-body.slint
+msgid "AutoEq's list couldn't be read"
+msgstr "Az AutoEq listáját nem sikerült beolvasni"
+
+#: ui/components/dialog/headphone-picker-body.slint
+msgid "No model matches"
+msgstr "Nincs egyező modell"
+
+#: ui/components/dialog/headphone-picker-body.slint
+msgid "A correction file can still be imported from the card."
+msgstr "Korrekciós fájlt továbbra is importálhatsz a kártyáról."
+
+#: ui/components/dialog/headphone-picker-body.slint
+msgid "Couldn't reach AutoEq. Check your connection and try again."
+msgstr "Az AutoEq nem érhető el. Ellenőrizd a kapcsolatot, és próbáld újra."
+
+#: ui/components/dialog/headphone-picker-body.slint
+msgid "AutoEq's profile for this model holds lines Melodia can't read."
+msgstr "Az AutoEq profilja ehhez a modellhez olyan sorokat tartalmaz, amelyeket a Melodia nem tud beolvasni."
+
+#: ui/components/dialog/headphone-picker-body.slint
+msgid "Couldn't apply the correction. See the log for details."
+msgstr "A korrekciót nem sikerült alkalmazni. A részleteket a naplóban találod."
+
 #. Translators: {} is the day the copy left the library, as 2026-11-02.
 #: ui/components/dialog/kept-out-body.slint
 msgid "Removed {}"
@@ -402,11 +535,6 @@ msgstr "Összes visszaállítása"
 msgid "Bringing back…"
 msgstr "Visszaállítás…"
 
-#: ui/components/dialog/kept-out-body.slint ui/views/radio/browse-tab.slint
-#: ui/views/radio/facet-chip.slint
-msgid "Loading…"
-msgstr "Betöltés…"
-
 #: ui/components/dialog/kept-out-body.slint
 msgid "Couldn't read the list."
 msgstr "Nem sikerült beolvasni a listát."
@@ -429,6 +557,7 @@ msgstr "{}/4 kijelölve"
 
 #: ui/components/dialog/playlist-mosaic-picker.slint
 #: ui/views/queue-panel/queue-panel.slint
+#: ui/views/settings/correction-section.slint
 msgid "Clear"
 msgstr "Törlés"
 
@@ -1503,6 +1632,64 @@ msgstr "{} elem értékelése"
 msgid "Search…"
 msgstr "Keresés…"
 
+#: ui/components/settings/correction-controls.slint
+#: ui/views/settings/output-section.slint ui/views/settings/undo-section.slint
+msgid "Headphone correction"
+msgstr "Fejhallgató-korrekció"
+
+#: ui/components/settings/correction-controls.slint
+msgid "Enable headphone correction"
+msgstr "Fejhallgató-korrekció bekapcsolása"
+
+#: ui/components/settings/correction-controls.slint
+msgid "Even out how your headphones color the sound, with a correction measured for their model"
+msgstr "Kiegyenlíti, ahogy a fejhallgatód színezi a hangot, a modelljéhez mért korrekcióval"
+
+#: ui/components/settings/correction-controls.slint
+msgid "Find corrections online"
+msgstr "Korrekciók keresése online"
+
+#: ui/components/settings/correction-controls.slint
+msgid "Look headphone models up in AutoEq's list on github.com"
+msgstr "Fejhallgatómodellek keresése az AutoEq listájában a github.com-on"
+
+#: ui/components/settings/correction-controls.slint
+msgid "Find Headphones"
+msgstr "Fejhallgató keresése"
+
+#: ui/components/settings/correction-controls.slint
+#: ui/views/my-library/tab-pills.slint ui/views/radio/tab-pills.slint
+msgid "Import"
+msgstr "Importálás"
+
+#: ui/components/settings/correction-controls.slint ui/settings.slint
+msgid "System Default"
+msgstr "Rendszer alapértelmezése"
+
+#: ui/components/settings/correction-controls.slint
+#: ui/views/settings/output-section.slint
+#: ui/views/settings/scrobbling-section.slint
+msgid "Not connected"
+msgstr "Nincs csatlakoztatva"
+
+#. Translators: {} is an output device's name.
+#: ui/components/settings/correction-controls.slint
+msgid "{} (not connected)"
+msgstr "{} (nincs csatlakoztatva)"
+
+#. Translators: a headphone model, then who measured it.
+#: ui/components/settings/correction-controls.slint
+msgid "{} · measured by {}"
+msgstr "{} · mérte: {}"
+
+#: ui/components/settings/correction-controls.slint
+msgid "Pasted profile"
+msgstr "Beillesztett profil"
+
+#: ui/components/settings/correction-controls.slint
+msgid "No correction set for this device"
+msgstr "Ehhez az eszközhöz nincs beállítva korrekció"
+
 #: ui/components/settings/equalizer-controls.slint
 #: ui/views/settings/animations-section.slint
 #: ui/views/settings/output-section.slint ui/views/settings/undo-section.slint
@@ -1655,6 +1842,7 @@ msgstr "{}/{} fájl"
 #: ui/components/settings/scan-progress.slint ui/globals/dialog-forms.slint
 #: ui/globals/dialog.slint ui/views/queue-panel/queue-panel.slint
 #: ui/views/radio/tab-pills.slint ui/views/settings/appearance-section.slint
+#: ui/views/settings/correction-section.slint
 #: ui/views/settings/duplicates-section.slint
 #: ui/views/settings/library-section.slint
 #: ui/views/settings/output-section.slint
@@ -1963,10 +2151,6 @@ msgid "Edit Artwork"
 msgstr "Borító szerkesztése"
 
 #: ui/globals/dialog.slint
-msgid "Apply"
-msgstr "Alkalmaz"
-
-#: ui/globals/dialog.slint
 msgid "Export Playlists"
 msgstr "Lejátszási listák exportálása"
 
@@ -2120,6 +2304,10 @@ msgid "Equalizer reset"
 msgstr "Hangszínszabályzó visszaállítva"
 
 #: ui/globals/undo-text.slint
+msgid "Headphone correction cleared"
+msgstr "Fejhallgató-korrekció törölve"
+
+#: ui/globals/undo-text.slint
 msgid "Recent searches cleared"
 msgstr "Legutóbbi keresések törölve"
 
@@ -2204,10 +2392,6 @@ msgstr "Kibontás"
 #: ui/layout/sidebar.slint
 msgid "Collapse"
 msgstr "Összecsukás"
-
-#: ui/settings.slint
-msgid "System Default"
-msgstr "Rendszer alapértelmezése"
 
 #: ui/settings.slint
 msgid "File watching disabled"
@@ -2707,10 +2891,6 @@ msgstr "Lejátszási lista létrehozása szabályok alapján"
 msgid "More playlist actions"
 msgstr "További lejátszásilista-műveletek"
 
-#: ui/views/my-library/tab-pills.slint ui/views/radio/tab-pills.slint
-msgid "Import"
-msgstr "Importálás"
-
 #: ui/views/now-playing-view.slint ui/views/radio/tab-pills.slint
 msgid "Vote"
 msgstr "Szavazás"
@@ -3106,6 +3286,18 @@ msgstr "Monokróm"
 msgid "Changing the backdrop style requires restarting Melodia. Restart now?"
 msgstr "A háttérstílus módosításához újra kell indítani a Melodiát. Újraindítod most?"
 
+#: ui/views/settings/correction-section.slint
+msgid "Find Your Headphones"
+msgstr "Keresd meg a fejhallgatódat"
+
+#: ui/views/settings/correction-section.slint
+msgid "AutoEq's corrections, one measurement for each model."
+msgstr "Az AutoEq korrekciói, modellenként egy mérés."
+
+#: ui/views/settings/correction-section.slint
+msgid "Import a Correction"
+msgstr "Korrekció importálása"
+
 #: ui/views/settings/diagnostics-section.slint
 msgid "Diagnostics"
 msgstr "Diagnosztika"
@@ -3424,9 +3616,15 @@ msgstr "az eszközt nem sikerült megnyitni"
 msgid "No effects"
 msgstr "Nincsenek effektek"
 
+#. Translators: two effects' names, as ReplayGain and Equalizer.
 #: ui/views/settings/output-section.slint
-msgid "Equalizer and ReplayGain"
-msgstr "Hangszínszabályzó és ReplayGain"
+msgid "{} and {}"
+msgstr "{} és {}"
+
+#. Translators: three effects' names, in the order they apply.
+#: ui/views/settings/output-section.slint
+msgid "{}, {} and {}"
+msgstr "{}, {} és {}"
 
 #: ui/views/settings/output-section.slint
 msgid "Shared"
@@ -3435,11 +3633,6 @@ msgstr "Megosztott"
 #: ui/views/settings/output-section.slint
 msgid "Exclusive"
 msgstr "Kizárólagos"
-
-#: ui/views/settings/output-section.slint
-#: ui/views/settings/scrobbling-section.slint
-msgid "Not connected"
-msgstr "Nincs csatlakoztatva"
 
 #: ui/views/settings/output-section.slint
 msgid "Play Through the System Mixer"
@@ -3791,6 +3984,10 @@ msgstr "A kedvencek vagy a nemrég lejátszottak közül eltávolított állomá
 #: ui/views/settings/undo-section.slint
 msgid "Resetting the equalizer."
 msgstr "A hangszínszabályzó visszaállítása."
+
+#: ui/views/settings/undo-section.slint
+msgid "Clearing a device's headphone correction."
+msgstr "Egy eszköz fejhallgató-korrekciójának törlése."
 
 #: ui/views/settings/undo-section.slint
 msgid "Recent searches"

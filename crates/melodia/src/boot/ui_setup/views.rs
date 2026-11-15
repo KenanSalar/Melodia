@@ -201,6 +201,7 @@ pub fn install_library_settings_and_friends(
     ui::settings::playback_settings::install_playback_settings(app, state);
     ui::settings::signal_path::install(app, state);
     ui::settings::output_settings::install(app, state);
+    ui::correction::install(app, state, undo);
     ui::equalizer::install_equalizer(app, state, undo);
     ui::replaygain::install_replaygain(app, state)
         .map_err(|e| melodia_core::error::AppError::io("replaygain install", e))?;

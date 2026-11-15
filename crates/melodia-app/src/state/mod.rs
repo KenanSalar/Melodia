@@ -76,6 +76,9 @@ pub struct AppState {
     /// Bumped by `tasks::audio_health` when the output device goes away, for the sticky toast that
     /// is the only notice: playback otherwise runs on in silence.
     pub audio_device_lost: Signal,
+    /// Bumped once the engine is aimed at a new output choice, for the headphone correction card,
+    /// which names the device it speaks for.
+    pub output_changed: Signal,
     /// How many scans are restoring cover art whose stored file went missing, for the notice. A
     /// count rather than a [`Signal`], since the boot scan can start before the notice subscribes.
     pub artwork_restoring: HoldCount,
@@ -217,6 +220,7 @@ impl AppState {
             rescan_notice: Signal::new(),
             auto_check_changed: Signal::new(),
             audio_device_lost: Signal::new(),
+            output_changed: Signal::new(),
             artwork_restoring: HoldCount::new(),
             scan,
             loudness: Arc::new(LoudnessControl::new()),
