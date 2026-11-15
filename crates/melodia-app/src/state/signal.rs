@@ -1,8 +1,9 @@
-//! The three shared cells [`super::AppState`] hands out by the handful, so no field hand-rolls one.
+//! The shared cells [`super::AppState`] hands out by the handful, so no field hand-rolls one.
 
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 
+use parking_lot::{Mutex, MutexGuard};
 use tokio::sync::watch;
 
 /// A settings toggle mirrored where a worker can read it without touching the disk.
@@ -23,6 +24,34 @@ impl SharedFlag {
 
     pub fn set(&self, value: bool) {
         self.0.store(value, Ordering::Relaxed);
+    }
+}
+
+/// A value as its writers last set it, and the lock a task holds from reading it through the
+/// apply that hands it on.
+pub struct Shadowed<T> {
+    picked: Mutex<T>,
+    applying: Mutex<()>,
+}
+
+impl<T> Shadowed<T> {
+    pub fn new(value: T) -> Self {
+        Self { picked: Mutex::new(value), applying: Mutex::new(()) }
+    }
+
+    /// For a writer to set before it spawns the apply.
+    pub fn picked(&self) -> MutexGuard<'_, T> {
+        self.picked.lock()
+    }
+
+    /// Hands `apply` the value as it stands, holding the apply lock until it returns. Ordering only
+    /// the read would let a task that read an older value land after a newer one, the engine and
+    /// the settings file each taking a lock of its own. The value's own lock is let go first, so a
+    /// click never waits on a device open.
+    pub fn apply_latest<P, R>(&self, read: impl FnOnce(&T) -> P, apply: impl FnOnce(P) -> R) -> R {
+        let _applying = self.applying.lock();
+        let latest = read(&self.picked.lock());
+        apply(latest)
     }
 }
 

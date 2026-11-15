@@ -139,7 +139,8 @@ pub enum CorrectionOrigin {
     Paste,
 }
 
-/// Every device's correction, keyed by the device the output is aimed at.
+/// Every device's correction, keyed by the device the output is aimed at, `None` naming System
+/// default.
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
 #[serde(default)]
 pub struct DeviceCorrections {
@@ -150,11 +151,74 @@ pub struct DeviceCorrections {
 }
 
 impl DeviceCorrections {
-    /// `None` names System default.
     pub fn for_device(&self, device: Option<&str>) -> Option<&Correction> {
         match device {
             Some(id) => self.devices.get(id),
             None => self.system_default.as_ref(),
         }
     }
+
+    pub fn insert(&mut self, device: Option<String>, correction: Correction) {
+        match device {
+            Some(id) => {
+                self.devices.insert(id, correction);
+            }
+            None => self.system_default = Some(correction),
+        }
+    }
+
+    pub fn remove(&mut self, device: Option<&str>) {
+        match device {
+            Some(id) => {
+                self.devices.remove(id);
+            }
+            None => self.system_default = None,
+        }
+    }
+}
+
+/// One model on `AutoEq`'s list of recommended profiles.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct AutoEqEntry {
+    pub name: Box<str>,
+    /// Whose measurement it is.
+    pub source: Box<str>,
+    /// Decoded segments under the list's folder, joined by `/`; the last names the model's files.
+    pub path: Box<str>,
+}
+
+/// A parametric file read for a correction: the filters it runs, and every line it won't use.
+#[derive(Clone, Debug)]
+pub struct ParsedProfile {
+    pub filters: CorrectionFilters,
+    pub skipped: Box<[SkippedLine]>,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct SkippedLine {
+    /// From 1, as an editor counts.
+    pub number: usize,
+    pub text: Box<str>,
+    pub reason: SkipReason,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum SkipReason {
+    /// A filter switched `OFF`.
+    Off,
+    /// A filter shape or width the correction has no stage for.
+    Unsupported,
+    OutOfRange(FilterError),
+    /// Not a line of the format, or one the correction doesn't run (`GraphicEQ:` among them).
+    Unreadable,
+}
+
+/// A parametric file refused whole rather than applied in part.
+#[derive(Clone, Copy, Debug, PartialEq, thiserror::Error)]
+pub enum ProfileRefusal {
+    #[error("the file sets one ear apart from the other")]
+    OneEar,
+
+    #[error(transparent)]
+    Filters(#[from] FilterSetError),
 }

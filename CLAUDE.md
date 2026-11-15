@@ -67,8 +67,9 @@ cargo llvm-cov --workspace --html          # coverage → target/llvm-cov/html/
 
 ### Facades and primitives
 
-- **Nothing outside `library::radio` names `radio_browser`** (`radio_facade.rs`), and nothing
-  outside `library::lyrics` names `lyrics_directory` (`lyrics_switch.rs`).
+- **Nothing outside `library::radio` names `radio_browser`** (`radio_facade.rs`), nothing outside
+  `library::lyrics` names `lyrics_directory` (`lyrics_switch.rs`), and nothing outside
+  `library::correction` names `services::net::autoeq`.
 - **Every fetch parses its URL with `http_url` and reads its body through `read_capped`**, never
   `bytes()` or `.json::<T>()`, the updater's download to a file excepted. `net_primitives.rs`
   walks the scheme test and the streamed read; `bytes()` and `.json()` are review's,

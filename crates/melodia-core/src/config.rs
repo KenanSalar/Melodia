@@ -12,6 +12,10 @@ pub struct Paths {
     pub search_history_path: PathBuf,
     pub scrobble_credentials_path: PathBuf,
     pub scrobble_queue_path: PathBuf,
+    /// `AutoEq`'s list as last fetched, read only while the headphone picker is open.
+    pub autoeq_list_path: PathBuf,
+    /// The list's `ETag` and when it was last checked.
+    pub autoeq_list_meta_path: PathBuf,
     pub artwork_dir: PathBuf,
     pub artists_dir: PathBuf,
     /// Apart from [`Self::artwork_dir`], whose contents a re-scan rebuilds: a logo came off a
@@ -75,6 +79,8 @@ impl Paths {
             search_history_path: data_dir.join("search_history.json"),
             scrobble_credentials_path: data_dir.join("scrobble_credentials.json"),
             scrobble_queue_path: data_dir.join("scrobble_queue.json"),
+            autoeq_list_path: data_dir.join("autoeq_list.md"),
+            autoeq_list_meta_path: data_dir.join("autoeq_list.json"),
             artwork_dir: data_dir.join("artwork"),
             artists_dir: data_dir.join("artists"),
             radio_logos_dir: data_dir.join("radio-logos"),

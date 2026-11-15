@@ -66,6 +66,8 @@ impl Default for EqualizerFlags {
 pub struct CorrectionFlags {
     pub correction_enabled: bool,
     pub corrections: DeviceCorrections,
+    /// Whether `AutoEq`'s list and profiles may be fetched. Import works either way.
+    pub correction_online: bool,
 }
 
 /// Ships off, with `rg_prevent_clipping` on for once it isn't. `rg_mode` is a lowercase token, an

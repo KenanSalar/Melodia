@@ -2,7 +2,7 @@
 
 Working doc. Delete when the feature ships.
 
-Status: **Phase 4 next** · Created: 2026-11-14
+Status: **Phase 5 next** · Created: 2026-11-14
 
 Issue [#144](https://github.com/KenanSalar/Melodia/issues/144).
 
@@ -171,10 +171,14 @@ next write would build a set mixing two headphones and ramp to it.
   20 finite filters in range, built through `TryFrom` (serde `try_from`), so a hand-edited
   `settings.json` can't hand the DSP a bad one. A bad one fails the `corrections` key alone, which
   the loader resets and logs (`utils/atomic_file.rs:36-66`).
-- **Persisted in `settings.json`** as `CorrectionFlags { correction_enabled, corrections }`,
-  flattened and `serde(default)` like its siblings, `correction_online` joining in Phase 4. Several
-  writers (apply, import, clear) share one synchronous shadow on `AppState`, set before each
-  persist, which writes the shadow's latest; the engine gets a copy at each write.
+- **Persisted in `settings.json`** as `CorrectionFlags { correction_enabled, corrections,
+  correction_online }`, flattened and `serde(default)` like its siblings. Apply, import and clear
+  share one synchronous shadow, `AppState.corrections`, a `Shadowed` (`state/signal.rs`, the Output
+  card's too) edited before each persist; `library::correction::commit` is the one writer, its
+  `apply_latest` handing the engine and the file the map as it stands. Nothing reads the map off
+  disk, so nothing is kicked after the write.
+- **A write's device comes from the caller** (`CorrectionTarget`), as the card named it when the
+  user acted, so a profile still downloading as the output moves lands where it was asked for.
 - The card learns of a device switch through a new `AppState.output_changed` `Signal`, bumped
   where every device change in the views passes. `library::playback::player_set_output_choice` is
   that funnel, but it takes a `PlaybackContext`, which carries no `Signal`
@@ -183,9 +187,10 @@ next write would build a set mixing two headphones and ramp to it.
 ### Online, the way radio and lyrics are
 
 - **`library::correction` is the facade, and the only place that names `services::net::autoeq`.**
-  Its `autoeq_client` is `ensure_online(state)?` then `state.http_client()`, the shape of
-  `library::radio`'s `directory_client` (`library/radio/mod.rs:51-63`), and the one read of the
-  `correction_online` `SharedFlag`.
+  Its `autoeq_client` checks the `correction_online` `SharedFlag`, then hands out
+  `state.http_client()`, the shape of `library::radio`'s `directory_client`
+  (`library/radio/mod.rs:51-63`), and is the flag's one read. The check has no other caller, so
+  there is no `ensure_online` beside it.
 - **Where the files are:** `https://raw.githubusercontent.com/jaakkopasanen/AutoEq/master/results/`,
   the list `README.md` and a profile `<path>/<model> ParametricEQ.txt`, the model being the path's
   last segment. The base is parsed through `http_url`. A profile URL is the base joined with the
@@ -209,7 +214,9 @@ next write would build a set mixing two headphones and ramp to it.
   to start). The cached list shows at once, the check runs behind it, and a changed list repaints
   the open picker.
 - What the picker says: the list; "Couldn't reach AutoEq" with no cache and no network; "AutoEq's
-  list couldn't be read" when what arrived parses to nothing. Both point at Import.
+  list couldn't be read" when what arrived, or a cache with no answer behind it, parses to
+  nothing. Both point at Import. `recheck_list`'s `ListAnswer` carries the four outcomes, a
+  failed recheck behind a usable cache answering `Unchanged`.
 - **In memory only while open.** The parsed entries are held beside the picker's model and dropped
   in the dialog's `closed-teardown`, as the kept-out list is (`duplicates/kept_out.rs:217-226`).
   The model draws at most `PICKER_ROW_CAP` rows, the needle searching them all, as the radio facet
@@ -221,15 +228,18 @@ next write would build a set mixing two headphones and ramp to it.
   `)`, since names and paths carry parentheses (2,048 of the list's paths on 2026-11-14), and the
   name ends at the first `](./`.
 - Segments are percent-decoded (the list escapes spaces and UTF-8) and a path needs at least a
-  source and a model; `..` is refused.
-- A line that opens `- [` and doesn't parse is counted and logged at `debug`.
+  source and a model; an empty, `.` or `..` segment, or one decoding to a `/`, is refused.
+- A line that opens `- [` and doesn't parse is left out, the count logged once at `debug` with the
+  first such line.
 - Entries are `AutoEqEntry { name, source, path }` of `Box<str>` in `melodia-core`, so the views
   can name them without naming `melodia-net`.
 
 ### Reading a parametric file
 
-The Equalizer APO syntax AutoEq writes, parsed in `melodia-app`
-(`services/correction/parametric.rs`), shared by Import and by a fetched profile:
+The Equalizer APO syntax AutoEq writes, parsed beside its facade
+(`library/correction/parametric.rs`, as `library/lyrics/lrc.rs` is: `services/` holds what needs
+the database or the app state, and the parser needs neither), shared by Import and by a fetched
+profile:
 
 - `Filter[ n]: ON PK|PEQ|Modal|LSC|HSC Fc <hz> Hz Gain <db> dB Q <q>` is a filter.
 - `Preamp: <db> dB` is read and not applied.
@@ -242,7 +252,8 @@ The Equalizer APO syntax AutoEq writes, parsed in `melodia-app`
   set apart), more than 20 filters, no filter at all.
 - **A fetched profile with any line listed is refused**, logged with the lines, rather than shown a
   review: AutoEq's layout isn't a promise, and a changed format must not apply half a curve. Import
-  is the way in if it moves.
+  is the way in if it moves. The refusal is an `AppError::Validation`, which the card tells from a
+  `Network` failure and the switch's `Settings` refusal by variant.
 
 ### Bit-perfect
 
@@ -277,11 +288,10 @@ persists it (`library/settings/playback.rs:71-81`).
 | the stage | `crates/melodia-playback/src/player/playback/correction/` | `shared.rs`: `CorrectionShared`, its sequence counter and `CorrectionWriter`. `bank.rs`: `CorrectionStage`, the per-channel banks and the swap ramp. `response.rs`: the grid, `\|H\|²` and the headroom |
 | the wrapper | `player/playback/equalizer.rs` | `DspControls` in, the stage polled with the other two generations, the f64 bands, bypass and seek |
 | engine | `crates/melodia-engine/src/player/engine/backend/{mod,correction,output}.rs`, `signal_path.rs` | `DspControls` owned once; `correction.rs`: `CorrectionControl` (the writer, the map, the switch, the heard device) and its `select`; `OutputChoice::heard_device` and the aim; `SignalInputs.correction_on` |
-| net | `crates/melodia-net/src/services/net/mod.rs`, `services/net/autoeq/` | `get_capped_if_changed`; the URLs and their guard, the list fetch, the profile fetch, the list parser |
-| parser | `crates/melodia-app/src/services/correction/parametric.rs` | the format above |
+| net | `crates/melodia-net/src/services/net/mod.rs`, `services/net/autoeq/` | `get_capped_if_changed`; `autoeq/mod.rs`: the URLs and their guard, the list fetch, the profile fetch. `autoeq/list.rs`: the list parser |
 | settings | `crates/melodia-app/src/services/settings/playback.rs`, `library/settings/correction.rs` | `CorrectionFlags` beside `EqualizerFlags`; the setters through `mutate_settings` |
-| facade | `crates/melodia-app/src/library/correction/` | `mod.rs`: `ensure_online`, `autoeq_client`, the shadow. `list.rs`: the cache, the recheck, the states. `apply.rs`: apply from the list, import a file or text, clear |
-| app glue | `library/playback.rs`, `state/{mod,signal}.rs`, `crates/melodia-core/src/config.rs` | the player setters and Make Bit-Perfect; `hydrate_audio_dsp` seeds the map and switch (`state/mod.rs:329-362`); `output_changed`; the two list paths |
+| facade | `crates/melodia-app/src/library/correction/` | `mod.rs`: `autoeq_client`, `CorrectionTarget`, `commit` (the map's one writer), `clear`. `list.rs`: the cache, the recheck, `ListAnswer`. `apply.rs`: apply from the list, import a file or a paste, apply. `parametric.rs`: the format above |
+| app glue | `library/playback.rs`, `state/{mod,signal}.rs`, `crates/melodia-core/src/config.rs` | the player setters and Make Bit-Perfect; `hydrate_audio_dsp` seeds the engine's map and switch (`state/mod.rs:329-362`); `Shadowed`, `AppState.corrections` and `correction_online`; `output_changed`; the two list paths |
 | card | `crates/melodia-ui/ui/views/settings/correction-section.slint`, `components/settings/correction-controls.slint`, `globals/audio.slint` | `CorrectionText` shared by the card and both dialogs, the `HeadphoneCorrection` global |
 | dialogs | `components/dialog/headphone-picker-body.slint`, `correction-import-body.slint`, `globals/dialog.slint`, `components/dialog/dialog.slint` | two kinds; the import's step in its own global |
 | views | `crates/melodia-views/src/ui/correction/` | `mod.rs`: install, seed, repaint on `output_changed`. `picker.rs`: load, filter, apply, release. `import.rs`: file, paste, review |
@@ -367,25 +377,27 @@ each landing with its first user.
 
 ## Phase 4: AutoEq online (`melodia-net`, `melodia-app`)
 
-- [ ] `services/net/autoeq/`: the base, the list URL, the profile URL and its guard; the
-      conditional list fetch; the profile fetch; the list parser and its skip count.
-- [ ] `entities/correction.rs`: `AutoEqEntry` and the parse result.
-- [ ] `services/correction/parametric.rs`, its refusals typed, each filter line through
+- [x] `services/net/autoeq/`: the base, the list URL, the profile URL and its guard; the
+      conditional list fetch; the profile fetch; the list parser, its skip count logged.
+      `percent-encoding` joins the workspace, already in the lock through `url`.
+- [x] `entities/correction.rs`: `AutoEqEntry`, the parse result, `DeviceCorrections::insert` and
+      `remove`.
+- [x] `library/correction/parametric.rs`, its refusals typed, each filter line through
       `CorrectionFilter::check`.
-- [ ] The map's shadow on `AppState`. First, the Output card's `Shadowed` and its `apply_latest`
+- [x] The map's shadow on `AppState`. First, the Output card's `Shadowed` and its `apply_latest`
       (`melodia-views`' `ui/settings/output_settings.rs:56-75`) move into `melodia-app` and both
       share it: the value under one lock and the apply under another, so an older write can't
-      land after a newer.
-- [ ] `library/correction/`: the online seam, the cache and its recheck, apply from the list,
-      import a file or text, clear; each write through the shadow, the engine, then the persist,
-      kicking only after the write commits.
-- [ ] `correction_online`: its `CorrectionFlags` field, a `SharedFlag` and its setter; the two
+      land after a newer. The two tests on its locks move with it.
+- [x] `library/correction/`: the online seam, the cache and its recheck, apply from the list,
+      import a file or a paste, clear; each write through `commit`.
+- [x] `correction_online`: its `CorrectionFlags` field, a `SharedFlag` and its setter; the two
       `Paths` entries, in `rooted_at`.
-- [ ] Docs: `CLAUDE.md`'s Facades gains "Nothing outside `library::correction` names `autoeq`";
-      the facade's `//!` argues the seam, as `library/radio/mod.rs:8-10` does.
+- [x] Docs: `CLAUDE.md`'s Facades gains "nothing outside `library::correction` names
+      `services::net::autoeq`" (the `Paths` fields hold the bare word); the facade's `//!` argues
+      the seam, as `library/radio/mod.rs:8-10` does.
 
 **Gate:**
-- [ ] The static gates.
+- [x] The static gates, and the three `Shadowed` tests passing where the move left them.
 
 ## Phase 5: The card, the picker and the import (`melodia-ui`, `melodia-views`)
 

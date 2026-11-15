@@ -5,6 +5,7 @@
 //! is **parsed** rather than prefix-tested ([`http_url`]), and a body is **streamed under a cap**
 //! rather than collected and measured afterwards ([`read_capped`]).
 
+pub mod autoeq;
 pub mod lyrics_directory;
 pub mod pacer;
 pub mod radio_blocklist;
@@ -75,16 +76,19 @@ pub async fn get_capped(
     read_success(response, spec).await
 }
 
-/// [`get_capped`] for text. `from_utf8` moves where `from_utf8_lossy` copies; lossy stays on the
-/// error arm so one Latin-1 byte in a title costs a replacement character, not the station.
+/// [`get_capped`] for text.
 pub async fn get_capped_text(
     client: &reqwest::Client,
     url: &reqwest::Url,
     spec: &CappedGet,
 ) -> Result<String, AppError> {
-    let body = get_capped(client, url, spec).await?;
-    Ok(String::from_utf8(body)
-        .unwrap_or_else(|e| String::from_utf8_lossy(e.as_bytes()).into_owned()))
+    Ok(body_text(get_capped(client, url, spec).await?))
+}
+
+/// `from_utf8` moves where `from_utf8_lossy` copies; lossy stays on the error arm so one Latin-1
+/// byte in a title costs a replacement character, not the station.
+fn body_text(body: Vec<u8>) -> String {
+    String::from_utf8(body).unwrap_or_else(|e| String::from_utf8_lossy(e.as_bytes()).into_owned())
 }
 
 /// What [`get_capped_if_changed`] found.

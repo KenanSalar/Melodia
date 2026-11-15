@@ -17,3 +17,9 @@ pub fn set_corrections(paths: &Paths, corrections: DeviceCorrections) -> Result<
         settings.correction.corrections = corrections;
     })
 }
+
+pub fn set_correction_online(paths: &Paths, enabled: bool) -> Result<(), AppError> {
+    services::settings::mutate_settings(paths, move |settings| {
+        settings.correction.correction_online = enabled;
+    })
+}

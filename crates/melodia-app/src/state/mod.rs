@@ -14,13 +14,14 @@ pub mod signal;
 pub use contexts::PlaybackContext;
 pub use loudness::{LoudnessControl, MeasurePhase, MeasureProgress};
 pub use scan::{ScanControl, ScanPhase, ScanProgressTick};
-pub use signal::{Hold, HoldCount, SharedFlag, Signal};
+pub use signal::{Hold, HoldCount, Shadowed, SharedFlag, Signal};
 
 use crate::services::search_history::SearchHistoryState;
 use crate::services::settings;
 use crate::tasks::play_count_flusher::{FlushRequests, PlayCountFlush};
 use melodia_artwork::media::image::artwork::CoverCache;
 use melodia_core::config::Paths;
+use melodia_core::entities::correction::DeviceCorrections;
 use melodia_core::error::{AppError, AppResult, describe};
 use melodia_core::utils::self_writes::SelfWrites;
 use melodia_engine::player::engine::backend::PlaybackEngine;
@@ -121,6 +122,11 @@ pub struct AppState {
     /// Whether a star rating is also written into the file's own tag, asked by
     /// `tasks::rating_writeback` once per coalesced burst.
     pub write_ratings_to_tags: SharedFlag,
+    /// Whether `library::correction` may reach `AutoEq`, read on a worker at each fetch.
+    pub correction_online: SharedFlag,
+    /// Every device's headphone correction as last set. Each of `library::correction`'s writes
+    /// edits this rather than the file's copy, so two in flight can't undo each other.
+    pub corrections: Arc<Shadowed<DeviceCorrections>>,
     pub media_controls: Option<Arc<MediaControlsHandle>>,
     /// Built on first use by [`AppState::http_client`], one client for every clone.
     http_client: Arc<OnceLock<reqwest::Client>>,
@@ -230,6 +236,8 @@ impl AppState {
             lyrics_romanization_shown: SharedFlag::new(settings.lyrics.lyrics_romanization_shown),
             lyrics_pacer: Arc::new(crate::library::lyrics::pacer()),
             write_ratings_to_tags: SharedFlag::new(settings.library.write_ratings_to_tags),
+            correction_online: SharedFlag::new(settings.correction.correction_online),
+            corrections: Arc::new(Shadowed::new(settings.correction.corrections.clone())),
             media_controls: Some(mc_handle),
             http_client,
             task_tracker: TaskTracker::new(),
