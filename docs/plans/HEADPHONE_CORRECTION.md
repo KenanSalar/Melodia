@@ -202,7 +202,7 @@ next write would build a set mixing two headphones and ramp to it.
 - **No gzip.** reqwest's `gzip` feature is off in the workspace; the 79,067-byte compressed list
   would add a decompression crate to save a fetch that happens once per upstream change.
 - **Caps and deadlines are named constants**: the list a few times today's size, a profile a few
-  KiB, an import file the same order.
+  KiB, an import the same order, file and paste alike.
 
 ### The cached list
 
@@ -250,6 +250,9 @@ profile:
   among them).
 - Refused whole, as typed variants: a `Channel:` line selecting anything but every channel (one ear
   set apart), more than 20 filters, no filter at all.
+- An import past `IMPORT_MAX_BYTES`, file or paste, is `ImportError::TooLarge`. A file is decoded
+  lossily, so a comment in another codepage doesn't refuse it; a stray byte in a filter line leaves
+  that line unreadable, which the review lists.
 - **A fetched profile with any line listed is refused**, logged with the lines, rather than shown a
   review: AutoEq's layout isn't a promise, and a changed format must not apply half a curve. Import
   is the way in if it moves. The refusal is an `AppError::Validation`, which the card tells from a
@@ -291,7 +294,7 @@ persists it (`library/settings/playback.rs:71-81`).
 | net | `crates/melodia-net/src/services/net/mod.rs`, `services/net/autoeq/` | `get_capped_if_changed`; `autoeq/mod.rs`: the URLs and their guard, the list fetch, the profile fetch. `autoeq/list.rs`: the list parser |
 | settings | `crates/melodia-app/src/services/settings/playback.rs`, `library/settings/correction.rs` | `CorrectionFlags` beside `EqualizerFlags`; the setters through `mutate_settings` |
 | facade | `crates/melodia-app/src/library/correction/` | `mod.rs`: `autoeq_client`, `CorrectionTarget`, `commit` (the map's one writer), `clear`. `list.rs`: the cache, the recheck, `ListAnswer`. `apply.rs`: apply from the list, import a file or a paste, apply. `parametric.rs`: the format above |
-| app glue | `library/playback.rs`, `state/{mod,signal}.rs`, `crates/melodia-core/src/config.rs` | the player setters and Make Bit-Perfect; `hydrate_audio_dsp` seeds the engine's map and switch (`state/mod.rs:329-362`); `Shadowed`, `AppState.corrections` and `correction_online`; `output_changed`; the two list paths |
+| app glue | `library/playback.rs`, `state/{mod,signal}.rs`, `crates/melodia-core/src/config.rs` | the player setters and Make Bit-Perfect; `hydrate_audio_dsp` seeds the engine's map and switch (`state/mod.rs:337-370`); `Shadowed`, `AppState.corrections` and `correction_online`; `output_changed`; the two list paths |
 | card | `crates/melodia-ui/ui/views/settings/correction-section.slint`, `components/settings/correction-controls.slint`, `globals/audio.slint` | `CorrectionText` shared by the card and both dialogs, the `HeadphoneCorrection` global |
 | dialogs | `components/dialog/headphone-picker-body.slint`, `correction-import-body.slint`, `globals/dialog.slint`, `components/dialog/dialog.slint` | two kinds; the import's step in its own global |
 | views | `crates/melodia-views/src/ui/correction/` | `mod.rs`: install, seed, repaint on `output_changed`. `picker.rs`: load, filter, apply, release. `import.rs`: file, paste, review |
@@ -385,7 +388,7 @@ each landing with its first user.
 - [x] `library/correction/parametric.rs`, its refusals typed, each filter line through
       `CorrectionFilter::check`.
 - [x] The map's shadow on `AppState`. First, the Output card's `Shadowed` and its `apply_latest`
-      (`melodia-views`' `ui/settings/output_settings.rs:56-75`) move into `melodia-app` and both
+      (`melodia-views`' `ui/settings/output_settings.rs`) move into `melodia-app` and both
       share it: the value under one lock and the apply under another, so an older write can't
       land after a newer. The two tests on its locks move with it.
 - [x] `library/correction/`: the online seam, the cache and its recheck, apply from the list,

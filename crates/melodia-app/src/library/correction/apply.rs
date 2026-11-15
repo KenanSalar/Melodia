@@ -28,6 +28,9 @@ pub enum ImportError {
     #[error(transparent)]
     Read(#[from] AppError),
 
+    #[error("the profile is larger than {IMPORT_MAX_BYTES} bytes")]
+    TooLarge,
+
     #[error(transparent)]
     Refused(#[from] ProfileRefusal),
 }
@@ -56,12 +59,15 @@ pub async fn apply_from_list(
 
 /// Blocking.
 pub fn import_file(path: &Path) -> Result<Imported, ImportError> {
-    let text = read_capped(path)?;
+    let text = read_import(path)?;
     let name = path.file_name().unwrap_or(path.as_os_str()).to_string_lossy().into_owned();
     Ok(Imported { origin: CorrectionOrigin::File { name }, profile: parametric::parse(&text)? })
 }
 
-pub fn import_paste(text: &str) -> Result<Imported, ProfileRefusal> {
+pub fn import_paste(text: &str) -> Result<Imported, ImportError> {
+    if !fits_import_cap(text.len()) {
+        return Err(ImportError::TooLarge);
+    }
     Ok(Imported { origin: CorrectionOrigin::Paste, profile: parametric::parse(text)? })
 }
 
@@ -75,15 +81,19 @@ pub fn apply(state: &AppState, target: CorrectionTarget, imported: Imported) {
     commit(state, |corrections| corrections.insert(target.device, correction));
 }
 
-fn read_capped(path: &Path) -> Result<String, AppError> {
+fn read_import(path: &Path) -> Result<String, ImportError> {
     let mut bytes = Vec::new();
     File::open(path)
         .and_then(|file| file.take(IMPORT_MAX_BYTES + 1).read_to_end(&mut bytes))
         .map_err(|e| AppError::io("the file could not be read", e))?;
-    if bytes.len() as u64 > IMPORT_MAX_BYTES {
-        return Err(AppError::validation_msg(format!(
-            "the file is larger than {IMPORT_MAX_BYTES} bytes"
-        )));
+    if !fits_import_cap(bytes.len()) {
+        return Err(ImportError::TooLarge);
     }
-    String::from_utf8(bytes).map_err(|e| AppError::validation("the file is not UTF-8 text", e))
+    // Lossy, so a comment written in another codepage doesn't refuse the file.
+    Ok(String::from_utf8(bytes)
+        .unwrap_or_else(|e| String::from_utf8_lossy(e.as_bytes()).into_owned()))
+}
+
+fn fits_import_cap(len: usize) -> bool {
+    u64::try_from(len).is_ok_and(|len| len <= IMPORT_MAX_BYTES)
 }

@@ -1,5 +1,5 @@
-//! The parametric format `AutoEq` writes, which is Equalizer APO's: a `Preamp:` line, then a line per
-//! filter. Keywords match in any case, so a hand-written file needn't copy `AutoEq`'s.
+//! The parametric format `AutoEq` writes, which is Equalizer APO's: a `Preamp:` line, then a line
+//! per filter. Keywords match in any case, so a hand-written file needn't copy `AutoEq`'s.
 
 use melodia_core::entities::correction::{
     CorrectionFilter, CorrectionFilters, FilterKind, ParsedProfile, ProfileRefusal, SkipReason,

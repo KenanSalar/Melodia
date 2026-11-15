@@ -23,7 +23,7 @@ use melodia_core::error::AppError;
 pub struct CorrectionTarget {
     /// `None` is System default.
     pub device: Option<String>,
-    /// Kept with the correction, to name the device by while it's unplugged.
+    /// Stored as the correction's `device_name`.
     pub device_name: Option<String>,
 }
 

@@ -66,7 +66,7 @@ impl Default for EqualizerFlags {
 pub struct CorrectionFlags {
     pub correction_enabled: bool,
     pub corrections: DeviceCorrections,
-    /// Whether `AutoEq`'s list and profiles may be fetched. Import works either way.
+    /// Whether `AutoEq`'s list and profiles may be fetched.
     pub correction_online: bool,
 }
 
