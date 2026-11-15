@@ -2,7 +2,7 @@
 
 Working doc. Delete when the feature ships.
 
-Status: **Phase 5 in progress** · Created: 2026-11-14
+Status: **Phase 6 next** · Created: 2026-11-14
 
 Issue [#144](https://github.com/KenanSalar/Melodia/issues/144).
 
@@ -446,8 +446,7 @@ each landing with its first user.
 - [x] The onboarding row, its label and description `CorrectionText`'s.
 - [x] The signal path panel names the correction, the Effects row naming up to three effects in
       the order the samples meet them.
-- [ ] `headphones` into `scripts/icons.txt`, the re-subset and a clean `scripts/check-icons.py`.
-      The list holds it; the re-subset waits on fontTools.
+- [x] `headphones` into `scripts/icons.txt`, the re-subset and a clean `scripts/check-icons.py`.
 - [x] Strings through `@tr`, counts as plurals; `scripts/update-translations.py` and all fifteen
       catalogs finished.
 - [x] Docs: `README.md`'s effects, undo and data-folder lines and its acknowledgments;
@@ -459,9 +458,9 @@ each landing with its first user.
 - [x] The online row mounts only while the correction is on, keeping its value.
 
 **Gate:**
-- [ ] The static gates, and the onboarding and settings tests fixed where the new rows break them.
-      fmt and clippy pass, and the whole suite with the catalogs; the bit-perfect reset's test
-      reads the curve from `eq.json`. `scripts/check-icons.py` waits on the re-subset.
+- [x] The static gates, and the onboarding and settings tests fixed where the new rows break them.
+      fmt, clippy, `scripts/check-icons.py` and the whole suite with the catalogs pass; the
+      bit-perfect reset's test reads the curve from `eq.json`.
 
 ## Phase 6: Testing
 
