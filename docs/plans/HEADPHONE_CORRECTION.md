@@ -518,9 +518,15 @@ profiles, one for a card and one for System default:
       | 96 kHz | -5.832 / -11.299 dB | 0.0000 / 0.0004 dB |
       | 192 kHz | -5.832 / -11.299 dB | 0.0000 / 0.0053 dB |
 
-      The 192 kHz figure is the same at every tone, so it is the level: `response.rs`'s cos-form
-      `|H|²` cancels near DC at high rates and reads a sub-bass peak slightly off, up to 0.028 dB
-      in the worst set built (a 31 Hz +12 dB band).
+      The 192 kHz figure is the same at every tone, so it is the headroom.
+- [x] **The headroom loses its sub-bass peak at high rates.** `power_at` summed terms near 6, -8
+      and 2 that cancel to a sub-bass filter's `|H|²`: 1e-12 at 192 kHz, a few ulps at 768 kHz.
+      Replicated from `response.rs` against a 60-digit evaluation of the same coefficients, and
+      matched by the release build's tones to four decimals at 352.8, 384 and 705.6 kHz:
+      DT 990 with Bass Boost read +0.042, -0.078 and +0.897 dB off, and at 768 kHz a
+      denominator rounded to 0, the headroom to 0 and the output to silence. `response.rs` now
+      holds `|H|²` over `φ = sin²(w/2)`, which stayed within 1e-6 dB of the reference across 49
+      sets and rates; the release build's tones read 0.0000 dB at every rate from 44.1 to 768 kHz.
 - [x] The rebuild on the audio thread with a 20-filter correction at 192 kHz during a slider drag:
       `perf record` on the output thread, `rebuild`'s share recorded here.
       `cycles:u` on `cpal_alsa_out`, 30 s of drag (63 band writes, all ten bands ending active):

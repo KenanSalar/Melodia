@@ -1,7 +1,7 @@
 //! The cascade's magnitude response at a source's rate, read for its loudest point: a peak sits
 //! where curves overlap, so no single filter's gain says how high.
 
-use std::f64::consts::TAU;
+use std::f64::consts::PI;
 
 use biquad::Coefficients;
 
@@ -14,12 +14,13 @@ const GRID_STEPS_PER_OCTAVE: f64 = 24.0;
 /// A frequency as the response formula takes it, built once per point rather than per filter.
 #[derive(Clone, Copy, Debug)]
 struct Point {
-    cos_w: f64,
-    cos_2w: f64,
+    phi: f64,
+    phi_squared: f64,
 }
 
-/// A biquad's squared magnitude, `|H|²`, as a function of frequency, with the point its design
-/// centres on, where a peaking filter's peak sits.
+/// A biquad's squared magnitude, `|H|²`, over `φ = sin²(w/2)`, with the point its design centres
+/// on, where a peaking filter's peak sits. Over `cos w`, a sub-bass filter's `|H|²` at a high rate
+/// is the few ulps left after terms of order one cancel.
 #[derive(Clone, Copy, Debug)]
 pub(crate) struct FilterResponse {
     numerator: [f64; 3],
@@ -35,7 +36,8 @@ impl FilterResponse {
     fn power_at(&self, point: Point) -> f64 {
         let [n0, n1, n2] = self.numerator;
         let [d0, d1, d2] = self.denominator;
-        (n0 + n1 * point.cos_w + n2 * point.cos_2w) / (d0 + d1 * point.cos_w + d2 * point.cos_2w)
+        (n0 + n1 * point.phi + n2 * point.phi_squared)
+            / (d0 + d1 * point.phi + d2 * point.phi_squared)
     }
 }
 
@@ -63,8 +65,8 @@ impl ResponseGrid {
     pub(crate) fn response(&self, coeffs: &Coefficients<f64>, centre_hz: f64) -> FilterResponse {
         let Coefficients { a1, a2, b0, b1, b2 } = *coeffs;
         FilterResponse {
-            numerator: [b0 * b0 + b1 * b1 + b2 * b2, 2.0 * (b0 * b1 + b1 * b2), 2.0 * b0 * b2],
-            denominator: [1.0 + a1 * a1 + a2 * a2, 2.0 * (a1 + a1 * a2), 2.0 * a2],
+            numerator: power_over_phi([b0, b1, b2]),
+            denominator: power_over_phi([1.0, a1, a2]),
             centre: Some(point_at(centre_hz.max(GRID_FLOOR_HZ).min(self.top_hz), self.sample_rate)),
         }
     }
@@ -87,6 +89,13 @@ impl ResponseGrid {
 }
 
 fn point_at(hz: f64, sample_rate: f64) -> Point {
-    let w = TAU * hz / sample_rate;
-    Point { cos_w: w.cos(), cos_2w: (2.0 * w).cos() }
+    let half_sin = (PI * hz / sample_rate).sin();
+    let phi = half_sin * half_sin;
+    Point { phi, phi_squared: phi * phi }
+}
+
+/// `|t0 + t1·z⁻¹ + t2·z⁻²|²` on the unit circle, as the coefficients of 1, `φ` and `φ²`.
+fn power_over_phi([t0, t1, t2]: [f64; 3]) -> [f64; 3] {
+    let sum = t0 + t1 + t2;
+    [sum * sum, -4.0 * (t0 * t1 + t1 * t2 + 4.0 * t0 * t2), 16.0 * t0 * t2]
 }
