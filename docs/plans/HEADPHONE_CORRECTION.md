@@ -2,7 +2,7 @@
 
 Working doc. Delete when the feature ships.
 
-Status: **Phase 6 next** · Created: 2026-11-14
+Status: **Phase 6, hand tests done but Windows; Tests next** · Created: 2026-11-14
 
 Issue [#144](https://github.com/KenanSalar/Melodia/issues/144).
 
@@ -472,41 +472,89 @@ feature has landed; the tests follow them.
 Kenan's hand pass, or run by Claude on his go, in the dev data folder with a backup.
 
 **Groundwork:**
-- [ ] With the correction off, every preset and a hand curve sound as before.
-- [ ] An update check against an unchanged release logs its 304.
-- [ ] The radio Tag picker draws and narrows as before.
+- [x] With the correction off, every preset and a hand curve sound as before.
+      2026-11-15, `main` (`78db3781`) against this build, each preset on a 0 dBFS master at 48 kHz:
+      Flat bit-identical, the rest within 0.03 dB in every band. On -20 dBFS tones with Bass Boost
+      this build reads the cookbook to 0.0000 dB at all three rates, where `main`'s f32 bands were
+      0.014 dB off at 44.1 kHz and 0.44 dB at 40 Hz at 192 kHz.
+- [x] An update check against an unchanged release logs its 304.
+      `run_check` twice against the live release from a scratch folder, a binary under `target/`
+      having no updater: 200 and the ETag stored, then `updater: 304 Not Modified`.
+- [x] The radio Tag picker draws and narrows as before. Kenan, on Radio's Genre chip.
 
 **One correction per device**, corrections written into `eq.json` by hand from two AutoEq
 profiles, one for a card and one for System default:
-- [ ] The switch on: the signal path names the stage and the sound changes; a big bass boost on a
+- [x] The switch on: the signal path names the stage and the sound changes; a big bass boost on a
       loudly mastered track neither clips nor pumps.
-- [ ] Switching device mid-track switches the correction, with no click and no jump in level;
+      The panel named Headphone correction, then Equalizer. 2026-11-15: a brickwall master (2,075 samples at full scale) with DT 990 Pro
+      (250 Ohm) peaks at -1.92 dBFS, and with Bass Boost on top at -2.60 dBFS. No sample reaches
+      full scale, and against the linear path no 10 ms block shows 0.1 dB of limiter gain.
+- [x] Switching device mid-track switches the correction, with no click and no jump in level;
       `CORRECTION_SWAP_MS` settled by ear and recorded here, once more against a profile with a
       high-Q sub-bass peak, which settles from rest for longer than the swap.
-- [ ] A device with nothing set plays uncorrected; System default plays its own.
-- [ ] The switch off: exclusive output reads Bit-perfect with the Equalizer off, and a flat
+      **50 ms stays.** Kenan on DT 990 Pro (250 Ohm) through a UMC22, System default shared (DT
+      990) to the UMC22 exclusive (HIFIMAN Sundara, 38 Hz at Q 2.27) and back four times, and the
+      switch toggled on each: clean, the only break the reopen's own gap.
+- [x] A device with nothing set plays uncorrected; System default plays its own.
+      Shared, so System default: with only the card corrected every tone reads 0.0000 dB; with its
+      own correction it plays that curve (the table below).
+- [x] The switch off: exclusive output reads Bit-perfect with the Equalizer off, and a flat
       Equalizer is bit-identical (`bit_perfect.rs`'s rig).
-- [ ] Make Bit-Perfect turns the correction off and keeps both corrections.
-- [ ] The curve: sines at 44.1, 96 and 192 kHz through the null sink, read back per tone against
+      The panel read Bit-perfect on the UMC22 with a 16-bit 48 kHz WAV. The rig passes its three
+      cases, and with everything off shared F32 at unity volume carries the 48 kHz master bit for
+      bit.
+- [x] Make Bit-Perfect turns the correction off and keeps both corrections.
+      The correction, Equalizer and ReplayGain off, volume 100, rate followed; System default's
+      and both cards' corrections kept.
+- [x] The curve: sines at 44.1, 96 and 192 kHz through the null sink, read back per tone against
       the analytic response of the correction plus the bands, every tone within 0.1 dB, the table
       recorded here (the issue's 192 kHz check).
-- [ ] The rebuild on the audio thread with a 20-filter correction at 192 kHz during a slider drag:
+      21 tones from 25 Hz to 16 kHz at -20 dBFS per rate, each over the same run with everything
+      off, against complex evaluation of the cookbook filters times the stage's headroom:
+
+      | source | headroom, DT 990 / + Bass Boost | worst tone, DT 990 / + Bass Boost |
+      |---|---|---|
+      | 44.1 kHz | -5.832 / -11.298 dB | 0.0000 / 0.0000 dB |
+      | 96 kHz | -5.832 / -11.299 dB | 0.0000 / 0.0004 dB |
+      | 192 kHz | -5.832 / -11.299 dB | 0.0000 / 0.0053 dB |
+
+      The 192 kHz figure is the same at every tone, so it is the level: `response.rs`'s cos-form
+      `|H|²` cancels near DC at high rates and reads a sub-bass peak slightly off, up to 0.028 dB
+      in the worst set built (a 31 Hz +12 dB band).
+- [x] The rebuild on the audio thread with a 20-filter correction at 192 kHz during a slider drag:
       `perf record` on the output thread, `rebuild`'s share recorded here.
+      `cycles:u` on `cpal_alsa_out`, 30 s of drag (63 band writes, all ten bands ending active):
+      139.2 ± 3.3 M cycles/s against 137.4 ± 2.4 right after, so the rebuilds add about 1.3%;
+      `Bank::update_headroom` took 0.11% of the window's samples. Nearly all of the thread is the
+      per-sample path, and no underrun was logged.
 
 **The card, the picker and the import:**
-- [ ] The picker finds a model by part of its name, applies it, and the card shows it; a second
+- [x] The picker finds a model by part of its name, applies it, and the card shows it; a second
       open with nothing changed sends one conditional request.
-- [ ] The picker offline: with a cache it lists, without one it says it couldn't reach AutoEq; a
+      "dt 990 pro (250" found crinacle's DT 990 Pro (250 Ohm), applied with all ten filters. With
+      no cache: the list download, then the profile; the second open, its check aged past a day:
+      one request, the check time moved and the list left unwritten. Applied while exclusive, it
+      landed on the UMC22 alone.
+- [x] The picker offline: with a cache it lists, without one it says it couldn't reach AutoEq; a
       hand-corrupted cache says the list couldn't be read; Import works either way.
-- [ ] Importing a file with lines it can't use lists them before applying; a per-ear file and a
+      Offline through a dead `HTTPS_PROXY`, each open's recheck failing: all three as stated, and
+      a file import applied.
+- [x] Importing a file with lines it can't use lists them before applying; a per-ear file and a
       30-filter file are refused; a paste applies.
-- [ ] The switch gives a before and after with no click; Clear on one device leaves the other.
-- [ ] The online switch off: Find headphones is unavailable and nothing reaches GitHub, Import
+      The mixed file listed its OFF, `LP`, `BW Oct`, out-of-range and `GraphicEQ:` lines and
+      applied the other six filters.
+- [x] The switch gives a before and after with no click; Clear on one device leaves the other.
+      Clear emptied System default alone, and its Undo put the correction back.
+- [x] The online switch off: Find headphones is unavailable and nothing reaches GitHub, Import
       still applies; the onboarding row flips the same switch. With the correction off the online
       row is gone, and turning the correction back on shows it as it was left.
-- [ ] A `settings.json` from the released build, a curve on its equalizer: the first boot writes
+      The onboarding row showed with the correction off, and the card's row showed as it was left.
+- [x] A `settings.json` from the released build, a curve on its equalizer: the first boot writes
       `eq.json` with that curve, drops the three keys from `settings.json`, and the curve plays.
-- [ ] The settings search finds the card by "headphone", "correction" and "AutoEq".
+      Ten times, each on the `settings.json` `main` wrote at quit with one preset or the hand
+      curve: every `eq.json` carried it, every `settings.json` lost the three keys, and each played
+      as `main` did (the Groundwork row).
+- [x] The settings search finds the card by "headphone", "correction" and "AutoEq".
 
 **Windows** (on Kenan's go):
 - [ ] It builds; switching between two endpoints in shared mode switches the correction; System
@@ -515,8 +563,11 @@ profiles, one for a card and one for System default:
       here as the answer to the issue's open note.
 
 **Memory:**
-- [ ] RSS sampled from `/proc` with the picker open on the full list and two minutes after it
+- [x] RSS sampled from `/proc` with the picker open on the full list and two minutes after it
       closes, against a run that never opened it; idle after close within noise, recorded here.
+      Never opened, at the same point after boot: 179.2 MB VmRSS, 26.87 MB anonymous. Open: 185.4
+      and 28.56. Two minutes after closing: 184.2 and 27.25, the list's heap given back to within
+      0.4 MB; the rest is code and GPU pages faulted in to draw the dialog, which stay resident.
 
 ### Tests
 
