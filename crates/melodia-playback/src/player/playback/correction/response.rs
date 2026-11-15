@@ -19,8 +19,8 @@ struct Point {
 }
 
 /// A biquad's squared magnitude, `|H|²`, over `φ = sin²(w/2)`, with the point its design centres
-/// on, where a peaking filter's peak sits. Over `cos w`, a sub-bass filter's `|H|²` at a high rate
-/// is the few ulps left after terms of order one cancel.
+/// on, where a peaking filter's peak sits. Over `cos w`, a sub-bass filter's numerator and
+/// denominator at a high rate are the few ulps left after terms of order one cancel.
 #[derive(Clone, Copy, Debug)]
 pub(crate) struct FilterResponse {
     numerator: [f64; 3],

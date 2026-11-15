@@ -111,7 +111,7 @@ width, so nothing vectorised is given up; the hand tests' profile records what i
   a rebuild ends in one square root. The grid is fixed log spacing from 20 Hz to the lower of
   20 kHz and the source's band edge (`GRID_STEPS_PER_OCTAVE`, a twenty-fourth to start), the edge
   itself, and each active filter's own centre clamped into that band, where the peaks sit. The
-  fixed points' cosines are built once per source in `EqSource::new`, which runs on the control
+  fixed points are built once per source in `EqSource::new`, which runs on the control
   thread (`backend/mod.rs:287-288`); a rebuild allocates nothing.
 - The gain is `min(1, 1 / sqrt(peak power))`: the level only comes down. Each bank's output takes
   its own, which equals scaling the input and lets a swap's mix carry both levels. The file's
@@ -520,13 +520,16 @@ profiles, one for a card and one for System default:
 
       The 192 kHz figure is the same at every tone, so it is the headroom.
 - [x] **The headroom loses its sub-bass peak at high rates.** `power_at` summed terms near 6, -8
-      and 2 that cancel to a sub-bass filter's `|H|²`: 1e-12 at 192 kHz, a few ulps at 768 kHz.
+      and 2 that cancel to a sub-bass filter's numerator and denominator: 1e-12 and 3e-13 at
+      192 kHz, a few ulps at 768 kHz.
       Replicated from `response.rs` against a 60-digit evaluation of the same coefficients, and
       matched by the release build's tones to four decimals at 352.8, 384 and 705.6 kHz:
       DT 990 with Bass Boost read +0.042, -0.078 and +0.897 dB off, and at 768 kHz a
       denominator rounded to 0, the headroom to 0 and the output to silence. `response.rs` now
       holds `|H|²` over `φ = sin²(w/2)`, which stayed within 1e-6 dB of the reference across 49
-      sets and rates; the release build's tones read 0.0000 dB at every rate from 44.1 to 768 kHz.
+      sets and rates, and within 4e-4 dB at the worst corner of the accepted range (Q 20, +30 dB
+      at the 20 Hz grid floor, 768 kHz); the release build's tones read 0.0000 dB at every rate
+      from 44.1 to 768 kHz.
 - [x] The rebuild on the audio thread with a 20-filter correction at 192 kHz during a slider drag:
       `perf record` on the output thread, `rebuild`'s share recorded here.
       `cycles:u` on `cpal_alsa_out`, 30 s of drag (63 band writes, all ten bands ending active):
