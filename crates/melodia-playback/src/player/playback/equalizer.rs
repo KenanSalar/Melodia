@@ -57,6 +57,9 @@ const LIMITER_KNEE_DB: f32 = 4.0;
 const LIMITER_ATTACK_S: f32 = 0.005;
 const LIMITER_RELEASE_S: f32 = 0.100;
 
+/// How long the output reads exactly zero before the filters' state is cleared.
+const SILENCE_SETTLE_MS: u64 = 10;
+
 /// `PRESETS` order is load-bearing: the preset dropdown lists the names as inline `@tr` literals
 /// in this order and maps its index straight in.
 pub struct EqPreset {
@@ -334,6 +337,9 @@ pub struct EqSource<S> {
     frame: Vec<f32>,
     frame_len: usize,
     frame_pos: usize,
+    /// Frames in a row whose narrowed output was exactly zero, not merely quiet.
+    silent_frames: u64,
+    silence_settle_frames: u64,
     bypass: bool,
 }
 
@@ -396,6 +402,8 @@ impl<S: AudioSource> EqSource<S> {
             frame: vec![0.0; channels],
             frame_len: 0,
             frame_pos: 0,
+            silent_frames: 0,
+            silence_settle_frames: SILENCE_SETTLE_MS * sample_rate_hz / 1000,
             bypass: true,
         }
     }
@@ -609,6 +617,7 @@ impl<S: AudioSource> EqSource<S> {
         for &s in &self.frame[..self.frame_len] {
             peak = peak.max(s.abs());
         }
+        self.settle_on_silence(peak);
         let gain = self.limiter.process(peak);
         let fade_g = if self.fade_engaged {
             self.step_fade(u64::try_from(frame_len).unwrap_or(1))
@@ -623,6 +632,29 @@ impl<S: AudioSource> EqSource<S> {
 
         self.frame_pos = 1;
         Some(self.frame[0])
+    }
+
+    /// Clears the filters once the output has read exactly zero for a run: a decaying state would
+    /// otherwise cycle at subnormal values for the rest of the silence, which is slow arithmetic,
+    /// and an output already reading exactly zero leaves nothing audible to clear.
+    fn settle_on_silence(&mut self, peak: f32) {
+        if peak > 0.0 {
+            self.silent_frames = 0;
+            return;
+        }
+        self.silent_frames = self.silent_frames.saturating_add(1);
+        if self.silent_frames == self.silence_settle_frames {
+            self.reset_bands();
+            self.correction.reset_state();
+        }
+    }
+
+    fn reset_bands(&mut self) {
+        for bank in &mut self.banks {
+            for filter in bank.iter_mut() {
+                filter.reset_state();
+            }
+        }
     }
 }
 
@@ -683,11 +715,7 @@ impl<S: AudioSource> AudioSource for EqSource<S> {
         self.input.try_seek(pos)?;
         // Clears the filter and limiter state so the destination doesn't pop, and leaves the fade
         // fields alone, so a ramp in flight carries across rather than restarting from silence.
-        for bank in &mut self.banks {
-            for filter in bank.iter_mut() {
-                filter.reset_state();
-            }
-        }
+        self.reset_bands();
         self.correction.reset();
         self.limiter.reset();
         // The rest of the frame in hand drains and `frame_phase` stays: dropping owed samples

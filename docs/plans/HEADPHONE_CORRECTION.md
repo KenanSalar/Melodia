@@ -536,6 +536,16 @@ profiles, one for a card and one for System default:
       139.2 ± 3.3 M cycles/s against 137.4 ± 2.4 right after, so the rebuilds add about 1.3%;
       `Bank::update_headroom` took 0.11% of the window's samples. Nearly all of the thread is the
       per-sample path, and no underrun was logged.
+- [x] Digital silence inside a track leaves a cascade's state cycling at subnormal values instead
+      of reaching zero, so `EqSource::settle_on_silence` clears the filters once the output has
+      read exactly zero for `SILENCE_SETTLE_MS`.
+      A scratch bench of `biquad` 0.6.0 on the 9800X3D, ten correction filters and ten boosted
+      bands per channel at 44.1 kHz. Left alone, each 5 s of silence after music cost 1.72–2.22×
+      clean silence for the first 20 s and 1.08–1.61× after, bimodal between runs. With the watch
+      it fired 2.69 s in, and later windows read 1.11–1.21× against the same loop's 1.12× on a
+      clean chain.
+- [ ] In the app: `perf stat -e cycles:u` on `cpal_alsa_out` across a track with 30 s of digital
+      silence, the correction on; the silent stretch costs no more than the music.
 
 **The card, the picker and the import:**
 - [x] The picker finds a model by part of its name, applies it, and the card shows it; a second
@@ -590,8 +600,8 @@ tests a phase breaks are fixed in that phase. The facade's corpus walk lands her
 
 - **Docs land in the phase that stales them**, each argument above moving to the doc comment of
   what it constrains as that lands.
-- **800 lines:** `equalizer.rs` (709 with the stage wired) gains no more; if it passes 760 the
-  limiter moves to its own file first. `backend/mod.rs` (677 with the correction's field) holds
+- **800 lines:** `equalizer.rs` (737 with the stage wired and the silence watch) gains no more;
+  if it passes 760 the limiter moves to its own file first. `backend/mod.rs` (677 with the correction's field) holds
   every stage's cells in one `DspControls`. `app-window.slint` (751) gained its export lines only.
   `library/playback.rs` (567 with the heard-device getter and the bump) gains nothing more.
   Everything else new is its own module.

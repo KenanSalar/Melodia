@@ -104,13 +104,18 @@ impl CorrectionStage {
 
     /// A seek lands a ramp at once, the outgoing bank's state belonging to the audio left behind.
     pub(crate) fn reset(&mut self) {
-        for channel in &mut self.channels {
-            for filter in &mut channel.current {
-                filter.reset_state();
-            }
-        }
+        self.reset_state();
         if self.ramp.is_some() {
             self.end_ramp();
+        }
+    }
+
+    /// Keeps a ramp in flight, so music returning mid-swap still crossfades.
+    pub(crate) fn reset_state(&mut self) {
+        for channel in &mut self.channels {
+            for filter in channel.current.iter_mut().chain(&mut channel.outgoing) {
+                filter.reset_state();
+            }
         }
     }
 
