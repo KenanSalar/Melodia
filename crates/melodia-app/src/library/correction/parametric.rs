@@ -133,3 +133,7 @@ fn number(token: &str) -> Result<f64, SkipReason> {
 fn is(token: &str, keyword: &str) -> bool {
     token.eq_ignore_ascii_case(keyword)
 }
+
+#[cfg(test)]
+#[path = "tests/parametric_tests.rs"]
+mod tests;

@@ -79,3 +79,7 @@ impl PlaybackEngine {
         self.correction.lock().heard.clone()
     }
 }
+
+#[cfg(test)]
+#[path = "tests/correction_tests.rs"]
+mod tests;

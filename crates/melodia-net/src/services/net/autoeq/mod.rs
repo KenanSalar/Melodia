@@ -88,3 +88,7 @@ fn results_base() -> Result<Url, AppError> {
     http_url(RESULTS_BASE)
         .ok_or_else(|| AppError::network_msg("AutoEq's results base is not an http(s) URL"))
 }
+
+#[cfg(test)]
+#[path = "tests/mod_tests.rs"]
+mod tests;

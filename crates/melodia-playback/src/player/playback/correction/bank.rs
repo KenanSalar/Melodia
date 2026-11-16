@@ -247,3 +247,7 @@ fn coefficients(filter: &CorrectionFilter, sample_rate: f64) -> Option<Coefficie
     };
     dsp::design(shape, sample_rate, filter.freq_hz, filter.q)
 }
+
+#[cfg(test)]
+#[path = "tests/bank_tests.rs"]
+mod tests;

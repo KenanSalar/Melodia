@@ -52,3 +52,7 @@ fn decoded_segment(raw: &str) -> Option<String> {
     let movable = matches!(&*segment, "" | "." | "..") || segment.contains('/');
     (!movable).then(|| segment.into_owned())
 }
+
+#[cfg(test)]
+#[path = "tests/list_tests.rs"]
+mod tests;

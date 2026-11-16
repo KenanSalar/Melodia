@@ -135,6 +135,7 @@ fn the_bit_perfect_reset_writes_every_stage_it_cleared() -> Result<(), AppError>
     let (_tmp, paths) = seeded_root_with(|settings| {
         settings.equalizer.eq_enabled = true;
         settings.replaygain.rg_enabled = true;
+        settings.correction.correction_enabled = true;
         settings.playback.playback_speed = 1.5;
         settings.playback.is_muted = true;
         settings.volume = 30;
@@ -146,14 +147,15 @@ fn the_bit_perfect_reset_writes_every_stage_it_cleared() -> Result<(), AppError>
     let written = (
         s.equalizer.eq_enabled,
         s.replaygain.rg_enabled,
+        s.correction.correction_enabled,
         s.playback.playback_speed.to_bits(),
         s.playback.is_muted,
         s.volume,
     );
     assert_eq!(
         written,
-        (false, false, 1.0_f64.to_bits(), false, MAX_VOLUME),
-        "(equalizer, ReplayGain, speed bits, muted, volume)"
+        (false, false, false, 1.0_f64.to_bits(), false, MAX_VOLUME),
+        "(equalizer, ReplayGain, headphone correction, speed bits, muted, volume)"
     );
     Ok(())
 }

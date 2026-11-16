@@ -190,3 +190,7 @@ async fn store(
         log::warn!("AutoEq list cache: {}", describe(&e));
     }
 }
+
+#[cfg(test)]
+#[path = "tests/list_tests.rs"]
+mod tests;

@@ -1,11 +1,41 @@
 //! Tests for where the output choice sends a shared stream, and at which rate, both of which differ
-//! by platform.
+//! by platform, and for which device it is heard on, which keys the headphone correction.
 
 use melodia_audio::player::source::audio::SampleRate;
 use melodia_audio::player::source::decode_ahead;
-use melodia_playback::player::playback::output::OutputRequest;
+use melodia_playback::player::playback::output::{OutputMode, OutputRequest};
 
 use super::OutputChoice;
+
+const CARD: &str = "hw:CARD=UMC22,DEV=0";
+
+/// An exclusive claim plays on the card it names, so that card's correction is the one heard.
+#[test]
+fn an_exclusive_claim_is_heard_on_its_card() {
+    for (chosen, heard) in [(Some(CARD), Some(CARD)), (None, None)] {
+        let choice = OutputChoice {
+            mode: OutputMode::Exclusive,
+            device: chosen.map(str::to_owned),
+            ..OutputChoice::default()
+        };
+
+        assert_eq!(choice.heard_device(), heard, "{chosen:?} chosen");
+    }
+}
+
+/// Shared output on Linux reaches the sound server's default whichever card the Output card names,
+/// so it plays System default's correction.
+#[cfg(target_os = "linux")]
+#[test]
+fn a_shared_stream_on_linux_is_heard_on_system_default() {
+    let choice = OutputChoice {
+        mode: OutputMode::Shared,
+        device: Some(CARD.to_owned()),
+        ..OutputChoice::default()
+    };
+
+    assert_eq!(choice.heard_device(), None);
+}
 
 /// Windows' endpoint ids are the ones a shared stream opens by, so the device picked on the Output
 /// card is where shared output plays too, and none picked follows the system default.

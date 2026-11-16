@@ -2,7 +2,7 @@
 
 Working doc. Delete when the feature ships.
 
-Status: **Phase 6, hand tests left: Windows, silence perf; Tests next** · Created: 2026-11-14
+Status: **Phase 6, hand tests left: Windows, silence perf; Tests written** · Created: 2026-11-14
 
 Issue [#144](https://github.com/KenanSalar/Melodia/issues/144).
 
@@ -591,8 +591,13 @@ profiles, one for a card and one for System default:
 ### Tests
 
 Added where the landed change earns them, on Kenan's go, after the hand tests above. Existing
-tests a phase breaks are fixed in that phase. The facade's corpus walk lands here, and
-`CLAUDE.md`'s facade line then names its file.
+tests a phase breaks are fixed in that phase.
+
+- [x] The facade's corpus walk, `crates/melodia/tests/correction_facade.rs`, which `CLAUDE.md`'s
+      facade line now names.
+- [x] Unit tests beside each module the change earned them in.
+- [ ] Two seams no test reaches yet, each a production change waiting on a decision: the picker's
+      row index into the full list, and the facade's `AppState`-taking writes and rechecks.
 
 ---
 

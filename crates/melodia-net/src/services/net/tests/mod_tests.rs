@@ -7,8 +7,8 @@ use melodia_core::error::AppError;
 use melodia_testkit::http::{TestResponse, TestServer};
 
 use super::{
-    CappedGet, build_http_client, get_capped, get_capped_text, http_url, is_http, is_http_url,
-    read_capped,
+    CappedGet, IfChanged, build_http_client, get_capped, get_capped_if_changed, get_capped_text,
+    http_url, is_http, is_http_url, read_capped,
 };
 
 type TestResult = Result<(), Box<dyn std::error::Error>>;
@@ -171,6 +171,24 @@ async fn a_text_body_that_is_not_utf8_comes_back_lossy_rather_than_failing() -> 
     let text = get_capped_text(&reqwest::Client::new(), &url, &TEST_GET).await?;
 
     assert_eq!(text, "A\u{fffd}B");
+    Ok(())
+}
+
+/// The tag is all the next request revalidates by: lost, the update check and `AutoEq`'s list
+/// download in full every time.
+#[tokio::test]
+async fn a_fresh_body_comes_back_with_the_tag_to_revalidate_it_by() -> TestResult {
+    const TAG: &str = "\"list-1\"";
+    let server = TestServer::start(|_| TestResponse::ok("list").header("ETag", TAG))?;
+    let url = reqwest::Url::parse(&server.base_url())?;
+
+    let fetched = get_capped_if_changed(&reqwest::Client::new(), &url, None, &TEST_GET).await?;
+
+    let tag = match fetched {
+        IfChanged::Fresh { etag, .. } => etag,
+        IfChanged::NotModified => None,
+    };
+    assert_eq!(tag.as_deref(), Some(TAG));
     Ok(())
 }
 

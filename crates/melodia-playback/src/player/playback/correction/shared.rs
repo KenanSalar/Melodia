@@ -142,3 +142,7 @@ fn kind_from_cell(code: u8) -> FilterKind {
         _ => FilterKind::Peaking,
     }
 }
+
+#[cfg(test)]
+#[path = "tests/shared_tests.rs"]
+mod tests;

@@ -67,3 +67,7 @@ pub fn move_legacy_eq(paths: &Paths, settings: &SettingsData) -> AppResult<()> {
     }
     mutate_settings(paths, |settings| settings.legacy_eq = LegacyEq::default())
 }
+
+#[cfg(test)]
+#[path = "../tests/eq_tests.rs"]
+mod tests;

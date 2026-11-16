@@ -97,3 +97,7 @@ fn read_import(path: &Path) -> Result<String, ImportError> {
 fn fits_import_cap(len: usize) -> bool {
     u64::try_from(len).is_ok_and(|len| len <= IMPORT_MAX_BYTES)
 }
+
+#[cfg(test)]
+#[path = "tests/apply_tests.rs"]
+mod tests;

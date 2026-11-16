@@ -219,3 +219,7 @@ pub enum ProfileRefusal {
     #[error(transparent)]
     Filters(#[from] FilterSetError),
 }
+
+#[cfg(test)]
+#[path = "tests/correction_tests.rs"]
+mod tests;

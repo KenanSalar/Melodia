@@ -99,3 +99,7 @@ fn power_over_phi([t0, t1, t2]: [f64; 3]) -> [f64; 3] {
     let sum = t0 + t1 + t2;
     [sum * sum, -4.0 * (t0 * t1 + t1 * t2 + 4.0 * t0 * t2), 16.0 * t0 * t2]
 }
+
+#[cfg(test)]
+#[path = "tests/response_tests.rs"]
+mod tests;
