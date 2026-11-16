@@ -634,9 +634,8 @@ impl<S: AudioSource> EqSource<S> {
         Some(self.frame[0])
     }
 
-    /// Clears the filters once the output has read exactly zero for a run: a decaying state would
-    /// otherwise cycle at subnormal values for the rest of the silence, which is slow arithmetic,
-    /// and an output already reading exactly zero leaves nothing audible to clear.
+    /// The narrowed output reads zero long before the slowest filter's f64 state goes subnormal,
+    /// so clearing every filter is inaudible and cuts the silence's subnormal arithmetic short.
     fn settle_on_silence(&mut self, peak: f32) {
         if peak > 0.0 {
             self.silent_frames = 0;
