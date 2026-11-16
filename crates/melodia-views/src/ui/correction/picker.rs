@@ -136,16 +136,13 @@ impl Picker {
         };
         let Some(ui) = self.ui.upgrade() else { return };
         let g = ui.global::<HeadphonePicker>();
-        g.set_applying(true);
         g.set_failure(ApplyFailure::None);
 
         let state = self.state.clone();
-        let fetch = self.state.runtime.spawn(async move {
-            library::correction::apply_from_list(&state, target, &entry).await
-        });
-        *self.fetch.borrow_mut() = Some(fetch.abort_handle());
+        let work =
+            async move { library::correction::apply_from_list(&state, target, &entry).await };
         let ticket = self.ticket.get();
-        self.after_any_ticket("AutoEq profile", fetch, move |ui, picker, applied| {
+        let fetch = self.after_any_ticket("AutoEq profile", work, move |ui, picker, applied| {
             picker.card.paint();
             // A close already took this handle, and the slot may hold a later fetch's.
             if !picker.ticket.holds(ticket, ui) {
@@ -155,18 +152,16 @@ impl Picker {
             let g = ui.global::<HeadphonePicker>();
             g.set_applying(false);
             match applied {
-                Some(Ok(Ok(()))) => ui.global::<Dialog>().set_open(false),
-                Some(Ok(Err(e))) => {
+                Some(Ok(())) => ui.global::<Dialog>().set_open(false),
+                Some(Err(e)) => {
                     log::warn!("AutoEq profile: {}", describe(&e));
                     g.set_failure(failure(&e));
-                }
-                Some(Err(e)) => {
-                    log::warn!("AutoEq profile task failed: {}", describe(&e));
-                    g.set_failure(ApplyFailure::Failed);
                 }
                 None => g.set_failure(ApplyFailure::Failed),
             }
         });
+        g.set_applying(fetch.is_some());
+        *self.fetch.borrow_mut() = fetch;
     }
 
     fn release(&self) {

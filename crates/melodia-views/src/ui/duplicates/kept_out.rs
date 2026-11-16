@@ -156,7 +156,7 @@ impl KeptOutList {
                     None => list.show_bring_back_failed(ui, asked),
                 }
             });
-        if spawned {
+        if spawned.is_some() {
             kept.set_bringing_back(true);
         }
     }

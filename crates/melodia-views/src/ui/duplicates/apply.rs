@@ -51,7 +51,7 @@ impl Finder {
                 }
                 finder.show_removed(ui, counts);
             });
-        if spawned {
+        if spawned.is_some() {
             dup.set_removing(true);
         }
     }

@@ -166,12 +166,10 @@ impl DeviceCorrections {
         }
     }
 
-    pub fn remove(&mut self, device: Option<&str>) {
+    pub fn remove(&mut self, device: Option<&str>) -> Option<Correction> {
         match device {
-            Some(id) => {
-                self.devices.remove(id);
-            }
-            None => self.system_default = None,
+            Some(id) => self.devices.remove(id),
+            None => self.system_default.take(),
         }
     }
 }

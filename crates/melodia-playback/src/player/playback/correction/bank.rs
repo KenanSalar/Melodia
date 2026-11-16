@@ -4,12 +4,12 @@
 
 use std::mem;
 
-use biquad::{Biquad, Coefficients, DirectForm1, Hertz, Type};
+use biquad::{Biquad, Coefficients, DirectForm1, Type};
 
 use super::response::{FilterResponse, ResponseGrid};
 use super::shared::{CorrectionShared, PublishedSet};
 use crate::player::playback::crossfade;
-use crate::player::playback::dsp::PASSTHROUGH;
+use crate::player::playback::dsp::{self, PASSTHROUGH};
 use melodia_audio::player::source::audio::SampleRate;
 use melodia_core::entities::correction::{CorrectionFilter, FilterKind, MAX_CORRECTION_FILTERS};
 
@@ -239,14 +239,11 @@ impl Ramp {
     }
 }
 
-/// `None` at or past Nyquist, where the cookbook has no design and the filter sits out.
 fn coefficients(filter: &CorrectionFilter, sample_rate: f64) -> Option<Coefficients<f64>> {
     let shape = match filter.kind {
         FilterKind::Peaking => Type::PeakingEQ(filter.gain_db),
         FilterKind::LowShelf => Type::LowShelf(filter.gain_db),
         FilterKind::HighShelf => Type::HighShelf(filter.gain_db),
     };
-    let fs = Hertz::<f64>::from_hz(sample_rate).ok()?;
-    let f0 = Hertz::<f64>::from_hz(filter.freq_hz).ok()?;
-    Coefficients::<f64>::from_params(shape, fs, f0, filter.q).ok()
+    dsp::design(shape, sample_rate, filter.freq_hz, filter.q)
 }

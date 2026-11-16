@@ -11,6 +11,7 @@ use melodia_core::entities::correction::{
     AutoEqEntry, Correction, CorrectionOrigin, ParsedProfile, ProfileRefusal,
 };
 use melodia_core::error::AppError;
+use melodia_core::utils::text::from_utf8_lossy_owned;
 use melodia_net::services::net::autoeq;
 
 /// Far past a profile's size, leaving room for the comments and the graphic EQ line other tools
@@ -90,8 +91,7 @@ fn read_import(path: &Path) -> Result<String, ImportError> {
         return Err(ImportError::TooLarge);
     }
     // Lossy, so a comment written in another codepage doesn't refuse the file.
-    Ok(String::from_utf8(bytes)
-        .unwrap_or_else(|e| String::from_utf8_lossy(e.as_bytes()).into_owned()))
+    Ok(from_utf8_lossy_owned(bytes))
 }
 
 fn fits_import_cap(len: usize) -> bool {

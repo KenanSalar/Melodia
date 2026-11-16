@@ -140,11 +140,9 @@ impl Card {
 
     fn clear(self: &Rc<Self>, undo: &UndoWindow) {
         let Some(CorrectionTarget { device, .. }) = self.target() else { return };
-        let Some(correction) = library::correction::correction_for(&self.state, device.as_deref())
-        else {
+        let Some(correction) = library::correction::clear(&self.state, device.as_deref()) else {
             return;
         };
-        library::correction::clear(&self.state, device.as_deref());
         self.paint();
         undo.offer(Removal::Correction(ClearUndo { card: Rc::clone(self), device, correction }));
     }

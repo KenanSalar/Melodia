@@ -14,6 +14,7 @@ pub mod radio_browser;
 use std::time::Duration;
 
 use melodia_core::error::{AppError, describe};
+use melodia_core::utils::text::from_utf8_lossy_owned;
 use reqwest::StatusCode;
 use reqwest::header::{ETAG, HeaderValue, IF_NONE_MATCH};
 
@@ -76,19 +77,14 @@ pub async fn get_capped(
     read_success(response, spec).await
 }
 
-/// [`get_capped`] for text.
+/// [`get_capped`] for text, lossy so one Latin-1 byte in a title costs a replacement character, not
+/// the station.
 pub async fn get_capped_text(
     client: &reqwest::Client,
     url: &reqwest::Url,
     spec: &CappedGet,
 ) -> Result<String, AppError> {
-    Ok(body_text(get_capped(client, url, spec).await?))
-}
-
-/// `from_utf8` moves where `from_utf8_lossy` copies; lossy stays on the error arm so one Latin-1
-/// byte in a title costs a replacement character, not the station.
-fn body_text(body: Vec<u8>) -> String {
-    String::from_utf8(body).unwrap_or_else(|e| String::from_utf8_lossy(e.as_bytes()).into_owned())
+    Ok(from_utf8_lossy_owned(get_capped(client, url, spec).await?))
 }
 
 /// What [`get_capped_if_changed`] found.

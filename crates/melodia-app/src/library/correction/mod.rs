@@ -58,11 +58,12 @@ pub fn correction_for(state: &AppState, device: Option<&str>) -> Option<Correcti
     state.corrections.picked().for_device(device).cloned()
 }
 
-pub fn clear(state: &AppState, device: Option<&str>) {
-    commit(state, |corrections| corrections.remove(device));
+/// Hands back what it took, so an undo restores exactly that.
+pub fn clear(state: &AppState, device: Option<&str>) -> Option<Correction> {
+    commit(state, |corrections| corrections.remove(device))
 }
 
-/// Sets a correction read back with [`correction_for`], as Clear's undo puts one back.
+/// Puts back a correction [`clear`] took.
 pub fn restore(state: &AppState, device: Option<String>, correction: Correction) {
     commit(state, |corrections| corrections.insert(device, correction));
 }
@@ -77,8 +78,8 @@ fn autoeq_client(state: &AppState) -> Result<&reqwest::Client, AppError> {
 
 /// Every write to the map: the shadow here, then the engine and the file handed the map as it
 /// stands, so they take writes in the order the shadow did.
-fn commit(state: &AppState, edit: impl FnOnce(&mut DeviceCorrections)) {
-    edit(&mut state.corrections.picked());
+fn commit<R>(state: &AppState, edit: impl FnOnce(&mut DeviceCorrections) -> R) -> R {
+    let edited = edit(&mut state.corrections.picked());
     let ctx = state.playback_ctx();
     let shadow = Arc::clone(&state.corrections);
     state.persist_blocking("persist corrections", move |paths| {
@@ -87,4 +88,5 @@ fn commit(state: &AppState, edit: impl FnOnce(&mut DeviceCorrections)) {
             library::settings::set_corrections(paths, corrections)
         })
     });
+    edited
 }

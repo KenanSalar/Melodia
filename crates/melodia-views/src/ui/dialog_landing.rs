@@ -10,6 +10,7 @@ use std::rc::Rc;
 
 use slint::ComponentHandle;
 use tokio::runtime::Handle;
+use tokio::task::AbortHandle;
 
 use melodia_core::error::describe;
 use melodia_ui::{AppWindow, Dialog, DialogKind};
@@ -72,21 +73,27 @@ pub(crate) trait TicketedDialog: Sized + 'static {
     }
 
     /// [`Self::after`] for an answer that lands whatever the ticket: a write a dialog closed mid-run
-    /// still made, or a count shown outside the dialog. `None` is a task that failed to join, so a
-    /// busy flag set for the work still comes down. Answers whether the landing was spawned.
+    /// still made, or a count shown outside the dialog. `None` is a task that didn't finish, so a
+    /// busy flag set for it still comes down. Answers its abort handle if the landing spawned.
     fn after_any_ticket<T: Send + 'static>(
         self: &Rc<Self>,
         label: &'static str,
         work: impl Future<Output = T> + Send + 'static,
         land: impl FnOnce(&AppWindow, &Self, Option<T>) + 'static,
-    ) -> bool {
+    ) -> Option<AbortHandle> {
         let answer = self.runtime().spawn(work);
+        let abort = answer.abort_handle();
         let dialog = Rc::downgrade(self);
         let spawned = slint::spawn_local(async_compat::Compat::new(async move {
-            let answer = answer
-                .await
-                .inspect_err(|e| log::warn!("{label}: task failed: {}", describe(e)))
-                .ok();
+            let answer = match answer.await {
+                Ok(answer) => Some(answer),
+                Err(e) => {
+                    if !e.is_cancelled() {
+                        log::warn!("{label}: task failed: {}", describe(&e));
+                    }
+                    None
+                }
+            };
             let Some(dialog) = dialog.upgrade() else {
                 return;
             };
@@ -98,6 +105,6 @@ pub(crate) trait TicketedDialog: Sized + 'static {
         if let Err(e) = &spawned {
             log::warn!("{label}: not spawned: {}", describe(e));
         }
-        spawned.is_ok()
+        spawned.is_ok().then_some(abort)
     }
 }

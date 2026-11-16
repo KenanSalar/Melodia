@@ -12,6 +12,7 @@ pub mod crossfade;
 pub mod decks;
 pub mod dsp;
 pub mod equalizer;
+mod limiter;
 pub mod output;
 pub mod replaygain;
 pub mod spectrum;
