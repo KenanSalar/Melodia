@@ -600,11 +600,11 @@ tests a phase breaks are fixed in that phase. The facade's corpus walk lands her
 
 - **Docs land in the phase that stales them**, each argument above moving to the doc comment of
   what it constrains as that lands.
-- **800 lines:** `equalizer.rs` (736 with the stage wired and the silence watch) gains no more;
-  if it passes 760 the limiter moves to its own file first. `backend/mod.rs` (677 with the
-  correction's field) holds every stage's cells in one `DspControls`. `app-window.slint` (751)
-  gained its export lines only. `library/playback.rs` (567 with the heard-device getter and the
-  bump) gains nothing more. Everything else new is its own module.
+- **800 lines:** `equalizer.rs` (661 once the limiter moved to `limiter.rs`) gains no more.
+  `backend/mod.rs` (677 with the correction's field) holds every stage's cells in one
+  `DspControls`. `app-window.slint` (751) gained its export lines only. `library/playback.rs`
+  (567 with the heard-device getter and the bump) gains nothing more. Everything else new is its
+  own module.
 - **Memory:** two banks of 20 f64 filters per channel per source, a few KiB; the list only while
   the picker is open. The hand tests measure it.
 - **Lock order** (ADR 0035) is untouched: only the output choice's lock is taken under the
