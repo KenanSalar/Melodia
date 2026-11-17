@@ -13,7 +13,6 @@ pub fn crossfeed_for(state: &AppState, device: Option<&str>) -> CrossfeedSetting
     state.crossfeed.picked().for_device(device).copied().unwrap_or_default()
 }
 
-/// Keeps the strength for when it is switched back on.
 pub fn set_enabled(state: &AppState, device: Option<String>, enabled: bool) {
     commit(state, |crossfeed| crossfeed.get_or_insert_default(device).enabled = enabled);
 }
@@ -33,9 +32,12 @@ pub fn set_strength(state: &AppState, device: Option<String>, strength: Crossfee
     commit(state, |crossfeed| crossfeed.get_or_insert_default(device).strength = strength);
 }
 
-/// Make Bit-Perfect's half, on the device heard when called, so it runs after any output switch.
+/// Make Bit-Perfect's half, on the device heard when called: call it after any output switch.
 pub fn switch_off_heard(state: &AppState) {
     let heard = library::playback::player_heard_device(&state.playback_ctx());
+    if !crossfeed_for(state, heard.as_deref()).enabled {
+        return;
+    }
     set_enabled(state, heard, false);
 }
 

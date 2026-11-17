@@ -197,8 +197,9 @@ not `g`, so the strength-to-`g` mapping (`amount`) stays private to the DSP.
 
 Both handlers (`ui/settings/signal_path.rs:36`, `output_settings.rs:194`) end with
 `library::crossfeed::switch_off_heard`, after the output switch where there is one, so the device
-made bit-perfect is the one switched off. It goes through `set_enabled`, the map's one writer, rather
-than into `reset_for_bit_perfect`'s write, which could land an older map after a newer.
+made bit-perfect is the one switched off; one already off is left unwritten. It goes through
+`set_enabled`, so through `commit`, the map's one writer, rather than into
+`reset_for_bit_perfect`'s write, which could land an older map after a newer.
 `show_bit_perfect_reset` turns the card's switch off.
 
 ### The signal path
@@ -394,8 +395,8 @@ that phase.
   it constrains as it lands.
 - **800 lines:** `equalizer.rs` (661, 679 after Phase 2) gains the scratch and the stage's hooks
   only; the stage is its own module. `backend/mod.rs` (677, 683 after Phase 3) renames a field.
-  `library/playback.rs` (567, 573 after Phase 3) gains one setter. `output-section.slint` (453) gains a name and a
-  chain.
+  `library/playback.rs` (567, 573 after Phase 3) gains one setter. `output-section.slint` (453)
+  gains a name and a chain.
 - **Memory:** one f64 filter and a few scalars per source; nothing to measure past the hand tests.
 - **Lock order** (ADR 0035) is unchanged: the renamed lock sits where the correction's did.
 - **The live public release:** off by default; `crossfeed` is `#[serde(default)]`. `eq.json` has
