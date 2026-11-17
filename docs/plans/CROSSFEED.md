@@ -392,8 +392,8 @@ In the dev data folder with a backup.
       output on Linux, with a search showing the Output and Headphones cards together, the card
       ends on the exclusive device with its switch off.
 - [ ] The readout changes word halfway between the default and each end (0.35 and 0.85 of the
-      track at a default of 0.7), and the track holds still as it does, in English and in a long
-      locale (`ru`, `el`).
+      track at a default of 0.7), and the track holds still as it does, in English and in `nl`,
+      whose "Gemiddeld" is the widest readout; `ru` and `el` for their scripts.
 - [ ] The Effects row names Crossfeed with a stereo file playing and not with a mono one, and
       lists four names in the order ReplayGain, correction, equalizer, crossfeed.
 - [ ] The settings search finds the card by "headphone", "correction", "AutoEq" and "crossfeed".

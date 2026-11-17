@@ -15,7 +15,7 @@ export component CrossfeedStrengthSlider inherits SettingSlider {
         : Crossfeed.level == CrossfeedLevel.medium ? @tr("Medium")
         // Translators: crossfeed's strength, at the slider's high end.
         : @tr("Strong");
-    readout-width: 56px;
+    readout-width: 60px;
     changed(v) => { Crossfeed.preview-strength(v); }
     committed(v) => { Crossfeed.set-strength(v); }
 }

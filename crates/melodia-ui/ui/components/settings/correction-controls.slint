@@ -1,7 +1,7 @@
 import { CorrectionFrom, HeadphoneCorrection } from "../../globals/audio.slint";
 
-// The words the correction's rows, its two dialogs and the onboarding row print, so a reworded
-// label can't leave another on its old msgid.
+// The words the correction's rows and the onboarding row print, so a reworded label can't leave
+// the other on its old msgid.
 export global CorrectionText {
     out property <string> enable-label: @tr("Enable headphone correction");
     out property <string> enable-desc: @tr("Even out how your headphones color the sound, with a correction measured for their model");
