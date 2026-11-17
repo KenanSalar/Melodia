@@ -2,7 +2,7 @@
 
 Working doc. Delete when the feature ships.
 
-Status: **Phase 6, hand tests left: Windows, silence perf; Tests written** · Created: 2026-11-14
+Status: **Phase 6, hand tests left: Windows; Tests written** · Created: 2026-11-14
 
 Issue [#144](https://github.com/KenanSalar/Melodia/issues/144).
 
@@ -536,6 +536,13 @@ profiles, one for a card and one for System default:
       139.2 ± 3.3 M cycles/s against 137.4 ± 2.4 right after, so the rebuilds add about 1.3%;
       `Bank::update_headroom` took 0.11% of the window's samples. Nearly all of the thread is the
       per-sample path, and no underrun was logged.
+      Windows, 2026-11-17: `QueryThreadCycleTime` on `cpal_wasapi_out`, the 192 kHz source
+      resampled to the UMC22's 48 kHz, 60 band writes in 30 s of scripted drags from a curve with
+      all ten bands active, none crossing 0 dB. 177.3 M cycles/s during the drag against 184.7 in
+      the 30 s before; 7 s after it the thread fell to about 142 with nothing in Melodia's log, so
+      the machine's background moves more than the rebuilds cost and this run resolves no share.
+      No underrun or warning was logged. WPR, the sampling profiler that would give the share,
+      refuses to start without an elevated shell.
 - [x] Digital silence inside a track can leave a cascade's state cycling at subnormal values
       instead of reaching zero, so `EqSource::settle_on_silence` clears the filters once the
       output has read exactly zero for `SILENCE_SETTLE_MS`.
@@ -544,8 +551,15 @@ profiles, one for a card and one for System default:
       clean silence for the first 20 s and 1.08–1.61× after, bimodal between runs. With the watch
       it fired 2.69 s in, and later windows read 1.11–1.21× against the same loop's 1.12× on a
       clean chain.
-- [ ] In the app: `perf stat -e cycles:u` on `cpal_alsa_out` across a track with 30 s of digital
+- [x] In the app: `perf stat -e cycles:u` on `cpal_alsa_out` across a track with 30 s of digital
       silence, the correction on; the silent stretch costs no more than the music.
+      Run on Windows, 2026-11-17: `QueryThreadCycleTime` on `cpal_wasapi_out`, shared on the
+      UMC22 at 48 kHz, a 44.1 kHz track of 30 s music, 30 s of zeros and 30 s music, stretches
+      timed from the log's play line. In M cycles/s, silence after its first 3 s against the music
+      after it: 18.41 / 18.53 with the correction alone; 26.95 / 26.99 and 27.07 / 28.89 with ten
+      boosted bands on top, the music before reading 27.04 and 27.02. Stopped reads 3.6. Both
+      ten-band runs show one burst of about 0.6 s some 2 s into the silence, up to 43 in a 0.2 s
+      step, after which the silence reads a little under the music.
 
 **The card, the picker and the import:**
 - [x] The picker finds a model by part of its name, applies it, and the card shows it; a second
@@ -587,6 +601,14 @@ profiles, one for a card and one for System default:
       Never opened, at the same point after boot: 179.2 MB VmRSS, 26.87 MB anonymous. Open: 185.4
       and 28.56. Two minutes after closing: 184.2 and 27.25, the list's heap given back to within
       0.4 MB; the rest is code and GPU pages faulted in to draw the dialog, which stay resident.
+      Windows, 2026-11-17, two picker runs against two never-opened runs on one timeline, idle on
+      Settings ▸ Effects: two minutes after closing, the picker runs sat +1.37 and +1.93 MiB in
+      Private Bytes over the never-opened ones, inside the launch-to-launch spread. A
+      `VirtualQueryEx` walk of the second pair splits it. The NT heap's segments read 9.07 MiB
+      before, 11.91 open and 10.18 after (never opened: 9.17, 9.21, 9.23), so about 1.1 MiB stays
+      committed past the close's trim; whether that is the list or the heap keeping freed pages,
+      a second open and close would tell. A 32 MiB non-heap pool beside the driver's
+      write-combined ones kept the 2.00 MiB it grew while the picker drew.
 
 ### Tests
 
