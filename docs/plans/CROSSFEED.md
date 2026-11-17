@@ -2,7 +2,7 @@
 
 Working doc. Delete when the feature ships.
 
-Status: **Phase 1 landed, Phase 2 waiting for its go** · Created: 2026-11-17 ·
+Status: **Phases 1 and 2 landed, Phase 3 waiting for its go** · Created: 2026-11-17 ·
 Branch `feat/crossfeed`, linked to the issue
 
 Issue [#157](https://github.com/KenanSalar/Melodia/issues/157).
@@ -130,6 +130,8 @@ the two settings' outputs. One mechanism covers on, off, a slider move and a dev
   so a slider drag glides.
 - No coefficient swap and no second bank: the filter runs on while `g` moves.
 - Switching on starts the filter from rest; its settling is scaled by a `g` near zero.
+- A new source takes the `g` set when it is built, with no ramp, so a gapless successor doesn't
+  glide in from zero.
 - A ramp landing on zero frees the bypass, so off is bit-identical again.
 - A seek clears the filter and lands a ramp at its target, as the correction does
   (`correction/bank.rs` `reset`); digital silence clears it with the other filters in
@@ -158,7 +160,8 @@ ReplayGain/preamp, correction, bands, crossfeed, limiter, clamp, fade.
 
 `CrossfeedShared` holds the target `g` as one `AtomicF64`, zero meaning off. One cell needs no
 sequence count or generation: the source compares it with its last target at each frame boundary.
-It joins `DspControls` beside the correction.
+It joins `DspControls` beside the correction. The engine hands it a `CrossfeedSetting` (`set`),
+not `g`, so the strength-to-`g` mapping (`amount`) stays private to the DSP.
 
 ### One setting per device
 
@@ -173,8 +176,8 @@ It joins `DspControls` beside the correction.
 - **The engine owns the heard device once.** `HeadphoneControls` (`backend/headphones.rs`) holds
   `heard`, `aim` and `heard_device`, and the two selects: `CorrectionControl` keeps its writer and
   map, its `select` now taking the heard device; `CrossfeedControl` publishes the heard device's
-  `g`, only on a change. `aim` selects both. It is the engine's `correction` lock renamed, at the
-  same place in the order.
+  setting (off where it has none), only on a change. `aim` selects both. It is the engine's
+  `correction` lock renamed, at the same place in the order.
 - **Persisted in `settings.json`** as the `crossfeed` key: a switch and a strength are prefs, and
   `CLAUDE.md`'s state-file line already says so. `#[serde(default)]`, so older files read it as
   empty.
@@ -267,7 +270,8 @@ Headphones
 | views | `crates/melodia-views/src/ui/headphones.rs`, `ui/crossfeed.rs`, `ui/correction/mod.rs`, `ui/settings/signal_path.rs` | the card's naming and repaint on `output_changed` move out of `correction`; crossfeed's switch and slider; the bit-perfect repaint |
 
 `melodia-views` learns nothing about filters: it reads `CrossfeedSetting` from `melodia-core`
-through `library::crossfeed`. The DSP learns nothing about devices: the engine hands it `g`.
+through `library::crossfeed`. The DSP learns nothing about devices: the engine hands it the heard
+device's setting.
 
 **The duplication this collapses first** (Phase 1):
 
@@ -300,16 +304,17 @@ through `library::crossfeed`. The DSP learns nothing about devices: the engine h
 
 ## Phase 2: The stage (`melodia-core`, `melodia-playback`)
 
-- [ ] `entities/crossfeed.rs`: `CrossfeedStrength`, `CrossfeedSetting`, `DEFAULT_STRENGTH`, serde.
-- [ ] `crossfeed.rs`: the constants, `amount`, `reaches`, `CrossfeedShared`, `CrossfeedStage`
+- [x] `entities/crossfeed.rs`: `CrossfeedStrength`, `CrossfeedSetting`, `DEFAULT_STRENGTH`, serde.
+- [x] `crossfeed.rs`: the constants, `amount`, `reaches`, `CrossfeedShared`, `CrossfeedStage`
       (the filter, `g`, the ramp, `poll`, `run` over a frame, `reset`, `reset_state`, `engaged`).
-- [ ] `EqSource`: the f64 frame scratch, the stage in `DspControls` and polled at the frame
+- [x] `EqSource`: the f64 frame scratch, the stage in `DspControls` and polled at the frame
       boundary, `rebuild`'s bypass counting it, seek and silence clearing it.
-- [ ] Docs: `playback/mod.rs`' chain order, `equalizer.rs`' `//!`, `.claude/rules/unsafe-rust.md`'s
-      "four iterator loops" line. ADR 0010's shape (one wrapper, lock-free state) holds.
+- [x] Docs: `playback/mod.rs`' chain order, `equalizer.rs`' `//!`. `unsafe-rust.md`'s "four
+      iterator loops" line holds as written: still four, crossfeed adding one per-frame slice
+      pattern. ADR 0010's shape (one wrapper, lock-free state) holds.
 
 **Gate:**
-- [ ] fmt, clippy, the existing equalizer suite unchanged through `..DspControls::default()`.
+- [x] fmt, clippy, the existing equalizer suite unchanged through `..DspControls::default()`.
 
 ## Phase 3: Per device, persisted (`melodia-engine`, `melodia-app`)
 
@@ -380,9 +385,10 @@ that phase.
 
 - **Docs land in the phase that stales them**, each argument here moving to the doc comment of what
   it constrains as it lands.
-- **800 lines:** `equalizer.rs` (661) gains the scratch and the stage's hooks only; the stage is its
-  own module. `backend/mod.rs` (677) renames a field. `library/playback.rs` (567) gains one
-  setter. `output-section.slint` (453) gains a name and a chain.
+- **800 lines:** `equalizer.rs` (661, 679 after Phase 2) gains the scratch and the stage's hooks
+  only; the stage is its own module. `backend/mod.rs` (677) renames a field.
+  `library/playback.rs` (567) gains one setter. `output-section.slint` (453) gains a name and a
+  chain.
 - **Memory:** one f64 filter and a few scalars per source; nothing to measure past the hand tests.
 - **Lock order** (ADR 0035) is unchanged: the renamed lock sits where the correction's did.
 - **The live public release:** off by default; `crossfeed` is `#[serde(default)]`. `eq.json` has

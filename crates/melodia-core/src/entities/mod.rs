@@ -4,6 +4,7 @@ pub mod audio_quality;
 pub mod browse;
 pub mod correction;
 pub mod credits;
+pub mod crossfeed;
 pub mod cue;
 pub mod device_map;
 pub mod duplicates;
