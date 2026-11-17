@@ -1,0 +1,58 @@
+name: Issue labels
+
+# Copies the linked issues' labels onto a PR, which GitHub doesn't do itself.
+# Runs on every push too, since an issue linked from the sidebar after the PR
+# opened raises no event of its own.
+
+on:
+  pull_request:
+    branches: [ main ]
+    types: [opened, reopened, synchronize]
+
+permissions: {}
+
+jobs:
+  copy-labels:
+    name: copy-labels
+    runs-on: ubuntu-latest
+    # A fork's token is read-only, so the label write would fail the job.
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    permissions:
+      issues: read          # the linked issues' labels
+      pull-requests: write  # the label write on the PR
+    steps:
+      - uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        env:
+          # Issue-only labels: `accepted` is what puts an item on the project board.
+          EXCLUDED_LABELS: accepted
+        with:
+          script: |
+            const excluded = new Set(
+              process.env.EXCLUDED_LABELS.split(',').map(name => name.trim().toLowerCase())
+            );
+            const pr = context.payload.pull_request;
+            const { repository } = await github.graphql(`
+              query($owner: String!, $repo: String!, $number: Int!) {
+                repository(owner: $owner, name: $repo) {
+                  pullRequest(number: $number) {
+                    closingIssuesReferences(first: 10) {
+                      nodes { labels(first: 50) { nodes { name } } }
+                    }
+                  }
+                }
+              }`, { ...context.repo, number: pr.number });
+
+            const onPr = new Set(pr.labels.map(label => label.name));
+            const toAdd = new Set(
+              repository.pullRequest.closingIssuesReferences.nodes
+                .flatMap(issue => issue.labels.nodes.map(label => label.name))
+                .filter(name => !excluded.has(name.toLowerCase()) && !onPr.has(name))
+            );
+            if (toAdd.size === 0) return;
+
+            await github.rest.issues.addLabels({
+              ...context.repo,
+              issue_number: pr.number,
+              labels: [...toAdd],
+            });
+            core.info(`Added: ${[...toAdd].join(', ')}`);
