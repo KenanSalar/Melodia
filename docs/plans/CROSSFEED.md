@@ -2,7 +2,7 @@
 
 Working doc. Delete when the feature ships.
 
-Status: **Phases 1–3 done, Phase 4 waiting for its go** · Created: 2026-11-17 ·
+Status: **Phases 1–4 done, Phase 5's hand tests next** · Created: 2026-11-17 ·
 Branch `feat/crossfeed`, linked to the issue
 
 Issue [#157](https://github.com/KenanSalar/Melodia/issues/157).
@@ -115,7 +115,8 @@ they are built once per source and never change.
   `STRONG_FEED_DB` 4.5 dB (bs2b's ±30° speakers), and then `g = 1 / (1 + 10^(feed/20))`.
   `DEFAULT_STRENGTH` 0.7 lands on 6.0 dB, Chu Moy's level, which bs2b calls the most popular.
 - The cutoff stays at `CUTOFF_HZ` 700 Hz at every strength.
-- The slider's readout names the nearest of the three: Subtle, Medium, Strong.
+- The slider's readout names the nearest of the three: Subtle at the low end, Medium at
+  `DEFAULT_STRENGTH`, Strong at the high end (`ui/crossfeed.rs`' `level`).
 - All four constants are starting points; the hand tests settle them by ear on hard-panned
   recordings and record the result here.
 
@@ -195,10 +196,14 @@ not `g`, so the strength-to-`g` mapping (`amount`) stays private to the DSP.
 
 ### Make Bit-Perfect
 
-Both handlers (`ui/settings/signal_path.rs:36`, `output_settings.rs:194`) end with
-`library::crossfeed::switch_off_heard`, after the output switch where there is one, so the device
-made bit-perfect is the one switched off; one already off is left unwritten. It goes through
-`set_enabled`, so through `commit`, the map's one writer, rather than into
+Both handlers call `library::crossfeed::switch_off(state, device)` on the UI thread before they
+spawn anything; one already off is left unwritten. The reset alone (`ui/settings/signal_path.rs`)
+names `player_heard_device`; the switch to exclusive (`output_settings.rs`'
+`install_bit_perfect_switch`) names the new choice's `heard_device()`, the function the engine's
+aim reads, so the device made bit-perfect is the one switched off. Switching it off after the
+output switch, inside its task, would lose to the card: `player_set_output_choice` bumps
+`output_changed`, and the card can paint the new device's crossfeed as on before the write lands.
+It goes through `set_enabled`, so through `commit`, the map's one writer, rather than into
 `reset_for_bit_perfect`'s write, which could land an older map after a newer.
 `show_bit_perfect_reset` turns the card's switch off.
 
@@ -215,18 +220,23 @@ Headphones
   [volume_up]  <device name>                       always, while the card shows
                Correction and crossfeed are kept for each device
   [headphones] Enable headphone correction    [ ]
-     ... the correction's rows as today, while it is on ...
-  [swap]       Crossfeed                       [ ]
+  [graphic_eq] <the correction, or none set>       while it is on
+               [Find Headphones] [Import] [Clear]
+  [travel_explore] Find corrections online    [ ]  while it is on
+  [swap_horiz] Crossfeed                       [ ]  disabled until the device is named
                Each ear hears a little of the other channel, as from speakers
-     Strength  ======o=========  Medium        while it is on
+  [tune]       Strength
+               ======o=========  Medium        while it is on
 ```
 
 - The device row moves out of the correction's stacked row to head the card, since both settings
-  are per device; the correction's row keeps its description and three buttons.
+  are per device; the correction's row takes the correction's own words as its label.
 - Words per effect, as the catalogue has it: `CorrectionText` keeps the correction's (the
   onboarding row still reads its online pair), `CrossfeedText` holds the crossfeed's, and
   `HeadphonesText` the card's title and device line.
-- The Crossfeed row takes `swap_horiz`, already in `scripts/icons.txt`.
+- The three icons are already in `scripts/icons.txt`.
+- The readout's word is Rust's (`Crossfeed.level`), written back with the strength on every drag
+  step, as RG's preamp is.
 
 ---
 
@@ -268,7 +278,7 @@ Headphones
 | the wrapper | `player/playback/equalizer.rs` | the f64 frame scratch, the stage polled with the others, bypass, seek, silence |
 | engine | `backend/{headphones,correction,crossfeed,output,mod}.rs`, `signal_path.rs` | `HeadphoneControls` owns `heard` and `aim`; `CrossfeedControl`; `SignalInputs.crossfeed_on` |
 | settings | `crates/melodia-app/src/services/settings/data.rs`, `library/settings/crossfeed.rs` | `SettingsData.crossfeed`; its setter |
-| facade | `crates/melodia-app/src/library/{headphones,crossfeed}.rs` | `DeviceTarget`, `Heard`, `heard()`; `crossfeed_for`, `set_enabled`, `preview_strength`, `set_strength`, `switch_off_heard` |
+| facade | `crates/melodia-app/src/library/{headphones,crossfeed}.rs` | `DeviceTarget`, `Heard`, `heard()`; `crossfeed_for`, `set_enabled`, `preview_strength`, `set_strength`, `switch_off` |
 | app glue | `library/playback.rs`, `state/mod.rs` | `player_set_crossfeed`; the shadow, seeded at startup; `hydrate_audio_dsp` hands the engine the map |
 | card | `ui/views/settings/headphones-section.slint` (renamed from `correction-section.slint`), `components/settings/{headphones,crossfeed}-controls.slint`, `globals/audio.slint` | the device row first; `HeadphonesText`, `CrossfeedText`; a `Headphones` global (device, name, refresh) taken out of `HeadphoneCorrection`; a `Crossfeed` global |
 | signal path | `ui/globals/signal-path.slint`, `ui/views/settings/output-section.slint` | `crossfeed-on`, four names |
@@ -330,7 +340,7 @@ device's setting.
 - [x] `AppState.crossfeed`, seeded from the startup read; `hydrate_audio_dsp` hands it over before
       `set_output_choice` aims.
 - [x] `library::crossfeed`: `crossfeed_for`, `set_enabled`, `preview_strength`, `set_strength`,
-      `switch_off_heard`; `player_set_crossfeed`.
+      `switch_off` (Phase 4 turned it from the heard device to a named one); `player_set_crossfeed`.
 - [x] Lock order: only `CrossfeedShared::set`, an atomic store, runs under `HeadphoneControls`
       beyond what the correction already took.
 
@@ -339,19 +349,19 @@ device's setting.
 
 ## Phase 4: The card and the signal path (`melodia-ui`, `melodia-views`)
 
-- [ ] The Headphones card: the device row first, the correction's rows, the Crossfeed switch and
-      the Strength row; `has-matches` over every row; the page's "three stages" comment made four.
-- [ ] `ui/crossfeed.rs`: seed on the card's naming, the switch through `set_enabled`, the slider
-      through `preview_strength` while dragged and `set_strength` on release, repaint on
-      `output_changed`.
-- [ ] Make Bit-Perfect: both handlers call `switch_off_heard`; `show_bit_perfect_reset` repaints.
-- [ ] The Effects row's fourth name.
-- [ ] Strings through `@tr`; `scripts/update-translations.py` and every catalog finished.
-- [ ] Docs: `README.md`'s features line, effects list and acknowledgments (bs2b's presets, Meier's
-      circuit); `.claude/rules/ui-patterns.md`'s Settings line if the card's shape earns one.
+- [x] The Headphones card: the device row first, the correction's rows, the Crossfeed switch and
+      the Strength row; `has-matches` over every row; the page's comment counts no stages.
+- [x] `ui/crossfeed.rs`: painted with the card's naming, the switch through `set_enabled`, the
+      slider through `preview_strength` while dragged and `set_strength` on release.
+- [x] Make Bit-Perfect: both handlers call `switch_off` first; `show_bit_perfect_reset` repaints.
+- [x] The Effects row's fourth name.
+- [x] Strings through `@tr`; `scripts/update-translations.py` and every catalog finished.
+- [x] Docs: `README.md`'s features line, effects list and acknowledgments (bs2b's presets, Meier's
+      circuit). `.claude/rules/ui-patterns.md` unchanged: its Settings line already covers a
+      `*-controls.slint` and `*Text` per effect, and the card couples nothing across trees.
 
 **Gate:**
-- [ ] fmt, clippy, the suite with the catalogs; the settings page pin on `category-name:` holds for
+- [x] fmt, clippy, the suite with the catalogs; the settings page pin on `category-name:` holds for
       the renamed section.
 
 ## Phase 5: Tests
@@ -378,7 +388,14 @@ In the dev data folder with a backup.
 - [ ] Switching device mid-track: each keeps its own; System default on Linux shared.
 - [ ] A loudly mastered hard-panned track at Strong: how often the limiter acts, against off.
 - [ ] Integrated loudness of a few albums with it off and at each end, recorded here.
-- [ ] Make Bit-Perfect switches off the heard device's crossfeed and keeps the others'.
+- [ ] Make Bit-Perfect switches off the heard device's crossfeed and keeps the others'; from shared
+      output on Linux, with a search showing the Output and Headphones cards together, the card
+      ends on the exclusive device with its switch off.
+- [ ] The readout changes word halfway between the default and each end (0.35 and 0.85 of the
+      track at a default of 0.7), and the track holds still as it does, in English and in a long
+      locale (`ru`, `el`).
+- [ ] The Effects row names Crossfeed with a stereo file playing and not with a mono one, and
+      lists four names in the order ReplayGain, correction, equalizer, crossfeed.
 - [ ] The settings search finds the card by "headphone", "correction", "AutoEq" and "crossfeed".
 - [ ] The cost on the audio thread with the correction and ten bands on, against without.
 

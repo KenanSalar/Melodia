@@ -10,6 +10,7 @@ pub mod card_grid;
 pub mod clipboard;
 pub mod correction;
 pub mod cover_generation;
+pub mod crossfeed;
 pub mod detail_artwork;
 pub mod detail_view;
 pub mod dialog_landing;

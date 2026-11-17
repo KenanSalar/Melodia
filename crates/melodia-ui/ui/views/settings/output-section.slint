@@ -173,18 +173,26 @@ export component OutputSection inherits Rectangle {
     property <string> rg-name: @tr("ReplayGain");
     property <string> correction-name: @tr("Headphone correction");
     property <string> eq-name: @tr("Equalizer");
+    property <string> crossfeed-name: @tr("Crossfeed");
     property <int> effect-count: (SignalPathUi.rg-on ? 1 : 0) + (SignalPathUi.correction-on ? 1 : 0)
-        + (SignalPathUi.eq-on ? 1 : 0);
+        + (SignalPathUi.eq-on ? 1 : 0) + (SignalPathUi.crossfeed-on ? 1 : 0);
     property <string> first-effect: SignalPathUi.rg-on ? root.rg-name
-        : SignalPathUi.correction-on ? root.correction-name : root.eq-name;
-    property <string> last-effect: SignalPathUi.eq-on ? root.eq-name
+        : SignalPathUi.correction-on ? root.correction-name
+        : SignalPathUi.eq-on ? root.eq-name : root.crossfeed-name;
+    // Read only with three on, where the correction is the middle one only behind ReplayGain.
+    property <string> second-effect: SignalPathUi.rg-on && SignalPathUi.correction-on
+        ? root.correction-name : root.eq-name;
+    property <string> last-effect: SignalPathUi.crossfeed-on ? root.crossfeed-name
+        : SignalPathUi.eq-on ? root.eq-name
         : SignalPathUi.correction-on ? root.correction-name : root.rg-name;
     property <string> effects-text: SignalPathUi.dsp-grade == 0 ? @tr("No effects")
         : root.effect-count <= 1 ? root.first-effect
         // Translators: two effects' names, as ReplayGain and Equalizer.
         : root.effect-count == 2 ? @tr("{} and {}", root.first-effect, root.last-effect)
         // Translators: three effects' names, in the order they apply.
-        : @tr("{}, {} and {}", root.rg-name, root.correction-name, root.eq-name);
+        : root.effect-count == 3 ? @tr("{}, {} and {}", root.first-effect, root.second-effect, root.last-effect)
+        // Translators: four effects' names, in the order they apply.
+        : @tr("{}, {}, {} and {}", root.rg-name, root.correction-name, root.eq-name, root.crossfeed-name);
 
     property <string> device-text: SignalPathUi.device-name == "" ? SignalPathUi.device-format
         : SignalPathUi.device-name + " · " + SignalPathUi.device-format;

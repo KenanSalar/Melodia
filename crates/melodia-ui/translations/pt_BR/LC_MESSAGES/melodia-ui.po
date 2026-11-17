@@ -300,7 +300,7 @@ msgid "Remove"
 msgstr "Remover"
 
 #: ui/components/dialog/dialog.slint ui/globals/dialog.slint
-#: ui/views/settings/correction-section.slint
+#: ui/views/settings/headphones-section.slint
 msgid "Apply"
 msgstr "Aplicar"
 
@@ -555,7 +555,7 @@ msgstr "{} / 4 selecionadas"
 
 #: ui/components/dialog/playlist-mosaic-picker.slint
 #: ui/views/queue-panel/queue-panel.slint
-#: ui/views/settings/correction-section.slint
+#: ui/views/settings/headphones-section.slint
 msgid "Clear"
 msgstr "Limpar"
 
@@ -1631,11 +1631,6 @@ msgid "Search…"
 msgstr "Buscar…"
 
 #: ui/components/settings/correction-controls.slint
-#: ui/views/settings/output-section.slint ui/views/settings/undo-section.slint
-msgid "Headphone correction"
-msgstr "Correção de fones de ouvido"
-
-#: ui/components/settings/correction-controls.slint
 msgid "Enable headphone correction"
 msgstr "Ativar a correção de fones de ouvido"
 
@@ -1660,21 +1655,6 @@ msgstr "Procurar fones de ouvido"
 msgid "Import"
 msgstr "Importar"
 
-#: ui/components/settings/correction-controls.slint ui/settings.slint
-msgid "System Default"
-msgstr "Padrão do sistema"
-
-#: ui/components/settings/correction-controls.slint
-#: ui/views/settings/output-section.slint
-#: ui/views/settings/scrobbling-section.slint
-msgid "Not connected"
-msgstr "Não conectado"
-
-#. Translators: {} is an output device's name.
-#: ui/components/settings/correction-controls.slint
-msgid "{} (not connected)"
-msgstr "{} (não conectado)"
-
 #. Translators: a headphone model, then who measured it.
 #: ui/components/settings/correction-controls.slint
 msgid "{} · measured by {}"
@@ -1687,6 +1667,34 @@ msgstr "Perfil colado"
 #: ui/components/settings/correction-controls.slint
 msgid "No correction set for this device"
 msgstr "Nenhuma correção definida para este dispositivo"
+
+#: ui/components/settings/crossfeed-controls.slint
+#: ui/views/settings/output-section.slint
+msgid "Crossfeed"
+msgstr "Crossfeed"
+
+#: ui/components/settings/crossfeed-controls.slint
+msgid "Each ear hears a little of the other channel, as from speakers"
+msgstr "Cada ouvido ouve um pouco do outro canal, como em caixas de som"
+
+#: ui/components/settings/crossfeed-controls.slint
+msgid "Strength"
+msgstr "Intensidade"
+
+#. Translators: crossfeed's strength, at the slider's low end.
+#: ui/components/settings/crossfeed-controls.slint
+msgid "Subtle"
+msgstr "Sutil"
+
+#. Translators: crossfeed's strength, in the slider's middle.
+#: ui/components/settings/crossfeed-controls.slint
+msgid "Medium"
+msgstr "Média"
+
+#. Translators: crossfeed's strength, at the slider's high end.
+#: ui/components/settings/crossfeed-controls.slint
+msgid "Strong"
+msgstr "Forte"
 
 #: ui/components/settings/equalizer-controls.slint
 #: ui/views/settings/animations-section.slint
@@ -1754,6 +1762,29 @@ msgstr "Redefinir"
 #: ui/components/settings/folder-row.slint
 msgid "Rescan"
 msgstr "Escanear novamente"
+
+#: ui/components/settings/headphones-controls.slint
+msgid "Headphones"
+msgstr "Fones de ouvido"
+
+#: ui/components/settings/headphones-controls.slint
+msgid "Correction and crossfeed are kept for each device"
+msgstr "A correção e o crossfeed são salvos para cada dispositivo"
+
+#: ui/components/settings/headphones-controls.slint ui/settings.slint
+msgid "System Default"
+msgstr "Padrão do sistema"
+
+#: ui/components/settings/headphones-controls.slint
+#: ui/views/settings/output-section.slint
+#: ui/views/settings/scrobbling-section.slint
+msgid "Not connected"
+msgstr "Não conectado"
+
+#. Translators: {} is an output device's name.
+#: ui/components/settings/headphones-controls.slint
+msgid "{} (not connected)"
+msgstr "{} (não conectado)"
 
 #: ui/components/settings/replaygain-controls.slint
 #: ui/views/settings/output-section.slint
@@ -1840,8 +1871,8 @@ msgstr "{} / {} arquivos"
 #: ui/components/settings/scan-progress.slint ui/globals/dialog-forms.slint
 #: ui/globals/dialog.slint ui/views/queue-panel/queue-panel.slint
 #: ui/views/radio/tab-pills.slint ui/views/settings/appearance-section.slint
-#: ui/views/settings/correction-section.slint
 #: ui/views/settings/duplicates-section.slint
+#: ui/views/settings/headphones-section.slint
 #: ui/views/settings/library-section.slint
 #: ui/views/settings/output-section.slint
 #: ui/views/settings/scrobbling-section.slint
@@ -3284,18 +3315,6 @@ msgstr "Monocromático"
 msgid "Changing the backdrop style requires restarting Melodia. Restart now?"
 msgstr "Mudar o estilo do fundo exige reiniciar o Melodia. Reiniciar agora?"
 
-#: ui/views/settings/correction-section.slint
-msgid "Find Your Headphones"
-msgstr "Encontre seus fones de ouvido"
-
-#: ui/views/settings/correction-section.slint
-msgid "AutoEq's corrections, one measurement for each model."
-msgstr "As correções do AutoEq, uma medição por modelo."
-
-#: ui/views/settings/correction-section.slint
-msgid "Import a Correction"
-msgstr "Importar uma correção"
-
 #: ui/views/settings/diagnostics-section.slint
 msgid "Diagnostics"
 msgstr "Diagnóstico"
@@ -3423,6 +3442,18 @@ msgstr "Monitorar mudanças nos arquivos"
 #: ui/views/settings/file-watching-section.slint
 msgid "Automatically detect when files are added, removed, or changed in your library folders."
 msgstr "Detecta automaticamente quando arquivos são adicionados, removidos ou alterados nas pastas da sua biblioteca."
+
+#: ui/views/settings/headphones-section.slint
+msgid "Find Your Headphones"
+msgstr "Encontre seus fones de ouvido"
+
+#: ui/views/settings/headphones-section.slint
+msgid "AutoEq's corrections, one measurement for each model."
+msgstr "As correções do AutoEq, uma medição por modelo."
+
+#: ui/views/settings/headphones-section.slint
+msgid "Import a Correction"
+msgstr "Importar uma correção"
 
 #: ui/views/settings/library-section.slint
 msgid "Manage Folders"
@@ -3610,6 +3641,10 @@ msgstr "o dispositivo não permite controle exclusivo, que pode ser ativado nas 
 msgid "the device couldn't be opened"
 msgstr "não foi possível abrir o dispositivo"
 
+#: ui/views/settings/output-section.slint ui/views/settings/undo-section.slint
+msgid "Headphone correction"
+msgstr "Correção de fones de ouvido"
+
 #: ui/views/settings/output-section.slint
 msgid "No effects"
 msgstr "Sem efeitos"
@@ -3623,6 +3658,11 @@ msgstr "{} e {}"
 #: ui/views/settings/output-section.slint
 msgid "{}, {} and {}"
 msgstr "{}, {} e {}"
+
+#. Translators: four effects' names, in the order they apply.
+#: ui/views/settings/output-section.slint
+msgid "{}, {}, {} and {}"
+msgstr "{}, {}, {} e {}"
 
 #: ui/views/settings/output-section.slint
 msgid "Shared"

@@ -10,14 +10,14 @@ use std::rc::Rc;
 use async_compat::Compat;
 use slint::ComponentHandle;
 
-use crate::ui::correction;
 use crate::ui::signal::on_signal;
 use crate::ui::undo::UndoWindow;
+use crate::ui::{correction, crossfeed};
 use melodia_app::library;
 use melodia_app::library::headphones::{DeviceTarget, Heard};
 use melodia_app::state::AppState;
 use melodia_core::error::describe;
-use melodia_ui::{AppWindow, HeadphoneCorrection, HeardDevice};
+use melodia_ui::{AppWindow, Headphones, HeardDevice};
 
 /// Wires the card's rows and keeps the card on the device heard. UI thread.
 pub fn install(ui: &AppWindow, state: &AppState, undo: &Rc<UndoWindow>) {
@@ -28,9 +28,10 @@ pub fn install(ui: &AppWindow, state: &AppState, undo: &Rc<UndoWindow>) {
         asked: Cell::new(0),
     });
     let c = Rc::clone(&card);
-    ui.global::<HeadphoneCorrection>().on_refresh(move || c.refresh());
+    ui.global::<Headphones>().on_refresh(move || c.refresh());
 
     correction::install(ui, undo, &card);
+    crossfeed::install(ui, &card);
 
     let followed = on_signal(&state.output_changed, ui.as_weak(), "headphones", move |_| {
         card.refresh();
@@ -88,7 +89,7 @@ impl Card {
     /// The device as last named, and what each row holds for it now.
     pub(crate) fn paint(&self) {
         let Some(ui) = self.ui.upgrade() else { return };
-        let g = ui.global::<HeadphoneCorrection>();
+        let g = ui.global::<Headphones>();
         let heard = self.heard.borrow();
         let Some(heard) = heard.as_ref() else {
             g.set_device(HeardDevice::Pending);
@@ -96,7 +97,9 @@ impl Card {
         };
         g.set_device(heard_device(heard));
         g.set_device_name(heard.target.device_name.clone().unwrap_or_default().into());
-        correction::paint(&ui, &self.state, heard.target.device.as_deref());
+        let device = heard.target.device.as_deref();
+        correction::paint(&ui, &self.state, device);
+        crossfeed::paint(&ui, &self.state, device);
     }
 }
 

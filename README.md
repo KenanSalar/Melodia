@@ -14,7 +14,7 @@
 ## Highlights
 
 - **Bit-perfect exclusive output** on Linux and Windows, with a Signal Path panel that grades every stage from the file to the device
-- **Gapless playback and crossfade**, a 10-band equalizer, headphone correction for each output device, ReplayGain that can measure untagged tracks itself, and playback speed from 0.25× to 2.0×
+- **Gapless playback and crossfade**, a 10-band equalizer, headphone correction and crossfeed for each output device, ReplayGain that can measure untagged tracks itself, and playback speed from 0.25× to 2.0×
 - **Timed lyrics** from `.lrc` files, tags, or an opt-in online lookup, romanized for around a hundred scripts
 - **Internet radio** from a worldwide directory or your own stream URLs, off until you switch it on
 - **Six theme families** in light and dark, and Material You colors drawn from the playing artwork
@@ -126,6 +126,7 @@ Shrink the window and the full UI collapses into a mini-player that grows with i
 - Crossfade (1–12 s) across two decks with a clip-safe ramp, optionally skipped between same-album tracks, and under exclusive output too wherever the next track needs no change of device format
 - 10-band equalizer (31 Hz – 16 kHz) with preamp, presets, and a soft-knee limiter, from the player bar's overflow menu or Settings ▸ Effects
 - Headphone correction under Settings ▸ Effects: pick your model from AutoEq's measured corrections, or import a parametric EQ file, and each output device keeps its own. The level comes down by the loudest boost of the correction and the equalizer together, so a boost doesn't clip. Looking models up online is off until you switch it on, nothing contacting **github.com** until you do, and importing a file works without it
+- Crossfeed for headphones under Settings ▸ Effects, from subtle to strong: each ear hears a little of the other channel, as it would from speakers, so a hard-panned instrument reaches both ears. Each output device keeps its own, sound panned to the center passes through at its level, and mono and surround files are left as they are
 - ReplayGain in track or album mode, with preamp and peak-based clip prevention, reached the same two ways. Tracks without loudness tags can be measured in the background, opt-in under Settings ▸ Effects, with albums measured as a whole and the files left unchanged
 - A queue with shuffle and repeat in a resizable side panel, which floats over the page once the window is too narrow to dock it. Playing from any list queues that list behind your pick
 - Drag tracks, albums, artists, genres, playlists, or files from your file manager into the queue or a playlist where you let go; a selection reorders together in the queue, Up Next, and the mini-player
@@ -516,7 +517,8 @@ Built on the work of the [Slint](https://slint.dev/),
 [Material Foundation](https://m3.material.io/)'s color utilities, along with the many other crates
 listed in `Cargo.toml`. The station directory is [radio-browser.info](https://www.radio-browser.info)
 (CC0 data, no account), and the lyrics directory is [LRCLIB](https://lrclib.net) (also no account).
-Headphone corrections come from [AutoEq](https://github.com/jaakkopasanen/AutoEq). Romanization is [uroman-rs](https://github.com/stellanomia/uroman-rs) for most scripts and
+Headphone corrections come from [AutoEq](https://github.com/jaakkopasanen/AutoEq), and crossfeed
+follows Jan Meier's circuit, its levels taken from [bs2b](https://bs2b.sourceforge.net/)'s presets. Romanization is [uroman-rs](https://github.com/stellanomia/uroman-rs) for most scripts and
 [kakasi](https://github.com/Theta-Dev/kakasi) for Japanese.
 
 Melodia's interface is set in [Vazirmatn](https://github.com/rastikerdar/vazirmatn) (SIL Open Font

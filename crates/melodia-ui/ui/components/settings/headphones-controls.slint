@@ -1,0 +1,17 @@
+import { Headphones, HeardDevice } from "../../globals/audio.slint";
+
+// The headphone card's own words; each setting it holds keeps its words in its own controls file.
+export global HeadphonesText {
+    out property <string> title: @tr("Headphones");
+    out property <string> device-desc: @tr("Correction and crossfeed are kept for each device");
+
+    // What the card names the device by.
+    out property <string> device: Headphones.device == HeardDevice.system-default
+        ? @tr("System Default")
+        : Headphones.device == HeardDevice.pending ? ""
+        : Headphones.device-name == "" ? @tr("Not connected")
+        : Headphones.device == HeardDevice.not-connected
+        // Translators: {} is an output device's name.
+        ? @tr("{} (not connected)", Headphones.device-name)
+        : Headphones.device-name;
+}

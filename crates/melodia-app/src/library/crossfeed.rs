@@ -32,13 +32,13 @@ pub fn set_strength(state: &AppState, device: Option<String>, strength: Crossfee
     commit(state, |crossfeed| crossfeed.get_or_insert_default(device).strength = strength);
 }
 
-/// Make Bit-Perfect's half, on the device heard when called: call it after any output switch.
-pub fn switch_off_heard(state: &AppState) {
-    let heard = library::playback::player_heard_device(&state.playback_ctx());
-    if !crossfeed_for(state, heard.as_deref()).enabled {
+/// Make Bit-Perfect's half, for the device it makes bit-perfect. Call it before spawning an output
+/// switch, so the card names the new device only once its crossfeed is off.
+pub fn switch_off(state: &AppState, device: Option<String>) {
+    if !crossfeed_for(state, device.as_deref()).enabled {
         return;
     }
-    set_enabled(state, heard, false);
+    set_enabled(state, device, false);
 }
 
 fn commit(state: &AppState, edit: impl FnOnce(&mut DeviceMap<CrossfeedSetting>)) {
