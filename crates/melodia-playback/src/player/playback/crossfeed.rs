@@ -2,6 +2,10 @@
 //! decks' [`crossfade`](super::crossfade). Only the channels' difference crosses, low-passed
 //! (`L - g·LP(L - R)`, `R + g·LP(L - R)`), so centre-panned sound passes untouched and the
 //! low-pass's own delay stands in for the far ear's, with no delay line.
+//!
+//! It runs after the bands, which treat both channels alike and so commute with it, and before
+//! the limiter, which catches the direct and cross paths summing past the input: unlike the
+//! correction, it reserves no headroom.
 
 use std::mem;
 use std::sync::Arc;

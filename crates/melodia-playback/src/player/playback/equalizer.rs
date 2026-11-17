@@ -196,7 +196,7 @@ pub struct DspControls {
     pub crossfeed: Arc<CrossfeedShared>,
 }
 
-/// With no other handle, the correction stays empty and the crossfeed off for these sources' lives.
+/// Its writer dropped, the correction stays empty for these sources' lives.
 impl Default for DspControls {
     fn default() -> Self {
         Self {

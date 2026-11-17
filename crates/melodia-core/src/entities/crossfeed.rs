@@ -11,6 +11,12 @@ pub const STRENGTH_RANGE: RangeInclusive<f32> = 0.0..=1.0;
 /// Where a device's strength starts before it is ever moved.
 pub const DEFAULT_STRENGTH: CrossfeedStrength = CrossfeedStrength(0.7);
 
+// Built past `try_from`, so the default's range is checked here instead.
+const _: () = assert!(
+    *STRENGTH_RANGE.start() <= DEFAULT_STRENGTH.0 && DEFAULT_STRENGTH.0 <= *STRENGTH_RANGE.end(),
+    "the default strength must sit inside the slider's range"
+);
+
 /// How far crossfeed narrows the stereo image, within [`STRENGTH_RANGE`].
 #[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(try_from = "f32")]
