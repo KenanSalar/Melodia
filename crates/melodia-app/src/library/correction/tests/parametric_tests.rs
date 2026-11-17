@@ -159,19 +159,23 @@ fn a_byte_order_mark_does_not_hide_the_first_filter() {
 /// The review points the user at a line by number, so a blank or a comment above it still counts.
 #[test]
 fn a_listed_line_is_numbered_as_an_editor_counts_it() {
-    let text = concat!(
-        "# AutoEq\n",
-        "\n",
-        "Filter 1: ON PK Fc 105 Hz Gain 6.5 dB Q 0.70\n",
-        "  Filter 2: OFF PK Fc 200 Hz Gain 3 dB Q 1\n",
-    );
-
-    let listed = parse(text).map(|profile| profile.skipped.to_vec());
-
+    let lines = [
+        "# AutoEq",
+        "",
+        "Filter 1: ON PK Fc 105 Hz Gain 6.5 dB Q 0.70",
+        "  Filter 2: OFF PK Fc 200 Hz Gain 3 dB Q 1",
+        "",
+    ];
     let expected = SkippedLine {
         number: 4,
         text: "Filter 2: OFF PK Fc 200 Hz Gain 3 dB Q 1".into(),
         reason: SkipReason::Off,
     };
-    assert_eq!(listed.ok(), Some(vec![expected]));
+    for ending in ["\n", "\r\n"] {
+        let text = lines.join(ending);
+
+        let listed = parse(&text).map(|profile| profile.skipped.to_vec());
+
+        assert_eq!(listed.ok(), Some(vec![expected.clone()]), "{ending:?} line endings");
+    }
 }
