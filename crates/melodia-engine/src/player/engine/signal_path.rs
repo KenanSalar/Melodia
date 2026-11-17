@@ -33,16 +33,21 @@ pub enum Verdict {
 }
 
 /// Everything the verdict reads, kept on the answer so the panel can name what it saw.
+#[expect(
+    clippy::struct_excessive_bools,
+    reason = "one flag per effect the panel names, each its own setting and none excluding another"
+)]
 #[derive(Debug, Clone, PartialEq)]
 pub struct SignalInputs {
     pub negotiated: Negotiated,
     pub source: PlayingSource,
     /// Which of the settings behind `source.dsp_engaged` are on, the correction only where one is
-    /// set for the device heard. They name the stage and never grade it: an EQ that is on with
-    /// nothing to do at this rate leaves it clean.
+    /// set for the device heard and the crossfeed only on a stereo source. They name the stage and
+    /// never grade it: an EQ that is on with nothing to do at this rate leaves it clean.
     pub eq_on: bool,
     pub rg_on: bool,
     pub correction_on: bool,
+    pub crossfeed_on: bool,
     pub transport: Transport,
 }
 

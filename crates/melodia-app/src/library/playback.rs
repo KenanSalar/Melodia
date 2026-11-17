@@ -6,6 +6,7 @@ use tokio::sync::mpsc::UnboundedReceiver;
 use crate::state::PlaybackContext;
 use melodia_audio::player::source::stream_source;
 use melodia_core::entities::correction::Correction;
+use melodia_core::entities::crossfeed::CrossfeedSetting;
 use melodia_core::entities::device_map::DeviceMap;
 use melodia_core::error::AppError;
 use melodia_core::error::describe;
@@ -421,7 +422,11 @@ pub fn player_set_correction_enabled(ctx: &PlaybackContext, enabled: bool) {
     ctx.engine.set_correction_enabled(enabled);
 }
 
-/// The device whose correction plays, `None` naming System default.
+pub fn player_set_crossfeed(ctx: &PlaybackContext, crossfeed: DeviceMap<CrossfeedSetting>) {
+    ctx.engine.set_crossfeed(crossfeed);
+}
+
+/// The device whose headphone settings play, `None` naming System default.
 pub fn player_heard_device(ctx: &PlaybackContext) -> Option<String> {
     ctx.engine.heard_device()
 }

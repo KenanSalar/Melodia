@@ -17,6 +17,7 @@ pub mod artists;
 pub mod browse;
 pub mod clipboard;
 pub mod correction;
+pub mod crossfeed;
 pub mod duplicates;
 pub mod entity_tracks;
 pub mod favorites;

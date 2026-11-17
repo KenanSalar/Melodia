@@ -18,6 +18,7 @@ use melodia_audio::player::source::file_decode::FileDecoder;
 use melodia_audio::player::source::park::ParkTicket;
 use melodia_core::entities::track::TrackAudio;
 use melodia_core::error::{AppError, describe};
+use melodia_playback::player::playback::crossfeed;
 use melodia_playback::player::playback::decks::Decks;
 use melodia_playback::player::playback::output::device::{ExternalVolume, Lead};
 use melodia_playback::player::playback::output::voice::Voice;
@@ -50,8 +51,8 @@ impl OutputChoice {
         self.device.as_deref().filter(|_| output::SHARED_DEVICE_SUPPORTED)
     }
 
-    /// The device the output is aimed at, which keys its headphone correction. `None` is System
-    /// default.
+    /// The device the output is aimed at, which keys the settings each device keeps. `None` is
+    /// System default.
     pub fn heard_device(&self) -> Option<&str> {
         match self.mode {
             OutputMode::Exclusive => self.device.as_deref(),
@@ -241,13 +242,18 @@ impl PlaybackEngine {
     pub fn signal_path(&self, transport: Transport) -> Option<SignalPath> {
         let source = self.lock_decks().active().voice.playing()?;
         let negotiated = self.negotiated()?;
-        let correction_on = self.headphones.lock().correction_engaged();
+        let (correction_on, crossfeed_enabled) = {
+            let headphones = self.headphones.lock();
+            (headphones.correction_engaged(), headphones.crossfeed_enabled())
+        };
+        let crossfeed_on = crossfeed_enabled && crossfeed::reaches(source.shape.channels);
         Some(signal_path::evaluate(SignalInputs {
             negotiated,
             source,
             eq_on: self.dsp.eq.enabled(),
             rg_on: self.dsp.rg.enabled(),
             correction_on,
+            crossfeed_on,
             transport,
         }))
     }

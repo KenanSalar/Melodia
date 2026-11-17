@@ -44,6 +44,16 @@ impl<T> DeviceMap<T> {
             None => self.system_default.take(),
         }
     }
+
+    pub fn get_or_insert_default(&mut self, device: Option<String>) -> &mut T
+    where
+        T: Default,
+    {
+        match device {
+            Some(id) => self.devices.entry(id).or_default(),
+            None => self.system_default.get_or_insert_default(),
+        }
+    }
 }
 
 #[cfg(test)]

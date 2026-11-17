@@ -22,6 +22,7 @@ use crate::tasks::play_count_flusher::{FlushRequests, PlayCountFlush};
 use melodia_artwork::media::image::artwork::CoverCache;
 use melodia_core::config::Paths;
 use melodia_core::entities::correction::Correction;
+use melodia_core::entities::crossfeed::CrossfeedSetting;
 use melodia_core::entities::device_map::DeviceMap;
 use melodia_core::error::{AppError, AppResult, describe};
 use melodia_core::utils::self_writes::SelfWrites;
@@ -131,6 +132,8 @@ pub struct AppState {
     /// Every device's headphone correction as last set. Each of `library::correction`'s writes
     /// edits this rather than the file's copy, so two in flight can't undo each other.
     pub corrections: Arc<Shadowed<DeviceMap<Correction>>>,
+    /// Every device's crossfeed as last set, shadowed for [`Self::corrections`]' reason.
+    pub crossfeed: Arc<Shadowed<DeviceMap<CrossfeedSetting>>>,
     pub media_controls: Option<Arc<MediaControlsHandle>>,
     /// Built on first use by [`AppState::http_client`], one client for every clone.
     http_client: Arc<OnceLock<reqwest::Client>>,
@@ -240,6 +243,7 @@ impl AppState {
             write_ratings_to_tags: SharedFlag::new(settings.library.write_ratings_to_tags),
             correction_online: SharedFlag::new(settings.correction.correction_online),
             corrections: Arc::new(Shadowed::new(eq.corrections)),
+            crossfeed: Arc::new(Shadowed::new(settings.crossfeed)),
             media_controls: Some(mc_handle),
             http_client,
             task_tracker: TaskTracker::new(),
@@ -374,6 +378,7 @@ fn hydrate_audio_dsp(
 
     engine.set_corrections(eq.corrections.clone());
     engine.set_correction_enabled(settings.correction.correction_enabled);
+    engine.set_crossfeed(settings.crossfeed.clone());
 
     engine.set_crossfade_duration_ms(settings.crossfade.crossfade_duration_ms);
     engine.set_crossfade_manual(settings.crossfade.crossfade_manual);

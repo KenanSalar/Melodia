@@ -4,17 +4,21 @@
 use std::sync::Arc;
 
 use melodia_core::entities::correction::Correction;
+use melodia_core::entities::crossfeed::CrossfeedSetting;
 use melodia_core::entities::device_map::DeviceMap;
 use melodia_playback::player::playback::correction::shared::CorrectionShared;
+use melodia_playback::player::playback::crossfeed::CrossfeedShared;
 
 use super::PlaybackEngine;
 use super::correction::CorrectionControl;
+use super::crossfeed::CrossfeedControl;
 
 #[derive(Default)]
 pub(super) struct HeadphoneControls {
     /// `None` is System default.
     heard: Option<String>,
     correction: CorrectionControl,
+    crossfeed: CrossfeedControl,
 }
 
 impl HeadphoneControls {
@@ -22,13 +26,26 @@ impl HeadphoneControls {
         self.correction.shared()
     }
 
+    pub(super) fn crossfeed_shared(&self) -> Arc<CrossfeedShared> {
+        self.crossfeed.shared()
+    }
+
     pub(super) fn aim(&mut self, device: Option<&str>) {
         self.heard = device.map(str::to_owned);
         self.correction.select(device);
+        self.crossfeed.select(device);
     }
 
     pub(super) fn correction_engaged(&self) -> bool {
         self.correction.engaged()
+    }
+
+    pub(super) fn crossfeed_enabled(&self) -> bool {
+        self.crossfeed.enabled(self.heard.as_deref())
+    }
+
+    pub(super) fn set_crossfeed(&mut self, settings: DeviceMap<CrossfeedSetting>) {
+        self.crossfeed.set_settings(settings, self.heard.as_deref());
     }
 
     pub(super) fn set_corrections(&mut self, corrections: DeviceMap<Correction>) {

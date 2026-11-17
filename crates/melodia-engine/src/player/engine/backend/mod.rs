@@ -8,6 +8,7 @@
 
 mod controls;
 mod correction;
+mod crossfeed;
 mod headphones;
 mod output;
 mod player_backend;
@@ -123,8 +124,11 @@ impl PlaybackEngine {
         decode_ahead: Duration,
     ) -> Result<Self, AppError> {
         let headphones = HeadphoneControls::default();
-        let dsp =
-            DspControls { correction: headphones.correction_shared(), ..DspControls::default() };
+        let dsp = DspControls {
+            correction: headphones.correction_shared(),
+            crossfeed: headphones.crossfeed_shared(),
+            ..DspControls::default()
+        };
         Ok(Self {
             output: EngineOutput::default(),
             decks: Arc::new(std::sync::Mutex::new(Decks::connect(mixer)?)),

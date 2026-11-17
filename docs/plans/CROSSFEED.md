@@ -2,7 +2,7 @@
 
 Working doc. Delete when the feature ships.
 
-Status: **Phases 1 and 2 landed, Phase 3 waiting for its go** · Created: 2026-11-17 ·
+Status: **Phases 1–3 done, Phase 4 waiting for its go** · Created: 2026-11-17 ·
 Branch `feat/crossfeed`, linked to the issue
 
 Issue [#157](https://github.com/KenanSalar/Melodia/issues/157).
@@ -176,16 +176,20 @@ not `g`, so the strength-to-`g` mapping (`amount`) stays private to the DSP.
 - **The engine owns the heard device once.** `HeadphoneControls` (`backend/headphones.rs`) holds
   `heard`, `aim` and `heard_device`, and the two selects: `CorrectionControl` keeps its writer and
   map, its `select` now taking the heard device; `CrossfeedControl` publishes the heard device's
-  setting (off where it has none), only on a change. `aim` selects both. It is the engine's
-  `correction` lock renamed, at the same place in the order.
+  setting (off where it has none) at every select, with no change test: a source ramps only to a
+  target that moved. `aim` selects both. It is the engine's `correction` lock renamed, at the same
+  place in the order.
 - **Persisted in `settings.json`** as the `crossfeed` key: a switch and a strength are prefs, and
-  `CLAUDE.md`'s state-file line already says so. `#[serde(default)]`, so older files read it as
-  empty.
+  `CLAUDE.md`'s state-file line already says so. A plain `SettingsData` field, the struct's own
+  `#[serde(default)]` reading older files as empty; a bad strength resets only this key, the reader
+  dropping one top-level key at a time.
 - **One writer.** `AppState.crossfeed` is a `Shadowed<DeviceMap<CrossfeedSetting>>`, edited before
-  every apply. `library::crossfeed::commit` hands the engine and the file the map as it stands,
-  through `apply_latest`, the shape `library::correction::commit` has. A slider drag edits the
-  shadow and hands the engine the map at once; its release commits, as the Preamp's
-  `set-preamp`/`commit-preamp` do.
+  every apply, each write changing one field in place (`DeviceMap::get_or_insert_default`) so none
+  reads a setting back whole. `library::crossfeed`'s private `commit` hands the engine and the
+  file the map as it stands, through `apply_latest`, the shape `library::correction::commit` has.
+  `set_enabled` and `set_strength` commit; a slider drag goes through `preview_strength`, which
+  edits the shadow and hands the engine the map at once, and its release through `set_strength`,
+  as the Preamp's `set-preamp`/`commit-preamp` do.
 - **A write's device comes from the card**, as the correction's does: `CorrectionTarget` and
   `heard()` move to `library::headphones` as `DeviceTarget` and `heard()`, shared by both.
 
@@ -193,7 +197,7 @@ not `g`, so the strength-to-`g` mapping (`amount`) stays private to the DSP.
 
 Both handlers (`ui/settings/signal_path.rs:36`, `output_settings.rs:194`) end with
 `library::crossfeed::switch_off_heard`, after the output switch where there is one, so the device
-made bit-perfect is the one switched off. It goes through `commit`, the map's one writer, rather
+made bit-perfect is the one switched off. It goes through `set_enabled`, the map's one writer, rather
 than into `reset_for_bit_perfect`'s write, which could land an older map after a newer.
 `show_bit_perfect_reset` turns the card's switch off.
 
@@ -256,14 +260,14 @@ Headphones
 
 | what | where | note |
 |---|---|---|
-| per-device map | `crates/melodia-core/src/entities/device_map.rs` | `DeviceMap<T>`; `correction.rs` loses `DeviceCorrections` |
+| per-device map | `crates/melodia-core/src/entities/device_map.rs` | `DeviceMap<T>`, `get_or_insert_default` for a one-field edit; `correction.rs` loses `DeviceCorrections` |
 | crossfeed types | `crates/melodia-core/src/entities/crossfeed.rs` | `CrossfeedStrength` (newtype, `TryFrom`), `CrossfeedSetting`, `DEFAULT_STRENGTH` |
 | the stage | `crates/melodia-playback/src/player/playback/crossfeed.rs` | `CrossfeedShared`, `CrossfeedStage`, `reaches`, `amount`, the four constants. Beside `crossfade.rs` (the decks' ramp): one letter apart, so its `//!` says which it is |
 | the ramp | `crates/melodia-playback/src/player/playback/dsp.rs` | `FrameRamp { start, target, frame, frames }` from the correction's private `Ramp` |
 | the wrapper | `player/playback/equalizer.rs` | the f64 frame scratch, the stage polled with the others, bypass, seek, silence |
 | engine | `backend/{headphones,correction,crossfeed,output,mod}.rs`, `signal_path.rs` | `HeadphoneControls` owns `heard` and `aim`; `CrossfeedControl`; `SignalInputs.crossfeed_on` |
-| settings | `crates/melodia-app/src/services/settings/{playback,data}.rs`, `library/settings/crossfeed.rs` | `CrossfeedPrefs { crossfeed }` flattened into `SettingsData`; its setter |
-| facade | `crates/melodia-app/src/library/{headphones,crossfeed}.rs` | `DeviceTarget`, `Heard`, `heard()`; `crossfeed_for`, `preview`, `commit`, `switch_off_heard` |
+| settings | `crates/melodia-app/src/services/settings/data.rs`, `library/settings/crossfeed.rs` | `SettingsData.crossfeed`; its setter |
+| facade | `crates/melodia-app/src/library/{headphones,crossfeed}.rs` | `DeviceTarget`, `Heard`, `heard()`; `crossfeed_for`, `set_enabled`, `preview_strength`, `set_strength`, `switch_off_heard` |
 | app glue | `library/playback.rs`, `state/mod.rs` | `player_set_crossfeed`; the shadow, seeded at startup; `hydrate_audio_dsp` hands the engine the map |
 | card | `ui/views/settings/headphones-section.slint` (renamed from `correction-section.slint`), `components/settings/{headphones,crossfeed}-controls.slint`, `globals/audio.slint` | the device row first; `HeadphonesText`, `CrossfeedText`; a `Headphones` global (device, name, refresh) taken out of `HeadphoneCorrection`; a `Crossfeed` global |
 | signal path | `ui/globals/signal-path.slint`, `ui/views/settings/output-section.slint` | `crossfeed-on`, four names |
@@ -318,24 +322,27 @@ device's setting.
 
 ## Phase 3: Per device, persisted (`melodia-engine`, `melodia-app`)
 
-- [ ] `CrossfeedControl` in `HeadphoneControls`, publishing on a change; `set_crossfeed`.
-- [ ] `SignalInputs.crossfeed_on`, fed in `signal_path()` from the control and `reaches`.
-- [ ] `CrossfeedPrefs` in `SettingsData`; `library::settings::set_crossfeed`.
-- [ ] `AppState.crossfeed`, seeded from the startup read; `hydrate_audio_dsp` hands it over before
+- [x] `CrossfeedControl` in `HeadphoneControls`, publishing at every select; `set_crossfeed`.
+- [x] `SignalInputs.crossfeed_on`, fed in `signal_path()` from the control and `reaches`, under a
+      narrow `struct_excessive_bools` expectation (one flag per effect the panel names).
+- [x] `SettingsData.crossfeed`; `library::settings::set_crossfeed`.
+- [x] `AppState.crossfeed`, seeded from the startup read; `hydrate_audio_dsp` hands it over before
       `set_output_choice` aims.
-- [ ] `library::crossfeed`: `crossfeed_for`, `preview`, `commit`, `switch_off_heard`;
-      `player_set_crossfeed`.
-- [ ] Lock order: nothing new is taken under `HeadphoneControls` but the output choice's.
+- [x] `library::crossfeed`: `crossfeed_for`, `set_enabled`, `preview_strength`, `set_strength`,
+      `switch_off_heard`; `player_set_crossfeed`.
+- [x] Lock order: only `CrossfeedShared::set`, an atomic store, runs under `HeadphoneControls`
+      beyond what the correction already took.
 
 **Gate:**
-- [ ] fmt, clippy, the suite; `signal_path_tests.rs`' `clean_inputs()` takes the field.
+- [x] fmt, clippy, the suite; `signal_path_tests.rs`' `clean_inputs()` takes the field.
 
 ## Phase 4: The card and the signal path (`melodia-ui`, `melodia-views`)
 
 - [ ] The Headphones card: the device row first, the correction's rows, the Crossfeed switch and
       the Strength row; `has-matches` over every row; the page's "three stages" comment made four.
-- [ ] `ui/crossfeed.rs`: seed on the card's naming, the switch through `commit`, the slider
-      through `preview` while dragged and `commit` on release, repaint on `output_changed`.
+- [ ] `ui/crossfeed.rs`: seed on the card's naming, the switch through `set_enabled`, the slider
+      through `preview_strength` while dragged and `set_strength` on release, repaint on
+      `output_changed`.
 - [ ] Make Bit-Perfect: both handlers call `switch_off_heard`; `show_bit_perfect_reset` repaints.
 - [ ] The Effects row's fourth name.
 - [ ] Strings through `@tr`; `scripts/update-translations.py` and every catalog finished.
@@ -386,8 +393,8 @@ that phase.
 - **Docs land in the phase that stales them**, each argument here moving to the doc comment of what
   it constrains as it lands.
 - **800 lines:** `equalizer.rs` (661, 679 after Phase 2) gains the scratch and the stage's hooks
-  only; the stage is its own module. `backend/mod.rs` (677) renames a field.
-  `library/playback.rs` (567) gains one setter. `output-section.slint` (453) gains a name and a
+  only; the stage is its own module. `backend/mod.rs` (677, 683 after Phase 3) renames a field.
+  `library/playback.rs` (567, 573 after Phase 3) gains one setter. `output-section.slint` (453) gains a name and a
   chain.
 - **Memory:** one f64 filter and a few scalars per source; nothing to measure past the hand tests.
 - **Lock order** (ADR 0035) is unchanged: the renamed lock sits where the correction's did.

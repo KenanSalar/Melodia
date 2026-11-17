@@ -8,6 +8,7 @@
 pub mod appearance;
 pub mod correction;
 pub mod crossfade;
+pub mod crossfeed;
 pub mod diagnostics;
 pub mod discord;
 pub mod equalizer;
@@ -34,6 +35,7 @@ pub use crossfade::{
     set_crossfade_duration_ms, set_crossfade_enabled, set_crossfade_fade_on_pause,
     set_crossfade_manual, set_crossfade_skip_same_album,
 };
+pub use crossfeed::set_crossfeed;
 pub use diagnostics::set_verbose_logging;
 pub use discord::{
     set_discord_rpc_artwork, set_discord_rpc_enabled, set_discord_rpc_hide_when_paused,
