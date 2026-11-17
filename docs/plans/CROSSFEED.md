@@ -2,7 +2,7 @@
 
 Working doc. Delete when the feature ships.
 
-Status: **Phase 1 landed (uncommitted), Phase 2 waiting for its go** · Created: 2026-11-17 ·
+Status: **Phase 1 landed, Phase 2 waiting for its go** · Created: 2026-11-17 ·
 Branch `feat/crossfeed`, linked to the issue
 
 Issue [#157](https://github.com/KenanSalar/Melodia/issues/157).

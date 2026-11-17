@@ -45,3 +45,7 @@ impl<T> DeviceMap<T> {
         }
     }
 }
+
+#[cfg(test)]
+#[path = "tests/device_map_tests.rs"]
+mod tests;

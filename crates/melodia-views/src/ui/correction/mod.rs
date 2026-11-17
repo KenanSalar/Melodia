@@ -18,7 +18,8 @@ use melodia_core::entities::correction::{Correction, CorrectionOrigin};
 use melodia_ui::{AppWindow, CorrectionFrom, HeadphoneCorrection};
 
 /// Seeds both switches and wires the rows and their dialogs onto `card`. UI thread.
-pub(crate) fn install(ui: &AppWindow, state: &AppState, undo: &Rc<UndoWindow>, card: &Rc<Card>) {
+pub(crate) fn install(ui: &AppWindow, undo: &Rc<UndoWindow>, card: &Rc<Card>) {
+    let state = card.state();
     let g = ui.global::<HeadphoneCorrection>();
     g.set_enabled(read_or_default(state, "headphone correction").correction.correction_enabled);
     g.set_online(state.correction_online.get());
@@ -38,8 +39,8 @@ pub(crate) fn install(ui: &AppWindow, state: &AppState, undo: &Rc<UndoWindow>, c
     let (c, undo) = (Rc::clone(card), Rc::clone(undo));
     g.on_clear(move || clear(&c, &undo));
 
-    picker::install(ui, state, card);
-    import::install(ui, state, card);
+    picker::install(ui, card);
+    import::install(ui, card);
 }
 
 /// What Clear took, and the device it goes back to.

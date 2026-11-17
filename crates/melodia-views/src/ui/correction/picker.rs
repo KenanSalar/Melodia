@@ -27,10 +27,10 @@ use melodia_ui::{
     AppWindow, ApplyFailure, CorrectionPickRow, Dialog, DialogKind, HeadphonePicker, PickerPhase,
 };
 
-pub(super) fn install(ui: &AppWindow, state: &AppState, card: &Rc<Card>) {
+pub(super) fn install(ui: &AppWindow, card: &Rc<Card>) {
     let picker = Rc::new(Picker {
         ui: ui.as_weak(),
-        state: state.clone(),
+        state: card.state().clone(),
         card: Rc::clone(card),
         ticket: DialogTicket::new(DialogKind::HeadphonePicker),
         rows: Rc::new(VecModel::default()),

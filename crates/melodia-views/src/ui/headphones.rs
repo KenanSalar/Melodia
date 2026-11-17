@@ -30,7 +30,7 @@ pub fn install(ui: &AppWindow, state: &AppState, undo: &Rc<UndoWindow>) {
     let c = Rc::clone(&card);
     ui.global::<HeadphoneCorrection>().on_refresh(move || c.refresh());
 
-    correction::install(ui, state, undo, &card);
+    correction::install(ui, undo, &card);
 
     let followed = on_signal(&state.output_changed, ui.as_weak(), "headphones", move |_| {
         card.refresh();
@@ -85,7 +85,7 @@ impl Card {
         self.heard.borrow().as_ref().map(|heard| heard.target.clone())
     }
 
-    /// The device as last named, and what each row holds for it as the maps stand now.
+    /// The device as last named, and what each row holds for it now.
     pub(crate) fn paint(&self) {
         let Some(ui) = self.ui.upgrade() else { return };
         let g = ui.global::<HeadphoneCorrection>();
