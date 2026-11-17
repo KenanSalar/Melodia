@@ -2,7 +2,8 @@
 
 use crate::services;
 use melodia_core::config::Paths;
-use melodia_core::entities::correction::DeviceCorrections;
+use melodia_core::entities::correction::Correction;
+use melodia_core::entities::device_map::DeviceMap;
 use melodia_core::error::AppError;
 
 pub fn set_correction_enabled(paths: &Paths, enabled: bool) -> Result<(), AppError> {
@@ -12,7 +13,7 @@ pub fn set_correction_enabled(paths: &Paths, enabled: bool) -> Result<(), AppErr
 }
 
 /// Every device's correction at once, the map being one field of `eq.json`.
-pub fn set_corrections(paths: &Paths, corrections: DeviceCorrections) -> Result<(), AppError> {
+pub fn set_corrections(paths: &Paths, corrections: DeviceMap<Correction>) -> Result<(), AppError> {
     services::settings::mutate_eq(paths, move |eq| eq.corrections = corrections)
 }
 

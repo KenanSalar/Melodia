@@ -2,9 +2,10 @@
 //! in. A hand-edited `eq.json` and an imported file both reach the DSP through these alone.
 
 use super::super::correction::{
-    Correction, CorrectionFilter, CorrectionFilters, CorrectionOrigin, DeviceCorrections,
-    FilterError, FilterKind, FilterSetError, MAX_CORRECTION_FILTERS,
+    Correction, CorrectionFilter, CorrectionFilters, CorrectionOrigin, FilterError, FilterKind,
+    FilterSetError, MAX_CORRECTION_FILTERS,
 };
+use super::super::device_map::DeviceMap;
 
 const IN_RANGE: CorrectionFilter =
     CorrectionFilter { kind: FilterKind::Peaking, freq_hz: 1_000.0, gain_db: 3.0, q: 1.0 };
@@ -105,7 +106,7 @@ fn correction_of(gain_db: f64) -> Result<Correction, FilterSetError> {
 /// reverse.
 #[test]
 fn system_default_and_a_device_keep_their_own_correction() -> Result<(), FilterSetError> {
-    let mut corrections = DeviceCorrections::default();
+    let mut corrections = DeviceMap::<Correction>::default();
     corrections.insert(None, correction_of(-2.0)?);
     corrections.insert(Some("hw:CARD=UMC22".to_owned()), correction_of(4.0)?);
 

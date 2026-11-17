@@ -13,8 +13,8 @@ use slint::{ComponentHandle, ModelRc, VecModel};
 use tokio::runtime::Handle;
 use tokio::task::AbortHandle;
 
-use super::Card;
 use crate::ui::dialog_landing::{DialogTicket, TicketedDialog};
+use crate::ui::headphones::Card;
 use crate::ui::row_match::PICKER_ROW_CAP;
 use crate::ui::util::len_as_i32;
 use melodia_app::library;

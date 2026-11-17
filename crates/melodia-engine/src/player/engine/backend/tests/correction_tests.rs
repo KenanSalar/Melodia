@@ -1,11 +1,11 @@
 //! Which correction plays: the heard device's while the switch is on, every device keeping its own
 //! through a switch flipped off, a device switched away from, and back.
 
-use super::CorrectionControl;
+use super::super::headphones::HeadphoneControls;
 use melodia_core::entities::correction::{
-    Correction, CorrectionFilter, CorrectionFilters, CorrectionOrigin, DeviceCorrections,
-    FilterKind, FilterSetError,
+    Correction, CorrectionFilter, CorrectionFilters, CorrectionOrigin, FilterKind, FilterSetError,
 };
+use melodia_core::entities::device_map::DeviceMap;
 
 const CARD: &str = "hw:CARD=UMC22,DEV=0";
 const OTHER_CARD: &str = "hw:CARD=PCH,DEV=0";
@@ -21,20 +21,20 @@ fn correction() -> Result<Correction, FilterSetError> {
 }
 
 /// A map holding one correction, for the card when `card` is set and for System default when not.
-fn one_for(card: Option<&str>) -> Result<DeviceCorrections, FilterSetError> {
-    let mut corrections = DeviceCorrections::default();
+fn one_for(card: Option<&str>) -> Result<DeviceMap<Correction>, FilterSetError> {
+    let mut corrections = DeviceMap::default();
     corrections.insert(card.map(str::to_owned), correction()?);
     Ok(corrections)
 }
 
 fn control_for(
     enabled: bool,
-    corrections: DeviceCorrections,
+    corrections: DeviceMap<Correction>,
     heard: Option<&str>,
-) -> CorrectionControl {
-    let mut control = CorrectionControl::default();
+) -> HeadphoneControls {
+    let mut control = HeadphoneControls::default();
     control.set_corrections(corrections);
-    control.set_enabled(enabled);
+    control.set_correction_enabled(enabled);
     control.aim(heard);
     control
 }
@@ -48,10 +48,10 @@ fn a_correction_plays_only_for_the_heard_device_while_switched_on() -> Result<()
         ("on, System default's", true, one_for(None)?, None, true),
         ("on, System default's heard on a card", true, one_for(None)?, Some(CARD), false),
         ("on, a card's heard on System default", true, one_for(Some(CARD))?, None, false),
-        ("on, none set", true, DeviceCorrections::default(), Some(CARD), false),
+        ("on, none set", true, DeviceMap::default(), Some(CARD), false),
     ];
     for (what, enabled, corrections, heard, plays) in cases {
-        assert_eq!(control_for(enabled, corrections, heard).engaged(), plays, "{what}");
+        assert_eq!(control_for(enabled, corrections, heard).correction_engaged(), plays, "{what}");
     }
     Ok(())
 }
@@ -60,11 +60,11 @@ fn a_correction_plays_only_for_the_heard_device_while_switched_on() -> Result<()
 #[test]
 fn switching_off_and_on_again_brings_the_correction_back() -> Result<(), FilterSetError> {
     let mut control = control_for(true, one_for(Some(CARD))?, Some(CARD));
-    control.set_enabled(false);
+    control.set_correction_enabled(false);
 
-    control.set_enabled(true);
+    control.set_correction_enabled(true);
 
-    assert!(control.engaged());
+    assert!(control.correction_engaged());
     Ok(())
 }
 
@@ -73,10 +73,11 @@ fn switching_off_and_on_again_brings_the_correction_back() -> Result<(), FilterS
 fn aiming_back_at_a_device_brings_its_correction_back() -> Result<(), FilterSetError> {
     let mut control = control_for(true, one_for(Some(CARD))?, Some(CARD));
     control.aim(Some(OTHER_CARD));
-    let away = control.engaged();
+    let away = control.correction_engaged();
 
     control.aim(Some(CARD));
 
-    assert_eq!((away, control.engaged()), (false, true), "(on the other card, back on this one)");
+    let back = control.correction_engaged();
+    assert_eq!((away, back), (false, true), "(on the other card, back on this one)");
     Ok(())
 }

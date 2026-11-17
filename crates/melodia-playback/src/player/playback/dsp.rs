@@ -1,5 +1,5 @@
-//! Primitives the DSP paths share: the state cells and the biquad designs on the audio thread, and
-//! the visualizer's analysis on the UI thread.
+//! Primitives the DSP paths share: the state cells, the biquad designs and the frame ramp on the
+//! audio thread, and the visualizer's analysis on the UI thread.
 
 use std::fmt::Write as _;
 use std::sync::atomic::{AtomicU32, AtomicU64, Ordering};
@@ -21,6 +21,45 @@ pub(crate) fn design(
     let fs = Hertz::<f64>::from_hz(sample_rate).ok()?;
     let f0 = Hertz::<f64>::from_hz(centre_hz).ok()?;
     Coefficients::<f64>::from_params(shape, fs, f0, q).ok()
+}
+
+/// A straight line from `start` to `target` over a whole number of frames, so every channel of a
+/// frame takes one value.
+#[derive(Clone, Copy)]
+pub(crate) struct FrameRamp {
+    start: f64,
+    target: f64,
+    frame: u64,
+    frames: u64,
+}
+
+impl FrameRamp {
+    pub(crate) fn new(start: f64, target: f64, frames: u64) -> Self {
+        Self { start, target, frame: 0, frames }
+    }
+
+    pub(crate) fn done(self) -> bool {
+        self.frame >= self.frames
+    }
+
+    /// This frame's value, moving on to the next; `target` once done.
+    pub(crate) fn step(&mut self) -> f64 {
+        let value = self.value();
+        self.frame = self.frame.saturating_add(1);
+        value
+    }
+
+    #[expect(
+        clippy::cast_precision_loss,
+        reason = "a ramp's frame counts sit far inside f64's exact-integer range"
+    )]
+    fn value(self) -> f64 {
+        if self.done() {
+            return self.target;
+        }
+        let progress = self.frame as f64 / self.frames as f64;
+        self.start + (self.target - self.start) * progress
+    }
 }
 
 /// What a falling bar or trace keeps per frame, shared so every style falls by one law. The settle

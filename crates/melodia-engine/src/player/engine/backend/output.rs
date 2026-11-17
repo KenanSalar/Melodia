@@ -236,12 +236,12 @@ impl PlaybackEngine {
         }
     }
 
-    /// The path the playing source takes to the device. Takes the decks, output and correction
+    /// The path the playing source takes to the device. Takes the decks, output and headphones
     /// locks in turn, never two at once.
     pub fn signal_path(&self, transport: Transport) -> Option<SignalPath> {
         let source = self.lock_decks().active().voice.playing()?;
         let negotiated = self.negotiated()?;
-        let correction_on = self.correction.lock().engaged();
+        let correction_on = self.headphones.lock().correction_engaged();
         Some(signal_path::evaluate(SignalInputs {
             negotiated,
             source,
@@ -272,12 +272,12 @@ impl PlaybackEngine {
 
     /// Takes the card or gives it back now rather than at the next track. With nothing loaded an
     /// exclusive choice waits for the first play to claim, and a shared one reopens shared, which
-    /// is what hands the card back. The correction follows once the reopen returns, so the outgoing
-    /// device doesn't play the incoming one's as it closes. Blocking.
+    /// is what hands the card back. The per-device settings follow once the reopen returns, so the
+    /// outgoing device doesn't play the incoming one's as it closes. Blocking.
     pub fn set_output_choice(&self, choice: OutputChoice) {
         *self.output.choice.lock() = choice;
         self.reopen_for_choice();
-        self.aim_correction();
+        self.aim_headphones();
     }
 
     fn reopen_for_choice(&self) {
@@ -306,11 +306,11 @@ impl PlaybackEngine {
         }
     }
 
-    /// Reads the choice under the correction lock, not from a caller, so two device switches
-    /// crossing can't leave the correction on the older one.
-    fn aim_correction(&self) {
-        let mut correction = self.correction.lock();
-        correction.aim(self.output.choice.lock().heard_device());
+    /// Reads the choice under the headphones lock, not from a caller, so two device switches
+    /// crossing can't leave the per-device settings on the older one.
+    fn aim_headphones(&self) {
+        let mut headphones = self.headphones.lock();
+        headphones.aim(self.output.choice.lock().heard_device());
     }
 
     fn wanted_request(&self, shape: Shape, format: SourceFormat) -> OutputRequest {

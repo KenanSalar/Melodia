@@ -2,8 +2,8 @@
 
 Working doc. Delete when the feature ships.
 
-Status: **approved, Phase 1 waiting for its go** · Created: 2026-11-17 · Branch `feat/crossfeed`,
-linked to the issue
+Status: **Phase 1 landed (uncommitted), Phase 2 waiting for its go** · Created: 2026-11-17 ·
+Branch `feat/crossfeed`, linked to the issue
 
 Issue [#157](https://github.com/KenanSalar/Melodia/issues/157).
 
@@ -286,17 +286,17 @@ through `library::crossfeed`. The DSP learns nothing about devices: the engine h
 
 ## Phase 1: Groundwork (no audible change)
 
-- [ ] `DeviceMap<T>` in `melodia-core`, every `DeviceCorrections` site on `DeviceMap<Correction>`.
-- [ ] `HeadphoneControls` in the engine, owning `heard`, `aim` and `heard_device`;
+- [x] `DeviceMap<T>` in `melodia-core`, every `DeviceCorrections` site on `DeviceMap<Correction>`.
+- [x] `HeadphoneControls` in the engine, owning `heard`, `aim` and `heard_device`;
       `CorrectionControl::select` taking the heard device; the lock renamed with its doc kept.
-- [ ] `library::headphones` with `DeviceTarget`, `Heard`, `heard()`; the correction facade and its
+- [x] `library::headphones` with `DeviceTarget`, `Heard`, `heard()`; the correction facade and its
       views on them.
-- [ ] `ui/headphones.rs` holding the card's naming, `ui/correction` painting through it.
-- [ ] `dsp::FrameRamp`, the correction's bank on it.
-- [ ] Docs: the moved items' doc comments; `backend/mod.rs`' lock comment.
+- [x] `ui/headphones.rs` holding the card's naming, `ui/correction` painting through it.
+- [x] `dsp::FrameRamp`, the correction's bank on it.
+- [x] Docs: the moved items' doc comments; `backend/mod.rs`' lock comment.
 
 **Gate:**
-- [ ] fmt, clippy, the suite; the engine's `correction_tests.rs` follows the new select.
+- [x] fmt, clippy, the suite; the engine's `correction_tests.rs` follows the new select.
 
 ## Phase 2: The stage (`melodia-core`, `melodia-playback`)
 
@@ -343,12 +343,17 @@ through `library::crossfeed`. The DSP learns nothing about devices: the engine h
 
 ## Phase 5: Tests
 
-The hand tests come first, once everything above has landed; the tests follow, on Kenan's go.
+Phases 1–4 gate on the static checks alone, each adding what it could break by hand to the list
+below. The hand tests all run here, once everything above has landed; the tests follow, on
+Kenan's go.
 
 ### Hand tests
 
 In the dev data folder with a backup.
 
+- [ ] The correction through Phase 1's moves: the card names the device heard and follows a
+      switch; Find headphones, Import file and Paste land on the device shown; Clear, then Undo,
+      restores it; a correction sounds as before, a device switch mid-track included.
 - [ ] Off: the bit-perfect rig and a flat chain read bit-identical, as before.
 - [ ] On, Strong, an early stereo recording panned hard left and right: the image narrows, the
       level doesn't move; the four constants settled by ear and recorded here.

@@ -21,7 +21,8 @@ use crate::services::settings;
 use crate::tasks::play_count_flusher::{FlushRequests, PlayCountFlush};
 use melodia_artwork::media::image::artwork::CoverCache;
 use melodia_core::config::Paths;
-use melodia_core::entities::correction::DeviceCorrections;
+use melodia_core::entities::correction::Correction;
+use melodia_core::entities::device_map::DeviceMap;
 use melodia_core::error::{AppError, AppResult, describe};
 use melodia_core::utils::self_writes::SelfWrites;
 use melodia_engine::player::engine::backend::PlaybackEngine;
@@ -129,7 +130,7 @@ pub struct AppState {
     pub correction_online: SharedFlag,
     /// Every device's headphone correction as last set. Each of `library::correction`'s writes
     /// edits this rather than the file's copy, so two in flight can't undo each other.
-    pub corrections: Arc<Shadowed<DeviceCorrections>>,
+    pub corrections: Arc<Shadowed<DeviceMap<Correction>>>,
     pub media_controls: Option<Arc<MediaControlsHandle>>,
     /// Built on first use by [`AppState::http_client`], one client for every clone.
     http_client: Arc<OnceLock<reqwest::Client>>,

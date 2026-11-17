@@ -21,6 +21,7 @@ pub mod file_dialog;
 pub mod genres;
 pub mod grid_prewarm;
 pub mod grid_rows;
+pub mod headphones;
 pub mod hero_backdrop;
 pub mod hero_chips;
 pub mod hero_folds;

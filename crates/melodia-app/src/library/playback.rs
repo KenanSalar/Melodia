@@ -5,7 +5,8 @@ use tokio::sync::mpsc::UnboundedReceiver;
 
 use crate::state::PlaybackContext;
 use melodia_audio::player::source::stream_source;
-use melodia_core::entities::correction::DeviceCorrections;
+use melodia_core::entities::correction::Correction;
+use melodia_core::entities::device_map::DeviceMap;
 use melodia_core::error::AppError;
 use melodia_core::error::describe;
 use melodia_core::utils::event_bridge::EventBridge;
@@ -412,7 +413,7 @@ pub fn player_set_eq_preamp(ctx: &PlaybackContext, preamp_db: f32) {
     ctx.engine.set_eq_preamp(preamp_db);
 }
 
-pub fn player_set_corrections(ctx: &PlaybackContext, corrections: DeviceCorrections) {
+pub fn player_set_corrections(ctx: &PlaybackContext, corrections: DeviceMap<Correction>) {
     ctx.engine.set_corrections(corrections);
 }
 

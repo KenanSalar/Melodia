@@ -5,6 +5,7 @@ pub mod browse;
 pub mod correction;
 pub mod credits;
 pub mod cue;
+pub mod device_map;
 pub mod duplicates;
 pub mod folder;
 pub mod genre;

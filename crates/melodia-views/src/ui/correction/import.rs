@@ -9,9 +9,9 @@ use async_compat::Compat;
 use slint::{ComponentHandle, ModelRc, VecModel};
 use tokio::runtime::Handle;
 
-use super::Card;
 use crate::ui::dialog_landing::{DialogTicket, TicketedDialog};
 use crate::ui::file_dialog;
+use crate::ui::headphones::Card;
 use crate::ui::util::len_as_i32;
 use melodia_app::library;
 use melodia_app::library::correction::{ImportError, Imported};
