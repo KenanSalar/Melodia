@@ -12,6 +12,7 @@ use reqwest::StatusCode;
 
 use crate::services::integrations::scrobble::model::ScrobbleTrack;
 use melodia_core::error::AppError;
+use melodia_core::utils::text::from_utf8_lossy_owned;
 
 /// Every entry point takes its base as an argument and every production caller passes this, so
 /// the submitter's suites point the whole drain at a local server without a second code path
@@ -164,7 +165,7 @@ async fn server_error(status: StatusCode, response: reqwest::Response) -> Listen
         ERROR_MAX_BYTES,
     )
     .await
-    .map(|bytes| String::from_utf8_lossy(&bytes).into_owned())
+    .map(from_utf8_lossy_owned)
     .unwrap_or_default();
     ListenBrainzError::Server { status: status.as_u16(), message }
 }

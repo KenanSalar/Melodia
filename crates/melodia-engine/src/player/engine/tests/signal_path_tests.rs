@@ -42,6 +42,7 @@ fn clean_inputs() -> SignalInputs {
         },
         eq_on: false,
         rg_on: false,
+        correction_on: false,
         transport: Transport { volume: 100, muted: false, speed: 1.0, crossfading: false },
     }
 }

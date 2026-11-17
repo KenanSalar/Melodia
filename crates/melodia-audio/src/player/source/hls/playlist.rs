@@ -6,6 +6,7 @@ use std::time::Duration;
 use reqwest::Url;
 
 use melodia_core::error::AppError;
+use melodia_net::services::net::is_http;
 
 /// Mandatory in a media playlist, so its presence is what separates one from a plain Extended M3U.
 const TARGET_DURATION_TAG: &str = "#EXT-X-TARGETDURATION:";
@@ -147,14 +148,12 @@ fn audio_rendition(list: &str, base: &Url) -> Option<Url> {
 /// rendition back at its master or handing the demuxer the playlist text as an init segment.
 ///
 /// **Every URI in a playlist is resolved here**, and `Url::join` hands an absolute `file://` or
-/// `data:` back unchanged, so [`services::net::is_http`] is asked of the parsed value.
-///
-/// [`services::net::is_http`]: melodia_net::services::net::is_http
+/// `data:` back unchanged, so [`is_http`] is asked of the parsed value.
 fn joined(base: &Url, uri: &str) -> Option<Url> {
     if uri.is_empty() {
         return None;
     }
-    base.join(uri).ok().filter(melodia_net::services::net::is_http)
+    base.join(uri).ok().filter(is_http)
 }
 
 /// Split on the commas outside a quoted value, which `CODECS="mp4a.40.2,avc1.4d401f"` needs.

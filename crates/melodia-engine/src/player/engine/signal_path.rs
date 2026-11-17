@@ -37,10 +37,12 @@ pub enum Verdict {
 pub struct SignalInputs {
     pub negotiated: Negotiated,
     pub source: PlayingSource,
-    /// Which of the two settings behind `source.dsp_engaged` are on. They name the stage and
-    /// never grade it: an EQ that is on with nothing to do at this rate leaves it clean.
+    /// Which of the settings behind `source.dsp_engaged` are on, the correction only where one is
+    /// set for the device heard. They name the stage and never grade it: an EQ that is on with
+    /// nothing to do at this rate leaves it clean.
     pub eq_on: bool,
     pub rg_on: bool,
+    pub correction_on: bool,
     pub transport: Transport,
 }
 

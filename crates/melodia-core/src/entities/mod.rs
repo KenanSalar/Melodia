@@ -2,6 +2,7 @@ pub mod album;
 pub mod artist;
 pub mod audio_quality;
 pub mod browse;
+pub mod correction;
 pub mod credits;
 pub mod cue;
 pub mod duplicates;

@@ -151,7 +151,8 @@ narrowest-item rule above.
 | `get_unchecked` on a hot slice | iterator `zip` — already the idiom in `player/playback/equalizer.rs`, and the comment there says why. Or put the length in the *type* (`[T; N]` over `Box<[T]>`) so the compiler proves the mask itself |
 | `transmute` between plain-data slices | `bytemuck::cast_slice`. Already in the lock file transitively, so adopting it costs a direct-dependency line rather than a build — but it still has to earn one against what it saves |
 | uninit buffer + `set_len` | `Vec::with_capacity` + `extend`, or build with the fill you need. Every buffer in the DSP and visualizer paths is allocated once per source and reused, which is the win that actually mattered |
-| `std::arch` SIMD | measure first, and read the shape of the work: ten cascaded biquads are *serially dependent*, so there is nothing to vectorise across bands, and two channels caps the other axis at 2× |
+| `std::arch` SIMD | measure first, and read the shape of the work: the correction's and the ten bands' cascaded biquads are *serially dependent*, so there is nothing to vectorise across filters, and two channels caps the other axis at 2× |
+| flush-to-zero or denormals-are-zero through MXCSR, against slow subnormal filter state | `EqSource::settle_on_silence`. Core's `_mm_setcsr` docs call changing those flags immediate Undefined Behavior, Rust assuming their default state |
 | `unsafe impl Send` / `Sync` | the `const _: fn() = \|\| { fn check<T: Send + Sync>() {} check::<FooUi>(); };` assertion — ten of them in the tree already |
 | a raw pointer to dodge a lifetime | an owned `Arc` clone. `PlaybackContext` exists for precisely this and says so |
 
@@ -160,9 +161,10 @@ narrowest-item rule above.
 The measured hot spots are not where intuition puts them, and none of them is a
 bounds-check problem. Read these before proposing anything:
 
-- **The per-sample DSP path has no index in it.** `EqSource::next_active` is four
-  `zip`ped iterator loops; what survives is a handful of per-*frame* slice accesses. The
-  bypass arms — a flat EQ at unity gain, which is the default — touch no buffer at all.
+- **The per-sample DSP path has no index in it.** `EqSource::next_active` is four iterator
+  loops and the correction's cascades are folds over `take`; what survives is a handful of
+  per-*frame* slice accesses. The bypass arms (a flat EQ at unity gain, the default) touch no
+  buffer at all.
 - **The visualizer's dominant per-frame cost was number *formatting*, not arithmetic.**
   At the column cap the trace writes two vertices per column into an SVG path string,
   and asking `core::fmt` for an exactly-rounded decimal at a fixed precision is a far

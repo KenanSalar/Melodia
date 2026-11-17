@@ -2,6 +2,7 @@ import { Theme } from "../../theme.slint";
 import { SmartEditor, TagEditor, ScrobbleUi, RadioForm } from "../../globals/dialog-forms.slint";
 import { Dialog as DialogGlobal, DialogKind } from "../../globals/dialog.slint";
 import { DuplicatesUi } from "../../globals/duplicates.slint";
+import { CorrectionImport, HeadphonePicker, ImportStep, PickerPhase } from "../../globals/correction-dialogs.slint";
 import { LibrarySettings } from "../../globals/library-settings.slint";
 import { SectionButton } from "../settings/section-button.slint";
 import { PlaylistMosaicPicker } from "playlist-mosaic-picker.slint";
@@ -16,6 +17,8 @@ import { ScrobbleListenbrainzBody } from "scrobble-listenbrainz-body.slint";
 import { AddStationBody } from "add-station-body.slint";
 import { DuplicatesBody } from "duplicates-body.slint";
 import { KeptOutBody } from "kept-out-body.slint";
+import { HeadphonePickerBody } from "headphone-picker-body.slint";
+import { CorrectionImportBody } from "correction-import-body.slint";
 import { LabeledInput } from "../labeled-input.slint";
 import { DialogHeader } from "dialog-header.slint";
 import { ModalCard } from "modal-card.slint";
@@ -53,6 +56,8 @@ export component DialogOverlay inherits Rectangle {
         : DialogGlobal.kind == DialogKind.scrobble-listenbrainz-login ? 460px
         : DialogGlobal.kind == DialogKind.add-station ? 480px
         : DialogGlobal.kind == DialogKind.edit-station ? 480px
+        : DialogGlobal.kind == DialogKind.headphone-picker ? 560px
+        : DialogGlobal.kind == DialogKind.correction-import ? 560px
         : 540px;
     // Confirmation kinds only, mapped by kind so a caller sets nothing extra.
     property <string> kind-icon:
@@ -73,7 +78,9 @@ export component DialogOverlay inherits Rectangle {
         DialogGlobal.kind == DialogKind.add-station || DialogGlobal.kind == DialogKind.edit-station
         || DialogGlobal.kind == DialogKind.smart-playlist-editor
         || DialogGlobal.kind == DialogKind.duplicates
-        || DialogGlobal.kind == DialogKind.kept-out-files;
+        || DialogGlobal.kind == DialogKind.kept-out-files
+        || DialogGlobal.kind == DialogKind.headphone-picker
+        || DialogGlobal.kind == DialogKind.correction-import;
     property <length> eased-height: layout.preferred-height;
     // A transition rather than `animate`, which would chase a window resize: its curve ends a
     // fixed time after the step changed, so a later resize snaps. `in` only, finding being the
@@ -102,6 +109,9 @@ export component DialogOverlay inherits Rectangle {
     // The finder's second step, whose footer reads Back and Remove.
     property <bool> duplicates-confirming:
         DialogGlobal.kind == DialogKind.duplicates && DuplicatesUi.confirming;
+    // The import's second step, whose footer reads Back and Apply.
+    property <bool> import-reviewing:
+        DialogGlobal.kind == DialogKind.correction-import && CorrectionImport.step == ImportStep.review;
     // A fact about the form rather than an action on it, stated opposite the buttons.
     property <string> footer-note:
         DialogGlobal.kind == DialogKind.smart-playlist-editor && SmartEditor.match-count >= 0
@@ -200,6 +210,10 @@ export component DialogOverlay inherits Rectangle {
 
             if DialogGlobal.kind == DialogKind.kept-out-files: KeptOutBody { }
 
+            if DialogGlobal.kind == DialogKind.headphone-picker: HeadphonePickerBody { }
+
+            if DialogGlobal.kind == DialogKind.correction-import: CorrectionImportBody { }
+
             HorizontalLayout {
                 spacing: Theme.pad-sm;
                 padding-top: Theme.pad-sm;
@@ -217,7 +231,8 @@ export component DialogOverlay inherits Rectangle {
                 // `if` rather than `visible`, so an info-only dialog keeps its primary button
                 // flush right.
                 if DialogGlobal.cancel-label != "": SectionButton {
-                    label: root.duplicates-confirming ? @tr("Back") : DialogGlobal.cancel-label;
+                    label: root.duplicates-confirming || root.import-reviewing
+                        ? @tr("Back") : DialogGlobal.cancel-label;
                     icon: "";
                     primary: false;
                     button-enabled: DialogGlobal.open
@@ -225,6 +240,8 @@ export component DialogOverlay inherits Rectangle {
                     clicked => {
                         if (root.duplicates-confirming) {
                             DuplicatesUi.confirming = false;
+                        } else if (root.import-reviewing) {
+                            CorrectionImport.step = ImportStep.paste;
                         } else {
                             DialogGlobal.cancelled();
                             DialogGlobal.open = false;
@@ -240,6 +257,8 @@ export component DialogOverlay inherits Rectangle {
                         ? @tr("Connect")
                         : DialogGlobal.kind == DialogKind.duplicates
                         ? (DuplicatesUi.confirming ? @tr("Remove") : @tr("Continue"))
+                        : DialogGlobal.kind == DialogKind.correction-import
+                        ? (root.import-reviewing ? @tr("Apply") : @tr("Review"))
                         : DialogGlobal.confirm-label;
                     icon: "";
                     primary: true;
@@ -270,7 +289,13 @@ export component DialogOverlay inherits Rectangle {
                         && (DialogGlobal.kind != DialogKind.duplicates
                             || (DuplicatesUi.confirming
                                 ? !LibrarySettings.scanning && !DuplicatesUi.removing
-                                : DuplicatesUi.picked-count > 0));
+                                : DuplicatesUi.picked-count > 0))
+                        && (DialogGlobal.kind != DialogKind.headphone-picker
+                            || (HeadphonePicker.phase == PickerPhase.listing
+                                && HeadphonePicker.picked >= 0 && !HeadphonePicker.applying))
+                        && (DialogGlobal.kind != DialogKind.correction-import
+                            || (!CorrectionImport.busy
+                                && (root.import-reviewing || CorrectionImport.text != "")));
                     clicked => {
                         DialogGlobal.accepted();
                         // A kind making a request stays open across it and Rust closes it.
@@ -278,7 +303,9 @@ export component DialogOverlay inherits Rectangle {
                                 && DialogGlobal.kind != DialogKind.scrobble-listenbrainz-login
                                 && DialogGlobal.kind != DialogKind.add-station
                                 && DialogGlobal.kind != DialogKind.edit-station
-                                && DialogGlobal.kind != DialogKind.duplicates) {
+                                && DialogGlobal.kind != DialogKind.duplicates
+                                && DialogGlobal.kind != DialogKind.headphone-picker
+                                && DialogGlobal.kind != DialogKind.correction-import) {
                             DialogGlobal.open = false;
                         }
                     }

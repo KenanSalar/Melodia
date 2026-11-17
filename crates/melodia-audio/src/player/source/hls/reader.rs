@@ -11,6 +11,7 @@ use crate::player::source::prebuffer::StreamShared;
 use crate::player::source::stream_source::ABANDON_POLL;
 use melodia_core::error::AppError;
 use melodia_core::error::describe;
+use melodia_net::services::net::{CappedGet, get_capped, get_capped_text};
 
 use super::playlist::{self, MediaPlaylist, Playlist};
 use super::segment::SegmentReader;
@@ -25,13 +26,16 @@ const LIVE_EDGE_SEGMENTS: usize = 3;
 const SEGMENT_QUEUE_DEPTH: usize = 4;
 
 /// Generous, its point being to refuse a mount serving something else rather than to size a buffer.
-const SEGMENT_MAX_BYTES: u64 = 4 * 1024 * 1024;
-const SEGMENT_TIMEOUT: Duration = Duration::from_secs(20);
+const SEGMENT_GET: CappedGet = CappedGet {
+    what: "Station segment",
+    timeout: Duration::from_secs(20),
+    max_bytes: 4 * 1024 * 1024,
+};
 
 /// Its own cap rather than `stream_source`'s, which bounds a pointer of a few hundred bytes: a
 /// media playlist lists every segment in the window and is re-fetched twice a target duration.
-const MANIFEST_MAX_BYTES: u64 = 256 * 1024;
-const MANIFEST_TIMEOUT: Duration = Duration::from_secs(15);
+const MANIFEST_GET: CappedGet =
+    CappedGet { what: "Station playlist", timeout: Duration::from_secs(15), max_bytes: 256 * 1024 };
 
 /// Ending hands the station to the feed thread's reconnect, which owns the backoff and decides when
 /// to tell the user.
@@ -305,25 +309,11 @@ impl Scheduler {
 }
 
 async fn fetch_manifest(client: &reqwest::Client, url: &Url) -> Result<String, AppError> {
-    melodia_net::services::net::get_capped_text(
-        client,
-        url,
-        "Station playlist",
-        MANIFEST_TIMEOUT,
-        MANIFEST_MAX_BYTES,
-    )
-    .await
+    get_capped_text(client, url, &MANIFEST_GET).await
 }
 
 async fn fetch_segment(client: &reqwest::Client, url: &Url) -> Result<Vec<u8>, AppError> {
-    melodia_net::services::net::get_capped(
-        client,
-        url,
-        "Station segment",
-        SEGMENT_TIMEOUT,
-        SEGMENT_MAX_BYTES,
-    )
-    .await
+    get_capped(client, url, &SEGMENT_GET).await
 }
 
 #[cfg(test)]

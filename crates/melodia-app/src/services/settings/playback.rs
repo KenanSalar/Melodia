@@ -5,10 +5,11 @@ use std::time::Duration;
 
 use serde::{Deserialize, Serialize};
 
+use super::EqData;
+use melodia_core::entities::correction::DeviceCorrections;
 use melodia_engine::player::engine::backend::OutputChoice;
 use melodia_engine::player::engine::types::RepeatMode;
 use melodia_playback::player::playback::crossfade::DEFAULT_CROSSFADE_MS;
-use melodia_playback::player::playback::equalizer::{DEFAULT_PRESET, NUM_BANDS};
 use melodia_playback::player::playback::output::convert::Resampler;
 use melodia_playback::player::playback::output::{
     DEFAULT_RESYNC_HOLD, Drive, ExclusiveTuning, OutputMode, RateFallback,
@@ -36,25 +37,58 @@ impl Default for PlaybackFlags {
     }
 }
 
-/// Ships off and flat. Gains are dB, through `equalizer::normalize_gains` on read so a hand-edited
-/// or wrong-length array can't pin a bad value.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+/// Ships off. The curve is `eq.json`'s.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(default)]
 pub struct EqualizerFlags {
     pub eq_enabled: bool,
-    pub eq_band_gains: Vec<f32>,
-    pub eq_selected_preset: String,
-    /// Master gain in dB, clamped to `MIN_PREAMP_DB..=MAX_PREAMP_DB`.
-    pub eq_preamp: f32,
 }
 
-impl Default for EqualizerFlags {
-    fn default() -> Self {
-        Self {
-            eq_enabled: false,
-            eq_band_gains: vec![0.0; NUM_BANDS],
-            eq_selected_preset: DEFAULT_PRESET.to_owned(),
-            eq_preamp: 0.0,
+/// Ships off. Every device's correction is `eq.json`'s.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(default)]
+pub struct CorrectionFlags {
+    pub correction_enabled: bool,
+    /// Whether `AutoEq`'s list and profiles may be fetched.
+    pub correction_online: bool,
+}
+
+/// The curves as `settings.json` kept them before `eq.json`, read so boot can move them
+/// (`move_legacy_eq`). Unlike every other key, written only while set, so a moved one goes.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(default)]
+pub struct LegacyEq {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    eq_band_gains: Option<Vec<f32>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    eq_selected_preset: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    eq_preamp: Option<f32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    corrections: Option<DeviceCorrections>,
+}
+
+impl LegacyEq {
+    pub(super) fn is_empty(&self) -> bool {
+        self.eq_band_gains.is_none()
+            && self.eq_selected_preset.is_none()
+            && self.eq_preamp.is_none()
+            && self.corrections.is_none()
+    }
+
+    /// Each key it holds over `eq`'s, the rest left as they were.
+    pub(super) fn move_into(self, eq: &mut EqData) {
+        if let Some(gains) = self.eq_band_gains {
+            eq.band_gains = gains;
+        }
+        if let Some(preset) = self.eq_selected_preset {
+            eq.preset = preset;
+        }
+        if let Some(preamp) = self.eq_preamp {
+            eq.preamp = preamp;
+        }
+        if let Some(corrections) = self.corrections {
+            eq.corrections = corrections;
         }
     }
 }

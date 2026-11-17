@@ -1,0 +1,161 @@
+import { ListView } from "std-widgets.slint";
+import { Theme } from "../../theme.slint";
+import { ApplyFailure, HeadphonePicker, PickerPhase } from "../../globals/correction-dialogs.slint";
+import { CorrectionPickRow } from "../../models.slint";
+import { GridEmptyState } from "../grid/grid-empty-state.slint";
+import { OverlayScrollbar } from "../overlay-scrollbar.slint";
+import { SearchBar } from "../search-bar.slint";
+import { SelectIndicator } from "selectable-picker.slint";
+
+// One model, a card of its own in the well: its name over whose measurement it is.
+component PickRowItem inherits Rectangle {
+    in property <CorrectionPickRow> row-data;
+    in property <bool> list-start;
+    in property <bool> list-end;
+    // The cards' margins inside the list, the right one holding the list's scrollbar.
+    in property <length> inset-left;
+    in property <length> inset-right;
+
+    property <bool> picked: HeadphonePicker.picked == root.row-data.index;
+    property <length> card-h: 48px;
+    property <length> card-y: root.list-start ? Theme.pad-sm : 2px;
+
+    height: root.card-y + root.card-h + (root.list-end ? Theme.pad-sm : 0px);
+
+    Rectangle {
+        x: root.inset-left;
+        y: root.card-y;
+        width: root.width - root.inset-left - root.inset-right;
+        height: root.card-h;
+        border-radius: Theme.radius-md;
+        background: touch.has-hover || root.picked ? Theme.surface1 : Theme.surface0;
+        animate background { duration: Theme.dur-fast; easing: ease-in-out; enabled: !Theme.recoloring; }
+
+        HorizontalLayout {
+            padding-left: Theme.pad-md;
+            padding-right: Theme.pad-md;
+            spacing: Theme.pad-md;
+
+            VerticalLayout {
+                alignment: center;
+                spacing: 2px;
+
+                Text {
+                    text: root.row-data.name;
+                    color: root.picked ? Theme.accent : Theme.text;
+                    font-size: Theme.font-size-row;
+                    overflow: elide;
+                }
+                Text {
+                    // Translators: {} names who measured the headphones, as oratory1990.
+                    text: @tr("Measured by {}", root.row-data.source);
+                    color: Theme.subtext0;
+                    font-size: Theme.font-size-sm;
+                    overflow: elide;
+                }
+            }
+            VerticalLayout {
+                alignment: center;
+                SelectIndicator { checked: root.picked; }
+            }
+        }
+    }
+
+    touch := TouchArea {
+        x: root.inset-left;
+        y: root.card-y;
+        width: root.width - root.inset-left - root.inset-right;
+        height: root.card-h;
+        mouse-cursor: pointer;
+        clicked => {
+            HeadphonePicker.picked = root.row-data.index;
+            HeadphonePicker.blur-tick += 1;
+        }
+    }
+}
+
+// AutoEq's models behind a filter, or a state saying why there are none. The list is the card's
+// scroller, the kind being one of `body-scrolls`.
+export component HeadphonePickerBody inherits VerticalLayout {
+    spacing: Theme.pad-md;
+
+    property <length> bar-inset: Theme.pad-xs;
+    property <length> bar-gutter: Theme.scrollbar-slot + 2 * root.bar-inset;
+    property <bool> listing: HeadphonePicker.phase == PickerPhase.listing;
+
+    if root.listing: SearchBar {
+        on-card: true;
+        inset: true;
+        placeholder: @tr("Find a model…");
+        text <=> HeadphonePicker.filter;
+        blur-trigger: HeadphonePicker.blur-tick;
+        edited(needle) => { HeadphonePicker.filter-changed(needle); }
+        cleared => { HeadphonePicker.filter-changed(""); }
+    }
+
+    if !root.listing || HeadphonePicker.rows.length == 0: GridEmptyState {
+        min-height: 200px;
+        preferred-height: 240px;
+        vertical-stretch: 1;
+        border-radius: Theme.radius-lg;
+        icon: HeadphonePicker.phase == PickerPhase.loading ? "headphones"
+            : root.listing ? "search_off" : "error";
+        title: HeadphonePicker.phase == PickerPhase.loading ? @tr("Loading…")
+            : HeadphonePicker.phase == PickerPhase.unreachable ? @tr("Couldn't reach AutoEq")
+            : HeadphonePicker.phase == PickerPhase.unreadable ? @tr("AutoEq's list couldn't be read")
+            : @tr("No model matches");
+        body: root.listing || HeadphonePicker.phase == PickerPhase.loading ? ""
+            : @tr("A correction file can still be imported from the card.");
+    }
+
+    // No `clip`, for the finder's well's reason.
+    if root.listing && HeadphonePicker.rows.length > 0: Rectangle {
+        min-height: 160px;
+        preferred-height: 460px;
+        vertical-stretch: 1;
+        background: Theme.base;
+        border-radius: Theme.radius-lg;
+
+        list := ListView {
+            x: 0px;
+            y: 0px;
+            width: parent.width;
+            height: parent.height;
+            vertical-scrollbar-policy: always-off;
+            horizontal-scrollbar-policy: always-off;
+            // A click picks the model, so a drag mustn't pan the list from under it.
+            mouse-drag-pan-enabled: false;
+
+            for row[idx] in HeadphonePicker.rows: PickRowItem {
+                row-data: row;
+                list-start: idx == 0;
+                list-end: idx == HeadphonePicker.rows.length - 1;
+                inset-left: Theme.pad-sm;
+                inset-right: root.bar-gutter;
+            }
+        }
+
+        OverlayScrollbar {
+            x: parent.width - self.width - root.bar-inset;
+            y: root.bar-inset;
+            width: Theme.scrollbar-slot;
+            height: parent.height - 2 * root.bar-inset;
+            visible-size: list.visible-height;
+            content-size: list.content-height;
+            offset: -list.content-y;
+            track-color: Theme.scrollbar-track-on-card;
+            scroll-to(o) => { list.content-y = -o; }
+        }
+    }
+
+    if HeadphonePicker.failure != ApplyFailure.none: Text {
+        text: HeadphonePicker.failure == ApplyFailure.unreachable
+            ? @tr("Couldn't reach AutoEq. Check your connection and try again.")
+            : HeadphonePicker.failure == ApplyFailure.refused
+            ? @tr("AutoEq's profile for this model holds lines Melodia can't read.")
+            : @tr("Couldn't apply the correction. See the log for details.");
+        color: Theme.danger;
+        font-size: Theme.font-size-sm;
+        wrap: word-wrap;
+    }
+}

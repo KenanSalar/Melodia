@@ -50,6 +50,15 @@ impl OutputChoice {
         self.device.as_deref().filter(|_| output::SHARED_DEVICE_SUPPORTED)
     }
 
+    /// The device the output is aimed at, which keys its headphone correction. `None` is System
+    /// default.
+    pub fn heard_device(&self) -> Option<&str> {
+        match self.mode {
+            OutputMode::Exclusive => self.device.as_deref(),
+            OutputMode::Shared => self.shared_device(),
+        }
+    }
+
     fn shared_request(&self, rate: Option<SampleRate>) -> OutputRequest {
         OutputRequest::Shared { rate, device: self.shared_device().map(str::to_owned) }
     }
@@ -227,16 +236,18 @@ impl PlaybackEngine {
         }
     }
 
-    /// The path the playing source takes to the device. Takes the decks lock and then the output
-    /// lock, never both at once.
+    /// The path the playing source takes to the device. Takes the decks, output and correction
+    /// locks in turn, never two at once.
     pub fn signal_path(&self, transport: Transport) -> Option<SignalPath> {
         let source = self.lock_decks().active().voice.playing()?;
         let negotiated = self.negotiated()?;
+        let correction_on = self.correction.lock().engaged();
         Some(signal_path::evaluate(SignalInputs {
             negotiated,
             source,
-            eq_on: self.eq.enabled(),
-            rg_on: self.rg.enabled(),
+            eq_on: self.dsp.eq.enabled(),
+            rg_on: self.dsp.rg.enabled(),
+            correction_on,
             transport,
         }))
     }
@@ -261,10 +272,16 @@ impl PlaybackEngine {
 
     /// Takes the card or gives it back now rather than at the next track. With nothing loaded an
     /// exclusive choice waits for the first play to claim, and a shared one reopens shared, which
-    /// is what hands the card back. Blocking.
+    /// is what hands the card back. The correction follows once the reopen returns, so the outgoing
+    /// device doesn't play the incoming one's as it closes. Blocking.
     pub fn set_output_choice(&self, choice: OutputChoice) {
-        let exclusive = choice.mode == OutputMode::Exclusive;
         *self.output.choice.lock() = choice;
+        self.reopen_for_choice();
+        self.aim_correction();
+    }
+
+    fn reopen_for_choice(&self) {
+        let exclusive = self.output.choice.lock().mode == OutputMode::Exclusive;
         let decks = self.lock_decks();
         let wanted = match decks.active().voice.playing() {
             Some(playing) => Some(self.wanted_request(playing.shape, playing.format)),
@@ -287,6 +304,13 @@ impl PlaybackEngine {
             Ok(negotiated) => log::info!("Output reopened for a new output choice: {negotiated:?}"),
             Err(e) => log::warn!("Failed to reopen the output: {}", describe(&e)),
         }
+    }
+
+    /// Reads the choice under the correction lock, not from a caller, so two device switches
+    /// crossing can't leave the correction on the older one.
+    fn aim_correction(&self) {
+        let mut correction = self.correction.lock();
+        correction.aim(self.output.choice.lock().heard_device());
     }
 
     fn wanted_request(&self, shape: Shape, format: SourceFormat) -> OutputRequest {

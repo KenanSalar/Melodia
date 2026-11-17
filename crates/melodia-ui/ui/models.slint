@@ -219,6 +219,26 @@ export struct KeptOutRow {
     removed: string,
 }
 
+// A headphone model on AutoEq's list. `index` is the entry's place in the list Rust holds, so a
+// pick survives the filter narrowing past it.
+export struct CorrectionPickRow {
+    index: int,
+    name: string,
+    // Whose measurement it is.
+    source: string,
+}
+
+// Why an imported file's line goes unused. A type rather than a label, for `DuplicateMatch`'s
+// reason; the three ranges are a filter's frequency, gain and Q.
+export enum SkipWhy { off, unsupported, frequency, gain, q, unreadable }
+
+// `number` counts from 1, as an editor does.
+export struct SkippedLineRow {
+    number: int,
+    text: string,
+    reason: SkipWhy,
+}
+
 // `join-index` points into Rust's `TagEditor.join-phrases`, so a mistyped separator can't reach
 // the file from here. The last row's is ignored.
 export struct ArtistCreditRow {

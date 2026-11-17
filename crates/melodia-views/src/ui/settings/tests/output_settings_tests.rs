@@ -1,6 +1,6 @@
 //! Tests for the Output card's pickers: what a pick changes, what a listing of the cards shows, the
-//! chip orders Rust and the card each spell, and the lock that orders two picks in flight. Applying
-//! a pick opens a device, and is tested by hand.
+//! chip orders Rust and the card each spell, and that every apply reads its shadow. Applying a pick
+//! opens a device, and is tested by hand.
 
 use std::time::Duration;
 
@@ -14,8 +14,8 @@ use melodia_playback::player::playback::output::{
 use melodia_testkit::{array_body, binding_value, block_body, strip_line_comments};
 
 use super::{
-    PERIOD_PRESETS, Picked, Shadowed, mode_from_index, mode_index, period_index,
-    resampler_from_index, resampler_index,
+    PERIOD_PRESETS, Picked, mode_from_index, mode_index, period_index, resampler_from_index,
+    resampler_index,
 };
 
 const OUTPUT_SECTION: &str =
@@ -329,28 +329,6 @@ fn the_settings_global_reads_the_linear_chip_as_linear() {
     let reads = format!("root.output-resampler-idx == {}", resampler_index(Resampler::Linear));
 
     assert!(linear.contains(&reads), "resampler-linear reads {linear:?}");
-}
-
-/// Two picks in flight run on the pool in either order, and whichever takes the lock last has to
-/// apply and persist the newest. That holds only while the lock spans the apply, the engine and
-/// the settings file each taking a lock of their own.
-#[test]
-fn apply_latest_holds_the_apply_lock_until_the_apply_returns() {
-    let shadow = Shadowed::new(0);
-
-    let held = shadow.apply_latest(|picked| *picked, |_| shadow.applying.try_lock().is_none());
-
-    assert!(held, "a second task could take the apply lock while the first was applying");
-}
-
-/// A click takes the pick's own lock, and the apply behind it can be a device open.
-#[test]
-fn a_pick_can_land_while_an_apply_is_in_flight() {
-    let shadow = Shadowed::new(0);
-
-    let free = shadow.apply_latest(|picked| *picked, |_| shadow.picked.try_lock().is_some());
-
-    assert!(free, "a click would wait out the device open in flight");
 }
 
 /// A task that captured its value races the next commit's task on the pool, and either can land

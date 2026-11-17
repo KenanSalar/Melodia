@@ -10,6 +10,7 @@ pub enum UndoKind {
     Favorites,
     Radio,
     Equalizer,
+    Correction,
     RecentSearches,
 }
 
@@ -23,6 +24,7 @@ impl UndoKind {
             Self::Favorites => "favorites",
             Self::Radio => "radio",
             Self::Equalizer => "equalizer",
+            Self::Correction => "headphone_correction",
             Self::RecentSearches => "recent_searches",
         }
     }

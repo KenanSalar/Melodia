@@ -27,6 +27,7 @@ use symphonia::core::codecs::audio::well_known::{
 
 use melodia_core::error::AppError;
 use melodia_core::error::describe;
+use melodia_net::services::net::{CappedGet, get_capped_text, is_http_url};
 
 use super::audio::{Shape, SourceFormat};
 use super::hls;
@@ -61,10 +62,10 @@ const RECONNECT_MAX_DELAY: Duration = Duration::from_secs(16);
 /// `stall_watch`.
 pub(super) const ABANDON_POLL: Duration = Duration::from_millis(100);
 
-/// For a small text document; the audio request is deliberately unbounded, never ending.
-const PLAYLIST_TIMEOUT: Duration = Duration::from_secs(15);
-/// A `.pls` or `.m3u` naming a station is a few hundred bytes.
-const PLAYLIST_MAX_BYTES: u64 = 64 * 1024;
+/// A `.pls` or `.m3u` naming a station is a few hundred bytes. The deadline is for a small text
+/// document; the audio request is deliberately unbounded, never ending.
+const PLAYLIST_GET: CappedGet =
+    CappedGet { what: "Station playlist", timeout: Duration::from_secs(15), max_bytes: 64 * 1024 };
 /// URL extensions that mean "this is a pointer, not audio".
 const PLAYLIST_EXTENSIONS: [&str; 4] = ["pls", "m3u", "m3u8", "asx"];
 /// Response content types that mean the same, for the mounts that carry no extension.
@@ -486,14 +487,7 @@ async fn follow_playlist(
 }
 
 async fn fetch_playlist(client: &reqwest::Client, url: &Url) -> Result<String, AppError> {
-    melodia_net::services::net::get_capped_text(
-        client,
-        url,
-        "Station playlist",
-        PLAYLIST_TIMEOUT,
-        PLAYLIST_MAX_BYTES,
-    )
-    .await
+    get_capped_text(client, url, &PLAYLIST_GET).await
 }
 
 /// Off the path alone, a mount routinely carrying a session parameter after the name.
@@ -524,9 +518,7 @@ fn first_stream_url(body: &str) -> Option<String> {
         }
         let readings =
             [quoted_href(line), line.split_once('=').map(|(_, value)| value.trim()), Some(line)];
-        if let Some(url) =
-            readings.into_iter().flatten().find(|c| melodia_net::services::net::is_http_url(c))
-        {
+        if let Some(url) = readings.into_iter().flatten().find(|c| is_http_url(c)) {
             return Some(url.to_owned());
         }
     }

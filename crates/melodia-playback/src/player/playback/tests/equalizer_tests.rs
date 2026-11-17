@@ -5,8 +5,9 @@ use std::sync::atomic::AtomicBool;
 use std::time::Duration;
 
 use super::{
-    BAND_FREQS, CUSTOM_PRESET, EqShared, EqSource, MAX_GAIN_DB, MAX_PREAMP_DB, MIN_GAIN_DB,
-    MIN_PREAMP_DB, NUM_BANDS, PRESETS, clamp_gain, clamp_preamp, normalize_gains, preset_index,
+    BAND_FREQS, CUSTOM_PRESET, DspControls, EqShared, EqSource, MAX_GAIN_DB, MAX_PREAMP_DB,
+    MIN_GAIN_DB, MIN_PREAMP_DB, NUM_BANDS, PRESETS, clamp_gain, clamp_preamp, normalize_gains,
+    preset_index,
 };
 use crate::player::playback::crossfade::FadeShared;
 use crate::player::playback::replaygain::{ReplayGainShared, RgMode, TrackReplayGain};
@@ -33,8 +34,7 @@ fn run_eq(gains: &[f32], enabled: bool, input: Vec<f32>, channels: u16) -> Vec<f
     let rg = ReplayGainShared::new();
     EqSource::new(
         TestSource::new(input, channels, 44_100),
-        shared,
-        rg,
+        DspControls { eq: shared, rg, ..DspControls::default() },
         TrackReplayGain::default(),
         FadeShared::idle(),
     )
@@ -50,8 +50,8 @@ fn run_rg(
     input: Vec<f32>,
 ) -> Vec<f32> {
     let shared = EqShared::new(eq_enabled, &[0.0; NUM_BANDS]);
-    EqSource::new(TestSource::new(input, 1, 44_100), shared, rg, baked, FadeShared::idle())
-        .collect()
+    let controls = DspControls { eq: shared, rg, ..DspControls::default() };
+    EqSource::new(TestSource::new(input, 1, 44_100), controls, baked, FadeShared::idle()).collect()
 }
 
 // --- tests -----------------------------------------------------------------
@@ -152,8 +152,7 @@ fn band_outside_nyquist_is_skipped() {
     let shared = EqShared::new(true, &gains);
     let out: Vec<f32> = EqSource::new(
         TestSource::new(input.clone(), 1, 8_000),
-        shared,
-        ReplayGainShared::new(),
+        DspControls { eq: shared, ..DspControls::default() },
         TrackReplayGain::default(),
         FadeShared::idle(),
     )
@@ -175,8 +174,7 @@ fn seek_resets_filter_state() {
     let shared = EqShared::new(true, &gains);
     let mut src = EqSource::new(
         TestSource::new(input.clone(), 1, 44_100),
-        shared,
-        ReplayGainShared::new(),
+        DspControls { eq: shared, ..DspControls::default() },
         TrackReplayGain::default(),
         FadeShared::idle(),
     );
@@ -197,8 +195,7 @@ fn the_eq_is_ready_only_when_its_input_is() {
     let ready = Arc::new(AtomicBool::new(false));
     let eq = EqSource::new(
         TestSource::new(ramp(8), 1, 44_100).gated(ready),
-        EqShared::new(true, &[0.0; NUM_BANDS]),
-        ReplayGainShared::new(),
+        DspControls { eq: EqShared::new(true, &[0.0; NUM_BANDS]), ..DspControls::default() },
         TrackReplayGain::default(),
         FadeShared::idle(),
     );
@@ -211,8 +208,7 @@ fn live_gain_change_is_observed_via_generation() {
     let shared = EqShared::new(true, &[0.0; NUM_BANDS]);
     let mut src = EqSource::new(
         TestSource::new(ramp(2048), 1, 44_100),
-        shared.clone(),
-        ReplayGainShared::new(),
+        DspControls { eq: shared.clone(), ..DspControls::default() },
         TrackReplayGain::default(),
         FadeShared::idle(),
     );
@@ -254,8 +250,7 @@ fn preamp_scales_a_flat_curve() {
     shared.set_preamp(-6.0);
     let out: Vec<f32> = EqSource::new(
         TestSource::new(input.clone(), 2, 44_100),
-        shared,
-        ReplayGainShared::new(),
+        DspControls { eq: shared, ..DspControls::default() },
         TrackReplayGain::default(),
         FadeShared::idle(),
     )
@@ -275,8 +270,7 @@ fn limiter_keeps_heavy_boost_within_full_scale() {
     shared.set_preamp(MAX_PREAMP_DB);
     let out: Vec<f32> = EqSource::new(
         TestSource::new(input, 2, 44_100),
-        shared,
-        ReplayGainShared::new(),
+        DspControls { eq: shared, ..DspControls::default() },
         TrackReplayGain::default(),
         FadeShared::idle(),
     )
@@ -305,8 +299,7 @@ fn limiter_timing_is_channel_count_independent() {
         let samples = vec![1.0_f32; FRAMES * usize::from(channels)];
         EqSource::new(
             TestSource::new(samples, channels, 44_100),
-            shared,
-            ReplayGainShared::new(),
+            DspControls { eq: shared, ..DspControls::default() },
             TrackReplayGain::default(),
             FadeShared::idle(),
         )
@@ -404,8 +397,7 @@ fn live_replaygain_change_is_observed_via_generation() {
     let shared = EqShared::new(true, &[0.0; NUM_BANDS]);
     let mut src = EqSource::new(
         TestSource::new(input.clone(), 1, 44_100),
-        shared,
-        rg.clone(),
+        DspControls { eq: shared, rg: rg.clone(), ..DspControls::default() },
         baked,
         FadeShared::idle(),
     );
@@ -429,8 +421,7 @@ const RATE: u32 = 1_000;
 fn faded_source(input: Vec<f32>, channels: u16, fade: Arc<FadeShared>) -> EqSource<TestSource> {
     EqSource::new(
         TestSource::new(input, channels, RATE),
-        EqShared::new(false, &[0.0; NUM_BANDS]),
-        ReplayGainShared::new(),
+        DspControls::default(),
         TrackReplayGain::default(),
         fade,
     )
@@ -583,8 +574,7 @@ fn enabling_the_eq_mid_frame_still_ends_the_source_on_a_frame_boundary() {
     let eq = EqShared::new(false, &[0.0; NUM_BANDS]);
     let mut src = EqSource::new(
         TestSource::new(ramp(2_048), 2, RATE),
-        eq.clone(),
-        ReplayGainShared::new(),
+        DspControls { eq: eq.clone(), ..DspControls::default() },
         TrackReplayGain::default(),
         fade.clone(),
     );
@@ -638,8 +628,9 @@ fn engaged_after_first_sample(
     baked: TrackReplayGain,
     rate: u32,
 ) -> bool {
+    let controls = DspControls { eq, rg, ..DspControls::default() };
     let mut src =
-        EqSource::new(TestSource::new(ramp(64), 1, rate), eq, rg, baked, FadeShared::idle());
+        EqSource::new(TestSource::new(ramp(64), 1, rate), controls, baked, FadeShared::idle());
     let _ = src.next();
     src.dsp_engaged()
 }
@@ -711,8 +702,7 @@ fn dsp_engaged_follows_a_live_eq_change() {
     let eq = EqShared::new(true, &[0.0; NUM_BANDS]);
     let mut src = EqSource::new(
         TestSource::new(ramp(64), 1, 44_100),
-        eq.clone(),
-        ReplayGainShared::new(),
+        DspControls { eq: eq.clone(), ..DspControls::default() },
         TrackReplayGain::default(),
         FadeShared::idle(),
     );

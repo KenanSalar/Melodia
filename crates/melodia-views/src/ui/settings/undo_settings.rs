@@ -66,6 +66,7 @@ fn seed(ui: &AppWindow, prefs: &UndoFlags) {
     g.set_favorites(prefs.kind_on(UndoKind::Favorites));
     g.set_radio(prefs.kind_on(UndoKind::Radio));
     g.set_equalizer(prefs.kind_on(UndoKind::Equalizer));
+    g.set_correction(prefs.kind_on(UndoKind::Correction));
     g.set_recent_searches(prefs.kind_on(UndoKind::RecentSearches));
     // The slider's range is the setting's, seeded before the section can mount.
     g.set_min_secs(secs(*UNDO_NOTICE_MS_RANGE.start()));
@@ -84,6 +85,7 @@ fn undo_kind(kind: melodia_ui::UndoKind) -> UndoKind {
         melodia_ui::UndoKind::Favorites => UndoKind::Favorites,
         melodia_ui::UndoKind::Radio => UndoKind::Radio,
         melodia_ui::UndoKind::Equalizer => UndoKind::Equalizer,
+        melodia_ui::UndoKind::Correction => UndoKind::Correction,
         melodia_ui::UndoKind::RecentSearches => UndoKind::RecentSearches,
     }
 }

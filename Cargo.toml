@@ -212,6 +212,9 @@ stream-download = { version = "0.24.4", default-features = false, features = ["r
 # Icecast in-band metadata: the request header, the `icy-*` response headers, and the
 # reader that strips the interleaved blocks so the decoder sees audio only.
 icy-metadata = "0.6.0"
+# Decoding AutoEq's list, whose links escape every space and non-ASCII byte. `url`'s own
+# dependency, so it adds no package; the `form_urlencoded` it re-exports reads `+` as a space.
+percent-encoding = "2.3.2"
 # Last.fm mandates MD5 for `api_sig`; nothing security-sensitive.
 md5 = "0.8.1"
 

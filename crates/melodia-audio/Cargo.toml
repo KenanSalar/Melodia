@@ -15,8 +15,8 @@ doctest = false
 # tiers stayed apart is that neither manifest names the other's third-party dependency.
 [dependencies]
 melodia-core = { path = "../melodia-core" }
-# The four HTTP primitives the live trio and HLS take: `is_http`, `is_http_url`, `get_capped`
-# and `get_capped_text`.
+# The HTTP primitives the live trio and HLS take: `is_http`, `is_http_url`, and `get_capped` and
+# `get_capped_text` over each fetch's `CappedGet`.
 melodia-net = { path = "../melodia-net" }
 
 symphonia.workspace = true

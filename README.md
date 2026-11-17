@@ -14,7 +14,7 @@
 ## Highlights
 
 - **Bit-perfect exclusive output** on Linux and Windows, with a Signal Path panel that grades every stage from the file to the device
-- **Gapless playback and crossfade**, a 10-band equalizer, ReplayGain that can measure untagged tracks itself, and playback speed from 0.25× to 2.0×
+- **Gapless playback and crossfade**, a 10-band equalizer, headphone correction for each output device, ReplayGain that can measure untagged tracks itself, and playback speed from 0.25× to 2.0×
 - **Timed lyrics** from `.lrc` files, tags, or an opt-in online lookup, romanized for around a hundred scripts
 - **Internet radio** from a worldwide directory or your own stream URLs, off until you switch it on
 - **Six theme families** in light and dark, and Material You colors drawn from the playing artwork
@@ -112,7 +112,7 @@ Shrink the window and the full UI collapses into a mini-player that grows with i
 - Star ratings, play and skip counts, natural sort, resizable and toggleable columns
 - Multi-selection on every list and card grid: tick one to start, click to add, shift-click for a range, and right-click to queue, rate or tag the whole set. `Esc` clears it
 - Copy from any right-click menu: a song's title, artist, album, "Artist - Title" or file path, an album's name, or a station's name, stream URL or website, one line per selected item
-- Undo for removals: tracks taken out of a playlist or the queue, deleted playlists, a smart playlist's rules once it is converted, Clear queue, a play that replaces a queue you built, favorites, radio stations, the equalizer's Reset, and recent searches' Clear all. A notice names what went and offers Undo, or `Ctrl+Z` while it is up, and waits while the pointer is over it or Melodia is in the background. Settings ▸ Accessibility turns undo off altogether, per kind, or for single items, and sets how long the notice stays
+- Undo for removals: tracks taken out of a playlist or the queue, deleted playlists, a smart playlist's rules once it is converted, Clear queue, a play that replaces a queue you built, favorites, radio stations, the equalizer's Reset, a device's headphone correction, and recent searches' Clear all. A notice names what went and offers Undo, or `Ctrl+Z` while it is up, and waits while the pointer is over it or Melodia is in the background. Settings ▸ Accessibility turns undo off altogether, per kind, or for single items, and sets how long the notice stays
 - Tag editing for one track or many, cover art included, written straight back to the files. Artists, genres and the ten studio credits are each an editable list, beside work and movement, key, mood, ISRC, label, catalog number, barcode and medium
 - Manual and smart playlists, the latter rule-based and resolved live until you convert one to a regular playlist that keeps the tracks it holds; `.m3u8` import and export, several at once as one `.zip` that imports back without extracting, drag-and-drop import, and reordering that moves a whole selection
 - A database backup before every schema migration, three kept
@@ -125,6 +125,7 @@ Shrink the window and the full UI collapses into a mini-player that grows with i
 - Gapless, including the AAC encoder delay and padding read back from `iTunSMPB` or the MP4 edit list, and the trailing padding a Matroska file states
 - Crossfade (1–12 s) across two decks with a clip-safe ramp, optionally skipped between same-album tracks, and under exclusive output too wherever the next track needs no change of device format
 - 10-band equalizer (31 Hz – 16 kHz) with preamp, presets, and a soft-knee limiter, from the player bar's overflow menu or Settings ▸ Effects
+- Headphone correction under Settings ▸ Effects: pick your model from AutoEq's measured corrections, or import a parametric EQ file, and each output device keeps its own. The level comes down by the loudest boost of the correction and the equalizer together, so a boost doesn't clip. Looking models up online is off until you switch it on, nothing contacting **github.com** until you do, and importing a file works without it
 - ReplayGain in track or album mode, with preamp and peak-based clip prevention, reached the same two ways. Tracks without loudness tags can be measured in the background, opt-in under Settings ▸ Effects, with albums measured as a whole and the files left unchanged
 - A queue with shuffle and repeat in a resizable side panel, which floats over the page once the window is too narrow to dock it. Playing from any list queues that list behind your pick
 - Drag tracks, albums, artists, genres, playlists, or files from your file manager into the queue or a playlist where you let go; a selection reorders together in the queue, Up Next, and the mini-player
@@ -460,9 +461,11 @@ Everything lives under the OS application-data directory, `~/.local/share/Melodi
 |---------------|---------|
 | `melodia.db` | The music library (SQLite, WAL + FTS5) |
 | `settings.json`, `views.json`, `queue.json` | Preferences, per-view UI state, and the queue with the station tuned over it |
+| `eq.json` | The equalizer's bands, preset and preamp, and each output device's headphone correction |
 | `scrobble_*.json` | Last.fm session key and ListenBrainz token (`0600` on Unix), plus the offline queue |
 | `artwork/`, `artists/`, `radio-logos/` | Cached album, artist, and station images. A deleted cover is put back from your music files on the next scan |
 | `lyrics/` | Sheets the online lookup found, and a marker for the tracks it found none for |
+| `autoeq_list.md`, `autoeq_list.json` | AutoEq's list of headphone models as last fetched, and when it was last checked |
 | `backups/` | Database copies taken before each schema migration |
 | `logs/` | Rolling logs and crash reports |
 
@@ -513,7 +516,7 @@ Built on the work of the [Slint](https://slint.dev/),
 [Material Foundation](https://m3.material.io/)'s color utilities, along with the many other crates
 listed in `Cargo.toml`. The station directory is [radio-browser.info](https://www.radio-browser.info)
 (CC0 data, no account), and the lyrics directory is [LRCLIB](https://lrclib.net) (also no account).
-Romanization is [uroman-rs](https://github.com/stellanomia/uroman-rs) for most scripts and
+Headphone corrections come from [AutoEq](https://github.com/jaakkopasanen/AutoEq). Romanization is [uroman-rs](https://github.com/stellanomia/uroman-rs) for most scripts and
 [kakasi](https://github.com/Theta-Dev/kakasi) for Japanese.
 
 Melodia's interface is set in [Vazirmatn](https://github.com/rastikerdar/vazirmatn) (SIL Open Font

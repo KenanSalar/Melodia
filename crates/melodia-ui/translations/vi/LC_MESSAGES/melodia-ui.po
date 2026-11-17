@@ -143,6 +143,84 @@ msgstr "Danh bạ quản lý tên và luồng phát của đài này. Những g�
 msgid "Checking the stream…"
 msgstr "Đang kiểm tra luồng phát…"
 
+#: ui/components/dialog/correction-import-body.slint
+msgid "Switched off"
+msgstr "Đã tắt"
+
+#: ui/components/dialog/correction-import-body.slint
+msgid "A filter type Melodia doesn't run"
+msgstr "Loại bộ lọc Melodia không chạy"
+
+#: ui/components/dialog/correction-import-body.slint
+msgid "Frequency out of range"
+msgstr "Tần số nằm ngoài phạm vi"
+
+#: ui/components/dialog/correction-import-body.slint
+msgid "Gain out of range"
+msgstr "Độ khuếch đại nằm ngoài phạm vi"
+
+#: ui/components/dialog/correction-import-body.slint
+msgid "Q out of range"
+msgstr "Q nằm ngoài phạm vi"
+
+#: ui/components/dialog/correction-import-body.slint
+msgid "Not a line Melodia can read"
+msgstr "Không phải dòng Melodia đọc được"
+
+#. Translators: {} is the line's number in the file, then why it goes unused.
+#: ui/components/dialog/correction-import-body.slint
+msgid "Line {}: {}"
+msgstr "Dòng {}: {}"
+
+#: ui/components/dialog/correction-import-body.slint
+msgid "Paste a parametric EQ profile, as AutoEq writes it, or choose its file."
+msgstr "Dán một hồ sơ EQ tham số như AutoEq ghi, hoặc chọn tệp của nó."
+
+#: ui/components/dialog/correction-import-body.slint
+msgid "Choose File…"
+msgstr "Chọn tệp…"
+
+#: ui/components/dialog/correction-import-body.slint
+msgid "The file couldn't be read."
+msgstr "Không thể đọc tệp."
+
+#: ui/components/dialog/correction-import-body.slint
+msgid "That's larger than a correction profile can be."
+msgstr "Tệp này lớn hơn mức một hồ sơ hiệu chỉnh có thể có."
+
+#: ui/components/dialog/correction-import-body.slint
+msgid "This profile sets each ear apart, and a correction applies to both."
+msgstr "Hồ sơ này chỉnh riêng từng bên tai, còn hiệu chỉnh áp dụng cho cả hai."
+
+#: ui/components/dialog/correction-import-body.slint
+msgid "There's no filter here Melodia can run."
+msgstr "Không có bộ lọc nào ở đây mà Melodia chạy được."
+
+#: ui/components/dialog/correction-import-body.slint
+msgid "This profile holds {n} filter, more than a correction can."
+msgid_plural "This profile holds {n} filters, more than a correction can."
+msgstr[0] "Hồ sơ này có {n} bộ lọc, nhiều hơn mức một hiệu chỉnh chứa được."
+
+#. Translators: {} is the imported file's name.
+#: ui/components/dialog/correction-import-body.slint
+#: ui/components/settings/correction-controls.slint
+msgid "From {}"
+msgstr "Từ {}"
+
+#: ui/components/dialog/correction-import-body.slint
+msgid "{n} filter will be applied."
+msgid_plural "{n} filters will be applied."
+msgstr[0] "Sẽ áp dụng {n} bộ lọc."
+
+#: ui/components/dialog/correction-import-body.slint
+msgid "Every line will be used."
+msgstr "Mọi dòng đều sẽ được dùng."
+
+#: ui/components/dialog/correction-import-body.slint
+msgid "{n} line won't be used:"
+msgid_plural "{n} lines won't be used:"
+msgstr[0] "{n} dòng sẽ không được dùng:"
+
 #: ui/components/dialog/credit-editor.slint
 #: ui/components/dialog/name-list-editor.slint ui/globals/dialog.slint
 #: ui/views/radio/tab-pills.slint
@@ -215,6 +293,15 @@ msgstr "Tiếp tục"
 #: ui/views/settings/library-section.slint
 msgid "Remove"
 msgstr "Xóa"
+
+#: ui/components/dialog/dialog.slint ui/globals/dialog.slint
+#: ui/views/settings/correction-section.slint
+msgid "Apply"
+msgstr "Áp dụng"
+
+#: ui/components/dialog/dialog.slint
+msgid "Review"
+msgstr "Xem lại"
 
 #: ui/components/dialog/duplicate-row.slint
 msgid "Identical files"
@@ -369,6 +456,49 @@ msgstr "Không có danh sách phát nào để xuất"
 msgid "Several playlists are saved as one .zip file, which you can import directly without extracting it."
 msgstr "Nhiều danh sách phát được lưu thành một tệp .zip, bạn có thể nhập trực tiếp mà không cần giải nén."
 
+#. Translators: {} names who measured the headphones, as oratory1990.
+#: ui/components/dialog/headphone-picker-body.slint
+msgid "Measured by {}"
+msgstr "Đo bởi {}"
+
+#: ui/components/dialog/headphone-picker-body.slint
+msgid "Find a model…"
+msgstr "Tìm mẫu…"
+
+#: ui/components/dialog/headphone-picker-body.slint
+#: ui/components/dialog/kept-out-body.slint ui/views/radio/browse-tab.slint
+#: ui/views/radio/facet-chip.slint
+msgid "Loading…"
+msgstr "Đang tải…"
+
+#: ui/components/dialog/headphone-picker-body.slint
+msgid "Couldn't reach AutoEq"
+msgstr "Không thể kết nối với AutoEq"
+
+#: ui/components/dialog/headphone-picker-body.slint
+msgid "AutoEq's list couldn't be read"
+msgstr "Không thể đọc danh sách của AutoEq"
+
+#: ui/components/dialog/headphone-picker-body.slint
+msgid "No model matches"
+msgstr "Không có mẫu nào khớp"
+
+#: ui/components/dialog/headphone-picker-body.slint
+msgid "A correction file can still be imported from the card."
+msgstr "Bạn vẫn có thể nhập tệp hiệu chỉnh từ thẻ."
+
+#: ui/components/dialog/headphone-picker-body.slint
+msgid "Couldn't reach AutoEq. Check your connection and try again."
+msgstr "Không thể kết nối với AutoEq. Hãy kiểm tra kết nối và thử lại."
+
+#: ui/components/dialog/headphone-picker-body.slint
+msgid "AutoEq's profile for this model holds lines Melodia can't read."
+msgstr "Hồ sơ của AutoEq cho mẫu này có những dòng Melodia không đọc được."
+
+#: ui/components/dialog/headphone-picker-body.slint
+msgid "Couldn't apply the correction. See the log for details."
+msgstr "Không thể áp dụng hiệu chỉnh. Xem nhật ký để biết chi tiết."
+
 #. Translators: {} is the day the copy left the library, as 2026-11-02.
 #: ui/components/dialog/kept-out-body.slint
 msgid "Removed {}"
@@ -390,11 +520,6 @@ msgstr "Đưa tất cả trở lại"
 #: ui/components/dialog/kept-out-body.slint
 msgid "Bringing back…"
 msgstr "Đang đưa trở lại…"
-
-#: ui/components/dialog/kept-out-body.slint ui/views/radio/browse-tab.slint
-#: ui/views/radio/facet-chip.slint
-msgid "Loading…"
-msgstr "Đang tải…"
 
 #: ui/components/dialog/kept-out-body.slint
 msgid "Couldn't read the list."
@@ -418,6 +543,7 @@ msgstr "Đã chọn {} / 4"
 
 #: ui/components/dialog/playlist-mosaic-picker.slint
 #: ui/views/queue-panel/queue-panel.slint
+#: ui/views/settings/correction-section.slint
 msgid "Clear"
 msgstr "Xóa"
 
@@ -1490,6 +1616,64 @@ msgstr "Đánh giá cho {} mục"
 msgid "Search…"
 msgstr "Tìm kiếm…"
 
+#: ui/components/settings/correction-controls.slint
+#: ui/views/settings/output-section.slint ui/views/settings/undo-section.slint
+msgid "Headphone correction"
+msgstr "Hiệu chỉnh tai nghe"
+
+#: ui/components/settings/correction-controls.slint
+msgid "Enable headphone correction"
+msgstr "Bật hiệu chỉnh tai nghe"
+
+#: ui/components/settings/correction-controls.slint
+msgid "Even out how your headphones color the sound, with a correction measured for their model"
+msgstr "Cân bằng cách tai nghe của bạn tô màu âm thanh, bằng một hiệu chỉnh được đo cho mẫu của nó"
+
+#: ui/components/settings/correction-controls.slint
+msgid "Find corrections online"
+msgstr "Tìm hiệu chỉnh trực tuyến"
+
+#: ui/components/settings/correction-controls.slint
+msgid "Look headphone models up in AutoEq's list on github.com"
+msgstr "Tra mẫu tai nghe trong danh sách của AutoEq trên github.com"
+
+#: ui/components/settings/correction-controls.slint
+msgid "Find Headphones"
+msgstr "Tìm tai nghe"
+
+#: ui/components/settings/correction-controls.slint
+#: ui/views/my-library/tab-pills.slint ui/views/radio/tab-pills.slint
+msgid "Import"
+msgstr "Nhập"
+
+#: ui/components/settings/correction-controls.slint ui/settings.slint
+msgid "System Default"
+msgstr "Mặc định hệ thống"
+
+#: ui/components/settings/correction-controls.slint
+#: ui/views/settings/output-section.slint
+#: ui/views/settings/scrobbling-section.slint
+msgid "Not connected"
+msgstr "Chưa kết nối"
+
+#. Translators: {} is an output device's name.
+#: ui/components/settings/correction-controls.slint
+msgid "{} (not connected)"
+msgstr "{} (chưa kết nối)"
+
+#. Translators: a headphone model, then who measured it.
+#: ui/components/settings/correction-controls.slint
+msgid "{} · measured by {}"
+msgstr "{} · đo bởi {}"
+
+#: ui/components/settings/correction-controls.slint
+msgid "Pasted profile"
+msgstr "Hồ sơ đã dán"
+
+#: ui/components/settings/correction-controls.slint
+msgid "No correction set for this device"
+msgstr "Chưa đặt hiệu chỉnh cho thiết bị này"
+
 #: ui/components/settings/equalizer-controls.slint
 #: ui/views/settings/animations-section.slint
 #: ui/views/settings/output-section.slint ui/views/settings/undo-section.slint
@@ -1638,6 +1822,7 @@ msgstr "{} / {} tệp"
 #: ui/components/settings/scan-progress.slint ui/globals/dialog-forms.slint
 #: ui/globals/dialog.slint ui/views/queue-panel/queue-panel.slint
 #: ui/views/radio/tab-pills.slint ui/views/settings/appearance-section.slint
+#: ui/views/settings/correction-section.slint
 #: ui/views/settings/duplicates-section.slint
 #: ui/views/settings/library-section.slint
 #: ui/views/settings/output-section.slint
@@ -1940,10 +2125,6 @@ msgid "Edit Artwork"
 msgstr "Sửa ảnh bìa"
 
 #: ui/globals/dialog.slint
-msgid "Apply"
-msgstr "Áp dụng"
-
-#: ui/globals/dialog.slint
 msgid "Export Playlists"
 msgstr "Xuất danh sách phát"
 
@@ -2090,6 +2271,10 @@ msgid "Equalizer reset"
 msgstr "Đã đặt lại bộ chỉnh âm"
 
 #: ui/globals/undo-text.slint
+msgid "Headphone correction cleared"
+msgstr "Đã xóa hiệu chỉnh tai nghe"
+
+#: ui/globals/undo-text.slint
 msgid "Recent searches cleared"
 msgstr "Đã xóa các tìm kiếm gần đây"
 
@@ -2168,10 +2353,6 @@ msgstr "Mở rộng"
 #: ui/layout/sidebar.slint
 msgid "Collapse"
 msgstr "Thu gọn"
-
-#: ui/settings.slint
-msgid "System Default"
-msgstr "Mặc định hệ thống"
 
 #: ui/settings.slint
 msgid "File watching disabled"
@@ -2657,10 +2838,6 @@ msgstr "Tạo danh sách phát từ quy tắc"
 msgid "More playlist actions"
 msgstr "Thao tác khác với danh sách phát"
 
-#: ui/views/my-library/tab-pills.slint ui/views/radio/tab-pills.slint
-msgid "Import"
-msgstr "Nhập"
-
 #: ui/views/now-playing-view.slint ui/views/radio/tab-pills.slint
 msgid "Vote"
 msgstr "Bình chọn"
@@ -3050,6 +3227,18 @@ msgstr "Đơn sắc"
 msgid "Changing the backdrop style requires restarting Melodia. Restart now?"
 msgstr "Thay đổi kiểu phông nền cần khởi động lại Melodia. Khởi động lại ngay?"
 
+#: ui/views/settings/correction-section.slint
+msgid "Find Your Headphones"
+msgstr "Tìm tai nghe của bạn"
+
+#: ui/views/settings/correction-section.slint
+msgid "AutoEq's corrections, one measurement for each model."
+msgstr "Các hiệu chỉnh của AutoEq, mỗi mẫu một phép đo."
+
+#: ui/views/settings/correction-section.slint
+msgid "Import a Correction"
+msgstr "Nhập hiệu chỉnh"
+
 #: ui/views/settings/diagnostics-section.slint
 msgid "Diagnostics"
 msgstr "Chẩn đoán"
@@ -3367,9 +3556,15 @@ msgstr "không thể mở thiết bị"
 msgid "No effects"
 msgstr "Không có hiệu ứng"
 
+#. Translators: two effects' names, as ReplayGain and Equalizer.
 #: ui/views/settings/output-section.slint
-msgid "Equalizer and ReplayGain"
-msgstr "Bộ chỉnh âm và ReplayGain"
+msgid "{} and {}"
+msgstr "{} và {}"
+
+#. Translators: three effects' names, in the order they apply.
+#: ui/views/settings/output-section.slint
+msgid "{}, {} and {}"
+msgstr "{}, {} và {}"
 
 #: ui/views/settings/output-section.slint
 msgid "Shared"
@@ -3378,11 +3573,6 @@ msgstr "Dùng chung"
 #: ui/views/settings/output-section.slint
 msgid "Exclusive"
 msgstr "Độc quyền"
-
-#: ui/views/settings/output-section.slint
-#: ui/views/settings/scrobbling-section.slint
-msgid "Not connected"
-msgstr "Chưa kết nối"
 
 #: ui/views/settings/output-section.slint
 msgid "Play Through the System Mixer"
@@ -3734,6 +3924,10 @@ msgstr "Đài bị xóa khỏi Yêu thích hoặc Đã phát gần đây."
 #: ui/views/settings/undo-section.slint
 msgid "Resetting the equalizer."
 msgstr "Đặt lại bộ chỉnh âm."
+
+#: ui/views/settings/undo-section.slint
+msgid "Clearing a device's headphone correction."
+msgstr "Xóa hiệu chỉnh tai nghe của một thiết bị."
 
 #: ui/views/settings/undo-section.slint
 msgid "Recent searches"

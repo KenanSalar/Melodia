@@ -15,7 +15,6 @@ use std::rc::Rc;
 use std::sync::Arc;
 use std::time::Duration;
 
-use parking_lot::Mutex;
 use slint::{ComponentHandle, ModelRc, SharedString, VecModel, Weak};
 
 use crate::ui::settings::signal_path;
@@ -23,7 +22,7 @@ use crate::ui::settings_bind::{read_or_default, toggle_binding};
 use crate::ui::shell::tray_bridge;
 use melodia_app::library;
 use melodia_app::services::settings::OutputFlags;
-use melodia_app::state::AppState;
+use melodia_app::state::{AppState, Shadowed};
 use melodia_engine::player::engine::backend::OutputChoice;
 use melodia_playback::player::playback::output::convert::Resampler;
 use melodia_playback::player::playback::output::{
@@ -50,28 +49,6 @@ struct Picked {
     /// The newest listing asked for, and the newest applied, as `Settings.output-devices-revision`.
     listing_asked: i32,
     listing_applied: i32,
-}
-
-/// A pick as last made, and the lock a task holds from reading it through the persist.
-struct Shadowed<T> {
-    picked: Mutex<T>,
-    applying: Mutex<()>,
-}
-
-impl<T> Shadowed<T> {
-    fn new(value: T) -> Self {
-        Self { picked: Mutex::new(value), applying: Mutex::new(()) }
-    }
-
-    /// Hands `apply` the pick as it stands, holding the apply lock until it returns. Ordering only
-    /// the read would let a task that read an older pick land after a newer one, the engine and
-    /// the settings file each taking a lock of its own. The pick's own lock is let go first, so a
-    /// click never waits on a device open.
-    fn apply_latest<P, R>(&self, read: impl FnOnce(&T) -> P, apply: impl FnOnce(P) -> R) -> R {
-        let _applying = self.applying.lock();
-        let latest = read(&self.picked.lock());
-        apply(latest)
-    }
 }
 
 type Shadow = Arc<Shadowed<Picked>>;
@@ -132,7 +109,7 @@ fn install_resync_row(state: &AppState, g: &Settings<'_>, saved_ms: u32) {
     let state = state.clone();
     let shadow = Arc::new(Shadowed::new(saved_ms));
     g.on_output_resync_committed(move |ms| {
-        *shadow.picked.lock() = u32::try_from(ms).unwrap_or(0);
+        *shadow.picked() = u32::try_from(ms).unwrap_or(0);
         let ctx = state.playback_ctx();
         let shadow = Arc::clone(&shadow);
         state.persist_blocking("persist output_resync_ms", move |paths| {
@@ -154,7 +131,7 @@ fn install_resampler_row(state: &AppState, g: &Settings<'_>, saved: Resampler) {
     let state = state.clone();
     let shadow = Arc::new(Shadowed::new(saved));
     g.on_output_resampler_changed(move |idx| {
-        *shadow.picked.lock() = resampler_from_index(idx);
+        *shadow.picked() = resampler_from_index(idx);
         let ctx = state.playback_ctx();
         let shadow = Arc::clone(&shadow);
         state.persist_blocking("persist output_resampler", move |paths| {
@@ -206,7 +183,7 @@ fn install_bit_perfect_switch(ui: &AppWindow, state: &AppState, shadow: &Shadow)
     ui.global::<Settings>().on_output_switch_to_bit_perfect(move || {
         let Some(ui) = weak.upgrade() else { return };
         ui.global::<Settings>().set_output_mode_idx(mode_index(OutputMode::Exclusive));
-        shadow.picked.lock().choice.mode = OutputMode::Exclusive;
+        shadow.picked().choice.mode = OutputMode::Exclusive;
         let ctx = state.playback_ctx();
         let shadow = Arc::clone(&shadow);
         state.persist_blocking("persist bit-perfect switch", move |paths| {
@@ -232,7 +209,7 @@ fn pick<T>(
     let state = state.clone();
     let shadow = Arc::clone(shadow);
     move |value| {
-        edit(&mut shadow.picked.lock(), value);
+        edit(&mut shadow.picked(), value);
         apply(&state, &shadow);
     }
 }
@@ -258,10 +235,10 @@ fn list_devices(weak: Weak<AppWindow>, state: &AppState, shadow: &Shadow) -> i32
     // The picker's timer keeps firing behind a window hidden to the tray, where nobody reads it.
     // The listing it already shows is the answer, so a waiting dropdown opens at once.
     if !tray_bridge::is_window_visible() {
-        return shadow.picked.lock().listing_applied;
+        return shadow.picked().listing_applied;
     }
     let revision = {
-        let mut picked = shadow.picked.lock();
+        let mut picked = shadow.picked();
         picked.listing_asked = picked.listing_asked.saturating_add(1);
         picked.listing_asked
     };
@@ -281,7 +258,7 @@ fn apply_listing(ui: &AppWindow, shadow: &Shadow, devices: Vec<OutputDevice>, re
     let g = ui.global::<Settings>();
     let default_label =
         library::playback::SHARED_DEVICE_SUPPORTED.then(|| g.invoke_output_device_system_default());
-    let Some(listing) = shadow.picked.lock().take_listing(devices, default_label, revision) else {
+    let Some(listing) = shadow.picked().take_listing(devices, default_label, revision) else {
         return;
     };
     if let Some(names) = listing.names {

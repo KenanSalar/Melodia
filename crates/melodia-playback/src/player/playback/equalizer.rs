@@ -2,19 +2,23 @@
 //! one [`DirectForm1`] per band per channel, Form 1 because its delay line stays valid across a
 //! live coefficient swap, so a slider drag injects no transient.
 //!
-//! [`EqSource`] also carries two stages the EQ toggle doesn't gate, each polled through its own
-//! generation: the track's `ReplayGain` before the bands, so the limiter guards a boost, and the
-//! deck's crossfade ramp after the clamp, so two decks can't sum past unity in the unclamped
-//! mixer. With all three inert it is a bit-identical passthrough.
+//! [`EqSource`] also carries three stages the EQ toggle doesn't gate, each polled on its own and
+//! each arguing its place in its own module: the track's `ReplayGain` and the headphone correction
+//! before the bands, and the deck's crossfade ramp after the clamp. With all four inert it is a
+//! bit-identical passthrough.
 
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 
-use biquad::{Biquad, Coefficients, DirectForm1, Hertz, Type};
+use biquad::{Biquad, DirectForm1, Type};
 
+use super::correction::bank::CorrectionStage;
+use super::correction::response::FilterResponse;
+use super::correction::shared::{CorrectionShared, CorrectionWriter};
 use super::crossfade::{self, FadeShared};
-use super::dsp::{AtomicF32, Generation, db_to_linear, linear_to_db};
+use super::dsp::{self, AtomicF32, Generation, PASSTHROUGH, db_to_linear};
+use super::limiter::Limiter;
 use super::replaygain::{self, ReplayGainShared, TrackReplayGain};
 use melodia_audio::player::source::audio::{
     AudioSource, ChannelCount, Sample, SampleRate, SeekError, SourceFormat,
@@ -37,7 +41,7 @@ pub const MAX_PREAMP_DB: f32 = 6.0;
 
 /// Quality factor for the peaking filters. ~1.4 gives musically sensible
 /// overlap for octave-spaced bands without ringing.
-const BAND_Q: f32 = 1.41;
+const BAND_Q: f64 = 1.41;
 
 /// Bands within this many dB of unity are treated as off (skipped in the
 /// filter chain) so a near-flat EQ stays close to free.
@@ -47,12 +51,8 @@ const GAIN_EPSILON_DB: f32 = 0.05;
 /// a flat EQ with no preamp can still take the bit-identical bypass path.
 const PREAMP_EPSILON_DB: f32 = 0.01;
 
-// The safety limiter: transparent until near full scale, then it pins peaks at the threshold. In
-// the active path only, so EQ-off audio is never touched.
-const LIMITER_THRESHOLD_DB: f32 = -1.0;
-const LIMITER_KNEE_DB: f32 = 4.0;
-const LIMITER_ATTACK_S: f32 = 0.005;
-const LIMITER_RELEASE_S: f32 = 0.100;
+/// How long the output reads exactly zero before the filters' state is cleared.
+const SILENCE_SETTLE_MS: u64 = 10;
 
 /// `PRESETS` order is load-bearing: the preset dropdown lists the names as inline `@tr` literals
 /// in this order and maps its index straight in.
@@ -186,71 +186,32 @@ impl EqShared {
     }
 }
 
-/// Passthrough coefficients, only to construct the banks — [`EqSource::rebuild`]
-/// overwrites a band before it is ever run.
-fn identity_coeffs() -> Coefficients<f32> {
-    Coefficients { a1: 0.0, a2: 0.0, b0: 1.0, b1: 0.0, b2: 0.0 }
+/// The engine-wide state every [`EqSource`] polls.
+#[derive(Clone)]
+pub struct DspControls {
+    pub eq: Arc<EqShared>,
+    pub rg: Arc<ReplayGainShared>,
+    pub correction: Arc<CorrectionShared>,
 }
 
-/// One-pole smoothing coefficient for a time constant at a given update rate:
-/// the smoothed value moves `(1 - coeff)` of the way to its target each update.
-fn smoothing_coeff(time_s: f32, rate: f32) -> f32 {
-    if rate > 0.0 && time_s > 0.0 { (-1.0 / (time_s * rate)).exp() } else { 0.0 }
-}
-
-/// Soft-knee feed-forward peak limiter (Giannoulis et al. 2012): one gain per frame from its peak,
-/// smoothed with separate attack and release, and coupled across channels to keep the image.
-struct Limiter {
-    /// Smoothed linear gain (≤ 1.0); starts at unity.
-    gain: f32,
-    attack_coeff: f32,
-    release_coeff: f32,
-    /// Linear, so [`Self::target_gain`] answers a quiet frame without a `log10`.
-    knee_low_linear: f32,
-    /// Linear, the curve having a closed linear form past it.
-    knee_high_linear: f32,
-    /// Above the knee, the gain's numerator.
-    threshold_linear: f32,
-}
-
-impl Limiter {
-    fn new(frame_rate: f32) -> Self {
+/// Its writer dropped, the correction stays empty for these sources' lives.
+impl Default for DspControls {
+    fn default() -> Self {
         Self {
-            gain: 1.0,
-            attack_coeff: smoothing_coeff(LIMITER_ATTACK_S, frame_rate),
-            release_coeff: smoothing_coeff(LIMITER_RELEASE_S, frame_rate),
-            knee_low_linear: db_to_linear(LIMITER_THRESHOLD_DB - LIMITER_KNEE_DB / 2.0),
-            knee_high_linear: db_to_linear(LIMITER_THRESHOLD_DB + LIMITER_KNEE_DB / 2.0),
-            threshold_linear: db_to_linear(LIMITER_THRESHOLD_DB),
+            eq: EqShared::new(false, &[0.0; NUM_BANDS]),
+            rg: ReplayGainShared::new(),
+            correction: CorrectionWriter::default().shared(),
         }
     }
+}
 
-    fn reset(&mut self) {
-        self.gain = 1.0;
-    }
-
-    /// The soft-knee curve with an unbounded ratio above the knee.
-    fn target_gain(&self, peak: f32) -> f32 {
-        // Unity below the knee, so the common quiet frame skips the `log10`.
-        if peak <= self.knee_low_linear {
-            return 1.0;
-        }
-        // The output pins at the threshold; `10^(-over/20)` in dB expands to exactly this.
-        if peak >= self.knee_high_linear {
-            return self.threshold_linear / peak;
-        }
-        // The quadratic knee, meeting both guards' answers at its edges.
-        let over = linear_to_db(peak) - LIMITER_THRESHOLD_DB;
-        let k = over + LIMITER_KNEE_DB / 2.0;
-        db_to_linear(-(k * k) / (2.0 * LIMITER_KNEE_DB))
-    }
-
-    fn process(&mut self, peak: f32) -> f32 {
-        let target = self.target_gain(peak);
-        let coeff = if target < self.gain { self.attack_coeff } else { self.release_coeff };
-        self.gain = coeff.mul_add(self.gain, (1.0 - coeff) * target);
-        self.gain
-    }
+#[expect(
+    clippy::cast_possible_truncation,
+    reason = "the cascade's output is an audio sample, far inside f32's range, and rounding it back to the sample width is the point"
+)]
+#[inline]
+fn narrow_sample(sample: f64) -> f32 {
+    sample as f32
 }
 
 /// The EQ, `ReplayGain` and fade over one decoded track. The master state is shared, so a change
@@ -262,8 +223,7 @@ impl Limiter {
 )]
 pub struct EqSource<S> {
     input: S,
-    shared: Arc<EqShared>,
-    rg_shared: Arc<ReplayGainShared>,
+    controls: DspControls,
     baked_rg: TrackReplayGain,
     /// RG polled apart, so an RG-only change still rebuilds.
     last_generation: u64,
@@ -295,10 +255,14 @@ pub struct EqSource<S> {
     sample_rate: f32,
     sample_rate_hz: u64,
     channels: u64,
-    /// `[channel][band]`, its length the channel count.
-    banks: Vec<[DirectForm1<f32>; NUM_BANDS]>,
+    /// `[channel][band]`, its length the channel count. In f64: a low band at a high rate puts its
+    /// poles near z = 1, where f32 coefficients and state stop holding the curve.
+    banks: Vec<[DirectForm1<f64>; NUM_BANDS]>,
     /// A band is inactive at unity gain or outside Nyquist.
     band_active: [bool; NUM_BANDS],
+    /// For the correction's headroom, the banks' own coefficients being private to `biquad`.
+    band_responses: [FilterResponse; NUM_BANDS],
+    correction: CorrectionStage,
     preamp_gain: f32,
     rg_gain: f32,
     limiter: Limiter,
@@ -306,14 +270,16 @@ pub struct EqSource<S> {
     frame: Vec<f32>,
     frame_len: usize,
     frame_pos: usize,
+    /// Frames in a row whose narrowed output was exactly zero, not merely quiet.
+    silent_frames: u64,
+    silence_settle_frames: u64,
     bypass: bool,
 }
 
 impl<S: AudioSource> EqSource<S> {
     pub fn new(
         input: S,
-        shared: Arc<EqShared>,
-        rg_shared: Arc<ReplayGainShared>,
+        controls: DspControls,
         baked_rg: TrackReplayGain,
         fade: Arc<FadeShared>,
     ) -> Self {
@@ -325,21 +291,21 @@ impl<S: AudioSource> EqSource<S> {
         )]
         let sample_rate = input.sample_rate().get() as f32;
         let banks = (0..channels)
-            .map(|_| std::array::from_fn(|_| DirectForm1::<f32>::new(identity_coeffs())))
+            .map(|_| std::array::from_fn(|_| DirectForm1::<f64>::new(PASSTHROUGH)))
             .collect();
+        let correction = CorrectionStage::new(channels, input.sample_rate());
         // Already per channel: dividing by the channel count runs the limiter that many times too
         // fast against the biquads.
         let frame_rate = sample_rate;
         // One behind the live values, so the first `next()` rebuilds and a gapless successor picks
         // up a ramp already armed on its deck.
-        let last_generation = shared.generation().wrapping_sub(1);
-        let last_rg_generation = rg_shared.generation().wrapping_sub(1);
+        let last_generation = controls.eq.generation().wrapping_sub(1);
+        let last_rg_generation = controls.rg.generation().wrapping_sub(1);
         let fade_generation_at_build = fade.generation();
         let last_fade_generation = fade_generation_at_build.wrapping_sub(1);
         Self {
             input,
-            shared,
-            rg_shared,
+            controls,
             baked_rg,
             last_generation,
             last_rg_generation,
@@ -361,12 +327,16 @@ impl<S: AudioSource> EqSource<S> {
             channels: u64::try_from(channels).unwrap_or(1),
             banks,
             band_active: [false; NUM_BANDS],
+            band_responses: [FilterResponse::FLAT; NUM_BANDS],
+            correction,
             preamp_gain: 1.0,
             rg_gain: 1.0,
             limiter: Limiter::new(frame_rate),
             frame: vec![0.0; channels],
             frame_len: 0,
             frame_pos: 0,
+            silent_frames: 0,
+            silence_settle_frames: SILENCE_SETTLE_MS * sample_rate_hz / 1000,
             bypass: true,
         }
     }
@@ -425,69 +395,70 @@ impl<S: AudioSource> EqSource<S> {
         g
     }
 
-    /// `ReplayGain` applies either way, so it alone decides whether this is a passthrough.
-    fn disable_bands(&mut self, rg_is_unity: bool) {
-        self.preamp_gain = 1.0;
-        self.band_active = [false; NUM_BANDS];
-        self.bypass = rg_is_unity;
-    }
-
+    /// `ReplayGain` and the correction apply whether or not the EQ is on, so they join the bands in
+    /// deciding whether this is a passthrough.
     fn rebuild(&mut self) {
-        // First: `ReplayGain` is independent of the EQ toggle and the early returns below.
-        let rg_gain = if self.rg_shared.enabled() {
-            replaygain::compute_linear_gain(self.baked_rg, self.rg_shared.controls())
+        let rg_gain = if self.controls.rg.enabled() {
+            replaygain::compute_linear_gain(self.baked_rg, self.controls.rg.controls())
         } else {
             1.0
         };
         self.rg_gain = rg_gain;
-        let rg_is_unity = replaygain::is_unity_gain(rg_gain);
+        let bands_engaged = self.rebuild_bands();
+        // After the bands, whose curve the correction's headroom counts.
+        self.correction.update_headroom(&self.band_responses);
+        self.bypass =
+            !bands_engaged && replaygain::is_unity_gain(rg_gain) && !self.correction.engaged();
+    }
 
-        if !self.shared.enabled() {
-            self.disable_bands(rg_is_unity);
-            return;
+    fn disable_bands(&mut self) {
+        self.preamp_gain = 1.0;
+        self.band_active = [false; NUM_BANDS];
+        self.band_responses = [FilterResponse::FLAT; NUM_BANDS];
+    }
+
+    /// Returns whether a band or the preamp is engaged.
+    fn rebuild_bands(&mut self) -> bool {
+        if !self.controls.eq.enabled() {
+            self.disable_bands();
+            return false;
         }
 
-        let preamp_db = self.shared.preamp();
+        let preamp_db = self.controls.eq.preamp();
         self.preamp_gain = db_to_linear(preamp_db);
         let preamp_is_unity = preamp_db.abs() < PREAMP_EPSILON_DB;
 
-        let Ok(fs) = Hertz::<f32>::from_hz(self.sample_rate) else {
-            self.disable_bands(rg_is_unity);
-            return;
-        };
-
         let mut any_active = false;
         for band in 0..NUM_BANDS {
-            let gain = self.shared.gain(band);
-
-            // A band past this source's Nyquist yields no coefficients.
+            let gain = self.controls.eq.gain(band);
+            let centre_hz = f64::from(BAND_FREQS[band]);
             let coeffs = if gain.abs() < GAIN_EPSILON_DB {
                 None
             } else {
-                Hertz::<f32>::from_hz(BAND_FREQS[band]).ok().and_then(|f0| {
-                    Coefficients::<f32>::from_params(Type::PeakingEQ(gain), fs, f0, BAND_Q).ok()
-                })
+                let peaking = Type::PeakingEQ(f64::from(gain));
+                dsp::design(peaking, f64::from(self.sample_rate), centre_hz, BAND_Q)
             };
 
-            match coeffs {
-                Some(c) => {
-                    let was_active = self.band_active[band];
-                    for bank in &mut self.banks {
-                        // A band coming on starts clean so stale state can't pop; an active one
-                        // keeps its state across the swap, which DF1 allows.
-                        if !was_active {
-                            bank[band].reset_state();
-                        }
-                        bank[band].update_coefficients(c);
-                    }
-                    self.band_active[band] = true;
-                    any_active = true;
+            let Some(c) = coeffs else {
+                self.band_active[band] = false;
+                self.band_responses[band] = FilterResponse::FLAT;
+                continue;
+            };
+            let was_active = self.band_active[band];
+            for bank in &mut self.banks {
+                // A band coming on starts clean so stale state can't pop; an active one keeps its
+                // state across the swap, which DF1 allows.
+                if !was_active {
+                    bank[band].reset_state();
                 }
-                None => self.band_active[band] = false,
+                bank[band].update_coefficients(c);
             }
+            self.band_active[band] = true;
+            self.band_responses[band] = self.correction.response(&c, centre_hz);
+            any_active = true;
         }
 
-        self.bypass = !any_active && preamp_is_unity && rg_is_unity;
+        any_active || !preamp_is_unity
     }
 
     /// Only ever on a frame boundary, and not as an optimization: a rebuild can flip `bypass` off,
@@ -495,9 +466,13 @@ impl<S: AudioSource> EqSource<S> {
     /// half frame, flipping that deck's mixer channel parity for good.
     #[inline]
     fn poll_generations(&mut self) {
-        let generation = self.shared.generation();
-        let rg_generation = self.rg_shared.generation();
-        if generation != self.last_generation || rg_generation != self.last_rg_generation {
+        let generation = self.controls.eq.generation();
+        let rg_generation = self.controls.rg.generation();
+        let reshaped = self.correction.poll(&self.controls.correction);
+        if reshaped
+            || generation != self.last_generation
+            || rg_generation != self.last_rg_generation
+        {
             self.rebuild();
             self.last_generation = generation;
             self.last_rg_generation = rg_generation;
@@ -533,26 +508,29 @@ impl<S: AudioSource> EqSource<S> {
         Some(s.clamp(-1.0, 1.0) * self.frame_fade_gain)
     }
 
-    /// One whole frame through the bands, then the coupled limiter and the ramp across it; the rest
-    /// drains through [`Iterator::next`]'s fast path.
+    /// One whole frame through the filters, then the coupled limiter and the ramp across it; the
+    /// rest drains through [`Iterator::next`]'s fast path.
     #[inline]
     fn next_active(&mut self) -> Option<Sample> {
         if self.fade_ended() {
             return None;
         }
 
-        // Zipping `banks`/`frame` rather than indexing keeps the inner work
-        // free of bounds checks.
+        let mix = self.correction.frame_mix();
+        // Zipping the channels' state with `frame` rather than indexing keeps the inner work free
+        // of bounds checks.
+        let channels = self.banks.iter_mut().zip(self.correction.channels_mut());
         let mut frame_len = 0;
-        for (bank, slot) in self.banks.iter_mut().zip(self.frame.iter_mut()) {
+        for ((bank, correction), slot) in channels.zip(self.frame.iter_mut()) {
             let Some(x) = self.input.next() else { break };
-            let mut out = x * self.preamp_gain * self.rg_gain;
+            // Widened after the gains, so a path with no filter engaged round-trips exactly.
+            let mut out = correction.run(f64::from(x * self.preamp_gain * self.rg_gain), mix);
             for (filter, &active) in bank.iter_mut().zip(self.band_active.iter()) {
                 if active {
                     out = filter.run(out);
                 }
             }
-            *slot = out;
+            *slot = narrow_sample(out);
             frame_len += 1;
         }
         self.frame_len = frame_len;
@@ -564,6 +542,7 @@ impl<S: AudioSource> EqSource<S> {
         for &s in &self.frame[..self.frame_len] {
             peak = peak.max(s.abs());
         }
+        self.settle_on_silence(peak);
         let gain = self.limiter.process(peak);
         let fade_g = if self.fade_engaged {
             self.step_fade(u64::try_from(frame_len).unwrap_or(1))
@@ -578,6 +557,28 @@ impl<S: AudioSource> EqSource<S> {
 
         self.frame_pos = 1;
         Some(self.frame[0])
+    }
+
+    /// The narrowed output reads zero long before the slowest filter's f64 state goes subnormal,
+    /// so clearing every filter is inaudible and cuts the silence's subnormal arithmetic short.
+    fn settle_on_silence(&mut self, peak: f32) {
+        if peak > 0.0 {
+            self.silent_frames = 0;
+            return;
+        }
+        self.silent_frames = self.silent_frames.saturating_add(1);
+        if self.silent_frames == self.silence_settle_frames {
+            self.reset_bands();
+            self.correction.reset_state();
+        }
+    }
+
+    fn reset_bands(&mut self) {
+        for bank in &mut self.banks {
+            for filter in bank.iter_mut() {
+                filter.reset_state();
+            }
+        }
     }
 }
 
@@ -638,11 +639,8 @@ impl<S: AudioSource> AudioSource for EqSource<S> {
         self.input.try_seek(pos)?;
         // Clears the filter and limiter state so the destination doesn't pop, and leaves the fade
         // fields alone, so a ramp in flight carries across rather than restarting from silence.
-        for bank in &mut self.banks {
-            for filter in bank.iter_mut() {
-                filter.reset_state();
-            }
-        }
+        self.reset_bands();
+        self.correction.reset();
         self.limiter.reset();
         // The rest of the frame in hand drains and `frame_phase` stays: dropping owed samples
         // leaves every later frame a channel out of step.

@@ -1,4 +1,5 @@
-//! Load, save and atomic read-mutate-write for `settings.json`.
+//! Load, save and atomic read-mutate-write for `settings.json`, and the locked shape `eq.json`
+//! shares.
 
 use melodia_core::config::Paths;
 use melodia_core::error::AppResult;
@@ -19,12 +20,54 @@ pub(crate) fn write_settings(paths: &Paths, settings: &SettingsData) -> AppResul
     melodia_core::utils::atomic_file::write_json_sync(&paths.settings_path, settings)
 }
 
-/// Held across the read, mutate and write, so a burst of UI events can't interleave snapshots and
-/// lose updates. A bare `read_settings` stays unlocked, so writing back what one returned is the
-/// lost update this exists to stop.
-static MUTATE_LOCK: parking_lot::Mutex<()> = parking_lot::Mutex::new(());
+/// A JSON state file written whole, its lock held across the read, mutate and write so a burst of
+/// UI events can't interleave snapshots and lose updates. A bare read stays unlocked, so writing
+/// back what one returned is the lost update this exists to stop.
+pub(crate) struct LockedFile<T> {
+    lock: parking_lot::Mutex<()>,
+    read: fn(&Paths) -> AppResult<T>,
+    write: fn(&Paths, &T) -> AppResult<()>,
+}
 
-/// Reads, mutates and writes `settings.json` under `MUTATE_LOCK`.
+impl<T> LockedFile<T> {
+    pub(crate) const fn new(
+        read: fn(&Paths) -> AppResult<T>,
+        write: fn(&Paths, &T) -> AppResult<()>,
+    ) -> Self {
+        Self { lock: parking_lot::Mutex::new(()), read, write }
+    }
+
+    /// Always writes; a caller that often changes nothing takes [`Self::mutate_if`].
+    pub(crate) fn mutate_with<R>(
+        &self,
+        paths: &Paths,
+        mutate: impl FnOnce(&mut T) -> R,
+    ) -> AppResult<R> {
+        let _guard = self.lock.lock();
+        let mut value = (self.read)(paths)?;
+        let out = mutate(&mut value);
+        (self.write)(paths, &value)?;
+        Ok(out)
+    }
+
+    /// Writes only when the closure returns `true`, still under the lock.
+    pub(crate) fn mutate_if(
+        &self,
+        paths: &Paths,
+        mutate: impl FnOnce(&mut T) -> bool,
+    ) -> AppResult<()> {
+        let _guard = self.lock.lock();
+        let mut value = (self.read)(paths)?;
+        if mutate(&mut value) {
+            (self.write)(paths, &value)?;
+        }
+        Ok(())
+    }
+}
+
+static SETTINGS_FILE: LockedFile<SettingsData> = LockedFile::new(read_settings, write_settings);
+
+/// Reads, mutates and writes `settings.json` under its lock.
 pub fn mutate_settings<F>(paths: &Paths, mutate: F) -> AppResult<()>
 where
     F: FnOnce(&mut SettingsData),
@@ -38,23 +81,14 @@ pub fn mutate_settings_with<F, R>(paths: &Paths, mutate: F) -> AppResult<R>
 where
     F: FnOnce(&mut SettingsData) -> R,
 {
-    let _guard = MUTATE_LOCK.lock();
-    let mut settings = read_settings(paths)?;
-    let out = mutate(&mut settings);
-    write_settings(paths, &settings)?;
-    Ok(out)
+    SETTINGS_FILE.mutate_with(paths, mutate)
 }
 
 /// [`mutate_settings`] for a caller that often changes nothing: the file is written only when the
-/// closure returns `true`, still under `MUTATE_LOCK`.
+/// closure returns `true`, still under the lock.
 pub fn mutate_settings_if<F>(paths: &Paths, mutate: F) -> AppResult<()>
 where
     F: FnOnce(&mut SettingsData) -> bool,
 {
-    let _guard = MUTATE_LOCK.lock();
-    let mut settings = read_settings(paths)?;
-    if mutate(&mut settings) {
-        write_settings(paths, &settings)?;
-    }
-    Ok(())
+    SETTINGS_FILE.mutate_if(paths, mutate)
 }

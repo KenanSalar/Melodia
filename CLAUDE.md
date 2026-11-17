@@ -67,8 +67,9 @@ cargo llvm-cov --workspace --html          # coverage → target/llvm-cov/html/
 
 ### Facades and primitives
 
-- **Nothing outside `library::radio` names `radio_browser`** (`radio_facade.rs`), and nothing
-  outside `library::lyrics` names `lyrics_directory` (`lyrics_switch.rs`).
+- **Nothing outside `library::radio` names `radio_browser`** (`radio_facade.rs`), nothing outside
+  `library::lyrics` names `lyrics_directory` (`lyrics_switch.rs`), and nothing outside
+  `library::correction` names `services::net::autoeq` (`correction_facade.rs`).
 - **Every fetch parses its URL with `http_url` and reads its body through `read_capped`**, never
   `bytes()` or `.json::<T>()`, the updater's download to a file excepted. `net_primitives.rs`
   walks the scheme test and the streamed read; `bytes()` and `.json()` are review's,
@@ -111,7 +112,9 @@ cargo llvm-cov --workspace --html          # coverage → target/llvm-cov/html/
   spawned, and a `views.json` index goes through `IndexPersist` (`index_persist.rs`).
 - **A once-per-install sweep is `one_shot::spawn`**, never a hand-rolled copy of its shape.
 - **A dev build never shares the installed data root** (`config::Paths::data_root`). Prefs go in
-  `settings.json`, per-view state in `views.json`, and a map in any JSON state file is a `BTreeMap`.
+  `settings.json`, the equalizer's and the headphone corrections' curves in `eq.json` (the switches
+  over them staying prefs), per-view state in `views.json`, and a map in any JSON state file is a
+  `BTreeMap`.
 - **Migrations run after a backup, and a failed backup is fatal.** A shipped migration is never
   edited: the store's `build.rs` pins the ones sqlx applied and `database::migrate` checksums the
   rest, so an edit fails the build or the next run of every database that applied it.

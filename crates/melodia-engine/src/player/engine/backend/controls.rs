@@ -11,46 +11,46 @@ use melodia_playback::player::playback::visualizer::VisualizerShared;
 
 impl PlaybackEngine {
     pub fn set_eq_enabled(&self, enabled: bool) {
-        self.eq.set_enabled(enabled);
+        self.dsp.eq.set_enabled(enabled);
     }
 
     /// An out-of-range index is ignored.
     pub fn set_eq_band(&self, index: usize, gain_db: f32) {
-        self.eq.set_gain(index, gain_db);
+        self.dsp.eq.set_gain(index, gain_db);
     }
 
     pub fn set_eq_gains(&self, gains: &[f32]) {
-        self.eq.set_all_gains(gains);
+        self.dsp.eq.set_all_gains(gains);
     }
 
     pub fn set_eq_preamp(&self, preamp_db: f32) {
-        self.eq.set_preamp(preamp_db);
+        self.dsp.eq.set_preamp(preamp_db);
     }
 
     pub fn set_replaygain_enabled(&self, enabled: bool) {
-        self.rg.set_enabled(enabled);
+        self.dsp.rg.set_enabled(enabled);
     }
 
     pub fn set_replaygain_mode(&self, mode: RgMode) {
-        self.rg.set_mode(mode);
+        self.dsp.rg.set_mode(mode);
     }
 
     pub fn set_replaygain_preamp(&self, preamp_db: f32) {
-        self.rg.set_preamp(preamp_db);
+        self.dsp.rg.set_preamp(preamp_db);
     }
 
     /// The static peak-based clip guard.
     pub fn set_replaygain_prevent_clipping(&self, on: bool) {
-        self.rg.set_prevent_clipping(on);
+        self.dsp.rg.set_prevent_clipping(on);
     }
 
     /// Whether a gain Melodia measured levels its track.
     pub fn set_replaygain_measured(&self, on: bool) {
-        self.rg.set_measured(on);
+        self.dsp.rg.set_measured(on);
     }
 
     pub fn replaygain_levels_measured(&self) -> bool {
-        self.rg.levels_measured()
+        self.dsp.rg.levels_measured()
     }
 
     /// For the crossfade integration test; the UI arms the cell [`Self::visualizer`] hands it.

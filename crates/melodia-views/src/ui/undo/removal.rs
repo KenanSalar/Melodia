@@ -4,6 +4,7 @@
 use slint::{ComponentHandle, SharedString};
 
 use crate::ui::callbacks::FavoriteRemovalUndo;
+use crate::ui::correction::ClearUndo;
 use crate::ui::equalizer::ResetUndo;
 use crate::ui::playlists::{PlaylistConvertUndo, PlaylistCutUndo, PlaylistDeleteUndo};
 use crate::ui::queue_panel::{QueueClearUndo, QueueCutUndo, QueueReplaceUndo};
@@ -25,6 +26,7 @@ pub(super) type Title = Box<dyn Fn(&AppWindow) -> SharedString>;
 
 pub enum Removal {
     Equalizer(ResetUndo),
+    Correction(ClearUndo),
     RecentSearches(RecentClearUndo),
     PlaylistTracks(PlaylistCutUndo),
     Playlists(PlaylistDeleteUndo),
@@ -107,6 +109,7 @@ impl Removal {
     pub(super) fn kind(&self) -> UndoKind {
         match self {
             Removal::Equalizer(_) => UndoKind::Equalizer,
+            Removal::Correction(_) => UndoKind::Correction,
             Removal::RecentSearches(_) => UndoKind::RecentSearches,
             Removal::PlaylistTracks(_) | Removal::Playlists(_) | Removal::PlaylistRules(_) => {
                 UndoKind::Playlists
@@ -123,6 +126,7 @@ impl Removal {
     pub(super) fn size(&self) -> RemovalSize {
         match self {
             Removal::Equalizer(_)
+            | Removal::Correction(_)
             | Removal::RecentSearches(_)
             | Removal::PlaylistRules(_)
             | Removal::QueueCleared(_)
@@ -138,6 +142,9 @@ impl Removal {
     pub(super) fn recipe(&self) -> Recipe {
         match self {
             Removal::Equalizer(_) => titled(|ui| ui.global::<UndoText>().invoke_equalizer_reset()),
+            Removal::Correction(_) => {
+                titled(|ui| ui.global::<UndoText>().invoke_correction_cleared())
+            }
             Removal::RecentSearches(_) => {
                 titled(|ui| ui.global::<UndoText>().invoke_recent_searches_cleared())
             }
@@ -169,9 +176,9 @@ impl Removal {
         }
     }
 
-    /// Answers a failed write, for the one failure notice. The equalizer's and the queue's can't
-    /// fail here: the first's settings write logs its own, and the queue's arms write nothing, a
-    /// replace's resume reporting an unplayable track as any start does.
+    /// Answers a failed write, for the one failure notice. The equalizer's, the correction's and the
+    /// queue's can't fail here: the first two's writes log their own, and the queue's arms
+    /// write nothing, a replace's resume reporting an unplayable track as any start does.
     pub(super) async fn restore(
         self,
         state: &AppState,
@@ -180,6 +187,10 @@ impl Removal {
         match self {
             Removal::Equalizer(reset) => {
                 reset.restore();
+                Ok(())
+            }
+            Removal::Correction(cleared) => {
+                cleared.restore();
                 Ok(())
             }
             Removal::RecentSearches(cleared) => cleared.restore(state, ui).await,

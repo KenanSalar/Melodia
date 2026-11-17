@@ -13,6 +13,7 @@ use std::sync::Arc;
 use slint::{ComponentHandle, SharedString};
 
 use crate::ui::model_diff::replace_rows;
+use crate::ui::row_match::PICKER_ROW_CAP;
 use melodia_app::library;
 use melodia_app::state::AppState;
 use melodia_core::entities::radio::{Facet, FacetKind, StationSearch, UNKNOWN_CODEC};
@@ -223,17 +224,12 @@ pub fn filter(ui: &AppWindow, radio_ui: &RadioUi, needle: &str) {
     write_filtered(&ui.global::<Radio>(), &facets, needle);
 }
 
-/// How many options the picker draws, typed into or not: a cap on the drawing, never on what the
-/// needle searches. The lists arrive ordered by station count, so it shows the popular head. The
-/// needle is unthrottled, so uncapped it would build a row per match on every keystroke over the
-/// tag list, the only list long enough to reach this.
-pub(super) const PICKER_ROW_CAP: usize = 500;
-
 fn write_filtered(g: &Radio<'_>, facets: &[Facet], needle: &str) {
     // Off the global: both callers have already made `facet-shown` this chip.
     let chip = chip_from_index(g, g.get_facet_shown());
     let folded = fold_needle(needle);
     // An empty needle matches everything, so the cap alone decides what an untouched picker draws.
+    // The lists arrive ordered by station count, so it shows the popular head.
     let facet_rows: Vec<_> = facets
         .iter()
         .filter(|facet| matches_needle(chip, facet, &folded))

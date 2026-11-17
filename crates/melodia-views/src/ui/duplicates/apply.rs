@@ -5,7 +5,7 @@ use std::rc::Rc;
 use slint::ComponentHandle;
 
 use super::Finder;
-use super::landing::TicketedDialog;
+use crate::ui::dialog_landing::TicketedDialog;
 use crate::ui::shell::notifications::{Completion, RowText};
 use crate::ui::util::len_as_i32;
 use melodia_app::library;
@@ -51,7 +51,7 @@ impl Finder {
                 }
                 finder.show_removed(ui, counts);
             });
-        if spawned {
+        if spawned.is_some() {
             dup.set_removing(true);
         }
     }

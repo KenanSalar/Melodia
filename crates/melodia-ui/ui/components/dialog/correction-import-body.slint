@@ -1,0 +1,157 @@
+import { ListView } from "std-widgets.slint";
+import { Theme } from "../../theme.slint";
+import { CorrectionImport, ImportRefusal, ImportStep } from "../../globals/correction-dialogs.slint";
+import { SkippedLineRow, SkipWhy } from "../../models.slint";
+import { MultilineInput } from "../multiline-input.slint";
+import { OverlayScrollbar } from "../overlay-scrollbar.slint";
+import { ToolbarChip } from "toolbar-chip.slint";
+
+// A line the correction won't use: where it is, why, and the line as written.
+component SkippedLineItem inherits Rectangle {
+    in property <SkippedLineRow> row-data;
+    in property <length> inset-left;
+    in property <length> inset-right;
+
+    property <string> reason:
+        root.row-data.reason == SkipWhy.off ? @tr("Switched off")
+        : root.row-data.reason == SkipWhy.unsupported ? @tr("A filter type Melodia doesn't run")
+        : root.row-data.reason == SkipWhy.frequency ? @tr("Frequency out of range")
+        : root.row-data.reason == SkipWhy.gain ? @tr("Gain out of range")
+        : root.row-data.reason == SkipWhy.q ? @tr("Q out of range")
+        : @tr("Not a line Melodia can read");
+
+    height: layout.preferred-height;
+
+    layout := VerticalLayout {
+        padding-left: root.inset-left;
+        padding-right: root.inset-right;
+        padding-top: Theme.pad-xs;
+        padding-bottom: Theme.pad-xs;
+        spacing: 2px;
+
+        Text {
+            // Translators: {} is the line's number in the file, then why it goes unused.
+            text: @tr("Line {}: {}", root.row-data.number, root.reason);
+            color: Theme.subtext0;
+            font-size: Theme.font-size-sm;
+            overflow: elide;
+        }
+        Text {
+            text: root.row-data.text;
+            color: Theme.text;
+            font-size: Theme.font-size-md;
+            overflow: elide;
+        }
+    }
+}
+
+// Paste a profile or choose a file, then see what of it the correction will run before Apply.
+// The kind is one of `body-scrolls`: the paste box and the review's list each scroll.
+export component CorrectionImportBody inherits VerticalLayout {
+    spacing: Theme.pad-md;
+
+    property <length> bar-inset: Theme.pad-xs;
+    property <length> bar-gutter: Theme.scrollbar-slot + 2 * root.bar-inset;
+    property <bool> pasting: CorrectionImport.step == ImportStep.paste;
+
+    if root.pasting: HorizontalLayout {
+        spacing: Theme.pad-sm;
+
+        Text {
+            horizontal-stretch: 1;
+            text: @tr("Paste a parametric EQ profile, as AutoEq writes it, or choose its file.");
+            color: Theme.subtext0;
+            font-size: Theme.font-size-sm;
+            vertical-alignment: center;
+            wrap: word-wrap;
+        }
+        if !CorrectionImport.busy: ToolbarChip {
+            icon: "folder_open";
+            label: @tr("Choose File…");
+            clicked => { CorrectionImport.choose-file(); }
+        }
+    }
+
+    if root.pasting: MultilineInput {
+        min-height: 160px;
+        preferred-height: 280px;
+        vertical-stretch: 1;
+        placeholder: "Filter 1: ON PK Fc 105 Hz Gain 6.5 dB Q 0.70";
+        text <=> CorrectionImport.text;
+    }
+
+    if root.pasting && CorrectionImport.refusal != ImportRefusal.none: Text {
+        text: CorrectionImport.refusal == ImportRefusal.unread ? @tr("The file couldn't be read.")
+            : CorrectionImport.refusal == ImportRefusal.too-large
+            ? @tr("That's larger than a correction profile can be.")
+            : CorrectionImport.refusal == ImportRefusal.one-ear
+            ? @tr("This profile sets each ear apart, and a correction applies to both.")
+            : CorrectionImport.refusal == ImportRefusal.no-filters
+            ? @tr("There's no filter here Melodia can run.")
+            : @tr("This profile holds {n} filter, more than a correction can." | "This profile holds {n} filters, more than a correction can." % CorrectionImport.refused-count);
+        color: Theme.danger;
+        font-size: Theme.font-size-sm;
+        wrap: word-wrap;
+    }
+
+    if !root.pasting: VerticalLayout {
+        spacing: Theme.pad-xs;
+
+        if CorrectionImport.file-name != "": Text {
+            // Translators: {} is the imported file's name.
+            text: @tr("From {}", CorrectionImport.file-name);
+            color: Theme.subtext0;
+            font-size: Theme.font-size-sm;
+            overflow: elide;
+        }
+        Text {
+            text: @tr("{n} filter will be applied." | "{n} filters will be applied." % CorrectionImport.filter-count);
+            color: Theme.text;
+            font-size: Theme.font-size-md;
+        }
+        Text {
+            text: CorrectionImport.skipped.length == 0
+                ? @tr("Every line will be used.")
+                : @tr("{n} line won't be used:" | "{n} lines won't be used:" % CorrectionImport.skipped.length);
+            color: Theme.subtext0;
+            font-size: Theme.font-size-sm;
+        }
+    }
+
+    // No `clip`, for the finder's well's reason.
+    if !root.pasting && CorrectionImport.skipped.length > 0: Rectangle {
+        min-height: 120px;
+        preferred-height: 280px;
+        vertical-stretch: 1;
+        background: Theme.base;
+        border-radius: Theme.radius-lg;
+
+        list := ListView {
+            x: 0px;
+            y: Theme.pad-xs;
+            width: parent.width;
+            height: parent.height - 2 * Theme.pad-xs;
+            vertical-scrollbar-policy: always-off;
+            horizontal-scrollbar-policy: always-off;
+            mouse-drag-pan-enabled: false;
+
+            for row in CorrectionImport.skipped: SkippedLineItem {
+                row-data: row;
+                inset-left: Theme.pad-md;
+                inset-right: root.bar-gutter;
+            }
+        }
+
+        OverlayScrollbar {
+            x: parent.width - self.width - root.bar-inset;
+            y: root.bar-inset;
+            width: Theme.scrollbar-slot;
+            height: parent.height - 2 * root.bar-inset;
+            visible-size: list.visible-height;
+            content-size: list.content-height;
+            offset: -list.content-y;
+            track-color: Theme.scrollbar-track-on-card;
+            scroll-to(o) => { list.content-y = -o; }
+        }
+    }
+}

@@ -6,6 +6,7 @@
 //! own lock, so a burst of clicks can't race the read-mutate-write window.
 
 pub mod appearance;
+pub mod correction;
 pub mod crossfade;
 pub mod diagnostics;
 pub mod discord;
@@ -28,6 +29,7 @@ pub use appearance::{
     seed_theme_preference, set_appearance, set_corner_radius, set_dynamic_color_style,
     set_match_unfocused_to_system_bg,
 };
+pub use correction::{set_correction_enabled, set_correction_online, set_corrections};
 pub use crossfade::{
     set_crossfade_duration_ms, set_crossfade_enabled, set_crossfade_fade_on_pause,
     set_crossfade_manual, set_crossfade_skip_same_album,

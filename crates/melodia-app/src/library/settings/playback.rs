@@ -71,6 +71,7 @@ pub fn switch_to_bit_perfect(
 fn apply_bit_perfect_reset(settings: &mut SettingsData, volume: u32) {
     settings.equalizer.eq_enabled = false;
     settings.replaygain.rg_enabled = false;
+    settings.correction.correction_enabled = false;
     settings.playback.playback_speed = 1.0;
     settings.volume = volume.min(MAX_VOLUME);
     settings.playback.is_muted = false;

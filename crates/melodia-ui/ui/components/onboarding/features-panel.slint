@@ -1,6 +1,8 @@
 import { Settings } from "../../settings.slint";
+import { HeadphoneCorrection } from "../../globals/audio.slint";
 import { Onboarding } from "../../globals/onboarding.slint";
 import { MelodiaUpdater } from "../../globals/updater.slint";
+import { CorrectionText } from "../settings/correction-controls.slint";
 import { SectionButton } from "../settings/section-button.slint";
 import { ToggleSwitch } from "../settings/toggle-switch.slint";
 import { OnboardingCard } from "onboarding-card.slint";
@@ -54,6 +56,16 @@ export component OnboardingFeaturesPanel inherits OnboardingCard {
         ToggleSwitch {
             checked <=> Settings.lyrics-online-enabled;
             toggled(v) => { Settings.lyrics-online-enabled-changed(v); }
+        }
+    }
+
+    OnboardingFeatureRow {
+        icon: "headphones";
+        label: CorrectionText.online-label;
+        description: CorrectionText.online-desc;
+        ToggleSwitch {
+            checked <=> HeadphoneCorrection.online;
+            toggled(v) => { HeadphoneCorrection.set-online(v); }
         }
     }
 

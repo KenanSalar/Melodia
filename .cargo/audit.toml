@@ -6,8 +6,7 @@
 #   1. Include the advisory ID, the reason it doesn't apply to Melodia, and a `revisit:` date.
 #   2. Prefer pinning around the flagged crate, or removing the dep, over ignoring. Use this list
 #      only for transitive deps with no upgrade path that we've confirmed are safe to ship.
-#   3. Re-evaluate every `revisit:` date. Stale entries are worse than none — they hide real
-#      findings.
+#   3. Re-evaluate every `revisit:` date, since a stale entry hides real findings.
 #
 # Format: https://github.com/RustSec/rustsec/tree/main/cargo-audit#configuration
 
@@ -45,4 +44,11 @@ ignore = [
     # time only, so none of it ships. Leaves once Slint drops spin_on.
     # revisit: 2026-12-11
     "RUSTSEC-2026-0441",
+
+    # chrono 0.4.45 unmaintained: Slint 1.18.1's i-slint-core and flexi_logger 0.31.10 require it at
+    # their newest releases, so dropping our own uses and zip's `chrono` feature still leaves it in
+    # the lockfile. A vulnerability would arrive as its own advisory, which this doesn't silence.
+    # Leaves once Slint and flexi_logger drop it, our own uses following.
+    # revisit: 2026-12-11
+    "RUSTSEC-2026-0543",
 ]

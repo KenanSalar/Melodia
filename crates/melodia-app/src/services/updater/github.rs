@@ -4,10 +4,12 @@
 //! The signature is checked **before** the body is parsed, and fails closed: a missing `.minisig`
 //! is refused like an invalid one, or a network attacker could strip it.
 
-use reqwest::StatusCode;
-use reqwest::header::{ETAG, HeaderValue, IF_NONE_MATCH};
+use std::time::Duration;
 
 use melodia_core::error::AppError;
+use melodia_net::services::net::{
+    CappedGet, IfChanged, get_capped_if_changed, http_url, read_capped,
+};
 
 use super::event::{UpdateFailure, UpdateResult};
 use super::manifest::LatestManifest;
@@ -18,7 +20,8 @@ use super::minisign;
 pub const RELEASES_BASE: &str = "https://github.com/KenanSalar/Melodia/releases/latest/download";
 
 /// Many times the release matrix, and still a bound: the signature is checked only after the read.
-const MANIFEST_MAX_BYTES: u64 = 256 * 1024;
+const MANIFEST_GET: CappedGet =
+    CappedGet { what: "Update manifest", timeout: Duration::from_secs(15), max_bytes: 256 * 1024 };
 
 /// A minisign blob is two comment lines and a base64 signature.
 const SIGNATURE_MAX_BYTES: u64 = 8 * 1024;
@@ -34,34 +37,16 @@ pub async fn fetch_latest_manifest(
     base_url: &str,
     cached_etag: Option<&str>,
 ) -> UpdateResult<FetchOutcome> {
-    let manifest_url = format!("{base_url}/latest.json");
+    let manifest_url = http_url(&format!("{base_url}/latest.json"))
+        .ok_or_else(|| AppError::updater_msg("the releases base is not an http(s) URL"))?;
+
+    let fetched = get_capped_if_changed(http, &manifest_url, cached_etag, &MANIFEST_GET).await?;
+    let (body, etag) = match fetched {
+        IfChanged::NotModified => return Ok(FetchOutcome::NotModified),
+        IfChanged::Fresh { body, etag } => (body, etag),
+    };
+
     let signature_url = format!("{manifest_url}.minisig");
-
-    let mut req = http.get(&manifest_url);
-    if let Some(tag) = cached_etag
-        && !tag.is_empty()
-        && let Ok(value) = HeaderValue::from_str(tag)
-    {
-        req = req.header(IF_NONE_MATCH, value);
-    }
-
-    let resp = req.send().await.map_err(|e| AppError::network("fetch latest.json failed", e))?;
-
-    if resp.status() == StatusCode::NOT_MODIFIED {
-        return Ok(FetchOutcome::NotModified);
-    }
-    if !resp.status().is_success() {
-        return Err(AppError::network_msg(format!(
-            "fetch latest.json returned HTTP {}",
-            resp.status()
-        ))
-        .into());
-    }
-
-    let etag = resp.headers().get(ETAG).and_then(|v| v.to_str().ok()).map(str::to_owned);
-    let body =
-        melodia_net::services::net::read_capped(resp, "latest.json", MANIFEST_MAX_BYTES).await?;
-
     let sig_resp = http
         .get(&signature_url)
         .send()
@@ -73,12 +58,7 @@ pub async fn fetch_latest_manifest(
             sig_resp.status()
         ))));
     }
-    let sig_bytes = melodia_net::services::net::read_capped(
-        sig_resp,
-        "latest.json.minisig",
-        SIGNATURE_MAX_BYTES,
-    )
-    .await?;
+    let sig_bytes = read_capped(sig_resp, "latest.json.minisig", SIGNATURE_MAX_BYTES).await?;
     let sig_text = String::from_utf8_lossy(&sig_bytes);
 
     let pubkey = minisign::embedded_pubkey()
