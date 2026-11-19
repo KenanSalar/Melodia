@@ -2,8 +2,8 @@
 
 Working doc. Delete when the feature ships.
 
-Status: **Phases 1–5 done, Phase 6's hand tests done; Phase 5's two verify runs next, then Phase
-6's tests** · Created: 2026-11-17 · Branch `feat/crossfeed`, linked to the issue
+Status: **Phases 1–5 done and verified, Phase 6's hand tests done; Phase 6's tests next** ·
+Created: 2026-11-17 · Branch `feat/crossfeed`, linked to the issue
 
 Issue [#157](https://github.com/KenanSalar/Melodia/issues/157).
 
@@ -411,6 +411,11 @@ own commit, before Phase 6's tests.
     narrows to exactly 1.0.
 - **Verify:** rerun the dual-mono hand test (a 0 dBFS dual-mono file, crossfeed on against off:
   bit-identical except where the limiter acts and the release after it) and the loud-master one.
+  - [x] Done 2026-11-19 on `b384dd2f` through the harness. A quiet dual-mono file with one 200 ms
+        burst at +8 dB differs from 2.000 s to 3.703 s only, then reads bit-identical to its end.
+        The 0 dBFS dual-mono file comes back between loud passages: 55 differing stretches, 3.2 %
+        identical, against one stretch and 0.05 %. The loud master's shares cut by more than 1 dB
+        hold at 37.700, 18.898 and 23.276 %.
 
 ### 5b. A track's tail goes unplayed when it ends on its own and the output closes
 
@@ -491,6 +496,11 @@ own commit, before Phase 6's tests.
   stereo, mono, 5.1, and compare the capture with each file's `ffmpeg -f s16le` decode.
 - **Verify:** the lossy queue at 40 s plays the mono file whole on this branch; the same queue
   ending on the mono file keeps its tail; a skip mid-track still cuts at once.
+  - [x] Done 2026-11-19 on a release build of `b384dd2f`, the rig above. The lossy queue played
+        all 1,920,000 of the mono file's frames, where `2d1142fd` and `main` lost 912; ending the
+        queue on it, all of them too. A skip at 8.8 s started the mono 105 ms after Wide's last
+        frame, against 110 ms before the fix. A natural end's reopen gap went from 310 ms on
+        `main` to 371 and 392 ms, about one lead.
 
 **Gate:**
 - [x] fmt, clippy, the suite; `limiter.rs`' `gain` doc and `handlers.rs`' `end_of_stream` doc
@@ -524,8 +534,8 @@ in-app capture bit for bit.
       - Flat chain: seven fixtures (stereo, dual mono, mono, 5.1) bit-identical to the decoder,
         gapless joins included.
       - Exclusive, S16 into `snd-aloop`: every two-channel fixture byte-identical to its file, and
-        the mono one but for a tail `main` drops too (5b). The 5.1 one can't claim a
-        two-channel card, so it falls back to shared.
+        the mono one but for a tail `main` drops too, whole since 5b's fix. The 5.1 one can't
+        claim a two-channel card, so it falls back to shared.
 - [x] On, Strong, an early stereo recording panned hard left and right: the image narrows, the
       level doesn't move; the four constants settled by ear and recorded here.
       - The dev library has no early stereo; its widest track (side above mid) and a one-ear track
@@ -537,7 +547,7 @@ in-app capture bit for bit.
       rests.
       - Peaks at -6 dBFS: bit-identical on and off, in the app. Peaks at 0 dBFS: identical until
         the limiter first acts, 19 ms in, then never again: its release settles at 0.99986863
-        (-0.0011 dB) in f32, not 1.0 (5a).
+        (-0.0011 dB) in f32, not 1.0. Since 5a's fix, identical again after each release.
 - [x] A mono file and a 5.1 file: untouched, the signal path reading as with it off.
       - Untouched: both bit-identical with crossfeed at Strong, the 5.1 file as its front pair.
       - The Signal Path block captured with crossfeed alone on and off: pixel-identical for both,
