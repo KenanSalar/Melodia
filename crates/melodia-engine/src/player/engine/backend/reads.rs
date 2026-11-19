@@ -28,7 +28,7 @@ impl PlaybackEngine {
     /// publish the position it replaced.
     pub fn query_settled_clock(&self) -> Option<DeckClock> {
         self.with_settled_voice(|voice| DeckClock {
-            heard_ms: millis(voice.heard(self.output.lead.get())),
+            heard_ms: millis(voice.heard(self.output_lead())),
             pulled_ms: millis(voice.position()),
         })
     }

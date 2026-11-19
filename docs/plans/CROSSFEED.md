@@ -2,7 +2,7 @@
 
 Working doc. Delete when the feature ships.
 
-Status: **Phases 1–4 done, Phase 6's hand tests done; Phase 5 (two older bugs) next, then Phase
+Status: **Phases 1–5 done, Phase 6's hand tests done; Phase 5's two verify runs next, then Phase
 6's tests** · Created: 2026-11-17 · Branch `feat/crossfeed`, linked to the issue
 
 Issue [#157](https://github.com/KenanSalar/Melodia/issues/157).
@@ -52,7 +52,8 @@ card's signal path names up to three effects.
 
 - Once the safety limiter has caught a peak, the level comes back exactly to where it was, so the
   rest of the track is bit-identical again wherever the limiter rests.
-- A track plays to its last sample when the next one needs the output reopened on another device.
+- A track that ends on its own plays to its last sample, also where the next one reopens the output
+  or the end of the queue gives an exclusive card back.
 
 ---
 
@@ -289,7 +290,7 @@ Headphones
 | card | `ui/views/settings/headphones-section.slint` (renamed from `correction-section.slint`), `components/settings/{headphones,crossfeed}-controls.slint`, `globals/audio.slint` | the device row first; `HeadphonesText`, `CrossfeedText`; a `Headphones` global (device, name, refresh) taken out of `HeadphoneCorrection`; a `Crossfeed` global |
 | signal path | `ui/globals/signal-path.slint`, `ui/views/settings/output-section.slint` | `crossfeed-on`, four names |
 | views | `crates/melodia-views/src/ui/headphones.rs`, `ui/crossfeed.rs`, `ui/correction/mod.rs`, `ui/settings/signal_path.rs` | the card's naming and repaint on `output_changed` move out of `correction`; crossfeed's switch and slider; the bit-perfect repaint |
-| the two older bugs | `player/playback/limiter.rs`; the end-of-track reopen in `output/{voice,alsa,mod}.rs` and `backend/output.rs` | Phase 5; each fix stays in the file that owns the state, no new module |
+| the two older bugs | `player/playback/limiter.rs`; the engine's `handlers.rs` and `backend/output.rs` | Phase 5; the limiter's smoothing in f64; the monitor waits out the device's lead at a natural end; no new module |
 
 `melodia-views` learns nothing about filters: it reads `CrossfeedSetting` from `melodia-core`
 through `library::crossfeed`. The DSP learns nothing about devices: the engine hands it the heard
@@ -378,7 +379,7 @@ own commit, before Phase 6's tests.
 
 ### 5a. The safety limiter never returns to unity
 
-- [ ] **What you hear:** nothing. After the limiter has caught one peak, the rest of the track
+- [x] **What you hear:** nothing. After the limiter has caught one peak, the rest of the track
       plays 0.001 to 0.005 dB low, so a stretch it has left alone is no longer bit-identical to
       its source. That is why Phase 6's dual-mono hand test passes only "until the limiter first
       acts".
@@ -394,16 +395,29 @@ own commit, before Phase 6's tests.
     after the first catch.
   - It holds until `Limiter::reset` on a seek (`equalizer.rs:662`); each new source builds a
     fresh limiter at 1.0 (`equalizer.rs:343`).
+  - Validated 2026-11-19: an exact-rounding emulation through the limiter's own f32 coefficient
+    path stalls at 2205 steps at 44.1 kHz and 2400 at 48 kHz. One step from the 2204 above is one
+    ulp of `exp` in the coefficient. The limiter runs at the source's rate (`equalizer.rs:307`),
+    so 0.99986863 is the 44.1 kHz fixture's figure; a 48 kHz file stalls at 0.9998569.
 - **Fix:** keep the smoothed gain in f64 and narrow it on return. Emulated, an f64 release narrows
-  to exactly `1.0f32` 1.66 s after a -6 dB catch at 44.1, 48, 96 and 192 kHz. Snapping to the
-  target within one step also works but adds a threshold to argue. The field's "at most 1.0" holds.
+  to exactly `1.0f32` 1.66 s after a -6 dB catch at 44.1, 48, 96 and 192 kHz.
+  - `gain`, both coefficients, `ATTACK_S` and `RELEASE_S` in f64; `smoothing_coeff` in f64; `new`
+    widens `frame_rate`. `target_gain` and the knee stay f32.
+  - `process` keeps `f32` in and out, narrowing once a frame under its own
+    `cast_possible_truncation` expectation.
+  - `gain`'s doc keeps "at most 1.0" and gains why it is f64.
+  - Not taken: snapping to the target within one step adds a threshold to argue; `1 - gain` in
+    f32 decays through subnormals, where the f64 gain stalls about 2.4e-13 below 1.0, which
+    narrows to exactly 1.0.
 - **Verify:** rerun the dual-mono hand test (a 0 dBFS dual-mono file, crossfeed on against off:
   bit-identical except where the limiter acts and the release after it) and the loud-master one.
 
-### 5b. A track's tail goes unplayed when the next track reopens the output on another device
+### 5b. A track's tail goes unplayed when it ends on its own and the output closes
 
-- [ ] **What you hear:** the last 19 ms of a track cut off, where the next track needs the output
-      reopened on another device and the outgoing one doesn't end in silence.
+- [x] **What you hear:** the end of a track cut off, up to the device's lead (80 ms at the default
+      exclusive period, 400 ms at the longest), where it ends on its own and the next track
+      reopens the output, or the end of the queue gives an exclusive card back. Heard only where
+      the track doesn't end in silence.
 - **Seen** 2026-11-19, exclusive on `snd-aloop` at 48 kHz S16, crossfeed off, the fallback set to
   shared. A 40 s mono FLAC followed by a 5.1 one the two-channel loopback refuses: the log reads
   "exclusive output refused ... the device cannot run 6 channels or more", then `Output
@@ -421,41 +435,66 @@ own commit, before Phase 6's tests.
     3840 frames, 80 ms) less 48.
   - The stereo → mono reopen on the same card lost nothing of the stereo file, and the mono file
     started 14880 frames (310 ms) after it ended.
-- **The path** (where the frames go is unconfirmed):
-  - `open_for_gapless` won't stage a track the output reopens for (`backend/output.rs:391`), so
-    the mono track ends at `EndOfStream`.
-  - The voice drops its source count in `finish_current` (`voice.rs:518`) once the converter has
-    drained (`hand_over_or_drain`, `voice.rs:501`), on the audio thread. `evaluate_playback_check`
-    reads zero sources as `EndOfStream` (`backend/mod.rs:58`), polled every 500 ms
-    (`handlers.rs:27`).
-  - `end_of_stream` starts the next track, whose `reopen_for_track` (`backend/output.rs:429`) runs
-    `AudioOutput::reopen` through `replace_stream` and `close_for` (`output/mod.rs:259`, `:297`).
-    Dropping the exclusive stream stops the writer, whose `run` drops the PCM undrained
-    (`alsa.rs:480`), so the card discards whatever it still holds.
-- **Leads to check first:**
-  - A 500 ms poll against an 80 ms card buffer means the card should have played out before the
-    reopen, so the frames are likely lost earlier: in the converter's `drain` for a mono source, or
-    in the last block the writer filled. Count, at the mono track's end, the frames the voice hands
-    the mixer against the file's 1 920 000, and whether the writer writes them.
-  - The loss followed the track's start (lossy only after a natural end and a reopen), not the file
-    alone: check whether a block grid shifted by that start leaves 912 frames in a block that never
-    goes out.
-  - Whether `wasapi.rs`' drop (`:105`) and a shared stream's drop lose the same tail.
-- **Fix:** follows from where the frames are found: flush the voice's converter before retiring
-  the source, or play the card out (`pcm.drain()`, bounded by the reported lead) before closing it
-  on a reopen at a natural track end. A skip, seek or stop still cuts at once.
+- **Why** (read off the tree 2026-11-19, confirmed by the runs below):
+  - The voice runs dry a device's lead before the end is heard. The writer starts the card on a
+    full buffer and refills it a period at a time (`alsa.rs:353-354`), so `finish_current`
+    (`voice.rs:518`) drops the source count while the card still holds 60 to 80 ms of the track,
+    with silence following it in (`mixer.rs:61`).
+  - The monitor acts on the count alone. `evaluate_playback_check` reads zero as `EndOfStream`
+    (`backend/mod.rs:58`), and `end_of_stream` (`handlers.rs:442`) either starts the next track
+    through `cut_to_source` and `reopen_for_track` (`backend/mod.rs:320`,
+    `backend/output.rs:429`) or stops, which `release_exclusive` follows (`backend/mod.rs:527`).
+    Both drop the stream, and the writer drops the PCM undrained (`alsa.rs:480`).
+  - The 500 ms poll doesn't cover the lead, because its ticks sit on a fixed grid
+    (`handlers.rs:329`). The mono track started on the tick that caught the stereo's natural end,
+    and its 40 s are 80 ticks, so the tick ending it lands after the voice runs dry and before the
+    end is heard, by the same margin each run. Started by a skip or a click, off the grid, it
+    played. Tracks of any length land at random: about lead / 500 ms of the natural ends that
+    close the stream lose a tail, 16 % at the default period and 80 % at the longest.
+  - The writer stops only once its blocking write returns at a period boundary
+    (`alsa.rs:495-498`), so a cut comes in whole periods less the close: 912 is one period less
+    48 frames, and a tick landing inside the last period cuts nothing.
+  - In `x-off`, 05 starts 1,920,144 frames after the mono's cut, 80 ticks and 3 ms, so the grid
+    holds across a run; 07 ended the queue whole, which fits a tick inside its last period.
+- **Confirmed** 2026-11-19 on the rig above, release build of `2d1142fd`, queue 01 → mono → 5.1,
+  the mono started by the tick that caught 01's end. Only the mono's length changes, by whole
+  periods, so a block-grid fault would lose 912 frames in every row:
+
+  | mono | lost | cut, frames into the mono |
+  |---|---|---|
+  | 40.000 s, the original | 912 | 1,919,088 (1999 periods + 48) |
+  | 39.900 s, its first 1,915,200 frames | 0 | none |
+  | 40.020 s, its last 960 frames repeated | 1824 | 1,919,136 (1999 periods + 96) |
+
+  The cut stays on the same period boundary from the track's start, where the tick lands,
+  whatever the track's length: a track ending before the tick plays whole, one ending later loses
+  more. The close took 1 ms longer in the last row.
+- **Fix:** the monitor waits out the device's lead before acting on a natural end.
+  - `Monitor::end_of_stream` turns `async`: past the station check, `tokio::time::sleep` for
+    `PlaybackEngine::output_lead()`, then it emits only if the status still reads Playing and
+    `check_playback_state()` still reads `EndOfStream`, so a skip, stop or pause in the wait wins.
+    No guard crosses the await. `Monitor::poll` turns `async` with it.
+  - `output_lead()` in `backend/output.rs` reads `self.output.lead`, and `reads.rs`' clock read
+    goes through it.
+  - `end_of_stream`'s doc carries why it waits.
+  - Skip, seek and stop never reach `end_of_stream` and still cut at once; gapless and crossfade
+    are untouched. It covers every backend and the end of the queue at once, for up to one lead of
+    extra gap at a natural end that isn't gapless or a crossfade.
+  - Not taken: flushing the converter, which loses nothing; `pcm.drain()` at the close, ALSA's
+    alone and needing a natural-end flag through `PlayMedia` and `stop`; waiting at any close with
+    the voices dry, which also delays a user's stop on an exclusive card.
 - **Reproduce:** `sudo modprobe snd-aloop`, then `arecord -D hw:CARD=Loopback,DEV=1 -f S16_LE -r
   48000 -c 2 -t raw` started before Melodia so it pins the card. Settings: `output_mode` exclusive,
   `output_device` `hw:CARD=Loopback,DEV=0`, `output_rate_fallback` shared, volume 100, and an
   `ALSA_CONFIG_PATH` whose default PCM is a null sink so the fallback plays nowhere audible. Queue
   three 40 s 48 kHz s16 FLACs cut from music that doesn't end in silence, titled so they sort
   stereo, mono, 5.1, and compare the capture with each file's `ffmpeg -f s16le` decode.
-- **Verify:** the lossy queue plays the mono file whole on this branch, and a skip mid-track still
-  cuts at once.
+- **Verify:** the lossy queue at 40 s plays the mono file whole on this branch; the same queue
+  ending on the mono file keeps its tail; a skip mid-track still cuts at once.
 
 **Gate:**
-- [ ] fmt, clippy, the suite; docs the fixes make wrong (`limiter.rs`' `gain` doc, `alsa.rs`'
-      `ExclusiveStream` doc on what dropping it does) updated with them.
+- [x] fmt, clippy, the suite; `limiter.rs`' `gain` doc and `handlers.rs`' `end_of_stream` doc
+      carry their fixes' why.
 
 ## Phase 6: Tests
 
@@ -566,8 +605,8 @@ that phase.
 - **800 lines:** `equalizer.rs` (661, 679 after Phase 2) gains the scratch and the stage's hooks
   only; the stage is its own module. `backend/mod.rs` (677, 683 after Phase 3) renames a field.
   `library/playback.rs` (567, 573 after Phase 3) gains one setter. `output-section.slint` (453)
-  gains a name and a chain. Phase 5's files have room: `limiter.rs` 68, `alsa.rs` 547, `voice.rs`
-  593, `output/mod.rs` 539, `wasapi.rs` 610, `backend/output.rs` 479.
+  gains a name and a chain. Phase 5's files have room: `limiter.rs` 68, `handlers.rs` 590,
+  `backend/output.rs` 479.
 - **Memory:** one f64 filter and a few scalars per source; nothing to measure past the hand tests.
 - **Lock order** (ADR 0035) is unchanged: the renamed lock sits where the correction's did.
 - **The live public release:** off by default; `crossfeed` is `#[serde(default)]`. `eq.json` has

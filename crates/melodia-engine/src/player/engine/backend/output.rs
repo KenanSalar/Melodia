@@ -219,6 +219,11 @@ impl PlaybackEngine {
         self.output.status.reopening()
     }
 
+    /// The open stream's lead, read without the device's lock.
+    pub fn output_lead(&self) -> Duration {
+        self.output.lead.get()
+    }
+
     pub fn negotiated(&self) -> Option<Negotiated> {
         self.output.device.lock().as_ref().and_then(AudioOutput::negotiated)
     }
