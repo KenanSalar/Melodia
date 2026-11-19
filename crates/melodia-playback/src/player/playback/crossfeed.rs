@@ -174,3 +174,7 @@ impl CrossfeedStage {
         self.amount = self.target;
     }
 }
+
+#[cfg(test)]
+#[path = "tests/crossfeed_tests.rs"]
+mod tests;

@@ -63,3 +63,7 @@ pub struct CrossfeedSetting {
     pub enabled: bool,
     pub strength: CrossfeedStrength,
 }
+
+#[cfg(test)]
+#[path = "tests/crossfeed_tests.rs"]
+mod tests;

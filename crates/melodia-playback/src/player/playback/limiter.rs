@@ -72,3 +72,7 @@ impl Limiter {
 fn smoothing_coeff(time_s: f64, rate: f64) -> f64 {
     if rate > 0.0 && time_s > 0.0 { (-1.0 / (time_s * rate)).exp() } else { 0.0 }
 }
+
+#[cfg(test)]
+#[path = "tests/limiter_tests.rs"]
+mod tests;
