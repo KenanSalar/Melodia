@@ -2,8 +2,8 @@
 
 Working doc. Delete when the feature ships.
 
-Status: **Phases 1–4 done, Phase 5's hand tests next** · Created: 2026-11-17 ·
-Branch `feat/crossfeed`, linked to the issue
+Status: **Phases 1–4 done, Phase 6's hand tests done; Phase 5 (two older bugs) next, then Phase
+6's tests** · Created: 2026-11-17 · Branch `feat/crossfeed`, linked to the issue
 
 Issue [#157](https://github.com/KenanSalar/Melodia/issues/157).
 
@@ -47,6 +47,12 @@ card's signal path names up to three effects.
 - The equalizer, the preamp, ReplayGain, the correction and the safety limiter are untouched, and
   the limiter still runs last.
 - Searching Settings for "headphone", "correction" or "AutoEq" still finds the card's rows.
+
+**Also fixed on this branch** (older than crossfeed, found by its hand tests, Phase 5):
+
+- Once the safety limiter has caught a peak, the level comes back exactly to where it was, so the
+  rest of the track is bit-identical again wherever the limiter rests.
+- A track plays to its last sample when the next one needs the output reopened on another device.
 
 ---
 
@@ -283,6 +289,7 @@ Headphones
 | card | `ui/views/settings/headphones-section.slint` (renamed from `correction-section.slint`), `components/settings/{headphones,crossfeed}-controls.slint`, `globals/audio.slint` | the device row first; `HeadphonesText`, `CrossfeedText`; a `Headphones` global (device, name, refresh) taken out of `HeadphoneCorrection`; a `Crossfeed` global |
 | signal path | `ui/globals/signal-path.slint`, `ui/views/settings/output-section.slint` | `crossfeed-on`, four names |
 | views | `crates/melodia-views/src/ui/headphones.rs`, `ui/crossfeed.rs`, `ui/correction/mod.rs`, `ui/settings/signal_path.rs` | the card's naming and repaint on `output_changed` move out of `correction`; crossfeed's switch and slider; the bit-perfect repaint |
+| the two older bugs | `player/playback/limiter.rs`; the end-of-track reopen in `output/{voice,alsa,mod}.rs` and `backend/output.rs` | Phase 5; each fix stays in the file that owns the state, no new module |
 
 `melodia-views` learns nothing about filters: it reads `CrossfeedSetting` from `melodia-core`
 through `library::crossfeed`. The DSP learns nothing about devices: the engine hands it the heard
@@ -364,9 +371,95 @@ device's setting.
 - [x] fmt, clippy, the suite with the catalogs; the settings page pin on `category-name:` holds for
       the renamed section.
 
-## Phase 5: Tests
+## Phase 5: Two older bugs the hand tests found
 
-Phases 1–4 gate on the static checks alone, each adding what it could break by hand to the list
+Both predate this branch and reproduce on `main`. They're fixed here on Kenan's call, each on its
+own commit, before Phase 6's tests.
+
+### 5a. The safety limiter never returns to unity
+
+- [ ] **What you hear:** nothing. After the limiter has caught one peak, the rest of the track
+      plays 0.001 to 0.005 dB low, so a stretch it has left alone is no longer bit-identical to
+      its source. That is why Phase 6's dual-mono hand test passes only "until the limiter first
+      acts".
+- **Where:** `Limiter::process` (`limiter.rs:42`) smooths `gain: f32` (`:15`) with
+  `coeff.mul_add(self.gain, (1.0 - coeff) * target)` (`:45`), the release `coeff` from
+  `smoothing_coeff` (`:66`) over `RELEASE_S`.
+- **Why:** below 1.0 an f32 step is 2^-24. From `k` steps below, one release update lands `c·k`
+  steps below (`c = exp(-1 / (RELEASE_S · rate))`), which rounds back to `k` once `k·(1 - c)` is
+  under half a step, so the gain stops about `RELEASE_S · rate / 2` steps short.
+  - Emulated with f32 rounding: 0.99986863 at 44.1 kHz (2204 steps, -0.00114 dB), -0.00124 dB at
+    48 kHz, -0.00248 dB at 96, -0.00497 dB at 192.
+  - The scratch harness running the real `EqSource` showed the same -0.0011 dB on every frame
+    after the first catch.
+  - It holds until `Limiter::reset` on a seek (`equalizer.rs:662`); each new source builds a
+    fresh limiter at 1.0 (`equalizer.rs:343`).
+- **Fix:** keep the smoothed gain in f64 and narrow it on return. Emulated, an f64 release narrows
+  to exactly `1.0f32` 1.66 s after a -6 dB catch at 44.1, 48, 96 and 192 kHz. Snapping to the
+  target within one step also works but adds a threshold to argue. The field's "at most 1.0" holds.
+- **Verify:** rerun the dual-mono hand test (a 0 dBFS dual-mono file, crossfeed on against off:
+  bit-identical except where the limiter acts and the release after it) and the loud-master one.
+
+### 5b. A track's tail goes unplayed when the next track reopens the output on another device
+
+- [ ] **What you hear:** the last 19 ms of a track cut off, where the next track needs the output
+      reopened on another device and the outgoing one doesn't end in silence.
+- **Seen** 2026-11-19, exclusive on `snd-aloop` at 48 kHz S16, crossfeed off, the fallback set to
+  shared. A 40 s mono FLAC followed by a 5.1 one the two-channel loopback refuses: the log reads
+  "exclusive output refused ... the device cannot run 6 channels or more", then `Output
+  reopened` on Default Audio Device. The mono file's last 912 frames read zero in the loopback
+  capture; every frame before them is byte-identical.
+
+  | queue | build | mono's last 912 frames |
+  |---|---|---|
+  | stereo (ends on its own) → mono → 5.1, twice | this branch | lost both times |
+  | stereo (ends on its own) → mono → 5.1 | `main` | lost |
+  | stereo (skipped 0.16 s in) → mono → 5.1 | this branch | played |
+  | mono → 5.1 | this branch and `main` | played |
+
+  - Always exactly 912 frames: one 960-frame period of the card (its 20 ms period; the buffer is
+    3840 frames, 80 ms) less 48.
+  - The stereo → mono reopen on the same card lost nothing of the stereo file, and the mono file
+    started 14880 frames (310 ms) after it ended.
+- **The path** (where the frames go is unconfirmed):
+  - `open_for_gapless` won't stage a track the output reopens for (`backend/output.rs:391`), so
+    the mono track ends at `EndOfStream`.
+  - The voice drops its source count in `finish_current` (`voice.rs:518`) once the converter has
+    drained (`hand_over_or_drain`, `voice.rs:501`), on the audio thread. `evaluate_playback_check`
+    reads zero sources as `EndOfStream` (`backend/mod.rs:58`), polled every 500 ms
+    (`handlers.rs:27`).
+  - `end_of_stream` starts the next track, whose `reopen_for_track` (`backend/output.rs:429`) runs
+    `AudioOutput::reopen` through `replace_stream` and `close_for` (`output/mod.rs:259`, `:297`).
+    Dropping the exclusive stream stops the writer, whose `run` drops the PCM undrained
+    (`alsa.rs:480`), so the card discards whatever it still holds.
+- **Leads to check first:**
+  - A 500 ms poll against an 80 ms card buffer means the card should have played out before the
+    reopen, so the frames are likely lost earlier: in the converter's `drain` for a mono source, or
+    in the last block the writer filled. Count, at the mono track's end, the frames the voice hands
+    the mixer against the file's 1 920 000, and whether the writer writes them.
+  - The loss followed the track's start (lossy only after a natural end and a reopen), not the file
+    alone: check whether a block grid shifted by that start leaves 912 frames in a block that never
+    goes out.
+  - Whether `wasapi.rs`' drop (`:105`) and a shared stream's drop lose the same tail.
+- **Fix:** follows from where the frames are found: flush the voice's converter before retiring
+  the source, or play the card out (`pcm.drain()`, bounded by the reported lead) before closing it
+  on a reopen at a natural track end. A skip, seek or stop still cuts at once.
+- **Reproduce:** `sudo modprobe snd-aloop`, then `arecord -D hw:CARD=Loopback,DEV=1 -f S16_LE -r
+  48000 -c 2 -t raw` started before Melodia so it pins the card. Settings: `output_mode` exclusive,
+  `output_device` `hw:CARD=Loopback,DEV=0`, `output_rate_fallback` shared, volume 100, and an
+  `ALSA_CONFIG_PATH` whose default PCM is a null sink so the fallback plays nowhere audible. Queue
+  three 40 s 48 kHz s16 FLACs cut from music that doesn't end in silence, titled so they sort
+  stereo, mono, 5.1, and compare the capture with each file's `ffmpeg -f s16le` decode.
+- **Verify:** the lossy queue plays the mono file whole on this branch, and a skip mid-track still
+  cuts at once.
+
+**Gate:**
+- [ ] fmt, clippy, the suite; docs the fixes make wrong (`limiter.rs`' `gain` doc, `alsa.rs`'
+      `ExclusiveStream` doc on what dropping it does) updated with them.
+
+## Phase 6: Tests
+
+Phases 1–5 gate on the static checks alone, each adding what it could break by hand to the list
 below. The hand tests all run here, once everything above has landed; the tests follow, on
 Kenan's go.
 
@@ -374,30 +467,90 @@ Kenan's go.
 
 In the dev data folder with a backup.
 
-- [ ] The correction through Phase 1's moves: the card names the device heard and follows a
+Measured 2026-11-19 on release builds of `2d1142fd` and `main`: 48 kHz fixtures (the graph's
+clock), the shared stream pinned to F32 into a null sink and recorded from its monitor. Offline
+figures come from a scratch harness running the app's decoder and `EqSource`, which matched every
+in-app capture bit for bit.
+
+- [x] The correction through Phase 1's moves: the card names the device heard and follows a
       switch; Find headphones, Import file and Paste land on the device shown; Clear, then Undo,
       restores it; a correction sounds as before, a device switch mid-track included.
-- [ ] Off: the bit-perfect rig and a flat chain read bit-identical, as before.
-- [ ] On, Strong, an early stereo recording panned hard left and right: the image narrows, the
+      - Sounds as before: a ten-filter correction on two files, this branch against `main`,
+        bit-identical over 90 s.
+      - The card, driven exclusive between `snd-aloop` and the USB CODEC mid-track: it named each
+        device on the switch; a file imported on the loopback, a paste and an AutoEq model on the
+        CODEC each landed under that device's key in `eq.json` alone; Clear, then Ctrl+Z inside
+        the notice, put the loopback's back.
+- [x] Off: the bit-perfect rig and a flat chain read bit-identical, as before.
+      - Flat chain: seven fixtures (stereo, dual mono, mono, 5.1) bit-identical to the decoder,
+        gapless joins included.
+      - Exclusive, S16 into `snd-aloop`: every two-channel fixture byte-identical to its file, and
+        the mono one but for a tail `main` drops too (5b). The 5.1 one can't claim a
+        two-channel card, so it falls back to shared.
+- [x] On, Strong, an early stereo recording panned hard left and right: the image narrows, the
       level doesn't move; the four constants settled by ear and recorded here.
-- [ ] A dual-mono stereo file with crossfeed on matches off sample for sample wherever the limiter
+      - The dev library has no early stereo; its widest track (side above mid) and a one-ear track
+        stand in. Widest: mid -0.001 dB (the limiter's stall, 5a), side -3.6 dB at Strong and
+        -2.6 dB at Subtle, L/R correlation -0.13 to 0.28. One ear: correlation -0.01 to 0.54.
+      - Kept by ear: `SUBTLE_FEED_DB` 9.5, `STRONG_FEED_DB` 4.5, `DEFAULT_STRENGTH` 0.7,
+        `CUTOFF_HZ` 700.
+- [x] A dual-mono stereo file with crossfeed on matches off sample for sample wherever the limiter
       rests.
-- [ ] A mono file and a 5.1 file: untouched, the signal path reading as with it off.
-- [ ] Toggling on and off and dragging the slider during a quiet passage: no click;
+      - Peaks at -6 dBFS: bit-identical on and off, in the app. Peaks at 0 dBFS: identical until
+        the limiter first acts, 19 ms in, then never again: its release settles at 0.99986863
+        (-0.0011 dB) in f32, not 1.0 (5a).
+- [x] A mono file and a 5.1 file: untouched, the signal path reading as with it off.
+      - Untouched: both bit-identical with crossfeed at Strong, the 5.1 file as its front pair.
+      - The Signal Path block captured with crossfeed alone on and off: pixel-identical for both,
+        Effects reading "No effects".
+- [x] Toggling on and off and dragging the slider during a quiet passage: no click;
       `CROSSFEED_RAMP_MS` settled and recorded here.
-- [ ] Switching device mid-track: each keeps its own; System default on Linux shared.
-- [ ] A loudly mastered hard-panned track at Strong: how often the limiter acts, against off.
-- [ ] Integrated loudness of a few albums with it off and at each end, recorded here.
-- [ ] Make Bit-Perfect switches off the heard device's crossfeed and keeps the others'; from shared
+      - Offline, switching every 2 s on a 100 Hz tone in one ear, the worst case for a click: an
+        instant switch spikes 4.8 to 6.3 times the tone's own sample step, the 50 ms ramp 1.00 to
+        1.09.
+      - In the app, nine switches and slider drags on a one-ear song: none heard, and at each
+        switch the capture's sharpest step within 30 ms matches the song's own. Kept at 50 ms.
+- [x] Switching device mid-track: each keeps its own; System default on Linux shared.
+      - At launch, exclusive on the loopback: on for System default only, the loopback plays
+        byte-identical; on for the loopback, it matches the harness's render to -96.3 dBFS (the
+        writer's dither) and the mono file stays byte-identical.
+      - Mid-track: loopback at Subtle, the CODEC off (reading Bit-perfect), back to the loopback
+        at Subtle, then shared with the loopback still picked reading System Default at Medium.
+- [x] A loudly mastered hard-panned track at Strong: how often the limiter acts, against off.
+      - FUNK UNIVERSO (Slowed), 149 s, peaks +2.8 dBFS. Off runs no limiter. Frames cut by more
+        than 1 dB: limiter alone (an effect on, the signal unchanged) 37.7 %, mean -0.76 dB;
+        Subtle 18.9 %, -0.58 dB; Strong 23.3 %, -0.60 dB. Crossfeed lowers hard-panned peaks, so
+        it limits less than the limiter alone. The overshoot shows on centred loud material
+        instead: Beirut Ya Beirut never passes 0 dBFS, crossfed at Strong 0.9 % of its frames do.
+- [x] Integrated loudness of a few albums with it off and at each end, recorded here.
+      - LUFS, ffmpeg's `ebur128` at 0.1 LU, whole albums offline. The drop doesn't follow the
+        strength; the limiter alone accounts for 0.1 to 0.2 of it.
+
+        | album | off | limiter alone | Subtle | default | Strong |
+        |---|---|---|---|---|---|
+        | The Harmony Band, Peace Be upon Us Album (12) | -10.4 | -10.6 | -10.9 | -10.9 | -10.9 |
+        | Islamic Band, بحالي ربي أعلم (11) | -10.5 | -10.6 | -10.8 | -10.8 | -10.8 |
+        | Islamic Band, الكعبة محلاها (8) | -11.3 | -11.4 | -11.7 | -11.7 | -11.7 |
+- [x] Make Bit-Perfect switches off the heard device's crossfeed and keeps the others'; from shared
       output on Linux, with a search showing the Output and Headphones cards together, the card
       ends on the exclusive device with its switch off.
-- [ ] The readout changes word halfway between the default and each end (0.35 and 0.85 of the
+      - Searched "device", shared with the loopback picked: after the confirm, exclusive on the
+        loopback, its crossfeed off at its kept strength, System default's still on; the card
+        names the loopback with the switch off.
+- [x] The readout changes word halfway between the default and each end (0.35 and 0.85 of the
       track at a default of 0.7), and the track holds still as it does, in English and in `nl`,
       whose "Gemiddeld" is the widest readout; `ru` and `el` for their scripts.
-- [ ] The Effects row names Crossfeed with a stereo file playing and not with a mono one, and
+      - Released on each change of word: stored 0.367 and 0.858. Captured at 0.0, 0.7 and 1.0 in
+        all four: every word fits, and the track ends at the same pixel in all twelve.
+- [x] The Effects row names Crossfeed with a stereo file playing and not with a mono one, and
       lists four names in the order ReplayGain, correction, equalizer, crossfeed.
-- [ ] The settings search finds the card by "headphone", "correction", "AutoEq" and "crossfeed".
-- [ ] The cost on the audio thread with the correction and ten bands on, against without.
+      - Captured, all four on: "ReplayGain, Headphone correction, Equalizer and Crossfeed" for a
+        stereo file, "ReplayGain, Headphone correction and Equalizer" for a mono one.
+- [x] The settings search finds the card by "headphone", "correction", "AutoEq" and "crossfeed".
+      - Each typed and captured: the card shows for all four.
+- [x] The cost on the audio thread with the correction and ten bands on, against without.
+      - `cpal_alsa_out` at 48 kHz, six 20 s windows each: 4.81 ms/s off, 5.20 ms/s at Strong
+        (0.48 % and 0.52 % of a core); 74.7 against 76.3 M instructions/s, about 33 a frame.
 
 ### Tests
 
@@ -413,7 +566,8 @@ that phase.
 - **800 lines:** `equalizer.rs` (661, 679 after Phase 2) gains the scratch and the stage's hooks
   only; the stage is its own module. `backend/mod.rs` (677, 683 after Phase 3) renames a field.
   `library/playback.rs` (567, 573 after Phase 3) gains one setter. `output-section.slint` (453)
-  gains a name and a chain.
+  gains a name and a chain. Phase 5's files have room: `limiter.rs` 68, `alsa.rs` 547, `voice.rs`
+  593, `output/mod.rs` 539, `wasapi.rs` 610, `backend/output.rs` 479.
 - **Memory:** one f64 filter and a few scalars per source; nothing to measure past the hand tests.
 - **Lock order** (ADR 0035) is unchanged: the renamed lock sits where the correction's did.
 - **The live public release:** off by default; `crossfeed` is `#[serde(default)]`. `eq.json` has
