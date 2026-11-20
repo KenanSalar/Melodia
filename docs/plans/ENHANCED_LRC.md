@@ -8,9 +8,9 @@ Status: **planned; Phase 1 next** · Created: 2026-11-20 · Branch `feat/enhance
 Issue [#178](https://github.com/KenanSalar/Melodia/issues/178), from the request in
 [#177](https://github.com/KenanSalar/Melodia/issues/177).
 
-> Verified **2026-11-20** against this tree at `12da8f17`; lofty 0.25.5 and Slint 1.18.1 in the
-> registry sources (`i-slint-compiler`, `i-slint-core`, `i-slint-common`, parley 0.11.1), with
-> 1.19.0's `StyledText` declaration for #176; and the rox, sonora, Strawberry and fooyin checkouts
+> Verified **2026-11-20** against `main` at `ccce7ace` (#180); lofty 0.25.5 and Slint 1.19.0 in
+> the registry sources (`i-slint-compiler`, `i-slint-core`, `i-slint-common`,
+> `i-slint-renderer-femtovg`, parley 0.12.0); and the rox, sonora, Strawberry and fooyin checkouts
 > (no termusic clone is on disk).
 
 ---
@@ -68,7 +68,7 @@ in every format, where an M4A or a FLAC can keep an old one today.
   `:104`; `entities/lyrics.rs:126`), which breaks on `\n` and `\r\n` only. A CR-only file is one
   line: only its leading stamps are read, `[offset:]` is lost (`bracketed` wants a whole line,
   `lrc.rs:113-115`), and one opening with `[ti:]` reads as untimed.
-- **Holds: only the first entry is read.** `lyrics_from` (`tag_writer.rs:475-480`) takes
+- **Holds: only the first entry is read.** `lyrics_from` (`tag_writer.rs:475-479`) takes
   `Tag::get_string`, which is `items.iter().find` (`lofty tag/mod.rs:328-339`). lofty keeps every
   entry in the generic tag: each `USLT` differing in language or description
   (`id3/v2/tag.rs:800-829`), each Vorbis `LYRICS`, each `©lyr`, so `Tag::get_strings`
@@ -82,36 +82,46 @@ in every format, where an M4A or a FLAC can keep an old one today.
   unconfirmed: Phase 3 checks it first.
 - **Narrows the design: "anything Markdown would treat as formatting has to be escaped, and a line
   that still can't be read falls back".** `@markdown("…\{expr}…")` hands a string through
-  `StringToStyledText` (`i-slint-compiler passes/resolving.rs:1363-1371`), which is
-  `StyledText::from_plain_text` and never parsed (`i-slint-core styled_text.rs:185-195`). Only the
+  `StringToStyledText` (`i-slint-compiler passes/resolving.rs:1493-1506`), which is
+  `StyledText::from_plain_text` and never parsed (`i-slint-core styled_text.rs:267-277`). Only the
   template is Markdown, and the `.slint` build checks it. So the lyric needs no escaping and every
-  line draws: no escaper and no fallback.
+  line draws: no escaper and no fallback. A span around `\{expr}` still covers what it splices, its
+  range read off the text's length at each tag (`i-slint-common styled_text.rs:497`, `:526`).
 - **Narrows the design further: one layer, not two.** The issue stacks two copies so the colours
   stay the theme's. A colour can be interpolated into the markup instead: `<font color="\{expr}">`
-  takes an expression converted to `color` (`resolving.rs:1318-1358`), and a brush converts
-  (`langtype.rs:294`), warned only for a gradient literal (`expression_tree.rs:1616-1627`). The
+  takes an expression converted to `color` (`resolving.rs:1481-1491`), and a brush converts
+  (`langtype.rs:311`), warned only for a gradient literal (`expression_tree.rs:1112-1125`). The
   binding reads the brush each time it is evaluated, so a theme change and the miniplayer's eased
   ink still reach it. One `StyledText` draws the sung row: half the glyphs of two layers, nothing
   to keep aligned, and no wrapper element.
-- **Holds: no font weight.** `StyledText`'s font request passes none (`items/text.rs:394-406`);
-  `**…**` sets bold.
+- **Holds: no font weight.** `StyledText`'s font request passes none (`items/text.rs:513-524`);
+  `**…**` sets bold (`textlayout/sharedparley/shaping.rs:193-198`).
 - **Holds: it clips rather than elides.** `overflow()` is fixed at `Clip` and `wrap()` at word wrap
-  (`items/text.rs:437-443`).
+  (`items/text.rs:555-561`).
 - **Holds: a colour span moves no glyph.** It changes only the brush, and parley breaks a shaping
-  run only on size, locale, variations, features or spacing (`parley shape/mod.rs:127-139`). So a
+  run only on size, locale, variations, features or spacing (`parley shape/mod.rs:151-160`). So a
   syllable stamp inside an Arabic word keeps its joining.
-- **New: a transparent text colour returns before any shaping** (`textlayout/sharedparley.rs:148-152`,
-  ahead of the layout at `:181`). That is how the sung row's `Text` yields to the `StyledText`:
-  `visible` would add a `Clip` element to every row (`passes/visible.rs`), and an `if` a
+- **New: a transparent text colour returns before any shaping** (`textlayout/sharedparley.rs:234-238`,
+  ahead of the layout at `:265`). That is how the sung row's `Text` yields to the `StyledText`:
+  `visible` would add a `Clip` element to every row (`passes/visible.rs:92-98`), and an `if` a
   sub-component.
+- **New: the `if` stays out of the row's size only by pinning `x` and `y`.** At edition 1.19
+  (`melodia-ui/build.rs:17`) an `if` child folds into a plain parent's layout info
+  (`passes/default_geometry.rs:252-265`) unless it binds either (`:205-206`). Every part of the row
+  pins both (`lyrics-panel.slint:88-92`, the interlude's `if` at `:139-143`). Unpinned, a
+  `StyledText` whose width reads the row's would fold back into the row's own.
+- **Holds: a click on the sung row still seeks.** A `StyledText` accepts every press, move and
+  release (`items/text.rs:406-421`), but the sheet's one `TouchArea` lies over the scroller
+  (`lyrics-panel.slint:172-195`) and takes them first. The wheel it rejects, `StyledText` ignores.
 - **The cost of lighting a word.** FemtoVG redraws the whole window each frame (no partial
-  rendering in `i-slint-renderer-femtovg`), so each word lit is one frame. Shaped text is cached
-  per item and reshaped only when its text or font changes (`textlayout/sharedparley/cache.rs`), so
-  that frame reshapes the sung line alone. A property set to the value it holds marks nothing dirty
-  (`properties.rs:1047-1051`), so the 33 ms tick repaints nothing between words. Its magnitude
-  against a line-timed sheet is unmeasured: Phase 4 measures it.
-- **Holds: everything it uses is in 1.18.** `StyledText` is ungated in 1.18.1
-  (`builtin_elements.rs:1190-1265`); 1.19 adds only selection.
+  rendering, `i-slint-renderer-femtovg lib.rs:227-235`), so each word lit is one frame. Shaped
+  text is cached per item and reshaped only when something shaping read changes, the text and font
+  among it (`textlayout/sharedparley/cache.rs:220-227`), so that frame reshapes the sung line alone.
+  A property set to the value it holds marks nothing dirty (`properties.rs:1057-1068`), so the
+  33 ms tick repaints nothing between words. Its magnitude against a line-timed sheet is unmeasured:
+  Phase 4 measures it.
+- **Holds: everything it uses is stable in 1.19.0.** `StyledText` is ungated
+  (`builtin_elements.rs:1263-1365`), and what 1.19 added to it is selection, which this leaves off.
 - **Holds: cue sheet tracks stay out** (`library/lyrics/mod.rs:168-170`, the store alone).
 - **Narrows: no new clock.** The engine reports about once a second, but `follow` interpolates
   between reports (`follow.rs:116-148`) on the panel's 33 ms `Timer` while a timed sheet plays
@@ -182,10 +192,10 @@ in every format, where an M4A or a FLAC can keep an old one today.
 - The look: words already sung take `ink`, the colour the whole sung line takes today, and the
   words to come take the unsung rows' colour (`ink-muted.transparentize(0.2)`), so they match the
   lines around them. The whole line is bold, as the sung line is today. No accent colour and no
-  glow: Slint's `Text` and `StyledText` carry no blur, shadow or glow in 1.18.1 or 1.19.0, the
-  `drop-shadow-*` properties belonging to rectangles (`builtin_elements.rs`, Drop Shadows).
-- On the sung row of a word-timed line, one `StyledText` at the `Text`'s geometry, mounted behind
-  an `if` so only that row builds one:
+  glow: Slint's `Text` and `StyledText` carry no blur, shadow or glow in 1.19.0, the
+  `drop-shadow-*` properties belonging to rectangles (`passes/lower_shadows.rs:58-66`).
+- On the sung row of a word-timed line, one `StyledText` at the `Text`'s geometry, its `x` and `y`
+  pinned as the `Text`'s are, mounted behind an `if` so only that row builds one:
   `@markdown("**\{Lyrics.lit-words}<font color=\"\{root.ink-muted.transparentize(0.2)}\">\{Lyrics.unlit-words}</font>**")`,
   `default-color: root.ink`.
 - The row's `Text` goes transparent there, through the colour ternary it already has, and draws
@@ -213,8 +223,9 @@ in every format, where an M4A or a FLAC can keep an old one today.
 - Per 33 ms tick: a binary search over one row's word stamps, nothing allocated.
 - Per word lit: two short strings, one markup parse of a one-line template, one reshape of the
   sung line, and one window frame. Phase 4 measures that against a line-timed sheet.
-- Per theme change or miniplayer ink fade: the sung row re-parses its template each frame of the
-  fade, the colour being part of its text.
+- Per theme change or miniplayer ink fade: the sung row re-parses its template and reshapes its
+  line each frame of the fade, the dim colour being part of its text (`default-color` is read only
+  at draw).
 
 ---
 
@@ -268,7 +279,7 @@ copied.
 | `melodia-app/src/library/lyrics/mod.rs` | `read_local_text` through the chooser | 245 |
 | `melodia-store/src/media/ingest/tag_writer.rs` | every entry read; `Set` replacing them all | 484 |
 | `melodia-core/src/entities/tags.rs` | `FileTags.lyrics` as a list | 364 |
-| `melodia-views/src/ui/callbacks/tags/open.rs` | the Lyrics field through the chooser | 644 |
+| `melodia-views/src/ui/callbacks/tags/open.rs` | the Lyrics field through the chooser | 642 |
 | `melodia-views/src/ui/now_playing/lyrics/{mod,follow}.rs` | `Row`'s word stamps, the cut, its writes | 317, 238 |
 | `melodia-ui/ui/globals/lyrics.slint` | the three properties | 96 |
 | `melodia-ui/ui/components/now-playing/lyrics-panel.slint` | the sung row's `StyledText` | 280 |
@@ -284,7 +295,7 @@ Every file stays well under 800; `open.rs` grows by a line or two.
 
 ---
 
-## Phase 1: The two bugs (no Slint; can merge before #176)
+## Phase 1: The two bugs (no Slint)
 
 - [ ] `sheet_lines` in `entities/lyrics.rs`: `str::lines`, each line split again at a lone `\r`, so
       `\n` and `\r\n` text splits exactly as today. `lrc.rs`' three sites and `carries_gloss` take it.
@@ -324,18 +335,17 @@ follow the type.
 **Hand check:** a file with plain lyrics ahead of a timed copy follows the song, and Edit Tags
 opens on the timed one.
 
-## Phase 4: Lighting the words (`melodia-ui`, `melodia-views`; after #176)
+## Phase 4: Lighting the words (`melodia-ui`, `melodia-views`)
 
-- [ ] Merge `main` once #176 is on it, and build on Slint 1.19.
 - [ ] `Row`'s word stamps; `LyricsUi`'s last published row and cut; the cut in `write_active`,
       written on change and reset where `clear` resets the sung row.
 - [ ] `Lyrics`' three properties.
 - [ ] The sung row's `StyledText` behind its `if`, and the row's `Text` transparent there.
 - [ ] Docs: `README.md`'s lyrics lines (18, 163) say a sheet with word times follows word by word;
       `.claude/rules/slint-pitfalls.md`'s Text section takes `StyledText`: it clips at its box,
-      takes no weight, draws none of its spans under a transparent `default-color`, and
-      `@markdown` interpolates a string as plain text and a brush as a colour. The panel's header
-      note holds (no `changed`, no `animate`).
+      takes no weight, draws none of its spans under a transparent `default-color`, accepts every
+      press so a `TouchArea` beneath it gets none, and `@markdown` interpolates a string as plain
+      text and a brush as a colour. The panel's header note holds (no `changed`, no `animate`).
 - [ ] Measure, release build, dev data folder, Now Playing's lyrics open, the same 60 s of one
       track three times: the sheet with word times, the same sheet with them stripped, and lyrics
       off. CPU from `/proc/<pid>/stat` across each run. Resolves whether lighting words costs
@@ -375,7 +385,6 @@ In the dev data folder. Each against `main`'s behaviour where it should match.
 
 - Every phase: `cargo fmt --all`, `cargo clippy --all-targets --locked --workspace -- -D warnings`,
   `cargo test --locked --workspace`, then `code-style.md`'s comment audit.
-- Phases 1 to 3 need no Slint and can merge ahead of #176; Phase 4 waits for it.
 - Memory: a short list per line of the one resident sheet; no RSS check owed.
 - No ADR: the reasons live at their anchors.
 - #177 isn't linked to the branch: GitHub's API links a branch to an issue only by creating it, so
