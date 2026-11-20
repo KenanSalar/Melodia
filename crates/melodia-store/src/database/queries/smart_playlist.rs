@@ -6,7 +6,7 @@
 
 use std::hash::{BuildHasher, BuildHasherDefault, DefaultHasher};
 
-use jiff::{SignedDuration, Timestamp};
+use jiff::Timestamp;
 use rusqlite::{Connection, Transaction};
 
 use crate::database::DbPool;
@@ -19,6 +19,7 @@ use melodia_core::entities::smart_criteria::{
 };
 use melodia_core::entities::track;
 use melodia_core::error::AppError;
+use melodia_core::utils::{days_before, rfc3339};
 
 /// A smart playlist's membership as ids, in the criteria's order and under its cap, for the card
 /// menu's batch actions. The detail page reads the same membership through its keyset
@@ -532,9 +533,7 @@ const MAX_RELATIVE_DAYS: i64 = 3_600_000;
 /// The RFC 3339 cutoff `now - days` for the relative-date operators.
 fn cutoff_rfc3339(days: i64) -> String {
     let days = days.clamp(0, MAX_RELATIVE_DAYS);
-    let now = Timestamp::now();
-    let cutoff = now.checked_sub(SignedDuration::from_hours(days * 24)).unwrap_or(now);
-    melodia_core::utils::rfc3339(cutoff)
+    rfc3339(days_before(Timestamp::now(), days))
 }
 
 #[cfg(test)]

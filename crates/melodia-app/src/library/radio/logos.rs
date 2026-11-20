@@ -10,7 +10,7 @@ use crate::state::AppState;
 use melodia_artwork::media::image::logo_tile;
 use melodia_core::entities::radio::{self, StoredLogo};
 use melodia_core::error::AppError;
-use melodia_core::utils::rfc3339;
+use melodia_core::utils::{days_before, rfc3339};
 use melodia_net::media::fetch::station_logo;
 use melodia_store::database::{DbPool, queries};
 
@@ -77,15 +77,11 @@ pub async fn prune_logo_answers(db: &DbPool) -> Result<u64, AppError> {
     let now = Timestamp::now();
     queries::radio::prune_logo_answers(
         db,
-        days_before(now, LOGO_MISS_MAX_AGE_DAYS),
-        days_before(now, LOGO_CACHE_MAX_AGE_DAYS),
+        rfc3339(days_before(now, LOGO_MISS_MAX_AGE_DAYS)),
+        rfc3339(days_before(now, LOGO_CACHE_MAX_AGE_DAYS)),
         LOGO_CACHE_MAX_BYTES,
     )
     .await
-}
-
-fn days_before(now: Timestamp, days: i64) -> String {
-    rfc3339(now.checked_sub(SignedDuration::from_hours(days * 24)).unwrap_or(now))
 }
 
 /// Carry one URL's answer back to the table the next session reads: **the one writer of an

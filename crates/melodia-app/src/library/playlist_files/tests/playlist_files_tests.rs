@@ -195,12 +195,11 @@ fn a_suggested_file_name_has_no_folder_for_a_save_dialog_to_read_into() {
 }
 
 #[test]
-fn a_suggested_archive_name_is_dated_from_the_instant_passed_in() {
-    let named = civil::date(2026, 3, 7)
-        .at(12, 0, 0, 0)
-        .to_zoned_datetime(TimeZone::system())
-        .map(|now| suggested_archive_name(&now));
-    assert_eq!(named.ok().as_deref(), Some("melodia-playlists-2026-03-07.zip"));
+fn a_suggested_archive_name_is_dated_from_the_instant_passed_in() -> Result<(), jiff::Error> {
+    let now = civil::date(2026, 3, 7).at(12, 0, 0, 0).to_zoned_datetime(TimeZone::system())?;
+
+    assert_eq!(suggested_archive_name(&now), "melodia-playlists-2026-03-07.zip");
+    Ok(())
 }
 
 #[test]
