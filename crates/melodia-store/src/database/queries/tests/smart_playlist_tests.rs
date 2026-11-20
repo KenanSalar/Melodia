@@ -1,5 +1,7 @@
 use std::collections::HashSet;
 
+use jiff::{SignedDuration, Timestamp};
+
 use crate::database::DbPool;
 use crate::database::queries;
 use crate::database::queries::fixtures::{
@@ -17,10 +19,10 @@ use melodia_core::entities::track_list::{SortDir, TrackListScope, TrackOrder, Tr
 use melodia_core::error::AppError;
 use melodia_core::utils::needle::Needle;
 
-/// RFC-3339 timestamp `n` days before now — for staging `last_played`.
+/// RFC 3339 timestamp `n` days before now, for staging `last_played`.
 fn days_ago(n: i64) -> String {
-    let delta = chrono::TimeDelta::try_days(n).unwrap_or_else(chrono::TimeDelta::zero);
-    (chrono::Utc::now() - delta).to_rfc3339()
+    let now = Timestamp::now();
+    melodia_core::utils::rfc3339(now.checked_sub(SignedDuration::from_hours(n * 24)).unwrap_or(now))
 }
 
 /// Stage playback stats the scan-insert helper leaves at defaults.

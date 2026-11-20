@@ -11,7 +11,7 @@ use std::collections::HashSet;
 use std::ffi::OsStr;
 use std::path::{Path, PathBuf};
 
-use chrono::{DateTime, Local, NaiveDateTime};
+use jiff::{ZonedDateTime, civil};
 
 use super::import::files_opened_by;
 use melodia_core::entities::cue::CueTrack;
@@ -105,8 +105,8 @@ pub fn suggested_file_name(playlist_name: &str) -> String {
 }
 
 /// Dated, so a second backup doesn't open on the first one's name.
-pub fn suggested_archive_name(now: DateTime<Local>) -> String {
-    format!("melodia-playlists-{}.{ARCHIVE_EXTENSION}", now.format("%Y-%m-%d"))
+pub fn suggested_archive_name(now: &ZonedDateTime) -> String {
+    format!("melodia-playlists-{}.{ARCHIVE_EXTENSION}", now.strftime("%Y-%m-%d"))
 }
 
 /// Write one playlist to exactly `dest`, the save dialog having already asked before overwriting.
@@ -129,7 +129,7 @@ pub async fn export_playlists_to_archive(
     playlist_ids: &[i64],
     dest: &Path,
 ) -> Result<ExportOutcome, AppError> {
-    write_archive(db, playlist_ids, dest, Local::now().naive_local()).await
+    write_archive(db, playlist_ids, dest, ZonedDateTime::now().datetime()).await
 }
 
 /// Takes the instant its entries are dated, so a test can pin it.
@@ -137,7 +137,7 @@ async fn write_archive(
     db: &DbPool,
     playlist_ids: &[i64],
     dest: &Path,
-    modified: NaiveDateTime,
+    modified: civil::DateTime,
 ) -> Result<ExportOutcome, AppError> {
     let mut entries = Vec::with_capacity(playlist_ids.len());
     let mut used = HashSet::new();

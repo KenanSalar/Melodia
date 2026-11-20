@@ -10,7 +10,7 @@ use std::io::{Read, Seek, SeekFrom};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
-use chrono::{DateTime, Local};
+use jiff::ZonedDateTime;
 
 use crate::services::settings::read_settings;
 use crate::state::AppState;
@@ -32,8 +32,8 @@ const MAX_CRASH_REPORT_BYTES: u64 = 16 * 1024;
 const MAX_LOG_TAIL_BYTES: u64 = 256 * 1024;
 
 /// The save dialog's pre-filled name, in local time like everything else the trio writes.
-pub fn suggested_file_name(now: DateTime<Local>) -> String {
-    format!("melodia-diagnostics-{}.txt", now.format(FILE_TS_FORMAT))
+pub fn suggested_file_name(now: &ZonedDateTime) -> String {
+    format!("melodia-diagnostics-{}.txt", now.strftime(FILE_TS_FORMAT))
 }
 
 /// The report's text; where it lands is the caller's.
@@ -81,7 +81,7 @@ fn assemble(paths: &Paths, library: &LibraryFacts) -> String {
          {facts}\
          data dir  : {data_dir}\n\
          {library}{settings}{crashes}{logs}",
-        facts = crash_report::system_facts(Local::now()),
+        facts = crash_report::system_facts(&ZonedDateTime::now()),
         // Not left to the boot log, whose tail budget drops it from the long sessions worth
         // reporting, nor to `system_facts`, which has no `Paths`.
         data_dir = display_path(&paths.data_dir),

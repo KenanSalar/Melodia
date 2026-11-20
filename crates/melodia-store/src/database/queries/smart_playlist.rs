@@ -6,6 +6,7 @@
 
 use std::hash::{BuildHasher, BuildHasherDefault, DefaultHasher};
 
+use jiff::{SignedDuration, Timestamp};
 use rusqlite::{Connection, Transaction};
 
 use crate::database::DbPool;
@@ -525,14 +526,15 @@ fn order_by_fragment(limit: Option<&SmartLimit>) -> &'static str {
     }
 }
 
-/// The most days a relative-date rule reaches back, so `TimeDelta::try_days` can't overflow.
+/// The most days a relative-date rule reaches back, so the cutoff stays inside `Timestamp`'s range.
 const MAX_RELATIVE_DAYS: i64 = 3_600_000;
 
 /// The RFC 3339 cutoff `now - days` for the relative-date operators.
 fn cutoff_rfc3339(days: i64) -> String {
     let days = days.clamp(0, MAX_RELATIVE_DAYS);
-    let delta = chrono::TimeDelta::try_days(days).unwrap_or_else(chrono::TimeDelta::zero);
-    (chrono::Utc::now() - delta).to_rfc3339()
+    let now = Timestamp::now();
+    let cutoff = now.checked_sub(SignedDuration::from_hours(days * 24)).unwrap_or(now);
+    melodia_core::utils::rfc3339(cutoff)
 }
 
 #[cfg(test)]

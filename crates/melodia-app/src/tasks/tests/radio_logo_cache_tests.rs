@@ -22,7 +22,7 @@ const LONG_SPENT: &str = "2020-01-01T00:00:00.000+00:00";
 
 /// Answered just now, so the same pass keeps it.
 fn answered_now() -> String {
-    chrono::Utc::now().to_rfc3339()
+    melodia_core::utils::now_rfc3339()
 }
 
 struct Store {

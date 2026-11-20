@@ -37,16 +37,17 @@ pub fn compute_file_hash(path: &Path) -> Result<String, AppError> {
 /// Formats `meta`'s mtime as the RFC 3339 string `date_modified` stores, or `None` where it is
 /// unavailable or out of range.
 ///
-/// The one spelling of that format, since `scanner::file_is_current` compares against the stored
-/// string byte for byte. Takes the `Metadata` so a caller that already `stat`ed doesn't again.
+/// Spelled by [`melodia_core::utils::rfc3339`], which `scanner::file_is_current` relies on. Takes
+/// the `Metadata` so a caller that already `stat`ed doesn't again.
 pub fn date_modified_from_metadata(meta: &std::fs::Metadata) -> Option<String> {
     meta.modified()
         .ok()
         .and_then(|mtime| mtime.duration_since(UNIX_EPOCH).ok())
         .and_then(|dur| {
-            chrono::DateTime::from_timestamp(i64::try_from(dur.as_secs()).ok()?, dur.subsec_nanos())
+            let nanos = i32::try_from(dur.subsec_nanos()).ok()?;
+            jiff::Timestamp::new(i64::try_from(dur.as_secs()).ok()?, nanos).ok()
         })
-        .map(|dt| dt.to_rfc3339())
+        .map(melodia_core::utils::rfc3339)
 }
 
 /// [`date_modified_from_metadata`] for a caller holding no `Metadata`, at the cost of a `stat`.

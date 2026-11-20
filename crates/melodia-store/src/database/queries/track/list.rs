@@ -99,9 +99,9 @@ static RECENTLY_PLAYED: LazyLock<String> = LazyLock::new(|| {
 /// The `limit` most recently played tracks, newest first, which the view re-sorts and filters in
 /// memory rather than re-querying.
 ///
-/// RFC 3339 `last_played` sorts chronologically as text whatever width `AutoSi` gives the fraction,
-/// `+` sorting below every digit. The partial `idx_tracks_last_played` leaves out the never-played,
-/// and `id DESC` settles a flush's shared stamp in the order that index's walk returns anyway.
+/// `last_played` sorts chronologically as text, as [`melodia_core::utils::rfc3339`] spells it. The
+/// partial `idx_tracks_last_played` leaves out the never-played, and `id DESC` settles a flush's
+/// shared stamp in the order that index's walk returns anyway.
 pub async fn get_recently_played(
     db: &DbPool,
     limit: i64,

@@ -4,6 +4,7 @@
 use std::rc::Rc;
 
 use async_compat::Compat;
+use jiff::Timestamp;
 use slint::{ComponentHandle, ModelRc, SharedString, VecModel, Weak};
 
 use crate::ui::util::{clamp_i64_to_i32, count_as_i32};
@@ -129,27 +130,26 @@ pub fn format_last_scanned(stamp: Option<&str>) -> String {
     let Some(stamp) = stamp else {
         return String::new();
     };
-    let Ok(parsed) = chrono::DateTime::parse_from_rfc3339(stamp) else {
+    let Ok(parsed) = stamp.parse::<Timestamp>() else {
         return String::new();
     };
-    let now = chrono::Utc::now();
-    let elapsed = now.signed_duration_since(parsed.with_timezone(&chrono::Utc));
-    if elapsed.num_seconds() < 60 {
+    let elapsed = Timestamp::now().duration_since(parsed);
+    if elapsed.as_secs() < 60 {
         return "scanned just now".to_owned();
     }
-    let minutes = elapsed.num_minutes();
+    let minutes = elapsed.as_mins();
     if minutes < 60 {
         return format!("scanned {minutes} minute{} ago", plural(minutes));
     }
-    let hours = elapsed.num_hours();
+    let hours = elapsed.as_hours();
     if hours < 24 {
         return format!("scanned {hours} hour{} ago", plural(hours));
     }
-    let days = elapsed.num_days();
+    let days = hours / 24;
     if days < 7 {
         return format!("scanned {days} day{} ago", plural(days));
     }
-    format!("scanned {}", parsed.format("%Y-%m-%d"))
+    format!("scanned {}", parsed.strftime("%Y-%m-%d"))
 }
 
 fn plural(n: i64) -> &'static str {

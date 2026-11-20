@@ -1,6 +1,7 @@
 use std::path::Path;
 
-use chrono::{Local, TimeZone};
+use jiff::civil;
+use jiff::tz::TimeZone;
 
 use super::{
     FolderCounts, LibraryFacts, Paths, assemble, crash_block, head_of, library_block, log_section,
@@ -289,8 +290,9 @@ fn the_settings_block_is_an_allowlist() -> Result<(), AppError> {
 /// saved, so the suggested name has to say what it is *and* when — stamped the
 /// same way a crash report's name is, since the two get read together.
 #[test]
-fn the_suggested_name_carries_a_sortable_local_stamp() {
-    let now = Local.with_ymd_and_hms(2026, 8, 6, 14, 30, 5).single().unwrap_or_else(Local::now);
+fn the_suggested_name_carries_a_sortable_local_stamp() -> Result<(), jiff::Error> {
+    let now = civil::date(2026, 8, 6).at(14, 30, 5, 0).to_zoned_datetime(TimeZone::system())?;
 
-    assert_eq!(suggested_file_name(now), "melodia-diagnostics-20260806-143005.txt");
+    assert_eq!(suggested_file_name(&now), "melodia-diagnostics-20260806-143005.txt");
+    Ok(())
 }

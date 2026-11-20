@@ -45,10 +45,9 @@ ignore = [
     # revisit: 2026-12-11
     "RUSTSEC-2026-0441",
 
-    # chrono 0.4.45 unmaintained: Slint 1.19.0's i-slint-core and flexi_logger 0.31.10 require it at
-    # their newest releases, so dropping our own uses and zip's `chrono` feature still leaves it in
-    # the lockfile. A vulnerability would arrive as its own advisory, which this doesn't silence.
-    # Leaves once Slint and flexi_logger drop it, our own uses following.
+    # chrono 0.4.45 unmaintained: Slint 1.19.0's i-slint-core requires it at its newest release and
+    # is its only holder, no Melodia crate naming it. A vulnerability would arrive as its own
+    # advisory, which this doesn't silence. Leaves once Slint drops it.
     # revisit: 2026-12-11
     "RUSTSEC-2026-0543",
 ]

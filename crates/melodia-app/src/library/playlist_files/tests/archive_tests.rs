@@ -1,7 +1,5 @@
 use std::io::Cursor;
 
-use chrono::NaiveDate;
-
 use super::*;
 
 /// What a zip entry is written as, for the archives production's `write` can't produce.
@@ -31,7 +29,7 @@ fn entry(name: &str, text: &str) -> Entry {
     Entry { name: name.to_owned(), text: text.to_owned() }
 }
 
-fn written(entries: &[Entry], modified: NaiveDateTime) -> Result<Vec<u8>, AppError> {
+fn written(entries: &[Entry], modified: civil::DateTime) -> Result<Vec<u8>, AppError> {
     let mut out = Cursor::new(Vec::new());
     write(&mut out, entries, modified)?;
     Ok(out.into_inner())
@@ -50,10 +48,8 @@ fn modified_of_first_entry(bytes: Vec<u8>) -> Result<Option<zip::DateTime>, AppE
     Ok(file.last_modified())
 }
 
-fn at(year: i32, month: u32, day: u32, hour: u32, minute: u32, second: u32) -> NaiveDateTime {
-    NaiveDate::from_ymd_opt(year, month, day)
-        .and_then(|date| date.and_hms_opt(hour, minute, second))
-        .unwrap_or_default()
+fn at(year: i16, month: i8, day: i8, hour: i8, minute: i8, second: i8) -> civil::DateTime {
+    civil::DateTime::new(year, month, day, hour, minute, second, 0).unwrap_or_default()
 }
 
 // --- TextBudget ---------------------------------------------------------------
@@ -98,7 +94,7 @@ fn a_spent_budget_still_fits_nothing_but_nothing() {
 fn an_archive_reads_back_the_entries_it_was_written_with_in_order() -> Result<(), AppError> {
     let bytes = written(
         &[entry("Road.m3u8", "#EXTM3U\n#PLAYLIST:Road\n"), entry("Mix.m3u8", "#EXTM3U\n")],
-        NaiveDateTime::default(),
+        civil::DateTime::default(),
     )?;
 
     let (entries, unreadable) = read_back(bytes)?;
@@ -116,7 +112,7 @@ fn an_archive_reads_back_the_entries_it_was_written_with_in_order() -> Result<()
 
 #[test]
 fn an_archive_written_with_nothing_reads_as_no_entries() -> Result<(), AppError> {
-    let (entries, unreadable) = read_back(written(&[], NaiveDateTime::default())?)?;
+    let (entries, unreadable) = read_back(written(&[], civil::DateTime::default())?)?;
     assert_eq!(entries, [] as [(String, String); 0]);
     assert_eq!(unreadable, 0);
     Ok(())
