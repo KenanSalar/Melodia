@@ -1,5 +1,5 @@
 //! Tests for where the output choice sends a shared stream, and at which rate, both of which differ
-//! by platform, and for which device it is heard on, which keys the headphone correction.
+//! by platform, and for which device it is heard on.
 
 use melodia_audio::player::source::audio::SampleRate;
 use melodia_audio::player::source::decode_ahead;
@@ -11,7 +11,7 @@ const CARD: &str = "hw:CARD=UMC22,DEV=0";
 #[cfg(target_os = "windows")]
 const ENDPOINT: &str = "{0.0.0.00000000}.{a-test-endpoint}";
 
-/// An exclusive claim plays on the card it names, so that card's correction is the one heard.
+/// An exclusive claim plays on the card it names, so that card's settings play.
 #[test]
 fn an_exclusive_claim_is_heard_on_its_card() {
     for (chosen, heard) in [(Some(CARD), Some(CARD)), (None, None)] {
@@ -26,7 +26,7 @@ fn an_exclusive_claim_is_heard_on_its_card() {
 }
 
 /// Shared output on Linux reaches the sound server's default whichever card the Output card names,
-/// so it plays System default's correction.
+/// so it plays System default's settings.
 #[cfg(target_os = "linux")]
 #[test]
 fn a_shared_stream_on_linux_is_heard_on_system_default() {
@@ -39,7 +39,7 @@ fn a_shared_stream_on_linux_is_heard_on_system_default() {
     assert_eq!(choice.heard_device(), None);
 }
 
-/// Windows opens a shared stream on the picked endpoint, so that endpoint's correction is heard.
+/// Windows opens a shared stream on the picked endpoint, so that endpoint's settings play.
 #[cfg(target_os = "windows")]
 #[test]
 fn a_shared_stream_on_windows_is_heard_on_the_chosen_device() {
