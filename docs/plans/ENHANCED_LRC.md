@@ -138,8 +138,8 @@ in every format, where an M4A or a FLAC can keep an old one today.
   stays the one source of what is drawn: the lit part is `text[..cut]`, cut at the first word not
   yet due.
 - Text before the first word stamp lights with the line's own stamp.
-- Each stamp taken out leaves one space where either side had whitespace and none where neither
-  did, so a syllable stamp inside a word joins it. Phase 1 lands that rule on today's stripper.
+- Each stamp taken out leaves one of the seam's own whitespace characters, none where it had none,
+  so a syllable stamp inside a word joins it. Phase 1 lands that rule on today's stripper.
 - A stamp inside a `^` gloss is dropped, as today; the gloss lights whole with its line.
 - `Lyrics::timing()` answers `Plain`, `Lines` or `Words`, ordered; `is_synced` reads it.
 - Parsed once per track change, off the UI thread, as today (`read_local` in `spawn_blocking`).
@@ -273,8 +273,8 @@ copied.
 
 | File | Owns, after this | Lines today |
 |---|---|---|
-| `melodia-core/src/entities/lyrics.rs` | `WordStamp`, `LyricLine.words`, `Timing`, `sheet_lines` | 131 |
-| `melodia-app/src/library/lyrics/lrc.rs` | the word grammar beside the line grammar it shares `stamp_ms` with: the split, the rebase, the end stamp, the span check | 201 |
+| `melodia-core/src/entities/lyrics.rs` | `WordStamp`, `LyricLine.words`, `Timing`, `sheet_lines` | 137 |
+| `melodia-app/src/library/lyrics/lrc.rs` | the word grammar beside the line grammar it shares `stamp_ms` with: the split, the rebase, the end stamp, the span check | 209 |
 | `melodia-app/src/library/lyrics/embedded.rs` | the one chooser over a tag's entries | 17 |
 | `melodia-app/src/library/lyrics/mod.rs` | `read_local_text` through the chooser | 245 |
 | `melodia-store/src/media/ingest/tag_writer.rs` | every entry read; `Set` replacing them all | 484 |
@@ -299,7 +299,7 @@ Every file stays well under 800; `open.rs` grows by a line or two.
 
 - [x] `sheet_lines` in `entities/lyrics.rs`: `str::lines`, each line split again at a lone `\r`, so
       `\n` and `\r\n` text splits exactly as today. `lrc.rs`' three sites and `carries_gloss` take it.
-- [x] `strip_word_stamps` leaves one space at a seam with whitespace on either side.
+- [x] `strip_word_stamps` leaves one of a seam's own whitespace characters, none where it had none.
 - [x] Docs: `strip_word_stamps`' and `sheet_lines`'. `lrc.rs`' `//!` and `carries_gloss`' hold, the
       line rule's anchor being `sheet_lines`.
 
@@ -311,7 +311,9 @@ Every file stays well under 800; `open.rs` grows by a line or two.
       `words: Vec::new()`: `lrc.rs` and three test files (`entities/tests/lyrics_tests.rs`,
       `romanize_tests.rs`, the views' `lyrics_tests.rs`).
 - [ ] `strip_word_stamps` becomes a split returning the text and its stamps; the rebase per line
-      stamp; the end stamp into `end_ms`; `[offset:]` through the subtraction the line takes.
+      stamp; the end stamp into `end_ms`; `[offset:]` through the subtraction the line takes. Word
+      offsets index the text after `parse`'s `trim()` (`lrc.rs:42`): a stamp at a line's edge
+      keeps the whitespace beside it, which the trim takes off.
 - [ ] The span check after the sort.
 - [ ] Docs: `LyricLine`'s doc (`words`, and `end_ms`'s two sources), `lrc.rs`' `//!`.
 

@@ -173,9 +173,9 @@ fn fraction_ms(fraction: &str) -> Option<i64> {
     Some(ms)
 }
 
-/// Drops enhanced-LRC word stamps (`<mm:ss.xx>`), which nothing draws yet, leaving one space where
-/// either side of a stamp had whitespace and none where neither did, so a syllable stamp joins its
-/// word. A `<` that is not a stamp stays put, so a line with `<3` in it survives.
+/// Drops enhanced-LRC word stamps (`<mm:ss.xx>`), which nothing draws yet. A seam keeps one of
+/// its own whitespace characters, a full-width space included, and none where it had none, so a
+/// syllable stamp joins its word. A `<` that is not a stamp stays put, so `<3` survives.
 fn strip_word_stamps(line: &str) -> Cow<'_, str> {
     if !line.contains('<') {
         return Cow::Borrowed(line);
@@ -192,11 +192,12 @@ fn strip_word_stamps(line: &str) -> Cow<'_, str> {
         }
         out.push_str(&rest[..open]);
         rest = &after[close + 1..];
-        let spaced = out.ends_with(char::is_whitespace) || rest.starts_with(char::is_whitespace);
+        let before = out.chars().next_back().filter(|c| c.is_whitespace());
+        let seam = before.or_else(|| rest.chars().next().filter(|c| c.is_whitespace()));
         out.truncate(out.trim_end().len());
         rest = rest.trim_start();
-        if spaced {
-            out.push(' ');
+        if let Some(seam) = seam {
+            out.push(seam);
         }
     }
     out.push_str(rest);

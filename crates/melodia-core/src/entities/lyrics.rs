@@ -127,7 +127,7 @@ pub fn carries_gloss(text: &str) -> bool {
 }
 
 /// A sheet's lines, broken at `\n`, `\r\n` or a lone `\r`, the classic Mac OS break some taggers
-/// still write into an M4A. A final `\r` ends its line as a final `\n` does, adding no blank one.
+/// still write into an M4A. A `\r` closing the text, or doubled in `\r\r\n`, adds no blank line.
 pub fn sheet_lines(text: &str) -> impl Iterator<Item = &str> {
     text.lines().flat_map(|line| line.trim_suffix('\r').split('\r'))
 }
