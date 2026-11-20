@@ -311,7 +311,7 @@ fn the_top_tile_matches_artwork_image_and_the_genre_grid() {
 
     assert!(
         view.contains(&format!(
-            "tile-bg: Search.top-kind == \"genre\" ? @linear-gradient(135deg, \
+            "tile-bg: Search.top-kind == \"genre\" ? Theme.tile-gradient(\
              Search.top-tile-color-1, Search.top-tile-color-2) : {placeholder_bg};"
         )),
         "the tile's fill no longer pairs the hashed gradient with \

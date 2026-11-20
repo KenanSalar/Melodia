@@ -22,7 +22,7 @@ export component SourceArtwork inherits ArtworkImage {
     // For a station name with no letters to take initials from.
     fallback-icon: Player.vm.has_station ? "radio" : "music-note";
     tile-bg: Player.vm.has_station
-        ? @linear-gradient(135deg, Player.vm.radio.tile_color_1, Player.vm.radio.tile_color_2)
+        ? Theme.tile-gradient(Player.vm.radio.tile_color_1, Player.vm.radio.tile_color_2)
         : root.track-tile-bg;
     tile-icon-color: Player.vm.has_station ? Theme.tile-ink : root.track-tile-icon-color;
 }

@@ -1,6 +1,6 @@
 # CLAUDE.md
 
-Melodia, a cross-platform desktop music player: a Slint 1.18 UI over a pure-Rust backend, joined by
+Melodia, a cross-platform desktop music player: a Slint 1.19 UI over a pure-Rust backend, joined by
 direct calls and tokio channels. No WebView, and the only IPC is the single-instance socket.
 
 ## Where things go

@@ -147,6 +147,12 @@ export global Theme {
     // `ui::radio::identity` keeps the generated stops deep, so lowering those floors breaks it.
     out property <brush> tile-ink: #ffffff.transparentize(0.1);
 
+    // The name-hashed tile itself, one shape everywhere, so a genre or a station reads the same in
+    // its grid, its banner and Now Playing.
+    public pure function tile-gradient(first: color, second: color) -> brush {
+        return @linear-gradient(135deg, first, second);
+    }
+
     out property <length> pad-xs: 4px;
     out property <length> pad-sm: 8px;
     out property <length> pad-md: 12px;

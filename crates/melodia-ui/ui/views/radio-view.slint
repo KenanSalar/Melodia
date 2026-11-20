@@ -141,8 +141,7 @@ export component RadioView inherits Rectangle {
             // The card's own tile, so a station reads the same in the grid and the banner.
             fallback-text: Radio.detail-station.monogram;
             fallback-icon: "radio";
-            tile-bg: @linear-gradient(135deg,
-                Radio.detail-station.tile_color_1,
+            tile-bg: Theme.tile-gradient(Radio.detail-station.tile_color_1,
                 Radio.detail-station.tile_color_2);
             tile-icon-color: Theme.tile-ink;
             // The detail tier decodes at source size, so the pixel count is the 1:1 size. Read at

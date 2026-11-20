@@ -196,7 +196,7 @@ export global TagEditor {
 
 // Owned by `ui::settings::scrobbling_settings`. Last.fm takes two steps: `lastfm-open-auth()`
 // opens the approval page for a fresh token, and `lastfm-finish` trades it for a session. `error`
-// takes its line from the `err-*` callbacks, Slint 1.18 having no Rust-callable `tr()`.
+// takes its line from the `err-*` callbacks, Slint 1.19 having no Rust-callable `tr()`.
 export global ScrobbleUi {
     in-out property <int> lastfm-step;      // 0 = open browser, 1 = finish
     in-out property <string> lastfm-token;  // unauthorized token between steps

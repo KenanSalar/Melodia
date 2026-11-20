@@ -142,7 +142,7 @@ pub fn seed_category(ui: &AppWindow, persisted_key: &str) {
 pub fn install(ui: &AppWindow, state: &AppState) {
     let page = ui.global::<SettingsPage>();
 
-    // Slint 1.18 has no `.contains()` on a string, so every row's visibility test comes here, the
+    // Slint 1.19 has no `.contains()` on a string, so every row's visibility test comes here, the
     // filter boxes' own predicate, and an ASCII query reaches the accented catalogue labels.
     // Memoized against the raw needle: invoked per *field* rather than per pass, this is the one
     // `Needle` caller that can't hold a folded shadow.

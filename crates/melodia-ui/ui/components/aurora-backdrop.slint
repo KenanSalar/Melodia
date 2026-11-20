@@ -4,8 +4,8 @@ import { Theme } from "../theme.slint";
 // near-orthogonal, so each owns an edge and one corner shows the floor; four symmetric washes
 // would average to one flat tone whatever the record. CSS-convention degrees, as Slint takes them.
 //
-// **The far stop is this tint at zero alpha, never `transparent`**: FemtoVG interpolates straight
-// RGBA, so a fade to rgba(0,0,0,0) darkens the ramp instead of thinning it.
+// **A stop fades to this tint at zero alpha, never `transparent`**: an eased stop mixes through
+// `Color::mix`, which weighs RGB by alpha, so a fade to rgba(0,0,0,0) darkens on the way.
 //
 // **Both stops sit at the extents, which keeps FemtoVG on its two-stop path.** Inset either and
 // every sweep synthesizes a gradient texture, and the driver backs it with a slab it keeps.

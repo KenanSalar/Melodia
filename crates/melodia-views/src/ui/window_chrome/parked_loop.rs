@@ -1,9 +1,9 @@
 //! The Slint tick Win32's modal resize-and-move loop parks winit out of.
 //!
 //! Win32 pumps its own message loop for a whole drag, so winit never reaches the wait that emits
-//! `NewEvents`, the one place the backend runs `update_timers_and_animations`. Sizes and paints
-//! still arrive, so the layout tracks the pointer and only the decisions stall: every `Timer` and
-//! `changed` handler, the miniplayer swap and the grid column counts among them.
+//! `NewEvents`, and the backend runs `update_timers_and_animations` only there and after a posted
+//! closure. Sizes and paints still arrive, so the layout tracks the pointer and only the decisions
+//! stall: every `Timer` and `changed` handler, the miniplayer swap and the grid column counts.
 //!
 //! [`pump`] runs that tick off the events the modal loop still delivers, which stop with the
 //! pointer, and Slint's frame throttle is itself a `Timer`, so the swap would stop half faded. A

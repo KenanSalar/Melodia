@@ -168,8 +168,9 @@ paths:
 - **Fonts are imported, never registered from Rust**: a `.slint` file imports each face
   (`import "assets/fonts/vazirmatn/Vazirmatn-Regular.ttf";`), which embeds it at build time.
   `app-window.slint` imports the text faces and names them in `default-font-family`,
-  `material-icon.slint` the two icon faces. Slint 1.18 has no public registration API to reach
-  for instead. `scripts/patch_vazirmatn.py` argues the text faces and their patching, and
+  `material-icon.slint` the two icon faces. Slint 1.19's registration API sits behind the unstable
+  `unstable-fontique-012` feature, so there is nothing stable to reach for instead.
+  `scripts/patch_vazirmatn.py` argues the text faces and their patching, and
   `scripts/subset-icon-fonts.py` the icon subsets.
 
 ## Animations & Performance
