@@ -220,7 +220,7 @@ fn visible_ids(ui: &AppWindow, asking_scope: &str) -> Vec<i32> {
 
 /// A paged grid's ids, as the selection names them.
 fn card_ids<G: GridRow>(grid_rows: &ModelRc<G>, label: &str) -> Vec<i32> {
-    PagedGrid::installed(grid_rows, label).map(PagedGrid::card_ids).unwrap_or_default()
+    PagedGrid::installed(grid_rows, label).map_or_default(PagedGrid::card_ids)
 }
 
 /// Flatten a chunked grid model back into card order. Only the shift branch pays for it.

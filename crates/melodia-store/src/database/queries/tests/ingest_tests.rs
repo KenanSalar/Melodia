@@ -34,7 +34,7 @@ async fn ingest_empty_list_returns_zero() -> Result<(), AppError> {
     let db = DbPool::test_pool().await?;
     let result = folder_scan(&db, Vec::new()).await?;
     assert_eq!(result.inserted_count, 0);
-    assert!(result.inserted_track_ids.is_empty());
+    assert_eq!(result.inserted_track_ids, [] as [i64; 0]);
     Ok(())
 }
 
@@ -144,7 +144,7 @@ async fn ingest_skips_existing_track() -> Result<(), AppError> {
     let result = folder_scan(&db, files).await?;
 
     assert_eq!(result.inserted_count, 0);
-    assert!(result.inserted_track_ids.is_empty());
+    assert_eq!(result.inserted_track_ids, [] as [i64; 0]);
     Ok(())
 }
 
@@ -1053,7 +1053,7 @@ async fn an_import_that_takes_an_old_row_back_still_lifts_the_kept_out_file() ->
     let result = import(&db, vec![spare]).await?;
 
     assert_eq!(result.moved_count, 1, "the premise: the import re-pointed the old row");
-    assert!(kept_out_paths(&db).await?.is_empty());
+    assert_eq!(kept_out_paths(&db).await?, [] as [String; 0]);
     Ok(())
 }
 

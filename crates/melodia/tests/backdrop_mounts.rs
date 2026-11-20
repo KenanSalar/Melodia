@@ -34,8 +34,7 @@ fn every_backdrop_site_mounts_only_the_live_arm() {
         let src = tree
             .iter()
             .find(|(path, _)| path.ends_with(site))
-            .map(|(_, src)| src.as_str())
-            .unwrap_or_default();
+            .map_or_default(|(_, src)| src.as_str());
         assert!(
             src.contains("property <bool> aurora-shown:"),
             "{site} must name its choice once — both stacks read it, and a second spelling of \
@@ -74,15 +73,13 @@ fn the_wrapper_forwards_its_hosts_gate_to_the_mounted_stack() {
         let src = tree
             .iter()
             .find(|(path, _)| path.ends_with(site))
-            .map(|(_, src)| src.as_str())
-            .unwrap_or_default();
+            .map_or_default(|(_, src)| src.as_str());
 
         for stack in STACKS {
             let mount = src
                 .split_once(&format!("{stack} {{"))
                 .and_then(|(_, rest)| rest.split_once("\n    }"))
-                .map(|(mount, _)| mount)
-                .unwrap_or_default();
+                .map_or_default(|(mount, _)| mount);
             assert!(
                 mount.contains("shown: root.shown;"),
                 "{site}'s `{stack}` must take the wrapper's own `shown`: a host that passes \
@@ -103,13 +100,11 @@ fn no_backdrop_site_gates_the_aurora_on_anything_but_the_setting() {
         let src = tree
             .iter()
             .find(|(path, _)| path.ends_with(site))
-            .map(|(_, src)| src.as_str())
-            .unwrap_or_default();
+            .map_or_default(|(_, src)| src.as_str());
         let binding = src
             .split_once("property <bool> aurora-shown:")
             .and_then(|(_, rest)| rest.split_once(';'))
-            .map(|(binding, _)| binding)
-            .unwrap_or_default();
+            .map_or_default(|(binding, _)| binding);
         assert_eq!(
             binding.trim(),
             "Theme.aurora-backdrop",

@@ -56,78 +56,76 @@ export component AboutSection inherits Rectangle {
     out property <bool> has-matches: show-app || show-author || show-support || show-license
         || show-welcome;
 
-    VerticalLayout {
-        if has-matches: SectionCard {
-            title: root.card-title;
+    if has-matches: SectionCard {
+        title: root.card-title;
 
-            if root.show-app: SettingRow {
-                icon: "info";
-                label: root.app-label;
-                description: root.version-desc;
+        if root.show-app: SettingRow {
+            icon: "info";
+            label: root.app-label;
+            description: root.version-desc;
+        }
+
+        if root.show-app && root.show-author: SectionDivider {}
+        if root.show-author: SettingRow {
+            icon: "person";
+            label: root.author-label;
+            SectionButton {
+                label: root.repo-label;
+                icon: "";
+                primary: false;
+                clicked => { Settings.open-repository(); }
             }
+        }
 
-            if root.show-app && root.show-author: SectionDivider {}
-            if root.show-author: SettingRow {
-                icon: "person";
-                label: root.author-label;
+        // The card's only filled buttons: they ask for something rather than going somewhere,
+        // and share one shape and fill so neither reads as preferred. Ko-fi's mark keeps its
+        // colours, reading on any accent; GitHub's is one colour, so Sponsors takes a glyph.
+        if (root.show-app || root.show-author) && root.show-support: SectionDivider {}
+        if root.show-support: SettingRow {
+            icon: "favorite";
+            label: root.support-label;
+            description: root.support-desc;
+            // The row stacks its controls, so the pair needs a line of its own.
+            HorizontalLayout {
+                spacing: Theme.pad-sm;
                 SectionButton {
-                    label: root.repo-label;
+                    label: root.kofi-label;
                     icon: "";
-                    primary: false;
-                    clicked => { Settings.open-repository(); }
+                    leading-image: @image-url("../../assets/icons/kofi-symbol.svg");
+                    corner-radius: Theme.radius-md;
+                    primary: true;
+                    clicked => { Settings.open-kofi(); }
                 }
-            }
-
-            // The card's only filled buttons: they ask for something rather than going somewhere,
-            // and share one shape and fill so neither reads as preferred. Ko-fi's mark keeps its
-            // colours, reading on any accent; GitHub's is one colour, so Sponsors takes a glyph.
-            if (root.show-app || root.show-author) && root.show-support: SectionDivider {}
-            if root.show-support: SettingRow {
-                icon: "favorite";
-                label: root.support-label;
-                description: root.support-desc;
-                // The row stacks its controls, so the pair needs a line of its own.
-                HorizontalLayout {
-                    spacing: Theme.pad-sm;
-                    SectionButton {
-                        label: root.kofi-label;
-                        icon: "";
-                        leading-image: @image-url("../../assets/icons/kofi-symbol.svg");
-                        corner-radius: Theme.radius-md;
-                        primary: true;
-                        clicked => { Settings.open-kofi(); }
-                    }
-                    SectionButton {
-                        label: root.sponsors-label;
-                        icon: "favorite";
-                        corner-radius: Theme.radius-md;
-                        primary: true;
-                        clicked => { Settings.open-github-sponsors(); }
-                    }
-                }
-            }
-
-            if (root.show-app || root.show-author || root.show-support) && root.show-license: SectionDivider {}
-            if root.show-license: SettingRow {
-                icon: "balance";
-                label: root.license-label;
-                description: root.license-desc;
-            }
-
-            // Wired from `ui/onboarding/`, not `about.rs`, so neither the row nor the feature knows
-            // about the other.
-            if (root.show-app || root.show-author || root.show-support || root.show-license)
-                && root.show-welcome: SectionDivider {}
-            if root.show-welcome: SettingRow {
-                icon: "waving_hand";
-                label: root.welcome-label;
-                description: root.welcome-desc;
                 SectionButton {
-                    label: root.welcome-action;
-                    icon: "";
-                    primary: false;
-                    clicked => { Settings.run-onboarding(); }
+                    label: root.sponsors-label;
+                    icon: "favorite";
+                    corner-radius: Theme.radius-md;
+                    primary: true;
+                    clicked => { Settings.open-github-sponsors(); }
                 }
+            }
+        }
+
+        if (root.show-app || root.show-author || root.show-support) && root.show-license: SectionDivider {}
+        if root.show-license: SettingRow {
+            icon: "balance";
+            label: root.license-label;
+            description: root.license-desc;
+        }
+
+        // Wired from `ui/onboarding/`, not `about.rs`, so neither the row nor the feature knows
+        // about the other.
+        if (root.show-app || root.show-author || root.show-support || root.show-license)
+            && root.show-welcome: SectionDivider {}
+        if root.show-welcome: SettingRow {
+            icon: "waving_hand";
+            label: root.welcome-label;
+            description: root.welcome-desc;
+            SectionButton {
+                label: root.welcome-action;
+                icon: "";
+                primary: false;
+                clicked => { Settings.run-onboarding(); }
             }
         }
     }

@@ -40,7 +40,6 @@ export component DiscordSection inherits Rectangle {
 
     out property <bool> has-matches: show-discord;
 
-    VerticalLayout {
     if has-matches: SectionCard {
         title: root.card-title;
 
@@ -83,6 +82,5 @@ export component DiscordSection inherits Rectangle {
                 toggled(v) => { Settings.discord-rpc-hide-when-paused-changed(v); }
             }
         }
-    }
     }
 }

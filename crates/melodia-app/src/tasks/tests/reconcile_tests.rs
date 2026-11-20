@@ -57,7 +57,7 @@ async fn albums_named(db: &DbPool, name: &str) -> Result<i64, AppError> {
 fn rename_mtime(to: &Path, meta: Option<ExtractedMetadata>) -> Result<Option<String>, AppError> {
     let event = FileEvent::Renamed { from: to.with_file_name("from.mp3"), to: to.to_path_buf() };
     let metadata: HashMap<PathBuf, ExtractedMetadata> =
-        meta.map(|meta| HashMap::from([(to.to_path_buf(), meta)])).unwrap_or_default();
+        meta.map_or_default(|meta| HashMap::from([(to.to_path_buf(), meta)]));
 
     let changes = watched_changes(vec![event], metadata);
 

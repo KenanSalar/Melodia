@@ -42,50 +42,48 @@ export component AnimationsSection inherits Rectangle {
 
     out property <bool> has-matches: show-anim || show-visualizer;
 
-    VerticalLayout {
-        if has-matches: SectionCard {
-            title: root.card-title;
+    if has-matches: SectionCard {
+        title: root.card-title;
 
-            // The chips' order is `playback_settings::play_button_anim_idx_from_token`'s.
-            if root.show-anim: SettingRowStacked {
-                icon: "animation";
-                label: root.anim-label;
-                description: root.anim-desc;
-                ChipGroup {
-                    options: [
-                        @tr("None"),
-                        @tr("Equalizer"),
-                    ];
-                    selected-index <=> Settings.play-button-animation-idx;
-                    selected(i) => { Settings.play-button-animation-changed(i); }
-                }
+        // The chips' order is `playback_settings::play_button_anim_idx_from_token`'s.
+        if root.show-anim: SettingRowStacked {
+            icon: "animation";
+            label: root.anim-label;
+            description: root.anim-desc;
+            ChipGroup {
+                options: [
+                    @tr("None"),
+                    @tr("Equalizer"),
+                ];
+                selected-index <=> Settings.play-button-animation-idx;
+                selected(i) => { Settings.play-button-animation-changed(i); }
             }
-            if root.show-anim && root.show-visualizer: SectionDivider {}
+        }
+        if root.show-anim && root.show-visualizer: SectionDivider {}
 
-            // Binds `Visualizer` directly rather than mirroring its flags onto `Settings`, since it
-            // owns its own state and callbacks, as `Equalizer` does. Both two-way bindings have
-            // landed the value by the time the callback fires, so the callbacks only persist.
-            if root.show-visualizer: SettingRow {
-                icon: "bar_chart";
-                label: root.visualizer-label;
-                description: root.visualizer-desc;
-                ToggleSwitch {
-                    checked <=> Visualizer.enabled;
-                    toggled(v) => { Visualizer.set-enabled(v); }
-                }
+        // Binds `Visualizer` directly rather than mirroring its flags onto `Settings`, since it
+        // owns its own state and callbacks, as `Equalizer` does. Both two-way bindings have
+        // landed the value by the time the callback fires, so the callbacks only persist.
+        if root.show-visualizer: SettingRow {
+            icon: "bar_chart";
+            label: root.visualizer-label;
+            description: root.visualizer-desc;
+            ToggleSwitch {
+                checked <=> Visualizer.enabled;
+                toggled(v) => { Visualizer.set-enabled(v); }
             }
-            if root.show-visualizer && root.show-viz-style: SectionDivider {}
+        }
+        if root.show-visualizer && root.show-viz-style: SectionDivider {}
 
-            if root.show-viz-style: SettingRowStacked {
-                icon: "show_chart";
-                label: root.viz-style-label;
-                description: root.viz-style-desc;
-                // The same list the Now-Playing flyout renders, so the two pickers can't drift.
-                ChipGroup {
-                    options: VizStylePresets.viz-style-names;
-                    selected-index <=> Visualizer.style-idx;
-                    selected(i) => { Visualizer.set-style(i); }
-                }
+        if root.show-viz-style: SettingRowStacked {
+            icon: "show_chart";
+            label: root.viz-style-label;
+            description: root.viz-style-desc;
+            // The same list the Now-Playing flyout renders, so the two pickers can't drift.
+            ChipGroup {
+                options: VizStylePresets.viz-style-names;
+                selected-index <=> Visualizer.style-idx;
+                selected(i) => { Visualizer.set-style(i); }
             }
         }
     }

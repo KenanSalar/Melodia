@@ -42,12 +42,9 @@ fn searched(tracks: Vec<RsTrackListRow>) -> SearchUi {
 }
 
 fn cached(ui: &SearchUi) -> Vec<(bool, i32)> {
-    ui.inner
-        .last_results
-        .lock()
-        .as_ref()
-        .map(|results| results.tracks.iter().map(|t| (t.is_favorite, t.rating)).collect())
-        .unwrap_or_default()
+    ui.inner.last_results.lock().as_ref().map_or_default(|results| {
+        results.tracks.iter().map(|t| (t.is_favorite, t.rating)).collect()
+    })
 }
 
 /// Left unpatched, the next repaint from the cache put the old heart back on the row.

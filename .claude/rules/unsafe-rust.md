@@ -148,10 +148,10 @@ narrowest-item rule above.
 
 | temptation | reach for |
 |---|---|
-| `get_unchecked` on a hot slice | iterator `zip` — already the idiom in `player/playback/equalizer.rs`, and the comment there says why. Or put the length in the *type* (`[T; N]` over `Box<[T]>`) so the compiler proves the mask itself |
+| `get_unchecked` on a hot slice | iterator `zip`, already the idiom in `player/playback/equalizer.rs`, whose comment says why. Or put the length in the *type* (`[T; N]` over `Box<[T]>`, or `as_chunks::<N>()` over a flat buffer) so the compiler proves the mask itself |
 | `transmute` between plain-data slices | `bytemuck::cast_slice`. Already in the lock file transitively, so adopting it costs a direct-dependency line rather than a build — but it still has to earn one against what it saves |
 | uninit buffer + `set_len` | `Vec::with_capacity` + `extend`, or build with the fill you need. Every buffer in the DSP and visualizer paths is allocated once per source and reused, which is the win that actually mattered |
-| `std::arch` SIMD | measure first, and read the shape of the work: the correction's and the ten bands' cascaded biquads are *serially dependent*, so there is nothing to vectorise across filters, and two channels caps the other axis at 2× |
+| `std::arch` SIMD | measure first, and read the shape of the work: the correction's and the ten bands' cascaded biquads are *serially dependent*, so there is nothing to vectorise across filters, and two channels caps the other axis at 2×. A reduction held back only by evaluation order takes `algebraic_*` first, in safe code, at the cost `rust-performance.md` names |
 | flush-to-zero or denormals-are-zero through MXCSR, against slow subnormal filter state | `EqSource::settle_on_silence`. Core's `_mm_setcsr` docs call changing those flags immediate Undefined Behavior, Rust assuming their default state |
 | `unsafe impl Send` / `Sync` | the `const _: fn() = \|\| { fn check<T: Send + Sync>() {} check::<FooUi>(); };` assertion — ten of them in the tree already |
 | a raw pointer to dodge a lifetime | an owned `Arc` clone. `PlaybackContext` exists for precisely this and says so |

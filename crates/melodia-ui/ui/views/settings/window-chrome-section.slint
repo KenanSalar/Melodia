@@ -119,7 +119,6 @@ export component WindowChromeSection inherits Rectangle {
         return 0;
     }
 
-    VerticalLayout {
     if has-matches: SectionCard {
         title: root.card-title;
 
@@ -323,6 +322,5 @@ export component WindowChromeSection inherits Rectangle {
                 toggled(v) => { Settings.close-to-tray-changed(v); }
             }
         }
-    }
     }
 }

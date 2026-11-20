@@ -230,7 +230,7 @@ fn a_one_frame_source_yields_that_frame() {
 #[test]
 fn an_empty_source_yields_nothing() {
     let (out, frames) = convert_all(Vec::new(), 1, 44_100, 44_100, 1.0);
-    assert!(out.is_empty());
+    assert_eq!(out, [] as [f32; 0]);
     assert_eq!(frames, 0);
 }
 

@@ -285,12 +285,9 @@ pub fn warm_vm_cover(
 }
 
 pub fn to_slint_player_vm(vm: &PlayerViewModelLight, cover_thumbs: &CoverThumbs) -> PlayerVm {
-    let track = vm
-        .current_track
-        .as_ref()
-        .map(|t| to_slint_track(t.as_ref(), cover_thumbs))
-        .unwrap_or_default();
-    let radio = vm.radio.as_ref().map(|r| to_slint_radio_vm(r, cover_thumbs)).unwrap_or_default();
+    let track =
+        vm.current_track.as_ref().map_or_default(|t| to_slint_track(t.as_ref(), cover_thumbs));
+    let radio = vm.radio.as_ref().map_or_default(|r| to_slint_radio_vm(r, cover_thumbs));
     PlayerVm {
         has_track: vm.current_track.is_some(),
         track,

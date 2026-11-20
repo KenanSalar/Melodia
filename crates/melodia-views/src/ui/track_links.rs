@@ -107,7 +107,7 @@ fn playing_track_id(vm: Option<&PlayerViewModelLight>) -> Option<i64> {
 /// gone since is the same unlinked trio, which hides the entries.
 async fn read_links(state: &AppState, id: i64) -> RowLinks {
     match library::tracks::get_track_links(&state.db, vec![id]).await {
-        Ok(links) => links.into_iter().next().map(RowLinks::from).unwrap_or_default(),
+        Ok(links) => links.into_iter().next().map_or_default(RowLinks::from),
         Err(e) => {
             log::warn!("ui::track_links get_track_links({id}): {}", describe(&e));
             RowLinks::default()

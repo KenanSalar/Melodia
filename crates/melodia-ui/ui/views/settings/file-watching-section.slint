@@ -27,18 +27,16 @@ export component FileWatchingSection inherits Rectangle {
 
     out property <bool> has-matches: show-watch;
 
-    VerticalLayout {
-        if has-matches: SectionCard {
-            title: root.card-title;
+    if has-matches: SectionCard {
+        title: root.card-title;
 
-            if root.show-watch: SettingRow {
-                icon: "visibility";
-                label: root.watch-label;
-                description: root.watch-desc;
-                ToggleSwitch {
-                    checked <=> Settings.watch-for-file-changes;
-                    toggled(v) => { Settings.watch-for-file-changes-changed(v); }
-                }
+        if root.show-watch: SettingRow {
+            icon: "visibility";
+            label: root.watch-label;
+            description: root.watch-desc;
+            ToggleSwitch {
+                checked <=> Settings.watch-for-file-changes;
+                toggled(v) => { Settings.watch-for-file-changes-changed(v); }
             }
         }
     }

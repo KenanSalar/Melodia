@@ -34,50 +34,48 @@ export component DuplicatesSection inherits Rectangle {
 
     out property <bool> has-matches: show-find || show-kept-out;
 
-    VerticalLayout {
-        if has-matches: SectionCard {
-            title: root.card-title;
+    if has-matches: SectionCard {
+        title: root.card-title;
 
-            if root.show-find: SettingRow {
-                icon: "library_music";
-                label: root.find-label;
-                description: root.find-desc;
-                SectionButton {
-                    label: @tr("Find…");
-                    icon: "";
-                    primary: false;
-                    clicked => {
-                        Dialog.title = @tr("Duplicate Tracks");
-                        Dialog.message = @tr("Songs the library seems to hold more than once. Pick the copies you don't need.");
-                        Dialog.cancel-label = @tr("Cancel");
-                        Dialog.destructive = false;
-                        Dialog.kind = DialogKind.duplicates;
-                        DuplicatesUi.busy = true;
-                        Dialog.open = true;
-                        DuplicatesUi.find();
-                    }
+        if root.show-find: SettingRow {
+            icon: "library_music";
+            label: root.find-label;
+            description: root.find-desc;
+            SectionButton {
+                label: @tr("Find…");
+                icon: "";
+                primary: false;
+                clicked => {
+                    Dialog.title = @tr("Duplicate Tracks");
+                    Dialog.message = @tr("Songs the library seems to hold more than once. Pick the copies you don't need.");
+                    Dialog.cancel-label = @tr("Cancel");
+                    Dialog.destructive = false;
+                    Dialog.kind = DialogKind.duplicates;
+                    DuplicatesUi.busy = true;
+                    Dialog.open = true;
+                    DuplicatesUi.find();
                 }
             }
+        }
 
-            if root.show-kept-out: SettingRow {
-                icon: "folder_off";
-                label: root.kept-out-label;
-                description: root.kept-out-desc;
-                SectionButton {
-                    label: @tr("Show…");
-                    icon: "";
-                    primary: false;
-                    clicked => {
-                        Dialog.title = @tr("Files Kept Out of the Library");
-                        Dialog.message = @tr("Copies you removed as duplicates. Their files stay where they are, and scans leave them out until you bring them back.");
-                        Dialog.confirm-label = @tr("Close");
-                        Dialog.cancel-label = "";
-                        Dialog.destructive = false;
-                        Dialog.kind = DialogKind.kept-out-files;
-                        KeptOutUi.busy = true;
-                        Dialog.open = true;
-                        KeptOutUi.load();
-                    }
+        if root.show-kept-out: SettingRow {
+            icon: "folder_off";
+            label: root.kept-out-label;
+            description: root.kept-out-desc;
+            SectionButton {
+                label: @tr("Show…");
+                icon: "";
+                primary: false;
+                clicked => {
+                    Dialog.title = @tr("Files Kept Out of the Library");
+                    Dialog.message = @tr("Copies you removed as duplicates. Their files stay where they are, and scans leave them out until you bring them back.");
+                    Dialog.confirm-label = @tr("Close");
+                    Dialog.cancel-label = "";
+                    Dialog.destructive = false;
+                    Dialog.kind = DialogKind.kept-out-files;
+                    KeptOutUi.busy = true;
+                    Dialog.open = true;
+                    KeptOutUi.load();
                 }
             }
         }

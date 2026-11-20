@@ -183,8 +183,8 @@ fn luma_p90(rgb: &[u8]) -> Option<f64> {
 
     let mut histogram = [0u32; HISTOGRAM_BINS];
     let mut total = 0u32;
-    for px in rgb.chunks_exact(3) {
-        histogram[bin_of_y(pixel_y(px[0], px[1], px[2]))] += 1;
+    for &[r, g, b] in rgb.as_chunks::<3>().0 {
+        histogram[bin_of_y(pixel_y(r, g, b))] += 1;
         total += 1;
     }
     if total == 0 {

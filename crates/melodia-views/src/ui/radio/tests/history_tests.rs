@@ -31,7 +31,7 @@ fn a_different_station_clears_what_the_last_one_announced() {
     history.note(A, Some("Second"));
 
     assert!(history.note(B, None), "the clear itself is a move, even with nothing to put back");
-    assert!(titles(&history).is_empty());
+    assert_eq!(titles(&history), [] as [&str; 0]);
     assert!(history.describes(B));
     assert!(!history.describes(A));
 }
@@ -69,7 +69,7 @@ fn a_blank_or_whitespace_title_is_not_a_song() {
     for blank in ["", "   ", "\t", "\n"] {
         assert!(!history.note(A, Some(blank)), "{blank:?} is not something to list");
     }
-    assert!(titles(&history).is_empty());
+    assert_eq!(titles(&history), [] as [&str; 0]);
 
     assert!(history.note(A, Some("  Padded  ")));
     assert_eq!(titles(&history), ["Padded"], "and a real title arrives trimmed");

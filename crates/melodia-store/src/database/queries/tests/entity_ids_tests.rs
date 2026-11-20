@@ -283,10 +283,10 @@ async fn every_entity_keeps_its_order_across_a_chunk_boundary() -> Result<(), Ap
 #[tokio::test]
 async fn an_empty_id_list_asks_the_database_nothing() -> Result<(), AppError> {
     let db = empty_library().await?;
-    assert!(queries::track::track_ids_by_albums(&db, &[]).await?.is_empty());
-    assert!(queries::track::track_ids_by_artists(&db, &[]).await?.is_empty());
-    assert!(queries::track::track_ids_by_genres(&db, &[]).await?.is_empty());
-    assert!(queries::track::track_ids_by_playlists(&db, &[]).await?.is_empty());
+    assert_eq!(queries::track::track_ids_by_albums(&db, &[]).await?, [] as [(i64, i64); 0]);
+    assert_eq!(queries::track::track_ids_by_artists(&db, &[]).await?, [] as [(i64, i64); 0]);
+    assert_eq!(queries::track::track_ids_by_genres(&db, &[]).await?, [] as [(i64, i64); 0]);
+    assert_eq!(queries::track::track_ids_by_playlists(&db, &[]).await?, [] as [(i64, i64); 0]);
     Ok(())
 }
 

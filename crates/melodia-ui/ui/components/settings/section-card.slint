@@ -22,10 +22,6 @@ export component SectionCard inherits Rectangle {
         // No `clip`: a rounded one is a layer reallocated on every frame of a resize, and nothing
         // reaches the corners.
         Rectangle {
-            // The root's pair again on a cell, the only place it reaches the card's height
-            // behind an `if`.
-            preferred-width: root.card-width;
-            max-width: root.card-width;
             background: SettingsPage.card-fill;
             border-radius: Theme.radius-lg;
 

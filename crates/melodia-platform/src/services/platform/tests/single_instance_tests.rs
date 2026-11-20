@@ -63,7 +63,7 @@ fn an_empty_launch_is_a_frame_with_no_body() {
 
     assert_eq!(frame.len(), LENGTH_PREFIX_LEN);
     assert_eq!(split_frame(&frame).0, 0);
-    assert!(decode_paths(&[]).is_empty());
+    assert_eq!(decode_paths(&[]), [] as [String; 0]);
 }
 
 #[test]

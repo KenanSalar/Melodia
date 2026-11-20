@@ -70,7 +70,6 @@ export component AppearanceSection inherits Rectangle {
     property <bool> any-above-color-style: any-above-accent || show-accent;
     property <bool> any-above-backdrop: any-above-color-style || show-color-style;
 
-    VerticalLayout {
     if has-matches: SectionCard {
         title: root.card-title;
 
@@ -177,6 +176,5 @@ export component AppearanceSection inherits Rectangle {
                 }
             }
         }
-    }
     }
 }

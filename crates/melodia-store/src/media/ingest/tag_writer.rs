@@ -466,7 +466,7 @@ pub(crate) fn file_tags_of(tagged: &TaggedFile) -> FileTags {
     FileTags {
         lyrics: tag.and_then(lyrics_from),
         credits: metadata::credits_from_tag(tag),
-        roles: tag.map(role_tags::read_roles).unwrap_or_default(),
+        roles: tag.map_or_default(role_tags::read_roles),
         genres: metadata::read_genres(tag),
         release: metadata::read_release_tags(tag).into(),
     }

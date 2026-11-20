@@ -113,5 +113,5 @@ fn a_missing_half_is_not_a_problem() {
     let current = PathBuf::from("/logs/melodia_rCURRENT.log");
 
     assert_eq!(newest_first(vec![current.clone()], Vec::new()), [current]);
-    assert!(newest_first(Vec::new(), Vec::new()).is_empty());
+    assert_eq!(newest_first(Vec::new(), Vec::new()), [] as [PathBuf; 0]);
 }

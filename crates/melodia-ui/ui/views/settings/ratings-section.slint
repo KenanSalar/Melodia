@@ -29,18 +29,16 @@ export component RatingsSection inherits Rectangle {
 
     out property <bool> has-matches: show-write-tags;
 
-    VerticalLayout {
-        if has-matches: SectionCard {
-            title: root.card-title;
+    if has-matches: SectionCard {
+        title: root.card-title;
 
-            if root.show-write-tags: SettingRow {
-                icon: "star";
-                label: root.write-tags-label;
-                description: root.write-tags-desc;
-                ToggleSwitch {
-                    checked <=> Settings.write-ratings-to-tags;
-                    toggled(v) => { Settings.write-ratings-to-tags-changed(v); }
-                }
+        if root.show-write-tags: SettingRow {
+            icon: "star";
+            label: root.write-tags-label;
+            description: root.write-tags-desc;
+            ToggleSwitch {
+                checked <=> Settings.write-ratings-to-tags;
+                toggled(v) => { Settings.write-ratings-to-tags-changed(v); }
             }
         }
     }

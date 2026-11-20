@@ -10,5 +10,5 @@
 # `clippy.toml`'s `msrv` (which overrides the Cargo one) and `README.md`'s
 # prerequisites.
 [toolchain]
-channel = "1.97.0"
+channel = "1.100.0"
 components = ["clippy", "rustfmt", "llvm-tools-preview"]

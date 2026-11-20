@@ -30,10 +30,10 @@ fn build_fts_query_empty_input() {
 async fn search_all_empty_query_returns_empty() -> Result<(), AppError> {
     let db = DbPool::test_pool().await?;
     let results = queries::search::search_all(&db, "   ").await?;
-    assert!(results.tracks.is_empty());
-    assert!(results.albums.is_empty());
-    assert!(results.artists.is_empty());
-    assert!(results.genres.is_empty());
+    assert_eq!(results.tracks, [] as [track::TrackListRow; 0]);
+    assert_eq!(results.albums, [] as [album::AlbumStats; 0]);
+    assert_eq!(results.artists, [] as [artist::ArtistStats; 0]);
+    assert_eq!(results.genres, [] as [genre::GenreStats; 0]);
     Ok(())
 }
 
@@ -41,7 +41,7 @@ async fn search_all_empty_query_returns_empty() -> Result<(), AppError> {
 async fn search_all_finds_track_by_title() -> Result<(), AppError> {
     let db = setup_seeded_db().await?;
     let results = queries::search::search_all(&db, "Alpha").await?;
-    assert!(!results.tracks.is_empty());
+    assert_ne!(results.tracks, [] as [track::TrackListRow; 0]);
     assert!(results.tracks.iter().any(|t| t.title == "Alpha Song"));
     Ok(())
 }
@@ -50,7 +50,7 @@ async fn search_all_finds_track_by_title() -> Result<(), AppError> {
 async fn search_all_finds_albums_and_artists() -> Result<(), AppError> {
     let db = setup_seeded_db().await?;
     let results = queries::search::search_all(&db, "Album One").await?;
-    assert!(!results.albums.is_empty());
+    assert_ne!(results.albums, [] as [album::AlbumStats; 0]);
     assert!(results.albums.iter().any(|a| a.name == "Album One"));
     Ok(())
 }
@@ -59,10 +59,10 @@ async fn search_all_finds_albums_and_artists() -> Result<(), AppError> {
 async fn search_all_no_results() -> Result<(), AppError> {
     let db = setup_seeded_db().await?;
     let results = queries::search::search_all(&db, "zzz_nonexistent_xyz").await?;
-    assert!(results.tracks.is_empty());
-    assert!(results.albums.is_empty());
-    assert!(results.artists.is_empty());
-    assert!(results.genres.is_empty());
+    assert_eq!(results.tracks, [] as [track::TrackListRow; 0]);
+    assert_eq!(results.albums, [] as [album::AlbumStats; 0]);
+    assert_eq!(results.artists, [] as [artist::ArtistStats; 0]);
+    assert_eq!(results.genres, [] as [genre::GenreStats; 0]);
     Ok(())
 }
 

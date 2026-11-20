@@ -65,10 +65,9 @@ pub fn wire(
         let weak = weak.clone();
         let notifications = notifications.clone();
         updater.on_skip(move || {
-            let version = weak
-                .upgrade()
-                .map(|ui| ui.global::<MelodiaUpdater>().get_available_version().to_string())
-                .unwrap_or_default();
+            let version = weak.upgrade().map_or_default(|ui| {
+                ui.global::<MelodiaUpdater>().get_available_version().to_string()
+            });
             if version.is_empty() {
                 log::warn!("updater: skip clicked but available_version was empty");
                 return;

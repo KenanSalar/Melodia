@@ -85,7 +85,7 @@ fn a_cue_sheet_is_walked_as_a_sheet_and_never_as_audio() -> Result<(), AppError>
 fn handles_empty_directory() -> Result<(), AppError> {
     let tmp = TempDir::new()?;
     let files = walk(tmp.path())?;
-    assert!(files.is_empty());
+    assert_eq!(files, [] as [PathBuf; 0]);
     Ok(())
 }
 
@@ -616,7 +616,7 @@ fn a_kept_out_file_that_matches_its_stamp_is_left_unread() -> Result<(), AppErro
 
     let changed = index.changed(|_| true);
 
-    assert!(changed.is_empty());
+    assert_eq!(changed, [] as [PathBuf; 0]);
     Ok(())
 }
 

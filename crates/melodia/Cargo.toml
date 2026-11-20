@@ -10,7 +10,6 @@ rust-version.workspace = true
 description = "Cross-platform desktop music player (Slint + Rust)"
 license.workspace = true
 repository.workspace = true
-homepage.workspace = true
 authors = ["Kenan Salar <kenansalar@users.noreply.github.com>"]
 keywords = ["music", "player", "audio", "slint"]
 categories = ["multimedia::audio"]

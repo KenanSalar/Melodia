@@ -1,4 +1,5 @@
 import { ListView } from "std-widgets.slint";
+import { Theme } from "../../theme.slint";
 import { GenreGridRow } from "../../models.slint";
 import { EntityCard } from "entity-card.slint";
 import { CardCell } from "card-cell.slint";
@@ -57,12 +58,8 @@ export component GenreGrid inherits Rectangle {
                         EntityCard {
                             card-width: root.card-width;
                             card-height: root.card-height;
-                            // A name-hashed gradient, spelled out per caller: a gradient's stops
-                            // can't read a function's arguments.
                             fallback-icon: "theater_comedy";
-                            tile-bg: @linear-gradient(135deg,
-                                genre.tile_color_1,
-                                genre.tile_color_2);
+                            tile-bg: Theme.tile-gradient(genre.tile_color_1, genre.tile_color_2);
                             tile-icon-color: #ffffff.with-alpha(0.3);
                             // On a glyph at half the tile, the covers' gentle zoom reads as none.
                             cover-scale-hover: 1.15;

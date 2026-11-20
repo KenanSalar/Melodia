@@ -162,10 +162,7 @@ fn armed_origins(tree: &[(String, String)]) -> BTreeSet<String> {
 
 fn capitalized(word: &str) -> String {
     let mut chars = word.chars();
-    chars
-        .next()
-        .map(|first| first.to_ascii_uppercase().to_string() + chars.as_str())
-        .unwrap_or_default()
+    chars.next().map_or_default(|first| first.to_ascii_uppercase().to_string() + chars.as_str())
 }
 
 /// How many sites in the Rust tree revoke each origin.

@@ -1,7 +1,7 @@
 //! The press half of the drag regions: which one the pointer is over, and what a left press there
 //! does. The winit filter hands every such press to the OS as a window move, so Slint never sees
 //! two in a row and no `double-clicked` on a region can fire. The double press is read here
-//! instead, by the same rule Slint's own double click keeps.
+//! instead, within the slop Slint's own double click allows.
 
 use std::cell::Cell;
 use std::rc::Rc;
@@ -11,8 +11,8 @@ use slint::{ComponentHandle, LogicalPosition};
 
 use melodia_ui::{AppWindow, DragRegion, WindowChrome};
 
-/// Slint's `Platform::click_interval`, which its winit backend doesn't override, so the titlebar's
-/// double press is timed like every other double click in the app.
+/// Slint's default `Platform::click_interval`. Its winit backend reads the OS's interval instead,
+/// which nothing public exposes, so the titlebar keeps the default.
 const DOUBLE_PRESS_INTERVAL: Duration = Duration::from_millis(500);
 
 /// How far from the first press the second may land, the radius Slint's `ClickState` allows.

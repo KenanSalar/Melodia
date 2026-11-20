@@ -78,7 +78,6 @@ export component OverflowMenuSection inherits Rectangle {
 
     out property <bool> has-matches: show-overflow;
 
-    VerticalLayout {
     if has-matches: SectionCard {
         title: root.card-title;
 
@@ -144,6 +143,5 @@ export component OverflowMenuSection inherits Rectangle {
                 }
             }
         }
-    }
     }
 }

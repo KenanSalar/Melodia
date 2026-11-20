@@ -114,7 +114,7 @@ fn keep_leaves_the_existing_value_alone() {
 
     let unsupported = apply_edit(&mut tag, &TagEdit::default(), None);
 
-    assert!(unsupported.is_empty());
+    assert_eq!(unsupported, [] as [TagField; 0]);
     assert_eq!(text(&tag, ItemKey::TrackTitle).as_deref(), Some("Original"));
 }
 
@@ -178,7 +178,7 @@ fn bpm_writes_the_integer_key_on_id3v2_and_the_decimal_key_on_vorbis() {
         &TagEdit { bpm: FieldEdit::Set(128.5), ..TagEdit::default() },
         None,
     );
-    assert!(unsupported.is_empty());
+    assert_eq!(unsupported, [] as [TagField; 0]);
     assert_eq!(text(&vorbis, ItemKey::Bpm).as_deref(), Some("128.5"));
 }
 
@@ -242,7 +242,7 @@ fn lyrics_key_is_chosen_by_tag_type() {
         &TagEdit { lyrics: FieldEdit::Set("words".into()), ..TagEdit::default() },
         None,
     );
-    assert!(unsupported.is_empty());
+    assert_eq!(unsupported, [] as [TagField; 0]);
     assert_eq!(text(&id3, ItemKey::UnsyncLyrics).as_deref(), Some("words"));
 }
 
@@ -317,7 +317,7 @@ fn m4a_artwork_replace_actually_replaces() -> Result<(), AppError> {
 
     let edit = TagEdit { artwork: ArtworkEdit::Replace, ..TagEdit::default() };
     let written = apply_to_file(&audio, &edit, Some(&picture))?;
-    assert!(written.unsupported.is_empty());
+    assert_eq!(written.unsupported, [] as [TagField; 0]);
 
     // Exactly one picture — not the old one lingering beside the new one.
     let after = read_primary(&audio)?;
@@ -682,7 +682,7 @@ fn every_release_field_can_be_cleared_out_of_the_file() {
         None,
     );
 
-    assert!(unsupported.is_empty());
+    assert_eq!(unsupported, [] as [TagField; 0]);
     assert_eq!(release_texts(&tag), vec![None; 6]);
     assert_eq!(text(&tag, ItemKey::FlagCompilation), None);
 }
@@ -765,7 +765,7 @@ fn a_credit_reduced_to_one_name_leaves_no_list_behind() {
         None,
     );
 
-    assert!(artists(&tag, ItemKey::TrackArtists).is_empty());
+    assert_eq!(artists(&tag, ItemKey::TrackArtists), [] as [String; 0]);
     assert_eq!(text(&tag, ItemKey::TrackArtist).as_deref(), Some("Alice"));
 }
 
@@ -778,7 +778,7 @@ fn a_cleared_credit_takes_both_of_its_keys() {
     apply_edit(&mut tag, &TagEdit { album_artist: FieldEdit::Clear, ..TagEdit::default() }, None);
 
     assert_eq!(text(&tag, ItemKey::AlbumArtist), None);
-    assert!(artists(&tag, ItemKey::AlbumArtists).is_empty());
+    assert_eq!(artists(&tag, ItemKey::AlbumArtists), [] as [String; 0]);
 }
 
 /// One value per name, which is the multi-value form every reader understands — never the

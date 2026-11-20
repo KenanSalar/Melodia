@@ -73,7 +73,7 @@ async fn single_track_edit_updates_row_and_preserves_stats() -> Result<(), AppEr
 
     assert_eq!(report.updated, 1);
     assert_eq!(updated, vec![id]);
-    assert!(report.failures.is_empty());
+    assert_eq!(report.failures, [] as [(String, String); 0]);
 
     let (album, play_count, rating, is_favorite, new_hash): (String, i64, i64, i64, String) =
         fetch_one(
@@ -226,7 +226,7 @@ async fn a_rating_only_edit_sweeps_nothing_and_keeps_its_cover() -> Result<(), A
     let (report, _) =
         write_tag_edit(&db, &artwork_dir, &cover_cache, &self_writes, &[id], &edit, None).await?;
     assert_eq!(report.updated, 1);
-    assert!(report.failures.is_empty());
+    assert_eq!(report.failures, [] as [(String, String); 0]);
 
     let (artwork_path, genre_after, rating): (String, i64, i64) = fetch_one(
         &db,
@@ -320,7 +320,7 @@ async fn replace_artwork_lands_on_every_track_and_the_shared_album() -> Result<(
 
     assert_eq!(report.updated, 2);
     assert_eq!(updated, vec![a_id, b_id]);
-    assert!(report.failures.is_empty());
+    assert_eq!(report.failures, [] as [(String, String); 0]);
 
     // Bind to non-null types (both columns are set after a successful Replace),
     // so a NULL would fail the test rather than needing an `expect`.
@@ -702,7 +702,7 @@ async fn clearing_a_release_field_empties_the_column_the_upsert_cannot() -> Resu
         write_tag_edit(&db, &artwork_dir, &cover_cache, &self_writes, &[id], &cleared, None)
             .await?;
 
-    assert!(report.failures.is_empty());
+    assert_eq!(report.failures, [] as [(String, String); 0]);
     assert_eq!(
         stored_release(&db, id).await?,
         (None, Some("ECM 1064".to_owned()), false),

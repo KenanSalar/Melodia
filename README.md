@@ -385,7 +385,7 @@ Windows keeps no PSS, so **Commit** is the figure to compare: the private memory
 
 ## Building from Source
 
-[Rust](https://rustup.rs/) **1.97.0**, edition 2024, pinned by `rust-toolchain.toml` and installed by
+[Rust](https://rustup.rs/) **1.100.0**, edition 2024, pinned by `rust-toolchain.toml` and installed by
 rustup on its own. Linux additionally needs the development packages for Slint's FemtoVG renderer
 (no WebKitGTK); Windows needs nothing extra.
 
@@ -443,7 +443,7 @@ decoding, the DSP chain, and the mix stay off the runtime entirely.
 
 Fourteen crates, layered so the compiler enforces the direction rather than a convention: the UI
 names no database or socket, the decoders name no mixer, the tag writer names no state machine.
-Slint 1.18 on FemtoVG, Tokio, Symphonia and cpal (with ALSA and WASAPI directly for exclusive output),
+Slint 1.19 on FemtoVG, Tokio, Symphonia and cpal (with ALSA and WASAPI directly for exclusive output),
 SQLite via rusqlite with WAL and FTS5, Lofty for tags, Rayon, BLAKE3, and minisign for the updater.
 
 The doc comments are the architecture reference, [`CLAUDE.md`](CLAUDE.md) holds the repo-wide

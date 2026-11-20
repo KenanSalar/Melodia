@@ -105,11 +105,7 @@ pub fn extract_source_rgb(artwork_path: &Path) -> Option<u32> {
     drop(decoded);
 
     let mut pixels: Vec<Rgb> = Vec::with_capacity((QUANTIZE_DIM * QUANTIZE_DIM) as usize);
-    for chunk in small.chunks_exact(4) {
-        let r = chunk[0];
-        let g = chunk[1];
-        let b = chunk[2];
-        let a = chunk[3];
+    for &[r, g, b, a] in small.as_chunks::<4>().0 {
         // Near-transparent pixels would bias the seed toward whatever bleeds through the edges.
         if a < 128 {
             continue;
@@ -140,8 +136,8 @@ fn seed_from_pixels(pixels: &[Rgb]) -> Option<u32> {
 pub fn extract_source_rgb_from_rgb8(buf: &SharedPixelBuffer<Rgb8Pixel>) -> Option<u32> {
     let bytes = buf.as_bytes();
     let mut pixels: Vec<Rgb> = Vec::with_capacity(bytes.len() / 3);
-    for chunk in bytes.chunks_exact(3) {
-        pixels.push(Rgb::new(chunk[0], chunk[1], chunk[2]));
+    for &[r, g, b] in bytes.as_chunks::<3>().0 {
+        pixels.push(Rgb::new(r, g, b));
     }
     seed_from_pixels(&pixels)
 }
@@ -347,9 +343,9 @@ fn mix_rgb_u32(a: u32, b: u32) -> u32 {
     let br = (b >> 16) & 0xff;
     let bg = (b >> 8) & 0xff;
     let bb = b & 0xff;
-    let r = (ar + br) >> 1;
-    let g = (ag + bg) >> 1;
-    let bl = (ab + bb) >> 1;
+    let r = u32::midpoint(ar, br);
+    let g = u32::midpoint(ag, bg);
+    let bl = u32::midpoint(ab, bb);
     (r << 16) | (g << 8) | bl
 }
 

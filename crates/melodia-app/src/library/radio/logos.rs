@@ -4,10 +4,13 @@
 //! and the station's own site. **The constants are retention policy rather than tuning**: a miss
 //! costs a request and a hit costs nothing, so they are about not asking a dead host on a schedule.
 
+use jiff::{SignedDuration, Timestamp};
+
 use crate::state::AppState;
 use melodia_artwork::media::image::logo_tile;
 use melodia_core::entities::radio::{self, StoredLogo};
 use melodia_core::error::AppError;
+use melodia_core::utils::{days_before, rfc3339};
 use melodia_net::media::fetch::station_logo;
 use melodia_store::database::{DbPool, queries};
 
@@ -71,13 +74,11 @@ fn answer_is_suppressed(answer: &radio::StoredLogoAnswer, now: &str) -> bool {
 /// Hold the answer table to its two bounds; the files dropped rows named go on the next sweep. Not
 /// behind the switch, there being no network behind it.
 pub async fn prune_logo_answers(db: &DbPool) -> Result<u64, AppError> {
-    let now = chrono::Utc::now();
-    let miss_cutoff = now - chrono::TimeDelta::try_days(LOGO_MISS_MAX_AGE_DAYS).unwrap_or_default();
-    let hit_cutoff = now - chrono::TimeDelta::try_days(LOGO_CACHE_MAX_AGE_DAYS).unwrap_or_default();
+    let now = Timestamp::now();
     queries::radio::prune_logo_answers(
         db,
-        miss_cutoff.to_rfc3339(),
-        hit_cutoff.to_rfc3339(),
+        rfc3339(days_before(now, LOGO_MISS_MAX_AGE_DAYS)),
+        rfc3339(days_before(now, LOGO_CACHE_MAX_AGE_DAYS)),
         LOGO_CACHE_MAX_BYTES,
     )
     .await
@@ -105,14 +106,15 @@ fn miss_backoff_hours(attempts: i64) -> i64 {
 async fn note_logo_miss(db: &DbPool, favicon_url: &str) -> Result<(), AppError> {
     let attempts =
         queries::radio::logo_miss_attempts(db, favicon_url).await?.unwrap_or(0).saturating_add(1);
-    let hours = miss_backoff_hours(attempts);
-    let retry_after = chrono::Utc::now() + chrono::TimeDelta::try_hours(hours).unwrap_or_default();
+    let now = Timestamp::now();
+    let backoff = SignedDuration::from_hours(miss_backoff_hours(attempts));
+    let retry_after = now.checked_add(backoff).unwrap_or(now);
     queries::radio::record_logo_miss(
         db,
         favicon_url,
         attempts,
-        &retry_after.to_rfc3339(),
-        &melodia_core::utils::now_rfc3339(),
+        &rfc3339(retry_after),
+        &rfc3339(now),
     )
     .await
 }

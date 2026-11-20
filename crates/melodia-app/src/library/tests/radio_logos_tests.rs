@@ -11,7 +11,7 @@ type TestResult = Result<(), Box<dyn std::error::Error>>;
 const HOURS_PER_DAY: i64 = 24;
 
 /// The instant every case is measured against, and an hour either side of it. Written in the
-/// `to_rfc3339` shape both sides of the comparison use, since the comparison is on the strings.
+/// `rfc3339` shape both sides of the comparison use, since the comparison is on the strings.
 const NOW: &str = "2026-09-05T12:00:00+00:00";
 const EARLIER: &str = "2026-09-05T11:00:00+00:00";
 const LATER: &str = "2026-09-05T13:00:00+00:00";
@@ -201,7 +201,7 @@ fn the_users_own_columns_are_what_a_heal_pass_asks_about() {
 
 #[test]
 fn a_station_naming_no_host_at_all_seeds_nothing() {
-    assert!(heal_seed_urls(&[station(None, None, "not a url")]).is_empty());
+    assert_eq!(heal_seed_urls(&[station(None, None, "not a url")]), [] as [String; 0]);
 }
 
 // ---- the loop between the schedule and the table ----
@@ -236,8 +236,7 @@ async fn each_miss_counts_the_ones_before_it_and_schedules_further_out()
         Some(3),
         "the stored count is what the next schedule is derived from"
     );
-    // Both stamps are `to_rfc3339` closing on a constant `+00:00`, so lexical order is
-    // chronological — the ordering `get_recent_stations` reads on.
+    // Both stamps are `rfc3339`'s, so lexical order is chronological.
     assert!(
         first < third,
         "and a third miss must be asked later than a first, not on the same day"

@@ -233,7 +233,7 @@ async fn execute_play_media_decode_failure_triggers_auto_skip() -> Result<(), Ap
     crate::player::engine::actions::execute_actions(actions, &mock, &fx.player_state, &fx.sinks);
 
     let inner = mock.inner();
-    assert!(inner.play_media_calls.is_empty());
+    assert_eq!(inner.play_media_calls, [] as [(String, f64, f64, Option<u64>); 0]);
     assert_eq!(inner.stop_count, 2);
     Ok(())
 }
@@ -257,7 +257,7 @@ async fn execute_play_media_vanished_file_pre_flights() -> Result<(), AppError> 
     crate::player::engine::actions::execute_actions(actions, &mock, &fx.player_state, &fx.sinks);
 
     let inner = mock.inner();
-    assert!(inner.play_media_calls.is_empty());
+    assert_eq!(inner.play_media_calls, [] as [(String, f64, f64, Option<u64>); 0]);
     assert_eq!(inner.stop_count, 2);
     Ok(())
 }
@@ -357,7 +357,7 @@ async fn execute_begin_crossfade_vanished_file_skips_without_stopping() -> Resul
     crate::player::engine::actions::execute_actions(actions, &mock, &fx.player_state, &fx.sinks);
 
     let inner = mock.inner();
-    assert!(inner.begin_crossfade_calls.is_empty());
+    assert_eq!(inner.begin_crossfade_calls, [] as [(String, u64, f64, f64); 0]);
     assert_eq!(inner.stop_count, 1, "only the empty-queue auto-skip may stop");
     Ok(())
 }
@@ -378,7 +378,7 @@ async fn execute_begin_crossfade_decode_failure_triggers_auto_skip() -> Result<(
     crate::player::engine::actions::execute_actions(actions, &mock, &fx.player_state, &fx.sinks);
 
     let inner = mock.inner();
-    assert!(inner.begin_crossfade_calls.is_empty());
+    assert_eq!(inner.begin_crossfade_calls, [] as [(String, u64, f64, f64); 0]);
     assert_eq!(inner.stop_count, 1, "only the empty-queue auto-skip may stop");
     Ok(())
 }
@@ -492,7 +492,7 @@ async fn execute_empty_actions_is_noop() -> Result<(), AppError> {
     crate::player::engine::actions::execute_actions(vec![], &mock, &fx.player_state, &fx.sinks);
 
     let inner = mock.inner();
-    assert!(inner.play_media_calls.is_empty());
+    assert_eq!(inner.play_media_calls, [] as [(String, f64, f64, Option<u64>); 0]);
     assert_eq!(inner.resume_count, 0);
     assert_eq!(inner.stop_count, 0);
     Ok(())
@@ -542,7 +542,7 @@ async fn execute_play_stream_failure_clears_the_station() -> Result<(), AppError
     assert_eq!(state.status, crate::player::engine::types::PlaybackStatus::Stopped);
     // The failure path is `build_station_failed_actions`, not `enqueue_auto_skip`: there is no
     // next station to fall through to, and reaching into the queue would be a change of source.
-    assert!(mock.inner().play_media_calls.is_empty());
+    assert_eq!(mock.inner().play_media_calls, [] as [(String, f64, f64, Option<u64>); 0]);
     Ok(())
 }
 

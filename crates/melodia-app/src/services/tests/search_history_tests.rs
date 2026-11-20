@@ -33,7 +33,7 @@ fn add_query_ignores_empty() {
     let mut history = SearchHistory { queries: vec![] };
     add_query(&mut history, "");
     add_query(&mut history, "   ");
-    assert!(history.queries.is_empty());
+    assert_eq!(history.queries, [] as [String; 0]);
 }
 
 #[test]
@@ -96,7 +96,7 @@ async fn a_history_written_this_session_is_there_on_the_next_one() -> Result<(),
 async fn an_absent_history_file_loads_as_an_empty_one() -> Result<(), AppError> {
     let tmp = TempDir::new()?;
 
-    assert!(store(&tmp).await.get().is_empty());
+    assert_eq!(store(&tmp).await.get(), [] as [String; 0]);
     Ok(())
 }
 
@@ -128,7 +128,7 @@ async fn clearing_writes_an_empty_history_rather_than_removing_the_file() -> Res
     assert_eq!(history.clear().await?, vec!["boards of canada"]);
 
     assert!(path.exists(), "the file is the record that the history is empty");
-    assert!(store(&tmp).await.get().is_empty());
+    assert_eq!(store(&tmp).await.get(), [] as [String; 0]);
     Ok(())
 }
 

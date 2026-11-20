@@ -20,7 +20,7 @@ fn max_binds_per_statement_is_999() {
 async fn chunked_in_query_empty_input() -> Result<(), AppError> {
     let db = DbPool::test_pool().await?;
     let result = ids_found(&db, Vec::new()).await?;
-    assert!(result.is_empty());
+    assert_eq!(result, [] as [i64; 0]);
     Ok(())
 }
 
@@ -154,6 +154,6 @@ async fn chunked_in_query_with_string_binds() -> Result<(), AppError> {
 async fn chunked_in_query_all_missing() -> Result<(), AppError> {
     let db = DbPool::test_pool().await?;
     let result = ids_found(&db, vec![9999_i64, 8888, 7777]).await?;
-    assert!(result.is_empty());
+    assert_eq!(result, [] as [i64; 0]);
     Ok(())
 }

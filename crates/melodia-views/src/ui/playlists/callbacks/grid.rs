@@ -83,11 +83,11 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, playlists_ui: &Arc<Playlist
         let weak = weak.clone();
         playlists.on_row_name(move |id| {
             let Some(ui) = weak.upgrade() else { return SharedString::default() };
-            playlists_ui_mod::shown_card(&ui, i64::from(id)).map(|p| p.name).unwrap_or_default()
+            playlists_ui_mod::shown_card(&ui, i64::from(id)).map_or_default(|p| p.name)
         });
     }
     playlists.on_row_description(move |id| {
         let Some(ui) = weak.upgrade() else { return SharedString::default() };
-        playlists_ui_mod::shown_card(&ui, i64::from(id)).map(|p| p.description).unwrap_or_default()
+        playlists_ui_mod::shown_card(&ui, i64::from(id)).map_or_default(|p| p.description)
     });
 }

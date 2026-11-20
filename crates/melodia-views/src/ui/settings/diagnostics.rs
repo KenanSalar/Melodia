@@ -5,7 +5,7 @@
 use std::rc::Rc;
 
 use async_compat::Compat;
-use chrono::Local;
+use jiff::ZonedDateTime;
 use slint::{ComponentHandle, SharedString, Weak};
 
 use crate::ui::shell::notifications::{Completion, NotificationsUi, RowText};
@@ -47,7 +47,7 @@ fn wire_save_report(ui: &AppWindow, state: &AppState, notifications: &Rc<Notific
 /// Asks where the bundle goes, writes it and says how that went. A cancel says nothing.
 async fn save_report(state: AppState, weak: Weak<AppWindow>, notifications: Rc<NotificationsUi>) {
     let dialog = file_dialog::parented(&weak, "Save Diagnostics Report")
-        .set_file_name(services::diagnostics::suggested_file_name(Local::now()));
+        .set_file_name(services::diagnostics::suggested_file_name(&ZonedDateTime::now()));
     let Some(target) = dialog.save_file().await else {
         return;
     };

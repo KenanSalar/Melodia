@@ -47,7 +47,7 @@ fn a_field_the_track_has_nothing_for_renders_as_an_empty_string() {
     assert_eq!(row.codec.as_str(), "");
     assert_eq!(row.bitrate.as_str(), "");
     assert_eq!(row.year.as_str(), "");
-    assert!(visible_chip_texts(&row).is_empty());
+    assert_eq!(visible_chip_texts(&row), [] as [slint::SharedString; 0]);
 }
 
 /// A year of zero is a tag that said nothing rather than a release in year nought, and a chip

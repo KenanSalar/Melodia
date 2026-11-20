@@ -15,7 +15,7 @@
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 
-use chrono::{DateTime, Local, NaiveDateTime};
+use jiff::{ZonedDateTime, civil};
 
 use melodia_core::error::describe;
 use melodia_core::utils::redact::redact_home;
@@ -56,18 +56,18 @@ impl Drop for HookGuard {
 }
 
 /// The one definition of the naming scheme; [`timestamp_of`] is its inverse.
-fn file_name(now: DateTime<Local>) -> String {
-    format!("{PREFIX}{}{SUFFIX}", now.format(FILE_TS_FORMAT))
+fn file_name(now: &ZonedDateTime) -> String {
+    format!("{PREFIX}{}{SUFFIX}", now.strftime(FILE_TS_FORMAT))
 }
 
 /// When a report was written, or `None` for a name this module didn't write. Pruning is gated on
 /// this, so it is the whole of what keeps the sweep off `melodia_rCURRENT.log` beside it.
-fn timestamp_of(name: &str) -> Option<NaiveDateTime> {
+fn timestamp_of(name: &str) -> Option<civil::DateTime> {
     parse_stamp(name.strip_prefix(PREFIX)?.strip_suffix(SUFFIX)?)
 }
 
-fn parse_stamp(stamp: &str) -> Option<NaiveDateTime> {
-    NaiveDateTime::parse_from_str(stamp, FILE_TS_FORMAT).ok()
+fn parse_stamp(stamp: &str) -> Option<civil::DateTime> {
+    civil::DateTime::strptime(FILE_TS_FORMAT, stamp).ok()
 }
 
 /// Installs the panic hook, as early as a logs directory exists so boot panics are covered.
@@ -84,17 +84,17 @@ pub fn install_hook(logs_dir: &Path) {
         }
         let _guard = HookGuard;
 
-        let now = Local::now();
+        let now = ZonedDateTime::now();
         let thread = std::thread::current();
         let location = info.location().map(ToString::to_string);
         let payload = info.payload_as_str().unwrap_or("<non-string panic payload>");
         let backtrace = std::backtrace::Backtrace::force_capture().to_string();
 
-        let report = format_report(now, thread.name(), location.as_deref(), payload, &backtrace);
+        let report = format_report(&now, thread.name(), location.as_deref(), payload, &backtrace);
 
         // Plain `fs`: a panic raised inside a logging call must not need the logger to leave an
         // artifact.
-        let path = logs_dir.join(file_name(now));
+        let path = logs_dir.join(file_name(&now));
         let _ = std::fs::create_dir_all(&logs_dir);
         let _ = std::fs::write(&path, report);
         prune(&logs_dir);
@@ -112,7 +112,7 @@ pub fn install_hook(logs_dir: &Path) {
 
 /// Pure over its inputs, so testable without panicking.
 fn format_report(
-    now: DateTime<Local>,
+    now: &ZonedDateTime,
     thread: Option<&str>,
     location: Option<&str>,
     payload: &str,
@@ -136,7 +136,7 @@ fn format_report(
 }
 
 /// The header both this report and the diagnostics bundle open with.
-pub fn system_facts(now: DateTime<Local>) -> String {
+pub fn system_facts(now: &ZonedDateTime) -> String {
     // Absent off Linux, where the pair says nothing worth a line.
     let session_type = std::env::var("XDG_SESSION_TYPE").ok();
     let desktop = std::env::var("XDG_CURRENT_DESKTOP").ok();
@@ -157,7 +157,7 @@ pub fn system_facts(now: DateTime<Local>) -> String {
          {session}\
          install   : {install}\n",
         version = env!("CARGO_PKG_VERSION"),
-        timestamp = now.to_rfc3339(),
+        timestamp = now.timestamp().display_with_offset(now.offset()),
         os = std::env::consts::OS,
         arch = std::env::consts::ARCH,
         // `None` on macOS and unsupported arches, where the install method is unknown, not absent.
@@ -179,7 +179,7 @@ pub fn take_unseen(logs_dir: &Path) -> Option<PathBuf> {
         return None;
     }
 
-    let record = LastSeen { newest: Some(newest.format(FILE_TS_FORMAT).to_string()) };
+    let record = LastSeen { newest: Some(newest.strftime(FILE_TS_FORMAT).to_string()) };
     if let Err(e) = melodia_core::utils::atomic_file::write_json_sync(&marker, &record) {
         // Hand the report over anyway: a notice that repeats beats one that never arrives.
         log::warn!("crash report marker: {}", describe(&e));
@@ -187,7 +187,7 @@ pub fn take_unseen(logs_dir: &Path) -> Option<PathBuf> {
     Some(path)
 }
 
-/// A [`FILE_TS_FORMAT`] string rather than a `NaiveDateTime`, chrono being pulled without its
+/// A [`FILE_TS_FORMAT`] string rather than a `civil::DateTime`, jiff being built without its
 /// `serde` feature.
 #[derive(Default, serde::Serialize, serde::Deserialize)]
 struct LastSeen {
@@ -205,12 +205,12 @@ pub fn recent(logs_dir: &Path, limit: usize) -> Vec<PathBuf> {
 
 /// Every report in `logs_dir` that parses back into this module's scheme, oldest first, so nothing
 /// else in the directory can be swept.
-fn existing_reports(logs_dir: &Path) -> Vec<(NaiveDateTime, PathBuf)> {
+fn existing_reports(logs_dir: &Path) -> Vec<(civil::DateTime, PathBuf)> {
     let Ok(entries) = std::fs::read_dir(logs_dir) else {
         return Vec::new();
     };
 
-    let mut reports: Vec<(NaiveDateTime, PathBuf)> = entries
+    let mut reports: Vec<(civil::DateTime, PathBuf)> = entries
         .flatten()
         .filter_map(|entry| {
             let path = entry.path();

@@ -41,47 +41,44 @@ export component DiagnosticsSection inherits Rectangle {
 
     out property <bool> has-matches: show-logs || show-report || show-verbose;
 
-    VerticalLayout {
-        if has-matches: SectionCard {
-            title: root.card-title;
+    if has-matches: SectionCard {
+        title: root.card-title;
 
-            if root.show-logs: SettingRow {
-                icon: "description";
-                label: root.logs-label;
-                description: root.logs-desc;
-                SectionButton {
-                    label: @tr("Open Folder");
-                    icon: "";
-                    primary: false;
-                    clicked => { Settings.open-log-folder(); }
-                }
+        if root.show-logs: SettingRow {
+            icon: "description";
+            label: root.logs-label;
+            description: root.logs-desc;
+            SectionButton {
+                label: @tr("Open Folder");
+                icon: "";
+                primary: false;
+                clicked => { Settings.open-log-folder(); }
             }
+        }
 
-            // Each divider asks whether anything above it survived the filter,
-            // so past the first they take the cumulative form — the shape the
-            // second divider in `about-section.slint` uses.
-            if root.show-logs && root.show-report: SectionDivider {}
-            if root.show-report: SettingRow {
-                icon: "bug_report";
-                label: root.report-label;
-                description: root.report-desc;
-                SectionButton {
-                    label: @tr("Save…");
-                    icon: "";
-                    primary: false;
-                    clicked => { Settings.save-diagnostics-report(); }
-                }
+        // Each divider asks whether anything above it survived the filter, so past the first they
+        // take the cumulative form, the shape of the second divider in `about-section.slint`.
+        if root.show-logs && root.show-report: SectionDivider {}
+        if root.show-report: SettingRow {
+            icon: "bug_report";
+            label: root.report-label;
+            description: root.report-desc;
+            SectionButton {
+                label: @tr("Save…");
+                icon: "";
+                primary: false;
+                clicked => { Settings.save-diagnostics-report(); }
             }
+        }
 
-            if (root.show-logs || root.show-report) && root.show-verbose: SectionDivider {}
-            if root.show-verbose: SettingRow {
-                icon: "tune";
-                label: root.verbose-label;
-                description: root.verbose-desc;
-                ToggleSwitch {
-                    checked <=> Settings.verbose-logging;
-                    toggled(v) => { Settings.verbose-logging-changed(v); }
-                }
+        if (root.show-logs || root.show-report) && root.show-verbose: SectionDivider {}
+        if root.show-verbose: SettingRow {
+            icon: "tune";
+            label: root.verbose-label;
+            description: root.verbose-desc;
+            ToggleSwitch {
+                checked <=> Settings.verbose-logging;
+                toggled(v) => { Settings.verbose-logging-changed(v); }
             }
         }
     }

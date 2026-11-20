@@ -13,7 +13,7 @@
 [advisories]
 ignore = [
     # bincode 2.0.1 unmaintained: in the lockfile only, as the optional `bincode` feature of
-    # typed-index-collections 3.5.0 under i-slint-compiler 1.18.1. Nothing enables it, so it is
+    # typed-index-collections 3.5.0 under i-slint-compiler 1.19.0. Nothing enables it, so it is
     # never built. No upstream tracking issue.
     # revisit: 2026-12-11
     "RUSTSEC-2025-0141",
@@ -30,7 +30,7 @@ ignore = [
     "RUSTSEC-2024-0436",
 
     # zvariant 5.15.0, zvariant_derive 5.15.0 and zbus_names 4.3.4 unmaintained: zbus 5's own
-    # sub-crates, merged into zbus 6.0.0 the day these were filed. Slint 1.18.1's winit backend,
+    # sub-crates, merged into zbus 6.0.0 the day these were filed. Slint 1.19.0's winit backend,
     # its accesskit / atspi chain and ksni 0.3.7 all require zbus ^5 at their newest releases, so
     # moving our own zbus pin alone adds a second zbus and leaves all three here. Leaves once Slint
     # and ksni ship on zbus 6, our bump following.
@@ -39,16 +39,15 @@ ignore = [
     "RUSTSEC-2026-0371",
     "RUSTSEC-2026-0372",
 
-    # pin-utils 0.1.0 unmaintained: via spin_on 0.1.1 under Slint 1.18.1's macros and build crate,
+    # pin-utils 0.1.0 unmaintained: via spin_on 0.1.1 under Slint 1.19.0's macros and build crate,
     # with no fixed release and Slint's main branch still on spin_on. One `pin_mut!`, run at compile
     # time only, so none of it ships. Leaves once Slint drops spin_on.
     # revisit: 2026-12-11
     "RUSTSEC-2026-0441",
 
-    # chrono 0.4.45 unmaintained: Slint 1.18.1's i-slint-core and flexi_logger 0.31.10 require it at
-    # their newest releases, so dropping our own uses and zip's `chrono` feature still leaves it in
-    # the lockfile. A vulnerability would arrive as its own advisory, which this doesn't silence.
-    # Leaves once Slint and flexi_logger drop it, our own uses following.
+    # chrono 0.4.45 unmaintained: Slint 1.19.0's i-slint-core requires it at its newest release and
+    # is its only holder, no Melodia crate naming it. A vulnerability would arrive as its own
+    # advisory, which this doesn't silence. Leaves once Slint drops it.
     # revisit: 2026-12-11
     "RUSTSEC-2026-0543",
 ]

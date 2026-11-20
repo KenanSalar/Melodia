@@ -7,7 +7,7 @@ const SECTION: &str =
 #[test]
 fn the_crash_toast_and_the_card_open_the_same_folder() {
     let (_, after_arm) = ROUTER.split_once("NotificationKind::CrashReport =>").unwrap_or_default();
-    let arm = after_arm.split_once('\n').map(|(arm, _)| arm).unwrap_or_default();
+    let arm = after_arm.split_once('\n').map_or_default(|(arm, _)| arm);
 
     assert!(
         arm.contains("invoke_open_log_folder()"),

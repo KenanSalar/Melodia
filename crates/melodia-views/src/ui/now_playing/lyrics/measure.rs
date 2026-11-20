@@ -38,28 +38,10 @@ pub(super) fn is_full_width(ch: char) -> bool {
     )
 }
 
-/// A Hangul syllable with no final consonant, which Slint 1.18 sets as two loose jamo from a
-/// jamo-only fallback face rather than one block. Retires when a Slint release composes the block.
-const OPEN_HANGUL_EMS: f32 = 2.0;
-
-/// The block is laid out initial-major, so a syllable's index is a multiple of the finals count
-/// exactly when it has none.
-pub(super) fn is_open_hangul_syllable(ch: char) -> bool {
-    const SYLLABLES: core::ops::RangeInclusive<u32> = 0xAC00..=0xD7A3;
-    /// How many syllables share one initial and vowel, the final being what separates them.
-    const FINALS: u32 = 28;
-
-    let cp = u32::from(ch);
-    SYLLABLES.contains(&cp) && (cp - SYLLABLES.start()).is_multiple_of(FINALS)
-}
-
 /// **The error directions aren't symmetric**: over-shooting wraps early and costs a blank half-row,
 /// under-shooting elides words. So each bucket sits just above its widest character, and none above
 /// the whole alphabet, where ordinary prose would measure wide.
 pub(super) fn char_ems(ch: char) -> f32 {
-    if is_open_hangul_syllable(ch) {
-        return OPEN_HANGUL_EMS;
-    }
     if is_full_width(ch) {
         return 1.0;
     }

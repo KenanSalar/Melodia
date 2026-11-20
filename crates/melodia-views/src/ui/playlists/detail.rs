@@ -251,7 +251,7 @@ pub fn apply_optimistic_move(
 /// Where the rows the page's picks name sit on show, in order.
 pub fn picked_rows(ui: &AppWindow) -> Vec<usize> {
     let tracks = ui.global::<PlaylistDetail>().get_tracks();
-    TrackRows::installed(&tracks, TRACKS_LABEL).map(TrackRows::picked_rows).unwrap_or_default()
+    TrackRows::installed(&tracks, TRACKS_LABEL).map_or_default(TrackRows::picked_rows)
 }
 
 /// The track ids on show at `rows`, read before a move renumbers them.

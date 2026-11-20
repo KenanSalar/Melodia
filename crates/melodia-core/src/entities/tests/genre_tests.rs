@@ -61,6 +61,6 @@ fn a_comma_with_no_space_after_it_is_not_a_separator() {
 
 #[test]
 fn a_line_with_nothing_in_it_names_no_genres() {
-    assert!(split("").is_empty());
-    assert!(split(", ").is_empty());
+    assert_eq!(split(""), [] as [&str; 0]);
+    assert_eq!(split(", "), [] as [&str; 0]);
 }

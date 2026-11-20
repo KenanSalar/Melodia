@@ -95,6 +95,7 @@ export component SingleLineInput inherits Rectangle {
 
     menu := TextEditMenu {
         has-text: root.text != "";
+        has-selection: ti.has-selection;
         read-only: root.read-only;
         cut => { ti.cut(); }
         copy => { ti.copy(); }

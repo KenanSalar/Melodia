@@ -299,8 +299,7 @@ fn the_compact_morph_is_written_not_bound() {
     let handler = TAB_BAR
         .split_once("changed compact =>")
         .and_then(|(_, rest)| rest.split_once('}'))
-        .map(|(body, _)| body)
-        .unwrap_or_default();
+        .map_or_default(|(body, _)| body);
 
     assert!(
         handler.contains("root.compact-t ="),
@@ -320,8 +319,7 @@ fn the_compact_morph_is_written_not_bound() {
 fn the_bar_clips_what_the_width_split_lets_it_overdraw() {
     // Anchored past `TabBarCell`, declared above the bar in the same file and clipping
     // its own label slot — an unanchored search passes on that one.
-    let bar =
-        TAB_BAR.split_once("export component TabBar").map(|(_, body)| body).unwrap_or_default();
+    let bar = TAB_BAR.split_once("export component TabBar").map_or_default(|(_, body)| body);
 
     assert!(
         bar.contains("clip: true"),
@@ -346,8 +344,7 @@ fn every_painted_brush_is_an_input() {
 
     // `Theme.*` still appears in the file for geometry, durations and the defaults
     // themselves, so anchor on the two paint sites that regressed.
-    let bar =
-        TAB_BAR.split_once("export component TabBar").map(|(_, body)| body).unwrap_or_default();
+    let bar = TAB_BAR.split_once("export component TabBar").map_or_default(|(_, body)| body);
     assert!(
         !bar.contains("background: Theme.surface1"),
         "the divider must paint `divider-color`, not `Theme.surface1` directly"
@@ -463,8 +460,7 @@ fn cell_body() -> String {
     TAB_BAR
         .split_once("component TabBarCell")
         .and_then(|(_, body)| body.split_once("export component TabBar"))
-        .map(|(body, _)| body)
-        .unwrap_or_default()
+        .map_or_default(|(body, _)| body)
         .lines()
         .filter(|line| !line.trim_start().starts_with("//"))
         .collect::<Vec<_>>()
@@ -491,8 +487,7 @@ fn the_cell_captures_the_previous_index_before_it_moves() {
         .split_once("export component TabBar")
         .and_then(|(_, bar)| bar.split_once("clicked => {"))
         .and_then(|(_, rest)| rest.split_once('}'))
-        .map(|(body, _)| body)
-        .unwrap_or_default();
+        .map_or_default(|(body, _)| body);
 
     let capture = handler.find("root.previous-index = root.selected-index;");
     let write = handler.find("root.selected-index = i;");

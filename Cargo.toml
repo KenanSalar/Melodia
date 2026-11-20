@@ -23,12 +23,11 @@ version = "0.23.0"
 edition = "2024"
 license = "AGPL-3.0-or-later"
 # Lockstep with `rust-toolchain.toml` and `clippy.toml`'s `msrv`.
-rust-version = "1.97"
+rust-version = "1.100"
 # Here rather than on `[package]` because `ui::settings::about` reads
 # `CARGO_PKG_REPOSITORY`, and a member that inherits nothing gets an empty string
 # and only *logs* about it.
 repository = "https://github.com/KenanSalar/Melodia"
-homepage = "https://github.com/KenanSalar/Melodia"
 
 # Every dependency is declared here rather than in the member that uses it, and the
 # reason is the one `slint` taught: a drifted version resolves two copies of a crate
@@ -41,9 +40,9 @@ homepage = "https://github.com/KenanSalar/Melodia"
 # UI
 # `raw-window-handle-06` parents the rfd pickers; `unstable-winit-030` exposes
 # `WinitWindowAccessor` for `drag_window()` and `WindowEvent::Resized` (slint-ui#2521,
-# #6273, #4817); `renderer-femtovg` because the software renderer can't clip to
-# `border-radius` (slint#4176).
-slint = { version = "1.18.1", default-features = false, features = [
+# #6273, #4817); `renderer-femtovg` as the renderer the rounded clips, layers and gradients
+# are tuned against.
+slint = { version = "1.19.0", default-features = false, features = [
     "std",
     "backend-default",
     "accessibility",
@@ -56,7 +55,7 @@ slint = { version = "1.18.1", default-features = false, features = [
 # So must `slint-tr-extractor`: `scripts/update-translations.py` reads the version off the
 # `slint = { version = … }` line and refuses an extractor that doesn't match it. The default
 # `renderer-software` feature only embeds resources for a renderer we don't build.
-slint-build = { version = "1.18.1", default-features = false, features = ["compat-1-18"] }
+slint-build = { version = "1.19.0", default-features = false, features = ["compat-1-18"] }
 
 # Async runtime / synchronisation
 tokio = { version = "1.54.1", features = [
@@ -68,14 +67,14 @@ tokio = { version = "1.54.1", features = [
     "process",
 ] }
 tokio-util = { version = "0.7.20", features = ["rt"] }
-async-compat = "0.2.6"
+async-compat = "0.2.7"
 parking_lot = "0.12.5"
 # `StreamExt` over a response body, so neither the updater's download nor a capped read
 # collects the whole asset; `future::join_all` where a view fans out over its rows.
 futures-util = { version = "0.3.34", default-features = false, features = ["std"] }
 
 # Database
-rusqlite = { version = "0.42.0", features = ["bundled", "collation"] }
+rusqlite = { version = "0.43.0", features = ["bundled", "collation"] }
 
 # Audio
 # The device stream `player::playback::output` opens, and the `ErrorKind`s
@@ -156,7 +155,7 @@ encoding_rs = "0.8.44"
 # The universal romanizer. Its dictionaries compile to a zero-copy `rkyv` archive read in
 # place out of `.rodata`, so they cost binary size rather than heap and nothing is parsed
 # at startup.
-uroman = "0.7.0"
+uroman = "0.7.1"
 # In front of it for Japanese, which uroman reads as Mandarin: kanji and hanzi are the
 # same codepoints and uroman carries no Japanese readings at all. GPL-3.0, which an
 # AGPL-3.0-or-later binary may link (GPLv3 §13); the combination stays AGPL.
@@ -182,7 +181,7 @@ image = { version = "0.25.10", default-features = false, features = [
 # `image`'s resamplers go through `get_pixel`; this is the same convolution over the
 # flat slice with SIMD. It carries `unsafe` internally, which `unsafe_code = "deny"`
 # can't reach; `media::image::image_decode::resize_rgb8` is the only place it is named.
-fast_image_resize = { version = "6.1.0", features = ["image"] }
+fast_image_resize = { version = "6.2.0", features = ["image"] }
 # Scale-on-decode, which `image`'s JPEG path can't reach (`zune-jpeg` picks reduced
 # IDCTs by coefficient content, not by request). Every tier draws a cover far smaller
 # than the store holds; `image_decode::decode_capped_to` falls back to `image`.
@@ -221,7 +220,9 @@ md5 = "0.8.1"
 # Serde / config
 serde = { version = "1.0.229", features = ["derive"] }
 serde_json = "1.0.154"
-chrono = { version = "0.4.45", default-features = false, features = ["clock", "std"] }
+# The default features, which flexi_logger turns on anyway: `ZonedDateTime::now` reads the system
+# zone through `tz-system`, and Windows, holding no copy of the tzdb, gets the bundled one.
+jiff = "1.0.1"
 dirs = "7.0.0"
 
 # Logging / errors
@@ -229,7 +230,7 @@ log = "0.4.35"
 # Replaced `env_logger` when logs had to reach a file: the only candidate with size
 # and age rotation in one criterion and no background thread. `colors` pulls
 # `nu-ansi-term`, the only crate the swap adds against thirteen it retires.
-flexi_logger = { version = "0.31.10", default-features = false, features = ["colors"] }
+flexi_logger = { version = "0.32.0", default-features = false, features = ["colors"] }
 thiserror = "2.0.21"
 
 # Updater
@@ -245,10 +246,10 @@ open = "5.4.5"
 # The single-instance socket: one abstraction over a Linux abstract unix socket and
 # a Windows named pipe, whose *server* half would otherwise be `CreateNamedPipeW`, an
 # FFI site no Linux runner compiles. `tokio` would pull `tokio/net`, left off above.
-interprocess = "2.4.8"
+interprocess = "2.4.9"
 
 # Utilities
-rand = "0.10.3"
+rand = "0.10.4"
 lru = "0.19.0"
 # Atomic file writes (settings/queue/search-history persistence)
 tempfile = "3.27.0"
@@ -256,9 +257,9 @@ tempfile = "3.27.0"
 # archive zipped elsewhere reliably uses; the defaults add AES, bzip2, Deflate64, lzma,
 # xz, zstd, PPMd and zopfli for nothing we write or expect to read. `deflate-flate2` names
 # no backend of its own: `lofty` already builds `flate2` with its pure-Rust one, and a tree
-# that lost that would fail to compile rather than misbehave. `chrono` is the conversion
-# that dates each entry, without which every extracted file reads 1980; it adds no crate.
-zip = { version = "9.5.1", default-features = false, features = ["chrono", "deflate-flate2"] }
+# that lost that would fail to compile rather than misbehave. No date feature: `jiff-02`
+# converts jiff 0.2's types, a second jiff beside ours, so `archive.rs` dates each entry itself.
+zip = { version = "9.8.1", default-features = false, features = ["deflate-flate2"] }
 # Test-only: the rules pin expands each `.claude/rules` `paths:` glob.
 glob = "0.3.4"
 # Test-only: the translations pin reads the bundled faces' character maps, which needs

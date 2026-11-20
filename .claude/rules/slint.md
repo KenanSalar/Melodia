@@ -16,6 +16,8 @@ paths:
   `slint::slint!{}` macro outside of toy demos. Files give you syntax highlighting, partial
   rebuilds, and proper diagnostics. The whole tree lives inside that crate, so those paths are
   manifest-relative, not repo-relative.
+- The tree compiles at the edition `build.rs` names, which a Slint bump leaves alone: raising it is
+  a change of its own, weighed against the behaviour changes that release's editions page lists.
 - One root component per app, additional components per file. Group by folder:
   `crates/melodia-ui/ui/layout/`, `.../views/`, `.../components/`.
 - A single `theme.slint` global holds design tokens (brushes, sizes, durations) — every other
@@ -168,8 +170,9 @@ paths:
 - **Fonts are imported, never registered from Rust**: a `.slint` file imports each face
   (`import "assets/fonts/vazirmatn/Vazirmatn-Regular.ttf";`), which embeds it at build time.
   `app-window.slint` imports the text faces and names them in `default-font-family`,
-  `material-icon.slint` the two icon faces. Slint 1.18 has no public registration API to reach
-  for instead. `scripts/patch_vazirmatn.py` argues the text faces and their patching, and
+  `material-icon.slint` the two icon faces. Slint 1.19's registration API sits behind the unstable
+  `unstable-fontique-012` feature, so there is nothing stable to reach for instead.
+  `scripts/patch_vazirmatn.py` argues the text faces and their patching, and
   `scripts/subset-icon-fonts.py` the icon subsets.
 
 ## Animations & Performance

@@ -74,7 +74,7 @@ export component StationCard inherits Rectangle {
         // Without a usable logo a station gets its own stops and initials, one repeated glyph
         // making a directory page read as a grid of icons. `ui::radio::identity` keeps the stops
         // deep enough for this one ink.
-        tile-bg: @linear-gradient(135deg, root.tile-color-1, root.tile-color-2);
+        tile-bg: Theme.tile-gradient(root.tile-color-1, root.tile-color-2);
         tile-icon-color: Theme.tile-ink;
         fallback-text: root.monogram;
         // For a name with no letters to take initials from.

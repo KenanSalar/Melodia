@@ -74,7 +74,7 @@ fn classify_create_file_non_audio_skipped() {
     let kind = EventKind::Create(CreateKind::File);
     let paths = vec![PathBuf::from("/music/readme.txt")];
     let events = super::classify_event(kind, &paths);
-    assert!(events.is_empty());
+    assert_eq!(events, [] as [FileEvent; 0]);
 }
 
 #[test]
@@ -160,7 +160,7 @@ fn classify_access_skipped() {
     let kind = EventKind::Access(notify::event::AccessKind::Read);
     let paths = vec![PathBuf::from("/music/song.mp3")];
     let events = super::classify_event(kind, &paths);
-    assert!(events.is_empty());
+    assert_eq!(events, [] as [FileEvent; 0]);
 }
 
 #[test]
@@ -168,7 +168,7 @@ fn classify_metadata_change_skipped() {
     let kind = EventKind::Modify(ModifyKind::Metadata(notify::event::MetadataKind::Any));
     let paths = vec![PathBuf::from("/music/song.mp3")];
     let events = super::classify_event(kind, &paths);
-    assert!(events.is_empty());
+    assert_eq!(events, [] as [FileEvent; 0]);
 }
 
 #[test]
@@ -176,7 +176,7 @@ fn classify_remove_non_audio_skipped() {
     let kind = EventKind::Remove(RemoveKind::File);
     let paths = vec![PathBuf::from("/music/cover.jpg")];
     let events = super::classify_event(kind, &paths);
-    assert!(events.is_empty());
+    assert_eq!(events, [] as [FileEvent; 0]);
 }
 
 #[test]
@@ -206,7 +206,7 @@ fn classify_rename_non_audio_to_non_audio_skipped() {
     let kind = EventKind::Modify(ModifyKind::Name(RenameMode::Both));
     let paths = vec![PathBuf::from("/music/readme.txt"), PathBuf::from("/music/readme.bak")];
     let events = super::classify_event(kind, &paths);
-    assert!(events.is_empty());
+    assert_eq!(events, [] as [FileEvent; 0]);
 }
 
 /// Trashing from a file manager is a rename, which must not re-point the row into the trash.
@@ -233,7 +233,7 @@ fn classify_create_inside_a_trash_skipped() {
     let kind = EventKind::Create(CreateKind::File);
     let paths = vec![PathBuf::from("/music/$RECYCLE.BIN/song.mp3")];
     let events = super::classify_event(kind, &paths);
-    assert!(events.is_empty());
+    assert_eq!(events, [] as [FileEvent; 0]);
 }
 
 // === A directory arriving at a new path ===

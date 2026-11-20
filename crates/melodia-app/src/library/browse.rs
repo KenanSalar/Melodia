@@ -97,8 +97,7 @@ pub async fn browse_directory(
     let mut files: Vec<BrowseFile> = Vec::with_capacity(scan.audio_paths.len());
     for audio_path in &scan.audio_paths {
         let path_str = audio_path.to_string_lossy();
-        let file_name =
-            audio_path.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
+        let file_name = audio_path.file_name().map_or_default(|n| n.to_string_lossy().into_owned());
 
         if let Some(rows) = track_map.remove(path_str.as_ref()) {
             let in_library = rows.into_iter().map(|row| BrowseFile {

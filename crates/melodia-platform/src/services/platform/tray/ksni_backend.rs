@@ -122,7 +122,7 @@ impl Drop for LinuxTray {
 
 /// The network-byte-order ARGB32 ksni's `Icon` takes.
 fn rgba_to_argb(mut rgba: Vec<u8>) -> Vec<u8> {
-    for px in rgba.chunks_exact_mut(4) {
+    for px in rgba.as_chunks_mut::<4>().0 {
         px.rotate_right(1);
     }
     rgba
@@ -141,8 +141,7 @@ fn icon_for(on_light_panel: bool) -> Vec<Icon> {
                 data: rgba_to_argb(rgba),
             })
         })
-        .map(|icon| vec![icon])
-        .unwrap_or_default()
+        .map_or_default(|icon| vec![icon])
 }
 
 /// `None` with no SNI host, as on vanilla GNOME, or no D-Bus.

@@ -54,9 +54,7 @@ export component TopResultCard inherits VerticalLayout {
                 // one genre. The other arms restate `ArtworkImage`'s own default, a
                 // ternary having no way to fall through to it.
                 tile-bg: Search.top-kind == "genre"
-                    ? @linear-gradient(135deg,
-                        Search.top-tile-color-1,
-                        Search.top-tile-color-2)
+                    ? Theme.tile-gradient(Search.top-tile-color-1, Search.top-tile-color-2)
                     : Theme.accent.with-alpha(0.15);
                 tile-icon-color: Search.top-kind == "genre"
                     ? #ffffff.with-alpha(0.3)

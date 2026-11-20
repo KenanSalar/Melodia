@@ -10,8 +10,8 @@ paths:
 # Slint Pitfalls (battle-tested)
 
 Melodia-specific, each paid for once already. General Slint patterns are in `slint.md`;
-this file is what builds, looks right, and is wrong. Source paths are Slint 1.18's. The generated
-`app-window.rs` (`target/*/build/melodia-ui-*/out/`) is what a construct compiled to: verify
+this file is what builds, looks right, and is wrong. Source paths are Slint 1.19's. The generated
+`app-window.rs` (`target/*/build/melodia-ui/*/out/`) is what a construct compiled to: verify
 there, never in the `.slint`.
 
 ## Layout
@@ -41,11 +41,10 @@ there, never in the `.slint`.
   / `max-width`. Tell: `layout_info`'s `min` reading the root's own `width`. **An animated
   `height` takes the same split and owes a `clip`**, the element drawing shorter than its contents.
 
-- **A `Rectangle`-rooted component folds only unrepeated, unpositioned children into its layout
-  info.** `default_geometry::gen_layout_info_prop` skips a repeated child, so
-  `Rectangle { if x: Card {} }` reports 0×0 (a `min-height` beside it hides that until the content
-  wraps): wrap in a layout, also the one thing outside the `if` whose height the root can read. It
-  skips a child binding `x` or `y` too, where the same content in a centring layout folds its whole
+- **A `Rectangle`-rooted component folds every unpositioned child into its layout info, an `if` or
+  `for` included** (`default_geometry::gen_layout_info_prop`, edition 1.19), a repeated one through
+  `box_layout_info_ortho` over its instances. A child binding `x` or `y` is skipped, which is how
+  one stays out of its host's size, where the same content in a centring layout folds its whole
   constraint set, animations included, into every host's layout. The fold runs on both axes and
   `layout_items` never shrinks a cell past its `min`, so a wrapper's `min-width` floors its host; an
   explicit `min-width` **replaces** the merged one. Tell: a missing `+ …layoutinfo_v` term, or a
@@ -54,12 +53,13 @@ there, never in the `.slint`.
 - **A box layout clamps a stretched child to that child's own cross-axis `min`/`max`, and the std
   `ScrollView` (so `ListView`) floors itself at 50 px.** `clamp_cross_stretch_size`
   (`passes/lower_layout.rs`), so a std scroller overflows a narrower column, along with everything
-  sized off its `content-width`. Set `min-width: 0px` at the mount. Tell: `.max (50f64`.
+  sized off its `content-width`. Set `min-width: 0px` at the mount. Tell: `. max (50f64`.
 
 - **Centring one cell of a box layout moves the whole layout onto another solve.**
   `cross-axis-alignment: center`, or `cross-axis-self-alignment: center` on a cell, goes through
   `solve_box_layout_ortho` (`i-slint-core/layout.rs`): a stretched sibling is clamped to its
-  implicit max (self-align only where every one is unbounded: a `Text`, a `Rectangle` of `if`s), an
+  implicit max (self-align only where every one is unbounded: a `Text`, a `Rectangle` of positioned
+  children), an
   explicit `x`/`y` on a cell is a build error, and dropping an `alignment: start` wrapper can cap
   the row, whose cross max is its cells' least. A lone `Text` centres with `vertical-alignment` and
   a sized child of a plain `Rectangle` is already centred. Tell: `solve_box_layout_ortho`.
@@ -79,6 +79,12 @@ there, never in the `.slint`.
   `for`'s items can place themselves, `add_element` following a repeated child's binding into its
   sub-component, where a mix is only a warning.
 
+- **A binding loop through a `GridLayout`'s runtime `row` or `col` panics the compiler rather than
+  being reported**: `RefCell already borrowed` in `GridLayout::visit_rowcol_named_references`
+  (`layout.rs`), `OrganizeGridLayout`'s analysis re-entering a cell it holds
+  (`passes/binding_analysis.rs`). A grid placing its cells off its own height is the shape; keep it
+  out of its host's size, as `NpEmptyState` does by pinning `x`/`y`.
+
 - **A `GridLayout` column starts at its cells' `preferred` width** (`layout_items` sizes to `pref`,
   then shares surplus by stretch), so equal stretch on unequal cards gives unequal columns. Pin
   every cell's `preferred-width` to one number, leaving `min-width` alone; never `width`.
@@ -92,7 +98,7 @@ there, never in the `.slint`.
 - **A `FlexboxLayout` measures its items at a width it hasn't committed to, and only a layout- or
   `Text`-rooted item can answer.** taffy asks a height at a trial width through
   `layoutinfo-v-with-constraint`, synthesized on layout elements only (`passes/lower_layout.rs`;
-  `is_height_for_width_cell`, `llr/lower_layout_expression.rs`). A `Rectangle`-rooted item whose
+  `is_height_for_width_cell`, `layout.rs`). A `Rectangle`-rooted item whose
   height follows its width is read at its drawn height, which waits on the solve: `Recursion
   detected` (`i-slint-core/properties.rs`) at run time on the first layout, the build and tests
   green. A `Text` reads the trial width as its `cross_axis_constraint` (`items/text.rs`). So a flex
@@ -104,21 +110,18 @@ there, never in the `.slint`.
   `cross-axis-line-alignment: start`, or hand it no surplus. **Its `preferred-width` is a
   near-square block** (`flexbox_layout_info_main_axis`), so a strip given only that wraps early.
 
-- **A flex inside an `if` reports its height at that near-square width, not the drawn one**, the
-  repeated `layout_info(Vertical)` handing `fn_layoutinfo_v_with_constraint` its own
-  `layoutinfo_h.preferred`. A box solve still places it (`layout_item_info_at_cross_width`); what
-  breaks is anything reading the reported height. Make the flex a direct child, hidden through
-  `visible`. Tell: the repeated arm ending on `…_layoutinfo_h ()` … `.preferred`, where a direct
-  child's `flexbox_layout_info_cross_axis` ends on the root's `…_width ()` (`hero_chips_tests.rs`).
+- **A flex inside an `if` outside any layout reports its height at that near-square width, not the
+  drawn one.** A box solve still places it (`layout_item_info_at_cross_width`); what breaks is
+  anything reading the reported height. Make the flex a direct child, hidden through `visible`
+  (`hero_chips_tests.rs`).
 
-- **Any component behind an `if` or `for` measures its height at its child layout's width, and a
-  root pin can't steer it**: a root's `preferred-width`/`max-width` reaches only the horizontal arm
-  (`get_layout_info_v_constrained_for_repeated`), so wrapped text reports one line. Pin a **cell**,
-  whose `preferred-width` replaces what it asks where a root's only raises it (`LayoutInfo::merge`).
-  Tell: the `Vertical` arm reading `(… + …_layoutinfo_h ()).preferred`. **A mount handing children
-  is inlined into the branch and caught where the same component mounted bare can escape**, its arm
-  reading the root's `layoutinfo_v` at the drawn width (`features-panel.slint`'s `UpdateCheckRow`).
-  A `preferred-width` on a layout under a `Rectangle` root is never read, so it pins nothing.
+- **Behind an `if` or `for`, a root outside any layout measures its height at its own preferred
+  width.** `get_root_layout_info_v` (`llr/lower_layout_expression.rs`) reads `min` and `max` at the
+  root's `width` but `preferred` at its preferred width bounded by its own `preferred-`, `min-` and
+  `max-width`, so wrapped text reports fewer lines than it draws until the root pins one. A layout
+  cell measures at the width it's given, a flex item at its preferred width
+  (`get_layout_info_v_constrained_for_repeated`). A `preferred-width` on a layout under a
+  `Rectangle` root is never read, so it pins nothing.
 
 ## Bindings and animation
 
@@ -151,7 +154,7 @@ there, never in the `.slint`.
   re-dirties the leaf every frame, which then lands in one late rush, both ways. A
   `touch.has-hover ? fill : transparent` is no escape, the clicked tab being the hovered one. Ease a
   float and paint `fill.transparentize(1.0 - t)`, which multiplies alpha where `with-alpha` sets
-  it. `mix()` has no brush overload (`ColorMix: (Color, Color, Float32) -> Color`), so crossing two
+  it. `mix()` has no brush overload (`color_mix(color: Color, other: Color, …)`), so crossing two
   host brushes is two identical layers with the bottom at full alpha, `t` over `1 - t` thinning to
   three-quarter coverage (`tab_bar_tests.rs`). **The mirror image bites the host**: a layer may not
   ease out of a value nothing was painting, so a held tier's idle value has to be honest
@@ -182,9 +185,10 @@ there, never in the `.slint`.
 - **A nested `ListView` swallows the wheel at its scroll edge** (`flickable.rs::process_wheel_event`
   returns `EventAccepted` in the capture window), and no pure-Slint interceptor works. Reach for
   tabs first. The composite views route the wheel through winit (`CompositeScroll`), and **every
-  content-view switch owes `CompositeScroll.reset()`**, Slint giving no unmount hook. **A Rust write
-  watched only by a `changed` handler owes `request_redraw()`**: handlers run from `new_events`,
-  which `WindowRedrawTracker` schedules off what the render read (`winit_filter_tests.rs`).
+  content-view switch owes `CompositeScroll.reset()`**, Slint giving no unmount hook. **A winit
+  filter's write watched only by a `changed` handler owes `request_redraw()`**: handlers run from
+  `new_events`, which `WindowRedrawTracker` schedules off what the render read, and after a posted
+  closure, which a filter write is not (`winit_filter_tests.rs`).
 
 - **A `Flickable`'s drag-pan steals a mouse drag, and the default is the style's.** A bare
   `Flickable` defaults `mouse-drag-pan-enabled` to `true`; every style's `ScrollView` (so
@@ -199,7 +203,7 @@ there, never in the `.slint`.
   only when `!y.has_binding()` (`items/flickable.rs`). An imperative write leaves no binding, but
   `Property::link_two_way` survives one, so content shrinking under the offset paints blank. A
   two-way scroller re-clamps itself (`CompositeScrollbars`). Audit:
-  `r#Flickable :: FIELD_OFFSETS . r#content_y ())`, every `link_two_way` hit unguarded.
+  `r#Flickable :: FIELD_OFFSETS . content_y ())`, every `link_two_way` hit unguarded.
 
 ## Pointer and hover
 
@@ -263,8 +267,8 @@ there, never in the `.slint`.
 
 - **An entry that closes its popup before it acts reads its host as defaults.** An entry inside an
   `if` or `for` reaches the host's properties through the popup, `parent.upgrade()` per level
-  ending in `unwrap_or_default()`, and `close()` drops the popup, so the read answers `0` or `""`
-  and nothing warns. Act, then close (`TrackContextMenu`'s `dismiss()`). Tell: `fn_dismiss ()`
+  falling back to `Default::default()`, and `close()` drops the popup, so the read answers `0` or
+  `""` and nothing warns. Act, then close (`TrackContextMenu`'s `dismiss()`). Tell: `fn_dismiss ()`
   ahead of a `parent . upgrade ()` read in the entry's `clicked` handler.
 
 ## Lifecycle: `changed`, `init`, `Timer`
@@ -274,15 +278,15 @@ there, never in the `.slint`.
   mirror always owes it.
 
 - **A `changed` handler inside an `if` outlives its branch, and whether that panics depends on what
-  it watches.** The generated `ChangeTracker` holds a `VWeakMapped` to its repeated component, and
-  `ChangeTracker::evaluate` opens with `self_weak.upgrade().unwrap()`; `VRc` keeps the allocation
-  for the weaks, so the tracker stays in `CHANGED_NODES`. One on a property driven inside the branch
+  it watches.** The generated tracker holds a weak handle to its repeated component, which its
+  evaluation expects alive (`properties/erased_bindings.rs`); `VRc` keeps the allocation for the
+  weaks, so the tracker stays in `CHANGED_NODES`. One on a property driven inside the branch
   dies quietly; one on a layout property is re-dirtied by the parent re-flowing without it. So a
   branch with a layout-watching tracker drops only on a frame nothing re-dirtied that property:
   never on an animated predicate, nor on anything a `changed` handler writes, nor safely from a
-  `Timer` or Rust callback. Symptom: `called Option::unwrap() on a None value` in
-  `InnerFoo::user_init::{closure#N}`, naming a component far from the edit. Tell: a
-  `change_tracker<N>.init` whose eval reads a `_width`, `_height` or `_watched_cols`. Keep the
+  `Timer` or Rust callback. Symptom: a `change tracker on dropped component` panic, naming a
+  component far from the edit. Tell: a `change_tracker_init_erased` whose eval reads a `_width`,
+  `_height` or `_watched_cols`. Keep the
   tracker mounted and fade by brush alpha (`library_tab_band_tests.rs`).
 
 - **A `Timer`'s `interval` may not reach a layout property, even transitively.** It is a
@@ -303,8 +307,8 @@ there, never in the `.slint`.
   element is always rounded.** `passes/clip.rs` copies the radius, and `visit_clip` sends any
   non-zero one through `render_layer`: a texture at physical size, redrawn when anything inside
   changes and filled back through an antialiased path. A radius-less clip is a scissor, and a
-  `border` never makes a layer (`draw_border_rectangle`). The texture softens text on a fractional
-  pixel and re-renders a view on every scroll frame. Clip a radius-less element with the rounded
+  `border` never makes a layer (`draw_border_rectangle`). The texture softens text under a scale or
+  rotation and re-renders a view on every scroll frame. Clip a radius-less element with the rounded
   fill a child at `x: 0; y: 0`, or mask corners with `RoundedFrame` over an opaque ground.
 
 - **FemtoVG antialiases every rounded fill, stroke and clip on its own, and the coverages of one
@@ -316,7 +320,8 @@ there, never in the `.slint`.
   drop shadow, which shows through a tucked rim.
 
 - **A `background: transparent` written out costs a discarded path per element per frame.**
-  `resolve_native_classes` picks the native class by which properties are bound, so the element
+  `select_native_class` (`llr/native_class_selection.rs`) picks the native class by which
+  properties are bound, so the element
   leaves `Empty`, and a plain `Rectangle`'s `draw_rectangle` builds its path before reading the
   paint. Delete it. **A plain fill only sometimes transparent pays the same**: put it behind an
   `if` on the eased float rather than its target, so it outlives the fade-out, carrying no
@@ -332,8 +337,9 @@ there, never in the `.slint`.
 
 - **A drop shadow that changes over an animation leaves a texture per frame resident.**
   `BoxShadowCache` (`i-slint-core/graphics/boxshadowcache.rs`) keeps sixteen keyed by size, colour,
-  blur, radius and offset after the animation ends. Switch a shadow rather than easing it or its
-  caster's size; only GPU memory shows the miss.
+  blur, radius, spread and the caster's fill and border (`BoxShadowOptions`) after the animation
+  ends. Switch a shadow rather than easing it or its caster's size or fill; only GPU memory shows
+  the miss.
 
 - **A flash-free image cross-fade is two slots, never cleared under a fade.** Rust writes the
   inactive slot and flips a `use-a` bool; a slot is cleared only where no fade can still read it.
@@ -373,21 +379,7 @@ there, never in the `.slint`.
 - **Material Symbols need a collapsed line box**, `Text` defaulting to ~1.2× `font-size`: a fixed
   square (`MaterialIcon`).
 
-- **Slint 1.18 draws a Hangul syllable with no final consonant as two loose jamo**, through the
-  generic family appended to every font stack: `textlayout/sharedparley/shaping.rs`'s
-  `ranged_builder` pushes `Generic(SansSerif)` and `Generic(SystemUi)` after the default family,
-  fontique takes a generic as fontconfig's whole chain, and parley stops at the first face covering
-  the decomposed form, a jamo-only one. Any single named family shapes correctly, so `.slint` can't
-  reach it. An open syllable measures 2 em, so a box sized off a character count under-measures and
-  an elided `Text` drops the line: `OPEN_HANGUL_EMS` (`ui/now_playing/lyrics/measure.rs`) pays.
-
 ## Paths and gradients
-
-- **A function's arguments are unreachable inside a gradient's stops**, so a shared
-  `tile-gradient(a, b)` is unspellable: `from_at_gradient` sets `ctx.property_type` to
-  `Type::Color` per stop, and `ArgumentsLookup` then yields nothing. Tell: `Unknown unqualified
-  identifier 'a'`. `root.a` resolves, so the escape is a mounted component with an
-  `out property <brush>`; Rust can't build one, `slint` re-exporting no `LinearGradientBrush`.
 
 - **Generated `Path` geometry crosses as an SVG `commands` string, with an explicit viewbox and
   `fit: fill`.** `for` inside a `Path` is rejected (slint-ui/slint#754); without a viewbox Slint
@@ -398,10 +390,10 @@ there, never in the `.slint`.
 
 - **A number turned into a string in `.slint` writes the running translation's decimal separator,
   so a `commands` string built with `+` breaks in every bundled locale but English.**
-  `shared_string_from_number` (`i-slint-core/string.rs`) swaps in the separator
+  `SlintContext::format_number` (`i-slint-core/context.rs`) swaps in the separator
   `select_bundled_translation` installs, and the path parser rejects `5,5`. Integers pass until a
   fraction lands. Use `.to-string-unlocalized()` on every number something parses; text a person
-  reads keeps `+`, and Rust's `format!` is unaffected. Tell: `shared_string_from_number (` in a
+  reads keeps `+`, and Rust's `format!` is unaffected. Tell: `format_number (` in a
   `PathData :: Commands` binding.
 
 - **A round cap on a 1 px stroke draws nothing at scale factor 1, and its two tips differ.**
@@ -424,7 +416,7 @@ there, never in the `.slint`.
   - **A `Drop` goes to whatever the hit test finds**, and a `DropArea` takes any it receives
     (`items/drag_n_drop.rs`), so one in front eats a target's drops while refusing every move.
 
-- **Stock Slint 1.18 + winit 0.30 have no OS file drop on Wayland, and no pointer during one
+- **Stock Slint 1.19 + winit 0.30 have no OS file drop on Wayland, and no pointer during one
   anywhere**: `DragArea`/`DropArea` is in-process, with no `PathBuf`. The vendored fork reports the
   pointer and Rust routes the drop (`window_chrome::file_drop`); winit #4571 is the upstream fix.
 

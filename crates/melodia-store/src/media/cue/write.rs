@@ -22,7 +22,6 @@ use melodia_core::entities::cue::CueTrack;
 use melodia_core::entities::tags::{FieldEdit, RoleCreditEdit, TagEdit};
 use melodia_core::error::AppError;
 use melodia_core::utils::atomic_file;
-use melodia_core::utils::text::from_utf8_lossy_owned;
 
 /// The part of a tag edit a cue sheet holds. The rest describes the whole disc, in the image's
 /// tags, or lives in the database.
@@ -154,7 +153,7 @@ pub(super) fn rewritten_comment(
     let track_fields = std::mem::take(&mut rewrite.track_fields);
     let text = rewrite
         .changes()
-        .then(|| from_utf8_lossy_owned(sheet.encode(&rewrite.into_lines(), origin)));
+        .then(|| String::from_utf8_lossy_owned(sheet.encode(&rewrite.into_lines(), origin)));
     CommentRewrite { text, track_fields }
 }
 

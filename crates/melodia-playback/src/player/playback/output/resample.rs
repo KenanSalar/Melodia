@@ -112,7 +112,7 @@ impl Kernel {
                 .map(|distance| prototype(distance, cutoff) as f32),
         );
         let table = table.into_boxed_slice();
-        let row_sums = table.chunks_exact(ROW).map(|row| row.iter().sum()).collect();
+        let row_sums = table.as_chunks::<ROW>().0.iter().map(|row| row.iter().sum()).collect();
         Self { table, row_sums }
     }
 

@@ -130,8 +130,8 @@ fn release(copy: &DuplicateCopy) -> String {
 /// A file's name and the folder holding it, as a row shows them.
 pub(super) fn file_and_folder(path: &str) -> (SharedString, SharedString) {
     let path = Path::new(path);
-    let file_name = path.file_name().map(|name| name.to_string_lossy()).unwrap_or_default();
-    let folder = path.parent().map(|folder| folder.display().to_string()).unwrap_or_default();
+    let file_name = path.file_name().map_or_default(|name| name.to_string_lossy());
+    let folder = path.parent().map_or_default(|folder| folder.display().to_string());
     (file_name.as_ref().into(), folder.into())
 }
 

@@ -5,7 +5,8 @@
 use std::io::{Read, Seek, Write};
 use std::path::Path;
 
-use chrono::NaiveDateTime;
+use jiff::civil;
+use zip::result::DateTimeRangeError;
 use zip::write::SimpleFileOptions;
 use zip::{CompressionMethod, ZipArchive, ZipWriter};
 
@@ -71,11 +72,11 @@ pub struct Contents {
 pub fn write<W: Write + Seek>(
     out: W,
     entries: &[Entry],
-    modified: NaiveDateTime,
+    modified: civil::DateTime,
 ) -> Result<(), AppError> {
     let options = SimpleFileOptions::default()
         .compression_method(CompressionMethod::Deflated)
-        .last_modified_time(zip::DateTime::try_from(modified).unwrap_or_default());
+        .last_modified_time(entry_date(modified).unwrap_or_default());
 
     let mut archive = ZipWriter::new(out);
     for entry in entries {
@@ -84,6 +85,18 @@ pub fn write<W: Write + Seek>(
     }
     archive.finish().map_err(AppError::io_source)?;
     Ok(())
+}
+
+/// `at` as an entry's date, without which every extracted entry reads 1980.
+fn entry_date(at: civil::DateTime) -> Result<zip::DateTime, DateTimeRangeError> {
+    zip::DateTime::from_date_and_time(
+        at.year().try_into()?,
+        at.month().try_into()?,
+        at.day().try_into()?,
+        at.hour().try_into()?,
+        at.minute().try_into()?,
+        at.second().try_into()?,
+    )
 }
 
 /// Reads every `.m3u8` and `.m3u` entry out of an archive. Anything else in it is ignored.

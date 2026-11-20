@@ -395,7 +395,7 @@ fn writing_a_path_reuses_the_buffer() {
 fn an_empty_trace_writes_an_empty_path() {
     let mut out = String::from("stale");
     write_path_commands(&[], &mut out);
-    assert!(out.is_empty());
+    assert_eq!(out, "");
 }
 
 // --- WaveformAnalyzer --------------------------------------------------------

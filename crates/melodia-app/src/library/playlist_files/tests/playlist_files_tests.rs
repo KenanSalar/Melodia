@@ -1,8 +1,9 @@
 use std::collections::HashSet;
 
-use chrono::TimeZone;
+use jiff::tz::TimeZone;
 
 use super::*;
+use melodia_core::entities::playlist::PlaylistStats;
 use melodia_core::entities::smart_criteria::{Draw, Rule, RuleField, RuleOp, RuleValue};
 use melodia_core::entities::track_list::{SortDir, TrackListScope, TrackOrder, TrackSortField};
 use melodia_core::error::AppError;
@@ -73,7 +74,7 @@ async fn match_entries_reports_missing() -> Result<(), AppError> {
     assert_eq!(out.matched_by_path, 0);
     assert_eq!(out.matched_by_hash, 0);
     assert_eq!(out.missing, 1);
-    assert!(out.ordered_ids.is_empty());
+    assert_eq!(out.ordered_ids, [] as [i64; 0]);
     Ok(())
 }
 
@@ -194,9 +195,11 @@ fn a_suggested_file_name_has_no_folder_for_a_save_dialog_to_read_into() {
 }
 
 #[test]
-fn a_suggested_archive_name_is_dated_from_the_instant_passed_in() {
-    let named = Local.with_ymd_and_hms(2026, 3, 7, 12, 0, 0).single().map(suggested_archive_name);
-    assert_eq!(named.as_deref(), Some("melodia-playlists-2026-03-07.zip"));
+fn a_suggested_archive_name_is_dated_from_the_instant_passed_in() -> Result<(), jiff::Error> {
+    let now = civil::date(2026, 3, 7).at(12, 0, 0, 0).to_zoned_datetime(TimeZone::system())?;
+
+    assert_eq!(suggested_archive_name(&now), "melodia-playlists-2026-03-07.zip");
+    Ok(())
 }
 
 #[test]
@@ -273,7 +276,7 @@ async fn an_exported_playlist_lands_under_a_sanitized_name() -> Result<(), AppEr
 
     let out = tmp.path().join("exported.zip");
     let result =
-        written(write_archive(&db, &[playlist_id], &out, NaiveDateTime::default()).await?)?;
+        written(write_archive(&db, &[playlist_id], &out, civil::DateTime::default()).await?)?;
 
     assert_eq!(result.exported, 1);
     assert_eq!(result.failed, 0);
@@ -300,7 +303,7 @@ async fn two_playlists_that_sanitize_alike_get_separate_files() -> Result<(), Ap
 
     let out = tmp.path().join("exported.zip");
     let result =
-        written(write_archive(&db, &[first, second], &out, NaiveDateTime::default()).await?)?;
+        written(write_archive(&db, &[first, second], &out, civil::DateTime::default()).await?)?;
 
     assert_eq!(result.exported, 2);
     assert_eq!(names(&archived(&out)?), ["A_B.m3u8", "A_B (2).m3u8"]);
@@ -317,8 +320,9 @@ async fn a_playlist_that_cannot_be_read_is_reported_without_stopping_the_batch()
     let playlist_id = playlist_with_tracks(&db, "Kept", &ids).await?;
 
     let out = tmp.path().join("exported.zip");
-    let result =
-        written(write_archive(&db, &[playlist_id, 9_999], &out, NaiveDateTime::default()).await?)?;
+    let result = written(
+        write_archive(&db, &[playlist_id, 9_999], &out, civil::DateTime::default()).await?,
+    )?;
 
     assert_eq!(result.exported, 1, "the readable playlist still writes");
     assert_eq!(result.failed, 1);
@@ -416,7 +420,7 @@ async fn a_file_with_no_entries_creates_no_playlist() -> Result<(), AppError> {
 
     let refused = read_playlist_file(&db, &src).await;
     assert!(matches!(refused, Err(AppError::Validation { .. })));
-    assert!(queries::playlist::get_all_playlists(&db).await?.is_empty());
+    assert_eq!(queries::playlist::get_all_playlists(&db).await?, [] as [PlaylistStats; 0]);
     Ok(())
 }
 
@@ -455,12 +459,12 @@ fn archive_at(path: &Path, entries: &[(&str, &str)]) -> Result<(), AppError> {
         .iter()
         .map(|&(name, text)| archive::Entry { name: name.to_owned(), text: text.to_owned() })
         .collect();
-    archive::write(std::fs::File::create(path)?, &entries, NaiveDateTime::default())
+    archive::write(std::fs::File::create(path)?, &entries, civil::DateTime::default())
 }
 
 /// A playlist file's text holding one entry, `line` being the path as the file spells it.
 fn playlist_text(name: Option<&str>, line: &str) -> String {
-    let tag = name.map(|name| format!("#PLAYLIST:{name}\n")).unwrap_or_default();
+    let tag = name.map_or_default(|name| format!("#PLAYLIST:{name}\n"));
     format!("#EXTM3U\n{tag}#EXTINF:-1,Alpha Song\n{line}\n")
 }
 
@@ -482,7 +486,7 @@ async fn an_exported_archive_imports_back_as_the_same_playlists() -> Result<(), 
     let road = playlist_with_tracks(&db, "Road", &ids).await?;
     let short = playlist_with_tracks(&db, "Short", &[ids[2], ids[0]]).await?;
     let out = tmp.path().join("backup.zip");
-    written(write_archive(&db, &[road, short], &out, NaiveDateTime::default()).await?)?;
+    written(write_archive(&db, &[road, short], &out, civil::DateTime::default()).await?)?;
 
     let result = import_playlists_from_file(&db, &out).await?;
 
@@ -504,7 +508,7 @@ async fn an_archive_export_with_nothing_readable_writes_no_file() -> Result<(), 
     let (db, _) = seed_under(tmp.path()).await?;
     let out = tmp.path().join("backup.zip");
 
-    let result = written(write_archive(&db, &[9_999], &out, NaiveDateTime::default()).await?)?;
+    let result = written(write_archive(&db, &[9_999], &out, civil::DateTime::default()).await?)?;
 
     assert_eq!((result.exported, result.failed), (0, 1));
     assert!(!out.exists(), "an archive with nothing in it would import back as a refusal");
@@ -531,7 +535,7 @@ async fn playlists_too_large_to_import_back_write_nothing_and_leave_the_old_file
     let out = tmp.path().join("backup.zip");
     std::fs::write(&out, "an earlier backup")?;
 
-    let export = write_archive(&db, &[playlist; COPIES], &out, NaiveDateTime::default()).await?;
+    let export = write_archive(&db, &[playlist; COPIES], &out, civil::DateTime::default()).await?;
 
     assert!(matches!(export, ExportOutcome::TooLarge));
     assert_eq!(std::fs::read_to_string(&out)?, "an earlier backup");
@@ -652,7 +656,7 @@ async fn an_archive_extension_is_recognised_in_any_case() -> Result<(), AppError
     let (db, ids) = seed_under(tmp.path()).await?;
     let road = playlist_with_tracks(&db, "Road", &ids).await?;
     let out = tmp.path().join("BACKUP.ZIP");
-    written(write_archive(&db, &[road], &out, NaiveDateTime::default()).await?)?;
+    written(write_archive(&db, &[road], &out, civil::DateTime::default()).await?)?;
 
     let result = import_playlists_from_file(&db, &out).await?;
 

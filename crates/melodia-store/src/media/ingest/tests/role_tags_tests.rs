@@ -134,7 +134,10 @@ fn a_written_credit_reads_back_as_the_one_that_went_in() {
         credit(CreditRole::Producer, "Carol", ""),
     ]);
 
-    assert!(write_roles(&mut tag, &RoleCreditEdit::whole(credits.clone())).is_empty());
+    assert_eq!(
+        write_roles(&mut tag, &RoleCreditEdit::whole(credits.clone())),
+        [] as [CreditRole; 0]
+    );
 
     assert_eq!(spelled(&read_roles(&tag)), spelled(&credits));
 }

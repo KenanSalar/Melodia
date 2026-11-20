@@ -92,7 +92,7 @@ fn a_missing_bitrate_arrives_as_zero_rather_than_absent() -> TestResult {
 fn a_row_carrying_nothing_at_all_still_decodes() -> TestResult {
     let station = serde_json::from_str::<ApiStation>("{}")?.into_directory_station();
 
-    assert!(station.name.is_empty());
+    assert_eq!(station.name, "");
     assert_eq!(station.favicon_url, None);
     assert!(!station.last_check_ok);
     Ok(())
@@ -204,7 +204,7 @@ fn a_host_list_never_offers_an_address() -> TestResult {
 fn a_mirror_entry_without_a_name_is_dropped() -> TestResult {
     let servers: Vec<ApiServer> = serde_json::from_str(r#"[{"ip":"1.2.3.4","name":""}]"#)?;
 
-    assert!(hosts(&servers).is_empty());
+    assert_eq!(hosts(&servers), [] as [String; 0]);
     Ok(())
 }
 

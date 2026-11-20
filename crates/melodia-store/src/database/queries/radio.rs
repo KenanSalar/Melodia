@@ -93,9 +93,8 @@ pub async fn get_favorite_stations(db: &DbPool) -> Result<Vec<radio::RadioStatio
     .await
 }
 
-/// The stations played most recently, newest first, ordered on the raw text: `now_rfc3339`
-/// zero-pads its fraction and ends in `+00:00`, `+` sorting below every digit, so lexical order is
-/// chronological even against a coarser stamp.
+/// The stations played most recently, newest first, ordered on the raw text, which
+/// [`melodia_core::utils::rfc3339`]'s spelling keeps chronological.
 pub async fn get_recent_stations(
     db: &DbPool,
     limit: i64,

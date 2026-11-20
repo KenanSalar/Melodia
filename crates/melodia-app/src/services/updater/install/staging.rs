@@ -132,7 +132,7 @@ fn asset_basename(url: &str) -> Option<String> {
 
 /// `<target>.new`, appended so an `.AppImage` keeps its extension.
 pub(crate) fn staged_path(target: &Path) -> PathBuf {
-    let mut name = target.file_name().map(std::ffi::OsStr::to_os_string).unwrap_or_default();
+    let mut name = target.file_name().map_or_default(std::ffi::OsStr::to_os_string);
     name.push(".new");
     target.with_file_name(name)
 }
@@ -173,8 +173,7 @@ impl StagedMeta {
 
 /// `<staged>.meta.json`, appended so the staged name keeps its own suffix.
 pub(crate) fn sidecar_meta_path(staged: &Path) -> PathBuf {
-    let mut name: OsString =
-        staged.file_name().map(std::ffi::OsStr::to_os_string).unwrap_or_default();
+    let mut name: OsString = staged.file_name().map_or_default(std::ffi::OsStr::to_os_string);
     name.push(".meta.json");
     staged.with_file_name(name)
 }

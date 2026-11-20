@@ -70,7 +70,7 @@ export global SettingsPage {
     out property <length> nav-pad: Theme.pad-sm;
     out property <length> card-header-h: root.nav-row-h + 2 * root.nav-pad;
 
-    // Slint 1.18 has no `.contains()` on string.
+    // Slint 1.19 has no `.contains()` on string.
     pure callback matches(string /*haystack*/, string /*needle*/) -> bool;
 
     // **Reading `search-query` at the call site is what makes the result reactive**, `matches`

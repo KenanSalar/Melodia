@@ -161,7 +161,7 @@ fn band_magnitude(spectrum: &[Complex<f32>], lo: f32, hi: f32) -> f32 {
             .map_or(0.0, |bins| bins.iter().map(Complex::norm_sqr).sum::<f32>().sqrt());
     }
 
-    let centre = 0.5 * (lo + hi);
+    let centre = f32::midpoint(lo, hi);
     let below = centre.floor();
     let toward_next = centre - below;
     let index = bin_to_index(below);
@@ -466,7 +466,7 @@ pub fn write_bar_path(levels: &[f32], strip: StripGeometry, anchor: BarAnchor, o
     let origin = horizontal.first + ((horizontal.pixels() - span) * 0.5).round();
     // A silent band rests as a square mark rather than vanishing.
     let floor = bar_width.min(vertical.pixels());
-    let middle = (vertical.first + vertical.last) * 0.5;
+    let middle = f32::midpoint(vertical.first, vertical.last);
 
     for (i, &level) in levels.iter().enumerate() {
         let height = (level.clamp(0.0, 1.0) * vertical.pixels()).max(floor);

@@ -1,3 +1,4 @@
+import { Theme } from "../theme.slint";
 import { MyLibrary } from "../globals/my-library.slint";
 import { NavEnterFrom } from "../globals/nav.slint";
 import { AlbumDetail, Albums } from "../globals/albums.slint";
@@ -261,8 +262,7 @@ export component MyLibraryView inherits Rectangle {
             // The grid card's own name-hashed stops, so a genre stays recognisable across the
             // drill-in.
             tile-bg: root.hero-genre
-                ? @linear-gradient(135deg,
-                    GenreDetail.genre.tile_color_1,
+                ? Theme.tile-gradient(GenreDetail.genre.tile_color_1,
                     GenreDetail.genre.tile_color_2)
                 : HeroBackdrop.placeholder.transparentize(0.85);
             tile-icon-color: root.hero-genre

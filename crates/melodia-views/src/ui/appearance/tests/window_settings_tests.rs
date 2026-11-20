@@ -29,8 +29,7 @@ fn chip_labels(src: &str, binding: &str) -> Vec<String> {
         .split_once(binding)
         .and_then(|(head, _)| head.rsplit_once("options: [").map(|(_, rest)| rest.to_owned()))
         .and_then(|rest| rest.split_once(']').map(|(body, _)| body.to_owned()))
-        .map(|body| body.split(',').map(|label| label.trim().to_owned()).collect())
-        .unwrap_or_default()
+        .map_or_default(|body| body.split(',').map(|label| label.trim().to_owned()).collect())
 }
 
 #[test]

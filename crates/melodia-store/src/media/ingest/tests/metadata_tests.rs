@@ -406,7 +406,7 @@ fn a_whitespace_only_value_is_not_a_value() {
     ]);
 
     assert_eq!(trimmed_values(&tag, ItemKey::Composer), ["Alice"]);
-    assert!(trimmed_values(&tag, ItemKey::Mood).is_empty());
+    assert_eq!(trimmed_values(&tag, ItemKey::Mood), [] as [String; 0]);
 }
 
 /// **A repeated `GENRE` is the multi-value form and needs no splitting.** A single value is split
@@ -531,7 +531,10 @@ fn artist_ids_are_kept_only_where_they_line_up_with_the_names() {
         two_names[2],
         (ItemKey::MusicBrainzArtistId, "id-alice"),
     ]);
-    assert!(read_credit_mbids(Some(&too_few), ItemKey::MusicBrainzArtistId, 2).is_empty());
+    assert_eq!(
+        read_credit_mbids(Some(&too_few), ItemKey::MusicBrainzArtistId, 2),
+        [] as [String; 0]
+    );
 
     let too_many = tagged(&[
         two_names[0],
@@ -541,7 +544,10 @@ fn artist_ids_are_kept_only_where_they_line_up_with_the_names() {
         (ItemKey::MusicBrainzArtistId, "id-bob"),
         (ItemKey::MusicBrainzArtistId, "id-carol"),
     ]);
-    assert!(read_credit_mbids(Some(&too_many), ItemKey::MusicBrainzArtistId, 2).is_empty());
+    assert_eq!(
+        read_credit_mbids(Some(&too_many), ItemKey::MusicBrainzArtistId, 2),
+        [] as [String; 0]
+    );
 }
 
 #[test]

@@ -38,39 +38,37 @@ export component MiniPlayerSection inherits Rectangle {
 
     out property <bool> has-matches: show-buttons || show-backdrop;
 
-    VerticalLayout {
-        if has-matches: SectionCard {
-            title: root.card-title;
+    if has-matches: SectionCard {
+        title: root.card-title;
 
-            // The titlebar's styles, set apart from its row so a native titlebar, which draws its
-            // own, doesn't take the miniplayer's choice with it.
-            if root.show-buttons: SettingRowStacked {
-                icon: "category";
-                label: root.buttons-label;
-                description: root.buttons-desc;
+        // The titlebar's styles, set apart from its row so a native titlebar, which draws its
+        // own, doesn't take the miniplayer's choice with it.
+        if root.show-buttons: SettingRowStacked {
+            icon: "category";
+            label: root.buttons-label;
+            description: root.buttons-desc;
 
-                ChipGroup {
-                    // The brand-name rule the titlebar's style row keeps.
-                    options: ["Windows", "macOS", "KDE"];
-                    selected-index <=> Settings.mini-player-button-style;
-                    selected(i) => {
-                        Settings.mini-player-button-style-changed(i);
-                    }
+            ChipGroup {
+                // The brand-name rule the titlebar's style row keeps.
+                options: ["Windows", "macOS", "KDE"];
+                selected-index <=> Settings.mini-player-button-style;
+                selected(i) => {
+                    Settings.mini-player-button-style-changed(i);
                 }
             }
+        }
 
-            if root.show-buttons && root.show-backdrop: SectionDivider {}
+        if root.show-buttons && root.show-backdrop: SectionDivider {}
 
-            // The same switch as the miniplayer's own button, both writing the global and handing
-            // Rust the one callback that mirrors, seeds or releases the artwork, and persists.
-            if root.show-backdrop: SettingRow {
-                icon: "tonality";
-                label: root.backdrop-label;
-                description: root.backdrop-desc;
-                ToggleSwitch {
-                    checked <=> MiniPlayer.backdrop-shown;
-                    toggled(on) => { MiniPlayer.set-backdrop-shown(on); }
-                }
+        // The same switch as the miniplayer's own button, both writing the global and handing
+        // Rust the one callback that mirrors, seeds or releases the artwork, and persists.
+        if root.show-backdrop: SettingRow {
+            icon: "tonality";
+            label: root.backdrop-label;
+            description: root.backdrop-desc;
+            ToggleSwitch {
+                checked <=> MiniPlayer.backdrop-shown;
+                toggled(on) => { MiniPlayer.set-backdrop-shown(on); }
             }
         }
     }

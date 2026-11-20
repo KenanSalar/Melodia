@@ -118,13 +118,13 @@ fn a_bitrate_floor_already_applied_is_not_offered_back() {
 fn a_needle_too_short_to_scope_offers_nothing() {
     // One letter matches a third of the country list, and the row would fill with noise
     // while the user is still typing.
-    assert!(offered("t").is_empty());
-    assert!(offered("").is_empty());
+    assert_eq!(offered("t"), [] as [Suggestion; 0]);
+    assert_eq!(offered(""), [] as [Suggestion; 0]);
 }
 
 #[test]
 fn a_needle_matching_no_facet_offers_nothing() {
-    assert!(offered("bbc").is_empty());
+    assert_eq!(offered("bbc"), [] as [Suggestion; 0]);
 }
 
 #[test]
@@ -158,7 +158,7 @@ fn the_shape_leads_every_guess() {
 fn an_unprimed_index_offers_only_what_the_needle_shape_says() {
     let empty = FacetIndex::default();
     let out = suggestions(&fold_needle("turkish"), &empty, &StationSearch::default());
-    assert!(out.is_empty());
+    assert_eq!(out, [] as [Suggestion; 0]);
     // A shape needs no list, so it survives a prime that has not landed.
     let out = suggestions(&fold_needle("128"), &empty, &StationSearch::default());
     assert_eq!(out.len(), 1);

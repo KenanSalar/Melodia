@@ -25,8 +25,7 @@ const TRACK_ROWS: &str = include_str!("../../paged_rows/track_rows.rs");
 fn item_body<'a>(src: &'a str, marker: &str, end: &str) -> &'a str {
     src.split_once(marker)
         .and_then(|(_, rest)| rest.split_once(end))
-        .map(|(body, _)| body)
-        .unwrap_or_default()
+        .map_or_default(|(body, _)| body)
 }
 
 /// `Favorites.tracks` feeds one element in the whole tree, under the Songs
@@ -339,8 +338,7 @@ fn each_gated_fetch_is_armed_beside_the_cache_it_fills() {
     let kick = LIFECYCLE
         .split_once("async fn kick_full_refresh(")
         .and_then(|(_, rest)| rest.split_once("\n}"))
-        .map(|(body, _)| body)
-        .unwrap_or_default();
+        .map_or_default(|(body, _)| body);
     assert!(
         kick.contains("fav_ui.take_tab_dirty(tab);"),
         "`kick_full_refresh` must consume the mounted tab's flag — leaving it set makes the \
@@ -355,8 +353,7 @@ fn each_gated_fetch_is_armed_beside_the_cache_it_fills() {
     let release = HANDLE
         .split_once("pub fn release_section_state(")
         .and_then(|(_, rest)| rest.split_once("\n    }"))
-        .map(|(body, _)| body)
-        .unwrap_or_default();
+        .map_or_default(|(body, _)| body);
     assert!(
         release.contains("self.mark_tab_dirty(tab);"),
         "`release_section_state` must re-arm every tab beside the lists it wipes"

@@ -158,8 +158,7 @@ fn the_card_gates_the_non_escape_shortcuts() {
 #[test]
 fn the_deferred_work_still_carries_the_crash_notice() {
     let boot = strip_line_comments(BOOT_UI);
-    let deferred =
-        boot.split_once("ui::onboarding::install(").map(|(_, rest)| rest).unwrap_or_default();
+    let deferred = boot.split_once("ui::onboarding::install(").map_or_default(|(_, rest)| rest);
 
     assert!(
         deferred.contains("notify_previous_crash"),

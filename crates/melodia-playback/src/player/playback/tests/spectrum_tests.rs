@@ -63,7 +63,7 @@ fn the_hann_window_is_symmetric() {
 #[test]
 fn a_degenerate_hann_window_is_a_passthrough() {
     // No span to taper across — the formula would divide by zero.
-    assert!(hann_window(0).is_empty());
+    assert_eq!(*hann_window(0), [] as [f32; 0]);
     assert_eq!(hann_window(1).len(), 1);
     approx(hann_window(1)[0], 1.0);
 }

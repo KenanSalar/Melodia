@@ -7,7 +7,7 @@ const SECTION: &str = include_str!("../../../../melodia-ui/ui/views/settings/abo
 fn the_support_toast_and_the_card_open_the_same_page() {
     let (_, after_arm) =
         ROUTER.split_once("NotificationKind::SupportMelodia =>").unwrap_or_default();
-    let arm = after_arm.split_once('\n').map(|(arm, _)| arm).unwrap_or_default();
+    let arm = after_arm.split_once('\n').map_or_default(|(arm, _)| arm);
 
     assert!(
         arm.contains("invoke_open_kofi()"),
@@ -27,7 +27,7 @@ fn the_support_toast_and_the_card_open_the_same_page() {
 #[test]
 fn the_kofi_mark_is_an_unrecoloured_image() {
     let (_, after) = SECTION.split_once("leading-image:").unwrap_or_default();
-    let mount = after.split_once(';').map(|(value, _)| value).unwrap_or_default();
+    let mount = after.split_once(';').map_or_default(|(value, _)| value);
 
     assert!(
         mount.contains("assets/icons/kofi-symbol.svg"),

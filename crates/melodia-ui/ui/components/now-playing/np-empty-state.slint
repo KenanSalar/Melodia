@@ -29,6 +29,10 @@ export component NpEmptyState inherits Rectangle {
     private property <length> glyph-size: root.compact ? 28px : 40px;
     private property <length> heading-size: root.compact ? Theme.font-size-sm : Theme.font-size-md;
 
+    // Pinned, so a host never counts the block toward its own size: `beside` reads that height.
+    x: 0px;
+    y: 0px;
+
     // **The words beside the glyph once the host is too short to stack them**, so a panel shrinking
     // under the block cuts the glyph before the words. Measured off unwrapped copies of the lines
     // rather than the lines drawn, whose wrap follows the width this decides.

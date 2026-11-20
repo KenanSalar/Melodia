@@ -18,13 +18,11 @@ pub(super) fn paint(rgba: &mut [u8], width: u32, height: u32) {
     // averaged, kept as `offset / span` to stay in integers.
     let span = 4 * width * height;
     for (y, row) in (0u64..).zip(rgba.chunks_exact_mut(row_len)) {
-        for (x, pixel) in (0u64..).zip(row.chunks_exact_mut(4)) {
+        for (x, [red, green, blue, _alpha]) in (0u64..).zip(row.as_chunks_mut::<4>().0) {
             let offset = (2 * x + 1) * height + (2 * y + 1) * width;
-            if let [red, green, blue, _alpha] = pixel {
-                *red = mix(from, to, 16, offset, span);
-                *green = mix(from, to, 8, offset, span);
-                *blue = mix(from, to, 0, offset, span);
-            }
+            *red = mix(from, to, 16, offset, span);
+            *green = mix(from, to, 8, offset, span);
+            *blue = mix(from, to, 0, offset, span);
         }
     }
 }

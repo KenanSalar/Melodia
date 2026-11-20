@@ -63,7 +63,6 @@ export component UpdateSection inherits Rectangle {
         && (show-software || show-auto-check || show-up-to-date || show-restart
             || show-update-available || show-error || show-system-managed);
 
-    VerticalLayout {
     if has-matches: SectionCard {
         title: root.card-title;
 
@@ -182,6 +181,5 @@ export component UpdateSection inherits Rectangle {
             label: "";
             description: MelodiaUpdater.error-message;
         }
-    }
     }
 }

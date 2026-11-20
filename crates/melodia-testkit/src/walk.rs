@@ -123,8 +123,8 @@ fn sources_under_any(root: &str, exts: &[&str]) -> (Vec<PathBuf>, Vec<PathBuf>) 
 }
 
 /// What a `.slint` `import` embeds a face from, taken from the compiler's own check
-/// (`i-slint-compiler`'s `object_tree.rs`) rather than from what is committed today: the format
-/// nothing uses yet is the one that arrives unlicensed.
+/// (`i-slint-compiler`'s `fileaccess::is_font_file`) rather than from what is committed today:
+/// the format nothing uses yet is the one that arrives unlicensed.
 const FONT_EXTENSIONS: [&str; 3] = ["ttc", "ttf", "otf"];
 
 /// Every shipped face under [`FONTS_DIR`], as paths. The walk recurses, so a face added

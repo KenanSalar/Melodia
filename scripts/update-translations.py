@@ -143,7 +143,7 @@ def extract_parts(extractor: str, work: Path) -> None:
 
     One file at a time because rspolib, the extractor's PO writer, drops an occurrence that
     overflows a `#:` line, and a file's first occurrence always fits. The sources are spelled
-    relative to the crate with forward slashes, the spelling the template's locations carry.
+    relative to the crate, and the locations end up with forward slashes on every platform.
     """
     sources = sorted(path.relative_to(CRATE).as_posix() for path in (CRATE / "ui").rglob("*.slint"))
     raw = work / "raw.po"
@@ -152,9 +152,18 @@ def extract_parts(extractor: str, work: Path) -> None:
         run([extractor, "--no-default-translation-context", "-o", str(raw), source], cwd=CRATE)
         kept, overlong = keep_translator_notes(read_lines(raw), source)
         errors += overlong
-        write_lines(work / f"part-{part:04d}.po", kept)
+        write_lines(work / f"part-{part:04d}.po", forward_slash_locations(kept))
     if errors:
         raise Failure(*errors)
+
+
+def forward_slash_locations(lines: list[str]) -> list[str]:
+    """The lines with each `#:` location's backslashes turned into forward slashes.
+
+    The extractor rebuilds a source path with the platform's separator, so a Windows run would
+    otherwise move every location in the template and the catalogs.
+    """
+    return [line.replace("\\", "/") if line.startswith("#:") else line for line in lines]
 
 
 def keep_translator_notes(lines: list[str], source: str) -> tuple[list[str], list[str]]:

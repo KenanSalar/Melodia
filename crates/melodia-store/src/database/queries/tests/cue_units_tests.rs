@@ -66,8 +66,7 @@ impl Library {
     }
 
     fn read(path: PathBuf) -> ScannedFile {
-        let stem =
-            path.file_stem().map(|stem| stem.to_string_lossy().into_owned()).unwrap_or_default();
+        let stem = path.file_stem().map_or_default(|stem| stem.to_string_lossy().into_owned());
         let mut metadata = make_test_metadata(&stem);
         metadata.duration_ms = IMAGE_MS;
         metadata.file_hash = blake3::hash(path.to_string_lossy().as_bytes()).to_hex().to_string();

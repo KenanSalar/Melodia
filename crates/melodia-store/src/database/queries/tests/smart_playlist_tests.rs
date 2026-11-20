@@ -1,5 +1,7 @@
 use std::collections::HashSet;
 
+use jiff::{SignedDuration, Timestamp};
+
 use crate::database::DbPool;
 use crate::database::queries;
 use crate::database::queries::fixtures::{
@@ -16,11 +18,13 @@ use melodia_core::entities::track::TrackListRow;
 use melodia_core::entities::track_list::{SortDir, TrackListScope, TrackOrder, TrackSortField};
 use melodia_core::error::AppError;
 use melodia_core::utils::needle::Needle;
+use melodia_core::utils::rfc3339;
 
-/// RFC-3339 timestamp `n` days before now — for staging `last_played`.
+/// RFC 3339 timestamp `n` days before now, for staging `last_played`. Its own arithmetic rather
+/// than `days_before`, which the cutoff under test goes through.
 fn days_ago(n: i64) -> String {
-    let delta = chrono::TimeDelta::try_days(n).unwrap_or_else(chrono::TimeDelta::zero);
-    (chrono::Utc::now() - delta).to_rfc3339()
+    let now = Timestamp::now();
+    rfc3339(now.checked_sub(SignedDuration::from_hours(n * 24)).unwrap_or(now))
 }
 
 /// Stage playback stats the scan-insert helper leaves at defaults.
@@ -450,9 +454,9 @@ async fn a_favorite_rule_can_ask_for_the_ones_that_are_not() -> Result<(), AppEr
 
 // ---- the two edges of a relative-date rule ----
 
-/// The clamp is what stops `TimeDelta::try_days` overflowing, and its failure mode is the
-/// opposite of a crash: the `unwrap_or` behind it falls back to a zero delta, so the cutoff
-/// becomes *now* and a rule asking for everything ever played answers with nothing.
+/// The clamp is what keeps the cutoff inside `Timestamp`'s range, and its failure mode is the
+/// opposite of a crash: past that range `days_before` falls back to *now*, so a rule asking for
+/// everything ever played answers with nothing.
 #[tokio::test]
 async fn an_absurd_day_count_still_asks_about_the_whole_past() -> Result<(), AppError> {
     let s = seed().await?;
@@ -932,7 +936,10 @@ async fn an_unmatched_rule_set_resolves_to_no_ids() -> Result<(), AppError> {
     let s = seed().await?;
     let c = one(RuleField::Title, RuleOp::Is, Some(RuleValue::Text("Nothing".to_owned())));
 
-    assert!(queries::smart_playlist::get_smart_playlist_track_ids(&s.db, &c).await?.is_empty());
+    assert_eq!(
+        queries::smart_playlist::get_smart_playlist_track_ids(&s.db, &c).await?,
+        [] as [i64; 0]
+    );
     Ok(())
 }
 

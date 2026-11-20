@@ -69,7 +69,7 @@ async fn a_drop_with_nothing_importable_reports_every_path_and_imports_none() ->
 
     let result = import_files(&db, &artwork_dir, &artwork::new_cover_cache(), &batch).await?;
 
-    assert!(result.opened.is_empty());
+    assert_eq!(result.opened, [] as [Vec<i64>; 0]);
     assert_eq!(result.imported_count, 0);
     assert_eq!(result.failed_paths.len(), 2);
     Ok(())
@@ -143,7 +143,7 @@ async fn summaries_arrive_one_per_id_and_the_ids_only_half_fetches_none() -> Res
     assert_eq!(summarized.summaries.len(), summarized.opened.concat().len());
 
     let ids_only = import_files(&db, &artwork_dir, &cover_cache, &batch).await?;
-    assert!(ids_only.summaries.is_empty());
+    assert_eq!(ids_only.summaries, [] as [Arc<TrackSummary>; 0]);
 
     let empty = import_and_summarize(&db, &artwork_dir, &cover_cache, &[]).await?;
     assert!(empty.summaries.is_empty(), "an empty batch must not reach the projection query");
