@@ -67,9 +67,10 @@ paths:
   and the text holds only SQL *structure* (placeholder lists, column projections). Text fixed for
   the whole run is interned as a `&'static str` (a `LazyLock<String>`) instead, so it stays cached
 - Caching follows the text's type (`database::sql`'s `//!`)
-- rusqlite refuses three things the compiler lets through, each only when the statement runs:
+- rusqlite refuses four things the compiler lets through, each only when the statement runs:
   - a second statement in one string (`MultipleStatement`): only `execute_batch` runs several, as
     the migrator does
+  - text holding no statement, empty, `;` or only a comment (`Empty`): only `execute_batch` skips it
   - a row from `execute` (`ExecuteReturnedResults`): `RETURNING` reads through `fetch_*`
   - a bind count unlike the statement's (`InvalidParameterCount`)
 - Params are a tuple up to 16 values, `rusqlite::params![]` past it
