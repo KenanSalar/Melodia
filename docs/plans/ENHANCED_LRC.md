@@ -2,8 +2,8 @@
 
 Working doc. Delete when the feature ships.
 
-Status: **planned; Phase 1 next** · Created: 2026-11-20 · Branch `feat/enhanced-lrc`, linked to
-#178 (#177 still to link from its Development sidebar)
+Status: **Phase 1 landed; Phase 2 next** · Created: 2026-11-20 · Branch
+`feat/enhanced-lrc`, linked to #178 (#177 still to link from its Development sidebar)
 
 Issue [#178](https://github.com/KenanSalar/Melodia/issues/178), from the request in
 [#177](https://github.com/KenanSalar/Melodia/issues/177).
@@ -79,7 +79,7 @@ in every format, where an M4A or a FLAC can keep an old one today.
   `UnsyncLyrics`. A FLAC keeps its `UNSYNCEDLYRICS`. An M4A's `©lyr` reads back as `Lyrics` (the
   map's first key, `tag/item.rs:343`, `:70`) while `Set` writes `UnsyncLyrics`, so the old atom
   likely survives and, being first, is what the next read shows. Inferred from lofty's source,
-  unconfirmed: Phase 3 checks it first.
+  unconfirmed: the hand tests check it on `main`. Phase 3's fix doesn't wait on it.
 - **Narrows the design: "anything Markdown would treat as formatting has to be escaped, and a line
   that still can't be read falls back".** `@markdown("…\{expr}…")` hands a string through
   `StringToStyledText` (`i-slint-compiler passes/resolving.rs:1493-1506`), which is
@@ -297,13 +297,13 @@ Every file stays well under 800; `open.rs` grows by a line or two.
 
 ## Phase 1: The two bugs (no Slint)
 
-- [ ] `sheet_lines` in `entities/lyrics.rs`: `str::lines`, each line split again at a lone `\r`, so
+- [x] `sheet_lines` in `entities/lyrics.rs`: `str::lines`, each line split again at a lone `\r`, so
       `\n` and `\r\n` text splits exactly as today. `lrc.rs`' three sites and `carries_gloss` take it.
-- [ ] `strip_word_stamps` leaves one space at a seam with whitespace on either side.
-- [ ] Docs: `lrc.rs`' `//!` and `strip_word_stamps`' doc; `carries_gloss`'.
+- [x] `strip_word_stamps` leaves one space at a seam with whitespace on either side.
+- [x] Docs: `strip_word_stamps`' and `sheet_lines`'. `lrc.rs`' `//!` and `carries_gloss`' hold, the
+      line rule's anchor being `sheet_lines`.
 
 **Gate:** fmt, clippy, the suite.
-**Hand check:** an iTunes- or Mp3tag-tagged M4A shows line by line; #177's line reads "Hello world".
 
 ## Phase 2: Word times in the sheet (`melodia-core`, `melodia-app`; no Slint)
 
@@ -320,8 +320,6 @@ Every file stays well under 800; `open.rs` grows by a line or two.
 
 ## Phase 3: Every entry, the best shown (`melodia-store`, `melodia-core`, `melodia-app`, `melodia-views`)
 
-- [ ] Confirm the M4A save first: an M4A made with `ffmpeg -metadata lyrics=…`, Save to tag over it
-      in the dev data folder, then `exiftool -a -G1 -Lyrics` (or `mutagen-inspect`). Record here.
 - [ ] `lyrics_entries` in `tag_writer.rs` replacing `lyrics_from`; `read_lyrics` returns the list;
       `FileTags.lyrics: Vec<String>`, the two cue merges clearing it (`cue/merge.rs:181`,
       `cue/embedded/mod.rs:103`).
@@ -332,8 +330,6 @@ Every file stays well under 800; `open.rs` grows by a line or two.
 
 **Gate:** fmt, clippy, the suite; `tag_writer_tests.rs`, `mod_tests.rs` and `merge_tests.rs`
 follow the type.
-**Hand check:** a file with plain lyrics ahead of a timed copy follows the song, and Edit Tags
-opens on the timed one.
 
 ## Phase 4: Lighting the words (`melodia-ui`, `melodia-views`)
 
@@ -358,13 +354,18 @@ and `opacity_layers.rs` and `palette_fade.rs` meet nothing new. No `@tr` string 
 
 ### Hand tests
 
-In the dev data folder. Each against `main`'s behaviour where it should match.
+In the dev data folder, after Phase 4 and before any test is written: every phase's hand check
+gathers here. Each against `main`'s behaviour where it should match.
 
-- [ ] #177's line in a `.lrc`; a `.lrc` with word times throughout.
+- [ ] #177's line in a `.lrc`, its words one space apart; a `.lrc` with word times throughout.
 - [ ] A chorus under two stamps lights on both; `[offset:+500]` and `[offset:-500]` move the words.
+- [ ] On `main` first: an M4A made with `ffmpeg -metadata lyrics=…`, Save to tag over it, then
+      `exiftool -a -G1 -Lyrics` (or `mutagen-inspect`); recorded in Validating the issue.
 - [ ] The same lyrics saved into an MP3, a FLAC and an M4A, each reading back as one entry.
-- [ ] An M4A whose lyrics came from iTunes or Mp3tag.
-- [ ] A file holding plain and timed entries, in both orders; Edit Tags opens on the timed one.
+- [ ] An M4A whose lyrics came from iTunes or Mp3tag shows line by line; so does a `.lrc` broken by
+      a lone `\r` (`printf '[ti:x]\r[00:01.00]one\r[00:03.00]two\r'`).
+- [ ] A file holding plain and timed entries, in both orders, follows the song; Edit Tags opens on
+      the timed one.
 - [ ] Times inside a word (one per syllable): the word joins, Arabic included.
 - [ ] Japanese or Korean lyrics; Arabic or Persian: marks against the clip, lit words from the right.
 - [ ] A lyric long enough to wrap, and one that wraps past what was measured.

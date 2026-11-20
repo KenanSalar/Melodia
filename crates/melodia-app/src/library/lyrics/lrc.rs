@@ -7,7 +7,7 @@
 
 use std::borrow::Cow;
 
-use melodia_core::entities::lyrics::{LyricLine, Lyrics, LyricsSource, split_gloss};
+use melodia_core::entities::lyrics::{LyricLine, Lyrics, LyricsSource, sheet_lines, split_gloss};
 
 /// The identification tags the format defines, dropped as metadata. Matched only against a whole
 /// bracketed line with a known key, so a plain sheet keeps its `[Chorus]` markers.
@@ -23,7 +23,7 @@ pub fn parse(text: &str, source: LyricsSource) -> Option<Lyrics> {
     let mut timed: Vec<LyricLine> = Vec::new();
     let mut plain: Vec<LyricLine> = Vec::new();
 
-    for line in text.lines() {
+    for line in sheet_lines(text) {
         let (stamps, rest) = split_stamps(line);
         if stamps.is_empty() {
             if !is_id_tag(line) {
@@ -90,7 +90,7 @@ fn close_at_blanks(lines: Vec<LyricLine>) -> Vec<LyricLine> {
 /// line rather than building the sheet.
 #[must_use]
 pub(super) fn is_timed(text: &str) -> bool {
-    text.lines().any(|line| !split_stamps(line).0.is_empty())
+    sheet_lines(text).any(|line| !split_stamps(line).0.is_empty())
 }
 
 fn split_translation(line: &str) -> (String, Option<String>) {
@@ -101,7 +101,7 @@ fn split_translation(line: &str) -> (String, Option<String>) {
 /// The `[offset:±ms]` tag, or zero. A **positive** offset means the sheet runs early, so it comes
 /// off the stamps rather than onto them.
 fn offset_ms(text: &str) -> i64 {
-    text.lines()
+    sheet_lines(text)
         .filter_map(bracketed)
         .filter_map(|inner| inner.split_once(':'))
         .find(|(key, _)| key.trim().eq_ignore_ascii_case("offset"))
@@ -173,8 +173,9 @@ fn fraction_ms(fraction: &str) -> Option<i64> {
     Some(ms)
 }
 
-/// Drops enhanced-LRC word stamps (`<mm:ss.xx>`), which nothing draws yet. A `<` that is not a
-/// stamp stays put, so a line with `<3` in it survives.
+/// Drops enhanced-LRC word stamps (`<mm:ss.xx>`), which nothing draws yet, leaving one space where
+/// either side of a stamp had whitespace and none where neither did, so a syllable stamp joins its
+/// word. A `<` that is not a stamp stays put, so a line with `<3` in it survives.
 fn strip_word_stamps(line: &str) -> Cow<'_, str> {
     if !line.contains('<') {
         return Cow::Borrowed(line);
@@ -191,6 +192,12 @@ fn strip_word_stamps(line: &str) -> Cow<'_, str> {
         }
         out.push_str(&rest[..open]);
         rest = &after[close + 1..];
+        let spaced = out.ends_with(char::is_whitespace) || rest.starts_with(char::is_whitespace);
+        out.truncate(out.trim_end().len());
+        rest = rest.trim_start();
+        if spaced {
+            out.push(' ');
+        }
     }
     out.push_str(rest);
     Cow::Owned(out)
