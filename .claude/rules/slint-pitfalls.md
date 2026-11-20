@@ -11,7 +11,7 @@ paths:
 
 Melodia-specific, each paid for once already. General Slint patterns are in `slint.md`;
 this file is what builds, looks right, and is wrong. Source paths are Slint 1.18's. The generated
-`app-window.rs` (`target/*/build/melodia-ui-*/out/`) is what a construct compiled to: verify
+`app-window.rs` (`target/*/build/melodia-ui/*/out/`) is what a construct compiled to: verify
 there, never in the `.slint`.
 
 ## Layout

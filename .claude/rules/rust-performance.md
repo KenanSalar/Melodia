@@ -7,12 +7,18 @@ paths:
 
 # Rust Performance Best Practices
 
+Language idioms are `rust.md`'s; this file is what changes the cost of the code.
+
 ## Allocation Reduction
 
 - Pre-allocate: `Vec::with_capacity(n)`, `String::with_capacity(n)`, `HashMap::with_capacity(n)`
 - Reuse buffers: `vec.clear()` then refill — retains allocated capacity
 - `clone_from(&source)` reuses the target's allocation when possible (unlike `clone()`)
-- Use `String::new()` or `Vec::new()` for empty containers — they don't allocate until first push
+- Use `String::new()` or `Vec::new()` for empty containers: they don't allocate until the first
+  push, and clippy's `with_capacity_zero` flags a `with_capacity(0)`
+- `Box::map` (1.100) reuses the box's allocation when the new value has the same size and
+  alignment; `Arc::map` / `Rc::map` do so only while the pointer is unique, allocating afresh
+  otherwise
 
 ## String Handling
 
@@ -22,6 +28,11 @@ paths:
 - `push_str()` is faster than `format!` for building strings incrementally
 - `std::fmt::from_fn` (1.93) builds an ad-hoc `Display` from a closure — formatted output without
   a newtype or an intermediate `String`
+- `{integer}::format_into(&mut NumBuffer::new())` (1.98) prints an integer into a stack buffer and
+  hands back the `&str`, bypassing `core::fmt`'s dynamic dispatch, for a hot path writing many
+  numbers
+- `String::from_utf8_lossy_owned` (1.99) moves valid UTF-8 into the `String`;
+  `String::from_utf8_lossy(&bytes).into_owned()` copies it
 
 ## Collections
 
@@ -47,31 +58,14 @@ paths:
 - `<[T]>::array_windows::<N>()` (1.94) yields const-length `&[T; N]` windows — the compiler knows
   the width (good for frame-based DSP); `slice::as_array::<N>()` (1.93) is the safe `&[T]` →
   `Option<&[T; N]>` conversion
-
-## Language Idioms (Rust 1.88–1.97)
-
-- Let chains (1.88, edition 2024 only): `if let Some(a) = x && a.ready() { … }` — flatten nested
-  `if let` towers instead of stacking indentation
-- `if let` guards on match arms (1.95): `Some(x) if let Ok(v) = parse(x) => …` — pattern-match
-  inside a guard; guard patterns don't count toward exhaustiveness
-- `cfg_select!` (1.95) — compile-time `match` over cfgs, in std; replaces the `cfg-if` crate for
-  platform-split code paths
-- `assert_matches!` / `debug_assert_matches!` (1.96) — prefer over `assert!(matches!(…))` in
-  tests: supports `if` guards and prints the non-matching value on failure
-- New `Copy` range types exist in `core::range` (1.96), but `0..1` syntax still produces the
-  legacy `Iterator` ranges — nothing to adopt yet
-- Bit-manipulation methods on every integer (1.97) — replace hand-rolled shift/mask idioms. Note
-  the two families return **different things**: `isolate_highest_one()` / `isolate_lowest_one()`
-  return the *value* with only that bit set (`0b1010_0100` → `0b1000_0000` / `0b0000_0100`), while
-  `highest_one()` / `lowest_one()` return the bit *index* as `Option<u32>` (`Some(7)` /
-  `Some(2)`; `None` for zero). `bit_width()` gives the bits needed to represent the value (`164` →
-  `8`). The `NonZero<{int}>` equivalents return a plain `u32` rather than an `Option`, since the
-  zero case is gone — prefer them when the value is already `NonZero`
-- `clippy::manual_assert_eq` (1.97) — `assert!(a == b)` is now a lint; use `assert_eq!(a, b)`. If
-  the type has no `PartialEq` (so the `assert!` was comparing `mem::discriminant`s or similar),
-  don't just wrap the discriminants in `assert_eq!` — their `Debug` prints an opaque
-  `Discriminant(..)` on both sides of a failure. Compare a cheap injective projection instead (a
-  token/`as_str`), which prints something readable
+- `<[T]>::as_chunks::<N>()` (1.88) over `chunks_exact(N)` for a constant `N`: the chunks are
+  `&[T; N]`, so they destructure (`for &[r, g, b] in rgb.as_chunks::<3>().0`) and a constant
+  index needs no runtime check. `.0` drops the remainder as `chunks_exact` does; clippy's
+  `chunks_exact_to_as_chunks` holds it
+- `f32::algebraic_add` / `algebraic_mul` and siblings (1.98) let LLVM reorder a float reduction (a
+  sum, a dot product) so it can vectorize. The result is non-deterministic, even between two calls
+  in one run, so never where a test pins bits (`equalizer_tests.rs`' mono/stereo `to_bits` check)
+  or two channels must come out identical; measure first
 
 ## Compile-Time Optimizations (release profile)
 
@@ -91,8 +85,8 @@ strip = "debuginfo"   # Drop DWARF but keep symbols — end-user panic backtrace
   fast out of the box (opt out with `-C linker-features=-lld`); `mold` is at best a marginal
   further gain, not a recommendation
 - `--remap-path-scope` (stable since 1.95) controls which local paths get remapped out of the
-  binary; Cargo's `trim-paths` profile key is **still nightly-only as of 1.97** (verified — a
-  `profile.*.trim-paths` key fails with ``feature `trim-paths` is required``). Don't recommend it
+  binary; Cargo's `trim-paths` profile key is **still nightly-only as of 1.100**: a
+  `profile.*.trim-paths` key fails with ``feature `trim-paths` is required``. Don't recommend it
   on stable
 - **v0 symbol mangling is the default since 1.97** — nothing to configure. It pairs with the
   `strip = "debuginfo"` choice above (kept so end-user panic backtraces stay readable): v0 encodes
@@ -118,13 +112,14 @@ strip = "debuginfo"   # Drop DWARF but keep symbols — end-user panic backtrace
 - Global-allocator swaps (`mimalloc`/`jemalloc`) trade RSS for speed — measure peak RSS before
   adopting. **Melodia caveat:** mimalloc's per-thread segments across the app's many long-lived
   threads caused a large idle-RSS regression and was reverted; don't propose allocator swaps here
+- Custom allocators are stable for `Vec` and `Box` (1.100: `Allocator`, `Vec::new_in`,
+  `Box::new_in`). A per-collection arena is an RSS decision like the global swap above, measured
+  the same way
 - Avoid unnecessary `Arc` — single-threaded code doesn't need atomic reference counting
 - Use `#[inline]` sparingly — the compiler usually makes good inlining decisions; only hint for
   small hot functions crossing crate boundaries
 - `core::hint::cold_path()` (1.95) marks a branch as unlikely — use in hot loops where the
   error/edge arm is rare
-- `std::sync::LazyLock` / `LazyCell` (1.80) for lazy statics — no `once_cell` dependency;
-  `get`/`get_mut`/`force_mut` (1.94) inspect without forcing initialization
 
 ## Type-Level Optimizations
 
@@ -134,7 +129,8 @@ strip = "debuginfo"   # Drop DWARF but keep symbols — end-user panic backtrace
 - Newtype wrappers (`struct Foo(u32)`) are zero-cost — use freely for type safety without runtime
   penalty
 - `NonZero*` types (e.g. `NonZeroU32`) allow the compiler to use 0 as a niche for
-  `Option<NonZeroU32>` — same size as `u32`
+  `Option<NonZeroU32>`, the same size as `u32`. An unsigned value divides or takes a remainder by
+  one directly (`x % n`), with no `.get()` and no zero check (clippy's `needless_nonzero_get`)
 - `Box<str>` / `Box<[T]>` (`Arc<str>` when shared) for owned data that never changes once built
   and exists in many copies: a two-word handle against `String`'s or `Vec`'s three, and no spare
   capacity. `into_boxed_str()` / `into_boxed_slice()` shrink as they convert; a long-lived

@@ -14,7 +14,6 @@ pub mod radio_browser;
 use std::time::Duration;
 
 use melodia_core::error::{AppError, describe};
-use melodia_core::utils::text::from_utf8_lossy_owned;
 use reqwest::StatusCode;
 use reqwest::header::{ETAG, HeaderValue, IF_NONE_MATCH};
 
@@ -84,7 +83,7 @@ pub async fn get_capped_text(
     url: &reqwest::Url,
     spec: &CappedGet,
 ) -> Result<String, AppError> {
-    Ok(from_utf8_lossy_owned(get_capped(client, url, spec).await?))
+    Ok(String::from_utf8_lossy_owned(get_capped(client, url, spec).await?))
 }
 
 /// What [`get_capped_if_changed`] found.

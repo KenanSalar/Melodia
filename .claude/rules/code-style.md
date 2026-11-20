@@ -63,29 +63,11 @@ tests, holds no duplication, says what it means, and has no more parts than that
 - **Meaning belongs in the type, not the primitive** - a bare `bool`, `u32` or `String` at a
   boundary lets the wrong one through in silence. An enum or newtype makes that a compile
   error and retires the comment explaining the unit.
-- **A newtype guards its invariant at construction** - one that carries an invariant keeps its
-  field private, checks the value in its constructor, and converts from the weaker type through
-  `TryFrom`, never `From`. A public field or an infallible conversion lets the invalid value in,
-  and the type proves nothing.
-- **Take what you keep, borrow what you read** - a parameter the function stores or consumes is
-  taken owned (`String`, `Vec<T>`, `PathBuf`): a caller done with its value moves it in, one
-  that isn't clones at the call site. A `&str` the body `.to_owned()`s copies on every call.
-  Clippy's `needless_pass_by_value` catches an owned parameter that is only read, not this.
-- **Borrow the data, not its holder** - a parameter that is only read takes `&T`, `&[T]`, `&str`,
-  `&Path` or `Option<&T>`, not `&Arc<T>`, `&Rc<T>`, `&Box<T>`, `&Vec<T>`, `&String`, `&PathBuf`
-  or `&Option<T>`. Naming the holder ties every caller to one way of storing the value. A
-  `&Arc<T>` or `&Rc<T>` is right only where the body keeps a pointer of its own: it clones or
-  downgrades it, or hands it to a callee that does. Clippy holds `&Box<T>`, `&Vec<T>`, `&String`
-  and `&PathBuf` everywhere (`borrowed_box`, `ptr_arg`) and `&Option<T>` on private items only
-  (`ref_option`); nothing holds `&Arc<T>` or `&Rc<T>`.
 - **Command or query, never both** - a function either changes state or answers a question.
   One that does both leaves every call site working out whether calling it twice is safe.
 - **Don't reach through** - `a.b().c().d()` couples the caller to the shape of everything in
   the middle. Ask the neighbour for the answer instead of walking its internals; the method
   you want usually belongs on the type you already hold.
-- **A free function unless it needs the type** - an inherent associated function that neither
-  builds `Self` nor takes `self` belongs outside the `impl`. Parked inside, it costs every caller
-  a `Type::` and claims a coupling that isn't there.
 
 **Reading order**
 
@@ -111,7 +93,8 @@ tests, holds no duplication, says what it means, and has no more parts than that
 - **A match repeated is a method missing** - the same dispatch spelled in three files wants to
   be one method on the enum or trait. Adding a variant should break one file, not find three.
 
-Test practice, including what all of this means for a test, is `.claude/rules/testing.md`.
+Test practice, including what all of this means for a test, is `.claude/rules/testing.md`; the
+Rust-only signature rules and the language idioms are `.claude/rules/rust.md`.
 
 ## Comments
 

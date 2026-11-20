@@ -11,7 +11,6 @@ use std::time::Duration;
 
 use melodia_core::entities::correction::AutoEqEntry;
 use melodia_core::error::AppError;
-use melodia_core::utils::text::from_utf8_lossy_owned;
 use reqwest::Url;
 
 use super::{CappedGet, IfChanged, get_capped_if_changed, get_capped_text, http_url};
@@ -54,7 +53,7 @@ pub async fn fetch_list(
     Ok(match get_capped_if_changed(client, &url, cached_etag, &LIST_GET).await? {
         IfChanged::NotModified => ListFetch::NotModified,
         IfChanged::Fresh { body, etag } => {
-            ListFetch::Fresh { text: from_utf8_lossy_owned(body), etag }
+            ListFetch::Fresh { text: String::from_utf8_lossy_owned(body), etag }
         }
     })
 }
