@@ -369,8 +369,8 @@ impl Window {
 
     fn push(&mut self, frame: &[Sample]) {
         let head = self.head;
-        for (ring, &sample) in self.samples.as_chunks_mut::<{ 2 * SPAN }>().0.iter_mut().zip(frame)
-        {
+        let (rings, _) = self.samples.as_chunks_mut::<{ 2 * SPAN }>();
+        for (ring, &sample) in rings.iter_mut().zip(frame) {
             ring[head] = sample;
             ring[head + SPAN] = sample;
         }

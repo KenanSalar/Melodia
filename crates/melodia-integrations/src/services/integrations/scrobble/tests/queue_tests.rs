@@ -157,7 +157,7 @@ fn legacy_queue_without_loves_field_loads_empty() -> TestResult {
     std::fs::write(&path, r#"{"items":[]}"#)?;
 
     let loaded = ScrobbleQueue::load(&path)?;
-    assert!(loaded.items.is_empty());
-    assert!(loaded.loves.is_empty());
+    assert_eq!(loaded.items, [] as [QueuedItem; 0]);
+    assert_eq!(loaded.loves, [] as [LoveItem; 0]);
     Ok(())
 }

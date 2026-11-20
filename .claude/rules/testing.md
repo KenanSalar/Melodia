@@ -135,9 +135,10 @@ none of which a passing run can show:
   its `mem::discriminant`s, whose `Debug` prints an opaque `Discriminant(..)` on both sides.
 - **Emptiness is an equality too**: `assert_eq!(x, [] as [T; 0])`, `""` for a string and
   `assert_ne!` for non-empty, so a failure prints what was there. Clippy's `assert_is_empty`
-  holds it, skipping an `assert!` that carries a message. Spell the element type: a bare `[]`
-  stops inferring once any crate in the graph adds a `PartialEq` impl to it, as `serde_json`
-  does for the primitives and `String`.
+  holds it over a string, slice, array or `Vec` whose element has `PartialEq`, skipping an
+  `assert!` that carries a message; a `VecDeque` or a boxed slice is the writer's to catch. Spell
+  the element type: a bare `[]` stops inferring once any crate in the graph adds a `PartialEq`
+  impl to it, as `serde_json` does for the primitives and `String`.
 - **The custom message argues, it does not restate.** The values are already printed; the
   string is for what broke and why it matters.
 - **Pick one form of pattern assertion and use it everywhere.** `assert!(matches!(…))` and
