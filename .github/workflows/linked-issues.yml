@@ -1,0 +1,77 @@
+name: Linked issues
+
+# Copies the linked issues' labels and assignees onto a PR, which GitHub
+# doesn't do itself. Runs on every push too, since an issue linked from the
+# sidebar after the PR opened raises no event of its own.
+
+on:
+  pull_request:
+    branches: [ main ]
+    types: [opened, reopened, synchronize]
+
+permissions: {}
+
+jobs:
+  copy-from-issues:
+    name: copy-from-issues
+    runs-on: ubuntu-latest
+    # A fork's token is read-only, so the writes would fail the job.
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    permissions:
+      issues: read          # the linked issues' labels and assignees
+      pull-requests: write  # the label and assignee writes on the PR
+    steps:
+      - uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        env:
+          # Issue-only labels: `accepted` is what puts an item on the project board.
+          EXCLUDED_LABELS: accepted
+        with:
+          script: |
+            const excludedLabels = new Set(
+              process.env.EXCLUDED_LABELS.split(',').map(name => name.trim().toLowerCase())
+            );
+            const pr = context.payload.pull_request;
+            const { repository } = await github.graphql(`
+              query($owner: String!, $repo: String!, $number: Int!) {
+                repository(owner: $owner, name: $repo) {
+                  pullRequest(number: $number) {
+                    closingIssuesReferences(first: 10) {
+                      nodes {
+                        labels(first: 50) { nodes { name } }
+                        assignees(first: 10) { nodes { login } }
+                      }
+                    }
+                  }
+                }
+              }`, { ...context.repo, number: pr.number });
+            const issues = repository.pullRequest.closingIssuesReferences.nodes;
+
+            const labelsOnPr = new Set(pr.labels.map(label => label.name));
+            const labelsToAdd = new Set(
+              issues
+                .flatMap(issue => issue.labels.nodes.map(label => label.name))
+                .filter(name => !excludedLabels.has(name.toLowerCase()) && !labelsOnPr.has(name))
+            );
+            if (labelsToAdd.size > 0) {
+              await github.rest.issues.addLabels({
+                ...context.repo,
+                issue_number: pr.number,
+                labels: [...labelsToAdd],
+              });
+              core.info(`Labels added: ${[...labelsToAdd].join(', ')}`);
+            }
+
+            const assignedOnPr = new Set(pr.assignees.map(user => user.login));
+            const assigneesToAdd = new Set(
+              issues
+                .flatMap(issue => issue.assignees.nodes.map(user => user.login))
+                .filter(login => !assignedOnPr.has(login))
+            );
+            if (assigneesToAdd.size > 0) {
+              await github.rest.issues.addAssignees({
+                ...context.repo,
+                issue_number: pr.number,
+                assignees: [...assigneesToAdd],
+              });
+              core.info(`Assignees added: ${[...assigneesToAdd].join(', ')}`);
+            }
