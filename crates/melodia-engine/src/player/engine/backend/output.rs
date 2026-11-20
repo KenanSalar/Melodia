@@ -18,6 +18,7 @@ use melodia_audio::player::source::file_decode::FileDecoder;
 use melodia_audio::player::source::park::ParkTicket;
 use melodia_core::entities::track::TrackAudio;
 use melodia_core::error::{AppError, describe};
+use melodia_playback::player::playback::crossfeed;
 use melodia_playback::player::playback::decks::Decks;
 use melodia_playback::player::playback::output::device::{ExternalVolume, Lead};
 use melodia_playback::player::playback::output::voice::Voice;
@@ -50,8 +51,8 @@ impl OutputChoice {
         self.device.as_deref().filter(|_| output::SHARED_DEVICE_SUPPORTED)
     }
 
-    /// The device the output is aimed at, which keys its headphone correction. `None` is System
-    /// default.
+    /// The device the output is aimed at, which keys the settings each device keeps. `None` is
+    /// System default.
     pub fn heard_device(&self) -> Option<&str> {
         match self.mode {
             OutputMode::Exclusive => self.device.as_deref(),
@@ -218,6 +219,11 @@ impl PlaybackEngine {
         self.output.status.reopening()
     }
 
+    /// The open stream's lead, read without the device's lock.
+    pub fn output_lead(&self) -> Duration {
+        self.output.lead.get()
+    }
+
     pub fn negotiated(&self) -> Option<Negotiated> {
         self.output.device.lock().as_ref().and_then(AudioOutput::negotiated)
     }
@@ -236,18 +242,23 @@ impl PlaybackEngine {
         }
     }
 
-    /// The path the playing source takes to the device. Takes the decks, output and correction
+    /// The path the playing source takes to the device. Takes the decks, output and headphones
     /// locks in turn, never two at once.
     pub fn signal_path(&self, transport: Transport) -> Option<SignalPath> {
         let source = self.lock_decks().active().voice.playing()?;
         let negotiated = self.negotiated()?;
-        let correction_on = self.correction.lock().engaged();
+        let (correction_on, crossfeed_enabled) = {
+            let headphones = self.headphones.lock();
+            (headphones.correction_engaged(), headphones.crossfeed_enabled())
+        };
+        let crossfeed_on = crossfeed_enabled && crossfeed::reaches(source.shape.channels);
         Some(signal_path::evaluate(SignalInputs {
             negotiated,
             source,
             eq_on: self.dsp.eq.enabled(),
             rg_on: self.dsp.rg.enabled(),
             correction_on,
+            crossfeed_on,
             transport,
         }))
     }
@@ -272,12 +283,12 @@ impl PlaybackEngine {
 
     /// Takes the card or gives it back now rather than at the next track. With nothing loaded an
     /// exclusive choice waits for the first play to claim, and a shared one reopens shared, which
-    /// is what hands the card back. The correction follows once the reopen returns, so the outgoing
-    /// device doesn't play the incoming one's as it closes. Blocking.
+    /// is what hands the card back. The per-device settings follow once the reopen returns, so the
+    /// outgoing device doesn't play the incoming one's as it closes. Blocking.
     pub fn set_output_choice(&self, choice: OutputChoice) {
         *self.output.choice.lock() = choice;
         self.reopen_for_choice();
-        self.aim_correction();
+        self.aim_headphones();
     }
 
     fn reopen_for_choice(&self) {
@@ -306,11 +317,11 @@ impl PlaybackEngine {
         }
     }
 
-    /// Reads the choice under the correction lock, not from a caller, so two device switches
-    /// crossing can't leave the correction on the older one.
-    fn aim_correction(&self) {
-        let mut correction = self.correction.lock();
-        correction.aim(self.output.choice.lock().heard_device());
+    /// Reads the choice under the headphones lock, not from a caller, so two device switches
+    /// crossing can't leave the per-device settings on the older one.
+    fn aim_headphones(&self) {
+        let mut headphones = self.headphones.lock();
+        headphones.aim(self.output.choice.lock().heard_device());
     }
 
     fn wanted_request(&self, shape: Shape, format: SourceFormat) -> OutputRequest {

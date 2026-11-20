@@ -6,7 +6,8 @@ use std::time::Duration;
 use serde::{Deserialize, Serialize};
 
 use super::EqData;
-use melodia_core::entities::correction::DeviceCorrections;
+use melodia_core::entities::correction::Correction;
+use melodia_core::entities::device_map::DeviceMap;
 use melodia_engine::player::engine::backend::OutputChoice;
 use melodia_engine::player::engine::types::RepeatMode;
 use melodia_playback::player::playback::crossfade::DEFAULT_CROSSFADE_MS;
@@ -65,7 +66,7 @@ pub struct LegacyEq {
     #[serde(skip_serializing_if = "Option::is_none")]
     eq_preamp: Option<f32>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    corrections: Option<DeviceCorrections>,
+    corrections: Option<DeviceMap<Correction>>,
 }
 
 impl LegacyEq {

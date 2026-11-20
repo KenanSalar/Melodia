@@ -336,7 +336,7 @@ pub fn spawn_playback_monitor(tracker: &TaskTracker, ctx: PlaybackMonitorContext
                 }
                 _ = interval.tick() => {}
             }
-            if monitor.poll() == Poll::Counted {
+            if monitor.poll().await == Poll::Counted {
                 monitor.count_toward_save().await;
             }
         }
@@ -388,7 +388,7 @@ impl Monitor {
         }
     }
 
-    fn poll(&mut self) -> Poll {
+    async fn poll(&mut self) -> Poll {
         // Every read below takes the decks lock, which a reopen holds across a device open, and
         // waiting for it would block a runtime worker as long. The next tick reads the new stream.
         if self.engine.output_reopening() {
@@ -421,7 +421,7 @@ impl Monitor {
                 self.advance_gapless();
                 Poll::Counted
             }
-            PlaybackCheck::EndOfStream => self.end_of_stream(),
+            PlaybackCheck::EndOfStream => self.end_of_stream().await,
             PlaybackCheck::Playing => self.playing(),
         }
     }
@@ -439,14 +439,20 @@ impl Monitor {
         });
     }
 
-    fn end_of_stream(&self) -> Poll {
+    /// Waits out the device's lead first: the deck runs dry as its last frames are pulled, which the
+    /// device plays a lead later, and the start or stop that follows can close the stream on them.
+    async fn end_of_stream(&self) -> Poll {
         // A station drains only once its reconnect budget is spent. An unfinished one is a deck
         // between `play_stream` publishing the cell and appending the source: not yet, not over.
-        let live = self.engine.stream_shared();
-        if live.as_deref().is_some_and(|s| !s.is_finished()) {
+        let station_ended = match self.engine.stream_shared() {
+            Some(stream) if !stream.is_finished() => return Poll::Skipped,
+            live => live.is_some(),
+        };
+        tokio::time::sleep(self.engine.output_lead()).await;
+        if !self.still_ended() {
             return Poll::Skipped;
         }
-        if live.is_some() {
+        if station_ended {
             notify_station_ended(&self.player_state);
         }
         emit_and_execute(
@@ -456,6 +462,14 @@ impl Monitor {
             PlayerState::build_end_of_stream_actions,
         );
         Poll::Counted
+    }
+
+    /// Whether the deck is still dry under a playing transport, which a skip, stop or pause
+    /// during [`Self::end_of_stream`]'s wait would have changed.
+    fn still_ended(&self) -> bool {
+        let status = self.player_state.status_atomic.load(std::sync::atomic::Ordering::Relaxed);
+        status == PlaybackStatus::Playing as u8
+            && self.engine.check_playback_state() == PlaybackCheck::EndOfStream
     }
 
     fn playing(&mut self) -> Poll {

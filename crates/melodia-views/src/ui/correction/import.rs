@@ -9,9 +9,9 @@ use async_compat::Compat;
 use slint::{ComponentHandle, ModelRc, VecModel};
 use tokio::runtime::Handle;
 
-use super::Card;
 use crate::ui::dialog_landing::{DialogTicket, TicketedDialog};
 use crate::ui::file_dialog;
+use crate::ui::headphones::Card;
 use crate::ui::util::len_as_i32;
 use melodia_app::library;
 use melodia_app::library::correction::{ImportError, Imported};
@@ -25,10 +25,10 @@ use melodia_ui::{
     SkippedLineRow,
 };
 
-pub(super) fn install(ui: &AppWindow, state: &AppState, card: &Rc<Card>) {
+pub(super) fn install(ui: &AppWindow, card: &Rc<Card>) {
     let import = Rc::new(Import {
         ui: ui.as_weak(),
-        state: state.clone(),
+        state: card.state().clone(),
         card: Rc::clone(card),
         ticket: DialogTicket::new(DialogKind::CorrectionImport),
         skipped: Rc::new(VecModel::default()),

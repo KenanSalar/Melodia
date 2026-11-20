@@ -442,17 +442,21 @@ fn a_poll_that_is_not_holding_starts_the_count_over() {
     assert_eq!(due_after, Some(RELEASE_AFTER_N_TICKS));
 }
 
+/// The device-free mixer's shape. Nothing listens, so any a converter accepts will do.
+fn device_shape() -> Shape {
+    Shape {
+        channels: NonZero::new(2).unwrap_or(NonZero::<u16>::MIN),
+        rate: NonZero::new(44_100).unwrap_or(NonZero::<u32>::MIN),
+    }
+}
+
 /// A seek while paused moves the state at once and sends the deck its swap without waiting for it
 /// to land. A release in that gap must not take the deck's old reading for where to resume.
 #[tokio::test]
 async fn a_release_never_writes_back_the_position_a_seek_moved_off() -> Result<(), AppError> {
     const SEEK_MS: u64 = 700;
     let fixture = whole_file(&Path::new(ASSETS_DIR).join("silence.wav").to_string_lossy());
-    let device = Shape {
-        channels: NonZero::new(2).unwrap_or(NonZero::<u16>::MIN),
-        rate: NonZero::new(44_100).unwrap_or(NonZero::<u32>::MIN),
-    };
-    let (mixer, mut pull) = mixer::pair(DECK_COUNT, device);
+    let (mixer, mut pull) = mixer::pair(DECK_COUNT, device_shape());
     let engine =
         PlaybackEngine::new(&mixer, tokio::runtime::Handle::current(), decode_ahead::DEPTH)?;
     engine.play_media(&fixture, 1.0, 1.0, None, TrackReplayGain::default())?;
@@ -467,6 +471,67 @@ async fn a_release_never_writes_back_the_position_a_seek_moved_off() -> Result<(
     release_paused_track(&engine, &handle, &sinks);
 
     assert_eq!(lock_state(&handle).position_ms, SEEK_MS);
+    Ok(())
+}
+
+// --- A natural end ---------------------------------------------------------
+
+/// Playing the last of [`playing_state`]'s two tracks, so its end is the end of the queue.
+fn playing_the_last_track() -> PlayerState {
+    let mut state = playing_state();
+    state.queue.current_index = Some(1);
+    state.source = Some(PlaybackSource::Track(track(2, Some("B"))));
+    state
+}
+
+/// A monitor over an engine with nothing on its decks, which reads as a track run dry. With no
+/// device under it the lead is zero, so the monitor's wait for the device is a yield.
+fn monitor_on_a_dry_deck(
+    state: PlayerState,
+) -> Result<(Monitor, Arc<PlayerStateHandle>), AppError> {
+    let (mixer, _pull) = mixer::pair(DECK_COUNT, device_shape());
+    let engine =
+        PlaybackEngine::new(&mixer, tokio::runtime::Handle::current(), decode_ahead::DEPTH)?;
+    let (handle, sinks, _published) = seated(state);
+    // The monitor reads the status through the mirror only an emit stores.
+    with_state_emit(&handle, &sinks, |_| ());
+    let player_state = Arc::new(handle);
+    let save: SnapshotSink =
+        Arc::new(|_snapshot| -> Pin<Box<dyn Future<Output = ()> + Send>> { Box::pin(async {}) });
+    let monitor = Monitor::new(PlaybackMonitorContext {
+        shutdown_token: CancellationToken::new(),
+        player_state: Arc::clone(&player_state),
+        engine: Arc::new(engine),
+        sinks: Arc::new(sinks),
+        position_tx: watch::channel(None).0,
+        signal_path_tx: watch::channel(None).0,
+        save,
+    });
+    Ok((monitor, player_state))
+}
+
+/// The monitor waits out the device's lead before acting on a dry deck, and a pause landing in
+/// that wait has to keep the track rather than end the queue under it.
+#[tokio::test]
+async fn a_pause_landing_during_the_wait_keeps_the_track() -> Result<(), AppError> {
+    let paused = PlayerState { status: PlaybackStatus::Paused, ..playing_the_last_track() };
+    let (monitor, handle) = monitor_on_a_dry_deck(paused)?;
+
+    monitor.end_of_stream().await;
+
+    assert_eq!(lock_state(&handle).status, PlaybackStatus::Paused);
+    Ok(())
+}
+
+/// The check after the wait can't be stricter than the end it guards: one that never passes leaves
+/// playback stuck at the end of every track.
+#[tokio::test]
+async fn a_track_run_dry_while_playing_still_ends_the_queue() -> Result<(), AppError> {
+    let (monitor, handle) = monitor_on_a_dry_deck(playing_the_last_track())?;
+
+    monitor.end_of_stream().await;
+
+    assert_eq!(lock_state(&handle).status, PlaybackStatus::Stopped);
     Ok(())
 }
 

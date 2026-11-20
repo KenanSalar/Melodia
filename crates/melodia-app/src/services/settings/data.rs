@@ -14,6 +14,8 @@ use super::playback::{
 };
 use super::services::{LyricsFlags, RadioFlags};
 use super::undo::UndoFlags;
+use melodia_core::entities::crossfeed::CrossfeedSetting;
+use melodia_core::entities::device_map::DeviceMap;
 use melodia_core::entities::integrations::{DiscordFlags, ScrobbleFlags};
 use melodia_core::entities::locale::{DEFAULT_LOCALE, SUPPORTED_LOCALES};
 use melodia_core::entities::track_list::SortDir;
@@ -132,6 +134,7 @@ pub struct SettingsData {
     pub equalizer: EqualizerFlags,
     #[serde(flatten)]
     pub correction: CorrectionFlags,
+    pub crossfeed: DeviceMap<CrossfeedSetting>,
     #[serde(flatten)]
     pub legacy_eq: LegacyEq,
     #[serde(flatten)]
@@ -207,6 +210,7 @@ impl Default for SettingsData {
             playback: PlaybackFlags::default(),
             equalizer: EqualizerFlags::default(),
             correction: CorrectionFlags::default(),
+            crossfeed: DeviceMap::default(),
             legacy_eq: LegacyEq::default(),
             replaygain: ReplayGainFlags::default(),
             crossfade: CrossfadeFlags::default(),

@@ -13,7 +13,9 @@ use melodia_app::state::AppState;
 use melodia_engine::player::engine::signal_path::{Grade, SignalPath, Verdict};
 use melodia_playback::player::playback::output::OutputFormat;
 use melodia_playback::player::playback::output::claim::FallbackReason;
-use melodia_ui::{AppWindow, Equalizer, HeadphoneCorrection, ReplayGain, Settings, SignalPathUi};
+use melodia_ui::{
+    AppWindow, Crossfeed, Equalizer, HeadphoneCorrection, ReplayGain, Settings, SignalPathUi,
+};
 
 pub fn install(ui: &AppWindow, state: &AppState) {
     let mut rx = state.signal_path_tx.subscribe();
@@ -30,6 +32,7 @@ pub fn install(ui: &AppWindow, state: &AppState) {
     let weak = ui.as_weak();
     ui.global::<SignalPathUi>().on_make_bit_perfect(move || {
         let ctx = state.playback_ctx();
+        library::crossfeed::switch_off(&state, library::playback::player_heard_device(&ctx));
         // One task, the live half first: the persist writes the volume the live half left, and
         // reading the output can wait out a reopen.
         state.persist_blocking("persist bit-perfect reset", move |paths| {
@@ -43,10 +46,11 @@ pub fn install(ui: &AppWindow, state: &AppState) {
 }
 
 /// Repaint what a bit-perfect reset switched. Volume and speed come back through the player's view
-/// model; these four are seeded from Rust and repaint only when told.
+/// model; these five are seeded from Rust and repaint only when told.
 pub(super) fn show_bit_perfect_reset(ui: &AppWindow) {
     ui.global::<Equalizer>().set_enabled(false);
     ui.global::<HeadphoneCorrection>().set_enabled(false);
+    ui.global::<Crossfeed>().set_enabled(false);
     ui.global::<ReplayGain>().set_enabled(false);
     if library::playback::FOLLOW_RATE_SUPPORTED {
         ui.global::<Settings>().set_output_follow_rate(true);
@@ -104,6 +108,7 @@ fn paint(ui: &AppWindow, path: Option<&SignalPath>) {
     g.set_eq_on(inputs.eq_on);
     g.set_rg_on(inputs.rg_on);
     g.set_correction_on(inputs.correction_on);
+    g.set_crossfeed_on(inputs.crossfeed_on);
     let transport = inputs.transport;
     g.set_volume_on_device(device.hardware_volume);
     g.set_device_level(device.device_level.map_or(-1, |level| i32::from(level.percent)));

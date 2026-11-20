@@ -21,7 +21,9 @@ use crate::services::settings;
 use crate::tasks::play_count_flusher::{FlushRequests, PlayCountFlush};
 use melodia_artwork::media::image::artwork::CoverCache;
 use melodia_core::config::Paths;
-use melodia_core::entities::correction::DeviceCorrections;
+use melodia_core::entities::correction::Correction;
+use melodia_core::entities::crossfeed::CrossfeedSetting;
+use melodia_core::entities::device_map::DeviceMap;
 use melodia_core::error::{AppError, AppResult, describe};
 use melodia_core::utils::self_writes::SelfWrites;
 use melodia_engine::player::engine::backend::PlaybackEngine;
@@ -76,8 +78,8 @@ pub struct AppState {
     /// Bumped by `tasks::audio_health` when the output device goes away, for the sticky toast that
     /// is the only notice: playback otherwise runs on in silence.
     pub audio_device_lost: Signal,
-    /// Bumped once the engine is aimed at a new output choice, for the headphone correction card,
-    /// which names the device it speaks for.
+    /// Bumped once the engine is aimed at a new output choice, for the headphone card, which names
+    /// the device it speaks for.
     pub output_changed: Signal,
     /// How many scans are restoring cover art whose stored file went missing, for the notice. A
     /// count rather than a [`Signal`], since the boot scan can start before the notice subscribes.
@@ -129,7 +131,9 @@ pub struct AppState {
     pub correction_online: SharedFlag,
     /// Every device's headphone correction as last set. Each of `library::correction`'s writes
     /// edits this rather than the file's copy, so two in flight can't undo each other.
-    pub corrections: Arc<Shadowed<DeviceCorrections>>,
+    pub corrections: Arc<Shadowed<DeviceMap<Correction>>>,
+    /// Every device's crossfeed as last set, shadowed for [`Self::corrections`]' reason.
+    pub crossfeed: Arc<Shadowed<DeviceMap<CrossfeedSetting>>>,
     pub media_controls: Option<Arc<MediaControlsHandle>>,
     /// Built on first use by [`AppState::http_client`], one client for every clone.
     http_client: Arc<OnceLock<reqwest::Client>>,
@@ -239,6 +243,7 @@ impl AppState {
             write_ratings_to_tags: SharedFlag::new(settings.library.write_ratings_to_tags),
             correction_online: SharedFlag::new(settings.correction.correction_online),
             corrections: Arc::new(Shadowed::new(eq.corrections)),
+            crossfeed: Arc::new(Shadowed::new(settings.crossfeed)),
             media_controls: Some(mc_handle),
             http_client,
             task_tracker: TaskTracker::new(),
@@ -373,6 +378,7 @@ fn hydrate_audio_dsp(
 
     engine.set_corrections(eq.corrections.clone());
     engine.set_correction_enabled(settings.correction.correction_enabled);
+    engine.set_crossfeed(settings.crossfeed.clone());
 
     engine.set_crossfade_duration_ms(settings.crossfade.crossfade_duration_ms);
     engine.set_crossfade_manual(settings.crossfade.crossfade_manual);

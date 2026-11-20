@@ -42,6 +42,8 @@ export global SignalPathUi {
     in property <bool> rg-on;
     // Only where a correction is set for the device heard.
     in property <bool> correction-on;
+    // Only for a two-channel source, where the device heard has it on.
+    in property <bool> crossfeed-on;
     // The device's own control carries the volume, which then changes no sample.
     in property <bool> volume-on-device;
     // That control as the claim read it, as its own slider's percentage, -1 where nothing was read.

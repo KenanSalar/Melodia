@@ -7,7 +7,7 @@ import { Theme } from "theme.slint";
 import { Settings } from "settings.slint";
 import { Albums, AlbumDetail } from "globals/albums.slint";
 import { Artists, ArtistDetail } from "globals/artists.slint";
-import { Equalizer, HeadphoneCorrection, ReplayGain, Visualizer } from "globals/audio.slint";
+import { Crossfeed, Equalizer, HeadphoneCorrection, Headphones, ReplayGain, Visualizer } from "globals/audio.slint";
 import { CorrectionImport, HeadphonePicker } from "globals/correction-dialogs.slint";
 import { Favorites, RecentlyPlayed } from "globals/curated.slint";
 import { SmartEditor, TagEditor, TagLock, ScrobbleUi, RadioForm } from "globals/dialog-forms.slint";
@@ -80,7 +80,7 @@ import { ViewTransition } from "components/view-transition.slint";
 // through the main file. The only place the full list appears: `globals/` has no barrel, every
 // consumer importing the file it needs, so an import above that only feeds this block is not dead.
 export {
-    Theme, Settings, SettingsPage, Player, HeroBackdrop, HeroChips, Equalizer, HeadphoneCorrection, HeadphonePicker, CorrectionImport, ReplayGain, Visualizer, SignalPathUi, ScrobbleUi, SmartEditor, TagEditor, TagLock, DuplicatesUi, KeptOutUi, Nav, CompositeScroll, MiniPlayer, MyLibrary, Tracks, Browse, LibrarySettings, Dialog, WindowChrome, Queue, Notifications, UndoText, UndoSettings, NowPlaying, Favorites, RecentlyPlayed, Albums, AlbumDetail, Artists, ArtistDetail, Genres, GenreDetail, Playlists, PlaylistDetail, Search, MelodiaUpdater, RowCovers, Radio, RadioForm, Onboarding, Lyrics, TrackColumnSizing, CardSelection, CardActions, CopyActions, FavoriteActions, Selection, Drag, DragOrigin, FileDrag, FileDropTarget, WindowRect,
+    Theme, Settings, SettingsPage, Player, HeroBackdrop, HeroChips, Equalizer, Headphones, HeadphoneCorrection, Crossfeed, HeadphonePicker, CorrectionImport, ReplayGain, Visualizer, SignalPathUi, ScrobbleUi, SmartEditor, TagEditor, TagLock, DuplicatesUi, KeptOutUi, Nav, CompositeScroll, MiniPlayer, MyLibrary, Tracks, Browse, LibrarySettings, Dialog, WindowChrome, Queue, Notifications, UndoText, UndoSettings, NowPlaying, Favorites, RecentlyPlayed, Albums, AlbumDetail, Artists, ArtistDetail, Genres, GenreDetail, Playlists, PlaylistDetail, Search, MelodiaUpdater, RowCovers, Radio, RadioForm, Onboarding, Lyrics, TrackColumnSizing, CardSelection, CardActions, CopyActions, FavoriteActions, Selection, Drag, DragOrigin, FileDrag, FileDropTarget, WindowRect,
     TrackSummaryRow, TrackListRow, PlayerVm, QueueVm, QueueRow, FolderListRow, LyricRow, LiftedRun,
     TrackColumns, TrackColumnLayout, TrackColumn,
     BrowseFolderRow, BreadcrumbRow, NotificationRow, TrackMetaRow,

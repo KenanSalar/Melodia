@@ -16,6 +16,7 @@ use crate::services::settings::{
     BorderTint, DEFAULT_UNDO_NOTICE_MS, ONBOARDING_VERSION, PausedDevice, TitlebarButtonStyle,
     UNDO_NOTICE_MS_RANGE, WINDOW_BORDER_SYSTEM_COLOR, WindowBorder,
 };
+use melodia_core::entities::crossfeed::{CrossfeedSetting, CrossfeedStrength};
 use melodia_core::entities::undo::{RemovalSize, UndoKind};
 
 fn json_err(e: serde_json::Error) -> AppError {
@@ -1287,6 +1288,60 @@ fn an_unreadable_resampler_resets_to_the_default_alone() -> Result<(), AppError>
         (settings.volume, settings.output.output_resampler),
         (40, Resampler::default()),
         "(volume, resampler)"
+    );
+    Ok(())
+}
+
+// --- Crossfeed ---
+
+const CARD: &str = "hw:CARD=UMC22,DEV=0";
+
+fn crossfeed_at(enabled: bool, strength: f32) -> Result<CrossfeedSetting, AppError> {
+    let strength = CrossfeedStrength::try_from(strength)
+        .map_err(|e| AppError::validation("test strength", e))?;
+    Ok(CrossfeedSetting { enabled, strength })
+}
+
+/// A shape that writes what it can't read back resets every device's crossfeed at the next boot.
+/// Neither strength is the default, which a strength left unwritten would read back as.
+#[test]
+fn every_devices_crossfeed_reads_back_from_settings_json() -> Result<(), AppError> {
+    let (_tmp, paths) = crate::state::fixtures::seeded_root()?;
+    let system_default = crossfeed_at(false, 0.25)?;
+    let card = crossfeed_at(true, 0.9)?;
+    crate::services::settings::mutate_settings(&paths, move |settings| {
+        settings.crossfeed.insert(None, system_default);
+        settings.crossfeed.insert(Some(CARD.to_owned()), card);
+    })?;
+
+    let read = crate::services::settings::read_settings(&paths)?.crossfeed;
+
+    assert_eq!(
+        (read.for_device(None), read.for_device(Some(CARD))),
+        (Some(&system_default), Some(&card))
+    );
+    Ok(())
+}
+
+/// A hand edit can write a strength past the slider. Only the crossfeed resets, so the settings
+/// beside it survive the edit.
+#[test]
+fn a_strength_past_the_slider_resets_crossfeed_alone() -> Result<(), AppError> {
+    let tmp = tempfile::tempdir()?;
+    let paths = melodia_core::config::Paths::rooted_at(tmp.path().to_path_buf());
+    paths.create_dirs()?;
+    let json = r#"{
+        "volume": 40,
+        "crossfeed": {"system_default": {"enabled": true, "strength": 1.5}, "devices": {}}
+    }"#;
+    std::fs::write(&paths.settings_path, json)?;
+
+    let settings = reading_env(|| crate::services::settings::read_settings(&paths))?;
+
+    assert_eq!(
+        (settings.volume, settings.crossfeed.for_device(None)),
+        (40, None),
+        "(volume, System default's crossfeed)"
     );
     Ok(())
 }

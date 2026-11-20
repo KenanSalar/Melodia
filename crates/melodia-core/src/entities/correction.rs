@@ -1,7 +1,6 @@
 //! A headphone correction's filters as the DSP takes them, checked once where they enter, so a
 //! hand-edited `eq.json` or an imported profile can't hand the audio thread a curve it can't run.
 
-use std::collections::BTreeMap;
 use std::ops::RangeInclusive;
 
 use serde::{Deserialize, Serialize};
@@ -136,42 +135,6 @@ pub enum CorrectionOrigin {
         name: String,
     },
     Paste,
-}
-
-/// Every device's correction, keyed by the device the output is aimed at, `None` naming System
-/// default.
-#[derive(Clone, Debug, Default, Serialize, Deserialize)]
-#[serde(default)]
-pub struct DeviceCorrections {
-    /// Its own field rather than a key in `devices`, which no device id can then collide with.
-    pub system_default: Option<Correction>,
-    /// By `OutputDevice::id`.
-    pub devices: BTreeMap<String, Correction>,
-}
-
-impl DeviceCorrections {
-    pub fn for_device(&self, device: Option<&str>) -> Option<&Correction> {
-        match device {
-            Some(id) => self.devices.get(id),
-            None => self.system_default.as_ref(),
-        }
-    }
-
-    pub fn insert(&mut self, device: Option<String>, correction: Correction) {
-        match device {
-            Some(id) => {
-                self.devices.insert(id, correction);
-            }
-            None => self.system_default = Some(correction),
-        }
-    }
-
-    pub fn remove(&mut self, device: Option<&str>) -> Option<Correction> {
-        match device {
-            Some(id) => self.devices.remove(id),
-            None => self.system_default.take(),
-        }
-    }
 }
 
 /// One model on `AutoEq`'s list of recommended profiles.

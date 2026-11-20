@@ -6,7 +6,8 @@ use serde::{Deserialize, Serialize};
 use super::io::{LockedFile, mutate_settings};
 use super::{LegacyEq, SettingsData};
 use melodia_core::config::Paths;
-use melodia_core::entities::correction::DeviceCorrections;
+use melodia_core::entities::correction::Correction;
+use melodia_core::entities::device_map::DeviceMap;
 use melodia_core::error::AppResult;
 use melodia_core::utils::atomic_file;
 use melodia_playback::player::playback::equalizer::{DEFAULT_PRESET, NUM_BANDS};
@@ -20,7 +21,7 @@ pub struct EqData {
     pub preset: String,
     /// Master gain in dB, clamped to `MIN_PREAMP_DB..=MAX_PREAMP_DB`.
     pub preamp: f32,
-    pub corrections: DeviceCorrections,
+    pub corrections: DeviceMap<Correction>,
 }
 
 impl Default for EqData {
@@ -29,7 +30,7 @@ impl Default for EqData {
             band_gains: vec![0.0; NUM_BANDS],
             preset: DEFAULT_PRESET.to_owned(),
             preamp: 0.0,
-            corrections: DeviceCorrections::default(),
+            corrections: DeviceMap::default(),
         }
     }
 }

@@ -5,7 +5,8 @@ use std::fs::File;
 use std::io::Read;
 use std::path::Path;
 
-use super::{CorrectionTarget, autoeq_client, commit, parametric};
+use super::{autoeq_client, commit, parametric};
+use crate::library::headphones::DeviceTarget;
 use crate::state::AppState;
 use melodia_core::entities::correction::{
     AutoEqEntry, Correction, CorrectionOrigin, ParsedProfile, ProfileRefusal,
@@ -40,7 +41,7 @@ pub enum ImportError {
 /// reviewed: `AutoEq`'s layout isn't a promise, and a moved one must not apply half a curve.
 pub async fn apply_from_list(
     state: &AppState,
-    target: CorrectionTarget,
+    target: DeviceTarget,
     entry: &AutoEqEntry,
 ) -> Result<(), AppError> {
     let text = autoeq::fetch_profile(autoeq_client(state)?, entry).await?;
@@ -73,7 +74,7 @@ pub fn import_paste(text: &str) -> Result<Imported, ImportError> {
 }
 
 /// Sets `imported`'s filters for `target`, the lines it couldn't use dropped.
-pub fn apply(state: &AppState, target: CorrectionTarget, imported: Imported) {
+pub fn apply(state: &AppState, target: DeviceTarget, imported: Imported) {
     let correction = Correction {
         origin: imported.origin,
         device_name: target.device_name,

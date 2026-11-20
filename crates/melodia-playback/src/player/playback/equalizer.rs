@@ -2,10 +2,10 @@
 //! one [`DirectForm1`] per band per channel, Form 1 because its delay line stays valid across a
 //! live coefficient swap, so a slider drag injects no transient.
 //!
-//! [`EqSource`] also carries three stages the EQ toggle doesn't gate, each polled on its own and
+//! [`EqSource`] also carries four stages the EQ toggle doesn't gate, each polled on its own and
 //! each arguing its place in its own module: the track's `ReplayGain` and the headphone correction
-//! before the bands, and the deck's crossfade ramp after the clamp. With all four inert it is a
-//! bit-identical passthrough.
+//! before the bands, the crossfeed after them, and the deck's crossfade ramp after the clamp. With
+//! all five inert it is a bit-identical passthrough.
 
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -17,6 +17,7 @@ use super::correction::bank::CorrectionStage;
 use super::correction::response::FilterResponse;
 use super::correction::shared::{CorrectionShared, CorrectionWriter};
 use super::crossfade::{self, FadeShared};
+use super::crossfeed::{CrossfeedShared, CrossfeedStage};
 use super::dsp::{self, AtomicF32, Generation, PASSTHROUGH, db_to_linear};
 use super::limiter::Limiter;
 use super::replaygain::{self, ReplayGainShared, TrackReplayGain};
@@ -192,6 +193,7 @@ pub struct DspControls {
     pub eq: Arc<EqShared>,
     pub rg: Arc<ReplayGainShared>,
     pub correction: Arc<CorrectionShared>,
+    pub crossfeed: Arc<CrossfeedShared>,
 }
 
 /// Its writer dropped, the correction stays empty for these sources' lives.
@@ -201,6 +203,7 @@ impl Default for DspControls {
             eq: EqShared::new(false, &[0.0; NUM_BANDS]),
             rg: ReplayGainShared::new(),
             correction: CorrectionWriter::default().shared(),
+            crossfeed: CrossfeedShared::new(),
         }
     }
 }
@@ -263,9 +266,12 @@ pub struct EqSource<S> {
     /// For the correction's headroom, the banks' own coefficients being private to `biquad`.
     band_responses: [FilterResponse; NUM_BANDS],
     correction: CorrectionStage,
+    crossfeed: CrossfeedStage,
     preamp_gain: f32,
     rg_gain: f32,
     limiter: Limiter,
+    /// The frame in f64 before it narrows, the crossfeed needing both channels at once.
+    wide: Vec<f64>,
     /// The active path's buffered frame, so the limiter acts per frame.
     frame: Vec<f32>,
     frame_len: usize,
@@ -294,6 +300,8 @@ impl<S: AudioSource> EqSource<S> {
             .map(|_| std::array::from_fn(|_| DirectForm1::<f64>::new(PASSTHROUGH)))
             .collect();
         let correction = CorrectionStage::new(channels, input.sample_rate());
+        let crossfeed =
+            CrossfeedStage::new(input.channels(), input.sample_rate(), &controls.crossfeed);
         // Already per channel: dividing by the channel count runs the limiter that many times too
         // fast against the biquads.
         let frame_rate = sample_rate;
@@ -329,9 +337,11 @@ impl<S: AudioSource> EqSource<S> {
             band_active: [false; NUM_BANDS],
             band_responses: [FilterResponse::FLAT; NUM_BANDS],
             correction,
+            crossfeed,
             preamp_gain: 1.0,
             rg_gain: 1.0,
             limiter: Limiter::new(frame_rate),
+            wide: vec![0.0; channels],
             frame: vec![0.0; channels],
             frame_len: 0,
             frame_pos: 0,
@@ -395,8 +405,8 @@ impl<S: AudioSource> EqSource<S> {
         g
     }
 
-    /// `ReplayGain` and the correction apply whether or not the EQ is on, so they join the bands in
-    /// deciding whether this is a passthrough.
+    /// `ReplayGain`, the correction and the crossfeed apply whether or not the EQ is on, so they
+    /// join the bands in deciding whether this is a passthrough.
     fn rebuild(&mut self) {
         let rg_gain = if self.controls.rg.enabled() {
             replaygain::compute_linear_gain(self.baked_rg, self.controls.rg.controls())
@@ -407,8 +417,10 @@ impl<S: AudioSource> EqSource<S> {
         let bands_engaged = self.rebuild_bands();
         // After the bands, whose curve the correction's headroom counts.
         self.correction.update_headroom(&self.band_responses);
-        self.bypass =
-            !bands_engaged && replaygain::is_unity_gain(rg_gain) && !self.correction.engaged();
+        self.bypass = !bands_engaged
+            && replaygain::is_unity_gain(rg_gain)
+            && !self.correction.engaged()
+            && !self.crossfeed.engaged();
     }
 
     fn disable_bands(&mut self) {
@@ -469,7 +481,9 @@ impl<S: AudioSource> EqSource<S> {
         let generation = self.controls.eq.generation();
         let rg_generation = self.controls.rg.generation();
         let reshaped = self.correction.poll(&self.controls.correction);
+        let crossfeed_flipped = self.crossfeed.poll(&self.controls.crossfeed);
         if reshaped
+            || crossfeed_flipped
             || generation != self.last_generation
             || rg_generation != self.last_rg_generation
         {
@@ -517,11 +531,11 @@ impl<S: AudioSource> EqSource<S> {
         }
 
         let mix = self.correction.frame_mix();
-        // Zipping the channels' state with `frame` rather than indexing keeps the inner work free
+        // Zipping the channels' state with `wide` rather than indexing keeps the inner work free
         // of bounds checks.
         let channels = self.banks.iter_mut().zip(self.correction.channels_mut());
         let mut frame_len = 0;
-        for ((bank, correction), slot) in channels.zip(self.frame.iter_mut()) {
+        for ((bank, correction), slot) in channels.zip(self.wide.iter_mut()) {
             let Some(x) = self.input.next() else { break };
             // Widened after the gains, so a path with no filter engaged round-trips exactly.
             let mut out = correction.run(f64::from(x * self.preamp_gain * self.rg_gain), mix);
@@ -530,17 +544,19 @@ impl<S: AudioSource> EqSource<S> {
                     out = filter.run(out);
                 }
             }
-            *slot = narrow_sample(out);
+            *slot = out;
             frame_len += 1;
         }
         self.frame_len = frame_len;
         if frame_len == 0 {
             return None;
         }
+        self.crossfeed.run(&mut self.wide[..frame_len]);
 
         let mut peak = 0.0_f32;
-        for &s in &self.frame[..self.frame_len] {
-            peak = peak.max(s.abs());
+        for (slot, &wide) in self.frame.iter_mut().zip(&self.wide[..frame_len]) {
+            *slot = narrow_sample(wide);
+            peak = peak.max(slot.abs());
         }
         self.settle_on_silence(peak);
         let gain = self.limiter.process(peak);
@@ -570,6 +586,7 @@ impl<S: AudioSource> EqSource<S> {
         if self.silent_frames == self.silence_settle_frames {
             self.reset_bands();
             self.correction.reset_state();
+            self.crossfeed.reset_state();
         }
     }
 
@@ -641,6 +658,7 @@ impl<S: AudioSource> AudioSource for EqSource<S> {
         // fields alone, so a ramp in flight carries across rather than restarting from silence.
         self.reset_bands();
         self.correction.reset();
+        self.crossfeed.reset();
         self.limiter.reset();
         // The rest of the frame in hand drains and `frame_phase` stays: dropping owed samples
         // leaves every later frame a channel out of step.

@@ -1,0 +1,21 @@
+import { Crossfeed, CrossfeedLevel } from "../../globals/audio.slint";
+import { SettingSlider } from "setting-slider.slint";
+
+export global CrossfeedText {
+    out property <string> enable-label: @tr("Crossfeed");
+    out property <string> enable-desc: @tr("Each ear hears a little of the other channel, as from speakers");
+    out property <string> strength-label: @tr("Strength");
+}
+
+export component CrossfeedStrengthSlider inherits SettingSlider {
+    value: Crossfeed.strength;
+    // Translators: crossfeed's strength, at the slider's low end.
+    readout: Crossfeed.level == CrossfeedLevel.subtle ? @tr("Subtle")
+        // Translators: crossfeed's strength, in the slider's middle.
+        : Crossfeed.level == CrossfeedLevel.medium ? @tr("Medium")
+        // Translators: crossfeed's strength, at the slider's high end.
+        : @tr("Strong");
+    readout-width: 60px;
+    changed(v) => { Crossfeed.preview-strength(v); }
+    committed(v) => { Crossfeed.set-strength(v); }
+}

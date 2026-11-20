@@ -13,8 +13,8 @@ use slint::{ComponentHandle, ModelRc, VecModel};
 use tokio::runtime::Handle;
 use tokio::task::AbortHandle;
 
-use super::Card;
 use crate::ui::dialog_landing::{DialogTicket, TicketedDialog};
+use crate::ui::headphones::Card;
 use crate::ui::row_match::PICKER_ROW_CAP;
 use crate::ui::util::len_as_i32;
 use melodia_app::library;
@@ -27,10 +27,10 @@ use melodia_ui::{
     AppWindow, ApplyFailure, CorrectionPickRow, Dialog, DialogKind, HeadphonePicker, PickerPhase,
 };
 
-pub(super) fn install(ui: &AppWindow, state: &AppState, card: &Rc<Card>) {
+pub(super) fn install(ui: &AppWindow, card: &Rc<Card>) {
     let picker = Rc::new(Picker {
         ui: ui.as_weak(),
-        state: state.clone(),
+        state: card.state().clone(),
         card: Rc::clone(card),
         ticket: DialogTicket::new(DialogKind::HeadphonePicker),
         rows: Rc::new(VecModel::default()),

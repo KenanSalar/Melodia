@@ -1,25 +1,14 @@
-import { CorrectionFrom, HeadphoneCorrection, HeardDevice } from "../../globals/audio.slint";
+import { CorrectionFrom, HeadphoneCorrection } from "../../globals/audio.slint";
 
-// The words the correction card, its two dialogs and the onboarding row print, so a reworded label
-// can't leave another on its old msgid.
+// The words the correction's rows and the onboarding row print, so a reworded label can't leave
+// the other on its old msgid.
 export global CorrectionText {
-    out property <string> title: @tr("Headphone correction");
     out property <string> enable-label: @tr("Enable headphone correction");
     out property <string> enable-desc: @tr("Even out how your headphones color the sound, with a correction measured for their model");
     out property <string> online-label: @tr("Find corrections online");
     out property <string> online-desc: @tr("Look headphone models up in AutoEq's list on github.com");
     out property <string> find-label: @tr("Find Headphones");
     out property <string> import-label: @tr("Import");
-
-    // What the card names the device by.
-    out property <string> device: HeadphoneCorrection.device == HeardDevice.system-default
-        ? @tr("System Default")
-        : HeadphoneCorrection.device == HeardDevice.pending ? ""
-        : HeadphoneCorrection.device-name == "" ? @tr("Not connected")
-        : HeadphoneCorrection.device == HeardDevice.not-connected
-        // Translators: {} is an output device's name.
-        ? @tr("{} (not connected)", HeadphoneCorrection.device-name)
-        : HeadphoneCorrection.device-name;
 
     // What the device's correction is, or that it has none.
     out property <string> correction: HeadphoneCorrection.origin == CorrectionFrom.autoeq

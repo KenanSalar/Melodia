@@ -1,9 +1,9 @@
-//! The checks a correction passes on its way to the audio thread, and the per-device map it lives
-//! in. A hand-edited `eq.json` and an imported file both reach the DSP through these alone.
+//! The checks a correction passes on its way to the audio thread. A hand-edited `eq.json` and an
+//! imported file both reach the DSP through these alone.
 
 use super::super::correction::{
-    Correction, CorrectionFilter, CorrectionFilters, CorrectionOrigin, DeviceCorrections,
-    FilterError, FilterKind, FilterSetError, MAX_CORRECTION_FILTERS,
+    CorrectionFilter, CorrectionFilters, FilterError, FilterKind, FilterSetError,
+    MAX_CORRECTION_FILTERS,
 };
 
 const IN_RANGE: CorrectionFilter =
@@ -91,29 +91,4 @@ fn a_set_names_the_filter_that_is_out_of_range() {
     let built = CorrectionFilters::try_from(filters);
 
     assert_eq!(built, Err(FilterSetError::Filter { index: 2, source: FilterError::Q(0.0) }));
-}
-
-fn correction_of(gain_db: f64) -> Result<Correction, FilterSetError> {
-    Ok(Correction {
-        origin: CorrectionOrigin::Paste,
-        device_name: None,
-        filters: CorrectionFilters::try_from(vec![with_gain(gain_db)])?,
-    })
-}
-
-/// System default is a field of its own, so clearing a device's correction can't take it, and the
-/// reverse.
-#[test]
-fn system_default_and_a_device_keep_their_own_correction() -> Result<(), FilterSetError> {
-    let mut corrections = DeviceCorrections::default();
-    corrections.insert(None, correction_of(-2.0)?);
-    corrections.insert(Some("hw:CARD=UMC22".to_owned()), correction_of(4.0)?);
-
-    let removed = corrections.remove(Some("hw:CARD=UMC22"));
-
-    let gain = |correction: Option<&Correction>| correction.map(|c| c.filters.filters()[0].gain_db);
-    assert_eq!(gain(removed.as_ref()), Some(4.0), "the device's own correction comes back");
-    assert_eq!(gain(corrections.for_device(Some("hw:CARD=UMC22"))), None);
-    assert_eq!(gain(corrections.for_device(None)), Some(-2.0), "System default's stays");
-    Ok(())
 }

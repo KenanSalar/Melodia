@@ -8,8 +8,7 @@ use biquad::{Biquad, Coefficients, DirectForm1, Type};
 
 use super::response::{FilterResponse, ResponseGrid};
 use super::shared::{CorrectionShared, PublishedSet};
-use crate::player::playback::crossfade;
-use crate::player::playback::dsp::{self, PASSTHROUGH};
+use crate::player::playback::dsp::{self, FrameRamp, PASSTHROUGH};
 use melodia_audio::player::source::audio::SampleRate;
 use melodia_core::entities::correction::{CorrectionFilter, FilterKind, MAX_CORRECTION_FILTERS};
 
@@ -22,7 +21,7 @@ pub(crate) struct CorrectionStage {
     current: Bank,
     outgoing: Bank,
     channels: Vec<ChannelFilters>,
-    ramp: Option<Ramp>,
+    ramp: Option<FrameRamp>,
     swap_frames: u64,
     /// `None` until the source's first read, which takes its set with no ramp.
     last_sequence: Option<u64>,
@@ -90,8 +89,7 @@ impl CorrectionStage {
             return Mix { current: self.current.weighted(1.0), outgoing: None };
         };
         // Linear: both banks carry one signal, so an equal-power curve would bump the level.
-        let incoming = f64::from(crossfade::ramp_gain(0.0, 1.0, ramp.frame, ramp.frames));
-        ramp.frame = ramp.frame.saturating_add(1);
+        let incoming = ramp.step();
         Mix {
             current: self.current.weighted(incoming),
             outgoing: Some(self.outgoing.weighted(1.0 - incoming)),
@@ -127,7 +125,7 @@ impl CorrectionStage {
         self.design_current(set);
         // Two idle banks have nothing to fade, and a ramp would hold the bypass off.
         if self.current.active > 0 || self.outgoing.active > 0 {
-            self.ramp = Some(Ramp { frame: 0, frames: self.swap_frames });
+            self.ramp = Some(FrameRamp::new(0.0, 1.0, self.swap_frames));
         }
     }
 
@@ -225,18 +223,6 @@ pub(crate) struct Mix {
 struct Weighted {
     gain: f64,
     filters: usize,
-}
-
-#[derive(Clone, Copy)]
-struct Ramp {
-    frame: u64,
-    frames: u64,
-}
-
-impl Ramp {
-    fn done(self) -> bool {
-        self.frame >= self.frames
-    }
 }
 
 fn coefficients(filter: &CorrectionFilter, sample_rate: f64) -> Option<Coefficients<f64>> {

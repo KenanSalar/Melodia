@@ -183,7 +183,12 @@ fn install_bit_perfect_switch(ui: &AppWindow, state: &AppState, shadow: &Shadow)
     ui.global::<Settings>().on_output_switch_to_bit_perfect(move || {
         let Some(ui) = weak.upgrade() else { return };
         ui.global::<Settings>().set_output_mode_idx(mode_index(OutputMode::Exclusive));
-        shadow.picked().choice.mode = OutputMode::Exclusive;
+        let heard = {
+            let mut picked = shadow.picked();
+            picked.choice.mode = OutputMode::Exclusive;
+            picked.choice.heard_device().map(str::to_owned)
+        };
+        library::crossfeed::switch_off(&state, heard);
         let ctx = state.playback_ctx();
         let shadow = Arc::clone(&shadow);
         state.persist_blocking("persist bit-perfect switch", move |paths| {

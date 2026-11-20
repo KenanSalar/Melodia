@@ -3,11 +3,13 @@
 //!
 //! One file because everything here races something else here, over the decks lock,
 //! [`PlaybackEngine::deck_epoch`] or a station's generation, and those arguments read only side by
-//! side. The submodules race none of those: [`controls`], [`correction`], [`reads`],
-//! [`player_backend`], and [`output`], which a transport op calls with the decks lock held.
+//! side. No submodule races those, [`output`] included, which a transport op calls with the decks
+//! lock held.
 
 mod controls;
 mod correction;
+mod crossfeed;
+mod headphones;
 mod output;
 mod player_backend;
 mod reads;
@@ -16,7 +18,7 @@ pub use output::OutputChoice;
 pub use player_backend::PlayerBackend;
 pub use reads::DeckClock;
 
-use correction::CorrectionControl;
+use headphones::HeadphoneControls;
 use output::EngineOutput;
 
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
@@ -87,9 +89,9 @@ pub struct PlaybackEngine {
     deck_epoch: Arc<AtomicU64>,
     // Master state shared by every `EqSource`, so a change reaches the staged track too.
     dsp: DspControls,
-    // Which set `dsp.correction` plays. Taken with the decks and output locks dropped, and only
-    // the output choice's is taken under it.
-    correction: Mutex<CorrectionControl>,
+    // What each per-device stage in `dsp` plays. Taken with the decks and output locks dropped,
+    // and only the output choice's is taken under it.
+    headphones: Mutex<HeadphoneControls>,
     // Read by the control layer only, so no generation counter.
     xf: Arc<CrossfadeShared>,
     // One ring per deck, read as their sum; disarmed until Now Playing is on screen.
@@ -121,8 +123,12 @@ impl PlaybackEngine {
         runtime: tokio::runtime::Handle,
         decode_ahead: Duration,
     ) -> Result<Self, AppError> {
-        let correction = CorrectionControl::default();
-        let dsp = DspControls { correction: correction.shared(), ..DspControls::default() };
+        let headphones = HeadphoneControls::default();
+        let dsp = DspControls {
+            correction: headphones.correction_shared(),
+            crossfeed: headphones.crossfeed_shared(),
+            ..DspControls::default()
+        };
         Ok(Self {
             output: EngineOutput::default(),
             decks: Arc::new(std::sync::Mutex::new(Decks::connect(mixer)?)),
@@ -130,7 +136,7 @@ impl PlaybackEngine {
             crossfade_armed: AtomicBool::new(false),
             deck_epoch: Arc::new(AtomicU64::new(0)),
             dsp,
-            correction: Mutex::new(correction),
+            headphones: Mutex::new(headphones),
             xf: CrossfadeShared::new(),
             viz: VisualizerShared::new(false),
             staged_stream: Mutex::new(None),

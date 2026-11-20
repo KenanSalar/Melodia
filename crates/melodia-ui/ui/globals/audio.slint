@@ -55,21 +55,28 @@ export global ReplayGain {
     callback resume-measuring();
 }
 
-// What the correction card says of the device it speaks for, `pending` until Rust has named it.
+// What the headphone card says of the device it speaks for, `pending` until Rust has named it.
 export enum HeardDevice { pending, system-default, connected, not-connected }
+
+// The device the headphone card speaks for, named by Rust on each output change.
+export global Headphones {
+    in property <HeardDevice> device: HeardDevice.pending;
+    // The listed name, or the one the device's correction stored while it isn't connected.
+    in property <string> device-name;
+
+    // From the device row's mount; output changes and writes repaint it otherwise.
+    callback refresh();
+}
 
 // Where the device's correction came from, which names it on the card.
 export enum CorrectionFrom { none, autoeq, file, paste }
 
 // `set-enabled` applies to the live player and persists; `online` gates every request to AutoEq,
-// Import working without it. The device and its correction are Rust's, repainted on each output
-// change and each write.
+// Import working without it. The device's correction is Rust's, repainted on each output change
+// and each write.
 export global HeadphoneCorrection {
     in-out property <bool> enabled;
     in-out property <bool> online;
-    in property <HeardDevice> device: HeardDevice.pending;
-    // The listed name, or the one the device's correction stored while it isn't connected.
-    in property <string> device-name;
     in property <CorrectionFrom> origin: CorrectionFrom.none;
     // The model or the file's name.
     in property <string> origin-name;
@@ -78,9 +85,23 @@ export global HeadphoneCorrection {
 
     callback set-enabled(bool);
     callback set-online(bool);
-    // From the device row's mount; output changes and writes repaint it otherwise.
-    callback refresh();
     callback clear();
+}
+
+// The word the strength slider reads out, picked in Rust so its boundaries have one home.
+export enum CrossfeedLevel { subtle, medium, strong }
+
+// The device's crossfeed, painted by Rust like the correction's rows. A strength drag is heard at
+// once through `preview-strength` and kept by the release's `set-strength`.
+export global Crossfeed {
+    in-out property <bool> enabled;
+    // 0..1, subtle to strong.
+    in property <float> strength;
+    in property <CrossfeedLevel> level;
+
+    callback set-enabled(bool);
+    callback preview-strength(float /*0..1*/);
+    callback set-strength(float /*0..1*/);
 }
 
 // `enabled` decides only whether the strip mounts; `set-active`, off the mount, arms the tap.
