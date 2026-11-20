@@ -19,61 +19,56 @@ export component SettingRow inherits Rectangle {
     property <float> dim: root.disabled ? Theme.dim-disabled : 0.0;
     animate dim { duration: Theme.dur-fast; easing: ease-in-out; }
 
-    // The wrapper measures the row at the card's width, a pin on a cell reaching a row behind an
-    // `if` where one on its root can't.
-    VerticalLayout {
-        HorizontalLayout {
-            padding: Theme.pad-lg;
-            spacing: Theme.pad-lg;
-            alignment: stretch;
-            preferred-width: SettingsPage.card-w;
+    HorizontalLayout {
+        padding: Theme.pad-lg;
+        spacing: Theme.pad-lg;
+        alignment: stretch;
 
-            // Pinned, so the labels start at one x however narrow a glyph is.
-            MaterialIcon {
-                cross-axis-self-alignment: center;
-                name: root.icon;
-                icon-size: SettingsPage.row-icon-w;
-                icon-color: Theme.text;
-                fade: 1.0 - root.dim;
+        // Pinned, so the labels start at one x however narrow a glyph is.
+        MaterialIcon {
+            cross-axis-self-alignment: center;
+            name: root.icon;
+            icon-size: SettingsPage.row-icon-w;
+            icon-color: Theme.text;
+            fade: 1.0 - root.dim;
+        }
+
+        VerticalLayout {
+            alignment: center;
+            spacing: Theme.pad-xs;
+            horizontal-stretch: 1;
+
+            // Wrapped, so the card compresses: a no-wrap `Text` reports its full width as its
+            // minimum.
+            Text {
+                text: root.label;
+                color: Theme.text.transparentize(root.dim);
+                font-size: Theme.font-size-md;
+                wrap: word-wrap;
             }
+            if root.description != "": Text {
+                text: root.description;
+                color: Theme.text-muted.transparentize(root.dim);
+                font-size: Theme.font-size-sm;
+                wrap: word-wrap;
+                max-width: root.description-max-width;
+            }
+        }
 
+        // The scrim's box, which a conditional child fills without sizing.
+        Rectangle {
             VerticalLayout {
                 alignment: center;
-                spacing: Theme.pad-xs;
-                horizontal-stretch: 1;
-
-                // Wrapped, so the card compresses: a no-wrap `Text` reports its full width as its
-                // minimum.
-                Text {
-                    text: root.label;
-                    color: Theme.text.transparentize(root.dim);
-                    font-size: Theme.font-size-md;
-                    wrap: word-wrap;
-                }
-                if root.description != "": Text {
-                    text: root.description;
-                    color: Theme.text-muted.transparentize(root.dim);
-                    font-size: Theme.font-size-sm;
-                    wrap: word-wrap;
-                    max-width: root.description-max-width;
-                }
+                spacing: Theme.pad-sm;
+                @children
             }
 
-            // The scrim's box, which a conditional child fills without sizing.
-            Rectangle {
-                VerticalLayout {
-                    alignment: center;
-                    spacing: Theme.pad-sm;
-                    @children
-                }
-
-                if root.dim > 0: DisabledScrim {
-                    x: 0;
-                    y: 0;
-                    width: 100%;
-                    height: 100%;
-                    dim: root.dim;
-                }
+            if root.dim > 0: DisabledScrim {
+                x: 0;
+                y: 0;
+                width: 100%;
+                height: 100%;
+                dim: root.dim;
             }
         }
     }

@@ -36,7 +36,6 @@ export component RadioSection inherits Rectangle {
 
     out property <bool> has-matches: show-radio || (Settings.radio-enabled && (show-segmented || show-clicks));
 
-    VerticalLayout {
     if has-matches: SectionCard {
         title: root.card-title;
 
@@ -71,6 +70,5 @@ export component RadioSection inherits Rectangle {
                 toggled(v) => { Settings.radio-send-clicks-changed(v); }
             }
         }
-    }
     }
 }

@@ -132,11 +132,11 @@ fn a_line_is_measured_by_its_letters_rather_than_by_its_length() {
 }
 
 #[test]
-fn a_hangul_syllable_with_no_final_consonant_is_charged_the_two_ems_it_is_drawn_at() {
-    // Slint sets those as two loose jamo, so a line of them is twice as wide as its syllable
-    // count says; charging both kinds a square em wrapped a Korean line the panel had no row for.
+fn a_hangul_syllable_is_charged_one_em_with_or_without_a_final_consonant() {
+    // Both draw as one square block, so charging the open one more wraps a Korean line the panel
+    // has room for and leaves a blank half-row under it.
     assert_eq!(wrapped_lines(&"안".repeat(12), TYPICAL_WIDTH, TYPICAL_SIZE), 1, "final consonant");
-    assert_eq!(wrapped_lines(&"아".repeat(12), TYPICAL_WIDTH, TYPICAL_SIZE), 2, "open syllable");
+    assert_eq!(wrapped_lines(&"아".repeat(12), TYPICAL_WIDTH, TYPICAL_SIZE), 1, "open syllable");
 }
 
 /// A stamped line, with `end_ms` where the sheet says when it stops.

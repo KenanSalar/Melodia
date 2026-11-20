@@ -46,38 +46,36 @@ export component LyricsSection inherits Rectangle {
 
     out property <bool> has-matches: show-enabled || show-online || show-romanization;
 
-    VerticalLayout {
-        if has-matches: SectionCard {
-            title: root.card-title;
+    if has-matches: SectionCard {
+        title: root.card-title;
 
-            if root.show-enabled: SettingRow {
-                icon: "lyrics";
-                label: root.enabled-label;
-                description: root.enabled-desc;
-                ToggleSwitch {
-                    checked <=> Settings.lyrics-enabled;
-                    toggled(v) => { Settings.lyrics-enabled-changed(v); }
-                }
+        if root.show-enabled: SettingRow {
+            icon: "lyrics";
+            label: root.enabled-label;
+            description: root.enabled-desc;
+            ToggleSwitch {
+                checked <=> Settings.lyrics-enabled;
+                toggled(v) => { Settings.lyrics-enabled-changed(v); }
             }
+        }
 
-            if root.show-online: SettingRow {
-                icon: "travel_explore";
-                label: root.online-label;
-                description: root.online-desc;
-                ToggleSwitch {
-                    checked <=> Settings.lyrics-online-enabled;
-                    toggled(v) => { Settings.lyrics-online-enabled-changed(v); }
-                }
+        if root.show-online: SettingRow {
+            icon: "travel_explore";
+            label: root.online-label;
+            description: root.online-desc;
+            ToggleSwitch {
+                checked <=> Settings.lyrics-online-enabled;
+                toggled(v) => { Settings.lyrics-online-enabled-changed(v); }
             }
+        }
 
-            if root.show-romanization: SettingRow {
-                icon: "translate";
-                label: root.romanization-label;
-                description: root.romanization-desc;
-                ToggleSwitch {
-                    checked <=> Settings.lyrics-romanization-shown;
-                    toggled(v) => { Settings.lyrics-romanization-shown-changed(v); }
-                }
+        if root.show-romanization: SettingRow {
+            icon: "translate";
+            label: root.romanization-label;
+            description: root.romanization-desc;
+            ToggleSwitch {
+                checked <=> Settings.lyrics-romanization-shown;
+                toggled(v) => { Settings.lyrics-romanization-shown-changed(v); }
             }
         }
     }

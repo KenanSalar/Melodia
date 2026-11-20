@@ -8,8 +8,10 @@ import { FocusLossWatcher } from "focus-loss-watcher.slint";
 // Undo and redo stay on the keyboard: the input can't say whether either has anything to do, and
 // a menu row has no disabled state to say it with.
 export component TextEditMenu inherits Rectangle {
-    // An empty field has nothing to cut, copy or select.
+    // An empty field has nothing to select.
     in property <bool> has-text;
+    // Cut and copy act on the selection, so they wait for one.
+    in property <bool> has-selection;
     // A read-only field offers only what leaves it as it is.
     in property <bool> read-only;
     out property <bool> is-open: menu.is-open;
@@ -50,12 +52,12 @@ export component TextEditMenu inherits Rectangle {
                 padding: ContextMenuMetrics.inset;
                 spacing: 0;
 
-                if root.has-text && !root.read-only: MenuItem {
+                if root.has-selection && !root.read-only: MenuItem {
                     label: @tr("Cut");
                     icon: "content_cut";
                     clicked => { root.cut(); }
                 }
-                if root.has-text: MenuItem {
+                if root.has-selection: MenuItem {
                     label: @tr("Copy");
                     icon: "content_copy";
                     clicked => { root.copy(); }
@@ -65,7 +67,7 @@ export component TextEditMenu inherits Rectangle {
                     icon: "content_paste";
                     clicked => { root.paste(); }
                 }
-                if root.has-text: MenuSeparator {}
+                if root.has-text && (root.has-selection || !root.read-only): MenuSeparator {}
                 if root.has-text: MenuItem {
                     label: @tr("Select all");
                     icon: "select_all";

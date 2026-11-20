@@ -71,7 +71,6 @@ export component PlaybackSection inherits Rectangle {
 
     out property <bool> has-matches: show-gapless || show-resume || show-crossfade;
 
-    VerticalLayout {
     if has-matches: SectionCard {
         title: root.card-title;
 
@@ -152,6 +151,5 @@ export component PlaybackSection inherits Rectangle {
                 toggled(v) => { Settings.resume-on-startup-changed(v); }
             }
         }
-    }
     }
 }

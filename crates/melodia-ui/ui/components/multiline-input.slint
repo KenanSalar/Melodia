@@ -94,6 +94,7 @@ export component MultilineInput inherits FieldFrame {
 
     menu := TextEditMenu {
         has-text: root.text != "";
+        has-selection: ti.has-selection;
         read-only: root.read-only;
         cut => { ti.cut(); }
         copy => { ti.copy(); }

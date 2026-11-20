@@ -31,17 +31,14 @@ export component LanguageSection inherits Rectangle {
 
     out property <bool> has-matches: row-visible(names-haystack, "");
 
-    // The wrapper every section needs: a `Rectangle` sizes to a layout child, never to an `if`.
-    VerticalLayout {
-        if has-matches: SectionCard {
-            title: root.card-title;
+    if has-matches: SectionCard {
+        title: root.card-title;
 
-            // Rust resolves the code, switches the bundled translation and persists.
-            ChoiceList {
-                options: Settings.language-names;
-                selected-index <=> Settings.language-idx;
-                selected(idx) => { Settings.language-changed(idx); }
-            }
+        // Rust resolves the code, switches the bundled translation and persists.
+        ChoiceList {
+            options: Settings.language-names;
+            selected-index <=> Settings.language-idx;
+            selected(idx) => { Settings.language-changed(idx); }
         }
     }
 }

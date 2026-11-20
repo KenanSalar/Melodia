@@ -16,6 +16,8 @@ paths:
   `slint::slint!{}` macro outside of toy demos. Files give you syntax highlighting, partial
   rebuilds, and proper diagnostics. The whole tree lives inside that crate, so those paths are
   manifest-relative, not repo-relative.
+- The tree compiles at the edition `build.rs` names, which a Slint bump leaves alone: raising it is
+  a change of its own, weighed against the behaviour changes that release's editions page lists.
 - One root component per app, additional components per file. Group by folder:
   `crates/melodia-ui/ui/layout/`, `.../views/`, `.../components/`.
 - A single `theme.slint` global holds design tokens (brushes, sizes, durations) — every other

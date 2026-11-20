@@ -41,11 +41,10 @@ there, never in the `.slint`.
   / `max-width`. Tell: `layout_info`'s `min` reading the root's own `width`. **An animated
   `height` takes the same split and owes a `clip`**, the element drawing shorter than its contents.
 
-- **A `Rectangle`-rooted component folds only unrepeated, unpositioned children into its layout
-  info.** `default_geometry::gen_layout_info_prop` skips a repeated child, so
-  `Rectangle { if x: Card {} }` reports 0×0 (a `min-height` beside it hides that until the content
-  wraps): wrap in a layout, also the one thing outside the `if` whose height the root can read. It
-  skips a child binding `x` or `y` too, where the same content in a centring layout folds its whole
+- **A `Rectangle`-rooted component folds every unpositioned child into its layout info, an `if` or
+  `for` included** (`default_geometry::gen_layout_info_prop`, edition 1.19), a repeated one through
+  `box_layout_info_ortho` over its instances. A child binding `x` or `y` is skipped, which is how
+  one stays out of its host's size, where the same content in a centring layout folds its whole
   constraint set, animations included, into every host's layout. The fold runs on both axes and
   `layout_items` never shrinks a cell past its `min`, so a wrapper's `min-width` floors its host; an
   explicit `min-width` **replaces** the merged one. Tell: a missing `+ …layoutinfo_v` term, or a
@@ -59,7 +58,8 @@ there, never in the `.slint`.
 - **Centring one cell of a box layout moves the whole layout onto another solve.**
   `cross-axis-alignment: center`, or `cross-axis-self-alignment: center` on a cell, goes through
   `solve_box_layout_ortho` (`i-slint-core/layout.rs`): a stretched sibling is clamped to its
-  implicit max (self-align only where every one is unbounded: a `Text`, a `Rectangle` of `if`s), an
+  implicit max (self-align only where every one is unbounded: a `Text`, a `Rectangle` of positioned
+  children), an
   explicit `x`/`y` on a cell is a build error, and dropping an `alignment: start` wrapper can cap
   the row, whose cross max is its cells' least. A lone `Text` centres with `vertical-alignment` and
   a sized child of a plain `Rectangle` is already centred. Tell: `solve_box_layout_ortho`.
@@ -78,6 +78,12 @@ there, never in the `.slint`.
   `passes/lower_layout.rs`): once one child spells `row`, every child does, a literal counting. A
   `for`'s items can place themselves, `add_element` following a repeated child's binding into its
   sub-component, where a mix is only a warning.
+
+- **A binding loop through a `GridLayout`'s runtime `row` or `col` panics the compiler rather than
+  being reported**: `RefCell already borrowed` in `GridLayout::visit_rowcol_named_references`
+  (`layout.rs`), `OrganizeGridLayout`'s analysis re-entering a cell it holds
+  (`passes/binding_analysis.rs`). A grid placing its cells off its own height is the shape; keep it
+  out of its host's size, as `NpEmptyState` does by pinning `x`/`y`.
 
 - **A `GridLayout` column starts at its cells' `preferred` width** (`layout_items` sizes to `pref`,
   then shares surplus by stretch), so equal stretch on unequal cards gives unequal columns. Pin
@@ -372,14 +378,6 @@ there, never in the `.slint`.
 
 - **Material Symbols need a collapsed line box**, `Text` defaulting to ~1.2× `font-size`: a fixed
   square (`MaterialIcon`).
-
-- **Slint 1.18 draws a Hangul syllable with no final consonant as two loose jamo**, through the
-  generic family appended to every font stack: `textlayout/sharedparley/shaping.rs`'s
-  `ranged_builder` pushes `Generic(SystemUi)` and `Generic(SansSerif)` after the default family,
-  fontique takes a generic as fontconfig's whole chain, and parley stops at the first face covering
-  the decomposed form, a jamo-only one. Any single named family shapes correctly, so `.slint` can't
-  reach it. An open syllable measures 2 em, so a box sized off a character count under-measures and
-  an elided `Text` drops the line: `OPEN_HANGUL_EMS` (`ui/now_playing/lyrics/measure.rs`) pays.
 
 ## Paths and gradients
 

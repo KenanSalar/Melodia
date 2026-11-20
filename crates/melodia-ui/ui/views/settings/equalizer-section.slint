@@ -34,38 +34,36 @@ export component EqualizerSection inherits Rectangle {
 
     property <bool> show-details: root.has-matches && Equalizer.enabled;
 
-    VerticalLayout {
-        if has-matches: SectionCard {
-            title: EqualizerText.title;
+    if has-matches: SectionCard {
+        title: EqualizerText.title;
 
-            SettingRow {
-                icon: "graphic_eq";
-                label: EqualizerText.enable-label;
-                description: EqualizerText.enable-desc;
-                ToggleSwitch {
-                    checked <=> Equalizer.enabled;
-                    toggled(v) => { Equalizer.set-enabled(v); }
-                }
+        SettingRow {
+            icon: "graphic_eq";
+            label: EqualizerText.enable-label;
+            description: EqualizerText.enable-desc;
+            ToggleSwitch {
+                checked <=> Equalizer.enabled;
+                toggled(v) => { Equalizer.set-enabled(v); }
             }
+        }
 
-            // Stacked so the dropdown and Reset never contend with the label for the row's width.
-            if root.show-details: SettingRowStacked {
-                icon: "music_note";
-                label: root.preset-label;
-                EqPresetPicker { }
-            }
+        // Stacked so the dropdown and Reset never contend with the label for the row's width.
+        if root.show-details: SettingRowStacked {
+            icon: "music_note";
+            label: root.preset-label;
+            EqPresetPicker { }
+        }
 
-            if root.show-details: SettingRowStacked {
-                icon: "volume_up";
-                label: EqualizerText.preamp-label;
-                EqPreampSlider { }
-            }
+        if root.show-details: SettingRowStacked {
+            icon: "volume_up";
+            label: EqualizerText.preamp-label;
+            EqPreampSlider { }
+        }
 
-            if root.show-details: SettingRowStacked {
-                icon: "bar_chart";
-                label: root.bands-label;
-                EqBandStrip { }
-            }
+        if root.show-details: SettingRowStacked {
+            icon: "bar_chart";
+            label: root.bands-label;
+            EqBandStrip { }
         }
     }
 }

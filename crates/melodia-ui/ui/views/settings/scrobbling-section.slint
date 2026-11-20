@@ -59,7 +59,6 @@ export component ScrobblingSection inherits Rectangle {
 
     out property <bool> has-matches: show-lastfm || show-listenbrainz || show-radio;
 
-    VerticalLayout {
     if has-matches: SectionCard {
         title: root.card-title;
 
@@ -176,21 +175,16 @@ export component ScrobblingSection inherits Rectangle {
         // Melodia doesn't look these IDs up, so the loves above reach only as far as the tags
         // already do; this says where the rest come from. The `max-width` keeps the copy to a
         // reading column so it can't inflate the card.
-        // `setting-row.slint`'s wrapper, for its reason: behind an `if`, the note is measured at the
-        // width its contents ask for, so the one cell holding them asks for the card's.
-        if root.show-listenbrainz && Settings.scrobble-listenbrainz-connected: VerticalLayout {
-            HorizontalLayout {
-                preferred-width: SettingsPage.card-w;
-                padding-left: Theme.pad-lg;
-                padding-right: Theme.pad-lg;
-                padding-bottom: Theme.pad-sm;
-                Text {
-                    text: root.lb-picard-note;
-                    color: Theme.text-muted;
-                    font-size: Theme.font-size-sm;
-                    wrap: word-wrap;
-                    max-width: 480px;
-                }
+        if root.show-listenbrainz && Settings.scrobble-listenbrainz-connected: HorizontalLayout {
+            padding-left: Theme.pad-lg;
+            padding-right: Theme.pad-lg;
+            padding-bottom: Theme.pad-sm;
+            Text {
+                text: root.lb-picard-note;
+                color: Theme.text-muted;
+                font-size: Theme.font-size-sm;
+                wrap: word-wrap;
+                max-width: 480px;
             }
         }
 
@@ -210,6 +204,5 @@ export component ScrobblingSection inherits Rectangle {
                 toggled(v) => { Settings.radio-scrobble-changed(v); }
             }
         }
-    }
     }
 }

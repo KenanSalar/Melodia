@@ -65,7 +65,6 @@ export component UndoSection inherits Rectangle {
 
     out property <bool> has-matches: show-undo;
 
-    VerticalLayout {
     if has-matches: SectionCard {
         title: root.card-title;
 
@@ -178,6 +177,5 @@ export component UndoSection inherits Rectangle {
                 committed(v) => { UndoSettings.notice-secs-committed(root.secs-step(v)); }
             }
         }
-    }
     }
 }

@@ -31,56 +31,54 @@ export component ReplayGainSection inherits Rectangle {
 
     property <bool> show-details: root.has-matches && ReplayGain.enabled;
 
-    VerticalLayout {
-        if has-matches: SectionCard {
-            title: ReplayGainText.title;
+    if has-matches: SectionCard {
+        title: ReplayGainText.title;
 
-            SettingRow {
-                icon: "tune";
-                label: ReplayGainText.enable-label;
-                description: ReplayGainText.enable-desc;
-                ToggleSwitch {
-                    checked <=> ReplayGain.enabled;
-                    toggled(v) => { ReplayGain.set-enabled(v); }
-                }
+        SettingRow {
+            icon: "tune";
+            label: ReplayGainText.enable-label;
+            description: ReplayGainText.enable-desc;
+            ToggleSwitch {
+                checked <=> ReplayGain.enabled;
+                toggled(v) => { ReplayGain.set-enabled(v); }
             }
+        }
 
-            if root.show-details: SettingRowStacked {
-                icon: "album";
-                label: ReplayGainText.mode-label;
-                RgModePicker { }
-            }
+        if root.show-details: SettingRowStacked {
+            icon: "album";
+            label: ReplayGainText.mode-label;
+            RgModePicker { }
+        }
 
-            if root.show-details: SettingRowStacked {
-                icon: "volume_up";
-                label: ReplayGainText.preamp-label;
-                RgPreampSlider { }
-            }
+        if root.show-details: SettingRowStacked {
+            icon: "volume_up";
+            label: ReplayGainText.preamp-label;
+            RgPreampSlider { }
+        }
 
-            if root.show-details: SettingRow {
-                icon: "shield";
-                label: ReplayGainText.clipping-label;
-                ToggleSwitch {
-                    checked <=> ReplayGain.prevent-clipping;
-                    toggled(v) => { ReplayGain.set-prevent-clipping(v); }
-                }
+        if root.show-details: SettingRow {
+            icon: "shield";
+            label: ReplayGainText.clipping-label;
+            ToggleSwitch {
+                checked <=> ReplayGain.prevent-clipping;
+                toggled(v) => { ReplayGain.set-prevent-clipping(v); }
             }
+        }
 
-            if root.show-details: SettingRow {
-                icon: "show_chart";
-                label: ReplayGainText.measure-label;
-                description: ReplayGainText.measure-desc;
-                ToggleSwitch {
-                    checked <=> ReplayGain.measure-untagged;
-                    toggled(v) => { ReplayGain.set-measure-untagged(v); }
-                }
+        if root.show-details: SettingRow {
+            icon: "show_chart";
+            label: ReplayGainText.measure-label;
+            description: ReplayGainText.measure-desc;
+            ToggleSwitch {
+                checked <=> ReplayGain.measure-untagged;
+                toggled(v) => { ReplayGain.set-measure-untagged(v); }
             }
+        }
 
-            // On the switch as well as the phase, so the bar goes with it before the pass answers.
-            if root.show-details && ReplayGain.measure-untagged
-                && ReplayGain.measure-phase != MeasurePhase.idle: RgMeasureProgress {
-                padding: Theme.pad-lg;
-            }
+        // On the switch as well as the phase, so the bar goes with it before the pass answers.
+        if root.show-details && ReplayGain.measure-untagged
+            && ReplayGain.measure-phase != MeasurePhase.idle: RgMeasureProgress {
+            padding: Theme.pad-lg;
         }
     }
 }

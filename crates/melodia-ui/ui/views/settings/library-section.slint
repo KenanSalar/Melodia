@@ -28,7 +28,6 @@ export component LibrarySection inherits Rectangle {
                                  manage-label + " " + add-label,
                                  SettingsPage.search-query);
 
-    VerticalLayout {
     if has-matches: SectionCard {
         title: root.card-title;
 
@@ -139,6 +138,5 @@ export component LibrarySection inherits Rectangle {
                 }
             }
         }
-    }
     }
 }
