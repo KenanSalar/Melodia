@@ -3,6 +3,7 @@ use std::collections::HashSet;
 use chrono::TimeZone;
 
 use super::*;
+use melodia_core::entities::playlist::PlaylistStats;
 use melodia_core::entities::smart_criteria::{Draw, Rule, RuleField, RuleOp, RuleValue};
 use melodia_core::entities::track_list::{SortDir, TrackListScope, TrackOrder, TrackSortField};
 use melodia_core::error::AppError;
@@ -73,7 +74,7 @@ async fn match_entries_reports_missing() -> Result<(), AppError> {
     assert_eq!(out.matched_by_path, 0);
     assert_eq!(out.matched_by_hash, 0);
     assert_eq!(out.missing, 1);
-    assert!(out.ordered_ids.is_empty());
+    assert_eq!(out.ordered_ids, [] as [i64; 0]);
     Ok(())
 }
 
@@ -416,7 +417,7 @@ async fn a_file_with_no_entries_creates_no_playlist() -> Result<(), AppError> {
 
     let refused = read_playlist_file(&db, &src).await;
     assert!(matches!(refused, Err(AppError::Validation { .. })));
-    assert!(queries::playlist::get_all_playlists(&db).await?.is_empty());
+    assert_eq!(queries::playlist::get_all_playlists(&db).await?, [] as [PlaylistStats; 0]);
     Ok(())
 }
 
@@ -460,7 +461,7 @@ fn archive_at(path: &Path, entries: &[(&str, &str)]) -> Result<(), AppError> {
 
 /// A playlist file's text holding one entry, `line` being the path as the file spells it.
 fn playlist_text(name: Option<&str>, line: &str) -> String {
-    let tag = name.map(|name| format!("#PLAYLIST:{name}\n")).unwrap_or_default();
+    let tag = name.map_or_default(|name| format!("#PLAYLIST:{name}\n"));
     format!("#EXTM3U\n{tag}#EXTINF:-1,Alpha Song\n{line}\n")
 }
 

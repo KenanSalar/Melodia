@@ -165,8 +165,7 @@ async fn server_error(status: StatusCode, response: reqwest::Response) -> Listen
         ERROR_MAX_BYTES,
     )
     .await
-    .map(from_utf8_lossy_owned)
-    .unwrap_or_default();
+    .map_or_default(from_utf8_lossy_owned);
     ListenBrainzError::Server { status: status.as_u16(), message }
 }
 

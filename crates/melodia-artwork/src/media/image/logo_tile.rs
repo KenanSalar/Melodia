@@ -206,7 +206,7 @@ fn mark_luma(source: &RgbaImage) -> Option<f64> {
 /// `source` composited over a flat `ground`, in gamma space as the renderer would have done it.
 fn flatten(source: &RgbaImage, ground: Rgb<u8>) -> Option<RgbImage> {
     let mut out = Vec::with_capacity(source.len() / 4 * 3);
-    for pixel in source.chunks_exact(4) {
+    for pixel in source.as_chunks::<4>().0 {
         for (channel, under) in ground.0.into_iter().enumerate() {
             out.push(over(pixel[channel], pixel[3], under));
         }

@@ -185,8 +185,7 @@ fn detail_for(original: &RoleCredits, role: CreditRole, name: &str) -> String {
     original
         .for_role(role)
         .find(|credit| credit.name.eq_ignore_ascii_case(name))
-        .map(|credit| credit.detail.clone())
-        .unwrap_or_default()
+        .map_or_default(|credit| credit.detail.clone())
 }
 
 /// The role credits a selection agrees on, per role, so a batch sharing a composer and differing

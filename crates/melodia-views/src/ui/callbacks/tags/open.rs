@@ -80,7 +80,7 @@ pub(super) fn wire_request_edit(
             let (lyrics, credits) = if single && !rows[0].is_sheet_track() {
                 let file = files.get(&rows[0].id);
                 let lyrics = file.and_then(|tags| tags.lyrics.clone()).unwrap_or_default();
-                (lyrics, vec![file.map(|tags| tags.credits.clone()).unwrap_or_default()])
+                (lyrics, vec![file.map_or_default(|tags| tags.credits.clone())])
             } else {
                 let mut by_id =
                     or_logged(library::tags::get_tag_edit_credits(&s.db, &ids).await, "credits");
@@ -630,14 +630,12 @@ fn set_summary(te: &TagEditor, row: Option<&TagEditRow>) {
         opt_shared(row.map(get))
     }
     te.set_summary_path(s(row, |r| r.file_path.clone()));
-    te.set_summary_codec(s(row, |r| r.codec.as_deref().map(format_codec).unwrap_or_default()));
-    te.set_summary_bitrate(s(row, |r| r.bitrate.map(format_bitrate).unwrap_or_default()));
-    te.set_summary_sample_rate(s(row, |r| {
-        r.sample_rate.map(format_sample_rate).unwrap_or_default()
-    }));
-    te.set_summary_bit_depth(s(row, |r| r.bit_depth.map(format_bit_depth).unwrap_or_default()));
-    te.set_summary_channels(s(row, |r| r.channels.map(format_channels).unwrap_or_default()));
-    te.set_summary_size(s(row, |r| r.file_size.map(format_size).unwrap_or_default()));
+    te.set_summary_codec(s(row, |r| r.codec.as_deref().map_or_default(format_codec)));
+    te.set_summary_bitrate(s(row, |r| r.bitrate.map_or_default(format_bitrate)));
+    te.set_summary_sample_rate(s(row, |r| r.sample_rate.map_or_default(format_sample_rate)));
+    te.set_summary_bit_depth(s(row, |r| r.bit_depth.map_or_default(format_bit_depth)));
+    te.set_summary_channels(s(row, |r| r.channels.map_or_default(format_channels)));
+    te.set_summary_size(s(row, |r| r.file_size.map_or_default(format_size)));
     te.set_summary_duration(s(row, |r| crate::ui::tracks::format_duration_ms(r.duration_ms)));
     te.set_summary_modified(s(row, |r| r.date_modified.as_deref().unwrap_or_default().to_owned()));
     te.set_summary_hash(s(row, |r| r.file_hash.as_deref().unwrap_or_default().to_owned()));

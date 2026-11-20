@@ -55,7 +55,7 @@ fn the_cap_counts_kept_paths_not_input_items() {
 
 #[test]
 fn a_zero_cap_yields_nothing() {
-    assert!(paths(&[Some("a.jpg")], 0).is_empty());
+    assert_eq!(paths(&[Some("a.jpg")], 0), [] as [String; 0]);
 }
 
 /// The cap has to grow with the display and stop at both ends: too small and the grid's overflow

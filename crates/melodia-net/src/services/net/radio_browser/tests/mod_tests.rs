@@ -34,7 +34,7 @@ fn serving(response: TestResponse) -> Result<(TestServer, String), Box<dyn std::
 fn the_fallback_host_is_a_bare_name() {
     assert!(!FALLBACK_HOST.contains("://"), "{FALLBACK_HOST} carries a scheme");
     assert!(!FALLBACK_HOST.ends_with('/'), "{FALLBACK_HOST} carries a separator");
-    assert!(!FALLBACK_HOST.is_empty());
+    assert_ne!(FALLBACK_HOST, "");
 }
 
 #[test]

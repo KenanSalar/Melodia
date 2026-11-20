@@ -520,7 +520,7 @@ fn holds(cache: &LruCache<PathBuf, Cached>, path: &Path, thumb_size: u32) -> boo
 }
 
 fn buf_to_image(buf: &CachedBuf) -> Image {
-    buf.ready().map(|b| Image::from_rgb8(b.clone())).unwrap_or_default()
+    buf.ready().map_or_default(|b| Image::from_rgb8(b.clone()))
 }
 
 fn decode_thumb(path: &Path, thumb_size: u32) -> Cached {

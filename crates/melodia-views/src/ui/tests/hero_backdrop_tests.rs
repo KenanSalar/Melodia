@@ -465,8 +465,7 @@ fn the_genre_hero_washes_the_saturated_pair_and_floors_on_the_dimmed_one() {
     let stops = GENRE_DETAIL
         .split_once("GenreStops {")
         .and_then(|(_, rest)| rest.split_once('}'))
-        .map(|(stops, _)| stops)
-        .unwrap_or_default();
+        .map_or_default(|(stops, _)| stops);
 
     // Each field is bounded by the other rather than by a paren or a line end: the stops are
     // wrapped in `color_to_rgb(…)` calls, and rustfmt is free to break the tuple across lines.
@@ -496,8 +495,7 @@ fn the_genre_hero_picks_its_arm_off_the_setting() {
     let body = HERO_BACKDROP
         .split_once("pub(crate) fn apply_gradient(")
         .and_then(|(_, rest)| rest.split_once("\n}"))
-        .map(|(body, _)| body)
-        .unwrap_or_default();
+        .map_or_default(|(body, _)| body);
 
     for needle in ["backdrop::kind(ui)", "backdrop::theme_backdrop(", "backdrop::solve("] {
         assert!(

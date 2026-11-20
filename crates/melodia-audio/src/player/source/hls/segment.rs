@@ -104,7 +104,12 @@ fn packet_offset(segment: &[u8]) -> Option<usize> {
 }
 
 fn packets(segment: &[u8]) -> impl Iterator<Item = &[u8]> {
-    segment.chunks_exact(TS_PACKET_LEN).filter(|packet| packet.first() == Some(&TS_SYNC_BYTE))
+    segment
+        .as_chunks::<TS_PACKET_LEN>()
+        .0
+        .iter()
+        .map(<[u8; TS_PACKET_LEN]>::as_slice)
+        .filter(|packet| packet.first() == Some(&TS_SYNC_BYTE))
 }
 
 fn pid(packet: &[u8]) -> u16 {
@@ -159,14 +164,15 @@ fn program_map_pids(segment: &[u8]) -> Vec<u16> {
         .filter(|packet| pid(packet) == PAT_PID)
         .filter_map(psi_section)
         .find_map(|section| section_body(section, TABLE_ID_PAT))
-        .map(|body| {
-            body.chunks_exact(4)
+        .map_or_default(|body| {
+            body.as_chunks::<4>()
+                .0
+                .iter()
                 // Program 0 names the network information table, not a program map.
                 .filter(|entry| u16::from_be_bytes([entry[0], entry[1]]) != 0)
                 .map(|entry| u16::from_be_bytes([entry[2], entry[3]]) & 0x1FFF)
                 .collect()
         })
-        .unwrap_or_default()
 }
 
 /// The first elementary pid of a stream type we can decode, off the section's body.

@@ -224,7 +224,7 @@ impl<R: PagedRow> PagedRows<R> {
 
     /// The ids `rows` shows, in order, for a play or a shuffle. None where it isn't one.
     pub fn ids_of(rows: &ModelRc<R>, label: &str) -> Vec<i64> {
-        Self::installed(rows, label).map(|model| model.ids().to_vec()).unwrap_or_default()
+        Self::installed(rows, label).map_or_default(|model| model.ids().to_vec())
     }
 }
 

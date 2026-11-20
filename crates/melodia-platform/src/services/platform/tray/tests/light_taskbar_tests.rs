@@ -44,5 +44,5 @@ fn an_icon_with_no_pixels_paints_nothing() {
 
     paint(&mut rgba, 0, 0);
 
-    assert!(rgba.is_empty());
+    assert_eq!(rgba, [] as [u8; 0]);
 }

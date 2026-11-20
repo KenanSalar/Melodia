@@ -89,7 +89,7 @@ fn a_single_track_agrees_with_itself_about_everything() {
     let folded = common_roles(std::slice::from_ref(&only));
 
     assert_eq!(spelled(folded.credits()), spelled(&only));
-    assert!(disagreed(&folded).is_empty());
+    assert_eq!(disagreed(&folded), [] as [&str; 0]);
 }
 
 #[test]
@@ -97,7 +97,7 @@ fn an_empty_selection_agrees_on_nothing_and_disagrees_about_nothing() {
     let folded = common_roles(&[]);
 
     assert!(folded.credits().is_empty());
-    assert!(disagreed(&folded).is_empty());
+    assert_eq!(disagreed(&folded), [] as [&str; 0]);
 }
 
 /// **The editor has no field for an instrument**, so the baseline is where it comes from on the

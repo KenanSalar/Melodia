@@ -122,7 +122,7 @@ fn cut_last_item_sets_minus_one() {
     q.current_index = Some(0);
     cut_rows(&mut q, &[0]);
     assert_eq!(q.current_index, None);
-    assert!(q.play_order.is_empty());
+    assert_eq!(q.play_order, [] as [usize; 0]);
 }
 
 #[test]
@@ -199,9 +199,9 @@ fn clear_resets_all() {
     q.current_index = Some(1);
     q.clear();
 
-    assert!(q.tracks.is_empty());
-    assert!(q.play_order.is_empty());
-    assert!(q.original_order.is_empty());
+    assert_eq!(q.tracks, [] as [i64; 0]);
+    assert_eq!(q.play_order, [] as [usize; 0]);
+    assert_eq!(q.original_order, [] as [usize; 0]);
     assert_eq!(q.current_index, None);
 }
 
@@ -706,8 +706,8 @@ fn prune_missing_everything_empties_queue() {
 
     assert_eq!(outcome.removed, 3);
     assert!(outcome.playing_was_removed);
-    assert!(q.play_order.is_empty());
-    assert!(q.original_order.is_empty());
+    assert_eq!(q.play_order, [] as [usize; 0]);
+    assert_eq!(q.original_order, [] as [usize; 0]);
     assert_eq!(q.current_index, None);
 }
 

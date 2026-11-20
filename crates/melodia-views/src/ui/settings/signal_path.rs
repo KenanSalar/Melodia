@@ -98,11 +98,7 @@ fn paint(ui: &AppWindow, path: Option<&SignalPath>) {
     g.set_device_rate(device_rate.into());
     g.set_device_name(util::opt_shared(device.device_name.as_deref()));
     g.set_device_period(
-        device
-            .period
-            .map(|frames| period_text(frames, device.shape.rate.get()))
-            .unwrap_or_default()
-            .into(),
+        device.period.map_or_default(|frames| period_text(frames, device.shape.rate.get())).into(),
     );
 
     g.set_eq_on(inputs.eq_on);

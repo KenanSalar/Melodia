@@ -40,7 +40,7 @@ pub(crate) fn rows(
     image: &Path,
     disc: &ExtractedMetadata,
 ) -> Option<Vec<CueRow>> {
-    let stem = image.file_stem().map(|stem| stem.to_string_lossy()).unwrap_or_default();
+    let stem = image.file_stem().map_or_default(|stem| stem.to_string_lossy());
     let track_total = i32::try_from(layout.track_total()).unwrap_or(i32::MAX);
     let carved: Vec<CueRow> = layout
         .rows

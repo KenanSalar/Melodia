@@ -201,7 +201,7 @@ fn the_users_own_columns_are_what_a_heal_pass_asks_about() {
 
 #[test]
 fn a_station_naming_no_host_at_all_seeds_nothing() {
-    assert!(heal_seed_urls(&[station(None, None, "not a url")]).is_empty());
+    assert_eq!(heal_seed_urls(&[station(None, None, "not a url")]), [] as [String; 0]);
 }
 
 // ---- the loop between the schedule and the table ----

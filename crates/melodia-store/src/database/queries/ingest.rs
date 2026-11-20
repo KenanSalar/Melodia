@@ -642,7 +642,7 @@ fn import_folder_of(
     path: &Path,
     folder_cache: &mut HashMap<String, TrackFolder>,
 ) -> Result<Option<TrackFolder>, AppError> {
-    let parent_dir = path.parent().map(|p| p.to_string_lossy().into_owned()).unwrap_or_default();
+    let parent_dir = path.parent().map_or_default(|p| p.to_string_lossy().into_owned());
     if parent_dir.is_empty() {
         log::warn!("Skipping file with no parent directory: {}", path.display());
         return Ok(None);

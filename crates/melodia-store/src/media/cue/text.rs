@@ -214,9 +214,9 @@ fn decoded(encoding: &'static Encoding, bytes: &[u8]) -> String {
 fn bomless_utf16(bytes: &[u8]) -> Option<&'static Encoding> {
     let units = bytes.len() / 2;
     let (mut nul_first, mut nul_second) = (0, 0);
-    for unit in bytes.chunks_exact(2) {
-        nul_first += usize::from(unit[0] == 0);
-        nul_second += usize::from(unit[1] == 0);
+    for &[first, second] in bytes.as_chunks::<2>().0 {
+        nul_first += usize::from(first == 0);
+        nul_second += usize::from(second == 0);
     }
     if nul_second > nul_first && nul_second * 4 >= units {
         Some(UTF_16LE)

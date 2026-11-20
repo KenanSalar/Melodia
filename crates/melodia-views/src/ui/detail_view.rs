@@ -62,7 +62,7 @@ pub(crate) fn apply_detail_artwork(
     animate: bool,
     section_active: bool,
 ) {
-    g.write_cover(pair.cover.map(Image::from_rgb8).unwrap_or_default());
+    g.write_cover(pair.cover.map_or_default(Image::from_rgb8));
     if section_active {
         crate::ui::hero_backdrop::apply(ui, pair.sample);
     }

@@ -29,7 +29,7 @@ fn fills_rows_left_to_right_and_leaves_the_last_short() {
 fn nothing_to_place_is_no_rows() {
     let rows = chunk_built_rows(Vec::<i32>::new(), 3, |m| m);
 
-    assert!(rows.is_empty());
+    assert_eq!(rows, [] as [ModelRc<i32>; 0]);
 }
 
 /// A grid mid-layout can report zero columns. One card per row is a visible wrong; a

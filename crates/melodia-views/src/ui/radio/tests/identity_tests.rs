@@ -48,10 +48,10 @@ fn a_monogram_is_uppercased_whatever_the_name_arrived_as() {
 /// stops would read as a broken tile where the glyph reads as a station with no logo.
 #[test]
 fn a_name_with_nothing_alphanumeric_takes_no_letters() {
-    assert!(monogram_of("!!!").is_empty());
-    assert!(monogram_of("   ").is_empty());
-    assert!(monogram_of("").is_empty());
-    assert!(monogram_of("—·—").is_empty());
+    assert_eq!(monogram_of("!!!"), "");
+    assert_eq!(monogram_of("   "), "");
+    assert_eq!(monogram_of(""), "");
+    assert_eq!(monogram_of("—·—"), "");
 }
 
 /// The tile is a hash of the name and nothing else, so a station keeps its colours across runs and

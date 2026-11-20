@@ -39,9 +39,9 @@ pub(super) fn refresh(ui: &AppWindow, state: &AppState) {
     let s = state.clone();
     state.runtime.spawn(async move {
         let shown = match library::settings::suggested_music_folder(&s.db).await {
-            Ok(folder) => folder
-                .map(|path| redact_home(&path.to_string_lossy()).into_owned())
-                .unwrap_or_default(),
+            Ok(folder) => {
+                folder.map_or_default(|path| redact_home(&path.to_string_lossy()).into_owned())
+            }
             Err(e) => {
                 log::warn!(
                     "Could not check the Music folder for the welcome card: {}",

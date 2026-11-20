@@ -179,9 +179,7 @@ pub fn set_columns<K: CardGrid>(ui: &AppWindow, columns: i32) {
 /// The ids `K` shows, in card order, so a card's Play queues what the grid shows, filter included.
 /// UI thread.
 pub fn shown_ids<K: CardGrid>(ui: &AppWindow) -> Vec<i64> {
-    PagedGrid::installed(&K::model(ui), K::LABEL)
-        .map(|grid| grid.ids().to_vec())
-        .unwrap_or_default()
+    PagedGrid::installed(&K::model(ui), K::LABEL).map_or_default(|grid| grid.ids().to_vec())
 }
 
 /// Empty `K` for a section leave, refusing every load still on its way: nothing it brings has a

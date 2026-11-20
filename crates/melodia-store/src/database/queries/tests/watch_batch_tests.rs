@@ -488,7 +488,7 @@ async fn a_kept_out_file_renamed_out_of_every_library_folder_is_lifted() -> Resu
 
     apply_watch_batch(&db, vec![renamed]).await?;
 
-    assert!(kept_out_paths(&db).await?.is_empty());
+    assert_eq!(kept_out_paths(&db).await?, [] as [String; 0]);
     Ok(())
 }
 
@@ -499,7 +499,7 @@ async fn a_kept_out_file_gone_from_disk_leaves_the_list() -> Result<(), AppError
 
     apply_watch_batch(&db, vec![WatchedChange::Removed { path: spare, gone: true }]).await?;
 
-    assert!(kept_out_paths(&db).await?.is_empty());
+    assert_eq!(kept_out_paths(&db).await?, [] as [String; 0]);
     Ok(())
 }
 
@@ -530,7 +530,7 @@ async fn a_track_renamed_onto_a_kept_out_path_lifts_the_exclusion() -> Result<()
 
     apply_watch_batch(&db, vec![renamed]).await?;
 
-    assert!(kept_out_paths(&db).await?.is_empty());
+    assert_eq!(kept_out_paths(&db).await?, [] as [String; 0]);
     Ok(())
 }
 
@@ -549,7 +549,7 @@ async fn a_kept_out_file_renamed_onto_a_tracks_path_is_lifted() -> Result<(), Ap
 
     apply_watch_batch(&db, vec![renamed]).await?;
 
-    assert!(kept_out_paths(&db).await?.is_empty());
+    assert_eq!(kept_out_paths(&db).await?, [] as [String; 0]);
     Ok(())
 }
 

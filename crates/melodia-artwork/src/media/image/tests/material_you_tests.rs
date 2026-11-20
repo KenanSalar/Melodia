@@ -240,10 +240,8 @@ fn extract_source_rgb_from_rgb8_produces_seed_for_uniform_colour() {
     // expected hue family (R-dominant for orange).
     let mut buf = SharedPixelBuffer::<Rgb8Pixel>::new(72, 72);
     let bytes = buf.make_mut_bytes();
-    for px in bytes.chunks_exact_mut(3) {
-        px[0] = 230;
-        px[1] = 120;
-        px[2] = 30;
+    for px in bytes.as_chunks_mut::<3>().0 {
+        *px = [230, 120, 30];
     }
     let seed =
         extract_source_rgb_from_rgb8(&buf).expect("uniform vibrant buffer should produce a seed");
@@ -269,11 +267,9 @@ fn a_greyscale_cover_seeds_from_its_own_grey() {
     // the shape of a real black-and-white sleeve, not a degenerate one.
     let mut buf = SharedPixelBuffer::<Rgb8Pixel>::new(72, 72);
     let bytes = buf.make_mut_bytes();
-    for (i, px) in bytes.chunks_exact_mut(3).enumerate() {
+    for (i, px) in bytes.as_chunks_mut::<3>().0.iter_mut().enumerate() {
         let grey = u8::try_from((i / 72) * 3).unwrap_or(u8::MAX);
-        px[0] = grey;
-        px[1] = grey;
-        px[2] = grey;
+        *px = [grey; 3];
     }
 
     let seed = extract_source_rgb_from_rgb8(&buf).expect("a grey ramp should produce a seed");

@@ -194,7 +194,7 @@ fn a_stream_type_with_no_decoder_behind_it_is_not_selected() {
 
     let (out, codec) = unwrapped(&segment);
     assert!(out.is_empty(), "a LATM stream was selected and handed to a decoder that fails on it");
-    assert!(codec.is_empty());
+    assert_eq!(codec, "");
 }
 
 /// A fragment is already the framing its own demuxer wants, so unwrapping one is exactly wrong.
@@ -251,7 +251,7 @@ fn every_leading_id3_tag_comes_off_a_packed_audio_segment() {
     assert_eq!(strip_id3(&audio), audio);
 
     // A tag claiming more than arrived leaves nothing rather than a stream starting mid-tag.
-    assert!(strip_id3(&id3_tag(6, false)[..12]).is_empty());
+    assert_eq!(strip_id3(&id3_tag(6, false)[..12]), [] as [u8; 0]);
 
     let (out, codec) = unwrapped(&[id3_tag(6, false), audio.clone()].concat());
     assert_eq!(out, audio);
@@ -300,8 +300,8 @@ fn a_segment_naming_no_audio_is_a_gap_and_not_an_error() {
     .concat();
 
     reader.append(&tables_only, &mut out);
-    assert!(out.is_empty());
-    assert!(reader.codec().is_empty());
+    assert_eq!(out, [] as [u8; 0]);
+    assert_eq!(reader.codec(), "");
 
     // And the pid it learned there is what carries the next segment, whose own tables never
     // arrive. Read fresh, the PES scan would have taken the decoy that comes first.

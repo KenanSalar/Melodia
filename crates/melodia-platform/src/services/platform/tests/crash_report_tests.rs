@@ -1,4 +1,4 @@
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use chrono::{Local, TimeZone};
 
@@ -177,8 +177,8 @@ fn recent_returns_the_newest_first() -> Result<(), AppError> {
 #[test]
 fn an_empty_folder_yields_nothing() -> Result<(), AppError> {
     let tmp = tempfile::tempdir()?;
-    assert!(recent(tmp.path(), 5).is_empty());
-    assert!(recent(&tmp.path().join("missing"), 5).is_empty());
+    assert_eq!(recent(tmp.path(), 5), [] as [PathBuf; 0]);
+    assert_eq!(recent(&tmp.path().join("missing"), 5), [] as [PathBuf; 0]);
     assert_eq!(take_unseen(tmp.path()), None);
     assert_eq!(take_unseen(&tmp.path().join("missing")), None);
     prune(&tmp.path().join("missing"));

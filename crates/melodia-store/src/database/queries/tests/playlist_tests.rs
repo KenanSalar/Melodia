@@ -2,8 +2,9 @@ use std::collections::BTreeSet;
 
 use crate::database::queries::fixtures::*;
 use crate::database::{DbPool, queries, sql};
-use melodia_core::entities::playlist::{DroppedRules, PlaylistItemsCut};
+use melodia_core::entities::playlist::{DroppedRules, PlaylistItemsCut, PlaylistStats};
 use melodia_core::entities::smart_criteria::Draw;
+use melodia_core::entities::track::Track;
 use melodia_core::entities::track_list::{SortDir, TrackListScope, TrackOrder, TrackSortField};
 use melodia_core::entities::undo::{UNDO_HOLD_CAP, UndoCapture};
 use melodia_core::error::AppError;
@@ -23,7 +24,7 @@ async fn create_playlist_returns_correct_fields() -> Result<(), AppError> {
 async fn get_all_playlists_empty() -> Result<(), AppError> {
     let db = setup_seeded_db().await?;
     let playlists = queries::playlist::get_all_playlists(&db).await?;
-    assert!(playlists.is_empty());
+    assert_eq!(playlists, [] as [PlaylistStats; 0]);
     Ok(())
 }
 
@@ -105,7 +106,7 @@ async fn add_tracks_empty_is_noop() -> Result<(), AppError> {
     let pl = queries::playlist::create_playlist(&db, "Test", None).await?;
     queries::playlist::add_tracks_to_playlist(&db, pl.id, Vec::new()).await?;
     let tracks = queries::playlist::get_playlist_tracks(&db, pl.id).await?;
-    assert!(tracks.is_empty());
+    assert_eq!(tracks, [] as [Track; 0]);
     Ok(())
 }
 
@@ -875,7 +876,7 @@ async fn more_playlists_than_one_statement_holds_all_delete() -> Result<(), AppE
 
     queries::playlist_delete::delete_playlists(&db, ids).await?;
 
-    assert!(queries::playlist::get_all_playlists(&db).await?.is_empty());
+    assert_eq!(queries::playlist::get_all_playlists(&db).await?, [] as [PlaylistStats; 0]);
     Ok(())
 }
 

@@ -173,7 +173,7 @@ fn a_requested_rate_leaves_the_fallback_walk_as_it_was() {
     let unrequested = ladder(three_ranges(), None);
     let requested = ladder(three_ranges(), SampleRate::new(cpal::SAMPLE_RATE_CD));
 
-    assert!(unrequested.preferred.is_empty());
+    assert_eq!(unrequested.preferred, [] as [cpal::SupportedStreamConfig; 0]);
     assert_eq!(rates(&requested.fallback), rates(&unrequested.fallback));
     assert_eq!(
         rates(&unrequested.fallback),

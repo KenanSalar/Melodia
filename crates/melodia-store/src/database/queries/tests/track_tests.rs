@@ -920,7 +920,7 @@ async fn get_whole_file_paths_by_ids_returns_pairs_in_input_order() -> Result<()
     assert_eq!(pairs[1], (ids[0], "/music/alpha.mp3".to_owned()));
 
     let empty = queries::track::get_whole_file_paths_by_ids(&db, &[]).await?;
-    assert!(empty.is_empty());
+    assert_eq!(empty, [] as [(i64, String); 0]);
     Ok(())
 }
 

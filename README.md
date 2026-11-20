@@ -385,7 +385,7 @@ Windows keeps no PSS, so **Commit** is the figure to compare: the private memory
 
 ## Building from Source
 
-[Rust](https://rustup.rs/) **1.97.0**, edition 2024, pinned by `rust-toolchain.toml` and installed by
+[Rust](https://rustup.rs/) **1.100.0**, edition 2024, pinned by `rust-toolchain.toml` and installed by
 rustup on its own. Linux additionally needs the development packages for Slint's FemtoVG renderer
 (no WebKitGTK); Windows needs nothing extra.
 

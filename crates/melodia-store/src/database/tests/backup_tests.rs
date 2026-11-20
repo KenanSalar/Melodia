@@ -139,7 +139,7 @@ async fn a_fresh_database_is_not_backed_up() -> Result<(), AppError> {
     // and still nothing to copy.
     let (paths, db) = open_db(tmp.path()).await?;
     db.close().await;
-    assert!(entry_names(&paths.backups_dir)?.is_empty());
+    assert_eq!(entry_names(&paths.backups_dir)?, [] as [String; 0]);
     Ok(())
 }
 

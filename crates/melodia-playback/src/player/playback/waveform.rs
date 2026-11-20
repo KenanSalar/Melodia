@@ -201,7 +201,7 @@ fn write_path(columns: &[Column], prefixes: &XPrefixes, out: &mut String) {
 /// `(upper, lower)` on screen, flipped so peaks draw on top. [`MIN_HALF_THICKNESS`] opens a
 /// near-silent column about its own midpoint.
 fn edges(column: Column) -> (f32, f32) {
-    let mid = 0.5 * (column.min + column.max);
+    let mid = f32::midpoint(column.min, column.max);
     let half = (0.5 * (column.max - column.min)).max(MIN_HALF_THICKNESS);
     let flipped = 0.0 - mid;
     (flipped - half, flipped + half)

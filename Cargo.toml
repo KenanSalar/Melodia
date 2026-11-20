@@ -23,12 +23,11 @@ version = "0.23.0"
 edition = "2024"
 license = "AGPL-3.0-or-later"
 # Lockstep with `rust-toolchain.toml` and `clippy.toml`'s `msrv`.
-rust-version = "1.97"
+rust-version = "1.100"
 # Here rather than on `[package]` because `ui::settings::about` reads
 # `CARGO_PKG_REPOSITORY`, and a member that inherits nothing gets an empty string
 # and only *logs* about it.
 repository = "https://github.com/KenanSalar/Melodia"
-homepage = "https://github.com/KenanSalar/Melodia"
 
 # Every dependency is declared here rather than in the member that uses it, and the
 # reason is the one `slint` taught: a drifted version resolves two copies of a crate

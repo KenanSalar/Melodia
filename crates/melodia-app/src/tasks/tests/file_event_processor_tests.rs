@@ -12,7 +12,7 @@ fn dedup_created_then_removed_cancels() {
         FileEvent::Removed(PathBuf::from("/music/song.mp3")),
     ];
     let result = deduplicate_events(events);
-    assert!(result.is_empty());
+    assert_eq!(result, [] as [FileEvent; 0]);
 }
 
 #[test]
@@ -93,7 +93,7 @@ fn dedup_rename_then_modified_keeps_rename() {
 fn dedup_empty_returns_empty() {
     let events: Vec<FileEvent> = vec![];
     let result = deduplicate_events(events);
-    assert!(result.is_empty());
+    assert_eq!(result, [] as [FileEvent; 0]);
 }
 
 #[test]
@@ -183,7 +183,7 @@ fn suppress_consumes_the_mark_so_a_second_event_survives() {
 
     let mut batch = echo.clone();
     suppress_self_writes(&mut batch, &self_writes);
-    assert!(batch.is_empty());
+    assert_eq!(batch, [] as [FileEvent; 0]);
 
     // A later, genuinely external edit to the same file is not swallowed.
     let mut batch = echo.clone();
@@ -203,7 +203,7 @@ fn suppress_can_empty_the_batch() {
     ];
 
     suppress_self_writes(&mut batch, &self_writes);
-    assert!(batch.is_empty());
+    assert_eq!(batch, [] as [FileEvent; 0]);
 }
 
 // ---- the order the two filters are applied in ----

@@ -89,7 +89,7 @@ fn a_set_with_nobody_in_it_renders_no_line() {
 
     assert!(credits.is_empty());
     assert_eq!(credits.line(), None);
-    assert!(credits.all().is_empty());
+    assert_eq!(credits.all(), []);
 }
 
 #[test]

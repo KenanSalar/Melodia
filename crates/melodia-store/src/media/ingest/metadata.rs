@@ -273,7 +273,7 @@ fn extract(
     let originally_released = read_timestamp(tag, ItemKey::OriginalReleaseDate);
 
     let rating = tag.and_then(rating_tags::stars_from_tag);
-    let credits = tag.map(role_tags::read_roles).unwrap_or_default();
+    let credits = tag.map_or_default(role_tags::read_roles);
 
     Ok(ExtractedMetadata {
         artist_mbids: read_credit_mbids(tag, ItemKey::MusicBrainzArtistId, artist.artists().len()),

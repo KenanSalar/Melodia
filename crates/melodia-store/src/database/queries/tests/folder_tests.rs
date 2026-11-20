@@ -1,5 +1,6 @@
 use crate::database::queries::fixtures::*;
 use crate::database::{DbPool, queries, sql};
+use melodia_core::entities::folder::Folder;
 use melodia_core::error::AppError;
 
 #[tokio::test]
@@ -16,7 +17,7 @@ async fn insert_folder_returns_correct_fields() -> Result<(), AppError> {
 async fn get_all_folders_empty_initially() -> Result<(), AppError> {
     let db = DbPool::test_pool().await?;
     let folders = queries::folder::get_all_folders(&db).await?;
-    assert!(folders.is_empty());
+    assert_eq!(folders, [] as [Folder; 0]);
     Ok(())
 }
 
@@ -53,7 +54,7 @@ async fn delete_folder_removes_it() -> Result<(), AppError> {
     let f = queries::folder::insert_folder(&db, "/music", true).await?;
     queries::folder::delete_folder(&db, f.id).await?;
     let folders = queries::folder::get_all_folders(&db).await?;
-    assert!(folders.is_empty());
+    assert_eq!(folders, [] as [Folder; 0]);
     Ok(())
 }
 

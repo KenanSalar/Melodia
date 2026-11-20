@@ -195,7 +195,7 @@ impl RingReader {
                 return Pulled::Ended;
             }
         }
-        self.frame_phase = (self.frame_phase + 1) % self.channels.get();
+        self.frame_phase = (self.frame_phase + 1) % self.channels;
 
         if self.frame_starved {
             return Pulled::Starved;

@@ -193,6 +193,6 @@ async fn a_favorited_artist_carries_the_count_of_its_favorited_tracks() -> Resul
 #[tokio::test]
 async fn a_library_with_no_favorites_has_no_favorite_artists() -> Result<(), AppError> {
     let db = setup_seeded_db().await?;
-    assert!(listed_favorite_artists(&db).await?.is_empty());
+    assert_eq!(listed_favorite_artists(&db).await?, [] as [FavoriteArtist; 0]);
     Ok(())
 }

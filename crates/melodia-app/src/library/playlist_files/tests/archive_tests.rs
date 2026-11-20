@@ -117,7 +117,7 @@ fn an_archive_reads_back_the_entries_it_was_written_with_in_order() -> Result<()
 #[test]
 fn an_archive_written_with_nothing_reads_as_no_entries() -> Result<(), AppError> {
     let (entries, unreadable) = read_back(written(&[], NaiveDateTime::default())?)?;
-    assert!(entries.is_empty());
+    assert_eq!(entries, [] as [(String, String); 0]);
     assert_eq!(unreadable, 0);
     Ok(())
 }
@@ -256,7 +256,7 @@ fn a_playlist_that_is_not_utf8_counts_as_unreadable() -> Result<(), AppError> {
 
     let (entries, unreadable) = read_back(bytes)?;
 
-    assert!(entries.is_empty());
+    assert_eq!(entries, [] as [(String, String); 0]);
     assert_eq!(unreadable, 1);
     Ok(())
 }

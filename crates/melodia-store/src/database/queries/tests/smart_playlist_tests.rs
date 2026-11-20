@@ -932,7 +932,10 @@ async fn an_unmatched_rule_set_resolves_to_no_ids() -> Result<(), AppError> {
     let s = seed().await?;
     let c = one(RuleField::Title, RuleOp::Is, Some(RuleValue::Text("Nothing".to_owned())));
 
-    assert!(queries::smart_playlist::get_smart_playlist_track_ids(&s.db, &c).await?.is_empty());
+    assert_eq!(
+        queries::smart_playlist::get_smart_playlist_track_ids(&s.db, &c).await?,
+        [] as [i64; 0]
+    );
     Ok(())
 }
 

@@ -59,7 +59,7 @@ fn landed(id: i64) -> UiAlbumRow {
 
 /// The cards of `row` as Slint draws them.
 fn cards(row: Option<&UiAlbumGridRow>) -> Vec<(i32, SharedString)> {
-    row.map(|row| row.albums.iter().map(|card| (card.id, card.name)).collect()).unwrap_or_default()
+    row.map_or_default(|row| row.albums.iter().map(|card| (card.id, card.name)).collect())
 }
 
 /// How many cards the grid's last row draws, `0` where it has none.
@@ -106,7 +106,7 @@ fn a_card_that_lands_repaints_its_own_cell_alone() {
     let seen = Rc::new(RefCell::new(Vec::new()));
     let recorder = Rc::clone(&seen);
     // A missing row reads as an empty one, which the assertion below names.
-    let chunk = grid.row(1).map(|row| row.albums).unwrap_or_default();
+    let chunk = grid.row(1).map_or_default(|row| row.albums);
     let _repeater = FilterModel::new(chunk, move |card: &UiAlbumRow| {
         recorder.borrow_mut().push((card.id, card.name.clone()));
         true

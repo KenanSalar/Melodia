@@ -111,7 +111,7 @@ fn install_notice_stack(
             log::warn!("notifications locale refresher: {}", describe(&e));
         }
     }
-    let prefs = settings.map(|s| s.undo.clone()).unwrap_or_default();
+    let prefs = settings.map_or_default(|s| s.undo.clone());
     let undo = ui::undo::install(app, state, &notifications, prefs);
     (notifications, undo)
 }

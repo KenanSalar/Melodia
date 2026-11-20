@@ -77,7 +77,7 @@ fn the_first_and_last_places_both_resolve() {
 fn a_key_outside_the_answer_resolves_to_nothing() {
     let radio_ui = browsing(&["first", "second", "third"]);
 
-    assert!(resolved(&radio_ui, &[0, 4, -1, i32::MIN]).is_empty());
+    assert_eq!(resolved(&radio_ui, &[0, 4, -1, i32::MIN]), [] as [String; 0]);
 }
 
 /// What lets a Browse selection outlive a Load More, where a fresh search has to drop it.

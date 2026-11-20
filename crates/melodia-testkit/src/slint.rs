@@ -145,7 +145,7 @@ pub fn globals_declaring(src: &str, needle: &str) -> Vec<String> {
     for (at, _) in src.match_indices(KEYWORD) {
         let head = at + KEYWORD.len();
         let Some(brace) = src.get(head..).and_then(|rest| rest.find('{')) else { continue };
-        let name = src.get(head..head + brace).map(str::trim).unwrap_or_default();
+        let name = src.get(head..head + brace).map_or_default(str::trim);
         if name.is_empty() || name.contains(char::is_whitespace) {
             continue;
         }

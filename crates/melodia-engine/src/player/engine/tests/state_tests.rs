@@ -221,7 +221,7 @@ fn test_resume_from_stopped_no_track() {
     let mut state = PlayerState { status: PlaybackStatus::Stopped, ..Default::default() };
 
     let actions = resume_from_stopped(&mut state);
-    assert!(actions.is_empty());
+    assert_eq!(actions, [] as [PlayerAction; 0]);
 }
 
 #[test]
@@ -231,7 +231,7 @@ fn test_resume_from_stopped_not_stopped() {
     play_track_inner(&mut state, track, None);
     // Status is Playing, not Stopped
     let actions = resume_from_stopped(&mut state);
-    assert!(actions.is_empty());
+    assert_eq!(actions, [] as [PlayerAction; 0]);
 }
 
 #[test]
@@ -1093,7 +1093,7 @@ fn play_from_stopped_resumes_from_stopped() {
     let actions = resume_from_stopped(&mut state);
 
     assert_eq!(state.status, PlaybackStatus::Playing);
-    assert!(!actions.is_empty());
+    assert_ne!(actions, [] as [PlayerAction; 0]);
 }
 
 #[test]
@@ -1117,7 +1117,7 @@ fn pause_when_not_playing_noop() {
     let actions = state.build_pause_actions(250);
 
     assert_eq!(state.status, PlaybackStatus::Stopped);
-    assert!(actions.is_empty());
+    assert_eq!(actions, [] as [PlayerAction; 0]);
 }
 
 #[test]

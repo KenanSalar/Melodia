@@ -267,7 +267,7 @@ async fn clearing_a_history_drops_the_station_out_of_recents_and_leaves_the_favo
     assert_eq!(cleared.play_count, 0);
     assert!(cleared.is_favorite, "the favorite belongs to the other tab");
 
-    assert!(get_recent_stations(&db, 10).await?.is_empty());
+    assert_eq!(get_recent_stations(&db, 10).await?, [] as [radio::RadioStation; 0]);
     assert_eq!(get_favorite_stations(&db).await?.len(), 1);
     Ok(())
 }

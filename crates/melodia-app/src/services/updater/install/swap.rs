@@ -241,7 +241,7 @@ fn pkexec_failure(command: &str, code: i32, stderr: &[u8]) -> AppResult<InstallO
 /// (`updater::install_target_old`) derives the same name.
 #[cfg(target_os = "linux")]
 pub(crate) fn old_path(target: &Path) -> PathBuf {
-    let mut name = target.file_name().map(std::ffi::OsStr::to_os_string).unwrap_or_default();
+    let mut name = target.file_name().map_or_default(std::ffi::OsStr::to_os_string);
     name.push(".old");
     target.with_file_name(name)
 }

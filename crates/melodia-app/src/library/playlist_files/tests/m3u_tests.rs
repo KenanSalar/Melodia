@@ -1,4 +1,4 @@
-use super::{parse, serialize};
+use super::{ParsedEntry, parse, serialize};
 use melodia_core::entities::cue::CueTrack;
 use melodia_core::entities::track::PlaylistExportRow;
 
@@ -106,9 +106,9 @@ fn parse_handles_crlf_line_endings() {
 
 #[test]
 fn parse_empty_and_header_only_yield_no_entries() {
-    assert!(parse("").entries.is_empty());
-    assert!(parse("#EXTM3U\n").entries.is_empty());
-    assert!(parse("\n\n   \n").entries.is_empty());
+    assert_eq!(parse("").entries, [] as [ParsedEntry; 0]);
+    assert_eq!(parse("#EXTM3U\n").entries, [] as [ParsedEntry; 0]);
+    assert_eq!(parse("\n\n   \n").entries, [] as [ParsedEntry; 0]);
 }
 
 #[test]

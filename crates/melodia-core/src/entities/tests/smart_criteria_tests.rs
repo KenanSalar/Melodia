@@ -47,7 +47,7 @@ fn missing_fields_fall_back_to_defaults() {
     let c = SmartCriteria::from_json_opt(Some("{}"));
     assert_eq!(c.version, SMART_CRITERIA_VERSION);
     assert_eq!(c.match_mode, MatchMode::All);
-    assert!(c.rules.is_empty());
+    assert_eq!(c.rules, [] as [Rule; 0]);
     assert!(c.limit.is_none());
 }
 

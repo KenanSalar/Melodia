@@ -335,7 +335,7 @@ fn a_first_launch_with_no_file_restores_nothing() {
 
     let actions = apply_restore(&mut state, plan_of(None, vec![], None));
 
-    assert!(actions.is_empty());
+    assert_eq!(actions, [] as [PlayerAction; 0]);
     assert!(state.queue.is_empty());
     assert!(state.station().is_none());
     assert!(state.current_track().is_none());

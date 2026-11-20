@@ -111,7 +111,7 @@ fn the_first_seed_is_what_the_cover_mostly_is() {
 #[test]
 fn an_empty_buffer_and_a_white_one_are_told_apart() {
     let empty = SharedPixelBuffer::<Rgb8Pixel>::new(0, 0);
-    assert!(population_seeds(empty.as_bytes(), SEED_COUNT).is_empty());
+    assert_eq!(population_seeds(empty.as_bytes(), SEED_COUNT), [] as [u32; 0]);
 
     let white = population_seeds(buffer_of(&[[255, 255, 255]]).as_bytes(), SEED_COUNT);
     assert_eq!(white, vec![0x00ff_ffff], "a white cover answers with its own white");

@@ -318,7 +318,7 @@ fn limiter_timing_is_channel_count_independent() {
         "limiter must attenuate over time for this test to be meaningful"
     );
 
-    for (frame, (m, s)) in mono.iter().zip(stereo.chunks_exact(2)).enumerate() {
+    for (frame, (m, s)) in mono.iter().zip(stereo.as_chunks::<2>().0).enumerate() {
         assert_eq!(
             m.to_bits(),
             s[0].to_bits(),
@@ -498,7 +498,7 @@ fn a_fade_advances_once_per_frame_not_once_per_sample() {
     let out: Vec<f32> = faded_source(vec![1.0; 1_024], 2, fade).collect();
 
     assert_eq!(out.len(), 200, "100 frames of ramp, two samples each");
-    for frame in out.chunks_exact(2) {
+    for frame in out.as_chunks::<2>().0 {
         assert!(approx(frame[0], frame[1]), "both channels of a frame share one gain");
     }
     assert!(approx(out[0], 1.0));
@@ -550,7 +550,7 @@ fn a_fade_armed_mid_frame_still_steps_on_frame_boundaries() {
     let full: Vec<f32> = head.into_iter().chain(src).collect();
 
     assert_eq!(full.len() % 2, 0, "the source must not end on a half frame");
-    for (i, frame) in full.chunks_exact(2).enumerate() {
+    for (i, frame) in full.as_chunks::<2>().0.iter().enumerate() {
         assert!(
             approx(frame[0], frame[1]),
             "both channels of frame {i} must share one gain, got {} and {}",

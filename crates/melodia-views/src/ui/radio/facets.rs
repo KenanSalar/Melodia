@@ -111,7 +111,7 @@ impl FacetIndex {
     /// and [`prime`] can stay asynchronous.
     pub(super) fn lists(&self) -> [(ChipFilter, &[Facet]); 4] {
         fn entries(list: Option<&Arc<[Facet]>>) -> &[Facet] {
-            list.map(Arc::as_ref).unwrap_or_default()
+            list.map_or_default(Arc::as_ref)
         }
         [
             (ChipFilter::Country, entries(self.countries.as_ref())),

@@ -166,7 +166,7 @@ fn gaps(rows: &[Row]) -> Vec<Option<(i32, i32)>> {
 
 /// The rows a sheet is drawn as, or nothing where it was not a sheet at all.
 fn drawn_rows(lines: Vec<LyricLine>) -> Vec<Row> {
-    sheet(lines).as_ref().map(rows_for).unwrap_or_default()
+    sheet(lines).as_ref().map_or_default(rows_for)
 }
 
 #[test]

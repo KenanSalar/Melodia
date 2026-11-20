@@ -369,7 +369,8 @@ impl Window {
 
     fn push(&mut self, frame: &[Sample]) {
         let head = self.head;
-        for (ring, &sample) in self.samples.chunks_exact_mut(2 * SPAN).zip(frame) {
+        for (ring, &sample) in self.samples.as_chunks_mut::<{ 2 * SPAN }>().0.iter_mut().zip(frame)
+        {
             ring[head] = sample;
             ring[head + SPAN] = sample;
         }
@@ -378,7 +379,7 @@ impl Window {
 
     fn push_silence(&mut self) {
         let head = self.head;
-        for ring in self.samples.chunks_exact_mut(2 * SPAN) {
+        for ring in self.samples.as_chunks_mut::<{ 2 * SPAN }>().0 {
             ring[head] = 0.0;
             ring[head + SPAN] = 0.0;
         }
