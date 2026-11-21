@@ -219,13 +219,17 @@ export struct KeptOutRow {
     removed: string,
 }
 
-// A headphone model on AutoEq's list. `index` is the entry's place in the list Rust holds, so a
-// pick survives the filter narrowing past it.
-export struct CorrectionPickRow {
+// One entry in a `PickList`. `index` is the entry's place in the list Rust holds, so a pick
+// survives the filter narrowing past it.
+export struct PickRow {
     index: int,
-    name: string,
-    // Whose measurement it is.
-    source: string,
+    title: string,
+    // Raw: the host formats the second line through `PickList.subtitle-for`.
+    subtitle: string,
+    // Empty for none.
+    trailing: string,
+    // Into the host's `PickList.badges`, -1 for none.
+    badge: int,
 }
 
 // Why an imported file's line goes unused. A type rather than a label, for `DuplicateMatch`'s

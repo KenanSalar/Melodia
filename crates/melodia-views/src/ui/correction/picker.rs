@@ -24,8 +24,11 @@ use melodia_core::entities::correction::AutoEqEntry;
 use melodia_core::error::{AppError, describe};
 use melodia_core::utils::needle::fold_needle;
 use melodia_ui::{
-    AppWindow, ApplyFailure, CorrectionPickRow, Dialog, DialogKind, HeadphonePicker, PickerPhase,
+    AppWindow, ApplyFailure, Dialog, DialogKind, HeadphonePicker, PickRow, PickerPhase,
 };
+
+/// `PickRow.badge` for a model, which carries none.
+const NO_BADGE: i32 = -1;
 
 pub(super) fn install(ui: &AppWindow, card: &Rc<Card>) {
     let picker = Rc::new(Picker {
@@ -54,7 +57,7 @@ struct Picker {
     state: AppState,
     card: Rc<Card>,
     ticket: DialogTicket,
-    rows: Rc<VecModel<CorrectionPickRow>>,
+    rows: Rc<VecModel<PickRow>>,
     /// The whole list while the dialog is open, which a row's `index` points into.
     entries: RefCell<Vec<AutoEqEntry>>,
     /// The pick's fetch, aborted by a close.
@@ -118,10 +121,12 @@ impl Picker {
             .enumerate()
             .filter(|(_, entry)| needle.contains(&entry.name) || needle.contains(&entry.source))
             .take(PICKER_ROW_CAP)
-            .map(|(index, entry)| CorrectionPickRow {
+            .map(|(index, entry)| PickRow {
                 index: len_as_i32(index),
-                name: entry.name.as_ref().into(),
-                source: entry.source.as_ref().into(),
+                title: entry.name.as_ref().into(),
+                subtitle: entry.source.as_ref().into(),
+                badge: NO_BADGE,
+                ..PickRow::default()
             })
             .collect();
         self.rows.set_vec(rows);

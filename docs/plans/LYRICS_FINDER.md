@@ -2,7 +2,7 @@
 
 Working doc. Delete when the feature ships.
 
-Status: **planned; Phase 1 next** · Created: 2026-11-21 · Branch `feat/enhanced-lrc`, after
+Status: **Phase 1 landed; Phase 2 next** · Created: 2026-11-21 · Branch `feat/enhanced-lrc`, after
 [ENHANCED_LRC.md](ENHANCED_LRC.md)'s Phase 5
 
 > Researched **2026-11-21** against `feat/enhanced-lrc` at `8db89fc3`; lrclib's API reference
@@ -180,14 +180,16 @@ Every file stays well under 800.
 
 ## Phase 1: `PickList` out of the headphone picker (no visible change)
 
-- [ ] `PickRow` replaces `CorrectionPickRow`; `picker.rs` fills `title` and `subtitle`, `badge: -1`.
-- [ ] `pick-list.slint`:
+- [x] `PickRow` replaces `CorrectionPickRow`; `picker.rs` fills `title` and `subtitle`, `badge: -1`.
+- [x] `pick-list.slint`:
   - inputs: rows, `listing`, placeholder, state icon, title and body, failure text, `badges`;
   - in-out: `filter`, `picked`, `blur-tick`;
   - callbacks: `filter-changed`, `filter-accepted`, `row-picked`, pure `subtitle-for(PickRow)`.
-- [ ] `headphone-picker-body.slint` mounts it; every `@tr` string stays in that file, the
+- [x] `headphone-picker-body.slint` inherits it; every `@tr` string stays in that file, the
       translator note on its line.
-- [ ] Docs: `ui-patterns.md`'s component catalogue gains `PickList`.
+- [x] Docs: `ui-patterns.md`'s component catalogue gains `PickList`.
+- [x] Also: the three wells' "No `clip`" note names the duplicates finder, a lyrics finder being
+      on the way.
 
 **Gate:** fmt, clippy, the suite. `scrollbars.rs` holds the well's policies and on-card track;
 `translations.rs` meets no new msgid.
@@ -248,17 +250,21 @@ Every file stays well under 800.
 
 ### Hand tests
 
-In the dev data folder, after Phase 4 and before any test is written.
+Every phase's hand check gathers here and runs last: after Phase 4, before any test is written, in
+the dev data folder, each against `main` where it should match.
 
-- [ ] Find Headphones as on `main`: filter, pick, Apply, a failure line.
-- [ ] The finder from the menu and from Settings on a real track; Enter with an edited query; a
-      pick applied and shown; "Look up again" back to automatic; the pick surviving a restart.
-- [ ] A pick hidden by a `.lrc` and by a timed tag, the note shown; a plain pick under a plain tag.
-- [ ] Online lookup off: both entries greyed, nothing sent.
-- [ ] A rate-limited answer; an unreachable lrclib.
-- [ ] A word-synced lrclib record lighting word by word, from the finder and from an automatic
-      lookup; a malformed `lyricsfile` falling back to `syncedLyrics`.
-- [ ] Long titles, Arabic and Korean rows, the preview of a long sheet.
+- [ ] Phase 1, Find Headphones as on `main`: rows, filter, pick, the loading and failure states,
+      Apply; a model shows no trailing text and no badge.
+- [ ] Phase 2, a word-synced lrclib record lighting word by word from an automatic lookup; a
+      malformed `lyricsfile` falling back to `syncedLyrics`.
+- [ ] Phases 3 and 4, the finder:
+  - from the menu and from Settings on a real track; Enter with an edited query;
+  - a pick applied and shown; "Look up again" back to automatic; the pick surviving a restart;
+  - a pick hidden by a `.lrc` and by a timed tag, the note shown; a plain pick under a plain tag;
+  - online lookup off: both entries greyed, nothing sent;
+  - a rate-limited answer; an unreachable lrclib;
+  - a word-synced record from the finder, badged Word-timed;
+  - long titles, Arabic and Korean rows, the preview of a long sheet.
 
 ### Tests
 
