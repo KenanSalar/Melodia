@@ -14,6 +14,7 @@ use tokio::runtime::Handle;
 use super::NowPlayingState;
 use super::sheet::{self, playing_track};
 use crate::ui::dialog_landing::{DialogTicket, TicketedDialog};
+use crate::ui::settings::lyrics_settings;
 use crate::ui::tracks::format_duration_ms;
 use crate::ui::util::len_as_i32;
 use melodia_app::library::lyrics::LyricsKey;
@@ -23,7 +24,7 @@ use melodia_core::entities::lyrics::LyricsCandidate;
 use melodia_core::entities::track::TrackSummary;
 use melodia_core::error::describe;
 use melodia_ui::{
-    AppWindow, Dialog, DialogKind, Lyrics, LyricsFinder, LyricsMasking, LyricsSearchPhase, PickRow,
+    AppWindow, Dialog, DialogKind, LyricsFinder, LyricsMasking, LyricsSearchPhase, PickRow,
 };
 
 pub(crate) fn wire_finder(ui: &AppWindow, state: &AppState, np_state: &Rc<NowPlayingState>) {
@@ -36,6 +37,8 @@ pub(crate) fn wire_finder(ui: &AppWindow, state: &AppState, np_state: &Rc<NowPla
         track: RefCell::new(None),
         choices: RefCell::new(Vec::new()),
         outranking: Cell::new(Outranking::Nothing),
+        persist_lookup_switch: Box::new(lyrics_settings::online_handler(ui, state)),
+        panel_lookup_owed: Cell::new(false),
     });
     let g = ui.global::<LyricsFinder>();
     g.set_rows(ModelRc::from(finder.rows.clone()));
@@ -64,6 +67,10 @@ struct Finder {
     choices: RefCell<Vec<Choice>>,
     /// Read beside each search, so it lands with the rows it describes under one ticket.
     outranking: Cell<Outranking>,
+    persist_lookup_switch: Box<dyn Fn(bool)>,
+    /// Turn On's re-ask of the panel, held to a stored pick or the close: one sent beside the
+    /// search could store its automatic answer over the pick.
+    panel_lookup_owed: Cell<bool>,
 }
 
 impl Finder {
@@ -84,10 +91,10 @@ impl Finder {
         self.open_on_default_query();
     }
 
-    /// Through the menu switch's own handler, which also sends the panel to look again.
     fn turn_on_lookup(self: &Rc<Self>) {
         let Some(ui) = self.ui.upgrade() else { return };
-        ui.global::<Lyrics>().invoke_set_online_enabled(true);
+        (self.persist_lookup_switch)(true);
+        self.panel_lookup_owed.set(true);
         ui.global::<LyricsFinder>().set_phase(LyricsSearchPhase::Searching);
         self.open_on_default_query();
     }
@@ -202,9 +209,10 @@ impl Finder {
         g.set_applying(landed.is_some());
     }
 
-    /// A panel showing the track gives its sheet back and looks again, finding the pick. One on
+    /// A panel showing the track gives its sheet back and looks again, finding any pick. One on
     /// another track, or none, reads the store on its own when it next shows this one.
     fn reload_panel(&self, ui: &AppWindow, track_id: i64) {
+        self.panel_lookup_owed.set(false);
         let lyrics = &self.np_state.lyrics;
         if lyrics.holds(track_id) {
             sheet::release(ui, lyrics);
@@ -214,11 +222,16 @@ impl Finder {
 
     fn release(&self) {
         self.ticket.retire();
-        self.track.take();
+        let track = self.track.take();
         self.choices.take();
         self.outranking.set(Outranking::Nothing);
         self.rows.set_vec(Vec::new());
         let Some(ui) = self.ui.upgrade() else { return };
+        if self.panel_lookup_owed.take()
+            && let Some(track) = track
+        {
+            self.reload_panel(&ui, track.id);
+        }
         let g = ui.global::<LyricsFinder>();
         g.set_preview(SharedString::new());
         g.set_masking(LyricsMasking::None);

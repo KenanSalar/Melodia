@@ -86,8 +86,6 @@ export component LyricsSection inherits Rectangle {
             }
         }
 
-        // Greyed rather than hidden while lyrics are off, as the radio scrobble row is, saying which
-        // switch to turn on. With the lookup off it opens, the dialog offering that switch.
         if root.show-find: SettingRow {
             icon: "search";
             label: root.find-label;

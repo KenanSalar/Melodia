@@ -68,8 +68,8 @@ Status: **Phase 4 landed; Phase 5's hand tests next** · Created: 2026-11-21 · 
 
 - The switch's description names lrclib.net, and the README promises nothing contacts it until
   the switch is on (`README.md:166`). Both entries open with it off, the dialog asking first: its
-  **Turn On** runs the menu switch's own handler, so the panel looks again too, and only then
-  searches.
+  **Turn On** persists the switch and searches, and the panel looks again only once a pick is
+  stored or the dialog closes, so its automatic answer can't land over the pick.
 - The facade's `search` reads the switch through the one `online_lookup_enabled`, so
   `lyrics_switch.rs`' single-reader pin holds.
 - A request leaves only on open and on Enter, never per keystroke, through the lyrics pacer and its
@@ -283,8 +283,10 @@ Every file stays well under 800.
       out a pick being stored, whose close its retired ticket would strand.
 - [x] After the first hand check: the card eases between steps (`lyrics-searching`, `lyrics-list`,
       `lyrics-settled` in `dialog.slint`); with the lookup off both entries open on a notice whose
-      Turn On is the switch; the greyed Settings row names "Show lyrics"; the preview shows the
-      whole sheet, scrolling (`DialogScrollPane.scroll-to-start()`).
+      Turn On is the switch, the panel's re-ask held to a stored pick or the close; the greyed
+      Settings row names "Show lyrics"; the preview shows the whole sheet, scrolling
+      (`DialogScrollPane.scroll-to-start()`), with room inside its clip for the first and last
+      lines' ink.
 
 **Gate:** fmt, clippy, the suite: `dialog_openers.rs`, `lyrics_switch.rs`, `scrollbars.rs`,
 `translations.rs`.
@@ -308,12 +310,15 @@ the dev data folder, each against `main` where it should match.
   - online lookup off: both entries open on the notice, nothing sent before Turn On; Turn On
     flipping the switch in the menu and in Settings, then searching; the Settings row greyed and
     naming "Show lyrics" while lyrics are off;
+  - Turn On, then a pick applied before the panel would have answered, the pick kept on screen
+    and after a restart; Turn On, then Cancel, the panel looking up on its own;
   - the card easing from Searching to the list, and down and back up on an Enter over a list;
   - a rate-limited answer; an unreachable lrclib;
   - a word-synced record from the finder, badged Word-timed;
   - a song ending under the dialog, the pick landing on the track it opened on;
   - long titles, Arabic and Korean rows; a long sheet scrolling in the preview, the next pick
-    reading from its first line;
+    reading from its first line; an Arabic sheet's and the `vi` placeholder's first and last
+    lines whole, at rest and scrolled to the end;
   - the shortest window reachable, a pick showing, the footer inside the card.
 
 ### Tests

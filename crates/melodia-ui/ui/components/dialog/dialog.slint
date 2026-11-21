@@ -109,7 +109,6 @@ export component DialogOverlay inherits Rectangle {
                 animate eased-height { duration: Theme.dur-med; easing: cubic-bezier(0.2, 0, 0, 1); }
             }
         }
-        // A state of its own, so an Enter over a list eases the card back down.
         lyrics-searching when DialogGlobal.kind == DialogKind.lyrics-finder
             && LyricsFinder.phase == LyricsSearchPhase.searching: {
             eased-height: layout.preferred-height;
@@ -139,7 +138,7 @@ export component DialogOverlay inherits Rectangle {
     // The import's second step, whose footer reads Back and Apply.
     property <bool> import-reviewing:
         DialogGlobal.kind == DialogKind.correction-import && CorrectionImport.step == ImportStep.review;
-    // The finder's first step with the lookup off, whose footer offers to turn it on.
+    // Find Lyrics with the lookup off, whose footer offers to turn it on.
     property <bool> lyrics-lookup-off:
         DialogGlobal.kind == DialogKind.lyrics-finder
         && LyricsFinder.phase == LyricsSearchPhase.lookup-off;

@@ -477,7 +477,8 @@ export global Dialog {
     }
 
     // Two callers, the lyrics menu and Settings, both meaning the playing track: Rust reads it at
-    // `load`, as the message reads its length here.
+    // `load`, as the message reads its length here. Neither gates on the lookup, which the dialog
+    // asks for in `lookup-off`.
     public function open-lyrics-finder() {
         root.claim-request();
         root.title = @tr("Find Lyrics");

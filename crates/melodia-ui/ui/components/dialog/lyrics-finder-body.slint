@@ -70,17 +70,25 @@ export component LyricsFinderBody inherits VerticalLayout {
 
         pane := DialogScrollPane {
             x: Theme.pad-md;
-            y: Theme.pad-sm;
+            y: Theme.pad-xs;
             width: parent.width - Theme.pad-md - Theme.pad-xs;
-            height: parent.height - 2 * Theme.pad-sm;
+            height: parent.height - 2 * Theme.pad-xs;
 
-            Text {
-                text: LyricsFinder.picked < 0 ? @tr("Pick a match to read its lyrics.")
-                    : root.shows-words ? LyricsFinder.preview
-                    : @tr("lrclib.net files this recording as instrumental.");
-                color: root.shows-words ? Theme.text : Theme.subtext0;
-                font-size: Theme.font-size-sm;
-                wrap: word-wrap;
+            // Slack inside the viewport's clip for the ink past the first and last line box, and
+            // `elide` because the default `clip` scissors the `Text` at that box.
+            VerticalLayout {
+                padding-top: Theme.pad-xs;
+                padding-bottom: Theme.pad-xs;
+
+                Text {
+                    text: LyricsFinder.picked < 0 ? @tr("Pick a match to read its lyrics.")
+                        : root.shows-words ? LyricsFinder.preview
+                        : @tr("lrclib.net files this recording as instrumental.");
+                    color: root.shows-words ? Theme.text : Theme.subtext0;
+                    font-size: Theme.font-size-sm;
+                    wrap: word-wrap;
+                    overflow: elide;
+                }
             }
         }
     }
