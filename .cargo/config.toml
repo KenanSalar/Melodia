@@ -4,7 +4,7 @@
 [build]
 jobs = 8
 
-# build.jobs does not touch the test harness's runtime threads — cap those too.
+# build.jobs leaves the test harness's runtime threads alone, so cap those too.
 # Non-forced: a dev can still override by exporting RUST_TEST_THREADS themselves.
 [env]
 RUST_TEST_THREADS = "8"

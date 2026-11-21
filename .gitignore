@@ -5,7 +5,7 @@ debug/
 
 # Vendored winit fork: its own `.gitignore` was dropped when the tree was
 # trimmed to essentials. Catch what cargo regenerates if it's ever run inside
-# `winit/` directly — build output, and a lockfile (winit is a library, so it
+# `winit/` directly: build output, and a lockfile (winit is a library, so it
 # doesn't commit one; the build is governed by this repo's root Cargo.lock).
 /winit/target/
 /winit/Cargo.lock
@@ -22,7 +22,7 @@ rustc-ice-*.txt
 # cargo-mutants output
 **/mutants.out*/
 
-# NOTE: Cargo.lock IS committed — Melodia is a binary application.
+# NOTE: Cargo.lock IS committed, Melodia being a binary application.
 # (Libraries should ignore it; apps should not.)
 
 # Local development databases that live alongside the source tree
@@ -87,7 +87,7 @@ callgrind.out.*
 # JetBrains (RustRover, IntelliJ, etc.)
 .idea/
 
-# VS Code — ignore by default; whitelist shared settings if/when needed
+# VS Code: ignore by default; whitelist shared settings if/when needed
 .vscode/
 
 # Zed
@@ -127,7 +127,7 @@ $RECYCLE.BIN/
 # ─── Python ──────────────────────────────────────────────────────────────────
 # `scripts/build-latest-json.py` runs in CI to assemble the auto-updater
 # manifest. Local invocation (validation, dry-runs) drops a `__pycache__/`
-# next to the script — never useful to commit.
+# next to the script, never useful to commit.
 __pycache__/
 *.pyc
 
@@ -143,7 +143,7 @@ __pycache__/
 /crates/melodia-ui/ui/assets/fonts/originals/
 
 # ─── Misc ────────────────────────────────────────────────────────────────────
-# Personal scratch space — useful but should not be committed
+# Personal scratch space: useful but should not be committed
 /scratch/
 /tmp/
 *.log

@@ -406,16 +406,89 @@ strip = "debuginfo"
 [profile.release.package.melodia-ui]
 opt-level = "s"
 
-# The `"*"` glob excludes workspace members, so this never reaches `melodia-ui`,
-# which is also the build-memory peak the CI `CARGO_BUILD_JOBS` cap holds down.
-[profile.dev.package."*"]
-opt-level = 3
+# Line tables keep file:line in a backtrace and drop the variable records only a debugger
+# reads, which are most of what every link rewrites.
+[profile.dev]
+debug = "line-tables-only"
+
+# Dependencies stay unoptimized unless named: generic code compiles in the crate that
+# instantiates it, so only concrete hot code is. `"*"` outranks `build-override`, so
+# build-time code that has to be fast is named too.
+[profile.dev.package]
+"*" = { opt-level = 0 }
+
+# Per sample: the decoders and the loudness meter
+symphonia-core = { opt-level = 3 }
+symphonia-common = { opt-level = 3 }
+symphonia-metadata = { opt-level = 3 }
+symphonia-bundle-flac = { opt-level = 3 }
+symphonia-bundle-mp3 = { opt-level = 3 }
+symphonia-codec-aac = { opt-level = 3 }
+symphonia-codec-adpcm = { opt-level = 3 }
+symphonia-codec-alac = { opt-level = 3 }
+symphonia-codec-pcm = { opt-level = 3 }
+symphonia-codec-vorbis = { opt-level = 3 }
+symphonia-format-caf = { opt-level = 3 }
+symphonia-format-isomp4 = { opt-level = 3 }
+symphonia-format-mkv = { opt-level = 3 }
+symphonia-format-ogg = { opt-level = 3 }
+symphonia-format-riff = { opt-level = 3 }
+opus-pure = { opt-level = 3 }
+ebur128 = { opt-level = 3 }
+
+# Per pixel: cover decoding, resizing and palette extraction
+image = { opt-level = 3 }
+zune-core = { opt-level = 3 }
+zune-jpeg = { opt-level = 3 }
+jpeg-decoder = { opt-level = 3 }
+png = { opt-level = 3 }
+fdeflate = { opt-level = 3 }
+miniz_oxide = { opt-level = 3 }
+image-webp = { opt-level = 3 }
+fast_image_resize = { opt-level = 3 }
+color-thief = { opt-level = 3 }
+material-colors = { opt-level = 3 }
+
+# Per frame: Slint's runtime and renderer, text layout and shaping, paths
+i-slint-core = { opt-level = 3 }
+i-slint-renderer-femtovg = { opt-level = 3 }
+femtovg = { opt-level = 3 }
+taffy = { opt-level = 3 }
+parley = { opt-level = 3 }
+parley_engine = { opt-level = 3 }
+fontique = { opt-level = 3 }
+harfrust = { opt-level = 3 }
+swash = { opt-level = 3 }
+zeno = { opt-level = 3 }
+skrifa = { opt-level = 3 }
+read-fonts = { opt-level = 3 }
+icu_segmenter = { opt-level = 3 }
+icu_properties = { opt-level = 3 }
+icu_normalizer = { opt-level = 3 }
+icu_collections = { opt-level = 3 }
+unicode-linebreak = { opt-level = 3 }
+lyon_path = { opt-level = 3 }
+lyon_geom = { opt-level = 3 }
+lyon_algorithms = { opt-level = 3 }
+lyon_extra = { opt-level = 3 }
+
+# Per track: the database, scan hashing, tag reads and search folding
+libsqlite3-sys = { opt-level = 3 }
+blake3 = { opt-level = 3 }
+lofty = { opt-level = 3 }
+unicode-normalization = { opt-level = 3 }
+uroman = { opt-level = 3 }
+kakasi = { opt-level = 3 }
+
+# Build time: the Slint compiler runs inside every .slint rebuild
+i-slint-compiler = { opt-level = 3 }
+proc-macro2 = { opt-level = 3 }
+quote = { opt-level = 3 }
+rowan = { opt-level = 3 }
 
 # Full debuginfo is nearly all of what this crate's objects weigh: each codegen unit carries
 # its own copy of the type records for the Slint component tree and every async state machine
 # it touches. On MSVC an rlib is a COFF archive with 32-bit member offsets, and rustc panics
 # writing one that outgrows them rather than erroring; GNU archives move to a 64-bit symbol
-# table, so only Windows sees it. Line tables keep file:line in a backtrace, the same trade
-# the CI test jobs make.
-[profile.dev.package.melodia-views]
-debug = "line-tables-only"
+# table, so only Windows sees it. Named so it holds when the profile's `debug` is raised.
+melodia-views = { debug = "line-tables-only" }

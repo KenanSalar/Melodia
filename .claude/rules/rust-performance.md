@@ -149,12 +149,9 @@ strip = "debuginfo"   # Drop DWARF but keep symbols — end-user panic backtrace
 
 ## Build & Debug Profile
 
-- Add a `[profile.dev.package."*"]` section to compile dependencies with optimizations even in
-  debug builds — huge speedup for codec/image crates:
-  ```toml
-  [profile.dev.package."*"]
-  opt-level = 3
-  ```
+- **A dev build optimizes only the dependencies `Cargo.toml`'s `[profile.dev.package]` names**, the
+  rest building at 0. A new dependency whose concrete code runs per sample, pixel, frame or track
+  joins that list, or `cargo run` runs it unoptimized
 - Use `cargo build --timings` to identify slow-to-compile crates
 - `cargo bloat --release` identifies the largest contributors to binary size
 
