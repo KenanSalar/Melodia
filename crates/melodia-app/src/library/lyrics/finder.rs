@@ -9,7 +9,7 @@ use std::time::Duration;
 
 use super::online::credit_for;
 use super::store::{self, Fetched, LyricsKey};
-use super::{Local, ensure_enabled, lrc, online_lookup_enabled, read_local};
+use super::{Local, ensure_enabled, local, lrc, online_lookup_enabled};
 use crate::state::AppState;
 use melodia_core::entities::artist::ArtistCredit;
 use melodia_core::entities::lyrics::{LyricsCandidate, LyricsSource, Timing};
@@ -120,14 +120,7 @@ pub async fn choose(
 /// Which of the track's own lyrics would be shown ahead of a pick.
 pub async fn outranking(state: &AppState, track: LyricsKey) -> Result<Outranking, AppError> {
     ensure_enabled(state)?;
-    let paths = Arc::clone(&state.paths);
-    let local = state
-        .runtime
-        .spawn_blocking(move || read_local(&paths.lyrics_dir, &track))
-        .await
-        .map_err(AppError::io_source)??;
-
-    Ok(match local {
+    Ok(match local(state, track).await? {
         Local { is_sidecar: true, .. } => Outranking::Sidecar,
         Local { own: Some(own), .. } if own.is_synced() => Outranking::TimedTag,
         Local { own: Some(_), .. } => Outranking::PlainTag,

@@ -83,16 +83,7 @@ async fn romanized(state: &AppState, outcome: LyricsOutcome) -> Result<LyricsOut
 
 /// Which of the four sources answers for this track.
 async fn resolve(state: &AppState, track: &TrackSummary) -> Result<LyricsOutcome, AppError> {
-    let key = LyricsKey::from(track);
-    let paths = Arc::clone(&state.paths);
-
-    let local = state
-        .runtime
-        .spawn_blocking(move || read_local(&paths.lyrics_dir, &key))
-        .await
-        .map_err(AppError::io_source)??;
-
-    let Local { own, is_sidecar, stored } = local;
+    let Local { own, is_sidecar, stored } = local(state, LyricsKey::from(track)).await?;
     let own = match own {
         // A sidecar is the user's own, and a timed sheet is the best a lookup could answer with.
         Some(own) if is_sidecar || own.is_synced() => return Ok(LyricsOutcome::Sheet(own)),
@@ -166,6 +157,17 @@ fn timed_first(fetched: LyricsOutcome, own: Option<Lyrics>) -> LyricsOutcome {
         LyricsOutcome::Sheet(sheet) if sheet.is_synced() => fetched,
         _ => LyricsOutcome::Sheet(own),
     }
+}
+
+/// [`read_local`] on the blocking pool.
+async fn local(state: &AppState, track: LyricsKey) -> Result<Local, AppError> {
+    let paths = Arc::clone(&state.paths);
+
+    state
+        .runtime
+        .spawn_blocking(move || read_local(&paths.lyrics_dir, &track))
+        .await
+        .map_err(AppError::io_source)?
 }
 
 /// The three sources that need no network, in the order a user's own file wins, a cue sheet's

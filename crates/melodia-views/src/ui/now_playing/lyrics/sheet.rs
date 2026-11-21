@@ -17,6 +17,7 @@ use melodia_app::library::lyrics::LyricsKey;
 use melodia_app::state::AppState;
 use melodia_core::entities::lyrics::{Lyrics as Sheet, LyricsOutcome, LyricsSource};
 use melodia_core::entities::track::TrackSummary;
+use melodia_core::error::{AppError, describe};
 use melodia_core::utils::toast::{self, ToastKind};
 use melodia_ui::{AppWindow, Lyrics, LyricsState};
 
@@ -26,11 +27,7 @@ async fn fetch(state: &AppState, track: &TrackSummary) -> LyricsOutcome {
     match library::lyrics::for_track(state, track).await {
         Ok(outcome) => outcome,
         Err(e) => {
-            log::debug!(
-                "ui::now_playing lyrics for {}: {}",
-                track.id,
-                melodia_core::error::describe(&e)
-            );
+            log::debug!("ui::now_playing lyrics for {}: {}", track.id, describe(&e));
             LyricsOutcome::Absent
         }
     }
@@ -71,10 +68,7 @@ fn reseed(weak: &Weak<AppWindow>, state: &AppState, np_state: &Rc<NowPlayingStat
         apply(&ui, &np_state.lyrics, &track, &outcome, state.lyrics_online_enabled.get());
     }));
     if let Err(e) = res {
-        log::warn!(
-            "ui::now_playing lyrics reseed task spawn_local: {}",
-            melodia_core::error::describe(&e)
-        );
+        log::warn!("ui::now_playing lyrics reseed task spawn_local: {}", describe(&e));
     }
 }
 
@@ -114,18 +108,15 @@ pub(crate) fn wire_save_to_tag(ui: &AppWindow, state: &AppState, np_state: &Rc<N
             np_state.lyrics.kick();
         }));
         if let Err(e) = res {
-            log::warn!(
-                "ui::now_playing lyrics save spawn_local: {}",
-                melodia_core::error::describe(&e)
-            );
+            log::warn!("ui::now_playing lyrics save spawn_local: {}", describe(&e));
         }
     });
 }
 
 /// A toast rather than a log line, the radio vote's rule: a control that says it writes to the
 /// user's file has to say why it didn't.
-fn report_save_failure(e: &melodia_core::error::AppError) {
-    let reason = melodia_core::error::describe(e);
+fn report_save_failure(e: &AppError) {
+    let reason = describe(e);
     log::warn!("lyrics save: {reason}");
     toast::notify(ToastKind::OperationFailed, reason);
 }

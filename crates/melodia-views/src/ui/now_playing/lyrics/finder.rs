@@ -16,7 +16,7 @@ use super::sheet::{self, playing_track};
 use crate::ui::dialog_landing::{DialogTicket, TicketedDialog};
 use crate::ui::settings::lyrics_settings;
 use crate::ui::tracks::format_duration_ms;
-use crate::ui::util::len_as_i32;
+use crate::ui::util::{item_at, len_as_i32};
 use melodia_app::library::lyrics::LyricsKey;
 use melodia_app::library::lyrics::finder::{self, Choice, ChoiceKind, Outranking, SearchFailure};
 use melodia_app::state::AppState;
@@ -121,11 +121,8 @@ impl Finder {
         }
 
         self.ticket.retire();
-        self.choices.take();
-        self.rows.set_vec(Vec::new());
+        self.clear_list(&g);
         g.set_picked(-1);
-        g.set_preview(SharedString::new());
-        g.set_masking(LyricsMasking::None);
         g.set_phase(LyricsSearchPhase::Searching);
 
         let state = self.state.clone();
@@ -160,11 +157,17 @@ impl Finder {
         g.set_phase(LyricsSearchPhase::Listing);
     }
 
+    /// Undoes [`Self::show`] and [`Self::pick`] at once: a row's `index` points into `choices`.
+    fn clear_list(&self, g: &LyricsFinder<'_>) {
+        self.choices.take();
+        self.rows.set_vec(Vec::new());
+        g.set_preview(SharedString::new());
+        g.set_masking(LyricsMasking::None);
+    }
+
     fn pick(&self, index: i32) {
         let choices = self.choices.borrow();
-        let Some(choice) = usize::try_from(index).ok().and_then(|i| choices.get(i)) else {
-            return;
-        };
+        let Some(choice) = item_at(&choices, index) else { return };
         let Some(ui) = self.ui.upgrade() else { return };
         let g = ui.global::<LyricsFinder>();
         g.set_preview(choice.preview.as_str().into());
@@ -174,9 +177,8 @@ impl Finder {
     /// Lands whatever the ticket: a pick stored as the dialog closed still changed what the panel
     /// reads.
     fn apply(self: &Rc<Self>, index: i32) {
-        let candidate = usize::try_from(index)
-            .ok()
-            .and_then(|i| self.choices.borrow().get(i).map(|choice| choice.candidate.clone()));
+        let candidate =
+            item_at(&self.choices.borrow(), index).map(|choice| choice.candidate.clone());
         let (Some(candidate), Some(track)) = (candidate, self.track.borrow().clone()) else {
             return;
         };
@@ -223,18 +225,15 @@ impl Finder {
     fn release(&self) {
         self.ticket.retire();
         let track = self.track.take();
-        self.choices.take();
         self.outranking.set(Outranking::Nothing);
-        self.rows.set_vec(Vec::new());
         let Some(ui) = self.ui.upgrade() else { return };
+        let g = ui.global::<LyricsFinder>();
+        self.clear_list(&g);
         if self.panel_lookup_owed.take()
             && let Some(track) = track
         {
             self.reload_panel(&ui, track.id);
         }
-        let g = ui.global::<LyricsFinder>();
-        g.set_preview(SharedString::new());
-        g.set_masking(LyricsMasking::None);
         g.set_applying(false);
         g.set_apply_failed(false);
     }

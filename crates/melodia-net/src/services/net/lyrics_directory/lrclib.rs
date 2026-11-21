@@ -126,7 +126,7 @@ impl ApiLyrics {
         Recording::new(&self.track_name, &self.artist_name)
     }
 
-    fn has_words(&self) -> bool {
+    fn has_text(&self) -> bool {
         self.is_timed() || self.plain_lyrics.as_deref().is_some_and(|text| !text.trim().is_empty())
     }
 
@@ -137,7 +137,7 @@ impl ApiLyrics {
             0
         } else if self.is_timed() {
             1
-        } else if self.has_words() {
+        } else if self.has_text() {
             2
         } else {
             3
@@ -285,12 +285,7 @@ async fn search_timed(
         .append_pair("track_name", track_query)
         .append_pair("artist_name", artist_query);
 
-    let Some(body) = send(client, pacer, url, "Lyrics search", MAX_SEARCH_BYTES).await? else {
-        return Ok(None);
-    };
-    let rows: Vec<ApiLyrics> = serde_json::from_slice(&body)
-        .map_err(|e| failed("Failed to parse the lyrics search response", e))?;
-
+    let rows = search_rows(client, pacer, url).await?;
     Ok(pick_timed(rows, ours, album, duration_ms))
 }
 
@@ -351,12 +346,7 @@ pub(super) async fn search(
     let mut url = endpoint(SEARCH_ENDPOINT)?;
     url.query_pairs_mut().append_pair("q", query);
 
-    let Some(body) = send(client, pacer, url, "Lyrics search", MAX_SEARCH_BYTES).await? else {
-        return Ok(Vec::new());
-    };
-    let rows: Vec<ApiLyrics> = serde_json::from_slice(&body)
-        .map_err(|e| failed("Failed to parse the lyrics search response", e))?;
-
+    let rows = search_rows(client, pacer, url).await?;
     let ours = Recording::from_credit(title, credit);
     let ranked = rank_candidates(rows, &ours, duration_ms);
     Ok(distinct(ranked.into_iter().map(ApiLyrics::into_candidate)))
@@ -366,7 +356,7 @@ pub(super) async fn search(
 /// seconds off, then by [`ApiLyrics::kind_rank`]; a tie keeps the index's order. A row with nothing
 /// to read stays only where it calls itself instrumental.
 fn rank_candidates(mut rows: Vec<ApiLyrics>, ours: &Recording, duration_ms: i64) -> Vec<ApiLyrics> {
-    rows.retain(|row| row.instrumental || row.has_words());
+    rows.retain(|row| row.instrumental || row.has_text());
     rows.sort_by_cached_key(|row| {
         (!ours.matches(&row.recording()), row.second_off(duration_ms), row.kind_rank())
     });
@@ -380,6 +370,19 @@ fn distinct(candidates: impl Iterator<Item = LyricsCandidate>) -> Vec<LyricsCand
     candidates
         .filter(|candidate| seen.insert(candidate.answer.text().map(|text| text.trim().to_owned())))
         .collect()
+}
+
+/// The index's rows for a search URL, none for a `404`.
+async fn search_rows(
+    client: &reqwest::Client,
+    pacer: &RequestPacer,
+    url: reqwest::Url,
+) -> Result<Vec<ApiLyrics>, LookupError> {
+    let Some(body) = send(client, pacer, url, "Lyrics search", MAX_SEARCH_BYTES).await? else {
+        return Ok(Vec::new());
+    };
+    serde_json::from_slice(&body)
+        .map_err(|e| failed("Failed to parse the lyrics search response", e))
 }
 
 /// One GET under a cap and behind the pacer, `None` for a `404`. The single choke point, so the

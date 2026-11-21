@@ -47,7 +47,7 @@ pub(super) async fn look_up(
     let fetched = answer.as_ref().map_or(Fetched::Nothing, Fetched::of);
     if let Err(e) = store::write(&state.paths.lyrics_dir, &LyricsKey::from(track), fetched) {
         // Costs a request next time, never the sheet in hand.
-        log::debug!("lyrics: not stored: {}", melodia_core::error::describe(&e));
+        log::debug!("lyrics: not stored: {}", describe(&e));
     }
 
     // Off what was stored, so the panel shows what the next replay will read back.
@@ -67,7 +67,7 @@ pub(super) async fn credit_for(db: &DbPool, track_id: i64, printed: &str) -> Art
         Ok(credit) if credit.line() == Some(printed) => credit,
         Ok(_) => ArtistCredit::from_name(printed),
         Err(e) => {
-            log::debug!("lyrics: credit unread: {}", melodia_core::error::describe(&e));
+            log::debug!("lyrics: credit unread: {}", describe(&e));
             ArtistCredit::from_name(printed)
         }
     }

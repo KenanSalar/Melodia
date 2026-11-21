@@ -16,7 +16,7 @@ use tokio::task::AbortHandle;
 use crate::ui::dialog_landing::{DialogTicket, TicketedDialog};
 use crate::ui::headphones::Card;
 use crate::ui::row_match::PICKER_ROW_CAP;
-use crate::ui::util::len_as_i32;
+use crate::ui::util::{item_at, len_as_i32};
 use melodia_app::library;
 use melodia_app::library::correction::{CachedList, ListAnswer, ListCheck};
 use melodia_app::state::AppState;
@@ -135,7 +135,7 @@ impl Picker {
     /// Lands whatever the ticket: a fetch that finished just as the dialog closed still set the
     /// correction, and the card has to show it.
     fn apply(self: &Rc<Self>, index: i32) {
-        let entry = usize::try_from(index).ok().and_then(|i| self.entries.borrow().get(i).cloned());
+        let entry = item_at(&self.entries.borrow(), index).cloned();
         let (Some(entry), Some(target)) = (entry, self.card.target()) else {
             return;
         };
