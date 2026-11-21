@@ -23,7 +23,7 @@ use melodia_core::entities::lyrics::LyricLine;
 use melodia_ui::{AppWindow, LyricRow, Lyrics};
 
 pub(super) use finder::wire_finder;
-pub(super) use sheet::{release, wire_menu, wire_reseed};
+pub(super) use sheet::{release, wire_reseed, wire_save_to_tag};
 
 /// Until the panel reports its own, within a second of mounting. Mid `up-next-width`'s clamp, so
 /// the first draw is close.

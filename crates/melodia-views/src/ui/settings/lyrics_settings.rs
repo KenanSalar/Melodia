@@ -5,11 +5,6 @@
 //! [`shadow_toggle`]'s shadow-before-persist order: `library::lyrics` reads the feature, online
 //! and automatic switches on a worker every track change, and a lookup between the click and the
 //! disk write has to see the new answer.
-//!
-//! Lyrics and the lookup are off by default, the second as the package description promises of
-//! every online feature. The automatic lookup and romanization are on: the first reaches nothing
-//! until the lookup is on, and the second draws nothing unless the sheet is in a script the reader
-//! cannot sound out.
 
 use slint::ComponentHandle;
 

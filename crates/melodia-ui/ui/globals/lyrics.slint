@@ -14,9 +14,8 @@ export enum LyricsState {
     unavailable,
 }
 
-// Rust owns everything here but `enabled`, `romanization-shown`, `online-enabled` and
-// `auto-lookup`, which Now Playing writes directly so each swaps on the click rather than after a
-// round trip.
+// Rust owns everything here but the header's and the menu's switches, which Now Playing writes
+// directly so each swaps on the click rather than after a round trip.
 export global Lyrics {
     // **The type scale Rust builds its offset table from too**, so the two can't disagree about
     // where a line sits. **Every line height is a floor**: an elided line past its box is dropped,

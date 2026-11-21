@@ -80,7 +80,7 @@ fn reseed(weak: &Weak<AppWindow>, state: &AppState, np_state: &Rc<NowPlayingStat
 
 /// **Reads what is playing at click time**: the menu outlives any one track, so a handle taken at
 /// wire time would name the wrong song by the second verse.
-pub(crate) fn wire_menu(ui: &AppWindow, state: &AppState, np_state: &Rc<NowPlayingState>) {
+pub(crate) fn wire_save_to_tag(ui: &AppWindow, state: &AppState, np_state: &Rc<NowPlayingState>) {
     let weak = ui.as_weak();
     let state = state.clone();
     let np_state = np_state.clone();

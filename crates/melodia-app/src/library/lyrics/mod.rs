@@ -2,9 +2,8 @@
 //!
 //! A sidecar, the lyrics tag, a store of past directory answers and the directory itself resolve
 //! through [`for_track`], so each switch has one place to guard: the feature's in front of all
-//! four, the lookup's and the automatic one's in front of the directory. **`is_enabled` and
-//! `online_lookup_enabled` may not move**, each being the one reader of its flag
-//! (`crates/melodia/tests/lyrics_switch.rs`).
+//! four, both lookup switches in front of the directory. **`is_enabled` and `online_lookup_enabled`
+//! may not move**, each being the one reader of its flag (`crates/melodia/tests/lyrics_switch.rs`).
 //!
 //! **The order is sidecar, tag, store, lookup, and a timed sheet cuts across it** wherever the
 //! sidecar hasn't spoken (`docs/adr/0038-lyrics-display-reads-the-file.md`). The store sits on the

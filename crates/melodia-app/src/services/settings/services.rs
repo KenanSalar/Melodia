@@ -37,11 +37,12 @@ impl Default for RadioFlags {
     }
 }
 
-/// Lyrics, their online lookup and romanization: **three independent switches, since they sell
+/// Lyrics, their online lookup, when it runs, and romanization: **four switches, since they sell
 /// different things.** Off, the feature reads, fetches and holds nothing. The lookup is traffic,
 /// and without it a stored sheet stays readable. Romanization only changes how a line is drawn.
 ///
-/// The first two ship off, a panel nobody asked for not taking the Up Next column on upgrade.
+/// The first two ship off, a panel nobody asked for not taking the Up Next column on upgrade and
+/// the lookup staying off as the package description promises of every online feature.
 /// Romanization and the automatic lookup ship on: the first draws nothing for a Latin sheet, and
 /// the second keeps an upgrade's lookups running. All of them live in `settings.json` like
 /// `viz_enabled`, the other switch on Now Playing's header, a `views.json` flag never being a bool.

@@ -250,7 +250,7 @@ pub fn install(
     install_artwork_releaser(ui, state, np_artwork, &np_state);
 
     lyrics::wire_reseed(ui, state, &np_state);
-    lyrics::wire_menu(ui, state, &np_state);
+    lyrics::wire_save_to_tag(ui, state, &np_state);
     lyrics::wire_finder(ui, state, &np_state);
 
     // No artwork seed: it decodes on the first open, or on `kick_artwork`.

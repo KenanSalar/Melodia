@@ -1,6 +1,6 @@
 //! The lyrics feature's contract, in the parts only its source text carries.
 //!
-//! One setting decides whether a track with no words of its own is looked up, and it is read in
+//! One setting decides whether the lyrics directory may be asked at all, and it is read in
 //! one place: `library::lyrics`' `online_lookup_enabled`. That only works while two things stay
 //! true, and neither is checkable from inside the crate holding it — nothing else in the facade
 //! reads the flag for itself, and nothing outside the facade reaches the directory client at all.
