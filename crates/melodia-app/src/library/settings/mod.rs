@@ -47,7 +47,10 @@ pub use folders::{
     add_folder, get_folders, remove_folder, set_folder_watching_enabled, suggested_music_folder,
     toggle_folder_watching,
 };
-pub use lyrics::{set_lyrics_enabled, set_lyrics_online_enabled, set_lyrics_romanization_shown};
+pub use lyrics::{
+    set_lyrics_auto_lookup, set_lyrics_enabled, set_lyrics_online_enabled,
+    set_lyrics_romanization_shown,
+};
 pub use onboarding::set_onboarding_seen;
 pub use playback::{
     reset_for_bit_perfect, set_gapless_playback, set_output_choice, set_output_follow_rate,

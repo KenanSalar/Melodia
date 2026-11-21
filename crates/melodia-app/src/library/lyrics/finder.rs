@@ -1,8 +1,8 @@
 //! The lyrics finder: every sheet the directory has for a track, asked with a query a person can
 //! edit, and the one they pick stored as the track's online answer.
 //!
-//! Behind both of the facade's switches, as a lookup is, and writing the store a lookup writes, so
-//! a pick is what every later play reads back until "Look up again" asks afresh.
+//! Behind the feature's and the lookup's switches, not the automatic one, and writing the store a
+//! lookup writes, so a pick is what later plays read back, as an automatic answer would be.
 
 use std::sync::Arc;
 use std::time::Duration;

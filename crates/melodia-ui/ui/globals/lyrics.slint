@@ -6,16 +6,17 @@ export enum LyricsState {
     idle,
     loading,
     ready,
-    // Asked, and nobody has a sheet.
+    // Nobody asked has a sheet, the directory being asked only while the lookup is automatic.
     missing,
     // The directory says the recording has no words. Never retried.
     instrumental,
-    // Asking failed, which is no fact about the track: nothing is cached, and Refresh retries.
+    // Asking failed, which is no fact about the track: nothing is cached, and a re-open retries.
     unavailable,
 }
 
-// Rust owns everything here but `enabled`, `romanization-shown` and `online-enabled`, which Now
-// Playing writes directly so each swaps on the click rather than after a round trip.
+// Rust owns everything here but `enabled`, `romanization-shown`, `online-enabled` and
+// `auto-lookup`, which Now Playing writes directly so each swaps on the click rather than after a
+// round trip.
 export global Lyrics {
     // **The type scale Rust builds its offset table from too**, so the two can't disagree about
     // where a line sits. **Every line height is a floor**: an elided line past its box is dropped,
@@ -75,9 +76,10 @@ export global Lyrics {
     in-out property <bool> online-enabled;
     callback set-online-enabled(bool);
 
-    // Forgets what the directory said about this track, for a sheet matched off tags since
-    // corrected. A sidecar and a lyrics tag are the user's own files and stay.
-    callback refresh();
+    // The Settings switch under that one, mirrored for its menu row.
+    in-out property <bool> auto-lookup;
+    callback set-auto-lookup(bool);
+
     callback save-to-tag();
 
     // Rust's, off the sheet it resolved: nothing the menu reads says where a sheet came from.

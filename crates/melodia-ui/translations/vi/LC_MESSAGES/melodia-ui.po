@@ -1443,8 +1443,9 @@ msgid "Look up lyrics online"
 msgstr "Tìm lời bài hát trực tuyến"
 
 #: ui/components/now-playing/lyrics-menu.slint
-msgid "Look up again"
-msgstr "Tìm lại"
+#: ui/views/settings/lyrics-section.slint
+msgid "Look up automatically"
+msgstr "Tự động tìm"
 
 #: ui/components/now-playing/lyrics-menu.slint
 msgid "Find lyrics…"
@@ -1489,8 +1490,8 @@ msgstr "Bật tính năng này trong menu Lời bài hát"
 
 #. Translators: "Lyrics menu" is the menu whose tooltip reads "Lyrics"
 #: ui/components/now-playing/lyrics-panel.slint
-msgid "Try again from the Lyrics menu"
-msgstr "Thử lại từ menu Lời bài hát"
+msgid "Find them in the Lyrics menu"
+msgstr "Tìm lời trong menu Lời bài hát"
 
 #: ui/components/now-playing/overflow-menu.slint
 #: ui/components/onboarding/onboarding-overlay.slint
@@ -1627,8 +1628,8 @@ msgstr "Hiện bản nhạc bạn đang phát trên hồ sơ Discord"
 
 #: ui/components/onboarding/features-panel.slint
 #: ui/views/settings/lyrics-section.slint
-msgid "When a track carries no words of its own, ask lrclib.net for them"
-msgstr "Khi bản nhạc không kèm lời, hỏi lrclib.net"
+msgid "Let Melodia ask lrclib.net for lyrics"
+msgstr "Cho phép Melodia hỏi lrclib.net để lấy lời bài hát"
 
 #: ui/components/onboarding/features-panel.slint
 #: ui/views/settings/scrobbling-section.slint
@@ -3517,6 +3518,10 @@ msgid "Show the playing track's words in Now Playing instead of Up Next"
 msgstr "Hiện lời của bản nhạc đang phát trong Đang phát thay cho Tiếp theo"
 
 #: ui/views/settings/lyrics-section.slint
+msgid "When a track carries no words of its own, ask lrclib.net for them"
+msgstr "Khi bản nhạc không kèm lời, hỏi lrclib.net"
+
+#: ui/views/settings/lyrics-section.slint
 msgid "Print how a line sounds in Latin letters under the words, for a script that does not use them"
 msgstr "Hiện cách đọc của mỗi dòng bằng chữ Latin bên dưới lời, với những hệ chữ không dùng chữ Latin"
 
@@ -3527,6 +3532,10 @@ msgstr "Tìm lời bài hát"
 #: ui/views/settings/lyrics-section.slint
 msgid "Pick the playing track's lyrics from lrclib.net's matches"
 msgstr "Chọn lời của bản nhạc đang phát từ các kết quả của lrclib.net"
+
+#: ui/views/settings/lyrics-section.slint
+msgid "Turn on \"Look up lyrics online\" above first"
+msgstr "Hãy bật \"Tìm lời bài hát trực tuyến\" ở trên trước"
 
 #: ui/views/settings/lyrics-section.slint
 msgid "Turn on \"Show lyrics\" above first"

@@ -1457,8 +1457,9 @@ msgid "Look up lyrics online"
 msgstr "Αναζήτηση στίχων στο διαδίκτυο"
 
 #: ui/components/now-playing/lyrics-menu.slint
-msgid "Look up again"
-msgstr "Νέα αναζήτηση"
+#: ui/views/settings/lyrics-section.slint
+msgid "Look up automatically"
+msgstr "Αυτόματη αναζήτηση"
 
 #: ui/components/now-playing/lyrics-menu.slint
 msgid "Find lyrics…"
@@ -1503,8 +1504,8 @@ msgstr "Ενεργοποιήστε την από το μενού Στίχοι"
 
 #. Translators: "Lyrics menu" is the menu whose tooltip reads "Lyrics"
 #: ui/components/now-playing/lyrics-panel.slint
-msgid "Try again from the Lyrics menu"
-msgstr "Δοκιμάστε ξανά από το μενού Στίχοι"
+msgid "Find them in the Lyrics menu"
+msgstr "Βρείτε τους από το μενού Στίχοι"
 
 #: ui/components/now-playing/overflow-menu.slint
 #: ui/components/onboarding/onboarding-overlay.slint
@@ -1641,8 +1642,8 @@ msgstr "Εμφάνιση του κομματιού που ακούς στο πρ
 
 #: ui/components/onboarding/features-panel.slint
 #: ui/views/settings/lyrics-section.slint
-msgid "When a track carries no words of its own, ask lrclib.net for them"
-msgstr "Όταν ένα κομμάτι δεν έχει δικούς του στίχους, ζητούνται από το lrclib.net"
+msgid "Let Melodia ask lrclib.net for lyrics"
+msgstr "Το Melodia μπορεί να ζητά στίχους από το lrclib.net"
 
 #: ui/components/onboarding/features-panel.slint
 #: ui/views/settings/scrobbling-section.slint
@@ -3579,6 +3580,10 @@ msgid "Show the playing track's words in Now Playing instead of Up Next"
 msgstr "Εμφάνιση των στίχων του κομματιού που παίζει στην οθόνη «Αναπαράγεται τώρα» αντί για τα «Επόμενα»"
 
 #: ui/views/settings/lyrics-section.slint
+msgid "When a track carries no words of its own, ask lrclib.net for them"
+msgstr "Όταν ένα κομμάτι δεν έχει δικούς του στίχους, ζητούνται από το lrclib.net"
+
+#: ui/views/settings/lyrics-section.slint
 msgid "Print how a line sounds in Latin letters under the words, for a script that does not use them"
 msgstr "Εμφάνιση της προφοράς κάθε στίχου με λατινικούς χαρακτήρες κάτω από τα λόγια, για γραφές που δεν τους χρησιμοποιούν"
 
@@ -3589,6 +3594,10 @@ msgstr "Εύρεση στίχων"
 #: ui/views/settings/lyrics-section.slint
 msgid "Pick the playing track's lyrics from lrclib.net's matches"
 msgstr "Επιλογή των στίχων του τρέχοντος κομματιού από τα αποτελέσματα του lrclib.net"
+
+#: ui/views/settings/lyrics-section.slint
+msgid "Turn on \"Look up lyrics online\" above first"
+msgstr "Ενεργοποιήστε πρώτα το \"Αναζήτηση στίχων στο διαδίκτυο\" παραπάνω"
 
 #: ui/views/settings/lyrics-section.slint
 msgid "Turn on \"Show lyrics\" above first"

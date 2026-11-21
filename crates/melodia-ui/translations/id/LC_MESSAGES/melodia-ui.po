@@ -1443,8 +1443,9 @@ msgid "Look up lyrics online"
 msgstr "Cari lirik secara online"
 
 #: ui/components/now-playing/lyrics-menu.slint
-msgid "Look up again"
-msgstr "Cari lagi"
+#: ui/views/settings/lyrics-section.slint
+msgid "Look up automatically"
+msgstr "Cari secara otomatis"
 
 #: ui/components/now-playing/lyrics-menu.slint
 msgid "Find lyrics…"
@@ -1489,8 +1490,8 @@ msgstr "Aktifkan di menu Lirik"
 
 #. Translators: "Lyrics menu" is the menu whose tooltip reads "Lyrics"
 #: ui/components/now-playing/lyrics-panel.slint
-msgid "Try again from the Lyrics menu"
-msgstr "Coba lagi dari menu Lirik"
+msgid "Find them in the Lyrics menu"
+msgstr "Temukan di menu Lirik"
 
 #: ui/components/now-playing/overflow-menu.slint
 #: ui/components/onboarding/onboarding-overlay.slint
@@ -1627,8 +1628,8 @@ msgstr "Tampilkan lagu yang sedang Anda putar di profil Discord Anda"
 
 #: ui/components/onboarding/features-panel.slint
 #: ui/views/settings/lyrics-section.slint
-msgid "When a track carries no words of its own, ask lrclib.net for them"
-msgstr "Jika lagu tidak menyertakan liriknya sendiri, minta dari lrclib.net"
+msgid "Let Melodia ask lrclib.net for lyrics"
+msgstr "Izinkan Melodia meminta lirik dari lrclib.net"
 
 #: ui/components/onboarding/features-panel.slint
 #: ui/views/settings/scrobbling-section.slint
@@ -3517,6 +3518,10 @@ msgid "Show the playing track's words in Now Playing instead of Up Next"
 msgstr "Tampilkan lirik lagu yang sedang diputar di Sedang Diputar alih-alih Berikutnya"
 
 #: ui/views/settings/lyrics-section.slint
+msgid "When a track carries no words of its own, ask lrclib.net for them"
+msgstr "Jika lagu tidak menyertakan liriknya sendiri, minta dari lrclib.net"
+
+#: ui/views/settings/lyrics-section.slint
 msgid "Print how a line sounds in Latin letters under the words, for a script that does not use them"
 msgstr "Tampilkan bunyi tiap baris dalam huruf Latin di bawah liriknya, untuk aksara yang tidak memakai huruf Latin"
 
@@ -3527,6 +3532,10 @@ msgstr "Temukan lirik"
 #: ui/views/settings/lyrics-section.slint
 msgid "Pick the playing track's lyrics from lrclib.net's matches"
 msgstr "Pilih lirik lagu yang sedang diputar dari hasil lrclib.net"
+
+#: ui/views/settings/lyrics-section.slint
+msgid "Turn on \"Look up lyrics online\" above first"
+msgstr "Aktifkan \"Cari lirik secara online\" di atas terlebih dahulu"
 
 #: ui/views/settings/lyrics-section.slint
 msgid "Turn on \"Show lyrics\" above first"

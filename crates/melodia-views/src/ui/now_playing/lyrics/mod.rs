@@ -220,7 +220,7 @@ pub(super) fn install(ui: &AppWindow, state: &AppState) -> Rc<LyricsUi> {
     ly
 }
 
-/// The header's switch and the two menu rows the Settings card carries as well.
+/// The header's switch and the three menu rows the Settings card carries as well.
 fn wire_toggles(ui: &AppWindow, state: &AppState, ly: &Rc<LyricsUi>) {
     let global = ui.global::<Lyrics>();
 
@@ -260,21 +260,38 @@ fn wire_toggles(ui: &AppWindow, state: &AppState, ly: &Rc<LyricsUi>) {
     }
 
     global.set_online_enabled(state.lyrics_online_enabled.get());
-    {
-        let persist = lyrics_settings::online_handler(ui, state);
-        let weak = ui.as_weak();
-        let ly_online = ly.clone();
-        global.on_set_online_enabled(move |on| {
-            persist(on);
-            let Some(ui) = weak.upgrade() else { return };
-            // On, the claim goes too: `reseed` dedupes on the sheet it holds, here the empty answer
-            // the switch just invalidated. Off re-runs only an empty panel, so it stops naming a
-            // lookup that can no longer run while a sheet on screen is kept.
-            if on || ly_online.rows.borrow().is_empty() {
-                release(&ui, &ly_online);
-                ly_online.kick();
-            }
-        });
+    global.on_set_online_enabled(with_panel_reask(
+        ui,
+        ly,
+        lyrics_settings::online_handler(ui, state),
+    ));
+
+    global.set_auto_lookup(state.lyrics_auto_lookup.get());
+    global.on_set_auto_lookup(with_panel_reask(
+        ui,
+        ly,
+        lyrics_settings::auto_lookup_handler(ui, state),
+    ));
+}
+
+/// A switch deciding whether the directory is asked, plus what it owes the panel. On, the claim
+/// goes too: `reseed` dedupes on the sheet it holds, here the empty answer the switch just
+/// invalidated. Off re-runs only an empty panel, so it stops naming a lookup that can no longer
+/// run while a sheet on screen is kept.
+fn with_panel_reask(
+    ui: &AppWindow,
+    ly: &Rc<LyricsUi>,
+    persist: impl Fn(bool) + 'static,
+) -> impl Fn(bool) + 'static {
+    let weak = ui.as_weak();
+    let ly = ly.clone();
+    move |on| {
+        persist(on);
+        let Some(ui) = weak.upgrade() else { return };
+        if on || ly.rows.borrow().is_empty() {
+            release(&ui, &ly);
+            ly.kick();
+        }
     }
 }
 

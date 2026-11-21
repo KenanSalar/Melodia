@@ -1,4 +1,4 @@
-//! The lyrics feature's three switches.
+//! The lyrics feature's four switches.
 
 use crate::services;
 use melodia_core::config::Paths;
@@ -11,10 +11,17 @@ pub fn set_lyrics_enabled(paths: &Paths, enabled: bool) -> Result<(), AppError> 
     })
 }
 
-/// Whether a track with no sheet of its own may be looked up online.
+/// Whether the lyrics directory may be asked at all, by the lookup or the finder.
 pub fn set_lyrics_online_enabled(paths: &Paths, enabled: bool) -> Result<(), AppError> {
     services::settings::mutate_settings(paths, move |settings| {
         settings.lyrics.lyrics_online_enabled = enabled;
+    })
+}
+
+/// Whether a track with no sheet of its own is looked up as it plays, the finder aside.
+pub fn set_lyrics_auto_lookup(paths: &Paths, enabled: bool) -> Result<(), AppError> {
+    services::settings::mutate_settings(paths, move |settings| {
+        settings.lyrics.lyrics_auto_lookup = enabled;
     })
 }
 

@@ -2,12 +2,13 @@
 
 Working doc. Delete when the feature ships.
 
-Status: **Phase 4 landed; Phase 5's hand tests next** · Created: 2026-11-21 · Branch `feat/enhanced-lrc`, after
+Status: **Phase 5 landed; Phase 6's hand tests next** · Created: 2026-11-21 · Branch `feat/enhanced-lrc`, after
 [ENHANCED_LRC.md](ENHANCED_LRC.md)'s Phase 5
 
 > Researched **2026-11-21** against `feat/enhanced-lrc` at `8db89fc3`; lrclib's API reference
 > (`lrclib.net/docs.txt`) and live `/api/search` answers; `serde-saphyr`'s published versions; and
-> the Strawberry, fooyin, rox and sonora checkouts (no termusic clone is on disk).
+> the Strawberry, fooyin, rox and sonora checkouts (no termusic clone is on disk). Phase 5
+> researched the same day at `c6805f10`, against the same checkouts.
 
 ---
 
@@ -16,6 +17,8 @@ Status: **Phase 4 landed; Phase 5's hand tests next** · Created: 2026-11-21 · 
 - **A wrong or missing online answer has one recourse**, "Look up again", which asks lrclib the
   same question and stores the same answer. lrclib's other candidates are never shown.
 - **Settings › Lyrics holds three switches and no action.**
+- **"Look up lyrics online" is both the consent and the automatic lookup**: one switch decides
+  whether lrclib may be reached at all and whether it is asked on every track change.
 - **An lrclib record with word timings lights line by line**: the client reads `syncedLyrics` and
   ignores the record's `lyricsfile`.
 
@@ -40,12 +43,21 @@ Status: **Phase 4 landed; Phase 5's hand tests next** · Created: 2026-11-21 · 
   track, timed lyrics in its tag, or a plain tag against a plain or instrumental pick. Apply still
   stores it.
 - **lrclib records with word timings light word by word**, from automatic lookups as well.
+- **"Look up automatically"**, on by default, under "Look up lyrics online" in Settings › Lyrics
+  and in the ♪ menu in "Look up again"'s place. Off, a track change sends nothing: picks and
+  stored answers still show, and a track with neither reads "No lyrics found" / "Find them in the
+  Lyrics menu". Turned on, it looks the playing track up. With the lookup off it greys in both
+  places, Settings reading "Turn on "Look up lyrics online" above first".
+- **"Look up lyrics online" says what it gates**: "Let Melodia ask lrclib.net for lyrics", on the
+  Settings and welcome cards alike. Its old sentence moves to the automatic row.
+- **"Couldn't reach the lyrics service" hints "Find them in the Lyrics menu"** too.
 
 **What keeps working:**
 
 - Find Headphones looks and behaves as today.
-- Automatic lookups run only when nothing is stored, so a pick stays until "Look up again" (the
-  reset to automatic), a retag renaming the recording, or the store's pruning.
+- Every install's lookups on upgrade: a `settings.json` without the automatic switch reads it on.
+- Automatic lookups run only when nothing is stored, so a pick stays until the next pick, a retag
+  renaming the recording, or the store's pruning.
 - With "Look up lyrics online" off, nothing reaches lrclib until the person turns it on, from the
   dialog's notice or the switch itself, and the facade refuses until then.
 - "Save to file" writes a picked sheet into the tag as it does any online answer.
@@ -74,6 +86,27 @@ Status: **Phase 4 landed; Phase 5's hand tests next** · Created: 2026-11-21 · 
   `lyrics_switch.rs`' single-reader pin holds.
 - A request leaves only on open and on Enter, never per keystroke, through the lyrics pacer and its
   `Retry-After` stop.
+- Turn On grants access only. Whether later tracks are looked up is the automatic switch's, and
+  the held re-ask matters only while that one is on.
+
+### Automatic lookup: a switch under the online one (Phase 5)
+
+- Two booleans rather than one Off / When I search / Automatically picker: the welcome card and the
+  menu are toggles, and the consent keeps its one reader.
+- `lyrics_auto_lookup` ships on, so an upgrade keeps today's lookups. A default that told upgrades
+  from new installs apart would need a three-state field.
+- `auto_lookup_enabled` is its one reader, in `resolve` beside `online_lookup_enabled`. The
+  finder's `search` doesn't read it, a search being asked for.
+- Greyed while the lookup is off, as the Find and scrobble-radio rows grey, Settings naming the
+  switch it waits on. Left live, it read "on" while doing nothing, and it bought no manual-only
+  start: Settings closes Now Playing, so turning the lookup on and then automatic off sends nothing
+  between the two.
+- "Look up again" goes. A wrong match, nothing found and an outage are each a search in the
+  finder, which lists the answer the lookup would store beside the rest. `library::lyrics::forget`
+  goes with it, `forget_all` staying for a retag.
+- The empty panel's hints name the menu, as the "off" state's does, rather than holding a button:
+  the panel is mounted behind an `if` and may hold no `animate` or `changed` (`lyrics_switch.rs`),
+  and `section-button.slint` and `icon-button.slint` both animate.
 
 ### The request: `/api/search?q=`
 
@@ -158,8 +191,16 @@ copied.
 - **Lyricsfile.** sonora reads lrclib's `lyricsfile` through `serde_saphyr`
   (`sonora/crates/music/src/lrclib/mod.rs:106-184`).
 - **Duplicates.** sonora dedupes by a text fingerprint (`music/src/lyrics/mod.rs:235-274`).
+- **Automatic versus by hand.** fooyin and rox keep reaching a service apart from asking it on
+  every track, and their manual search ignores the automatic switch
+  (`fooyin/src/plugins/lyrics/settings/lyricssearchingpage.cpp:66,93`,
+  `lyricsplaybackservice.cpp:202-208`; `rox/crates/rox/src/settings/window/providers_page.rs:1-14`,
+  `rox-panels/src/lyrics.rs:184-186`). Strawberry's automatic switch sits in its lyrics view's
+  menu (`strawberry/src/context/contextview.cpp:362-369`), as the ♪ menu's does.
 - **Not copied:** lookups on by default (Strawberry, sonora) and sonora's prefetch of tracks not yet
-  played (`state/src/lyrics.rs:364-381`).
+  played (`state/src/lyrics.rs:364-381`); fooyin's and rox's automatic search off by default, an
+  upgrade here keeping its lookups; rox's "Search Online" button in the empty view
+  (`rox-panels/src/lyrics.rs:1436-1452`).
 
 ## What this does not do
 
@@ -181,14 +222,25 @@ copied.
 | `melodia-ui/ui/globals/lyrics-finder.slint` (new) | `LyricsFinder`, `LyricsSearchPhase` and `LyricsMasking` | 32 |
 | `melodia-ui/ui/globals/dialog.slint` | `DialogKind.lyrics-finder`, its routing and teardown, `open-lyrics-finder()` | 490 |
 | `melodia-ui/ui/components/dialog/dialog.slint` | the kind's width, scroller, body mount and confirm gate | 326 |
-| `melodia-ui/ui/components/now-playing/lyrics-menu.slint` | the "Find lyrics…" row | 148 |
-| `melodia-ui/ui/views/settings/lyrics-section.slint` | the "Find lyrics" row | 103 |
+| `melodia-ui/ui/components/now-playing/lyrics-menu.slint` | the "Find lyrics…" row; "Look up automatically" in "Look up again"'s place | 148 |
+| `melodia-ui/ui/views/settings/lyrics-section.slint` | the "Find lyrics" row; the automatic row; the lookup's description | 104 |
+| `melodia-ui/ui/components/onboarding/features-panel.slint` | the lookup's description | 90 |
+| `melodia-ui/ui/components/now-playing/lyrics-panel.slint` | the `missing` and `unavailable` hints | 298 |
+| `melodia-ui/ui/globals/lyrics.slint` | `auto-lookup` and `set-auto-lookup`; `refresh()` gone | 102 |
+| `melodia-ui/ui/settings.slint` | `lyrics-auto-lookup` and its callback | 625 |
 | `melodia-net/src/services/net/lyrics_directory/lyricsfile.rs` (new) | Lyricsfile YAML to enhanced LRC | |
 | `melodia-net/src/services/net/lyrics_directory/lrclib.rs` | `lyricsfile` and `hasWordSync` read; the `q` search, ranked and deduplicated | 371 |
 | `melodia-core/src/entities/lyrics.rs` | `LyricsCandidate` | |
 | `melodia-app/src/library/lyrics/finder.rs` (new) | `default_query`, `search`, `choose`, `outranking` | |
+| `melodia-app/src/services/settings/services.rs` | `LyricsFlags.lyrics_auto_lookup`, on by default | 66 |
+| `melodia-app/src/state/mod.rs` | `lyrics_auto_lookup: SharedFlag` | 398 |
+| `melodia-app/src/library/settings/lyrics.rs` | `set_lyrics_auto_lookup` | 31 |
+| `melodia-app/src/library/lyrics/mod.rs` | `auto_lookup_enabled`, read in `resolve`; `forget` gone | 250 |
 | `melodia-views/src/ui/correction/picker.rs` | the AutoEq rows as `PickRow` | 203 |
 | `melodia-views/src/ui/now_playing/lyrics/finder.rs` (new) | the dialog's controller on `DialogTicket` | 267 |
+| `melodia-views/src/ui/settings/lyrics_settings.rs` | `auto_lookup_handler` over `mirrored` | 107 |
+| `melodia-views/src/ui/now_playing/lyrics/mod.rs` | the menu's automatic switch, on the online switch's re-ask | 334 |
+| `melodia-views/src/ui/now_playing/lyrics/sheet.rs` | `on_refresh` gone | 273 |
 
 Every file stays well under 800.
 
@@ -196,8 +248,9 @@ Every file stays well under 800.
 
 - `PickList` comes out of the headphone picker before the finder mounts it (Phase 1).
 - `PickRowItem` writes `HeadphonePicker` directly; `PickList` owns `picked` and each host binds it.
-- The reload after Apply reuses the release and kick "Look up again" runs
-  (`now_playing/lyrics/sheet.rs`).
+- The reload after Apply reuses the panel's `release` and `kick` (`now_playing/lyrics/sheet.rs`).
+- Phase 5: the online switch's re-ask (release and kick when turned on or over an empty panel)
+  becomes one fn the automatic switch calls too.
 - The ranking reuses `Recording::matches` and the duration terms `pick_timed` ranks by.
 - Left alone: the kept-out, duplicates and correction-import bodies hand-roll the same well, but
   around multi-select or grouped rows, and a component wrapping `ListView` would lose its
@@ -291,11 +344,43 @@ Every file stays well under 800.
 **Gate:** fmt, clippy, the suite: `dialog_openers.rs`, `lyrics_switch.rs`, `scrollbars.rs`,
 `translations.rs`.
 
-## Phase 5: Tests
+## Phase 5: Automatic lookup as its own switch
+
+One phase: the switch, the menu row and the panel's copy are only testable together.
+
+- [x] `LyricsFlags.lyrics_auto_lookup`, on by default; `AppState.lyrics_auto_lookup`;
+      `library::settings::set_lyrics_auto_lookup`.
+- [x] `library::lyrics::auto_lookup_enabled` in `resolve`, beside `online_lookup_enabled`;
+      `forget` deleted.
+- [x] `lyrics_settings.rs`' `auto_lookup_handler`; the menu's `set-auto-lookup` through
+      `with_panel_reask`, which the online switch's re-ask became; `on_refresh` deleted.
+- [x] Slint:
+  - `Lyrics.auto-lookup` and `set-auto-lookup`, `refresh()` deleted; `Settings.lyrics-auto-lookup`;
+  - the Settings row under the lookup's, its label and description declared once;
+  - the menu row (`auto_awesome`, already subset) in "Look up again"'s place, `menu-h` still `* 6`;
+  - the panel's `missing` and `unavailable` hints, under the existing `// Translators:` line;
+  - the lookup's description on both cards.
+- [x] Strings: `scripts/update-translations.py`, then every catalog filled, no empty `msgstr` and
+      no `#, fuzzy`. New: "Let Melodia ask lrclib.net for lyrics", "Look up automatically", "Find
+      them in the Lyrics menu". Gone: "Look up again", "Try again from the Lyrics menu". "When a
+      track carries no words of its own, ask lrclib.net for them" moves to the new row, its
+      translations kept.
+- [x] `lyrics_switch.rs`' description pin follows the lookup's new sentence.
+- [x] Docs: `README.md`'s lyrics block; the `LyricsFlags`, `library::lyrics`,
+      `library::settings::lyrics`, `lyrics_settings.rs` and `finder.rs` docs; `lyrics.slint`'s and
+      `lyrics-section.slint`'s header notes; the `Unavailable` claim's comment in `sheet.rs`.
+- [x] After the first hand check: the automatic row greys while the lookup is off, in Settings
+      reading "Turn on "Look up lyrics online" above first" (every catalog filled) and in the
+      menu through `button-enabled`; the menu's three switches leave it open, its Find lyrics…,
+      Save to file and Edit lyrics… closing it (`lyrics-menu.slint`'s header).
+
+**Gate:** fmt, clippy, the suite: `lyrics_switch.rs`, `translations.rs`.
+
+## Phase 6: Tests
 
 ### Hand tests
 
-Every phase's hand check gathers here and runs last: after Phase 4, before any test is written, in
+Every phase's hand check gathers here and runs last: after Phase 5, before any test is written, in
 the dev data folder, each against `main` where it should match.
 
 - [ ] Phase 1, Find Headphones as on `main`: rows, filter, pick, the loading and failure states,
@@ -304,7 +389,7 @@ the dev data folder, each against `main` where it should match.
       malformed `lyricsfile` falling back to `syncedLyrics`.
 - [ ] Phases 3 and 4, the finder:
   - from the menu and from Settings on a real track; Enter with an edited query;
-  - a pick applied and shown; "Look up again" back to automatic; the pick surviving a restart;
+  - a pick applied and shown; the pick surviving a restart;
   - a pick hidden by a `.lrc` and by a timed tag, the note shown; a plain pick under a plain tag;
   - Enter in the empty box the moment the dialog opens, a hidden pick still showing the note;
   - online lookup off: both entries open on the notice, nothing sent before Turn On; Turn On
@@ -320,6 +405,22 @@ the dev data folder, each against `main` where it should match.
     reading from its first line; an Arabic sheet's and the `vi` placeholder's first and last
     lines whole, at rest and scrolled to the end;
   - the shortest window reachable, a pick showing, the footer inside the card.
+- [ ] Phase 5, the automatic switch:
+  - an upgraded `settings.json` with the lookup on and no automatic key: lookups run as before;
+  - lookup on, automatic off: a track with no lyrics of its own sends nothing at
+    `RUST_LOG=debug`, and the panel reads "No lyrics found" with its hint; a stored answer still
+    shows; a pick shows and survives a restart;
+  - automatic turned on from the menu: the playing track looked up at once;
+  - lookup and automatic off, Turn On: one search, later tracks sending nothing; lookup off and
+    automatic on, Turn On: the held re-ask as before;
+  - the Settings row and the menu row in step both ways; both greyed with the lookup off, their
+    state kept and shown dimmed, Settings naming the switch;
+    Settings search finding it by label and by description;
+  - an unreachable lrclib: the new hint, the next track asking again;
+  - the welcome card's new description; the menu's six rows, none clipped;
+  - the menu kept open across each switch, the automatic row greying and returning as the lookup
+    flips beside it, the romanization row as the panel reloads; a click outside and the window
+    losing focus still closing it; Find lyrics…, Save to file and Edit lyrics… closing it.
 - [ ] The follow clock (`now_playing/lyrics/clock.rs`, found by hand 2026-11-21: words lit ahead,
       then went dark), on a word-timed sheet in Now Playing and the miniplayer:
   - launch and play; paused, click a line, then play: no word lights and goes dark again;

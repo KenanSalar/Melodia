@@ -1460,8 +1460,9 @@ msgid "Look up lyrics online"
 msgstr "Şarkı sözlerini çevrimiçi ara"
 
 #: ui/components/now-playing/lyrics-menu.slint
-msgid "Look up again"
-msgstr "Yeniden ara"
+#: ui/views/settings/lyrics-section.slint
+msgid "Look up automatically"
+msgstr "Otomatik ara"
 
 #: ui/components/now-playing/lyrics-menu.slint
 msgid "Find lyrics…"
@@ -1506,8 +1507,8 @@ msgstr "Şarkı Sözleri menüsünden açın"
 
 #. Translators: "Lyrics menu" is the menu whose tooltip reads "Lyrics"
 #: ui/components/now-playing/lyrics-panel.slint
-msgid "Try again from the Lyrics menu"
-msgstr "Şarkı Sözleri menüsünden tekrar deneyin"
+msgid "Find them in the Lyrics menu"
+msgstr "Şarkı Sözleri menüsünden bulun"
 
 #: ui/components/now-playing/overflow-menu.slint
 #: ui/components/onboarding/onboarding-overlay.slint
@@ -1644,8 +1645,8 @@ msgstr "Dinlediğin parçayı Discord profilinde göster"
 
 #: ui/components/onboarding/features-panel.slint
 #: ui/views/settings/lyrics-section.slint
-msgid "When a track carries no words of its own, ask lrclib.net for them"
-msgstr "Bir parça kendi sözlerini içermiyorsa lrclib.net'ten iste"
+msgid "Let Melodia ask lrclib.net for lyrics"
+msgstr "Melodia'nın lrclib.net'ten şarkı sözü istemesine izin ver"
 
 #: ui/components/onboarding/features-panel.slint
 #: ui/views/settings/scrobbling-section.slint
@@ -3588,6 +3589,10 @@ msgid "Show the playing track's words in Now Playing instead of Up Next"
 msgstr "“Şimdi Çalıyor” ekranında “Sıradaki” yerine çalan parçanın sözlerini göster"
 
 #: ui/views/settings/lyrics-section.slint
+msgid "When a track carries no words of its own, ask lrclib.net for them"
+msgstr "Bir parça kendi sözlerini içermiyorsa lrclib.net'ten iste"
+
+#: ui/views/settings/lyrics-section.slint
 msgid "Print how a line sounds in Latin letters under the words, for a script that does not use them"
 msgstr "Latin alfabesini kullanmayan yazılar için her satırın okunuşunu sözlerin altında Latin harfleriyle yaz"
 
@@ -3598,6 +3603,10 @@ msgstr "Şarkı sözü bul"
 #: ui/views/settings/lyrics-section.slint
 msgid "Pick the playing track's lyrics from lrclib.net's matches"
 msgstr "Çalan parçanın sözlerini lrclib.net'in sonuçları arasından seç"
+
+#: ui/views/settings/lyrics-section.slint
+msgid "Turn on \"Look up lyrics online\" above first"
+msgstr "Önce yukarıdan \"Şarkı sözlerini çevrimiçi ara\" seçeneğini aç"
 
 #: ui/views/settings/lyrics-section.slint
 msgid "Turn on \"Show lyrics\" above first"

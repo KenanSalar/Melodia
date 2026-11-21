@@ -1456,7 +1456,8 @@ msgid "Look up lyrics online"
 msgstr ""
 
 #: ui/components/now-playing/lyrics-menu.slint
-msgid "Look up again"
+#: ui/views/settings/lyrics-section.slint
+msgid "Look up automatically"
 msgstr ""
 
 #: ui/components/now-playing/lyrics-menu.slint
@@ -1502,7 +1503,7 @@ msgstr ""
 
 #. Translators: "Lyrics menu" is the menu whose tooltip reads "Lyrics"
 #: ui/components/now-playing/lyrics-panel.slint
-msgid "Try again from the Lyrics menu"
+msgid "Find them in the Lyrics menu"
 msgstr ""
 
 #: ui/components/now-playing/overflow-menu.slint
@@ -1640,7 +1641,7 @@ msgstr ""
 
 #: ui/components/onboarding/features-panel.slint
 #: ui/views/settings/lyrics-section.slint
-msgid "When a track carries no words of its own, ask lrclib.net for them"
+msgid "Let Melodia ask lrclib.net for lyrics"
 msgstr ""
 
 #: ui/components/onboarding/features-panel.slint
@@ -3575,6 +3576,10 @@ msgid "Show the playing track's words in Now Playing instead of Up Next"
 msgstr ""
 
 #: ui/views/settings/lyrics-section.slint
+msgid "When a track carries no words of its own, ask lrclib.net for them"
+msgstr ""
+
+#: ui/views/settings/lyrics-section.slint
 msgid "Print how a line sounds in Latin letters under the words, for a script that does not use them"
 msgstr ""
 
@@ -3584,6 +3589,10 @@ msgstr ""
 
 #: ui/views/settings/lyrics-section.slint
 msgid "Pick the playing track's lyrics from lrclib.net's matches"
+msgstr ""
+
+#: ui/views/settings/lyrics-section.slint
+msgid "Turn on \"Look up lyrics online\" above first"
 msgstr ""
 
 #: ui/views/settings/lyrics-section.slint

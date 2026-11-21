@@ -1456,8 +1456,9 @@ msgid "Look up lyrics online"
 msgstr "Buscar letras en línea"
 
 #: ui/components/now-playing/lyrics-menu.slint
-msgid "Look up again"
-msgstr "Buscar de nuevo"
+#: ui/views/settings/lyrics-section.slint
+msgid "Look up automatically"
+msgstr "Buscar automáticamente"
 
 #: ui/components/now-playing/lyrics-menu.slint
 msgid "Find lyrics…"
@@ -1502,8 +1503,8 @@ msgstr "Actívala en el menú Letra"
 
 #. Translators: "Lyrics menu" is the menu whose tooltip reads "Lyrics"
 #: ui/components/now-playing/lyrics-panel.slint
-msgid "Try again from the Lyrics menu"
-msgstr "Vuelve a intentarlo desde el menú Letra"
+msgid "Find them in the Lyrics menu"
+msgstr "Búscala en el menú Letra"
 
 #: ui/components/now-playing/overflow-menu.slint
 #: ui/components/onboarding/onboarding-overlay.slint
@@ -1640,8 +1641,8 @@ msgstr "Muestra la canción que estás escuchando en tu perfil de Discord"
 
 #: ui/components/onboarding/features-panel.slint
 #: ui/views/settings/lyrics-section.slint
-msgid "When a track carries no words of its own, ask lrclib.net for them"
-msgstr "Cuando una pista no incluye su propia letra, se pide a lrclib.net"
+msgid "Let Melodia ask lrclib.net for lyrics"
+msgstr "Permitir que Melodia pida letras a lrclib.net"
 
 #: ui/components/onboarding/features-panel.slint
 #: ui/views/settings/scrobbling-section.slint
@@ -3575,6 +3576,10 @@ msgid "Show the playing track's words in Now Playing instead of Up Next"
 msgstr "Mostrar la letra de la canción en curso en la pantalla «Reproduciendo» en lugar de «A continuación»"
 
 #: ui/views/settings/lyrics-section.slint
+msgid "When a track carries no words of its own, ask lrclib.net for them"
+msgstr "Cuando una pista no incluye su propia letra, se pide a lrclib.net"
+
+#: ui/views/settings/lyrics-section.slint
 msgid "Print how a line sounds in Latin letters under the words, for a script that does not use them"
 msgstr "Mostrar bajo la letra cómo suena cada verso en caracteres latinos, para escrituras que no los usan"
 
@@ -3585,6 +3590,10 @@ msgstr "Buscar la letra"
 #: ui/views/settings/lyrics-section.slint
 msgid "Pick the playing track's lyrics from lrclib.net's matches"
 msgstr "Elige la letra de la pista en reproducción entre los resultados de lrclib.net"
+
+#: ui/views/settings/lyrics-section.slint
+msgid "Turn on \"Look up lyrics online\" above first"
+msgstr "Activa primero «Buscar letras en línea» arriba"
 
 #: ui/views/settings/lyrics-section.slint
 msgid "Turn on \"Show lyrics\" above first"

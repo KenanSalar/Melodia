@@ -1,14 +1,15 @@
-//! The lyrics feature's three switches, and the one place each is answered.
+//! The lyrics feature's four switches, and the one place each is answered.
 //!
 //! Each has a Settings row **and** a Now Playing control, and neither view re-reads the other's
 //! global after boot, so whichever is used writes its twin ([`mirrored`]), over
-//! [`shadow_toggle`]'s shadow-before-persist order: `library::lyrics` reads the feature and
-//! online switches on a worker every track change, and a lookup between the click and the disk
-//! write has to see the new answer.
+//! [`shadow_toggle`]'s shadow-before-persist order: `library::lyrics` reads the feature, online
+//! and automatic switches on a worker every track change, and a lookup between the click and the
+//! disk write has to see the new answer.
 //!
 //! Lyrics and the lookup are off by default, the second as the package description promises of
-//! every online feature. Romanization is on: it reaches nothing, and draws nothing unless the
-//! sheet is in a script the reader cannot sound out.
+//! every online feature. The automatic lookup and romanization are on: the first reaches nothing
+//! until the lookup is on, and the second draws nothing unless the sheet is in a script the reader
+//! cannot sound out.
 
 use slint::ComponentHandle;
 
@@ -24,10 +25,12 @@ pub fn install(ui: &AppWindow, state: &AppState) {
     // Off the shadows `AppState` filled at boot, as `radio_settings` seeds, not a second file read.
     g.set_lyrics_enabled(state.lyrics_enabled.get());
     g.set_lyrics_online_enabled(state.lyrics_online_enabled.get());
+    g.set_lyrics_auto_lookup(state.lyrics_auto_lookup.get());
     g.set_lyrics_romanization_shown(state.lyrics_romanization_shown.get());
 
     g.on_lyrics_enabled_changed(enabled_handler(ui, state));
     g.on_lyrics_online_enabled_changed(online_handler(ui, state));
+    g.on_lyrics_auto_lookup_changed(auto_lookup_handler(ui, state));
     g.on_lyrics_romanization_shown_changed(romanization_handler(ui, state));
 }
 
@@ -63,6 +66,22 @@ pub(crate) fn online_handler(ui: &AppWindow, state: &AppState) -> impl Fn(bool) 
         |ui, on| {
             ui.global::<Settings>().set_lyrics_online_enabled(on);
             ui.global::<Lyrics>().set_online_enabled(on);
+        },
+    )
+}
+
+/// The handler both rows of the automatic-lookup switch register, owing the card's row no re-ask
+/// for [`online_handler`]'s reason.
+pub(crate) fn auto_lookup_handler(ui: &AppWindow, state: &AppState) -> impl Fn(bool) + 'static {
+    mirrored(
+        ui,
+        state,
+        &state.lyrics_auto_lookup,
+        "set_lyrics_auto_lookup",
+        library::settings::set_lyrics_auto_lookup,
+        |ui, on| {
+            ui.global::<Settings>().set_lyrics_auto_lookup(on);
+            ui.global::<Lyrics>().set_auto_lookup(on);
         },
     )
 }

@@ -217,6 +217,10 @@ export global Settings {
     in-out property <bool> lyrics-online-enabled: false;
     callback lyrics-online-enabled-changed(bool);
 
+    // True, so an upgrade keeps its lookups running; like the lookup's, it gates nothing here.
+    in-out property <bool> lyrics-auto-lookup: true;
+    callback lyrics-auto-lookup-changed(bool);
+
     // True: it reaches nothing and draws only under a script the reader can't sound out. **The Now
     // Playing menu writes it too**, hence one `SharedFlag` for both.
     in-out property <bool> lyrics-romanization-shown: true;

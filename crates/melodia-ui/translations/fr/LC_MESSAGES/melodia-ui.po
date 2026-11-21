@@ -1456,8 +1456,9 @@ msgid "Look up lyrics online"
 msgstr "Rechercher les paroles en ligne"
 
 #: ui/components/now-playing/lyrics-menu.slint
-msgid "Look up again"
-msgstr "Rechercher à nouveau"
+#: ui/views/settings/lyrics-section.slint
+msgid "Look up automatically"
+msgstr "Rechercher automatiquement"
 
 #: ui/components/now-playing/lyrics-menu.slint
 msgid "Find lyrics…"
@@ -1502,8 +1503,8 @@ msgstr "Activez-la depuis le menu Paroles"
 
 #. Translators: "Lyrics menu" is the menu whose tooltip reads "Lyrics"
 #: ui/components/now-playing/lyrics-panel.slint
-msgid "Try again from the Lyrics menu"
-msgstr "Réessayez depuis le menu Paroles"
+msgid "Find them in the Lyrics menu"
+msgstr "Trouvez-les depuis le menu Paroles"
 
 #: ui/components/now-playing/overflow-menu.slint
 #: ui/components/onboarding/onboarding-overlay.slint
@@ -1640,8 +1641,8 @@ msgstr "Affiche le morceau que vous écoutez sur votre profil Discord"
 
 #: ui/components/onboarding/features-panel.slint
 #: ui/views/settings/lyrics-section.slint
-msgid "When a track carries no words of its own, ask lrclib.net for them"
-msgstr "Quand un titre ne contient pas ses propres paroles, les demander à lrclib.net"
+msgid "Let Melodia ask lrclib.net for lyrics"
+msgstr "Autoriser Melodia à demander des paroles à lrclib.net"
 
 #: ui/components/onboarding/features-panel.slint
 #: ui/views/settings/scrobbling-section.slint
@@ -3575,6 +3576,10 @@ msgid "Show the playing track's words in Now Playing instead of Up Next"
 msgstr "Afficher les paroles du titre en cours dans « Lecture en cours » à la place de « À suivre »"
 
 #: ui/views/settings/lyrics-section.slint
+msgid "When a track carries no words of its own, ask lrclib.net for them"
+msgstr "Quand un titre ne contient pas ses propres paroles, les demander à lrclib.net"
+
+#: ui/views/settings/lyrics-section.slint
 msgid "Print how a line sounds in Latin letters under the words, for a script that does not use them"
 msgstr "Afficher sous les paroles la prononciation de chaque ligne en caractères latins, pour les écritures qui ne les utilisent pas"
 
@@ -3585,6 +3590,10 @@ msgstr "Trouver les paroles"
 #: ui/views/settings/lyrics-section.slint
 msgid "Pick the playing track's lyrics from lrclib.net's matches"
 msgstr "Choisir les paroles du titre en cours parmi les résultats de lrclib.net"
+
+#: ui/views/settings/lyrics-section.slint
+msgid "Turn on \"Look up lyrics online\" above first"
+msgstr "Activez d'abord « Rechercher les paroles en ligne » ci-dessus"
 
 #: ui/views/settings/lyrics-section.slint
 msgid "Turn on \"Show lyrics\" above first"

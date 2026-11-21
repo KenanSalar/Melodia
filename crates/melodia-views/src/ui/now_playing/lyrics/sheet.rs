@@ -78,87 +78,48 @@ fn reseed(weak: &Weak<AppWindow>, state: &AppState, np_state: &Rc<NowPlayingStat
     }
 }
 
-/// **Both actions read what is playing at click time**: the menu outlives any one track, so a
-/// handle taken at wire time would name the wrong song by the second verse.
+/// **Reads what is playing at click time**: the menu outlives any one track, so a handle taken at
+/// wire time would name the wrong song by the second verse.
 pub(crate) fn wire_menu(ui: &AppWindow, state: &AppState, np_state: &Rc<NowPlayingState>) {
-    let global = ui.global::<Lyrics>();
-
-    {
-        let weak = ui.as_weak();
+    let weak = ui.as_weak();
+    let state = state.clone();
+    let np_state = np_state.clone();
+    ui.global::<Lyrics>().on_save_to_tag(move || {
+        let Some(track) = playing_track(&np_state) else {
+            return;
+        };
         let state = state.clone();
+        let weak = weak.clone();
         let np_state = np_state.clone();
-        global.on_refresh(move || {
-            let Some(track) = playing_track(&np_state) else {
-                return;
+        let res = slint::spawn_local(Compat::new(async move {
+            let found = library::lyrics::resident_text(&state, LyricsKey::from(&*track)).await;
+            let text = match found {
+                Ok(Some(text)) => text,
+                // The row is only offered against a sheet on screen, so nothing here is the store
+                // having lost the copy it was resolved from.
+                Ok(None) => {
+                    log::debug!("lyrics save: nothing resident for {}", track.id);
+                    return;
+                }
+                Err(e) => return report_save_failure(&e),
             };
+            if let Err(e) = library::lyrics::write_to_tag(&state, track.id, &text).await {
+                return report_save_failure(&e);
+            }
+            toast::notify(ToastKind::LyricsSaved, track.title.clone());
+            // The tag now holds the sheet, which is the file's own from here.
             let Some(ui) = weak.upgrade() else { return };
-
-            // Given up before the lookup, not after: the claim is what stops the reseed below
-            // deduping this against the sheet it is meant to replace.
-            release(&ui, &np_state.lyrics);
-
-            let weak = weak.clone();
-            let state = state.clone();
-            let np_state = np_state.clone();
-            let res = slint::spawn_local(Compat::new(async move {
-                let key = LyricsKey::from(&*track);
-                if let Err(e) = library::lyrics::forget(&state, key).await {
-                    log::warn!("lyrics refresh: {}", melodia_core::error::describe(&e));
-                }
-                if weak.upgrade().is_some() {
-                    np_state.lyrics.kick();
-                }
-            }));
-            if let Err(e) = res {
-                log::warn!(
-                    "ui::now_playing lyrics refresh spawn_local: {}",
-                    melodia_core::error::describe(&e)
-                );
-            }
-        });
-    }
-
-    {
-        let weak = ui.as_weak();
-        let state = state.clone();
-        let np_state = np_state.clone();
-        global.on_save_to_tag(move || {
-            let Some(track) = playing_track(&np_state) else {
-                return;
-            };
-            let state = state.clone();
-            let weak = weak.clone();
-            let np_state = np_state.clone();
-            let res = slint::spawn_local(Compat::new(async move {
-                let found = library::lyrics::resident_text(&state, LyricsKey::from(&*track)).await;
-                let text = match found {
-                    Ok(Some(text)) => text,
-                    // The row is only offered against a sheet on screen, so nothing here is the
-                    // store having lost the copy it was resolved from.
-                    Ok(None) => {
-                        log::debug!("lyrics save: nothing resident for {}", track.id);
-                        return;
-                    }
-                    Err(e) => return report_save_failure(&e),
-                };
-                if let Err(e) = library::lyrics::write_to_tag(&state, track.id, &text).await {
-                    return report_save_failure(&e);
-                }
-                toast::notify(ToastKind::LyricsSaved, track.title.clone());
-                // The tag now holds the sheet, which is the file's own from here.
-                let Some(ui) = weak.upgrade() else { return };
-                ui.global::<Lyrics>().set_can_save_to_tag(false);
-                np_state.lyrics.holding.borrow_mut().take();
-                np_state.lyrics.kick();
-            }));
-            if let Err(e) = res {
-                log::warn!(
-                    "ui::now_playing lyrics save spawn_local: {}",
-                    melodia_core::error::describe(&e)
-                );
-            }
-        });
-    }
+            ui.global::<Lyrics>().set_can_save_to_tag(false);
+            np_state.lyrics.holding.borrow_mut().take();
+            np_state.lyrics.kick();
+        }));
+        if let Err(e) = res {
+            log::warn!(
+                "ui::now_playing lyrics save spawn_local: {}",
+                melodia_core::error::describe(&e)
+            );
+        }
+    });
 }
 
 /// A toast rather than a log line, the radio vote's rule: a control that says it writes to the
@@ -219,12 +180,12 @@ fn apply(
         }
         LyricsOutcome::Absent => {
             clear(ui, ly);
-            // The one state that names a setting, being the only one a reader can act on here.
+            // Off sends the reader to the switch, Missing to the finder.
             global.set_state(if online_enabled { LyricsState::Missing } else { LyricsState::Off });
         }
         // **The claim above is still recorded, deliberately.** Nothing retries on its own, so
         // without it every tick that reaches `reseed` would start another lookup against a service
-        // that has just told us to stop. Refresh is the retry, and it drops the claim itself.
+        // that has just told us to stop. A new track, a re-open and a pick are the retries.
         LyricsOutcome::Unavailable => {
             clear(ui, ly);
             global.set_state(LyricsState::Unavailable);

@@ -1,16 +1,17 @@
 //! Lyrics for the playing track, and the one door onto them.
 //!
 //! A sidecar, the lyrics tag, a store of past directory answers and the directory itself resolve
-//! through [`for_track`], so each of two switches has one place to guard: the feature's in front
-//! of all four, the lookup's in front of the directory. **`is_enabled` and `online_lookup_enabled`
-//! may not move**, each being the one reader of its flag (`crates/melodia/tests/lyrics_switch.rs`).
+//! through [`for_track`], so each switch has one place to guard: the feature's in front of all
+//! four, the lookup's and the automatic one's in front of the directory. **`is_enabled` and
+//! `online_lookup_enabled` may not move**, each being the one reader of its flag
+//! (`crates/melodia/tests/lyrics_switch.rs`).
 //!
 //! **The order is sidecar, tag, store, lookup, and a timed sheet cuts across it** wherever the
 //! sidecar hasn't spoken (`docs/adr/0038-lyrics-display-reads-the-file.md`). The store sits on the
 //! local side of the switch: turning the lookup off buys no traffic, not no lyrics.
 //!
 //! [`finder`] is the directory's other door: every candidate for a query a person edits, behind
-//! the same two switches, the one they pick written to the store a lookup writes.
+//! the feature's and the lookup's switches, the one they pick written to the store a lookup writes.
 //!
 //! Reachable with lyrics off: `forget_all`, so a retag leaves no stale answer waiting for the
 //! feature to come back, and the tag editor's `resident_text`, `best_tag_entry` and `write_to_tag`.
@@ -102,7 +103,8 @@ async fn resolve(state: &AppState, track: &TrackSummary) -> Result<LyricsOutcome
     if let Some(stored) = stored {
         return Ok(timed_first(stored, own));
     }
-    if !online_lookup_enabled(state) {
+    let may_ask = online_lookup_enabled(state) && auto_lookup_enabled(state);
+    if !may_ask {
         return Ok(own.map_or(LyricsOutcome::Absent, LyricsOutcome::Sheet));
     }
 
@@ -185,20 +187,21 @@ fn read_local(lyrics_dir: &Path, track: &LyricsKey) -> Result<Local, AppError> {
     Ok(Local { own, is_sidecar: false, stored })
 }
 
-/// Whether a track with no sheet of its own may be looked up online. `false` ends in
-/// [`LyricsOutcome::Absent`] rather than a refusal, being the ordinary state of most libraries.
+/// Whether the directory may be asked at all, by [`resolve`] or the finder. `false` ends a lookup
+/// in [`LyricsOutcome::Absent`] rather than a refusal, being the ordinary state of most libraries.
 fn online_lookup_enabled(state: &AppState) -> bool {
     state.lyrics_online_enabled.get()
 }
 
-/// Forget what the directory said about this track, so the next lookup asks again: the whole of
-/// what a refresh is. Only the store; a sidecar and a lyrics tag are the user's own files.
-pub async fn forget(state: &AppState, track: LyricsKey) -> Result<(), AppError> {
-    forget_all(state, vec![track]).await
+/// Whether [`resolve`] asks the directory unprompted. The finder doesn't read it: a search is
+/// asked for.
+fn auto_lookup_enabled(state: &AppState) -> bool {
+    state.lyrics_auto_lookup.get()
 }
 
-/// [`forget`] over a retagged batch, in one hop. Every track is attempted, one failure being no
-/// reason to leave the rest stale, and the first error comes back.
+/// Forget what the directory said about a retagged batch, in one hop, so the next lookup asks
+/// again. Only the store: a sidecar and a lyrics tag are the user's own files. Every track is
+/// attempted, one failure being no reason to leave the rest stale, and the first error comes back.
 pub async fn forget_all(state: &AppState, tracks: Vec<LyricsKey>) -> Result<(), AppError> {
     let paths = Arc::clone(&state.paths);
 

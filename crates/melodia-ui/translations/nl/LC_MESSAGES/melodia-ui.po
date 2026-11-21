@@ -1456,8 +1456,9 @@ msgid "Look up lyrics online"
 msgstr "Songteksten online opzoeken"
 
 #: ui/components/now-playing/lyrics-menu.slint
-msgid "Look up again"
-msgstr "Opnieuw opzoeken"
+#: ui/views/settings/lyrics-section.slint
+msgid "Look up automatically"
+msgstr "Automatisch opzoeken"
 
 #: ui/components/now-playing/lyrics-menu.slint
 msgid "Find lyrics…"
@@ -1502,8 +1503,8 @@ msgstr "Zet het aan in het menu Songtekst"
 
 #. Translators: "Lyrics menu" is the menu whose tooltip reads "Lyrics"
 #: ui/components/now-playing/lyrics-panel.slint
-msgid "Try again from the Lyrics menu"
-msgstr "Probeer het opnieuw via het menu Songtekst"
+msgid "Find them in the Lyrics menu"
+msgstr "Zoek hem op via het menu Songtekst"
 
 #: ui/components/now-playing/overflow-menu.slint
 #: ui/components/onboarding/onboarding-overlay.slint
@@ -1640,8 +1641,8 @@ msgstr "Toon het nummer dat je afspeelt op je Discord-profiel"
 
 #: ui/components/onboarding/features-panel.slint
 #: ui/views/settings/lyrics-section.slint
-msgid "When a track carries no words of its own, ask lrclib.net for them"
-msgstr "Vraag lrclib.net om de songtekst als een nummer er zelf geen heeft"
+msgid "Let Melodia ask lrclib.net for lyrics"
+msgstr "Laat Melodia songteksten opvragen bij lrclib.net"
 
 #: ui/components/onboarding/features-panel.slint
 #: ui/views/settings/scrobbling-section.slint
@@ -3575,6 +3576,10 @@ msgid "Show the playing track's words in Now Playing instead of Up Next"
 msgstr "Toon de songtekst van het huidige nummer in Nu aan het afspelen in plaats van Hierna"
 
 #: ui/views/settings/lyrics-section.slint
+msgid "When a track carries no words of its own, ask lrclib.net for them"
+msgstr "Vraag lrclib.net om de songtekst als een nummer er zelf geen heeft"
+
+#: ui/views/settings/lyrics-section.slint
 msgid "Print how a line sounds in Latin letters under the words, for a script that does not use them"
 msgstr "Toon onder de tekst in Latijnse letters hoe een regel klinkt, voor een schrift dat die niet gebruikt"
 
@@ -3585,6 +3590,10 @@ msgstr "Songtekst zoeken"
 #: ui/views/settings/lyrics-section.slint
 msgid "Pick the playing track's lyrics from lrclib.net's matches"
 msgstr "Kies de songtekst van het spelende nummer uit de resultaten van lrclib.net"
+
+#: ui/views/settings/lyrics-section.slint
+msgid "Turn on \"Look up lyrics online\" above first"
+msgstr "Zet eerst hierboven ‘Songteksten online opzoeken’ aan"
 
 #: ui/views/settings/lyrics-section.slint
 msgid "Turn on \"Show lyrics\" above first"

@@ -273,6 +273,9 @@ export component LyricsPanel inherits Rectangle {
         }
     }
 
+    property <bool> finder-may-help: Lyrics.state == LyricsState.missing
+        || Lyrics.state == LyricsState.unavailable;
+
     // Each hint names its control in words: the bundled faces carry no `▸` or `⋮`, and a fallback
     // glyph breaks the line box. Silent in the miniplayer, which has no header menu to point at.
     if !root.has-rows: NpEmptyState {
@@ -289,7 +292,7 @@ export component LyricsPanel inherits Rectangle {
             // Translators: "Lyrics menu" is the menu whose tooltip reads "Lyrics"
             : Lyrics.state == LyricsState.off ? @tr("Turn it on in the Lyrics menu")
             // Translators: "Lyrics menu" is the menu whose tooltip reads "Lyrics"
-            : Lyrics.state == LyricsState.unavailable ? @tr("Try again from the Lyrics menu")
+            : root.finder-may-help ? @tr("Find them in the Lyrics menu")
             : "";
         compact: root.compact;
         ink: root.ink-muted;

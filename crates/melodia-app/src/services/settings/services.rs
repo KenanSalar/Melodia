@@ -42,16 +42,23 @@ impl Default for RadioFlags {
 /// and without it a stored sheet stays readable. Romanization only changes how a line is drawn.
 ///
 /// The first two ship off, a panel nobody asked for not taking the Up Next column on upgrade.
-/// Romanization ships on, drawing nothing for a Latin sheet. All three live in `settings.json`
-/// like `viz_enabled`, the other switch on Now Playing's header, a `views.json` flag never being a
-/// bool.
+/// Romanization and the automatic lookup ship on: the first draws nothing for a Latin sheet, and
+/// the second keeps an upgrade's lookups running. All of them live in `settings.json` like
+/// `viz_enabled`, the other switch on Now Playing's header, a `views.json` flag never being a bool.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
+#[expect(
+    clippy::struct_excessive_bools,
+    reason = "four settings.json keys under one Settings card; splitting them would invent a container for the lint rather than one describing something"
+)]
 pub struct LyricsFlags {
     /// Read under its old name too: v0.13.0 shipped it as the column preference it grew out of.
     #[serde(alias = "lyrics_panel_shown")]
     pub lyrics_enabled: bool,
     pub lyrics_online_enabled: bool,
+    /// Whether the lookup asks on every track change, or only when the finder searches. Under the
+    /// lookup rather than beside it, which stays the one consent.
+    pub lyrics_auto_lookup: bool,
     pub lyrics_romanization_shown: bool,
 }
 
@@ -60,6 +67,7 @@ impl Default for LyricsFlags {
         Self {
             lyrics_enabled: false,
             lyrics_online_enabled: false,
+            lyrics_auto_lookup: true,
             lyrics_romanization_shown: true,
         }
     }

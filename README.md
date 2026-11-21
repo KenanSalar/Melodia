@@ -164,9 +164,10 @@ Shrink the window and the full UI collapses into a mini-player that grows with i
 - **Off by default, and off means off**: while lyrics are switched off, nothing looks a sheet up or keeps one in memory
 - Read from a `.lrc` beside the track or from the file's own lyrics tag, so a library that already carries them needs no online lookup
 - **Online lookup is off until you switch it on**: nothing contacts **lrclib.net** until you do, and its answers are cached under your data folder rather than written into your files
+- Once it is on, a track without lyrics of its own is looked up as it plays; switch off **Look up automatically** to ask only when you search
 - Romanization under a line in a script you don't read, around a hundred scripts in all, with engines matched to Korean and Japanese. On by default, and silent for a sheet already in Latin letters
 - A bilingual sheet's translation is drawn under the words it glosses
-- **Look up again** for a wrong match, **Find lyrics…** to pick one of lrclib.net's matches by hand, **Save to file** to write the sheet into the track's tag, and **Edit lyrics…** to fix a stamp by hand
+- **Find lyrics…** to pick one of lrclib.net's matches by hand, for a wrong match or none at all, **Save to file** to write the sheet into the track's tag, and **Edit lyrics…** to fix a stamp by hand
 
 </details>
 

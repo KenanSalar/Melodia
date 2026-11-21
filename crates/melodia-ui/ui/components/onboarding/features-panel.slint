@@ -52,7 +52,7 @@ export component OnboardingFeaturesPanel inherits OnboardingCard {
     OnboardingFeatureRow {
         icon: "travel_explore";
         label: @tr("Look up lyrics online");
-        description: @tr("When a track carries no words of its own, ask lrclib.net for them");
+        description: @tr("Let Melodia ask lrclib.net for lyrics");
         ToggleSwitch {
             checked <=> Settings.lyrics-online-enabled;
             toggled(v) => { Settings.lyrics-online-enabled-changed(v); }

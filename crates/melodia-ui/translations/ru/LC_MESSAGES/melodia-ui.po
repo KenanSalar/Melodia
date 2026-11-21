@@ -1469,8 +1469,9 @@ msgid "Look up lyrics online"
 msgstr "Искать тексты в интернете"
 
 #: ui/components/now-playing/lyrics-menu.slint
-msgid "Look up again"
-msgstr "Искать снова"
+#: ui/views/settings/lyrics-section.slint
+msgid "Look up automatically"
+msgstr "Искать автоматически"
 
 #: ui/components/now-playing/lyrics-menu.slint
 msgid "Find lyrics…"
@@ -1515,8 +1516,8 @@ msgstr "Включите его в меню «Текст песни»"
 
 #. Translators: "Lyrics menu" is the menu whose tooltip reads "Lyrics"
 #: ui/components/now-playing/lyrics-panel.slint
-msgid "Try again from the Lyrics menu"
-msgstr "Повторите попытку из меню «Текст песни»"
+msgid "Find them in the Lyrics menu"
+msgstr "Найдите его в меню «Текст песни»"
 
 #: ui/components/now-playing/overflow-menu.slint
 #: ui/components/onboarding/onboarding-overlay.slint
@@ -1653,8 +1654,8 @@ msgstr "Показывать играющий трек в профиле Discord
 
 #: ui/components/onboarding/features-panel.slint
 #: ui/views/settings/lyrics-section.slint
-msgid "When a track carries no words of its own, ask lrclib.net for them"
-msgstr "Если в треке нет своего текста, запрашивать его у lrclib.net"
+msgid "Let Melodia ask lrclib.net for lyrics"
+msgstr "Разрешить Melodia запрашивать тексты у lrclib.net"
 
 #: ui/components/onboarding/features-panel.slint
 #: ui/views/settings/scrobbling-section.slint
@@ -3633,6 +3634,10 @@ msgid "Show the playing track's words in Now Playing instead of Up Next"
 msgstr "Показывать текст играющего трека на экране «Сейчас играет» вместо списка «Далее»"
 
 #: ui/views/settings/lyrics-section.slint
+msgid "When a track carries no words of its own, ask lrclib.net for them"
+msgstr "Если в треке нет своего текста, запрашивать его у lrclib.net"
+
+#: ui/views/settings/lyrics-section.slint
 msgid "Print how a line sounds in Latin letters under the words, for a script that does not use them"
 msgstr "Показывать под строкой её звучание латиницей, если текст написан другим письмом"
 
@@ -3643,6 +3648,10 @@ msgstr "Найти текст"
 #: ui/views/settings/lyrics-section.slint
 msgid "Pick the playing track's lyrics from lrclib.net's matches"
 msgstr "Выбрать текст играющего трека из результатов lrclib.net"
+
+#: ui/views/settings/lyrics-section.slint
+msgid "Turn on \"Look up lyrics online\" above first"
+msgstr "Сначала включите «Искать тексты в интернете» выше"
 
 #: ui/views/settings/lyrics-section.slint
 msgid "Turn on \"Show lyrics\" above first"
