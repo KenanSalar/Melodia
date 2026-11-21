@@ -456,11 +456,6 @@ msgstr "Không có danh sách phát nào để xuất"
 msgid "Several playlists are saved as one .zip file, which you can import directly without extracting it."
 msgstr "Nhiều danh sách phát được lưu thành một tệp .zip, bạn có thể nhập trực tiếp mà không cần giải nén."
 
-#. Translators: {} names who measured the headphones, as oratory1990.
-#: ui/components/dialog/headphone-picker-body.slint
-msgid "Measured by {}"
-msgstr "Đo bởi {}"
-
 #: ui/components/dialog/headphone-picker-body.slint
 msgid "Find a model…"
 msgstr "Tìm mẫu…"
@@ -499,6 +494,11 @@ msgstr "Hồ sơ của AutoEq cho mẫu này có những dòng Melodia không đ
 msgid "Couldn't apply the correction. See the log for details."
 msgstr "Không thể áp dụng hiệu chỉnh. Xem nhật ký để biết chi tiết."
 
+#. Translators: {} names who measured the headphones, as oratory1990.
+#: ui/components/dialog/headphone-picker-body.slint
+msgid "Measured by {}"
+msgstr "Đo bởi {}"
+
 #. Translators: {} is the day the copy left the library, as 2026-11-02.
 #: ui/components/dialog/kept-out-body.slint
 msgid "Removed {}"
@@ -532,6 +532,78 @@ msgstr "Không có tệp nào bị loại ra"
 #: ui/components/dialog/kept-out-body.slint
 msgid "Every removed copy is back in the library."
 msgstr "Mọi bản sao đã xóa đều đã trở lại thư viện."
+
+#: ui/components/dialog/lyrics-finder-body.slint
+msgid "Title and artist…"
+msgstr "Tên bài và nghệ sĩ…"
+
+#: ui/components/dialog/lyrics-finder-body.slint
+msgid "Instrumental"
+msgstr "Không lời"
+
+#: ui/components/dialog/lyrics-finder-body.slint
+msgid "Plain"
+msgstr "Thường"
+
+#: ui/components/dialog/lyrics-finder-body.slint
+msgid "Synced"
+msgstr "Đồng bộ"
+
+#: ui/components/dialog/lyrics-finder-body.slint
+msgid "Word-timed"
+msgstr "Theo từng từ"
+
+#: ui/components/dialog/lyrics-finder-body.slint ui/views/search-view.slint
+msgid "Searching…"
+msgstr "Đang tìm kiếm…"
+
+#: ui/components/dialog/lyrics-finder-body.slint
+msgid "lrclib.net asked Melodia to wait"
+msgstr "lrclib.net đề nghị Melodia chờ"
+
+#: ui/components/dialog/lyrics-finder-body.slint
+msgid "Couldn't search lrclib.net"
+msgstr "Không thể tìm trên lrclib.net"
+
+#: ui/components/dialog/lyrics-finder-body.slint
+msgid "No lyrics match"
+msgstr "Không có lời nào khớp"
+
+#: ui/components/dialog/lyrics-finder-body.slint
+msgid "Press Enter to search again in a minute."
+msgstr "Nhấn Enter sau một phút để tìm lại."
+
+#: ui/components/dialog/lyrics-finder-body.slint
+msgid "Check your connection, then press Enter to search again."
+msgstr "Hãy kiểm tra kết nối, rồi nhấn Enter để tìm lại."
+
+#: ui/components/dialog/lyrics-finder-body.slint
+msgid "Try fewer words, or the title alone."
+msgstr "Thử bớt từ, hoặc chỉ tên bài."
+
+#: ui/components/dialog/lyrics-finder-body.slint
+msgid "Couldn't keep the pick. See the log for details."
+msgstr "Không thể lưu lựa chọn. Xem nhật ký để biết chi tiết."
+
+#: ui/components/dialog/lyrics-finder-body.slint
+msgid "Pick a match to see how it starts."
+msgstr "Chọn một kết quả để xem phần mở đầu."
+
+#: ui/components/dialog/lyrics-finder-body.slint
+msgid "lrclib.net files this recording as instrumental."
+msgstr "lrclib.net ghi bản thu này là không lời."
+
+#: ui/components/dialog/lyrics-finder-body.slint
+msgid "The .lrc file beside this track is shown ahead of this pick."
+msgstr "Tệp .lrc bên cạnh bản nhạc này được hiển thị trước lựa chọn này."
+
+#: ui/components/dialog/lyrics-finder-body.slint
+msgid "The timed lyrics in this track's tags are shown ahead of this pick."
+msgstr "Lời có mốc thời gian trong thẻ của bản nhạc này được hiển thị trước lựa chọn này."
+
+#: ui/components/dialog/lyrics-finder-body.slint
+msgid "This track's tags hold lyrics, which are shown ahead of an untimed pick."
+msgstr "Thẻ của bản nhạc này có lời, được hiển thị trước một lựa chọn không có mốc thời gian."
 
 #: ui/components/dialog/playlist-mosaic-picker.slint
 msgid "No artwork"
@@ -1363,6 +1435,10 @@ msgid "Look up again"
 msgstr "Tìm lại"
 
 #: ui/components/now-playing/lyrics-menu.slint
+msgid "Find lyrics…"
+msgstr "Tìm lời bài hát…"
+
+#: ui/components/now-playing/lyrics-menu.slint
 msgid "Save to file"
 msgstr "Lưu vào tệp"
 
@@ -2167,6 +2243,15 @@ msgstr "Chọn danh sách phát để xuất."
 #: ui/views/radio/tab-pills.slint
 msgid "Export"
 msgstr "Xuất"
+
+#: ui/globals/dialog.slint
+msgid "Find Lyrics"
+msgstr "Tìm lời bài hát"
+
+#. Translators: {} is the playing track's length, as 3:45.
+#: ui/globals/dialog.slint
+msgid "lrclib.net's matches for this track, which runs {}."
+msgstr "Kết quả của lrclib.net cho bản nhạc này, dài {}."
 
 #: ui/globals/duplicates.slint
 msgid "{n} copy removed from the library"
@@ -3051,10 +3136,6 @@ msgid "Play something and it will show up here."
 msgstr "Hãy phát một bài và nó sẽ hiện ở đây."
 
 #: ui/views/search-view.slint
-msgid "Searching…"
-msgstr "Đang tìm kiếm…"
-
-#: ui/views/search-view.slint
 msgid "Search your library…"
 msgstr "Tìm trong thư viện…"
 
@@ -3340,6 +3421,7 @@ msgid_plural "{n} removed copies. Their files are still on disk, and scans leave
 msgstr[0] "{n} bản sao đã xóa. Tệp vẫn còn trên ổ đĩa, và các lần quét sẽ bỏ qua."
 
 #: ui/views/settings/duplicates-section.slint
+#: ui/views/settings/lyrics-section.slint
 msgid "Find…"
 msgstr "Tìm…"
 
@@ -3425,6 +3507,14 @@ msgstr "Hiện lời của bản nhạc đang phát trong Đang phát thay cho T
 #: ui/views/settings/lyrics-section.slint
 msgid "Print how a line sounds in Latin letters under the words, for a script that does not use them"
 msgstr "Hiện cách đọc của mỗi dòng bằng chữ Latin bên dưới lời, với những hệ chữ không dùng chữ Latin"
+
+#: ui/views/settings/lyrics-section.slint
+msgid "Find lyrics"
+msgstr "Tìm lời bài hát"
+
+#: ui/views/settings/lyrics-section.slint
+msgid "Pick the playing track's lyrics from lrclib.net's matches"
+msgstr "Chọn lời của bản nhạc đang phát từ các kết quả của lrclib.net"
 
 #: ui/views/settings/mini-player-section.slint
 msgid "Miniplayer"

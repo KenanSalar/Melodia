@@ -478,11 +478,6 @@ msgstr "Нет плейлистов для экспорта"
 msgid "Several playlists are saved as one .zip file, which you can import directly without extracting it."
 msgstr "Несколько плейлистов сохраняются в один файл .zip, который можно импортировать сразу, не распаковывая."
 
-#. Translators: {} names who measured the headphones, as oratory1990.
-#: ui/components/dialog/headphone-picker-body.slint
-msgid "Measured by {}"
-msgstr "Измерения: {}"
-
 #: ui/components/dialog/headphone-picker-body.slint
 msgid "Find a model…"
 msgstr "Найти модель…"
@@ -521,6 +516,11 @@ msgstr "Профиль AutoEq для этой модели содержит ст
 msgid "Couldn't apply the correction. See the log for details."
 msgstr "Не удалось применить коррекцию. Подробности в журнале."
 
+#. Translators: {} names who measured the headphones, as oratory1990.
+#: ui/components/dialog/headphone-picker-body.slint
+msgid "Measured by {}"
+msgstr "Измерения: {}"
+
 #. Translators: {} is the day the copy left the library, as 2026-11-02.
 #: ui/components/dialog/kept-out-body.slint
 msgid "Removed {}"
@@ -556,6 +556,78 @@ msgstr "Исключённых файлов нет"
 #: ui/components/dialog/kept-out-body.slint
 msgid "Every removed copy is back in the library."
 msgstr "Все удалённые копии снова в медиатеке."
+
+#: ui/components/dialog/lyrics-finder-body.slint
+msgid "Title and artist…"
+msgstr "Название и исполнитель…"
+
+#: ui/components/dialog/lyrics-finder-body.slint
+msgid "Instrumental"
+msgstr "Инструментал"
+
+#: ui/components/dialog/lyrics-finder-body.slint
+msgid "Plain"
+msgstr "Простой"
+
+#: ui/components/dialog/lyrics-finder-body.slint
+msgid "Synced"
+msgstr "Синхронный"
+
+#: ui/components/dialog/lyrics-finder-body.slint
+msgid "Word-timed"
+msgstr "По словам"
+
+#: ui/components/dialog/lyrics-finder-body.slint ui/views/search-view.slint
+msgid "Searching…"
+msgstr "Поиск…"
+
+#: ui/components/dialog/lyrics-finder-body.slint
+msgid "lrclib.net asked Melodia to wait"
+msgstr "lrclib.net попросил Melodia подождать"
+
+#: ui/components/dialog/lyrics-finder-body.slint
+msgid "Couldn't search lrclib.net"
+msgstr "Не удалось выполнить поиск на lrclib.net"
+
+#: ui/components/dialog/lyrics-finder-body.slint
+msgid "No lyrics match"
+msgstr "Подходящих текстов нет"
+
+#: ui/components/dialog/lyrics-finder-body.slint
+msgid "Press Enter to search again in a minute."
+msgstr "Через минуту нажмите Enter, чтобы искать снова."
+
+#: ui/components/dialog/lyrics-finder-body.slint
+msgid "Check your connection, then press Enter to search again."
+msgstr "Проверьте подключение, затем нажмите Enter, чтобы искать снова."
+
+#: ui/components/dialog/lyrics-finder-body.slint
+msgid "Try fewer words, or the title alone."
+msgstr "Попробуйте меньше слов или только название."
+
+#: ui/components/dialog/lyrics-finder-body.slint
+msgid "Couldn't keep the pick. See the log for details."
+msgstr "Не удалось сохранить выбор. Подробности в журнале."
+
+#: ui/components/dialog/lyrics-finder-body.slint
+msgid "Pick a match to see how it starts."
+msgstr "Выберите результат, чтобы увидеть, как он начинается."
+
+#: ui/components/dialog/lyrics-finder-body.slint
+msgid "lrclib.net files this recording as instrumental."
+msgstr "lrclib.net числит эту запись инструментальной."
+
+#: ui/components/dialog/lyrics-finder-body.slint
+msgid "The .lrc file beside this track is shown ahead of this pick."
+msgstr "Файл .lrc рядом с этим треком показывается раньше этого выбора."
+
+#: ui/components/dialog/lyrics-finder-body.slint
+msgid "The timed lyrics in this track's tags are shown ahead of this pick."
+msgstr "Синхронизированный текст в тегах этого трека показывается раньше этого выбора."
+
+#: ui/components/dialog/lyrics-finder-body.slint
+msgid "This track's tags hold lyrics, which are shown ahead of an untimed pick."
+msgstr "В тегах этого трека есть текст, который показывается раньше несинхронизированного выбора."
 
 #: ui/components/dialog/playlist-mosaic-picker.slint
 msgid "No artwork"
@@ -1389,6 +1461,10 @@ msgid "Look up again"
 msgstr "Искать снова"
 
 #: ui/components/now-playing/lyrics-menu.slint
+msgid "Find lyrics…"
+msgstr "Найти текст…"
+
+#: ui/components/now-playing/lyrics-menu.slint
 msgid "Save to file"
 msgstr "Сохранить в файл"
 
@@ -2215,6 +2291,15 @@ msgstr "Выберите плейлисты для экспорта."
 #: ui/views/radio/tab-pills.slint
 msgid "Export"
 msgstr "Экспорт"
+
+#: ui/globals/dialog.slint
+msgid "Find Lyrics"
+msgstr "Найти текст"
+
+#. Translators: {} is the playing track's length, as 3:45.
+#: ui/globals/dialog.slint
+msgid "lrclib.net's matches for this track, which runs {}."
+msgstr "Результаты lrclib.net для этого трека длительностью {}."
 
 #: ui/globals/duplicates.slint
 msgid "{n} copy removed from the library"
@@ -3165,10 +3250,6 @@ msgid "Play something and it will show up here."
 msgstr "Включите что-нибудь, и оно появится здесь."
 
 #: ui/views/search-view.slint
-msgid "Searching…"
-msgstr "Поиск…"
-
-#: ui/views/search-view.slint
 msgid "Search your library…"
 msgstr "Поиск в медиатеке…"
 
@@ -3456,6 +3537,7 @@ msgstr[1] "{n} удалённые копии. Их файлы по-прежне�
 msgstr[2] "{n} удалённых копий. Их файлы по-прежнему на диске, а сканирования их пропускают."
 
 #: ui/views/settings/duplicates-section.slint
+#: ui/views/settings/lyrics-section.slint
 msgid "Find…"
 msgstr "Найти…"
 
@@ -3541,6 +3623,14 @@ msgstr "Показывать текст играющего трека на эк�
 #: ui/views/settings/lyrics-section.slint
 msgid "Print how a line sounds in Latin letters under the words, for a script that does not use them"
 msgstr "Показывать под строкой её звучание латиницей, если текст написан другим письмом"
+
+#: ui/views/settings/lyrics-section.slint
+msgid "Find lyrics"
+msgstr "Найти текст"
+
+#: ui/views/settings/lyrics-section.slint
+msgid "Pick the playing track's lyrics from lrclib.net's matches"
+msgstr "Выбрать текст играющего трека из результатов lrclib.net"
 
 #: ui/views/settings/mini-player-section.slint
 msgid "Miniplayer"

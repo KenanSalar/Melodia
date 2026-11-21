@@ -24,7 +24,7 @@ export component LyricsMenu inherits Rectangle {
 
     // Every row drawn whether it can act or not, so the reserve is a constant and no row moves
     // under the pointer between opens.
-    property <length> menu-h: FlyoutMetrics.menu-row-h * 5 + FlyoutMetrics.chrome-h;
+    property <length> menu-h: FlyoutMetrics.menu-row-h * 6 + FlyoutMetrics.chrome-h;
 
     btn := AccentGlyphButton {
         icon: "lyrics";
@@ -103,6 +103,17 @@ export component LyricsMenu inherits Rectangle {
                     button-enabled: Lyrics.state != LyricsState.idle && Lyrics.online-enabled;
                     clicked => {
                         Lyrics.refresh();
+                        pop.close();
+                    }
+                }
+
+                // For a match the lookup keeps getting wrong: lrclib.net's other sheets, one picked.
+                OverflowRow {
+                    icon: "search";
+                    label: @tr("Find lyrics…");
+                    button-enabled: Lyrics.online-enabled && Player.vm.has_track;
+                    clicked => {
+                        Dialog.open-lyrics-finder();
                         pop.close();
                     }
                 }

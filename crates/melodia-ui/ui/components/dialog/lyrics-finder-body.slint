@@ -1,0 +1,86 @@
+import { Theme } from "../../theme.slint";
+import { LyricsFinder, LyricsMasking, LyricsSearchPhase } from "../../globals/lyrics-finder.slint";
+import { PickList } from "pick-list.slint";
+
+// lrclib.net's matches for the playing track, the picked one's first lines, and whether the track's
+// own lyrics would be shown ahead of it.
+export component LyricsFinderBody inherits VerticalLayout {
+    property <bool> searching: LyricsFinder.phase == LyricsSearchPhase.loading;
+    property <bool> rate-limited: LyricsFinder.phase == LyricsSearchPhase.rate-limited;
+    property <bool> failed: LyricsFinder.phase == LyricsSearchPhase.failed;
+    property <bool> has-rows: LyricsFinder.phase == LyricsSearchPhase.listing
+        && LyricsFinder.rows.length > 0;
+    property <bool> shows-words: LyricsFinder.picked >= 0 && LyricsFinder.preview != "";
+    // Fixed, so a pick moves nothing, and with room for the lines Rust sends in a face as tall as
+    // CJK's.
+    property <length> preview-h: 150px;
+
+    spacing: Theme.pad-md;
+
+    PickList {
+        vertical-stretch: 1;
+        rows: LyricsFinder.rows;
+        // The box holds the question, so it stays up while lrclib.net answers or refuses. A search
+        // empties the rows, which is what raises the state block.
+        listing: true;
+        filter <=> LyricsFinder.query;
+        picked <=> LyricsFinder.picked;
+        blur-tick <=> LyricsFinder.blur-tick;
+        placeholder: @tr("Title and artist…");
+        // In `finder::badge`'s order.
+        badges: [@tr("Word-timed"), @tr("Synced"), @tr("Plain"), @tr("Instrumental")];
+
+        state-icon: root.searching ? "lyrics"
+            : root.rate-limited ? "timer"
+            : root.failed ? "error"
+            : "search_off";
+        state-title: root.searching ? @tr("Searching…")
+            : root.rate-limited ? @tr("lrclib.net asked Melodia to wait")
+            : root.failed ? @tr("Couldn't search lrclib.net")
+            : @tr("No lyrics match");
+        state-body: root.searching ? ""
+            : root.rate-limited ? @tr("Press Enter to search again in a minute.")
+            : root.failed ? @tr("Check your connection, then press Enter to search again.")
+            : @tr("Try fewer words, or the title alone.");
+
+        failure: LyricsFinder.apply-failed
+            ? @tr("Couldn't keep the pick. See the log for details.") : "";
+
+        filter-accepted => { LyricsFinder.search(LyricsFinder.query); }
+        row-picked(index) => { LyricsFinder.picked-changed(index); }
+        subtitle-for(row) => { row.subtitle }
+    }
+
+    if root.has-rows: Rectangle {
+        min-height: root.preview-h;
+        max-height: root.preview-h;
+        background: Theme.base;
+        border-radius: Theme.radius-lg;
+
+        Text {
+            x: Theme.pad-md;
+            y: Theme.pad-sm;
+            width: parent.width - 2 * Theme.pad-md;
+            height: parent.height - 2 * Theme.pad-sm;
+            text: LyricsFinder.picked < 0 ? @tr("Pick a match to see how it starts.")
+                : root.shows-words ? LyricsFinder.preview
+                : @tr("lrclib.net files this recording as instrumental.");
+            color: root.shows-words ? Theme.text : Theme.subtext0;
+            font-size: Theme.font-size-sm;
+            wrap: word-wrap;
+            overflow: elide;
+        }
+    }
+
+    // Apply still keeps such a pick, so it has to say why the panel won't show it.
+    if LyricsFinder.masking != LyricsMasking.none: Text {
+        text: LyricsFinder.masking == LyricsMasking.sidecar
+            ? @tr("The .lrc file beside this track is shown ahead of this pick.")
+            : LyricsFinder.masking == LyricsMasking.timed-tag
+            ? @tr("The timed lyrics in this track's tags are shown ahead of this pick.")
+            : @tr("This track's tags hold lyrics, which are shown ahead of an untimed pick.");
+        color: Theme.subtext0;
+        font-size: Theme.font-size-sm;
+        wrap: word-wrap;
+    }
+}

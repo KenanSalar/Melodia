@@ -251,6 +251,7 @@ pub fn install(
 
     lyrics::wire_reseed(ui, state, &np_state);
     lyrics::wire_menu(ui, state, &np_state);
+    lyrics::wire_finder(ui, state, &np_state);
 
     // No artwork seed: it decodes on the first open, or on `kick_artwork`.
     Ok(np_state)

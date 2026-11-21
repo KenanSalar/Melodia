@@ -170,7 +170,7 @@ fn report_save_failure(e: &melodia_core::error::AppError) {
 }
 
 /// The track on the deck, or `None` on a station or an empty queue.
-fn playing_track(np_state: &NowPlayingState) -> Option<Arc<TrackSummary>> {
+pub(super) fn playing_track(np_state: &NowPlayingState) -> Option<Arc<TrackSummary>> {
     np_state.current_source.borrow().as_ref().and_then(|s| s.track.clone())
 }
 

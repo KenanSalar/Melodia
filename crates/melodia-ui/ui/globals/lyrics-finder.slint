@@ -1,0 +1,32 @@
+import { PickRow } from "../models.slint";
+
+// `rate-limited` stands apart from `failed`: only waiting fixes it.
+export enum LyricsSearchPhase { loading, listing, rate-limited, failed }
+
+// Which of the track's own lyrics the panel shows ahead of the picked sheet, `none` where it would
+// show the pick.
+export enum LyricsMasking { none, sidecar, timed-tag, plain-tag }
+
+// The Find lyrics dialog, owned by `ui::now_playing::lyrics::finder`. Every search goes out from
+// Rust on the open and on Enter, never per keystroke.
+export global LyricsFinder {
+    in property <[PickRow]> rows;
+    // Raised by the opener, so the dialog opens on Searching rather than on an empty list.
+    in-out property <LyricsSearchPhase> phase;
+    in-out property <string> query;
+    in-out property <int> blur-tick;
+    // A `PickRow.index`, -1 for none.
+    in-out property <int> picked: -1;
+    // The picked sheet's first lines; empty for an instrumental pick, which has none.
+    in property <string> preview;
+    in property <LyricsMasking> masking;
+    in property <bool> applying;
+    in property <bool> apply-failed;
+
+    callback load();
+    callback search(string /*query*/);
+    callback picked-changed(int /*picked*/);
+    callback apply(int /*picked*/);
+    // From every kind's teardown, as `HeadphonePicker.released` is.
+    callback released();
+}

@@ -2,7 +2,7 @@
 
 Working doc. Delete when the feature ships.
 
-Status: **Phase 3 landed; Phase 4 next** · Created: 2026-11-21 · Branch `feat/enhanced-lrc`, after
+Status: **Phase 4 landed; Phase 5's hand tests next** · Created: 2026-11-21 · Branch `feat/enhanced-lrc`, after
 [ENHANCED_LRC.md](ENHANCED_LRC.md)'s Phase 5
 
 > Researched **2026-11-21** against `feat/enhanced-lrc` at `8db89fc3`; lrclib's API reference
@@ -112,6 +112,11 @@ Status: **Phase 3 landed; Phase 4 next** · Created: 2026-11-21 · Branch `feat/
   callback lets AutoEq keep "Measured by {}" with its translator note.
 - AutoEq narrows a list it holds, while the finder asks the network, so `PickList` raises both
   `filter-changed` and `filter-accepted` and each host wires what it needs.
+- The finder binds `listing: true`: its box holds the query, so it stays up while lrclib answers or
+  refuses, and a search empties the rows, which raises the state block. `PickList` takes no input
+  of its own for it.
+- The enums are `LyricsSearchPhase` and `LyricsMasking`, `dialog.slint` already saying "finder"
+  for the duplicates finder.
 
 ---
 
@@ -157,18 +162,18 @@ copied.
 | `melodia-ui/ui/components/dialog/pick-list.slint` (new) | `PickList`: search bar, the well with `ListView` and `OverlayScrollbar`, empty state, failure line, the single-pick row | |
 | `melodia-ui/ui/models.slint` | `PickRow`, replacing `CorrectionPickRow` | 530 |
 | `melodia-ui/ui/components/dialog/headphone-picker-body.slint` | `HeadphonePicker` bound onto `PickList`, with AutoEq's strings | 161 |
-| `melodia-ui/ui/components/dialog/lyrics-finder-body.slint` (new) | `PickList`, the preview, the hidden-pick note, the badge labels | |
-| `melodia-ui/ui/globals/lyrics-finder.slint` (new) | `LyricsFinder` and its phase and masking enums | |
-| `melodia-ui/ui/globals/dialog.slint` | `DialogKind.lyrics-finder`, its routing and teardown, `open-lyrics-finder()` | 465 |
-| `melodia-ui/ui/components/dialog/dialog.slint` | the kind's width, scroller, body mount and confirm gate | 316 |
-| `melodia-ui/ui/components/now-playing/lyrics-menu.slint` | the "Find lyrics…" row | 137 |
-| `melodia-ui/ui/views/settings/lyrics-section.slint` | the "Find lyrics" row | 82 |
+| `melodia-ui/ui/components/dialog/lyrics-finder-body.slint` (new) | `PickList`, the preview, the hidden-pick note, the badge labels | 86 |
+| `melodia-ui/ui/globals/lyrics-finder.slint` (new) | `LyricsFinder`, `LyricsSearchPhase` and `LyricsMasking` | 32 |
+| `melodia-ui/ui/globals/dialog.slint` | `DialogKind.lyrics-finder`, its routing and teardown, `open-lyrics-finder()` | 490 |
+| `melodia-ui/ui/components/dialog/dialog.slint` | the kind's width, scroller, body mount and confirm gate | 326 |
+| `melodia-ui/ui/components/now-playing/lyrics-menu.slint` | the "Find lyrics…" row | 148 |
+| `melodia-ui/ui/views/settings/lyrics-section.slint` | the "Find lyrics" row | 103 |
 | `melodia-net/src/services/net/lyrics_directory/lyricsfile.rs` (new) | Lyricsfile YAML to enhanced LRC | |
 | `melodia-net/src/services/net/lyrics_directory/lrclib.rs` | `lyricsfile` and `hasWordSync` read; the `q` search, ranked and deduplicated | 371 |
 | `melodia-core/src/entities/lyrics.rs` | `LyricsCandidate` | |
 | `melodia-app/src/library/lyrics/finder.rs` (new) | `default_query`, `search`, `choose`, `outranking` | |
 | `melodia-views/src/ui/correction/picker.rs` | the AutoEq rows as `PickRow` | 203 |
-| `melodia-views/src/ui/now_playing/lyrics/finder.rs` (new) | the dialog's controller on `DialogTicket` | |
+| `melodia-views/src/ui/now_playing/lyrics/finder.rs` (new) | the dialog's controller on `DialogTicket` | 267 |
 
 Every file stays well under 800.
 
@@ -239,26 +244,28 @@ Every file stays well under 800.
 
 ## Phase 4: The finder and its two entries (`melodia-ui`, `melodia-views`)
 
-- [ ] `LyricsFinder`: phase (loading, listing, rate-limited, failed, as `SearchFailure` tells
-      them apart), query, rows, picked, preview, masking, applying; `load`, `search`,
-      `picked-changed`, `apply`, `released`.
-- [ ] `lyrics-finder-body.slint`; `DialogKind.lyrics-finder` at `max-w`, `body-scrolls`, the body
+- [x] `LyricsFinder`: phase (loading, listing, rate-limited, failed, as `SearchFailure` tells
+      them apart), query, rows, picked, preview, masking, applying, apply-failed; `load`,
+      `search`, `picked-changed`, `apply`, `released`.
+- [x] `lyrics-finder-body.slint`; `DialogKind.lyrics-finder` at `max-w`, `body-scrolls`, the body
       mount, the confirm gate (listing, a pick, not applying), `accepted` and `closed-teardown`.
-- [ ] `Dialog.open-lyrics-finder()`, the kind having two callers; `dialog_openers.rs`'
+- [x] `Dialog.open-lyrics-finder()`, the kind having two callers; `dialog_openers.rs`'
       `FOLDED_KINDS` gains it.
-- [ ] `ui/now_playing/lyrics/finder.rs`:
+- [x] `ui/now_playing/lyrics/finder.rs`:
   - `load` searches the default query and `search` the typed one, off the UI thread, under the
     ticket;
   - `picked-changed` sets the preview, stamps stripped, and the masking from
     `Outranking::hides` for that row's kind;
   - `apply` chooses, closes the dialog, and releases and kicks the panel when it is mounted.
-- [ ] The lyrics menu's row, enabled on `Lyrics.online-enabled && Player.vm.has_track`, never
+- [x] The lyrics menu's row, enabled on `Lyrics.online-enabled && Player.vm.has_track`, never
       behind an `if`; `menu-h` becomes `* 6`, the count `lyrics_switch.rs` derives from the rows.
-- [ ] Settings › Lyrics' row with a "Find…" button (an existing msgid), enabled under the same
+- [x] Settings › Lyrics' row with a "Find…" button (an existing msgid), enabled under the same
       conditions plus `Settings.lyrics-enabled`.
-- [ ] Strings: `scripts/update-translations.py`, then every catalog filled, no empty `msgstr` and
-      no `#, fuzzy`. "Apply", "Cancel" and "Find…" are reused.
-- [ ] Docs: `README.md`'s lyrics lines; `lyrics-section.slint`'s header note.
+- [x] Strings: `scripts/update-translations.py`, then every catalog filled, no empty `msgstr` and
+      no `#, fuzzy`. "Apply", "Cancel", "Find…" and "Searching…" are reused.
+- [x] Docs: `README.md`'s lyrics lines; `lyrics-section.slint`'s header note.
+- [x] Also: `ui-patterns.md`'s catalogue names Find Lyrics beside Find Headphones; a search waits
+      out a pick being stored, whose close its retired ticket would strand.
 
 **Gate:** fmt, clippy, the suite: `dialog_openers.rs`, `lyrics_switch.rs`, `scrollbars.rs`,
 `translations.rs`.

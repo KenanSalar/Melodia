@@ -467,11 +467,6 @@ msgstr "No hay listas para exportar"
 msgid "Several playlists are saved as one .zip file, which you can import directly without extracting it."
 msgstr "Varias listas se guardan como un único archivo .zip, que puedes importar directamente sin descomprimirlo."
 
-#. Translators: {} names who measured the headphones, as oratory1990.
-#: ui/components/dialog/headphone-picker-body.slint
-msgid "Measured by {}"
-msgstr "Medido por {}"
-
 #: ui/components/dialog/headphone-picker-body.slint
 msgid "Find a model…"
 msgstr "Buscar un modelo…"
@@ -510,6 +505,11 @@ msgstr "El perfil de AutoEq para este modelo tiene líneas que Melodia no puede 
 msgid "Couldn't apply the correction. See the log for details."
 msgstr "No se pudo aplicar la corrección. Consulta el registro para más detalles."
 
+#. Translators: {} names who measured the headphones, as oratory1990.
+#: ui/components/dialog/headphone-picker-body.slint
+msgid "Measured by {}"
+msgstr "Medido por {}"
+
 #. Translators: {} is the day the copy left the library, as 2026-11-02.
 #: ui/components/dialog/kept-out-body.slint
 msgid "Removed {}"
@@ -544,6 +544,78 @@ msgstr "No hay nada excluido"
 #: ui/components/dialog/kept-out-body.slint
 msgid "Every removed copy is back in the library."
 msgstr "Todas las copias eliminadas han vuelto a la biblioteca."
+
+#: ui/components/dialog/lyrics-finder-body.slint
+msgid "Title and artist…"
+msgstr "Título y artista…"
+
+#: ui/components/dialog/lyrics-finder-body.slint
+msgid "Instrumental"
+msgstr "Instrumental"
+
+#: ui/components/dialog/lyrics-finder-body.slint
+msgid "Plain"
+msgstr "Sin sincronizar"
+
+#: ui/components/dialog/lyrics-finder-body.slint
+msgid "Synced"
+msgstr "Sincronizada"
+
+#: ui/components/dialog/lyrics-finder-body.slint
+msgid "Word-timed"
+msgstr "Por palabra"
+
+#: ui/components/dialog/lyrics-finder-body.slint ui/views/search-view.slint
+msgid "Searching…"
+msgstr "Buscando…"
+
+#: ui/components/dialog/lyrics-finder-body.slint
+msgid "lrclib.net asked Melodia to wait"
+msgstr "lrclib.net pidió a Melodia que espere"
+
+#: ui/components/dialog/lyrics-finder-body.slint
+msgid "Couldn't search lrclib.net"
+msgstr "No se pudo buscar en lrclib.net"
+
+#: ui/components/dialog/lyrics-finder-body.slint
+msgid "No lyrics match"
+msgstr "Ninguna letra coincide"
+
+#: ui/components/dialog/lyrics-finder-body.slint
+msgid "Press Enter to search again in a minute."
+msgstr "Pulsa Intro dentro de un minuto para buscar de nuevo."
+
+#: ui/components/dialog/lyrics-finder-body.slint
+msgid "Check your connection, then press Enter to search again."
+msgstr "Comprueba tu conexión y pulsa Intro para buscar de nuevo."
+
+#: ui/components/dialog/lyrics-finder-body.slint
+msgid "Try fewer words, or the title alone."
+msgstr "Prueba con menos palabras o solo el título."
+
+#: ui/components/dialog/lyrics-finder-body.slint
+msgid "Couldn't keep the pick. See the log for details."
+msgstr "No se pudo guardar la elección. Consulta el registro para más detalles."
+
+#: ui/components/dialog/lyrics-finder-body.slint
+msgid "Pick a match to see how it starts."
+msgstr "Elige un resultado para ver cómo empieza."
+
+#: ui/components/dialog/lyrics-finder-body.slint
+msgid "lrclib.net files this recording as instrumental."
+msgstr "lrclib.net registra esta grabación como instrumental."
+
+#: ui/components/dialog/lyrics-finder-body.slint
+msgid "The .lrc file beside this track is shown ahead of this pick."
+msgstr "El archivo .lrc junto a esta pista se muestra antes que esta elección."
+
+#: ui/components/dialog/lyrics-finder-body.slint
+msgid "The timed lyrics in this track's tags are shown ahead of this pick."
+msgstr "La letra sincronizada de las etiquetas de esta pista se muestra antes que esta elección."
+
+#: ui/components/dialog/lyrics-finder-body.slint
+msgid "This track's tags hold lyrics, which are shown ahead of an untimed pick."
+msgstr "Las etiquetas de esta pista tienen letra, que se muestra antes que una elección sin sincronizar."
 
 #: ui/components/dialog/playlist-mosaic-picker.slint
 msgid "No artwork"
@@ -1376,6 +1448,10 @@ msgid "Look up again"
 msgstr "Buscar de nuevo"
 
 #: ui/components/now-playing/lyrics-menu.slint
+msgid "Find lyrics…"
+msgstr "Buscar la letra…"
+
+#: ui/components/now-playing/lyrics-menu.slint
 msgid "Save to file"
 msgstr "Guardar en el archivo"
 
@@ -2191,6 +2267,15 @@ msgstr "Elige las listas que exportar."
 #: ui/views/radio/tab-pills.slint
 msgid "Export"
 msgstr "Exportar"
+
+#: ui/globals/dialog.slint
+msgid "Find Lyrics"
+msgstr "Buscar la letra"
+
+#. Translators: {} is the playing track's length, as 3:45.
+#: ui/globals/dialog.slint
+msgid "lrclib.net's matches for this track, which runs {}."
+msgstr "Resultados de lrclib.net para esta pista, que dura {}."
 
 #: ui/globals/duplicates.slint
 msgid "{n} copy removed from the library"
@@ -3108,10 +3193,6 @@ msgid "Play something and it will show up here."
 msgstr "Reproduce algo y aparecerá aquí."
 
 #: ui/views/search-view.slint
-msgid "Searching…"
-msgstr "Buscando…"
-
-#: ui/views/search-view.slint
 msgid "Search your library…"
 msgstr "Buscar en tu biblioteca…"
 
@@ -3398,6 +3479,7 @@ msgstr[0] "{n} copia eliminada. Su archivo sigue en el disco y los análisis lo 
 msgstr[1] "{n} copias eliminadas. Sus archivos siguen en el disco y los análisis los omiten."
 
 #: ui/views/settings/duplicates-section.slint
+#: ui/views/settings/lyrics-section.slint
 msgid "Find…"
 msgstr "Buscar…"
 
@@ -3483,6 +3565,14 @@ msgstr "Mostrar la letra de la canción en curso en la pantalla «Reproduciendo�
 #: ui/views/settings/lyrics-section.slint
 msgid "Print how a line sounds in Latin letters under the words, for a script that does not use them"
 msgstr "Mostrar bajo la letra cómo suena cada verso en caracteres latinos, para escrituras que no los usan"
+
+#: ui/views/settings/lyrics-section.slint
+msgid "Find lyrics"
+msgstr "Buscar la letra"
+
+#: ui/views/settings/lyrics-section.slint
+msgid "Pick the playing track's lyrics from lrclib.net's matches"
+msgstr "Elige la letra de la pista en reproducción entre los resultados de lrclib.net"
 
 #: ui/views/settings/mini-player-section.slint
 msgid "Miniplayer"

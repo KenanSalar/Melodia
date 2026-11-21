@@ -3,6 +3,7 @@
 //! **Every position is milliseconds in an `i32`**, as the `Player` global publishes and the rows
 //! carry: it reaches past three weeks of one track and converts into `f64` without loss.
 
+mod finder;
 mod follow;
 mod measure;
 mod rows;
@@ -21,6 +22,7 @@ use melodia_app::tasks;
 use melodia_core::entities::lyrics::LyricLine;
 use melodia_ui::{AppWindow, LyricRow, Lyrics};
 
+pub(super) use finder::wire_finder;
 pub(super) use sheet::{release, wire_menu, wire_reseed};
 
 /// Until the panel reports its own, within a second of mounting. Mid `up-next-width`'s clamp, so

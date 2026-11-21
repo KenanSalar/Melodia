@@ -166,7 +166,7 @@ Shrink the window and the full UI collapses into a mini-player that grows with i
 - **Online lookup is off until you switch it on**: nothing contacts **lrclib.net** until you do, and its answers are cached under your data folder rather than written into your files
 - Romanization under a line in a script you don't read, around a hundred scripts in all, with engines matched to Korean and Japanese. On by default, and silent for a sheet already in Latin letters
 - A bilingual sheet's translation is drawn under the words it glosses
-- **Look up again** for a wrong match, **Save to file** to write the sheet into the track's tag, and **Edit lyrics…** to fix a stamp by hand
+- **Look up again** for a wrong match, **Find lyrics…** to pick one of lrclib.net's matches by hand, **Save to file** to write the sheet into the track's tag, and **Edit lyrics…** to fix a stamp by hand
 
 </details>
 

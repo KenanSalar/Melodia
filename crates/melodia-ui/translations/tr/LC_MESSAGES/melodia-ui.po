@@ -471,11 +471,6 @@ msgstr "Dışa aktarılacak çalma listesi yok"
 msgid "Several playlists are saved as one .zip file, which you can import directly without extracting it."
 msgstr "Birden fazla çalma listesi tek bir .zip dosyası olarak kaydedilir; bu dosyayı arşivden çıkarmadan doğrudan içe aktarabilirsiniz."
 
-#. Translators: {} names who measured the headphones, as oratory1990.
-#: ui/components/dialog/headphone-picker-body.slint
-msgid "Measured by {}"
-msgstr "Ölçen: {}"
-
 #: ui/components/dialog/headphone-picker-body.slint
 msgid "Find a model…"
 msgstr "Model bul…"
@@ -514,6 +509,11 @@ msgstr "AutoEq'in bu model için profili Melodia'nın okuyamadığı satırlar i
 msgid "Couldn't apply the correction. See the log for details."
 msgstr "Düzeltme uygulanamadı. Ayrıntılar için günlüğe bak."
 
+#. Translators: {} names who measured the headphones, as oratory1990.
+#: ui/components/dialog/headphone-picker-body.slint
+msgid "Measured by {}"
+msgstr "Ölçen: {}"
+
 #. Translators: {} is the day the copy left the library, as 2026-11-02.
 #: ui/components/dialog/kept-out-body.slint
 msgid "Removed {}"
@@ -548,6 +548,78 @@ msgstr "Dışarıda tutulan dosya yok"
 #: ui/components/dialog/kept-out-body.slint
 msgid "Every removed copy is back in the library."
 msgstr "Kaldırılan tüm kopyalar kitaplığa geri döndü."
+
+#: ui/components/dialog/lyrics-finder-body.slint
+msgid "Title and artist…"
+msgstr "Başlık ve sanatçı…"
+
+#: ui/components/dialog/lyrics-finder-body.slint
+msgid "Instrumental"
+msgstr "Enstrümantal"
+
+#: ui/components/dialog/lyrics-finder-body.slint
+msgid "Plain"
+msgstr "Düz"
+
+#: ui/components/dialog/lyrics-finder-body.slint
+msgid "Synced"
+msgstr "Senkron"
+
+#: ui/components/dialog/lyrics-finder-body.slint
+msgid "Word-timed"
+msgstr "Kelime kelime"
+
+#: ui/components/dialog/lyrics-finder-body.slint ui/views/search-view.slint
+msgid "Searching…"
+msgstr "Aranıyor…"
+
+#: ui/components/dialog/lyrics-finder-body.slint
+msgid "lrclib.net asked Melodia to wait"
+msgstr "lrclib.net, Melodia'dan beklemesini istedi"
+
+#: ui/components/dialog/lyrics-finder-body.slint
+msgid "Couldn't search lrclib.net"
+msgstr "lrclib.net'te arama yapılamadı"
+
+#: ui/components/dialog/lyrics-finder-body.slint
+msgid "No lyrics match"
+msgstr "Eşleşen şarkı sözü yok"
+
+#: ui/components/dialog/lyrics-finder-body.slint
+msgid "Press Enter to search again in a minute."
+msgstr "Bir dakika sonra yeniden aramak için Enter'a bas."
+
+#: ui/components/dialog/lyrics-finder-body.slint
+msgid "Check your connection, then press Enter to search again."
+msgstr "Bağlantını kontrol et, sonra yeniden aramak için Enter'a bas."
+
+#: ui/components/dialog/lyrics-finder-body.slint
+msgid "Try fewer words, or the title alone."
+msgstr "Daha az kelime ya da yalnızca başlığı dene."
+
+#: ui/components/dialog/lyrics-finder-body.slint
+msgid "Couldn't keep the pick. See the log for details."
+msgstr "Seçim saklanamadı. Ayrıntılar için günlüğe bak."
+
+#: ui/components/dialog/lyrics-finder-body.slint
+msgid "Pick a match to see how it starts."
+msgstr "Nasıl başladığını görmek için bir sonuç seç."
+
+#: ui/components/dialog/lyrics-finder-body.slint
+msgid "lrclib.net files this recording as instrumental."
+msgstr "lrclib.net bu kaydı enstrümantal olarak listeliyor."
+
+#: ui/components/dialog/lyrics-finder-body.slint
+msgid "The .lrc file beside this track is shown ahead of this pick."
+msgstr "Bu parçanın yanındaki .lrc dosyası bu seçimden önce gösterilir."
+
+#: ui/components/dialog/lyrics-finder-body.slint
+msgid "The timed lyrics in this track's tags are shown ahead of this pick."
+msgstr "Bu parçanın etiketlerindeki zamanlı sözler bu seçimden önce gösterilir."
+
+#: ui/components/dialog/lyrics-finder-body.slint
+msgid "This track's tags hold lyrics, which are shown ahead of an untimed pick."
+msgstr "Bu parçanın etiketlerindeki sözler, zamanlaması olmayan bir seçimden önce gösterilir."
 
 #: ui/components/dialog/playlist-mosaic-picker.slint
 msgid "No artwork"
@@ -1380,6 +1452,10 @@ msgid "Look up again"
 msgstr "Yeniden ara"
 
 #: ui/components/now-playing/lyrics-menu.slint
+msgid "Find lyrics…"
+msgstr "Şarkı sözü bul…"
+
+#: ui/components/now-playing/lyrics-menu.slint
 msgid "Save to file"
 msgstr "Dosyaya kaydet"
 
@@ -2200,6 +2276,15 @@ msgstr "Dışa aktarılacak çalma listelerini seçin."
 #: ui/views/radio/tab-pills.slint
 msgid "Export"
 msgstr "Dışa aktar"
+
+#: ui/globals/dialog.slint
+msgid "Find Lyrics"
+msgstr "Şarkı Sözü Bul"
+
+#. Translators: {} is the playing track's length, as 3:45.
+#: ui/globals/dialog.slint
+msgid "lrclib.net's matches for this track, which runs {}."
+msgstr "lrclib.net'in {} süren bu parça için sonuçları."
 
 #: ui/globals/duplicates.slint
 msgid "{n} copy removed from the library"
@@ -3121,10 +3206,6 @@ msgid "Play something and it will show up here."
 msgstr "Bir şey çal, burada görünsün."
 
 #: ui/views/search-view.slint
-msgid "Searching…"
-msgstr "Aranıyor…"
-
-#: ui/views/search-view.slint
 msgid "Search your library…"
 msgstr "Kitaplığınızda arayın…"
 
@@ -3411,6 +3492,7 @@ msgstr[0] "{n} kaldırılan kopya. Dosyası hâlâ diskte ve taramalar onu atlar
 msgstr[1] "{n} kaldırılan kopya. Dosyaları hâlâ diskte ve taramalar onları atlar."
 
 #: ui/views/settings/duplicates-section.slint
+#: ui/views/settings/lyrics-section.slint
 msgid "Find…"
 msgstr "Bul…"
 
@@ -3496,6 +3578,14 @@ msgstr "“Şimdi Çalıyor” ekranında “Sıradaki” yerine çalan parçan�
 #: ui/views/settings/lyrics-section.slint
 msgid "Print how a line sounds in Latin letters under the words, for a script that does not use them"
 msgstr "Latin alfabesini kullanmayan yazılar için her satırın okunuşunu sözlerin altında Latin harfleriyle yaz"
+
+#: ui/views/settings/lyrics-section.slint
+msgid "Find lyrics"
+msgstr "Şarkı sözü bul"
+
+#: ui/views/settings/lyrics-section.slint
+msgid "Pick the playing track's lyrics from lrclib.net's matches"
+msgstr "Çalan parçanın sözlerini lrclib.net'in sonuçları arasından seç"
 
 #: ui/views/settings/mini-player-section.slint
 msgid "Miniplayer"
