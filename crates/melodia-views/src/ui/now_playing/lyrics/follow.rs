@@ -124,7 +124,7 @@ pub(super) fn follow(ui: &AppWindow, ly: &LyricsUi) {
         let pinned_at = ly.pinned_at_ms.get();
         let shares_stamp =
             sung.and_then(|index| ly.rows.borrow().get(index)?.at_ms) == Some(pinned_at);
-        let near = (position - f64::from(pinned_at)).abs() <= PIN_HOLDS_FOR_MS;
+        let near = position - f64::from(pinned_at) <= PIN_HOLDS_FOR_MS;
         if sung != Some(pinned) && shares_stamp && near {
             write_active(ui, ly, Some(pinned), position);
             return;
@@ -135,10 +135,11 @@ pub(super) fn follow(ui: &AppWindow, ly: &LyricsUi) {
     write_active(ui, ly, sung, position);
 }
 
-/// Reads two projections rather than `get_vm()`, which clones the whole view model, strings and
-/// images, for two numbers on every tick.
+/// Reads projections rather than `get_vm()`, which clones the whole view model, strings and
+/// images, on every tick.
 fn report(player: &Player<'_>) -> Report {
     Report {
+        track_id: player.get_vm_track_id(),
         position_ms: player.get_position_ms(),
         playing: player.get_vm_is_playing(),
         speed: f64::from(player.get_vm_playback_speed()),

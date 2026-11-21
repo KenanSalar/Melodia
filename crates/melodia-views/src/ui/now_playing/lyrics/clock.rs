@@ -1,6 +1,6 @@
 //! Where the song is between the position channel's reports, which land about once a second.
 //!
-//! **Within a run of play the clock doesn't step back**, which would unlight words already lit: a
+//! **Within a run of play on one track the clock doesn't step back**, which would unlight words: a
 //! report landing behind what was shown holds the clock there until the song catches up, and one
 //! further back than [`DRIFT_SLACK_MS`] is a seek, taken as it stands.
 
@@ -15,12 +15,15 @@ const DRIFT_SLACK_MS: f64 = 1_000.0;
 /// What the `Player` global says on one pass.
 #[derive(Clone, Copy)]
 pub(super) struct Report {
+    pub(super) track_id: i32,
     pub(super) position_ms: i32,
     pub(super) playing: bool,
     pub(super) speed: f64,
 }
 
 pub(super) struct SongClock {
+    /// The track at the last pass: a report for another one is an op's, however near it lands.
+    track_id: Cell<i32>,
     /// The report last taken, so one read on many passes is taken once.
     seen_ms: Cell<i32>,
     anchor_ms: Cell<f64>,
@@ -30,9 +33,8 @@ pub(super) struct SongClock {
     running: Cell<bool>,
     speed: Cell<f64>,
     floor_ms: Cell<f64>,
-    /// When the screen last took the clock's answer: a pass shows what it observed, a click its
-    /// line. A pause or a report is judged against that, the transport having stopped anywhere
-    /// since and a paused panel ticking only now and then.
+    /// When the screen last took the clock's answer, which a pause or a report is judged against:
+    /// the transport may have stopped anywhere since, and a paused panel ticks only now and then.
     shown_at: Cell<Instant>,
 }
 
@@ -40,6 +42,7 @@ impl SongClock {
     pub(super) fn new() -> Self {
         let now = Instant::now();
         Self {
+            track_id: Cell::new(0),
             seen_ms: Cell::new(0),
             anchor_ms: Cell::new(0.0),
             anchor_at: Cell::new(now),
@@ -54,13 +57,15 @@ impl SongClock {
         let shown = self.position(self.shown_at.get());
         let speed = report.speed.max(0.0);
         let speed_moved = speed.to_bits() != self.speed.get().to_bits();
-        if report.position_ms != self.seen_ms.get() {
+        let track_moved = report.track_id != self.track_id.get();
+        if track_moved || report.position_ms != self.seen_ms.get() {
             self.seen_ms.set(report.position_ms);
-            self.take(f64::from(report.position_ms), shown, now);
+            self.take(report, shown, now);
         } else if report.playing != self.running.get() || speed_moved {
             // A pause freezes what was shown; a press or a new speed counts on from it.
             self.anchor(shown, now);
         }
+        self.track_id.set(report.track_id);
         self.running.set(report.playing);
         self.speed.set(speed);
         self.shown_at.set(now);
@@ -85,8 +90,10 @@ impl SongClock {
         self.shown_at.set(now);
     }
 
-    fn take(&self, reported: f64, shown: f64, now: Instant) {
-        let drifted = self.running.get() && (0.0..=DRIFT_SLACK_MS).contains(&(shown - reported));
+    fn take(&self, report: Report, shown: f64, now: Instant) {
+        let reported = f64::from(report.position_ms);
+        let same_run = self.running.get() && report.track_id == self.track_id.get();
+        let drifted = same_run && (0.0..=DRIFT_SLACK_MS).contains(&(shown - reported));
         self.floor_ms.set(if drifted { shown } else { reported });
         self.anchor(reported, now);
     }

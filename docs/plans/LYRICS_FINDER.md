@@ -328,7 +328,7 @@ the dev data folder, each against `main` where it should match.
   - the slider several seconds back snaps the words back, and a seek back under `DRIFT_SLACK_MS`
     holds them that long instead (the trade); a lyric click always jumps;
   - the first of two lines under one stamp, clicked, lights from the live position as before;
-    next track and repeat-one start clean.
+    next track, Next twice inside a track's first second, and repeat-one start clean.
 
 ### Tests
 
