@@ -3,6 +3,7 @@
 //! **Every position is milliseconds in an `i32`**, as the `Player` global publishes and the rows
 //! carry: it reaches past three weeks of one track and converts into `f64` without loss.
 
+mod clock;
 mod finder;
 mod follow;
 mod measure;
@@ -11,7 +12,6 @@ mod sheet;
 
 use std::cell::{Cell, RefCell};
 use std::rc::Rc;
-use std::time::Instant;
 
 use slint::{ComponentHandle, ModelRc, SharedString, VecModel};
 
@@ -165,11 +165,8 @@ pub(crate) struct LyricsUi {
     /// Which way the romanization toggle stood when the model was last written, so a re-measure
     /// can tell a flip from a width that moved and publish only for the former.
     published_romanization: Cell<bool>,
-    /// The last position the bridge published, and when it was seen. Together they interpolate a
-    /// roughly one-second tick into something a highlight can follow.
-    anchor_ms: Cell<i32>,
-    anchor_at: Cell<Instant>,
-    /// A clicked row, held until the clock catches up with it.
+    clock: clock::SongClock,
+    /// A clicked row, kept lit over a later row under the same stamp.
     pinned: Cell<Option<usize>>,
     pinned_at_ms: Cell<i32>,
     /// The row and cut `Lyrics.lit-words` was last written for, so a tick between two words
@@ -208,8 +205,7 @@ pub(super) fn install(ui: &AppWindow, state: &AppState) -> Rc<LyricsUi> {
         metrics: Metrics::from_global(&global),
         width: Cell::new(ASSUMED_WIDTH),
         published_romanization: Cell::new(state.lyrics_romanization_shown.get()),
-        anchor_ms: Cell::new(0),
-        anchor_at: Cell::new(Instant::now()),
+        clock: clock::SongClock::new(),
         pinned: Cell::new(None),
         pinned_at_ms: Cell::new(0),
         published_cut: Cell::new(None),

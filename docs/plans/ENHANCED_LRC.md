@@ -124,9 +124,9 @@ in every format, where an M4A or a FLAC can keep an old one today.
 - **Holds: everything it uses is stable in 1.19.0.** `StyledText` is ungated
   (`builtin_elements.rs:1263-1365`), and what 1.19 added to it is selection, which this leaves off.
 - **Holds: cue sheet tracks stay out** (`library/lyrics/mod.rs:168-170`, the store alone).
-- **Narrows: no new clock.** The engine reports about once a second, but `follow` interpolates
-  between reports (`follow.rs:116-148`) on the panel's 33 ms `Timer` while a timed sheet plays
-  (`lyrics-panel.slint:222-224`), which is the resolution a word lights at.
+- **Narrows: no new engine clock.** The engine reports about once a second, but the panel's
+  `SongClock` runs between reports (`clock.rs`) on its 33 ms `Timer` while a timed sheet plays
+  (`lyrics-panel.slint:240-242`), which is the resolution a word lights at.
 
 ---
 
@@ -282,6 +282,7 @@ copied.
 | `melodia-core/src/entities/tags.rs` | `FileTags.lyrics` as a list | 364 |
 | `melodia-views/src/ui/callbacks/tags/open.rs` | the Lyrics field through the chooser | 642 |
 | `melodia-views/src/ui/now_playing/lyrics/{mod,follow}.rs` | `Row`'s word stamps, the cut, its writes | 317, 238 |
+| `melodia-views/src/ui/now_playing/lyrics/clock.rs` | where the song is between reports | new |
 | `melodia-ui/ui/globals/lyrics.slint` | the three properties | 96 |
 | `melodia-ui/ui/components/now-playing/lyrics-panel.slint` | the sung row's `StyledText` | 280 |
 
@@ -347,9 +348,9 @@ Every file stays well under 800; `open.rs` grows by a line or two.
 - [x] `Lyrics`' three properties.
 - [x] The sung row's `StyledText` behind its `if`, and the row's `Text` transparent there.
 - [x] Also: the panel's `ink-unsung` is the one spelling of the dim colour (unsung rows, the
-      interlude's notes, the unlit words); a pinned click lights at its own stamp until the clock
-      reaches that stamp, so its words and notes start empty while the seek lands; `clear` empties
-      both strings.
+      interlude's notes, the unlit words); a click lights its row from its own stamp, so its words
+      and notes start empty while the seek lands (`SongClock::jump_to`); `clear` empties both
+      strings.
 - [x] Docs: `README.md`'s lyrics lines (18, 163) say a sheet with word times follows word by word;
       `.claude/rules/slint-pitfalls.md`'s Text section takes `StyledText`: it clips at its box,
       takes no weight, draws none of its spans under a transparent `default-color`, accepts every

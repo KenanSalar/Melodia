@@ -320,6 +320,15 @@ the dev data folder, each against `main` where it should match.
     reading from its first line; an Arabic sheet's and the `vi` placeholder's first and last
     lines whole, at rest and scrolled to the end;
   - the shortest window reachable, a pick showing, the footer inside the card.
+- [ ] The follow clock (`now_playing/lyrics/clock.rs`, found by hand 2026-11-21: words lit ahead,
+      then went dark), on a word-timed sheet in Now Playing and the miniplayer:
+  - launch and play; paused, click a line, then play: no word lights and goes dark again;
+  - playing, click lines up and down the sheet, the one just sung included; a volume change
+    mid-line; pause and resume mid-word: nothing steps back;
+  - the slider several seconds back snaps the words back, and a seek back under `DRIFT_SLACK_MS`
+    holds them that long instead (the trade); a lyric click always jumps;
+  - the first of two lines under one stamp, clicked, lights from the live position as before;
+    next track and repeat-one start clean.
 
 ### Tests
 

@@ -14,12 +14,12 @@ use std::time::Instant;
 
 use slint::{ComponentHandle, Model};
 
+use super::clock::Report;
 use super::measure::wrapped_lines;
 use super::{LyricsUi, Metrics, Row, RowKind};
 use melodia_ui::{AppWindow, LyricRow, Lyrics, Player};
 
-/// The position channel reports about once a second, so after a seek it still names the old line;
-/// unpinned, the panel would glide back to it and return.
+/// How long a click keeps its line lit over a later one under the same stamp.
 const PIN_HOLDS_FOR_MS: f64 = 2_000.0;
 
 /// Re-measures every row against the width, rebuilding the model and the offset table.
@@ -112,45 +112,37 @@ pub(super) fn published_row(row: &Row, romanization_shown: bool) -> LyricRow {
     }
 }
 
-/// Move the sung line on, interpolating between the position channel's roughly one-second ticks.
+/// Move the sung line on to where the clock puts the song.
 pub(super) fn follow(ui: &AppWindow, ly: &LyricsUi) {
-    let player = ui.global::<Player>();
-    let reported = player.get_position_ms();
-    // The two projections rather than `get_vm()`, which clones the whole view model — sixteen
-    // strings and two images — for these two numbers, on every tick.
-    let is_playing = player.get_vm_is_playing();
-
-    // A paused player re-anchors every pass, so the interpolation can't run on past where it
-    // holds: its reported position simply stops changing.
-    if reported != ly.anchor_ms.get() || !is_playing {
-        ly.anchor_ms.set(reported);
-        ly.anchor_at.set(Instant::now());
-    }
-    let speed = f64::from(player.get_vm_playback_speed()).max(0.0);
-    let advanced = ly.anchor_at.get().elapsed().as_secs_f64() * 1000.0 * speed;
-    let position = f64::from(ly.anchor_ms.get()) + advanced;
+    let now = Instant::now();
+    ly.clock.observe(report(&ui.global::<Player>()), now);
+    let position = ly.clock.position(now);
 
     let sung = sung_at(&ly.rows.borrow(), position);
 
-    // The pin stands until the clock reaches the clicked line, or until it has had long enough
-    // that something else must have moved the player.
     if let Some(pinned) = ly.pinned.get() {
         let pinned_at = ly.pinned_at_ms.get();
-        let stale = (position - f64::from(pinned_at)).abs() > PIN_HOLDS_FOR_MS;
-        if sung != Some(pinned) && !stale {
-            // Restated rather than left alone, so a table rebuilt under the pin still centres it.
-            // Until the seek lands the clock reads the line the click left, so the row lights at
-            // its own stamp; a sung line sharing that stamp means the clock has reached it.
-            let reached =
-                sung.and_then(|index| ly.rows.borrow().get(index)?.at_ms) == Some(pinned_at);
-            let lit_at = if reached { position } else { f64::from(pinned_at) };
-            write_active(ui, ly, Some(pinned), lit_at);
+        let shares_stamp =
+            sung.and_then(|index| ly.rows.borrow().get(index)?.at_ms) == Some(pinned_at);
+        let near = (position - f64::from(pinned_at)).abs() <= PIN_HOLDS_FOR_MS;
+        if sung != Some(pinned) && shares_stamp && near {
+            write_active(ui, ly, Some(pinned), position);
             return;
         }
         ly.pinned.set(None);
     }
 
     write_active(ui, ly, sung, position);
+}
+
+/// Reads two projections rather than `get_vm()`, which clones the whole view model, strings and
+/// images, for two numbers on every tick.
+fn report(player: &Player<'_>) -> Report {
+    Report {
+        position_ms: player.get_position_ms(),
+        playing: player.get_vm_is_playing(),
+        speed: f64::from(player.get_vm_playback_speed()),
+    }
 }
 
 /// Takes a coordinate rather than a stamp, so the pin names the clicked row: a chorus repeats its
@@ -167,6 +159,7 @@ pub(super) fn seek_at(ui: &AppWindow, ly: &LyricsUi, y: f32) {
 
     ly.pinned.set(Some(index));
     ly.pinned_at_ms.set(at_ms);
+    ly.clock.jump_to(at_ms, Instant::now());
     // The seek's own instant, so a click landing on a gap starts its notes empty rather than
     // wherever the song happened to be when the pointer went down.
     write_active(ui, ly, Some(index), f64::from(at_ms));
