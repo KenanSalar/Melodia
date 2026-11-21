@@ -2,8 +2,8 @@
 
 Working doc. Delete when the feature ships.
 
-Status: **Phase 4 landed; Phase 5's hand tests and measurement next** · Created: 2026-11-20 · Branch
-`feat/enhanced-lrc`, linked to #178 (#177 still to link from its Development sidebar)
+Status: **Phase 5's hand tests and measurement done; tests wait on a go** · Created: 2026-11-20 ·
+Branch `feat/enhanced-lrc`, linked to #178 (#177 still to link from its Development sidebar)
 
 Issue [#178](https://github.com/KenanSalar/Melodia/issues/178), from the request in
 [#177](https://github.com/KenanSalar/Melodia/issues/177).
@@ -78,8 +78,9 @@ in every format, where an M4A or a FLAC can keep an old one today.
   drops only items of that key (`tag/mod.rs:381-384`). An MP3 loses every `USLT`, all read as
   `UnsyncLyrics`. A FLAC keeps its `UNSYNCEDLYRICS`. An M4A's `©lyr` reads back as `Lyrics` (the
   map's first key, `tag/item.rs:343`, `:70`) while `Set` writes `UnsyncLyrics`, so the old atom
-  likely survives and, being first, is what the next read shows. Inferred from lofty's source,
-  unconfirmed: the hand tests check it on `main`. Phase 3's fix doesn't wait on it.
+  survives and, being first, is what the next read shows. Confirmed on `main` (2026-11-21): an M4A
+  made with `ffmpeg -metadata lyrics=…`, saved over from its `.lrc`, holds two `©lyr` atoms, the
+  old one first (`exiftool -a -G1 -Lyrics`, `mutagen-inspect`), and Edit Tags opens on the old one.
 - **Narrows the design: "anything Markdown would treat as formatting has to be escaped, and a line
   that still can't be read falls back".** `@markdown("…\{expr}…")` hands a string through
   `StringToStyledText` (`i-slint-compiler passes/resolving.rs:1493-1506`), which is
@@ -201,9 +202,9 @@ in every format, where an M4A or a FLAC can keep an old one today.
 - The row's `Text` goes transparent there, through the colour ternary it already has, and draws
   nothing.
 - Every other row, and a sung row without word times, keeps today's `Text`.
-- The clip is the open risk for tall marks: the box keeps the slack above and below the line that
-  the `Text`'s has. If the Arabic and Persian hand tests crop, the `StyledText` grows over the row's
-  vertical padding, centred, which moves no glyph.
+- The box keeps the slack above and below the line that the `Text`'s has, enough for tall marks:
+  a fully lit word-timed row matches the line-timed `Text` of the same line pixel for pixel in the
+  hand tests, Arabic marks and Hangul included.
 
 ### What Rust publishes, and when
 
@@ -365,32 +366,49 @@ and `opacity_layers.rs` and `palette_fade.rs` meet nothing new. No `@tr` string 
 In the dev data folder, after Phase 4 and before any test is written: every phase's hand check
 gathers here. Each against `main`'s behaviour where it should match.
 
-- [ ] #177's line in a `.lrc`, its words one space apart; a `.lrc` with word times throughout.
-- [ ] A chorus under two stamps lights on both; `[offset:+500]` and `[offset:-500]` move the words.
-- [ ] On `main` first: an M4A made with `ffmpeg -metadata lyrics=…`, Save to tag over it, then
+Run 2026-11-21 at `8db89fc3` against `main` at `ccce7ace`, both debug builds, into a null sink.
+
+- [x] #177's line in a `.lrc`, its words one space apart; a `.lrc` with word times throughout.
+- [x] A chorus under two stamps lights on both; `[offset:+500]` and `[offset:-500]` move the words.
+- [x] On `main` first: an M4A made with `ffmpeg -metadata lyrics=…`, Save to tag over it, then
       `exiftool -a -G1 -Lyrics` (or `mutagen-inspect`); recorded in Validating the issue.
-- [ ] The same lyrics saved into an MP3, a FLAC and an M4A, each reading back as one entry.
-- [ ] An M4A whose lyrics came from iTunes or Mp3tag shows line by line; so does a `.lrc` broken by
+- [x] The same lyrics saved into an MP3, a FLAC and an M4A, each reading back as one entry.
+- [x] An M4A whose lyrics came from iTunes or Mp3tag shows line by line; so does a `.lrc` broken by
       a lone `\r` (`printf '[ti:x]\r[00:01.00]one\r[00:03.00]two\r'`).
-- [ ] A file holding plain and timed entries, in both orders, follows the song; Edit Tags opens on
+- [x] A file holding plain and timed entries, in both orders, follows the song; Edit Tags opens on
       the timed one.
-- [ ] Times inside a word (one per syllable): the word joins, Arabic included.
-- [ ] Japanese or Korean lyrics; Arabic or Persian: marks against the clip, lit words from the right.
-- [ ] A lyric long enough to wrap, and one that wraps past what was measured.
-- [ ] The miniplayer's column, through a backdrop toggle while a line is half lit.
-- [ ] Seeking into the middle of a line; clicking a line, and the first of two lines under one
+- [x] Times inside a word (one per syllable): the word joins, Arabic included.
+- [x] Japanese or Korean lyrics; Arabic or Persian: marks against the clip, lit words from the right.
+- [x] A lyric long enough to wrap, and one that wraps past what was measured. Bold never outran a
+      one-line row across ladders of Latin, all-caps and Korean prefixes. Past the three-line cap
+      the sung row shows the same middle lines the `Text` does, without its closing "…".
+- [x] The miniplayer's column, through a backdrop toggle while a line is half lit.
+- [x] Seeking into the middle of a line; clicking a line, and the first of two lines under one
       stamp.
-- [ ] A line with words out of order lights whole; an end stamp before a long break shows the notes
+- [x] A line with words out of order lights whole; an end stamp before a long break shows the notes
       from it.
-- [ ] Line-timed and plain sheets as on `main`; romanization and a translation under a word-timed
+- [x] Line-timed and plain sheets as on `main`; romanization and a translation under a word-timed
       line.
 
 ### Measurement
 
-- [ ] Release build, dev data folder, Now Playing's lyrics open, the same 60 s of one track three
+- [x] Release build, dev data folder, Now Playing's lyrics open, the same 60 s of one track three
       times: the sheet with word times, the same sheet with them stripped, and lyrics off. CPU from
       `/proc/<pid>/stat` across each run. Resolves whether lighting words costs more than following
       line by line already does; recorded here.
+
+Run 2026-11-21 at `8db89fc3`: the Korean track from 60 s to 120 s into a null sink, visualizer on,
+each scenario twice, interleaved. CPU seconds over the 60 s:
+
+| Sheet | Process | Main thread |
+|---|---|---|
+| Word times | 2.78, 2.97 | 2.38, 2.57 |
+| Word times stripped | 2.85, 2.66 | 2.46, 2.26 |
+| Lyrics off | 2.08, 2.09 | 1.69, 1.69 |
+
+Lighting words costs nothing measurable over following line by line: the two sheets overlap
+within one scenario's own spread (0.19 s). The panel itself costs about 0.7 s a minute over lyrics
+off, the same with or without word times.
 
 ### Tests
 
@@ -409,4 +427,5 @@ gathers here. Each against `main`'s behaviour where it should match.
 
 ## Open questions
 
-None blocking. The dim colour and the clip are settled by the hand tests.
+None blocking. The clip is settled (Drawing). The dim colour reads apart from the lit words on the
+backdrop and on the plain miniplayer; whether it is dim enough is a look at the hand-test captures.
