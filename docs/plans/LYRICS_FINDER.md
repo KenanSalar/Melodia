@@ -2,7 +2,7 @@
 
 Working doc. Delete when the feature ships.
 
-Status: **Phase 5 landed; Phase 6's hand tests next** · Created: 2026-11-21 · Branch `feat/enhanced-lrc`, after
+Status: **Phase 6's hand tests pass; tests wait for a go naming them** · Created: 2026-11-21 · Branch `feat/enhanced-lrc`, after
 [ENHANCED_LRC.md](ENHANCED_LRC.md)'s Phase 5
 
 > Researched **2026-11-21** against `feat/enhanced-lrc` at `8db89fc3`; lrclib's API reference
@@ -163,8 +163,8 @@ Status: **Phase 5 landed; Phase 6's hand tests next** · Created: 2026-11-21 · 
   on it. The Settings row greys only with lyrics off, as the radio scrobble row does, naming the
   switch.
 - The preview is the whole sheet in a `DialogScrollPane`, scrolled back to its first line on each
-  pick. Its box stretches beside the list from a short minimum, so a short window shrinks both
-  rather than pushing the footer off the card.
+  pick. Its box stretches beside the list from a short minimum, so a short window shrinks both,
+  and one too short for the floors cuts the body above the footer rather than pushing it off.
 
 ---
 
@@ -218,7 +218,7 @@ copied.
 | `melodia-ui/ui/components/dialog/pick-list.slint` (new) | `PickList`: search bar, the well with `ListView` and `OverlayScrollbar`, empty state, failure line, the single-pick row | |
 | `melodia-ui/ui/models.slint` | `PickRow`, replacing `CorrectionPickRow` | 530 |
 | `melodia-ui/ui/components/dialog/headphone-picker-body.slint` | `HeadphonePicker` bound onto `PickList`, with AutoEq's strings | 161 |
-| `melodia-ui/ui/components/dialog/lyrics-finder-body.slint` (new) | `PickList`, the preview, the hidden-pick note, the badge labels | 86 |
+| `melodia-ui/ui/components/dialog/lyrics-finder-body.slint` (new) | `PickList`, the preview, the hidden-pick note, the badge labels, the cut below its floors | 86 |
 | `melodia-ui/ui/globals/lyrics-finder.slint` (new) | `LyricsFinder`, `LyricsSearchPhase` and `LyricsMasking` | 32 |
 | `melodia-ui/ui/globals/dialog.slint` | `DialogKind.lyrics-finder`, its routing and teardown, `open-lyrics-finder()` | 490 |
 | `melodia-ui/ui/components/dialog/dialog.slint` | the kind's width, scroller, body mount and confirm gate | 326 |
@@ -383,11 +383,11 @@ One phase: the switch, the menu row and the panel's copy are only testable toget
 Every phase's hand check gathers here and runs last: after Phase 5, before any test is written, in
 the dev data folder, each against `main` where it should match.
 
-- [ ] Phase 1, Find Headphones as on `main`: rows, filter, pick, the loading and failure states,
+- [x] Phase 1, Find Headphones as on `main`: rows, filter, pick, the loading and failure states,
       Apply; a model shows no trailing text and no badge.
-- [ ] Phase 2, a word-synced lrclib record lighting word by word from an automatic lookup; a
+- [x] Phase 2, a word-synced lrclib record lighting word by word from an automatic lookup; a
       malformed `lyricsfile` falling back to `syncedLyrics`.
-- [ ] Phases 3 and 4, the finder:
+- [x] Phases 3 and 4, the finder:
   - from the menu and from Settings on a real track; Enter with an edited query;
   - a pick applied and shown; the pick surviving a restart;
   - a pick hidden by a `.lrc` and by a timed tag, the note shown; a plain pick under a plain tag;
@@ -405,7 +405,9 @@ the dev data folder, each against `main` where it should match.
     reading from its first line; an Arabic sheet's and the `vi` placeholder's first and last
     lines whole, at rest and scrolled to the end;
   - the shortest window reachable, a pick showing, the footer inside the card.
-- [ ] Phase 5, the automatic switch:
+- [x] After the hand run: `LyricsFinderBody` cuts its column on a window too short for its floors,
+      so `ModalCard.height-cap` no longer pushes the footer off the card.
+- [x] Phase 5, the automatic switch:
   - an upgraded `settings.json` with the lookup on and no automatic key: lookups run as before;
   - lookup on, automatic off: a track with no lyrics of its own sends nothing at
     `RUST_LOG=debug`, and the panel reads "No lyrics found" with its hint; a stored answer still
@@ -421,7 +423,7 @@ the dev data folder, each against `main` where it should match.
   - the menu kept open across each switch, the automatic row greying and returning as the lookup
     flips beside it, the romanization row as the panel reloads; a click outside and the window
     losing focus still closing it; Find lyrics…, Save to file and Edit lyrics… closing it.
-- [ ] The follow clock (`now_playing/lyrics/clock.rs`, found by hand 2026-11-21: words lit ahead,
+- [x] The follow clock (`now_playing/lyrics/clock.rs`, found by hand 2026-11-21: words lit ahead,
       then went dark), on a word-timed sheet in Now Playing and the miniplayer:
   - launch and play; paused, click a line, then play: no word lights and goes dark again;
   - playing, click lines up and down the sheet, the one just sung included; a volume change
