@@ -33,7 +33,8 @@ Status: **Phase 3 landed; Phase 4 next** · Created: 2026-11-21 · Branch `feat/
 - **Apply stores the pick as the track's online answer**, replacing the automatic one, and the
   Now Playing panel reloads with it.
 - **A pick the track's own lyrics would hide is named as such** in the dialog: a `.lrc` beside the
-  track, timed lyrics in its tag, or a plain tag against a plain pick. Apply still stores it.
+  track, timed lyrics in its tag, or a plain tag against a plain or instrumental pick. Apply still
+  stores it.
 - **lrclib records with word timings light word by word**, from automatic lookups as well.
 
 **What keeps working:**
@@ -54,9 +55,10 @@ Status: **Phase 3 landed; Phase 4 next** · Created: 2026-11-21 · Branch `feat/
 - The pick replaces the track's stored online answer (`store::forget`, then `store::write`), the
   same files an automatic answer uses. No audio file is touched.
 - A `.lrc` beside the track and timed lyrics in its tag still come first, and a plain tag beats a
-  plain pick (`library/lyrics/mod.rs`, `resolve`). Writing the pick there is the user's move:
-  "Save to file", or a `.lrc` placed beside the song.
-- The dialog says when that will hide the pick, so Apply never seems to do nothing.
+  plain or instrumental pick (`library/lyrics/mod.rs`, `resolve` and `timed_first`). Writing the
+  pick there is the user's move: "Save to file", or a `.lrc` placed beside the song.
+- The dialog says when that will hide the pick, so Apply never seems to do nothing. The rule has
+  one home, `finder::Outranking::hides`.
 
 ### Consent: the online switch
 
@@ -225,7 +227,8 @@ Every file stays well under 800.
   - `search(state, track, query)`, behind `ensure_enabled` and `online_lookup_enabled`, failing
     as `SearchFailure::RateLimited` or `Failed`; each `Choice` carries its kind and a preview;
   - `choose(state, track, candidate)`, forgetting what was stored first;
-  - `outranking(state, track)`: a sidecar, a timed tag or a plain tag, from `read_local`.
+  - `outranking(state, track)`: a sidecar, a timed tag or a plain tag, from `read_local`, behind
+    `ensure_enabled`; `Outranking::hides(kind)` says whether it hides a pick of that kind.
 - [x] Docs: `library::lyrics`' `//!`, `lyrics_directory`'s `//!` (its two calls), `lrclib.rs`'
       "at most two requests per track change" extended to a search a person asks for.
 - [x] Also: `search_terms` gives the search's title-and-artist fallback one home, used by the
@@ -246,7 +249,8 @@ Every file stays well under 800.
 - [ ] `ui/now_playing/lyrics/finder.rs`:
   - `load` searches the default query and `search` the typed one, off the UI thread, under the
     ticket;
-  - `picked-changed` sets the preview, stamps stripped, and the masking for that row's kind;
+  - `picked-changed` sets the preview, stamps stripped, and the masking from
+    `Outranking::hides` for that row's kind;
   - `apply` chooses, closes the dialog, and releases and kicks the panel when it is mounted.
 - [ ] The lyrics menu's row, enabled on `Lyrics.online-enabled && Player.vm.has_track`, never
       behind an `if`; `menu-h` becomes `* 6`, the count `lyrics_switch.rs` derives from the rows.

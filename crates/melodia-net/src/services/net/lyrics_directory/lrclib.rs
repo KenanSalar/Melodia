@@ -334,7 +334,7 @@ fn album_rank(row: &ApiLyrics, album: &str) -> u8 {
 }
 
 /// Every row the index has for a typed query, as candidates. One request, behind the same pacer as
-/// a lookup's.
+/// a lookup's, and none for a blank query, which the index answers with nothing.
 pub(super) async fn search(
     client: &reqwest::Client,
     pacer: &RequestPacer,
@@ -343,6 +343,11 @@ pub(super) async fn search(
     credit: &ArtistCredit,
     duration_ms: i64,
 ) -> Result<Vec<LyricsCandidate>, LookupError> {
+    let query = query.trim();
+    if query.is_empty() {
+        return Ok(Vec::new());
+    }
+
     let mut url = endpoint(SEARCH_ENDPOINT)?;
     url.query_pairs_mut().append_pair("q", query);
 

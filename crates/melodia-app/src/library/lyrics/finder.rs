@@ -47,14 +47,26 @@ pub enum SearchFailure {
     Failed(AppError),
 }
 
-/// What the panel shows ahead of a stored pick, which ranks below the track's own lyrics. A plain
-/// tag hides only a plain pick.
+/// What the panel shows ahead of a stored pick, which ranks below the track's own lyrics.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Outranking {
     Nothing,
     Sidecar,
     TimedTag,
     PlainTag,
+}
+
+impl Outranking {
+    /// Whether a pick of this kind stays out of sight, on `resolve`'s terms: only a timed pick
+    /// shows past a plain tag.
+    #[must_use]
+    pub fn hides(self, kind: ChoiceKind) -> bool {
+        match self {
+            Self::Sidecar | Self::TimedTag => true,
+            Self::PlainTag => matches!(kind, ChoiceKind::Plain | ChoiceKind::Instrumental),
+            Self::Nothing => false,
+        }
+    }
 }
 
 /// The query a search for this track opens on.
@@ -110,6 +122,7 @@ pub async fn choose(
 
 /// Which of the track's own lyrics would be shown ahead of a pick.
 pub async fn outranking(state: &AppState, track: LyricsKey) -> Result<Outranking, AppError> {
+    ensure_enabled(state)?;
     let paths = Arc::clone(&state.paths);
     let local = state
         .runtime

@@ -6,6 +6,8 @@ use std::fmt::Write as _;
 
 use serde::Deserialize;
 
+use melodia_core::error::describe;
+
 #[derive(Deserialize)]
 struct Lyricsfile {
     #[serde(default)]
@@ -36,9 +38,14 @@ struct Word {
 /// `syncedLyrics` answers then. Times that don't add up are left to the parser, which lights such a
 /// line whole.
 pub(super) fn enhanced_lrc(document: &str) -> Option<String> {
-    let Ok(file) = serde_saphyr::from_str::<Lyricsfile>(document) else {
-        log::debug!("lyrics: a lyricsfile didn't read, so its record answers with its LRC");
-        return None;
+    // The error's default rendering quotes the document around the fault, lyrics into the log.
+    let plain_errors = serde_saphyr::options! { with_snippet: false };
+    let file = match serde_saphyr::from_str_with_options::<Lyricsfile>(document, plain_errors) {
+        Ok(file) => file,
+        Err(e) => {
+            log::debug!("lyrics: a lyricsfile didn't read, so its LRC answers: {}", describe(&e));
+            return None;
+        }
     };
     if file.lines.iter().all(|line| line.words.is_empty()) {
         return None;
