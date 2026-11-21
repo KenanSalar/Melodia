@@ -8,7 +8,7 @@ use std::rc::Rc;
 use std::sync::Arc;
 
 use async_compat::Compat;
-use slint::{ComponentHandle, Weak};
+use slint::{ComponentHandle, SharedString, Weak};
 
 use super::rows::rows_for;
 use super::{LyricsUi, NowPlayingState, follow};
@@ -252,6 +252,8 @@ fn clear(ui: &AppWindow, ly: &LyricsUi) {
     ly.rows.borrow_mut().clear();
     ly.offsets.borrow_mut().clear();
     ly.pinned.set(None);
+    // The next sheet can sing the same row to the same cut, which must still write its own words.
+    ly.published_cut.set(None);
     ly.model.set_vec(Vec::new());
 
     let global = ui.global::<Lyrics>();
@@ -260,6 +262,9 @@ fn clear(ui: &AppWindow, ly: &LyricsUi) {
     global.set_active_index(-1);
     global.set_active_offset(0.0);
     global.set_active_height(0.0);
+    global.set_active_word_timed(false);
+    global.set_lit_words(SharedString::new());
+    global.set_unlit_words(SharedString::new());
 }
 
 /// Keep the sheet's text and stamps. Heights are not kept, following the width instead.

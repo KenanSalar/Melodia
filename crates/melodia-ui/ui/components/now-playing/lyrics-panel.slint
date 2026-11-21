@@ -21,6 +21,8 @@ export component LyricsPanel inherits Rectangle {
     in property <brush> ink-muted: Player.np-on-backdrop-muted;
     in property <brush> row-hover: Player.np-accent-pill;
     in property <brush> empty-glyph: Player.np-on-backdrop-muted.transparentize(0.5);
+    // A line not yet sung, and the words of the sung one still to come, so the two read alike.
+    property <brush> ink-unsung: root.ink-muted.transparentize(0.2);
     // A flag and a pace rather than brushes: `OverlayScrollbar` eases its own colours.
     in property <bool> bar-on-backdrop: true;
     in property <duration> bar-recolor-duration: Theme.dur-fast;
@@ -58,7 +60,7 @@ export component LyricsPanel inherits Rectangle {
             spacing: Lyrics.row-gap;
             alignment: start;
 
-            for row[i] in Lyrics.rows: Rectangle {
+            for row[i] in Lyrics.rows: line := Rectangle {
                 // Rust's heights, matching its offset table; a `for` can't read drawn ones back.
                 property <length> sung-h: row.line_count * Lyrics.line-height;
                 property <length> roman-h: row.romanization_line_count
@@ -76,6 +78,7 @@ export component LyricsPanel inherits Rectangle {
 
                 // -1 on a plain sheet, which then reads as a page with every row quiet.
                 property <bool> is-sung: i == Lyrics.active-index;
+                property <bool> lit-by-word: self.is-sung && Lyrics.active-word-timed;
 
                 // Flat like Up Next's rows. `has-hover` clears it, the index being rewritten only
                 // on a crossing.
@@ -96,9 +99,24 @@ export component LyricsPanel inherits Rectangle {
                     vertical-alignment: center;
                     font-size: Lyrics.font-size;
                     font-weight: parent.is-sung ? 700 : 400;
-                    color: parent.is-sung
-                        ? root.ink
-                        : root.ink-muted.transparentize(0.2);
+                    // Transparent text skips its shaping too, ceding the row to the one below.
+                    color: parent.lit-by-word ? transparent
+                        : parent.is-sung ? root.ink
+                        : root.ink-unsung;
+                }
+
+                // Pinned like the `Text` it stands in for, which keeps it out of the row's size.
+                // Only the template is markup: what it splices in draws as plain text.
+                if line.lit-by-word: StyledText {
+                    x: Lyrics.row-pad-x;
+                    y: Lyrics.row-pad-y;
+                    width: parent.width - 2 * Lyrics.row-pad-x;
+                    height: parent.sung-h;
+                    text: @markdown("**\{Lyrics.lit-words}"
+                        "<font color='\{root.ink-unsung}'>\{Lyrics.unlit-words}</font>**");
+                    default-color: root.ink;
+                    default-font-size: Lyrics.font-size;
+                    vertical-alignment: center;
                 }
 
                 // Collapses on a zero line count. Anchored under the words, being the middle part.
@@ -155,7 +173,7 @@ export component LyricsPanel inherits Rectangle {
                         MaterialIcon {
                             name: "music_note";
                             icon-size: root.note-size;
-                            icon-color: root.ink-muted.transparentize(0.2);
+                            icon-color: root.ink-unsung;
                         }
                         MaterialIcon {
                             name: "music_note";

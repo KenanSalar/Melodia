@@ -55,6 +55,12 @@ export global Lyrics {
     // which would rewrite the whole model on every tick of a solo.
     in property <float> interlude-progress;
 
+    // The active row's text split where the song is, on a row with word times, for the same
+    // reason: a word lighting rewrites no model row.
+    in property <bool> active-word-timed;
+    in property <string> lit-words;
+    in property <string> unlit-words;
+
     // Persisted by Rust, the `Visualizer.enabled` shape. **Not the gate that matters**:
     // `library::lyrics` refuses on the `SharedFlag` behind it, so off means nothing is looked up.
     in-out property <bool> enabled;

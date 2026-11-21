@@ -364,6 +364,17 @@ there, never in the `.slint`.
     first line overflows the box's height (`first_line_exceeds_height`), so user text wants elide,
     with slack in any fixed height. Elide also lowers the layout `min` to one `…`, so an
     over-packed row compresses and truncates.
+  - **A `StyledText` clips at its box whatever it is given**, its `overflow` fixed at `clip`
+    (`items/text.rs`), so its box carries the slack a fixed-height `Text` would
+    (`lyrics-panel.slint`).
+
+- **A `StyledText` is not a `Text` with spans.** It takes no `font-weight`, bold coming from
+  `**…**`. A transparent `default-color` draws none of its spans, coloured ones included,
+  `draw_text` returning on the fill brush before it shapes (`textlayout/sharedparley.rs`). It
+  accepts every press, move and release (`items/text.rs`), so a `TouchArea` beneath it gets none.
+  `@markdown` parses only its template, again on every evaluation (`parse_markdown`): an
+  interpolated string draws as plain text, and a brush inside `<font color='…'>` converts to a
+  colour (`passes/resolving.rs`).
 
 - **A faked placeholder `Text` in a non-layout parent paints past its field, `overflow: elide`
   alone not stopping it.** `make_default_implicit` sizes it to `max(preferred, min)` of its

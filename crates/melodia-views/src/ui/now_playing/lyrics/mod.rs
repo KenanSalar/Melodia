@@ -37,6 +37,13 @@ enum RowKind {
     },
 }
 
+/// A sheet's word stamp in the panel's milliseconds: `start` is the word's first byte in `text`.
+#[derive(Clone, Copy)]
+struct WordStamp {
+    start: usize,
+    at_ms: i32,
+}
+
 /// One row as the panel draws it. **The texts are `SharedString`**, so publishing a row on every
 /// re-measure is a refcount bump rather than a resident second copy of the sheet.
 struct Row {
@@ -44,6 +51,8 @@ struct Row {
     /// `None` on an untimed sheet, the two never mixing within one sheet.
     at_ms: Option<i32>,
     text: SharedString,
+    /// In time order, empty on a row lit whole.
+    words: Box<[WordStamp]>,
     /// How the words sound, for a script that does not spell it. `None` for a Latin line.
     romanization: Option<SharedString>,
     /// The gloss a bilingual sheet carries under the words.
@@ -64,6 +73,11 @@ impl Row {
             kind: RowKind::Words,
             at_ms,
             text: SharedString::from(line.text.as_str()),
+            words: line
+                .words
+                .iter()
+                .map(|word| WordStamp { start: word.start, at_ms: rows::millis(word.at_ms) })
+                .collect(),
             romanization: line.romanization.as_deref().map(SharedString::from),
             translation: line.translation.as_deref().map(SharedString::from),
             lines: 1,
@@ -79,6 +93,7 @@ impl Row {
             kind: RowKind::Interlude { until_ms },
             at_ms: Some(from_ms),
             text: SharedString::new(),
+            words: Box::default(),
             romanization: None,
             translation: None,
             lines: 1,
@@ -155,6 +170,9 @@ pub(crate) struct LyricsUi {
     /// A clicked row, held until the clock catches up with it.
     pinned: Cell<Option<usize>>,
     pinned_at_ms: Cell<i32>,
+    /// The row and cut `Lyrics.lit-words` was last written for, so a tick between two words
+    /// builds no string.
+    published_cut: Cell<Option<(usize, usize)>>,
     /// The track the resident sheet belongs to, `None` once the rows are handed back. **This makes
     /// the reseed idempotent**, so the three edges reaching it cost one lookup between them. An id
     /// rather than a path, every track of an image a cue sheet splits sharing its path.
@@ -192,6 +210,7 @@ pub(super) fn install(ui: &AppWindow, state: &AppState) -> Rc<LyricsUi> {
         anchor_at: Cell::new(Instant::now()),
         pinned: Cell::new(None),
         pinned_at_ms: Cell::new(0),
+        published_cut: Cell::new(None),
         holding: RefCell::new(None),
         reseed: RefCell::new(None),
         model,

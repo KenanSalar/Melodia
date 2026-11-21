@@ -138,7 +138,8 @@ pub(super) fn follow(ui: &AppWindow, ly: &LyricsUi) {
         let stale = (position - f64::from(ly.pinned_at_ms.get())).abs() > PIN_HOLDS_FOR_MS;
         if sung != Some(pinned) && !stale {
             // Restated rather than left alone, so a table rebuilt under the pin still centres it.
-            write_active(ui, ly, Some(pinned), position);
+            // At its own stamp: until the seek lands, the clock reads the line the click left.
+            write_active(ui, ly, Some(pinned), f64::from(ly.pinned_at_ms.get()));
             return;
         }
         ly.pinned.set(None);
@@ -213,6 +214,7 @@ fn write_active(ui: &AppWindow, ly: &LyricsUi, index: Option<usize>, position_ms
     // The whole row, gloss included, so the pair is centred together rather than the words alone.
     global.set_active_height(ly.metrics.row_height(row));
     global.set_interlude_progress(interlude_progress(row, position_ms));
+    publish_words(&global, ly, index, row, position_ms);
 }
 
 /// How far through a gap the song is, for the notes to fill against. Zero on a row of words, which
@@ -235,4 +237,28 @@ pub(super) fn interlude_progress(row: &Row, position_ms: f64) -> f32 {
     )]
     let progress = ((position_ms - from) / span).clamp(0.0, 1.0) as f32;
     progress
+}
+
+/// The sung row's text split at its cut, the strings rebuilt only when the row or the cut moves.
+fn publish_words(global: &Lyrics, ly: &LyricsUi, index: usize, row: &Row, position_ms: f64) {
+    let cut = lit_until(row, position_ms);
+    global.set_active_word_timed(cut.is_some());
+    let Some(cut) = cut else { return };
+    if ly.published_cut.replace(Some((index, cut))) == Some((index, cut)) {
+        return;
+    }
+    // A start off a character boundary, which the parser never writes, lights the row whole.
+    let (lit, unlit) = row.text.split_at_checked(cut).unwrap_or((row.text.as_str(), ""));
+    global.set_lit_words(lit.into());
+    global.set_unlit_words(unlit.into());
+}
+
+/// The byte the sung row's lit words end at, `None` on a row lit whole. Text ahead of the first
+/// word stamp lights with the line.
+fn lit_until(row: &Row, position_ms: f64) -> Option<usize> {
+    if row.words.is_empty() {
+        return None;
+    }
+    let due = row.words.partition_point(|word| f64::from(word.at_ms) <= position_ms);
+    Some(row.words.get(due).map_or(row.text.len(), |word| word.start))
 }

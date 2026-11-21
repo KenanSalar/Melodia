@@ -2,7 +2,7 @@
 
 Working doc. Delete when the feature ships.
 
-Status: **Phase 3 landed; Phase 4 next** · Created: 2026-11-20 · Branch
+Status: **Phase 4's code landed; its measurement next** · Created: 2026-11-20 · Branch
 `feat/enhanced-lrc`, linked to #178 (#177 still to link from its Development sidebar)
 
 Issue [#178](https://github.com/KenanSalar/Melodia/issues/178), from the request in
@@ -341,11 +341,14 @@ Every file stays well under 800; `open.rs` grows by a line or two.
 
 ## Phase 4: Lighting the words (`melodia-ui`, `melodia-views`)
 
-- [ ] `Row`'s word stamps; `LyricsUi`'s last published row and cut; the cut in `write_active`,
+- [x] `Row`'s word stamps; `LyricsUi`'s last published row and cut; the cut in `write_active`,
       written on change and reset where `clear` resets the sung row.
-- [ ] `Lyrics`' three properties.
-- [ ] The sung row's `StyledText` behind its `if`, and the row's `Text` transparent there.
-- [ ] Docs: `README.md`'s lyrics lines (18, 163) say a sheet with word times follows word by word;
+- [x] `Lyrics`' three properties.
+- [x] The sung row's `StyledText` behind its `if`, and the row's `Text` transparent there.
+- [x] Also: the panel's `ink-unsung` is the one spelling of the dim colour (unsung rows, the
+      interlude's notes, the unlit words); a pinned click writes at the clicked line's own stamp,
+      so its words and notes start empty while the seek lands; `clear` empties both strings.
+- [x] Docs: `README.md`'s lyrics lines (18, 163) say a sheet with word times follows word by word;
       `.claude/rules/slint-pitfalls.md`'s Text section takes `StyledText`: it clips at its box,
       takes no weight, draws none of its spans under a transparent `default-color`, accepts every
       press so a `TouchArea` beneath it gets none, and `@markdown` interpolates a string as plain

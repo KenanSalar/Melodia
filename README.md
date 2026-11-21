@@ -15,7 +15,7 @@
 
 - **Bit-perfect exclusive output** on Linux and Windows, with a Signal Path panel that grades every stage from the file to the device
 - **Gapless playback and crossfade**, a 10-band equalizer, headphone correction and crossfeed for each output device, ReplayGain that can measure untagged tracks itself, and playback speed from 0.25× to 2.0×
-- **Timed lyrics** from `.lrc` files, tags, or an opt-in online lookup, romanized for around a hundred scripts
+- **Timed lyrics**, lit word by word where a sheet times its words, from `.lrc` files, tags, or an opt-in online lookup, romanized for around a hundred scripts
 - **Internet radio** from a worldwide directory or your own stream URLs, off until you switch it on
 - **Six theme families** in light and dark, and Material You colors drawn from the playing artwork
 - **A library that keeps up**: parallel scanning, live folder watching, full-text search, smart playlists, and tag editing written back to the files
@@ -160,7 +160,7 @@ Shrink the window and the full UI collapses into a mini-player that grows with i
 <details>
 <summary><b>Lyrics</b>: timed sheets, an opt-in online lookup, and romanization</summary>
 
-- A timed sheet in Now Playing, in place of Up Next, that follows the song line by line; click a line to seek to it. Switch it on from that view's header or Settings ▸ Lyrics
+- A timed sheet in Now Playing, in place of Up Next, that follows the song line by line, and word by word where the sheet times its words (Enhanced LRC); click a line to seek to it. Switch it on from that view's header or Settings ▸ Lyrics
 - **Off by default, and off means off**: while lyrics are switched off, nothing looks a sheet up or keeps one in memory
 - Read from a `.lrc` beside the track or from the file's own lyrics tag, so a library that already carries them needs no online lookup
 - **Online lookup is off until you switch it on**: nothing contacts **lrclib.net** until you do, and its answers are cached under your data folder rather than written into your files
