@@ -285,10 +285,13 @@ the dev data folder, each against `main` where it should match.
   - from the menu and from Settings on a real track; Enter with an edited query;
   - a pick applied and shown; "Look up again" back to automatic; the pick surviving a restart;
   - a pick hidden by a `.lrc` and by a timed tag, the note shown; a plain pick under a plain tag;
+  - Enter in the empty box the moment the dialog opens, a hidden pick still showing the note;
   - online lookup off: both entries greyed, nothing sent;
   - a rate-limited answer; an unreachable lrclib;
   - a word-synced record from the finder, badged Word-timed;
-  - long titles, Arabic and Korean rows, the preview of a long sheet.
+  - a song ending under the dialog, the pick landing on the track it opened on;
+  - long titles, Arabic and Korean rows, the preview of a long sheet;
+  - the shortest window reachable, a pick showing, the footer inside the card.
 
 ### Tests
 

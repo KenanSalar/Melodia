@@ -60,7 +60,7 @@ struct Finder {
     track: RefCell<Option<Arc<TrackSummary>>>,
     /// The last search's answer, which a row's `index` points into.
     choices: RefCell<Vec<Choice>>,
-    /// Read once at the open: the track's own lyrics don't move while the dialog is up.
+    /// Read beside each search, so it lands with the rows it describes under one ticket.
     outranking: Cell<Outranking>,
 }
 
@@ -75,19 +75,9 @@ impl Finder {
         *self.track.borrow_mut() = Some(Arc::clone(&track));
 
         let state = self.state.clone();
-        let opening = async move {
-            let query = finder::default_query(&state, &track).await;
-            let outranking = finder::outranking(&state, LyricsKey::from(&*track)).await;
-            (query, outranking)
-        };
+        let opening = async move { finder::default_query(&state, &track).await };
         let finder = Rc::clone(self);
-        self.after(opening, move |ui, _, (query, outranking)| {
-            // A failed read costs only the warning a hidden pick would carry.
-            let outranking = outranking.unwrap_or_else(|e| {
-                log::debug!("lyrics finder: the track's own lyrics: {}", describe(&e));
-                Outranking::Nothing
-            });
-            finder.outranking.set(outranking);
+        self.after(opening, move |ui, _, query| {
             ui.global::<LyricsFinder>().set_query(SharedString::from(query.as_str()));
             finder.search(query);
         });
@@ -112,11 +102,19 @@ impl Finder {
         g.set_phase(LyricsSearchPhase::Loading);
 
         let state = self.state.clone();
-        let found = async move { finder::search(&state, &track, &query).await };
-        self.after(found, |ui, finder, found| {
+        let key = LyricsKey::from(&*track);
+        let found = async move {
+            // A failed read costs only the warning a hidden pick would carry.
+            let outranking = finder::outranking(&state, key).await.unwrap_or_else(|e| {
+                log::debug!("lyrics finder: the track's own lyrics: {}", describe(&e));
+                Outranking::Nothing
+            });
+            (finder::search(&state, &track, &query).await, outranking)
+        };
+        self.after(found, |ui, finder, (found, outranking)| {
             let g = ui.global::<LyricsFinder>();
             match found {
-                Ok(choices) => finder.show(&g, choices),
+                Ok(choices) => finder.show(&g, choices, outranking),
                 Err(SearchFailure::RateLimited { .. }) => {
                     g.set_phase(LyricsSearchPhase::RateLimited);
                 }
@@ -128,9 +126,10 @@ impl Finder {
         });
     }
 
-    fn show(&self, g: &LyricsFinder<'_>, choices: Vec<Choice>) {
+    fn show(&self, g: &LyricsFinder<'_>, choices: Vec<Choice>, outranking: Outranking) {
         self.rows.set_vec(choices.iter().enumerate().map(row).collect::<Vec<_>>());
         *self.choices.borrow_mut() = choices;
+        self.outranking.set(outranking);
         g.set_phase(LyricsSearchPhase::Listing);
     }
 

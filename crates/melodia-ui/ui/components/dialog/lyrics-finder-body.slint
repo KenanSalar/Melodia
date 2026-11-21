@@ -11,8 +11,8 @@ export component LyricsFinderBody inherits VerticalLayout {
     property <bool> has-rows: LyricsFinder.phase == LyricsSearchPhase.listing
         && LyricsFinder.rows.length > 0;
     property <bool> shows-words: LyricsFinder.picked >= 0 && LyricsFinder.preview != "";
-    // Fixed, so a pick moves nothing, and with room for the lines Rust sends in a face as tall as
-    // CJK's.
+    // Fixed, so a pick moves nothing, and with room for `finder::PREVIEW_LINES` in a face as tall
+    // as CJK's.
     property <length> preview-h: 150px;
 
     spacing: Theme.pad-md;

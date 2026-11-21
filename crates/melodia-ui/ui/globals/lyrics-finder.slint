@@ -1,6 +1,6 @@
 import { PickRow } from "../models.slint";
 
-// `rate-limited` stands apart from `failed`: only waiting fixes it.
+// `rate-limited` and `failed` are `finder::SearchFailure`'s two arms.
 export enum LyricsSearchPhase { loading, listing, rate-limited, failed }
 
 // Which of the track's own lyrics the panel shows ahead of the picked sheet, `none` where it would
