@@ -79,7 +79,9 @@ pub(super) fn wire_request_edit(
             // as its sheet read over its image.
             let (lyrics, credits) = if single && !rows[0].is_sheet_track() {
                 let file = files.get(&rows[0].id);
-                let lyrics = file.and_then(|tags| tags.lyrics.clone()).unwrap_or_default();
+                let lyrics = file
+                    .and_then(|tags| library::lyrics::best_tag_entry(&tags.lyrics))
+                    .map_or_default(str::to_owned);
                 (lyrics, vec![file.map_or_default(|tags| tags.credits.clone())])
             } else {
                 let mut by_id =

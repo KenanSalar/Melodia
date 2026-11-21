@@ -450,7 +450,7 @@ fn an_image_of_unknown_length_drops_nothing() {
 /// The image's tags as Edit Tags reads them for a file filed outside the library.
 fn image_tags() -> FileTags {
     FileTags {
-        lyrics: Some("The disc's lyrics".to_owned()),
+        lyrics: vec!["The disc's lyrics".to_owned()],
         credits: (
             ArtistCredit::from_name("Image Artist"),
             ArtistCredit::from_name("Image Album Artist"),
@@ -478,7 +478,7 @@ fn a_track_s_tags_read_over_its_image_s_by_the_scan_s_rules() {
     let tags = track_tags(&stated, track, image_tags());
 
     let expected = FileTags {
-        lyrics: None,
+        lyrics: Vec::new(),
         credits: (ArtistCredit::from_name("Track Artist"), ArtistCredit::from_name("Sheet Artist")),
         roles: RoleCredits::new(vec![composer("Track Composer")]),
         genres: GenreList::from_name("Sheet Genre"),
@@ -493,5 +493,5 @@ fn a_track_the_sheet_says_nothing_of_reads_its_image_s_tags_less_the_lyrics() {
 
     let tags = track_tags(&stated, CueTrack::HIDDEN, image_tags());
 
-    assert_eq!(tags, FileTags { lyrics: None, ..image_tags() });
+    assert_eq!(tags, FileTags { lyrics: Vec::new(), ..image_tags() });
 }

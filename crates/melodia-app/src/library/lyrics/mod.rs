@@ -10,7 +10,7 @@
 //! local side of the switch: turning the lookup off buys no traffic, not no lyrics.
 //!
 //! Reachable with lyrics off: `forget_all`, so a retag leaves no stale answer waiting for the
-//! feature to come back, and the tag editor's `resident_text` and `write_to_tag`.
+//! feature to come back, and the tag editor's `resident_text`, `best_tag_entry` and `write_to_tag`.
 
 mod embedded;
 mod lrc;
@@ -19,6 +19,7 @@ mod romanize;
 mod sidecar;
 mod store;
 
+pub use embedded::best_tag_entry;
 pub use store::LyricsKey;
 
 use std::path::Path;
@@ -128,7 +129,7 @@ fn read_local_text(lyrics_dir: &Path, track: &LyricsKey) -> Result<Option<String
     if let Some(text) = sidecar::read_text(track.path())? {
         return Ok(Some(text));
     }
-    let own = crate::library::tags::read_lyrics(track.path())?;
+    let own = embedded::read_text(track.path())?;
 
     if own.as_deref().is_some_and(lrc::is_timed) {
         return Ok(own);

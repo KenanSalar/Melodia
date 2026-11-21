@@ -1,17 +1,51 @@
-//! The file's own lyrics tag.
+//! The file's own lyrics tag, which can hold several entries, a `USLT` per language or a second
+//! `LYRICS`: [`best`] is the one choice of which shows, so the panel and the tag editor agree.
 
 use std::path::Path;
 
 use super::lrc;
 use crate::library::tags;
-use melodia_core::entities::lyrics::{Lyrics, LyricsSource};
+use melodia_core::entities::lyrics::{Lyrics, LyricsSource, Timing};
 use melodia_core::error::AppError;
 
-/// Reads the lyrics tag and parses whatever it holds, LRC or plain prose, the tag declaring
-/// neither.
+/// Reads the lyrics tag and parses its best entry, LRC or plain prose, the tag declaring neither.
 pub(super) fn read(path: &Path) -> Result<Option<Lyrics>, AppError> {
-    let Some(text) = tags::read_lyrics(path)? else {
-        return Ok(None);
-    };
-    Ok(lrc::parse(&text, LyricsSource::Tag))
+    let entries = tags::read_lyrics(path)?;
+    Ok(best(&entries).and_then(|entry| entry.sheet))
+}
+
+/// [`read`]'s entry as the tag held it.
+pub(super) fn read_text(path: &Path) -> Result<Option<String>, AppError> {
+    let entries = tags::read_lyrics(path)?;
+    Ok(best_tag_entry(&entries).map(str::to_owned))
+}
+
+/// Which of a lyrics tag's entries shows, as the tag held it, so the tag editor opens on the one
+/// the panel reads.
+#[must_use]
+pub fn best_tag_entry(entries: &[String]) -> Option<&str> {
+    best(entries).map(|entry| entry.text)
+}
+
+struct Entry<'a> {
+    text: &'a str,
+    sheet: Option<Lyrics>,
+}
+
+/// Word times over line times over plain text, the first on a tie, and an entry nothing parses
+/// from last.
+fn best(entries: &[String]) -> Option<Entry<'_>> {
+    let mut best: Option<(Option<Timing>, Entry<'_>)> = None;
+    for text in entries {
+        let sheet = lrc::parse(text, LyricsSource::Tag);
+        let timing = sheet.as_ref().map(Lyrics::timing);
+        let entry = Entry { text, sheet };
+        if timing == Some(Timing::Words) {
+            return Some(entry);
+        }
+        if best.as_ref().is_none_or(|(kept, _)| timing > *kept) {
+            best = Some((timing, entry));
+        }
+    }
+    best.map(|(_, entry)| entry)
 }

@@ -261,7 +261,7 @@ fn clearing_lyrics_removes_both_keys() {
 /// The dialog's single-selection Lyrics tab reads via `read_lyrics`, which must
 /// see whatever `apply_edit` wrote — including on MP3, where lyrics land in
 /// `USLT` (there is no `ID3v2` `Lyrics` mapping) and only the `UnsyncLyrics`
-/// fallback finds them. A writer↔reader round-trip; neither half is meaningful
+/// read finds them. A writer↔reader round-trip; neither half is meaningful
 /// alone.
 #[test]
 fn read_lyrics_round_trips_on_flac_and_mp3() -> Result<(), AppError> {
@@ -273,7 +273,7 @@ fn read_lyrics_round_trips_on_flac_and_mp3() -> Result<(), AppError> {
         &TagEdit { lyrics: FieldEdit::Set("first line\nsecond line".into()), ..TagEdit::default() },
         None,
     )?;
-    assert_eq!(read_lyrics(&flac)?.as_deref(), Some("first line\nsecond line"));
+    assert_eq!(read_lyrics(&flac)?, ["first line\nsecond line"]);
 
     let mp3 = stage(&tmp, "silence.mp3")?;
     apply_to_file(
@@ -281,7 +281,7 @@ fn read_lyrics_round_trips_on_flac_and_mp3() -> Result<(), AppError> {
         &TagEdit { lyrics: FieldEdit::Set("mp3 lyrics".into()), ..TagEdit::default() },
         None,
     )?;
-    assert_eq!(read_lyrics(&mp3)?.as_deref(), Some("mp3 lyrics"));
+    assert_eq!(read_lyrics(&mp3)?, ["mp3 lyrics"]);
 
     Ok(())
 }
@@ -600,7 +600,7 @@ fn an_oga_round_trips_a_full_edit_despite_its_extension() -> Result<(), AppError
     let tag = read_primary(&audio)?;
     assert_eq!(tag.tag_type(), TagType::VorbisComments);
     assert_full_edit_landed(&tag)?;
-    assert_eq!(read_lyrics(&audio)?.as_deref(), Some("la la la"));
+    assert_eq!(read_lyrics(&audio)?, ["la la la"]);
     Ok(())
 }
 

@@ -38,6 +38,10 @@ use melodia_core::utils::atomic_file;
 /// The highest BPM written; past it is a typo, not a tempo.
 const MAX_BPM: f64 = 1000.0;
 
+/// Every key a lyrics entry is read from, in read order, so a save clearing them all leaves no old
+/// entry to read back.
+const LYRICS_KEYS: [ItemKey; 2] = [ItemKey::Lyrics, ItemKey::UnsyncLyrics];
+
 /// What a write left unwritten, and the container that would not take it, named as its users know
 /// it, which [`apply_edit`], handed only a `Tag`, can't say.
 ///
@@ -220,17 +224,16 @@ impl<'a> TagWrite<'a> {
         }
     }
 
-    /// `ID3v2` has no `ItemKey::Lyrics` mapping. Vorbis comments take `LYRICS`, the key other
+    /// A `Set` replaces every entry, other languages included, so the one saved is the one read
+    /// back. `ID3v2` has no `ItemKey::Lyrics` mapping. Vorbis comments take `LYRICS`, the key other
     /// taggers write and read there, where `UNSYNCEDLYRICS` would hide ours from them and theirs
-    /// from us. Clear both.
+    /// from us.
     fn lyrics(&mut self, edit: &FieldEdit<String>) {
         match edit {
             FieldEdit::Keep => {}
-            FieldEdit::Clear => {
-                self.tag.remove_key(ItemKey::Lyrics);
-                self.tag.remove_key(ItemKey::UnsyncLyrics);
-            }
+            FieldEdit::Clear => self.clear_lyrics(),
             FieldEdit::Set(v) => {
+                self.clear_lyrics();
                 let key = if self.tag.tag_type() == TagType::VorbisComments {
                     ItemKey::Lyrics
                 } else {
@@ -238,6 +241,12 @@ impl<'a> TagWrite<'a> {
                 };
                 self.text(key, v.clone(), TagField::Lyrics);
             }
+        }
+    }
+
+    fn clear_lyrics(&mut self) {
+        for key in LYRICS_KEYS {
+            self.tag.remove_key(key);
         }
     }
 
@@ -447,11 +456,11 @@ fn vorbis_comment(item: &TagItem) -> Option<(String, String)> {
     Some((key.to_owned(), value.clone()))
 }
 
-/// Reads a file's lyrics tag, `Lyrics` before `UnsyncLyrics` as [`apply_edit`] writes them.
+/// Every entry in a file's lyrics tag, a key's in tag order and `Lyrics` before `UnsyncLyrics`.
 /// Blocking.
-pub fn read_lyrics(path: &Path) -> Result<Option<String>, AppError> {
+pub fn read_lyrics(path: &Path) -> Result<Vec<String>, AppError> {
     let tagged = metadata::read_tags(path, metadata::TagScope::TagsOnly)?;
-    Ok(tagged.primary_tag().or_else(|| tagged.first_tag()).and_then(lyrics_from))
+    Ok(tagged.primary_tag().or_else(|| tagged.first_tag()).map_or_default(lyrics_entries))
 }
 
 /// The tags the Edit-Tags dialog reads off a file, off one parse. Blocking.
@@ -464,7 +473,7 @@ pub fn read_file_tags(path: &Path) -> Result<FileTags, AppError> {
 pub(crate) fn file_tags_of(tagged: &TaggedFile) -> FileTags {
     let tag = tagged.primary_tag().or_else(|| tagged.first_tag());
     FileTags {
-        lyrics: tag.and_then(lyrics_from),
+        lyrics: tag.map_or_default(lyrics_entries),
         credits: metadata::credits_from_tag(tag),
         roles: tag.map_or_default(role_tags::read_roles),
         genres: metadata::read_genres(tag),
@@ -472,11 +481,13 @@ pub(crate) fn file_tags_of(tagged: &TaggedFile) -> FileTags {
     }
 }
 
-fn lyrics_from(tag: &Tag) -> Option<String> {
-    tag.get_string(ItemKey::Lyrics)
-        .or_else(|| tag.get_string(ItemKey::UnsyncLyrics))
+fn lyrics_entries(tag: &Tag) -> Vec<String> {
+    LYRICS_KEYS
+        .into_iter()
+        .flat_map(|key| tag.get_strings(key))
+        .filter(|text| !text.is_empty())
         .map(str::to_owned)
-        .filter(|s| !s.is_empty())
+        .collect()
 }
 
 #[cfg(test)]

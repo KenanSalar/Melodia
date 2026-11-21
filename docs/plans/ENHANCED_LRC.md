@@ -2,7 +2,7 @@
 
 Working doc. Delete when the feature ships.
 
-Status: **Phase 2 landed; Phase 3 next** · Created: 2026-11-20 · Branch
+Status: **Phase 3 landed; Phase 4 next** · Created: 2026-11-20 · Branch
 `feat/enhanced-lrc`, linked to #178 (#177 still to link from its Development sidebar)
 
 Issue [#178](https://github.com/KenanSalar/Melodia/issues/178), from the request in
@@ -324,16 +324,20 @@ Every file stays well under 800; `open.rs` grows by a line or two.
 
 ## Phase 3: Every entry, the best shown (`melodia-store`, `melodia-core`, `melodia-app`, `melodia-views`)
 
-- [ ] `lyrics_entries` in `tag_writer.rs` replacing `lyrics_from`; `read_lyrics` returns the list;
+- [x] `lyrics_entries` in `tag_writer.rs` replacing `lyrics_from`; `read_lyrics` returns the list;
       `FileTags.lyrics: Vec<String>`, the two cue merges clearing it (`cue/merge.rs:181`,
       `cue/embedded/mod.rs:103`).
-- [ ] The chooser in `embedded.rs`; `read_local_text` and `tags/open.rs` through it.
-- [ ] `TagWrite::lyrics`: `Set` clears both keys first.
-- [ ] Docs: the doc comments on `TagWrite::lyrics`, both `read_lyrics`, `FileTags.lyrics` and
-      `embedded.rs`' `//!`. ADR 38 holds: the entries come off the one read per track change.
+- [x] The chooser in `embedded.rs`; `read_local_text` (through `embedded::read_text`) and
+      `tags/open.rs` (through `library::lyrics::best_tag_entry`) through it. `read_local_text`
+      still asks `lrc::is_timed` of the chosen text, so a tag of blank stamps answers as before.
+- [x] `TagWrite::lyrics`: `Set` clears both keys first, through `LYRICS_KEYS`, the one list the
+      reader shares.
+- [x] Docs: the doc comments on `TagWrite::lyrics`, both `read_lyrics`, `FileTags.lyrics`,
+      `embedded.rs`' `//!` and `library::lyrics`' (what stays reachable with lyrics off). ADR 38
+      holds: the entries come off the one read per track change.
 
-**Gate:** fmt, clippy, the suite; `tag_writer_tests.rs`, `mod_tests.rs` and `merge_tests.rs`
-follow the type.
+**Gate:** fmt, clippy, the suite; `tag_writer_tests.rs` and `merge_tests.rs` follow the type,
+`mod_tests.rs` compiling unchanged.
 
 ## Phase 4: Lighting the words (`melodia-ui`, `melodia-views`)
 
