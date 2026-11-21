@@ -3,7 +3,14 @@
 use super::*;
 
 fn line(at_ms: Option<i64>, text: &str) -> LyricLine {
-    LyricLine { at_ms, end_ms: None, text: text.to_owned(), romanization: None, translation: None }
+    LyricLine {
+        at_ms,
+        end_ms: None,
+        text: text.to_owned(),
+        romanization: None,
+        translation: None,
+        words: Vec::new(),
+    }
 }
 
 #[test]

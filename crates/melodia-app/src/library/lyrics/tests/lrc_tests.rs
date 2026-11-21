@@ -16,7 +16,7 @@ fn stamps(text: &str) -> Vec<Option<i64>> {
     drawn(text).into_iter().map(|(at, _)| at).collect()
 }
 
-/// Each line with the end a blank stamp closed it at, which the two are only distinguishable by.
+/// Each line with the end a blank or end stamp closed it at, which the two are only told apart by.
 fn folded(text: &str) -> Vec<(Option<i64>, Option<i64>, String)> {
     parse(text, LyricsSource::Sidecar).map_or_else(Vec::new, |sheet| {
         sheet.lines.into_iter().map(|line| (line.at_ms, line.end_ms, line.text)).collect()
@@ -98,7 +98,7 @@ fn an_offset_past_the_first_stamp_clamps_at_the_start() {
 }
 
 #[test]
-fn word_stamps_are_dropped_and_their_words_kept() {
+fn word_stamps_are_taken_out_of_the_text_and_their_words_kept() {
     assert_eq!(
         drawn("[00:01.00]<00:01.00>one <00:01.50>two"),
         vec![(Some(1_000), "one two".to_owned())]

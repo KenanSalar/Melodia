@@ -2,7 +2,7 @@
 
 Working doc. Delete when the feature ships.
 
-Status: **Phase 1 landed; Phase 2 next** · Created: 2026-11-20 · Branch
+Status: **Phase 2 landed; Phase 3 next** · Created: 2026-11-20 · Branch
 `feat/enhanced-lrc`, linked to #178 (#177 still to link from its Development sidebar)
 
 Issue [#178](https://github.com/KenanSalar/Melodia/issues/178), from the request in
@@ -307,15 +307,17 @@ Every file stays well under 800; `open.rs` grows by a line or two.
 
 ## Phase 2: Word times in the sheet (`melodia-core`, `melodia-app`; no Slint)
 
-- [ ] `WordStamp`, `LyricLine.words`, `Timing` and `Lyrics::timing`. Every `LyricLine` literal takes
+- [x] `WordStamp`, `LyricLine.words`, `Timing` and `Lyrics::timing`. Every `LyricLine` literal takes
       `words: Vec::new()`: `lrc.rs` and three test files (`entities/tests/lyrics_tests.rs`,
       `romanize_tests.rs`, the views' `lyrics_tests.rs`).
-- [ ] `strip_word_stamps` becomes a split returning the text and its stamps; the rebase per line
-      stamp; the end stamp into `end_ms`; `[offset:]` through the subtraction the line takes. Word
-      offsets index the text after `parse`'s `trim()` (`lrc.rs:42`): a stamp at a line's edge
-      keeps the whitespace beside it, which the trim takes off.
-- [ ] The span check after the sort.
-- [ ] Docs: `LyricLine`'s doc (`words`, and `end_ms`'s two sources), `lrc.rs`' `//!`.
+- [x] `strip_word_stamps` becomes `split_word_stamps`, returning the trimmed text and its stamps;
+      the rebase per line stamp; the end stamp into `end_ms`; `[offset:]` through `on_track`, the
+      line's own clamp. Word offsets index the trimmed text: a stamp at the line's start leaves no
+      seam, and one at its end lands past the text, which is what marks it the end.
+- [x] The span check after the sort.
+- [x] Docs: `LyricLine`'s doc (`words`, and `end_ms`'s two sources), `lrc.rs`' `//!`,
+      `close_at_blanks` and `rows_for` (an end stamp ends a line as a blank does).
+- [x] Also: `stamp_ms` refuses a time past `i64` milliseconds, which overflowed.
 
 **Gate:** fmt, clippy, the suite, the literals the field breaks fixed here.
 **Visible:** only the end stamp, a break after a word-timed line showing its notes sooner.

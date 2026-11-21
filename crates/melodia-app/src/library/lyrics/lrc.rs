@@ -3,11 +3,14 @@
 //!
 //! [`parse`] is total and tolerant. It takes a sidecar, a lyrics tag or an API field without being
 //! told which, so no caller asks whether text "is LRC" first; whether it came back timed is
-//! [`Lyrics::is_synced`]'s question.
+//! [`Lyrics::is_synced`]'s question. Enhanced LRC's word stamps are read with their lines, and a
+//! line whose word times don't add up lights whole rather than failing its sheet.
 
 use std::borrow::Cow;
 
-use melodia_core::entities::lyrics::{LyricLine, Lyrics, LyricsSource, sheet_lines, split_gloss};
+use melodia_core::entities::lyrics::{
+    LyricLine, Lyrics, LyricsSource, TRANSLATION_MARK, WordStamp, sheet_lines, split_gloss,
+};
 
 /// The identification tags the format defines, dropped as metadata. Matched only against a whole
 /// bracketed line with a known key, so a plain sheet keeps its `[Chorus]` markers.
@@ -34,28 +37,18 @@ pub fn parse(text: &str, source: LyricsSource) -> Option<Lyrics> {
                     text: sung,
                     romanization: None,
                     translation: gloss,
+                    words: Vec::new(),
                 });
             }
             continue;
         }
-        let stripped = strip_word_stamps(rest);
-        let (mut sung, mut gloss) = split_translation(stripped.trim());
+        let mut written = Written::read(rest, &stamps);
         // Moved into the last stamp: nearly every line carries exactly one, where a clone would be
         // the whole cost.
         let last = stamps.len() - 1;
         for (index, at) in stamps.into_iter().enumerate() {
-            let (text, translation) = if index == last {
-                (std::mem::take(&mut sung), gloss.take())
-            } else {
-                (sung.clone(), gloss.clone())
-            };
-            timed.push(LyricLine {
-                at_ms: Some(at.saturating_sub(offset).max(0)),
-                end_ms: None,
-                text,
-                romanization: None,
-                translation,
-            });
+            let copy = if index == last { std::mem::take(&mut written) } else { written.clone() };
+            timed.push(copy.sung_at(at, offset));
         }
     }
 
@@ -64,12 +57,97 @@ pub fn parse(text: &str, source: LyricsSource) -> Option<Lyrics> {
     }
     // Stable, so a line written twice against one stamp keeps the order its author chose.
     timed.sort_by_key(|line| line.at_ms);
+    drop_overrunning_words(&mut timed);
     Lyrics::new(close_at_blanks(timed), source)
 }
 
+/// A stamped line as written, which each stamp it is sung under takes a copy of.
+#[derive(Clone, Default)]
+struct Written {
+    text: String,
+    translation: Option<String>,
+    pace: Option<Pace>,
+}
+
+impl Written {
+    fn read(rest: &str, line_stamps: &[i64]) -> Self {
+        let (spoken, stamps) = split_word_stamps(rest);
+        let (text, translation) = split_translation(&spoken);
+        let caret = translation.as_ref().and(spoken.find(TRANSLATION_MARK));
+        let (words, end_ms) = place(stamps, text.len(), caret);
+        let pace = Pace::new(words, end_ms, line_stamps);
+        Self { text, translation, pace }
+    }
+
+    fn sung_at(self, at: i64, offset: i64) -> LyricLine {
+        let (words, end_ms) = self.pace.map_or_default(|pace| pace.sung_at(at, offset));
+        LyricLine {
+            at_ms: Some(on_track(at, offset)),
+            end_ms,
+            text: self.text,
+            romanization: None,
+            translation: self.translation,
+            words,
+        }
+    }
+}
+
+/// A line's word times as written, and the line stamp they were timed against: a copy under
+/// another stamp moves them by its distance from that one, so a chorus lights on every repeat.
+#[derive(Clone)]
+struct Pace {
+    anchor: i64,
+    words: Vec<WordStamp>,
+    end_ms: Option<i64>,
+}
+
+impl Pace {
+    /// `None`, the line lit whole and its end dropped, where it has no word stamps, they run out of
+    /// order, or no line stamp comes at or before the first to time them against.
+    fn new(words: Vec<WordStamp>, end_ms: Option<i64>, line_stamps: &[i64]) -> Option<Self> {
+        let first = words.first()?.at_ms;
+        let anchor = line_stamps.iter().copied().filter(|&at| at <= first).max()?;
+        let in_order = words.iter().map(|word| word.at_ms).chain(end_ms).is_sorted();
+        in_order.then_some(Self { anchor, words, end_ms })
+    }
+
+    fn sung_at(mut self, at: i64, offset: i64) -> (Vec<WordStamp>, Option<i64>) {
+        let shift = at - self.anchor;
+        for word in &mut self.words {
+            word.at_ms = on_track(word.at_ms.saturating_add(shift), offset);
+        }
+        (self.words, self.end_ms.map(|end| on_track(end.saturating_add(shift), offset)))
+    }
+}
+
+/// A stamp with `[offset:]` applied, held at the track's start.
+fn on_track(stamp: i64, offset: i64) -> i64 {
+    stamp.saturating_sub(offset).max(0)
+}
+
+/// Lights whole any line whose words or end run past the sheet's next later stamp, a blank one
+/// included. Ahead of [`close_at_blanks`], so an `end_ms` here is the line's own end stamp.
+fn drop_overrunning_words(lines: &mut [LyricLine]) {
+    let mut next_later = None;
+    let mut run_at = None;
+    for line in lines.iter_mut().rev() {
+        if line.at_ms != run_at {
+            next_later = run_at;
+            run_at = line.at_ms;
+        }
+        let sung_until = line.end_ms.or(line.words.last().map(|word| word.at_ms));
+        if let (Some(until), Some(bound)) = (sung_until, next_later)
+            && until > bound
+        {
+            line.words = Vec::new();
+            line.end_ms = None;
+        }
+    }
+}
+
 /// Turns each blank stamp, the format's "stop showing the last line", into the end of the line
-/// above it rather than an empty row the panel centres on through the solo. The first blank of a
-/// run wins, and one before any words is dropped.
+/// above it rather than an empty row the panel centres on through the solo, unless an end stamp
+/// already ended it. The first blank of a run wins, and one before any words is dropped.
 fn close_at_blanks(lines: Vec<LyricLine>) -> Vec<LyricLine> {
     let mut sung: Vec<LyricLine> = Vec::with_capacity(lines.len());
     for line in lines {
@@ -144,7 +222,8 @@ fn split_stamps(line: &str) -> (Vec<i64>, &str) {
 fn stamp_ms(inner: &str) -> Option<i64> {
     let (minutes, rest) = inner.split_once(':')?;
     let (seconds, fraction) = rest.split_once(['.', ',']).unwrap_or((rest, ""));
-    Some((digits(minutes)? * 60 + digits(seconds)?) * 1000 + fraction_ms(fraction)?)
+    let whole_seconds = digits(minutes)?.checked_mul(60)?.checked_add(digits(seconds)?)?;
+    whole_seconds.checked_mul(1000)?.checked_add(fraction_ms(fraction)?)
 }
 
 /// A field that is nothing but ASCII digits, refusing the sign `i64::from_str` would take.
@@ -173,35 +252,57 @@ fn fraction_ms(fraction: &str) -> Option<i64> {
     Some(ms)
 }
 
-/// Drops enhanced-LRC word stamps (`<mm:ss.xx>`), which nothing draws yet. A seam keeps one of
-/// its own whitespace characters, a full-width space included, and none where it had none, so a
-/// syllable stamp joins its word. A `<` that is not a stamp stays put, so `<3` survives.
-fn strip_word_stamps(line: &str) -> Cow<'_, str> {
+/// Takes the enhanced-LRC word stamps (`<mm:ss.xx>`) out of a line, each kept with the byte its
+/// word starts at in the trimmed text left. A seam keeps one of its own whitespace characters, a
+/// full-width space included, and none where it had none, so a syllable stamp joins its word. A `<`
+/// that is not a stamp stays put, so `<3` survives.
+fn split_word_stamps(line: &str) -> (Cow<'_, str>, Vec<WordStamp>) {
+    let line = line.trim();
     if !line.contains('<') {
-        return Cow::Borrowed(line);
+        return (Cow::Borrowed(line), Vec::new());
     }
     let mut out = String::with_capacity(line.len());
+    let mut stamps = Vec::new();
     let mut rest = line;
     while let Some(open) = rest.find('<') {
         let after = &rest[open + 1..];
         let Some(close) = after.find('>') else { break };
-        if stamp_ms(&after[..close]).is_none() {
+        let Some(at_ms) = stamp_ms(&after[..close]) else {
             out.push_str(&rest[..=open]);
             rest = after;
             continue;
-        }
+        };
         out.push_str(&rest[..open]);
         rest = &after[close + 1..];
         let before = out.chars().next_back().filter(|c| c.is_whitespace());
         let seam = before.or_else(|| rest.chars().next().filter(|c| c.is_whitespace()));
         out.truncate(out.trim_end().len());
         rest = rest.trim_start();
-        if let Some(seam) = seam {
+        if let Some(seam) = seam
+            && !out.is_empty()
+        {
             out.push(seam);
         }
+        stamps.push(WordStamp { start: out.len(), at_ms });
     }
     out.push_str(rest);
-    Cow::Owned(out)
+    out.truncate(out.trim_end().len());
+    (Cow::Owned(out), stamps)
+}
+
+/// Splits a line's word stamps between its words and its end: the last stamp with no word after
+/// it ends the line, and one past the gloss's `caret` is dropped, the gloss lighting whole.
+fn place(
+    mut stamps: Vec<WordStamp>,
+    sung_len: usize,
+    caret: Option<usize>,
+) -> (Vec<WordStamp>, Option<i64>) {
+    // `split_word_stamps` hands the starts in order, which both searches need.
+    let sung_half = stamps.partition_point(|stamp| caret.is_none_or(|caret| stamp.start <= caret));
+    let words = stamps.partition_point(|stamp| stamp.start < sung_len);
+    let end_ms = stamps[words..sung_half].last().map(|stamp| stamp.at_ms);
+    stamps.truncate(words);
+    (stamps, end_ms)
 }
 
 #[cfg(test)]

@@ -4,10 +4,12 @@
 use crate::utils::text::filled;
 
 /// One line, timed or not. `at_ms` is `None` only for a sheet with no timing at all, and clamped
-/// non-negative. `end_ms` is where the sheet says the singing stops, `None` where it didn't say,
-/// which is how the panel tells a pause from a long line. `translation` is a bilingual sheet's
-/// gloss, apart because the panel draws it smaller; `romanization` is derived by
-/// `library::lyrics::romanize`. The panel draws the three in declaration order.
+/// non-negative. `end_ms` is where the sheet says the singing stops, by a blank stamp after the
+/// line or a stamp after its last word, `None` where it didn't say, which is how the panel tells a
+/// pause from a long line. `words` runs in time order from `at_ms`, empty for a line lit whole.
+/// `translation` is a bilingual sheet's gloss, apart because the panel draws it smaller;
+/// `romanization` is derived by `library::lyrics::romanize`. The panel draws the three in
+/// declaration order.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct LyricLine {
     pub at_ms: Option<i64>,
@@ -15,6 +17,23 @@ pub struct LyricLine {
     pub text: String,
     pub romanization: Option<String>,
     pub translation: Option<String>,
+    pub words: Vec<WordStamp>,
+}
+
+/// When a word, or a syllable, lights. `start` is its first byte in the line's `text`, so what is
+/// lit is the text up to the first word not yet due.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct WordStamp {
+    pub start: usize,
+    pub at_ms: i64,
+}
+
+/// How closely a sheet can be followed, ordered so the best of several is the greatest.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub enum Timing {
+    Plain,
+    Lines,
+    Words,
 }
 
 /// Which arm answered: only [`LyricsSource::Online`] is a candidate for the on-disk store.
@@ -49,8 +68,20 @@ impl Lyrics {
 
     /// Derived rather than stored, so it can't drift from the lines.
     #[must_use]
+    pub fn timing(&self) -> Timing {
+        if self.lines.iter().any(|line| !line.words.is_empty()) {
+            Timing::Words
+        } else if self.lines.iter().any(|line| line.at_ms.is_some()) {
+            Timing::Lines
+        } else {
+            Timing::Plain
+        }
+    }
+
+    /// Whether the panel follows the sheet as it plays, by lines at least.
+    #[must_use]
     pub fn is_synced(&self) -> bool {
-        self.lines.iter().any(|line| line.at_ms.is_some())
+        self.timing() != Timing::Plain
     }
 }
 

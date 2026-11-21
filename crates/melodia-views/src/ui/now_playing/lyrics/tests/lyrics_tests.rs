@@ -147,6 +147,7 @@ fn line(at_ms: i64, end_ms: Option<i64>, text: &str) -> LyricLine {
         text: text.to_owned(),
         romanization: None,
         translation: None,
+        words: Vec::new(),
     }
 }
 
@@ -179,6 +180,7 @@ fn an_untimed_sheet_is_drawn_without_gaps() {
             text: "a".to_owned(),
             romanization: None,
             translation: None,
+            words: Vec::new(),
         },
         LyricLine {
             at_ms: None,
@@ -186,6 +188,7 @@ fn an_untimed_sheet_is_drawn_without_gaps() {
             text: "b".to_owned(),
             romanization: None,
             translation: None,
+            words: Vec::new(),
         },
     ]);
 
