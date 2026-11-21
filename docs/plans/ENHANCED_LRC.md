@@ -148,7 +148,7 @@ in every format, where an M4A or a FLAC can keep an old one today.
 
 - Word times are kept relative to the stamp they were written against: the latest of the line's
   stamps at or before its first word time. Each copy then takes its own stamp plus those gaps,
-  the last copy taking the list by move as it takes the text (`lrc.rs:43-51`).
+  the last copy taking the list by move as it takes the text (`lrc.rs:45-52`).
 - So words timed against a chorus's second occurrence light on the first too, and a one-stamp line
   whose stamp comes after its words is refused rather than shifted.
 

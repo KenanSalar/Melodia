@@ -9,7 +9,7 @@
 use std::borrow::Cow;
 
 use melodia_core::entities::lyrics::{
-    LyricLine, Lyrics, LyricsSource, TRANSLATION_MARK, WordStamp, sheet_lines, split_gloss,
+    LyricLine, Lyrics, LyricsSource, WordStamp, gloss_caret, sheet_lines, split_gloss,
 };
 
 /// The identification tags the format defines, dropped as metadata. Matched only against a whole
@@ -73,8 +73,7 @@ impl Written {
     fn read(rest: &str, line_stamps: &[i64]) -> Self {
         let (spoken, stamps) = split_word_stamps(rest);
         let (text, translation) = split_translation(&spoken);
-        let caret = translation.as_ref().and(spoken.find(TRANSLATION_MARK));
-        let (words, end_ms) = place(stamps, text.len(), caret);
+        let (words, end_ms) = place(stamps, text.len(), gloss_caret(&spoken));
         let pace = Pace::new(words, end_ms, line_stamps);
         Self { text, translation, pace }
     }

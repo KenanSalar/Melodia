@@ -22,9 +22,9 @@ pub(super) const INTRO_MS: i32 = 3_000;
 /// The rows a sheet draws, with the notes wherever it leaves a gap worth naming. The run-in falls
 /// out of the same walk, `sung_until` starting at the track.
 ///
-/// A line the sheet gave no end to closes nothing: only a blank stamp, or one after its last word,
-/// says the singing stopped. No trailing gap: it needs the last line's end, which almost no sheet
-/// states, and would paint notes over the singing everywhere else.
+/// A line with no `end_ms` closes nothing, the sheet never having said the singing stopped. No
+/// trailing gap: it needs the last line's end, which almost no sheet states, and would paint notes
+/// over the singing everywhere else.
 pub(super) fn rows_for(sheet: &Sheet) -> Vec<Row> {
     let mut rows: Vec<Row> = Vec::with_capacity(sheet.lines.len());
     let mut sung_until = Some(0);

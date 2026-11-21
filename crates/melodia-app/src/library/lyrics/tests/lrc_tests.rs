@@ -16,7 +16,7 @@ fn stamps(text: &str) -> Vec<Option<i64>> {
     drawn(text).into_iter().map(|(at, _)| at).collect()
 }
 
-/// Each line with the end a blank or end stamp closed it at, which the two are only told apart by.
+/// Each line with its end, the one trace a blank or end stamp leaves on the sheet.
 fn folded(text: &str) -> Vec<(Option<i64>, Option<i64>, String)> {
     parse(text, LyricsSource::Sidecar).map_or_else(Vec::new, |sheet| {
         sheet.lines.into_iter().map(|line| (line.at_ms, line.end_ms, line.text)).collect()

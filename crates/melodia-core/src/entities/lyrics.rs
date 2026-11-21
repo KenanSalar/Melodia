@@ -138,23 +138,30 @@ impl LyricsAnswer {
 /// is parsed.
 pub const TRANSLATION_MARK: char = '^';
 
-/// Only a caret with text either side separates; anywhere else it is a character, and kept.
+/// A line's words and its gloss, cut at [`gloss_caret`].
 #[must_use]
 pub fn split_gloss(line: &str) -> (&str, Option<&str>) {
-    let Some((sung, gloss)) = line.split_once(TRANSLATION_MARK) else {
+    let Some(caret) = gloss_caret(line) else {
         return (line, None);
     };
-    let (sung, gloss) = (sung.trim_end(), gloss.trim());
-    if sung.is_empty() || gloss.is_empty() {
-        return (line, None);
-    }
-    (sung, Some(gloss))
+    let (sung, rest) = line.split_at(caret);
+    let gloss = &rest[TRANSLATION_MARK.len_utf8()..];
+    (sung.trim_end(), Some(gloss.trim()))
+}
+
+/// Where [`split_gloss`] cuts a line, for a caller holding offsets into it whole. Only a caret with
+/// text either side separates; anywhere else it is a character, and kept.
+#[must_use]
+pub fn gloss_caret(line: &str) -> Option<usize> {
+    let (sung, gloss) = line.split_once(TRANSLATION_MARK)?;
+    let separates = !sung.trim_end().is_empty() && !gloss.trim().is_empty();
+    separates.then_some(sung.len())
 }
 
 /// Asked of raw LRC, stamps and all, so it answers before a sheet is parsed.
 #[must_use]
 pub fn carries_gloss(text: &str) -> bool {
-    sheet_lines(text).any(|line| split_gloss(line).1.is_some())
+    sheet_lines(text).any(|line| gloss_caret(line).is_some())
 }
 
 /// A sheet's lines, broken at `\n`, `\r\n` or a lone `\r`, the classic Mac OS break some taggers
