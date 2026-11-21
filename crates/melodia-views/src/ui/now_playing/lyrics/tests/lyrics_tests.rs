@@ -3,7 +3,7 @@
 //! Both are silent when wrong: an off-by-one in the search highlights the wrong line for the whole
 //! song, and a row height that disagrees with the layout drifts the scroll further down a sheet.
 
-use super::follow::{interlude_progress, row_at, sung_at};
+use super::follow::{interlude_progress, lit_until, row_at, sung_at};
 use super::measure::{MAX_WRAPPED_LINES, UPPERCASE_EMS, char_ems, wrapped_lines};
 use super::rows::{INTERLUDE_MS, INTRO_MS, MAX_ROWS, millis, rows_for};
 use super::*;
@@ -87,6 +87,39 @@ fn an_untimed_sheet_sings_nothing() {
 #[test]
 fn an_empty_sheet_sings_nothing() {
     assert_eq!(sung_at(&[], 5_000.0), None);
+}
+
+/// "Oh say can", "say" timed at 1 s and "can" at 2 s, "Oh " written ahead of any word stamp.
+fn word_timed_row() -> Row {
+    Row {
+        text: "Oh say can".into(),
+        words: Box::new([
+            WordStamp { start: 3, at_ms: 1_000 },
+            WordStamp { start: 7, at_ms: 2_000 },
+        ]),
+        ..plain_row(0)
+    }
+}
+
+#[test]
+fn a_row_lit_whole_has_no_cut() {
+    assert_eq!(lit_until(&plain_row(0), 5_000.0), None);
+}
+
+#[test]
+fn ahead_of_its_first_word_a_row_lights_what_was_written_before_it() {
+    assert_eq!(lit_until(&word_timed_row(), 500.0), Some(3));
+}
+
+#[test]
+fn a_word_lights_from_the_instant_its_stamp_arrives() {
+    assert_eq!(lit_until(&word_timed_row(), 1_000.0), Some(7));
+    assert_eq!(lit_until(&word_timed_row(), 999.0), Some(3), "the step before");
+}
+
+#[test]
+fn from_its_last_word_on_the_whole_row_is_lit() {
+    assert_eq!(lit_until(&word_timed_row(), 2_000.0), Some("Oh say can".len()));
 }
 
 #[test]

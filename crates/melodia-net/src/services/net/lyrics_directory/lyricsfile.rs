@@ -82,3 +82,7 @@ fn push_stamp(sheet: &mut String, open: char, ms: u64, close: char) {
     // Writing into a String cannot fail.
     let _ = write!(sheet, "{open}{minutes:02}:{:02}.{:03}{close}", within / 1000, within % 1000);
 }
+
+#[cfg(test)]
+#[path = "tests/lyricsfile_tests.rs"]
+mod tests;

@@ -166,3 +166,7 @@ impl From<LookupError> for SearchFailure {
         }
     }
 }
+
+#[cfg(test)]
+#[path = "tests/finder_tests.rs"]
+mod tests;

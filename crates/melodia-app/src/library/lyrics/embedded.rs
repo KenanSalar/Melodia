@@ -48,3 +48,7 @@ fn best(entries: &[String]) -> Option<Entry<'_>> {
     }
     chosen.map(|(_, entry)| entry)
 }
+
+#[cfg(test)]
+#[path = "tests/embedded_tests.rs"]
+mod tests;

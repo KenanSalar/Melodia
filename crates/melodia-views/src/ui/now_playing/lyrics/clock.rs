@@ -103,3 +103,7 @@ impl SongClock {
         self.anchor_at.set(now);
     }
 }
+
+#[cfg(test)]
+#[path = "tests/clock_tests.rs"]
+mod tests;

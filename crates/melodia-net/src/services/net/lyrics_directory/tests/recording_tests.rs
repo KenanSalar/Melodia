@@ -216,6 +216,28 @@ fn a_credited_name_does_not_make_another_artists_song_of_the_same_name_ours() {
 }
 
 #[test]
+fn a_search_asks_with_the_trimmed_title_and_the_lead_artist() {
+    let credit = tagged("Dominic Strike, Euphoria", &[]);
+    assert_eq!(
+        search_terms("Eclipse (feat. Dr Disrespect)", &credit),
+        ("Eclipse", "Dominic Strike")
+    );
+}
+
+#[test]
+fn a_title_its_trim_empties_is_searched_as_tagged() {
+    // Searched empty, the index finds nothing for it.
+    let credit = tagged("Band", &[]);
+    assert_eq!(search_terms("(feat. Guest) Song", &credit), ("(feat. Guest) Song", "Band"));
+}
+
+#[test]
+fn an_artist_its_trim_empties_is_searched_as_tagged() {
+    let credit = tagged("/Band", &[]);
+    assert_eq!(search_terms("Song", &credit), ("Song", "/Band"));
+}
+
+#[test]
 fn the_query_takes_the_lead_off_a_credit_and_guesses_only_without_one() {
     assert_eq!(
         search_artist(&tagged("Alesso vs. Hailee Steinfeld", &["Alesso", "Hailee Steinfeld"])),

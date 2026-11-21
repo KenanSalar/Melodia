@@ -254,7 +254,7 @@ fn publish_words(global: &Lyrics, ly: &LyricsUi, index: usize, row: &Row, positi
 
 /// The byte the sung row's lit words end at, `None` on a row lit whole. Text ahead of the first
 /// word stamp lights with the line.
-fn lit_until(row: &Row, position_ms: f64) -> Option<usize> {
+pub(super) fn lit_until(row: &Row, position_ms: f64) -> Option<usize> {
     if row.words.is_empty() {
         return None;
     }
