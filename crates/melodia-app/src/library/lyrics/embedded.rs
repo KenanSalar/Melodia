@@ -20,8 +20,7 @@ pub(super) fn read_text(path: &Path) -> Result<Option<String>, AppError> {
     Ok(best_tag_entry(&entries).map(str::to_owned))
 }
 
-/// Which of a lyrics tag's entries shows, as the tag held it, so the tag editor opens on the one
-/// the panel reads.
+/// Which of a lyrics tag's entries shows, as the tag held it.
 #[must_use]
 pub fn best_tag_entry(entries: &[String]) -> Option<&str> {
     best(entries).map(|entry| entry.text)
@@ -35,7 +34,7 @@ struct Entry<'a> {
 /// Word times over line times over plain text, the first on a tie, and an entry nothing parses
 /// from last.
 fn best(entries: &[String]) -> Option<Entry<'_>> {
-    let mut best: Option<(Option<Timing>, Entry<'_>)> = None;
+    let mut chosen: Option<(Option<Timing>, Entry<'_>)> = None;
     for text in entries {
         let sheet = lrc::parse(text, LyricsSource::Tag);
         let timing = sheet.as_ref().map(Lyrics::timing);
@@ -43,9 +42,9 @@ fn best(entries: &[String]) -> Option<Entry<'_>> {
         if timing == Some(Timing::Words) {
             return Some(entry);
         }
-        if best.as_ref().is_none_or(|(kept, _)| timing > *kept) {
-            best = Some((timing, entry));
+        if chosen.as_ref().is_none_or(|(kept, _)| timing > *kept) {
+            chosen = Some((timing, entry));
         }
     }
-    best.map(|(_, entry)| entry)
+    chosen.map(|(_, entry)| entry)
 }

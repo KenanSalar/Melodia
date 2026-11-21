@@ -224,10 +224,8 @@ impl<'a> TagWrite<'a> {
         }
     }
 
-    /// A `Set` replaces every entry, other languages included, so the one saved is the one read
-    /// back. `ID3v2` has no `ItemKey::Lyrics` mapping. Vorbis comments take `LYRICS`, the key other
-    /// taggers write and read there, where `UNSYNCEDLYRICS` would hide ours from them and theirs
-    /// from us.
+    /// A `Set` replaces every entry, other languages included. `ID3v2` has no `ItemKey::Lyrics`
+    /// mapping, and Vorbis comments take `LYRICS`, the key other taggers read there.
     fn lyrics(&mut self, edit: &FieldEdit<String>) {
         match edit {
             FieldEdit::Keep => {}
@@ -456,8 +454,7 @@ fn vorbis_comment(item: &TagItem) -> Option<(String, String)> {
     Some((key.to_owned(), value.clone()))
 }
 
-/// Every entry in a file's lyrics tag, a key's in tag order and `Lyrics` before `UnsyncLyrics`.
-/// Blocking.
+/// Every entry in a file's lyrics tag, by `LYRICS_KEYS` and then tag order. Blocking.
 pub fn read_lyrics(path: &Path) -> Result<Vec<String>, AppError> {
     let tagged = metadata::read_tags(path, metadata::TagScope::TagsOnly)?;
     Ok(tagged.primary_tag().or_else(|| tagged.first_tag()).map_or_default(lyrics_entries))

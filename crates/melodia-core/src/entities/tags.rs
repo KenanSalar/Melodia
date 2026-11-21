@@ -201,7 +201,7 @@ impl ClearedReleaseTags {
 /// library holds nowhere else, having no album or join rows.
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct FileTags {
-    /// Every lyrics entry, in tag order: which one shows is `library::lyrics`' choice.
+    /// Every lyrics entry: which one shows is `library::lyrics`' choice.
     pub lyrics: Vec<String>,
     /// The track's own artist credit, then its album's.
     pub credits: (ArtistCredit, ArtistCredit),
