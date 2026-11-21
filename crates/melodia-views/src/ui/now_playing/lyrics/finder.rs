@@ -157,7 +157,7 @@ impl Finder {
         g.set_phase(LyricsSearchPhase::Listing);
     }
 
-    /// Undoes [`Self::show`] and [`Self::pick`] at once: a row's `index` points into `choices`.
+    /// What [`Self::show`] listed and [`Self::pick`] drew from it, which go stale together.
     fn clear_list(&self, g: &LyricsFinder<'_>) {
         self.choices.take();
         self.rows.set_vec(Vec::new());

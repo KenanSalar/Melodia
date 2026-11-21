@@ -22,7 +22,7 @@ use super::track_rows::fetch_by_id;
 use super::{Keyset, PagedRow, PagedRows, ReadStamp, RowRequest, window};
 use crate::ui::list_selection::click_selection;
 use crate::ui::tracks::format_duration_ms;
-use crate::ui::util::{self, StringPool, clamp_i64_to_i32};
+use crate::ui::util::{self, StringPool, clamp_i64_to_i32, item_at};
 use melodia_app::library;
 use melodia_app::state::AppState;
 use melodia_core::entities::track::TrackListRow as RsTrackListRow;
@@ -128,9 +128,7 @@ impl QueueRows {
     /// Pick by a click on row `idx`, by the rule every list clicks by.
     pub fn click(&self, idx: i32, ctrl: bool, shift: bool) {
         let entries = Arc::clone(&self.entries.borrow());
-        let Some(&entry) = usize::try_from(idx).ok().and_then(|row| entries.get(row)) else {
-            return;
-        };
+        let Some(&entry) = item_at(&entries, idx) else { return };
         let picked = self.picks.borrow().iter().copied().collect();
         let (picks, anchor) = click_selection(
             self.anchor.get(),

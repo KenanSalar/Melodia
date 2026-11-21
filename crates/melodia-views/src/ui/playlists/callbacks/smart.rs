@@ -16,7 +16,7 @@ use slint::{ComponentHandle, Model, ModelRc, SharedString, VecModel};
 use super::optional_text;
 use crate::ui::callbacks::DialogClaim;
 use crate::ui::playlists::{self as playlists_ui_mod, PlaylistsUi};
-use crate::ui::util::clamp_i64_to_i32;
+use crate::ui::util::{clamp_i64_to_i32, item_at};
 use melodia_app::library;
 use melodia_app::state::AppState;
 use melodia_core::entities::smart_criteria as sc;
@@ -323,9 +323,9 @@ fn rule_to_row(rule: &sc::Rule) -> Option<SmartRuleRow> {
 
 /// Rebuild a rule from an editor row (dropping incoherent / incomplete rows).
 fn row_to_rule(row: &SmartRuleRow) -> Option<sc::Rule> {
-    let field = usize::try_from(row.field_index).ok().and_then(|i| sc::FIELDS.get(i).copied())?;
+    let field = item_at(sc::FIELDS, row.field_index).copied()?;
     let vt = field.value_type();
-    let op = usize::try_from(row.op_index).ok().and_then(|i| sc::ops_for(vt).get(i).copied())?;
+    let op = item_at(sc::ops_for(vt), row.op_index).copied()?;
     let value = sc::RuleValue::from_input(vt, op, row.value_text.as_str());
     Some(sc::Rule { field, op, value })
 }

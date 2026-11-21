@@ -87,7 +87,7 @@ pub fn len_as_i32(len: usize) -> i32 {
     i32::try_from(len).unwrap_or(i32::MAX)
 }
 
-/// The entry a Slint index names, `None` for the `-1` that means no pick.
+/// The entry a Slint `int` index names, `None` for `-1` or past the end.
 pub fn item_at<T>(items: &[T], index: i32) -> Option<&T> {
     usize::try_from(index).ok().and_then(|index| items.get(index))
 }
