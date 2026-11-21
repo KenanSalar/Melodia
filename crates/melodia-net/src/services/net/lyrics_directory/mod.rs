@@ -5,6 +5,7 @@
 //! for is a question about tags, not about any one service.
 
 mod lrclib;
+mod lyricsfile;
 mod recording;
 
 use std::fmt;

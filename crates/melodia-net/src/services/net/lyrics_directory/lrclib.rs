@@ -1,5 +1,5 @@
 //! lrclib.net, the lyrics directory: at most two requests per track change, only from behind
-//! `library::lyrics`' switch, and its wire shape stays here.
+//! `library::lyrics`' switch, and its wire shape stays here and in [`lyricsfile`].
 //!
 //! **Every request goes through the pacer, and a refusal arms it.** The service requires both: a
 //! delay between requests, and honouring a `429`'s `Retry-After` on pain of a `User-Agent` ban.
@@ -14,6 +14,7 @@ use melodia_core::error::{AppError, describe};
 use melodia_core::utils::fold::fold;
 
 use super::LookupError;
+use super::lyricsfile;
 use super::recording::{Recording, query_title, search_artist};
 use crate::services::net::pacer::{RequestPacer, Turn};
 
@@ -57,6 +58,11 @@ struct ApiLyrics {
     plain_lyrics: Option<String>,
     #[serde(default)]
     instrumental: bool,
+    /// Whether `lyricsfile` times the words, which `syncedLyrics` never does.
+    #[serde(default)]
+    has_word_sync: bool,
+    #[serde(default)]
+    lyricsfile: Option<String>,
     /// Seconds, fractional, checked against [`DURATION_TOLERANCE_MS`] on both legs.
     #[serde(default)]
     duration: f64,
@@ -70,17 +76,31 @@ struct ApiLyrics {
 }
 
 impl ApiLyrics {
+    /// Converts the Lyricsfile only here, for the one row that answers.
     fn into_answer(self) -> LyricsAnswer {
         LyricsAnswer {
-            synced: self.synced_lyrics,
+            synced: self.word_timed_sheet().or(self.synced_lyrics),
             plain: self.plain_lyrics,
             instrumental: self.instrumental,
         }
     }
 
-    /// [`LyricsAnswer::is_synced`] on the raw row, which still carries what the ranking needs.
+    /// The Lyricsfile as enhanced LRC, where it times the words.
+    fn word_timed_sheet(&self) -> Option<String> {
+        if !self.has_word_sync {
+            return None;
+        }
+        self.lyricsfile.as_deref().and_then(lyricsfile::enhanced_lrc)
+    }
+
+    /// [`LyricsAnswer::is_synced`] on the raw row, which still carries what the ranking needs. A
+    /// word-timed record carries its lines in `syncedLyrics` too.
     fn is_timed(&self) -> bool {
         self.synced_lyrics.as_deref().is_some_and(|text| !text.trim().is_empty())
+    }
+
+    fn is_glossed(&self) -> bool {
+        self.synced_lyrics.as_deref().is_some_and(carries_gloss)
     }
 
     /// Fractional, being the ranking's last separator.
@@ -106,7 +126,7 @@ impl ApiLyrics {
 }
 
 /// Asks the directory about one track: the signature first, and the index only where that left
-/// no timed or no glossed sheet, so an ordinary hit costs one request.
+/// no timed sheet, or one timing neither words nor a gloss, so an ordinary hit costs one request.
 ///
 /// `Ok(None)` is a miss, which is what a `404` means and most of what a library gets. Every other
 /// non-success status is an error, so an outage doesn't read as nobody having written lyrics.
@@ -121,48 +141,49 @@ pub(super) async fn fetch(
     let ours = Recording::from_credit(title, credit);
     let printed = credit.line().unwrap_or_default();
     let exact = get_exact(client, pacer, title, printed, duration_ms, &ours).await?;
-    if exact.as_ref().is_some_and(|answer| answer.instrumental || settles_it(answer)) {
-        return Ok(exact);
+    if exact.as_ref().is_some_and(|row| row.instrumental || settles_it(row)) {
+        return Ok(exact.map(ApiLyrics::into_answer));
     }
-    // Past `settles_it`, an answer already timed leaves the index one errand: the gloss.
-    let gloss_errand = exact.as_ref().is_some_and(LyricsAnswer::is_synced);
+    // Past `settles_it`, a row already timed leaves the index one errand: word times or a gloss.
+    let timed_errand = exact.as_ref().is_some_and(ApiLyrics::is_timed);
 
-    match search_timed(client, pacer, title, credit, album, duration_ms, &ours).await {
-        Ok(Some(timed)) if worth_taking(exact.as_ref(), &timed) => Ok(Some(timed)),
-        Ok(Some(_) | None) => Ok(exact),
-        // A failed gloss errand mustn't cost the sheet: as a failure it would clear what the
-        // reader could already follow, and store nothing.
-        Err(_) if gloss_errand => Ok(exact),
+    let chosen = match search_timed(client, pacer, title, credit, album, duration_ms, &ours).await {
+        Ok(Some(timed)) if worth_taking(exact.as_ref(), &timed) => Some(timed),
+        Ok(Some(_) | None) => exact,
+        // A failed errand mustn't cost the sheet: as a failure it would clear what the reader
+        // could already follow, and store nothing.
+        Err(_) if timed_errand => exact,
         // A refusal ends the lookup whatever the signature found, so the caller can say so.
-        Err(e @ LookupError::RateLimited { .. }) => Err(e),
+        Err(e @ LookupError::RateLimited { .. }) => return Err(e),
         // Otherwise fatal only with no sheet in hand, or the caller would record "nobody has
         // this" for a month on the strength of an outage.
         Err(e) if exact.is_some() => {
             log::debug!("lyrics: index unreachable: {}", describe(&e));
-            Ok(exact)
+            exact
         }
-        Err(e) => Err(e),
-    }
+        Err(e) => return Err(e),
+    };
+    Ok(chosen.map(ApiLyrics::into_answer))
 }
 
-/// Whether the signature's answer leaves the index nothing to add. A timed sheet isn't enough
-/// alone: of a recording's uploads only some gloss their lines, and which one the signature
-/// returns depends on how the length rounded.
+/// Whether the signature's row leaves the index nothing to add. A timed sheet isn't enough alone:
+/// of a recording's uploads only some time their words or gloss their lines, and which one the
+/// signature returns depends on how the length rounded.
 ///
 /// Gated on `is_ascii` as the cheap, loose stand-in for `romanize::needs_romanization`, a crate
 /// away: an accented Latin sheet pays for a request it rarely needs, the right direction to fail.
-fn settles_it(answer: &LyricsAnswer) -> bool {
-    if !answer.is_synced() {
+fn settles_it(row: &ApiLyrics) -> bool {
+    if !row.is_timed() {
         return false;
     }
-    answer.has_gloss() || answer.text().is_some_and(str::is_ascii)
+    row.has_word_sync || row.is_glossed() || row.synced_lyrics.as_deref().is_some_and(str::is_ascii)
 }
 
-/// A timed sheet beats none and an untimed one. Against one already timed the bar is the gloss,
-/// or a length the signature matched would be traded for one merely inside the window.
-fn worth_taking(exact: Option<&LyricsAnswer>, found: &LyricsAnswer) -> bool {
+/// A timed sheet beats none and an untimed one. Against one already timed the bar is word times
+/// or a gloss, or a length the signature matched would be traded for one merely inside the window.
+fn worth_taking(exact: Option<&ApiLyrics>, found: &ApiLyrics) -> bool {
     match exact {
-        Some(answer) if answer.is_synced() => found.has_gloss(),
+        Some(row) if row.is_timed() => found.has_word_sync || found.is_glossed(),
         _ => true,
     }
 }
@@ -179,7 +200,7 @@ async fn get_exact(
     artist: &str,
     duration_ms: i64,
     ours: &Recording,
-) -> Result<Option<LyricsAnswer>, LookupError> {
+) -> Result<Option<ApiLyrics>, LookupError> {
     let mut url = endpoint(GET_ENDPOINT)?;
     url.query_pairs_mut()
         .append_pair("track_name", title)
@@ -193,7 +214,7 @@ async fn get_exact(
     let row: ApiLyrics = serde_json::from_slice(&body)
         .map_err(|e| failed("Failed to parse the lyrics response", e))?;
 
-    Ok(answers_for(ours, &row, duration_ms).then(|| row.into_answer()))
+    Ok(answers_for(ours, &row, duration_ms).then_some(row))
 }
 
 /// Whether the signature's row is the recording asked about, on [`pick_timed`]'s terms: without
@@ -216,7 +237,7 @@ async fn search_timed(
     album: &str,
     duration_ms: i64,
     ours: &Recording,
-) -> Result<Option<LyricsAnswer>, LookupError> {
+) -> Result<Option<ApiLyrics>, LookupError> {
     // Nothing this side can't compare is worth a request. The signature has no such bail: its
     // exact title and length stay comparable where the fold doesn't.
     if !ours.can_match() {
@@ -246,12 +267,12 @@ async fn search_timed(
     let rows: Vec<ApiLyrics> = serde_json::from_slice(&body)
         .map_err(|e| failed("Failed to parse the lyrics search response", e))?;
 
-    Ok(pick_timed(rows, ours, album, duration_ms).map(ApiLyrics::into_answer))
+    Ok(pick_timed(rows, ours, album, duration_ms))
 }
 
-/// The searched row that is this recording, ranked by whole seconds off, then gloss, then album,
-/// then the fractional distance; a full tie keeps the index's order. Split out to be
-/// table-testable without a socket.
+/// The searched row that is this recording, ranked by whole seconds off, then word times, then
+/// gloss, then album, then the fractional distance; a full tie keeps the index's order. Split out
+/// to be table-testable without a socket.
 fn pick_timed(
     rows: Vec<ApiLyrics>,
     ours: &Recording,
@@ -269,17 +290,23 @@ fn pick_timed(
         .min_by(|a, b| {
             a.second_off(duration_ms)
                 .cmp(&b.second_off(duration_ms))
+                .then_with(|| word_rank(a).cmp(&word_rank(b)))
                 .then_with(|| gloss_rank(a).cmp(&gloss_rank(b)))
                 .then_with(|| album_rank(a, &album).cmp(&album_rank(b, &album)))
                 .then_with(|| a.distance_ms(duration_ms).total_cmp(&b.distance_ms(duration_ms)))
         })
 }
 
-/// Under the second and above the album: two uploads agreeing to the second are one recording
-/// twice, so what they carry decides rather than a fifth of a second of noise. A whole second
-/// further out still loses.
+/// Under the second and above the gloss: two uploads agreeing to the second are one recording
+/// twice, so what they carry decides rather than a fifth of a second of noise, and words lit one
+/// by one are the most a sheet can carry. A whole second further out still loses.
+fn word_rank(row: &ApiLyrics) -> u8 {
+    u8::from(!row.has_word_sync)
+}
+
+/// Under the word times and above the album.
 fn gloss_rank(row: &ApiLyrics) -> u8 {
-    u8::from(!row.synced_lyrics.as_deref().is_some_and(carries_gloss))
+    u8::from(!row.is_glossed())
 }
 
 /// A tie-break only: the release it was ripped from is all that is left to prefer.

@@ -27,6 +27,7 @@ futures-util.workspace = true
 rand.workspace = true
 percent-encoding.workspace = true
 log.workspace = true
+serde-saphyr.workspace = true
 
 # The blocklist's fingerprints, hashed at build time and looked up at run time. Pinned to the
 # build-dependency version below: two of them would be two hashes.

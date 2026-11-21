@@ -103,7 +103,8 @@ pub enum LyricsOutcome {
 /// the crate that asked. `instrumental` is a positive answer, never asked again.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct LyricsAnswer {
-    /// LRC text, where the directory has a timed sheet.
+    /// LRC text, where the directory has a timed sheet, its words timed where the directory
+    /// times them.
     pub synced: Option<String>,
     /// Plain text, where it has only that.
     pub plain: Option<String>,

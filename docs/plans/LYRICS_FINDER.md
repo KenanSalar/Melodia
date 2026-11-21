@@ -2,7 +2,7 @@
 
 Working doc. Delete when the feature ships.
 
-Status: **Phase 1 landed; Phase 2 next** · Created: 2026-11-21 · Branch `feat/enhanced-lrc`, after
+Status: **Phase 2 landed; Phase 3 next** · Created: 2026-11-21 · Branch `feat/enhanced-lrc`, after
 [ENHANCED_LRC.md](ENHANCED_LRC.md)'s Phase 5
 
 > Researched **2026-11-21** against `feat/enhanced-lrc` at `8db89fc3`; lrclib's API reference
@@ -92,6 +92,9 @@ Status: **Phase 1 landed; Phase 2 next** · Created: 2026-11-21 · Branch `feat/
   a line whole when its times don't add up.
 - The conversion lives in `lyrics_directory`, so callers still get a `LyricsAnswer` and never the
   wire shape (`lyrics_directory/mod.rs`' `//!`).
+- Word times outrank a gloss: between uploads the same second off, a word-timed one wins, then a
+  glossed one. A signature answer with word times settles the lookup, and the index's row replaces
+  a timed one only by bringing word times or a gloss.
 - `serde-saphyr` 2.2.0, the latest stable release (3.0.0-rc.1 is a release candidate), with
   `default-features = false` and `deserialize` only. `serde_yaml` and `serde_yml` are both
   published as deprecated on crates.io.
@@ -196,11 +199,15 @@ Every file stays well under 800.
 
 ## Phase 2: lrclib's word timings (`melodia-net`)
 
-- [ ] `serde-saphyr` as a workspace dependency, named by `melodia-net` only.
-- [ ] `lyricsfile.rs`: the conversion and its fallback (Decisions).
-- [ ] `ApiLyrics` reads `lyricsfile` and `hasWordSync`; `into_answer` prefers the converted sheet.
+- [x] `serde-saphyr` as a workspace dependency, named by `melodia-net` only. It adds four packages,
+      all MIT or Apache-2.0, so `licenses/ATTRIBUTION.txt` owes nothing.
+- [x] `lyricsfile.rs`: the conversion and its fallback (Decisions).
+- [x] `ApiLyrics` reads `lyricsfile` and `hasWordSync`; `into_answer` prefers the converted sheet.
       `pick_timed` and `settles_it` count word timings as the better timed answer.
-- [ ] Docs: `lrclib.rs`' and `lyrics_directory`'s `//!` on what an answer can carry.
+- [x] Docs: `lrclib.rs`' `//!` names `lyricsfile`, and `LyricsAnswer.synced` says its words can be
+      timed. `lyrics_directory`'s `//!` holds: callers still get LRC.
+- [x] Also: both legs hand back the raw row and `fetch` converts the one it keeps, so ranking reads
+      `hasWordSync` without parsing a sheet.
 
 **Gate:** fmt, clippy, the suite.
 **Visible:** an online answer with word timings lights word by word.

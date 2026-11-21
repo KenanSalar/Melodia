@@ -26,6 +26,8 @@ fn row(album: &str, off_by: f64) -> ApiLyrics {
         synced_lyrics: Some("[00:01.00]words".to_owned()),
         plain_lyrics: None,
         instrumental: false,
+        has_word_sync: false,
+        lyricsfile: None,
         duration: TRACK_SECONDS + off_by,
         track_name: TRACK.to_owned(),
         artist_name: ARTIST.to_owned(),
