@@ -2,7 +2,7 @@
 
 Working doc. Delete when the feature ships.
 
-Status: **Phase 4's code landed; its measurement next** · Created: 2026-11-20 · Branch
+Status: **Phase 4 landed; Phase 5's hand tests and measurement next** · Created: 2026-11-20 · Branch
 `feat/enhanced-lrc`, linked to #178 (#177 still to link from its Development sidebar)
 
 Issue [#178](https://github.com/KenanSalar/Melodia/issues/178), from the request in
@@ -119,7 +119,7 @@ in every format, where an M4A or a FLAC can keep an old one today.
   among it (`textlayout/sharedparley/cache.rs:220-227`), so that frame reshapes the sung line alone.
   A property set to the value it holds marks nothing dirty (`properties.rs:1057-1068`), so the
   33 ms tick repaints nothing between words. Its magnitude against a line-timed sheet is unmeasured:
-  Phase 4 measures it.
+  Phase 5 measures it.
 - **Holds: everything it uses is stable in 1.19.0.** `StyledText` is ungated
   (`builtin_elements.rs:1263-1365`), and what 1.19 added to it is selection, which this leaves off.
 - **Holds: cue sheet tracks stay out** (`library/lyrics/mod.rs:168-170`, the store alone).
@@ -190,13 +190,13 @@ in every format, where an M4A or a FLAC can keep an old one today.
 ### Drawing: one `StyledText`, the markup in Slint
 
 - The look: words already sung take `ink`, the colour the whole sung line takes today, and the
-  words to come take the unsung rows' colour (`ink-muted.transparentize(0.2)`), so they match the
+  words to come take the unsung rows' colour (the panel's `ink-unsung`), so they match the
   lines around them. The whole line is bold, as the sung line is today. No accent colour and no
   glow: Slint's `Text` and `StyledText` carry no blur, shadow or glow in 1.19.0, the
   `drop-shadow-*` properties belonging to rectangles (`passes/lower_shadows.rs:58-66`).
 - On the sung row of a word-timed line, one `StyledText` at the `Text`'s geometry, its `x` and `y`
   pinned as the `Text`'s are, mounted behind an `if` so only that row builds one:
-  `@markdown("**\{Lyrics.lit-words}<font color=\"\{root.ink-muted.transparentize(0.2)}\">\{Lyrics.unlit-words}</font>**")`,
+  `@markdown("**\{Lyrics.lit-words}" "<font color='\{root.ink-unsung}'>\{Lyrics.unlit-words}</font>**")`,
   `default-color: root.ink`.
 - The row's `Text` goes transparent there, through the colour ternary it already has, and draws
   nothing.
@@ -222,7 +222,7 @@ in every format, where an M4A or a FLAC can keep an old one today.
   its row.
 - Per 33 ms tick: a binary search over one row's word stamps, nothing allocated.
 - Per word lit: two short strings, one markup parse of a one-line template, one reshape of the
-  sung line, and one window frame. Phase 4 measures that against a line-timed sheet.
+  sung line, and one window frame. Phase 5 measures that against a line-timed sheet.
 - Per theme change or miniplayer ink fade: the sung row re-parses its template and reshapes its
   line each frame of the fade, the dim colour being part of its text (`default-color` is read only
   at draw).
@@ -346,17 +346,14 @@ Every file stays well under 800; `open.rs` grows by a line or two.
 - [x] `Lyrics`' three properties.
 - [x] The sung row's `StyledText` behind its `if`, and the row's `Text` transparent there.
 - [x] Also: the panel's `ink-unsung` is the one spelling of the dim colour (unsung rows, the
-      interlude's notes, the unlit words); a pinned click writes at the clicked line's own stamp,
-      so its words and notes start empty while the seek lands; `clear` empties both strings.
+      interlude's notes, the unlit words); a pinned click lights at its own stamp until the clock
+      reaches that stamp, so its words and notes start empty while the seek lands; `clear` empties
+      both strings.
 - [x] Docs: `README.md`'s lyrics lines (18, 163) say a sheet with word times follows word by word;
       `.claude/rules/slint-pitfalls.md`'s Text section takes `StyledText`: it clips at its box,
       takes no weight, draws none of its spans under a transparent `default-color`, accepts every
       press so a `TouchArea` beneath it gets none, and `@markdown` interpolates a string as plain
       text and a brush as a colour. The panel's header note holds (no `changed`, no `animate`).
-- [ ] Measure, release build, dev data folder, Now Playing's lyrics open, the same 60 s of one
-      track three times: the sheet with word times, the same sheet with them stripped, and lyrics
-      off. CPU from `/proc/<pid>/stat` across each run. Resolves whether lighting words costs
-      more than following line by line already does; recorded here.
 
 **Gate:** fmt, clippy, the suite: `lyrics_switch.rs` holds the panel to no `changed` or `animate`,
 and `opacity_layers.rs` and `palette_fade.rs` meet nothing new. No `@tr` string is added.
@@ -381,11 +378,19 @@ gathers here. Each against `main`'s behaviour where it should match.
 - [ ] Japanese or Korean lyrics; Arabic or Persian: marks against the clip, lit words from the right.
 - [ ] A lyric long enough to wrap, and one that wraps past what was measured.
 - [ ] The miniplayer's column, through a backdrop toggle while a line is half lit.
-- [ ] Seeking into the middle of a line; clicking a line.
+- [ ] Seeking into the middle of a line; clicking a line, and the first of two lines under one
+      stamp.
 - [ ] A line with words out of order lights whole; an end stamp before a long break shows the notes
       from it.
 - [ ] Line-timed and plain sheets as on `main`; romanization and a translation under a word-timed
       line.
+
+### Measurement
+
+- [ ] Release build, dev data folder, Now Playing's lyrics open, the same 60 s of one track three
+      times: the sheet with word times, the same sheet with them stripped, and lyrics off. CPU from
+      `/proc/<pid>/stat` across each run. Resolves whether lighting words costs more than following
+      line by line already does; recorded here.
 
 ### Tests
 

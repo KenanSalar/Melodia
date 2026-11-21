@@ -135,11 +135,16 @@ pub(super) fn follow(ui: &AppWindow, ly: &LyricsUi) {
     // The pin stands until the clock reaches the clicked line, or until it has had long enough
     // that something else must have moved the player.
     if let Some(pinned) = ly.pinned.get() {
-        let stale = (position - f64::from(ly.pinned_at_ms.get())).abs() > PIN_HOLDS_FOR_MS;
+        let pinned_at = ly.pinned_at_ms.get();
+        let stale = (position - f64::from(pinned_at)).abs() > PIN_HOLDS_FOR_MS;
         if sung != Some(pinned) && !stale {
             // Restated rather than left alone, so a table rebuilt under the pin still centres it.
-            // At its own stamp: until the seek lands, the clock reads the line the click left.
-            write_active(ui, ly, Some(pinned), f64::from(ly.pinned_at_ms.get()));
+            // Until the seek lands the clock reads the line the click left, so the row lights at
+            // its own stamp; a sung line sharing that stamp means the clock has reached it.
+            let reached =
+                sung.and_then(|index| ly.rows.borrow().get(index)?.at_ms) == Some(pinned_at);
+            let lit_at = if reached { position } else { f64::from(pinned_at) };
+            write_active(ui, ly, Some(pinned), lit_at);
             return;
         }
         ly.pinned.set(None);

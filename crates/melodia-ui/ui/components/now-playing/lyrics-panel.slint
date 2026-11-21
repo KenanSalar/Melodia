@@ -99,7 +99,7 @@ export component LyricsPanel inherits Rectangle {
                     vertical-alignment: center;
                     font-size: Lyrics.font-size;
                     font-weight: parent.is-sung ? 700 : 400;
-                    // Transparent text skips its shaping too, ceding the row to the one below.
+                    // Transparent text isn't shaped, which leaves the row to the `StyledText`.
                     color: parent.lit-by-word ? transparent
                         : parent.is-sung ? root.ink
                         : root.ink-unsung;
