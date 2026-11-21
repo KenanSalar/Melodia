@@ -36,6 +36,7 @@ hit, so this table finds them. A rule missed where needed gets a wider glob, nev
 
 ```bash
 cargo run -p melodia                       # debug
+cargo mcp                                  # debug, with Slint's MCP server on 127.0.0.1:9315
 cargo build --release -p melodia && target/release/Melodia
 cargo fmt --all                            # CI gates it with --check
 cargo clippy --all-targets --locked --workspace -- -D warnings   # the whole gate; never cargo check
@@ -180,6 +181,11 @@ Three rules share the UI globs: `slint.md` general, `slint-pitfalls.md` what bui
 - **A corpus walk lives in `crates/melodia/tests/`, a pin on one named file beside that file**, so
   `cargo test -p <crate>` stays a question about that crate.
 - **The suite assumes an LF checkout**, which `.gitattributes` guarantees.
+- **With the `melodia-ui` MCP server's tools loaded, check a UI change in the running app through
+  them**: find elements by type name or id, click, type, screenshot. The person starts the app with
+  `cargo mcp`; without the tools, stop at the static gates and say what to look at. A page fades in
+  after a nav click (`ViewTransition`), so a screenshot taken at once can catch it half drawn:
+  capture again once it settles.
 - **Read `.claude/rules/ci-packaging.md` before touching `.github/`.**
 - **A release is a pushed `v*.*.*` tag, never a merge.** Land the version bump as a PR, tag the
   merge commit, then QA the draft `release.yml` leaves and publish it by hand.

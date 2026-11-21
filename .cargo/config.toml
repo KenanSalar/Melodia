@@ -14,3 +14,12 @@ RUST_TEST_THREADS = "8"
 # was one crate; cargo resolves this against the directory holding `.cargo`, so
 # it keeps meaning the root once packages move under it.
 MELODIA_REPO_ROOT = { value = "", relative = true }
+
+# Read only by a build carrying Slint's `mcp` feature, which `cargo mcp` adds; an
+# exported SLINT_MCP_PORT wins.
+SLINT_MCP_PORT = "9315"
+
+# Slint's MCP server, for an agent to drive the UI, rides only this build: the
+# feature never enters a Cargo.toml, so no release can carry it.
+[alias]
+mcp = "run -p melodia --features slint/mcp"
