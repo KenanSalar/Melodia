@@ -14,7 +14,7 @@ use std::time::{Duration, SystemTime};
 
 use super::lrc;
 use melodia_core::entities::cue::CueTrack;
-use melodia_core::entities::lyrics::{LyricsOutcome, LyricsSource};
+use melodia_core::entities::lyrics::{LyricsAnswer, LyricsOutcome, LyricsSource};
 use melodia_core::entities::track::{TagEditRow, TrackSummary};
 use melodia_core::error::AppError;
 use melodia_core::utils::atomic_file;
@@ -97,6 +97,18 @@ pub(super) enum Fetched<'a> {
     Sheet(&'a str),
     Instrumental,
     Nothing,
+}
+
+impl<'a> Fetched<'a> {
+    /// A sheet wherever the answer has words, so an upload both timed and marked instrumental is
+    /// kept as the words.
+    pub(super) fn of(answer: &'a LyricsAnswer) -> Self {
+        match answer.text() {
+            Some(text) => Self::Sheet(text),
+            None if answer.instrumental => Self::Instrumental,
+            None => Self::Nothing,
+        }
+    }
 }
 
 /// Records an answer, so the same track never costs a second request.

@@ -1,21 +1,23 @@
-//! lrclib.net, the lyrics directory: at most two requests per track change, only from behind
-//! `library::lyrics`' switch, and its wire shape stays here and in [`lyricsfile`].
+//! lrclib.net, the lyrics directory: at most two requests per track change and one per search a
+//! person asks for, only from behind `library::lyrics`' switch, and its wire shape stays here and
+//! in [`lyricsfile`].
 //!
 //! **Every request goes through the pacer, and a refusal arms it.** The service requires both: a
 //! delay between requests, and honouring a `429`'s `Retry-After` on pain of a `User-Agent` ban.
 
+use std::collections::HashSet;
 use std::time::Duration;
 
 use serde::Deserialize;
 
 use melodia_core::entities::artist::ArtistCredit;
-use melodia_core::entities::lyrics::{LyricsAnswer, carries_gloss};
+use melodia_core::entities::lyrics::{LyricsAnswer, LyricsCandidate, carries_gloss};
 use melodia_core::error::{AppError, describe};
 use melodia_core::utils::fold::fold;
 
 use super::LookupError;
 use super::lyricsfile;
-use super::recording::{Recording, query_title, search_artist};
+use super::recording::{Recording, search_terms};
 use crate::services::net::pacer::{RequestPacer, Turn};
 
 /// The exact signature: four fields naming one recording, so it answers or it doesn't.
@@ -76,7 +78,7 @@ struct ApiLyrics {
 }
 
 impl ApiLyrics {
-    /// Converts the Lyricsfile only here, for the one row that answers.
+    /// Converts the Lyricsfile only here, for a row that answers or is offered.
     fn into_answer(self) -> LyricsAnswer {
         LyricsAnswer {
             synced: self.word_timed_sheet().or(self.synced_lyrics),
@@ -114,7 +116,7 @@ impl ApiLyrics {
     #[expect(
         clippy::cast_possible_truncation,
         clippy::cast_sign_loss,
-        reason = "non-negative by `abs`, and bounded by `DURATION_TOLERANCE_MS` before it is read"
+        reason = "non-negative by `abs`, and a float cast saturates, a row that far off sorting last"
     )]
     fn second_off(&self, duration_ms: i64) -> u32 {
         (self.distance_ms(duration_ms) / 1000.0) as u32
@@ -122,6 +124,39 @@ impl ApiLyrics {
 
     fn recording(&self) -> Recording {
         Recording::new(&self.track_name, &self.artist_name)
+    }
+
+    fn has_words(&self) -> bool {
+        self.is_timed() || self.plain_lyrics.as_deref().is_some_and(|text| !text.trim().is_empty())
+    }
+
+    /// Words, then lines, then plain text, then nothing to read, which is what an instrumental
+    /// row is. Words lit one by one are the most a sheet can carry.
+    fn kind_rank(&self) -> u8 {
+        if self.has_word_sync {
+            0
+        } else if self.is_timed() {
+            1
+        } else if self.has_words() {
+            2
+        } else {
+            3
+        }
+    }
+
+    #[expect(
+        clippy::cast_possible_truncation,
+        clippy::cast_sign_loss,
+        reason = "clamped non-negative, and a float cast saturates past any song's length"
+    )]
+    fn into_candidate(mut self) -> LyricsCandidate {
+        LyricsCandidate {
+            title: std::mem::take(&mut self.track_name),
+            artist: std::mem::take(&mut self.artist_name),
+            album: std::mem::take(&mut self.album_name),
+            duration_secs: self.duration.max(0.0).round() as u32,
+            answer: self.into_answer(),
+        }
     }
 }
 
@@ -244,18 +279,7 @@ async fn search_timed(
         return Ok(None);
     }
 
-    // Back to the tag where the trim empties a field, or a title opening on `feat.` searches for
-    // nothing.
-    let printed = credit.line().unwrap_or_default();
-    let track_query = match query_title(title) {
-        "" => title,
-        cut => cut,
-    };
-    let artist_query = match search_artist(credit) {
-        "" => printed,
-        cut => cut,
-    };
-
+    let (track_query, artist_query) = search_terms(title, credit);
     let mut url = endpoint(SEARCH_ENDPOINT)?;
     url.query_pairs_mut()
         .append_pair("track_name", track_query)
@@ -290,21 +314,16 @@ fn pick_timed(
         .min_by(|a, b| {
             a.second_off(duration_ms)
                 .cmp(&b.second_off(duration_ms))
-                .then_with(|| word_rank(a).cmp(&word_rank(b)))
+                .then_with(|| a.kind_rank().cmp(&b.kind_rank()))
                 .then_with(|| gloss_rank(a).cmp(&gloss_rank(b)))
                 .then_with(|| album_rank(a, &album).cmp(&album_rank(b, &album)))
                 .then_with(|| a.distance_ms(duration_ms).total_cmp(&b.distance_ms(duration_ms)))
         })
 }
 
-/// Under the second and above the gloss: two uploads agreeing to the second are one recording
-/// twice, so what they carry decides rather than a fifth of a second of noise, and words lit one
-/// by one are the most a sheet can carry. A whole second further out still loses.
-fn word_rank(row: &ApiLyrics) -> u8 {
-    u8::from(!row.has_word_sync)
-}
-
-/// Under the word times and above the album.
+/// Under the second and the kind, above the album: two uploads agreeing to the second are one
+/// recording twice, so what they carry decides rather than a fifth of a second of noise. A whole
+/// second further out still loses.
 fn gloss_rank(row: &ApiLyrics) -> u8 {
     u8::from(!row.is_glossed())
 }
@@ -312,6 +331,50 @@ fn gloss_rank(row: &ApiLyrics) -> u8 {
 /// A tie-break only: the release it was ripped from is all that is left to prefer.
 fn album_rank(row: &ApiLyrics, album: &str) -> u8 {
     u8::from(album.is_empty() || fold(&row.album_name) != *album)
+}
+
+/// Every row the index has for a typed query, as candidates. One request, behind the same pacer as
+/// a lookup's.
+pub(super) async fn search(
+    client: &reqwest::Client,
+    pacer: &RequestPacer,
+    query: &str,
+    title: &str,
+    credit: &ArtistCredit,
+    duration_ms: i64,
+) -> Result<Vec<LyricsCandidate>, LookupError> {
+    let mut url = endpoint(SEARCH_ENDPOINT)?;
+    url.query_pairs_mut().append_pair("q", query);
+
+    let Some(body) = send(client, pacer, url, "Lyrics search", MAX_SEARCH_BYTES).await? else {
+        return Ok(Vec::new());
+    };
+    let rows: Vec<ApiLyrics> = serde_json::from_slice(&body)
+        .map_err(|e| failed("Failed to parse the lyrics search response", e))?;
+
+    let ours = Recording::from_credit(title, credit);
+    let ranked = rank_candidates(rows, &ours, duration_ms);
+    Ok(distinct(ranked.into_iter().map(ApiLyrics::into_candidate)))
+}
+
+/// The rows a person can pick among, best first: this recording's before another's, then by whole
+/// seconds off, then by [`ApiLyrics::kind_rank`]; a tie keeps the index's order. A row with nothing
+/// to read stays only where it calls itself instrumental.
+fn rank_candidates(mut rows: Vec<ApiLyrics>, ours: &Recording, duration_ms: i64) -> Vec<ApiLyrics> {
+    rows.retain(|row| row.instrumental || row.has_words());
+    rows.sort_by_cached_key(|row| {
+        (!ours.matches(&row.recording()), row.second_off(duration_ms), row.kind_rank())
+    });
+    rows
+}
+
+/// Each sheet once, at its best place. Keyed on the converted text, the Lyricsfile naming the album
+/// it was filed under, so one upload filed under every release would otherwise fill the list.
+fn distinct(candidates: impl Iterator<Item = LyricsCandidate>) -> Vec<LyricsCandidate> {
+    let mut seen = HashSet::new();
+    candidates
+        .filter(|candidate| seen.insert(candidate.answer.text().map(|text| text.trim().to_owned())))
+        .collect()
 }
 
 /// One GET under a cap and behind the pacer, `None` for a `404`. The single choke point, so the

@@ -111,6 +111,19 @@ pub struct LyricsAnswer {
     pub instrumental: bool,
 }
 
+/// One of a directory's sheets, offered for a person to pick. It carries the sheet, so picking it
+/// costs no second request.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct LyricsCandidate {
+    pub title: String,
+    pub artist: String,
+    pub album: String,
+    /// The length the directory files the upload under, which tells a radio edit from the album
+    /// cut.
+    pub duration_secs: u32,
+    pub answer: LyricsAnswer,
+}
+
 impl LyricsAnswer {
     /// Timed in preference to plain, decided once so the stored and the parsed copy agree. Each
     /// field is judged before it is preferred: an empty `syncedLyrics` beside a real

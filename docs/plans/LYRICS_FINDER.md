@@ -2,7 +2,7 @@
 
 Working doc. Delete when the feature ships.
 
-Status: **Phase 2 landed; Phase 3 next** · Created: 2026-11-21 · Branch `feat/enhanced-lrc`, after
+Status: **Phase 3 landed; Phase 4 next** · Created: 2026-11-21 · Branch `feat/enhanced-lrc`, after
 [ENHANCED_LRC.md](ENHANCED_LRC.md)'s Phase 5
 
 > Researched **2026-11-21** against `feat/enhanced-lrc` at `8db89fc3`; lrclib's API reference
@@ -71,14 +71,16 @@ Status: **Phase 2 landed; Phase 3 next** · Created: 2026-11-21 · Branch `feat/
 ### The request: `/api/search?q=`
 
 - One shape for both the prefilled and the typed query: `q` matches the title, artist and album
-  fields (lrclib's reference, Search). The prefill reuses `query_title` and `search_artist`
-  (`lyrics_directory/recording.rs`), as the automatic search does.
+  fields (lrclib's reference, Search). The prefill is `search_terms`
+  (`lyrics_directory/recording.rs`), the terms the automatic search asks with.
 - v1, not the v2 beta: v1 rows carry the lyrics, so the preview and Apply need no second request,
   and v2's shape may still change.
 - Rows are kept with plain and instrumental ones, unlike `pick_timed`'s filter.
-- Ranked by duration gap, then `Recording::matches`, then kind (words, lines, plain,
-  instrumental); deduplicated by kind and folded text, since lrclib files one sheet under several
-  album rows.
+- Ranked this recording's first (`Recording::matches`), then by whole seconds off, then by kind
+  (words, lines, plain, instrumental), a tie keeping lrclib's order.
+- Deduplicated on the converted text: lrclib files one upload under every release, and each copy's
+  Lyricsfile names its album, so the raw document differs where the sheet doesn't. Twenty rows for
+  one song came down to three sheets.
 
 ### Word timings: Lyricsfile to enhanced LRC, inside the client
 
@@ -214,25 +216,29 @@ Every file stays well under 800.
 
 ## Phase 3: Search and choose (no UI)
 
-- [ ] `LyricsCandidate { title, artist, album, duration_ms, answer }` in `melodia-core`.
-- [ ] `lyrics_directory::search(client, pacer, query, duration_ms)`: one `/api/search?q=` through
-      `send` (pacer, `Retry-After` stop, `read_capped` at the search cap), ranked and deduplicated.
-- [ ] `library::lyrics::finder`:
-  - `default_query(track)`;
-  - `search(state, track, query)`, behind `ensure_enabled` and `online_lookup_enabled`;
-  - `choose(state, track, candidate)`;
-  - `outranking(track)`: a sidecar, a timed tag or a plain tag, from `read_local`.
-- [ ] Docs: `library::lyrics`' `//!` (the finder writes the store, behind the lookup's switch);
-      `lrclib.rs`' "at most two requests per track change" rewritten for a search the user asks
-      for.
+- [x] `LyricsCandidate { title, artist, album, duration_secs, answer }` in `melodia-core`.
+- [x] `lyrics_directory::search(client, pacer, query, title, credit, duration_ms)`: one
+      `/api/search?q=` through `send` (pacer, `Retry-After` stop, `read_capped` at the search cap),
+      ranked and deduplicated; `query_for` for the prefill.
+- [x] `library::lyrics::finder`:
+  - `default_query(state, track)`;
+  - `search(state, track, query)`, behind `ensure_enabled` and `online_lookup_enabled`, failing
+    as `SearchFailure::RateLimited` or `Failed`; each `Choice` carries its kind and a preview;
+  - `choose(state, track, candidate)`, forgetting what was stored first;
+  - `outranking(state, track)`: a sidecar, a timed tag or a plain tag, from `read_local`.
+- [x] Docs: `library::lyrics`' `//!`, `lyrics_directory`'s `//!` (its two calls), `lrclib.rs`'
+      "at most two requests per track change" extended to a search a person asks for.
+- [x] Also: `search_terms` gives the search's title-and-artist fallback one home, used by the
+      automatic search and the prefill; `Fetched::of` gives an answer's store form one home, used by
+      the lookup and the pick.
 
 **Gate:** fmt, clippy, the suite.
 
 ## Phase 4: The finder and its two entries (`melodia-ui`, `melodia-views`)
 
-- [ ] `LyricsFinder`: phase (loading, listing, unreachable, rate-limited, unreadable), query,
-      rows, picked, preview, masking, applying; `load`, `search`, `picked-changed`, `apply`,
-      `released`.
+- [ ] `LyricsFinder`: phase (loading, listing, rate-limited, failed, as `SearchFailure` tells
+      them apart), query, rows, picked, preview, masking, applying; `load`, `search`,
+      `picked-changed`, `apply`, `released`.
 - [ ] `lyrics-finder-body.slint`; `DialogKind.lyrics-finder` at `max-w`, `body-scrolls`, the body
       mount, the confirm gate (listing, a pick, not applying), `accepted` and `closed-teardown`.
 - [ ] `Dialog.open-lyrics-finder()`, the kind having two callers; `dialog_openers.rs`'

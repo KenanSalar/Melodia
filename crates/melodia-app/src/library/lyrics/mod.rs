@@ -9,10 +9,14 @@
 //! sidecar hasn't spoken (`docs/adr/0038-lyrics-display-reads-the-file.md`). The store sits on the
 //! local side of the switch: turning the lookup off buys no traffic, not no lyrics.
 //!
+//! [`finder`] is the directory's other door: every candidate for a query a person edits, behind
+//! the same two switches, the one they pick written to the store a lookup writes.
+//!
 //! Reachable with lyrics off: `forget_all`, so a retag leaves no stale answer waiting for the
 //! feature to come back, and the tag editor's `resident_text`, `best_tag_entry` and `write_to_tag`.
 
 mod embedded;
+pub mod finder;
 mod lrc;
 mod online;
 mod romanize;

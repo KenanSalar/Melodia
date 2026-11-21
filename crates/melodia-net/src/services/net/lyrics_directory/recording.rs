@@ -101,9 +101,23 @@ fn credits_agree(ours: &BTreeSet<String>, theirs: &BTreeSet<String>) -> bool {
     !ours.is_empty() && (ours.is_subset(theirs) || theirs.is_subset(ours))
 }
 
+/// The title and artist a search asks with, each back to the tag where its trim empties it, or a
+/// title opening on `feat.` would search for nothing.
+pub(super) fn search_terms<'a>(title: &'a str, credit: &'a ArtistCredit) -> (&'a str, &'a str) {
+    let title_term = match query_title(title) {
+        "" => title,
+        cut => cut,
+    };
+    let artist_term = match search_artist(credit) {
+        "" => credit.line().unwrap_or_default(),
+        cut => cut,
+    };
+    (title_term, artist_term)
+}
+
 /// The tag's title less a `feat.` credit and nothing else. A version marker stays, or a search for
 /// a live take is answered by the studio cut that [`Recording::matches`] then rejects.
-pub(super) fn query_title(title: &str) -> &str {
+fn query_title(title: &str) -> &str {
     // ASCII-folded so an index into it is a byte index into `title`: `to_lowercase` grows `İ` by
     // a byte and would push the cut past the marker.
     let lower = title.to_ascii_lowercase();
@@ -120,7 +134,7 @@ pub(super) fn query_title(title: &str) -> &str {
 
 /// A credit listing several artists already says who leads. A single one may still be several
 /// run together, which [`query_artist`] guesses at.
-pub(super) fn search_artist(credit: &ArtistCredit) -> &str {
+fn search_artist(credit: &ArtistCredit) -> &str {
     if credit.artists().len() > 1 {
         credit.primary_name()
     } else {
