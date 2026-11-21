@@ -13,7 +13,7 @@ import { ToggleSwitch } from "../../components/settings/toggle-switch.slint";
 // know who would be contacted. Search visibility follows `radio-section.slint`.
 //
 // **Unlike Radio's, the rows under the master stay put while it is off.** The two switches are
-// defaults a user sets before turning lyrics on, and the finder greys as its menu row does. Every
+// defaults a user sets before turning lyrics on, and the finder greys and says why. Every
 // row here is also in Now Playing, the master as the header's switch and the rest in its lyrics
 // menu, each switch being two things: a default worth finding in Settings, and the one you reach
 // for the moment it is wanted.
@@ -86,16 +86,19 @@ export component LyricsSection inherits Rectangle {
             }
         }
 
+        // Greyed rather than hidden while lyrics are off, as the radio scrobble row is, saying which
+        // switch to turn on. With the lookup off it opens, the dialog offering that switch.
         if root.show-find: SettingRow {
             icon: "search";
             label: root.find-label;
-            description: root.find-desc;
+            description: Settings.lyrics-enabled ? root.find-desc
+                : @tr("Turn on \"Show lyrics\" above first");
+            disabled: !Settings.lyrics-enabled;
             SectionButton {
                 label: @tr("Find…");
                 icon: "";
                 primary: false;
-                button-enabled: Settings.lyrics-enabled && Settings.lyrics-online-enabled
-                    && Player.vm.has_track;
+                button-enabled: Player.vm.has_track;
                 clicked => { Dialog.open-lyrics-finder(); }
             }
         }

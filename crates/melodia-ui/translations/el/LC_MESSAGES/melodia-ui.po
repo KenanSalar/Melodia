@@ -309,6 +309,10 @@ msgstr "Εφαρμογή"
 msgid "Review"
 msgstr "Έλεγχος"
 
+#: ui/components/dialog/dialog.slint
+msgid "Turn On"
+msgstr "Ενεργοποίηση"
+
 #: ui/components/dialog/duplicate-row.slint
 msgid "Identical files"
 msgstr "Πανομοιότυπα αρχεία"
@@ -566,6 +570,10 @@ msgstr "Συγχρονισμένο"
 msgid "Word-timed"
 msgstr "Ανά λέξη"
 
+#: ui/components/dialog/lyrics-finder-body.slint
+msgid "\"Look up lyrics online\" is off"
+msgstr "Το \"Αναζήτηση στίχων στο διαδίκτυο\" είναι απενεργοποιημένο"
+
 #: ui/components/dialog/lyrics-finder-body.slint ui/views/search-view.slint
 msgid "Searching…"
 msgstr "Αναζήτηση…"
@@ -581,6 +589,10 @@ msgstr "Δεν ήταν δυνατή η αναζήτηση στο lrclib.net"
 #: ui/components/dialog/lyrics-finder-body.slint
 msgid "No lyrics match"
 msgstr "Δεν ταιριάζουν στίχοι"
+
+#: ui/components/dialog/lyrics-finder-body.slint
+msgid "Turning it on lets Melodia ask lrclib.net for this track, and for any track without lyrics of its own."
+msgstr "Με την ενεργοποίηση, το Melodia ρωτά το lrclib.net για αυτό το κομμάτι και για κάθε κομμάτι χωρίς δικούς του στίχους."
 
 #: ui/components/dialog/lyrics-finder-body.slint
 msgid "Press Enter to search again in a minute."
@@ -599,8 +611,8 @@ msgid "Couldn't keep the pick. See the log for details."
 msgstr "Δεν ήταν δυνατή η αποθήκευση της επιλογής. Δείτε το αρχείο καταγραφής για λεπτομέρειες."
 
 #: ui/components/dialog/lyrics-finder-body.slint
-msgid "Pick a match to see how it starts."
-msgstr "Επιλέξτε ένα αποτέλεσμα για να δείτε πώς ξεκινά."
+msgid "Pick a match to read its lyrics."
+msgstr "Επιλέξτε ένα αποτέλεσμα για να διαβάσετε τους στίχους του."
 
 #: ui/components/dialog/lyrics-finder-body.slint
 msgid "lrclib.net files this recording as instrumental."
@@ -3577,6 +3589,10 @@ msgstr "Εύρεση στίχων"
 #: ui/views/settings/lyrics-section.slint
 msgid "Pick the playing track's lyrics from lrclib.net's matches"
 msgstr "Επιλογή των στίχων του τρέχοντος κομματιού από τα αποτελέσματα του lrclib.net"
+
+#: ui/views/settings/lyrics-section.slint
+msgid "Turn on \"Show lyrics\" above first"
+msgstr "Ενεργοποιήστε πρώτα το \"Εμφάνιση στίχων\" παραπάνω"
 
 #: ui/views/settings/mini-player-section.slint
 msgid "Miniplayer"

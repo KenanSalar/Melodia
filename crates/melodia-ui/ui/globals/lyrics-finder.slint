@@ -1,7 +1,9 @@
 import { PickRow } from "../models.slint";
 
+// `loading` is the opener's and `searching` each search Rust sends, so the card opens at rest and
+// eases into every later step. `lookup-off` asks before anything reaches lrclib.net.
 // `rate-limited` and `failed` are `finder::SearchFailure`'s two arms.
-export enum LyricsSearchPhase { loading, listing, rate-limited, failed }
+export enum LyricsSearchPhase { loading, lookup-off, searching, listing, rate-limited, failed }
 
 // Which of the track's own lyrics the panel shows ahead of the picked sheet, `none` where it would
 // show the pick.
@@ -17,13 +19,15 @@ export global LyricsFinder {
     in-out property <int> blur-tick;
     // A `PickRow.index`, -1 for none.
     in-out property <int> picked: -1;
-    // The picked sheet's first lines; empty for an instrumental pick, which has none.
+    // The picked sheet's lines; empty for an instrumental pick, which has none.
     in property <string> preview;
     in property <LyricsMasking> masking;
     in property <bool> applying;
     in property <bool> apply-failed;
 
     callback load();
+    // The switch `lookup-off` offers, then the search it held back.
+    callback turn-on-lookup();
     callback search(string /*query*/);
     callback picked-changed(int /*picked*/);
     callback apply(int /*picked*/);

@@ -1,5 +1,5 @@
-//! The Find lyrics dialog: lrclib.net's matches for the playing track, the picked one's first
-//! lines, and the pick stored as the track's online answer.
+//! The Find lyrics dialog: lrclib.net's matches for the playing track, the picked one's lyrics,
+//! and the pick stored as the track's online answer.
 //!
 //! The track is the one playing at the open, held until the close, so a song that ends under the
 //! dialog doesn't take the pick.
@@ -23,7 +23,7 @@ use melodia_core::entities::lyrics::LyricsCandidate;
 use melodia_core::entities::track::TrackSummary;
 use melodia_core::error::describe;
 use melodia_ui::{
-    AppWindow, Dialog, DialogKind, LyricsFinder, LyricsMasking, LyricsSearchPhase, PickRow,
+    AppWindow, Dialog, DialogKind, Lyrics, LyricsFinder, LyricsMasking, LyricsSearchPhase, PickRow,
 };
 
 pub(crate) fn wire_finder(ui: &AppWindow, state: &AppState, np_state: &Rc<NowPlayingState>) {
@@ -42,6 +42,8 @@ pub(crate) fn wire_finder(ui: &AppWindow, state: &AppState, np_state: &Rc<NowPla
 
     let f = Rc::clone(&finder);
     g.on_load(move || f.load());
+    let f = Rc::clone(&finder);
+    g.on_turn_on_lookup(move || f.turn_on_lookup());
     let f = Rc::clone(&finder);
     g.on_search(move |query| f.search(query.into()));
     let f = Rc::clone(&finder);
@@ -66,14 +68,32 @@ struct Finder {
 
 impl Finder {
     fn load(self: &Rc<Self>) {
+        let Some(ui) = self.ui.upgrade() else { return };
+        let g = ui.global::<LyricsFinder>();
         let Some(track) = playing_track(&self.np_state) else {
-            if let Some(ui) = self.ui.upgrade() {
-                ui.global::<LyricsFinder>().set_phase(LyricsSearchPhase::Failed);
-            }
+            g.set_phase(LyricsSearchPhase::Failed);
             return;
         };
-        *self.track.borrow_mut() = Some(Arc::clone(&track));
+        *self.track.borrow_mut() = Some(track);
 
+        // Read here rather than met as the facade's refusal, so the card opens on the notice.
+        if !self.state.lyrics_online_enabled.get() {
+            g.set_phase(LyricsSearchPhase::LookupOff);
+            return;
+        }
+        self.open_on_default_query();
+    }
+
+    /// Through the menu switch's own handler, which also sends the panel to look again.
+    fn turn_on_lookup(self: &Rc<Self>) {
+        let Some(ui) = self.ui.upgrade() else { return };
+        ui.global::<Lyrics>().invoke_set_online_enabled(true);
+        ui.global::<LyricsFinder>().set_phase(LyricsSearchPhase::Searching);
+        self.open_on_default_query();
+    }
+
+    fn open_on_default_query(self: &Rc<Self>) {
+        let Some(track) = self.track.borrow().clone() else { return };
         let state = self.state.clone();
         let opening = async move { finder::default_query(&state, &track).await };
         let finder = Rc::clone(self);
@@ -99,7 +119,7 @@ impl Finder {
         g.set_picked(-1);
         g.set_preview(SharedString::new());
         g.set_masking(LyricsMasking::None);
-        g.set_phase(LyricsSearchPhase::Loading);
+        g.set_phase(LyricsSearchPhase::Searching);
 
         let state = self.state.clone();
         let key = LyricsKey::from(&*track);

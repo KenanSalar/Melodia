@@ -308,6 +308,10 @@ msgstr "Toepassen"
 msgid "Review"
 msgstr "Controleren"
 
+#: ui/components/dialog/dialog.slint
+msgid "Turn On"
+msgstr "Inschakelen"
+
 #: ui/components/dialog/duplicate-row.slint
 msgid "Identical files"
 msgstr "Identieke bestanden"
@@ -565,6 +569,10 @@ msgstr "Gesynchroniseerd"
 msgid "Word-timed"
 msgstr "Per woord"
 
+#: ui/components/dialog/lyrics-finder-body.slint
+msgid "\"Look up lyrics online\" is off"
+msgstr "‘Songteksten online opzoeken’ staat uit"
+
 #: ui/components/dialog/lyrics-finder-body.slint ui/views/search-view.slint
 msgid "Searching…"
 msgstr "Zoeken…"
@@ -580,6 +588,10 @@ msgstr "Kan lrclib.net niet doorzoeken"
 #: ui/components/dialog/lyrics-finder-body.slint
 msgid "No lyrics match"
 msgstr "Geen passende songtekst"
+
+#: ui/components/dialog/lyrics-finder-body.slint
+msgid "Turning it on lets Melodia ask lrclib.net for this track, and for any track without lyrics of its own."
+msgstr "Ingeschakeld vraagt Melodia lrclib.net om de songtekst van dit nummer, en van elk nummer zonder eigen songtekst."
 
 #: ui/components/dialog/lyrics-finder-body.slint
 msgid "Press Enter to search again in a minute."
@@ -598,8 +610,8 @@ msgid "Couldn't keep the pick. See the log for details."
 msgstr "De keuze kon niet worden bewaard. Zie het logboek voor details."
 
 #: ui/components/dialog/lyrics-finder-body.slint
-msgid "Pick a match to see how it starts."
-msgstr "Kies een resultaat om te zien hoe het begint."
+msgid "Pick a match to read its lyrics."
+msgstr "Kies een resultaat om de songtekst te lezen."
 
 #: ui/components/dialog/lyrics-finder-body.slint
 msgid "lrclib.net files this recording as instrumental."
@@ -3573,6 +3585,10 @@ msgstr "Songtekst zoeken"
 #: ui/views/settings/lyrics-section.slint
 msgid "Pick the playing track's lyrics from lrclib.net's matches"
 msgstr "Kies de songtekst van het spelende nummer uit de resultaten van lrclib.net"
+
+#: ui/views/settings/lyrics-section.slint
+msgid "Turn on \"Show lyrics\" above first"
+msgstr "Zet eerst hierboven ‘Songtekst tonen’ aan"
 
 #: ui/views/settings/mini-player-section.slint
 msgid "Miniplayer"

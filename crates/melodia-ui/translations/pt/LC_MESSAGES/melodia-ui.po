@@ -308,6 +308,10 @@ msgstr "Aplicar"
 msgid "Review"
 msgstr "Rever"
 
+#: ui/components/dialog/dialog.slint
+msgid "Turn On"
+msgstr "Ativar"
+
 #: ui/components/dialog/duplicate-row.slint
 msgid "Identical files"
 msgstr "Ficheiros idênticos"
@@ -565,6 +569,10 @@ msgstr "Sincronizada"
 msgid "Word-timed"
 msgstr "Palavra a palavra"
 
+#: ui/components/dialog/lyrics-finder-body.slint
+msgid "\"Look up lyrics online\" is off"
+msgstr "“Procurar letras online” está desativado"
+
 #: ui/components/dialog/lyrics-finder-body.slint ui/views/search-view.slint
 msgid "Searching…"
 msgstr "A pesquisar…"
@@ -580,6 +588,10 @@ msgstr "Não foi possível pesquisar no lrclib.net"
 #: ui/components/dialog/lyrics-finder-body.slint
 msgid "No lyrics match"
 msgstr "Nenhuma letra corresponde"
+
+#: ui/components/dialog/lyrics-finder-body.slint
+msgid "Turning it on lets Melodia ask lrclib.net for this track, and for any track without lyrics of its own."
+msgstr "Ao ativá-la, o Melodia pede ao lrclib.net a letra desta faixa e de qualquer faixa sem letra própria."
 
 #: ui/components/dialog/lyrics-finder-body.slint
 msgid "Press Enter to search again in a minute."
@@ -598,8 +610,8 @@ msgid "Couldn't keep the pick. See the log for details."
 msgstr "Não foi possível guardar a escolha. Consulte o registo para mais detalhes."
 
 #: ui/components/dialog/lyrics-finder-body.slint
-msgid "Pick a match to see how it starts."
-msgstr "Escolha um resultado para ver como começa."
+msgid "Pick a match to read its lyrics."
+msgstr "Escolha um resultado para ler a letra."
 
 #: ui/components/dialog/lyrics-finder-body.slint
 msgid "lrclib.net files this recording as instrumental."
@@ -3573,6 +3585,10 @@ msgstr "Encontrar letra"
 #: ui/views/settings/lyrics-section.slint
 msgid "Pick the playing track's lyrics from lrclib.net's matches"
 msgstr "Escolher a letra da faixa em reprodução entre os resultados do lrclib.net"
+
+#: ui/views/settings/lyrics-section.slint
+msgid "Turn on \"Show lyrics\" above first"
+msgstr "Ative primeiro “Mostrar letra” acima"
 
 #: ui/views/settings/mini-player-section.slint
 msgid "Miniplayer"

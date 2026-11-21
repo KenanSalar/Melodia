@@ -303,6 +303,10 @@ msgstr "Terapkan"
 msgid "Review"
 msgstr "Tinjau"
 
+#: ui/components/dialog/dialog.slint
+msgid "Turn On"
+msgstr "Aktifkan"
+
 #: ui/components/dialog/duplicate-row.slint
 msgid "Identical files"
 msgstr "Berkas identik"
@@ -553,6 +557,10 @@ msgstr "Tersinkron"
 msgid "Word-timed"
 msgstr "Per kata"
 
+#: ui/components/dialog/lyrics-finder-body.slint
+msgid "\"Look up lyrics online\" is off"
+msgstr "\"Cari lirik secara online\" nonaktif"
+
 #: ui/components/dialog/lyrics-finder-body.slint ui/views/search-view.slint
 msgid "Searching…"
 msgstr "Mencari…"
@@ -568,6 +576,10 @@ msgstr "Tidak dapat mencari di lrclib.net"
 #: ui/components/dialog/lyrics-finder-body.slint
 msgid "No lyrics match"
 msgstr "Tidak ada lirik yang cocok"
+
+#: ui/components/dialog/lyrics-finder-body.slint
+msgid "Turning it on lets Melodia ask lrclib.net for this track, and for any track without lyrics of its own."
+msgstr "Jika diaktifkan, Melodia meminta lirik lagu ini dari lrclib.net, juga untuk lagu apa pun yang tidak menyertakan liriknya sendiri."
 
 #: ui/components/dialog/lyrics-finder-body.slint
 msgid "Press Enter to search again in a minute."
@@ -586,8 +598,8 @@ msgid "Couldn't keep the pick. See the log for details."
 msgstr "Pilihan tidak dapat disimpan. Lihat log untuk detailnya."
 
 #: ui/components/dialog/lyrics-finder-body.slint
-msgid "Pick a match to see how it starts."
-msgstr "Pilih hasil untuk melihat awalnya."
+msgid "Pick a match to read its lyrics."
+msgstr "Pilih hasil untuk membaca liriknya."
 
 #: ui/components/dialog/lyrics-finder-body.slint
 msgid "lrclib.net files this recording as instrumental."
@@ -3515,6 +3527,10 @@ msgstr "Temukan lirik"
 #: ui/views/settings/lyrics-section.slint
 msgid "Pick the playing track's lyrics from lrclib.net's matches"
 msgstr "Pilih lirik lagu yang sedang diputar dari hasil lrclib.net"
+
+#: ui/views/settings/lyrics-section.slint
+msgid "Turn on \"Show lyrics\" above first"
+msgstr "Aktifkan \"Tampilkan lirik\" di atas terlebih dahulu"
 
 #: ui/views/settings/mini-player-section.slint
 msgid "Miniplayer"

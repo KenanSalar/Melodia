@@ -308,6 +308,10 @@ msgstr "Anwenden"
 msgid "Review"
 msgstr "Prüfen"
 
+#: ui/components/dialog/dialog.slint
+msgid "Turn On"
+msgstr "Einschalten"
+
 #: ui/components/dialog/duplicate-row.slint
 msgid "Identical files"
 msgstr "Identische Dateien"
@@ -565,6 +569,10 @@ msgstr "Synchron"
 msgid "Word-timed"
 msgstr "Wortsynchron"
 
+#: ui/components/dialog/lyrics-finder-body.slint
+msgid "\"Look up lyrics online\" is off"
+msgstr "„Songtexte online suchen“ ist aus"
+
 #: ui/components/dialog/lyrics-finder-body.slint ui/views/search-view.slint
 msgid "Searching…"
 msgstr "Suche läuft…"
@@ -580,6 +588,10 @@ msgstr "lrclib.net konnte nicht durchsucht werden"
 #: ui/components/dialog/lyrics-finder-body.slint
 msgid "No lyrics match"
 msgstr "Kein Songtext passt"
+
+#: ui/components/dialog/lyrics-finder-body.slint
+msgid "Turning it on lets Melodia ask lrclib.net for this track, and for any track without lyrics of its own."
+msgstr "Eingeschaltet fragt Melodia lrclib.net nach diesem Titel und nach jedem Titel ohne eigenen Songtext."
 
 #: ui/components/dialog/lyrics-finder-body.slint
 msgid "Press Enter to search again in a minute."
@@ -598,8 +610,8 @@ msgid "Couldn't keep the pick. See the log for details."
 msgstr "Die Auswahl konnte nicht gespeichert werden. Details siehe Protokoll."
 
 #: ui/components/dialog/lyrics-finder-body.slint
-msgid "Pick a match to see how it starts."
-msgstr "Wähle einen Treffer, um zu sehen, wie er beginnt."
+msgid "Pick a match to read its lyrics."
+msgstr "Wähle einen Treffer, um seinen Songtext zu lesen."
 
 #: ui/components/dialog/lyrics-finder-body.slint
 msgid "lrclib.net files this recording as instrumental."
@@ -3574,6 +3586,10 @@ msgstr "Songtext finden"
 #: ui/views/settings/lyrics-section.slint
 msgid "Pick the playing track's lyrics from lrclib.net's matches"
 msgstr "Den Songtext des laufenden Titels aus den Treffern von lrclib.net auswählen"
+
+#: ui/views/settings/lyrics-section.slint
+msgid "Turn on \"Show lyrics\" above first"
+msgstr "Aktiviere zuerst oben „Songtext anzeigen“"
 
 #: ui/views/settings/mini-player-section.slint
 msgid "Miniplayer"

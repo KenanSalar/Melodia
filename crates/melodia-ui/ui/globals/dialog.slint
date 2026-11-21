@@ -200,7 +200,11 @@ export global Dialog {
                 CorrectionImport.apply();
             }
         } else if (root.kind == DialogKind.lyrics-finder) {
-            LyricsFinder.apply(LyricsFinder.picked);
+            if (LyricsFinder.phase == LyricsSearchPhase.lookup-off) {
+                LyricsFinder.turn-on-lookup();
+            } else {
+                LyricsFinder.apply(LyricsFinder.picked);
+            }
         }
     }
     cancelled => { }

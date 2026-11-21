@@ -87,8 +87,8 @@ export component DialogOverlay inherits Rectangle {
         || DialogGlobal.kind == DialogKind.lyrics-finder;
     property <length> eased-height: layout.preferred-height;
     // A transition rather than `animate`, which would chase a window resize: its curve ends a
-    // fixed time after the step changed, so a later resize snaps. `in` only, finding being the
-    // default, so the card opens at rest and a close's teardown leaves nothing easing.
+    // fixed time after the step changed, so a later resize snaps. `in` only, each kind's first step
+    // being the default, so the card opens at rest and a close's teardown leaves nothing easing.
     states [
         finder-confirm when root.duplicates-confirming: {
             eased-height: layout.preferred-height;
@@ -109,6 +109,29 @@ export component DialogOverlay inherits Rectangle {
                 animate eased-height { duration: Theme.dur-med; easing: cubic-bezier(0.2, 0, 0, 1); }
             }
         }
+        // A state of its own, so an Enter over a list eases the card back down.
+        lyrics-searching when DialogGlobal.kind == DialogKind.lyrics-finder
+            && LyricsFinder.phase == LyricsSearchPhase.searching: {
+            eased-height: layout.preferred-height;
+            in {
+                animate eased-height { duration: Theme.dur-med; easing: cubic-bezier(0.2, 0, 0, 1); }
+            }
+        }
+        lyrics-list when DialogGlobal.kind == DialogKind.lyrics-finder
+            && LyricsFinder.phase == LyricsSearchPhase.listing: {
+            eased-height: layout.preferred-height;
+            in {
+                animate eased-height { duration: Theme.dur-med; easing: cubic-bezier(0.2, 0, 0, 1); }
+            }
+        }
+        lyrics-settled when DialogGlobal.kind == DialogKind.lyrics-finder
+            && (LyricsFinder.phase == LyricsSearchPhase.rate-limited
+                || LyricsFinder.phase == LyricsSearchPhase.failed): {
+            eased-height: layout.preferred-height;
+            in {
+                animate eased-height { duration: Theme.dur-med; easing: cubic-bezier(0.2, 0, 0, 1); }
+            }
+        }
     ]
     // The finder's second step, whose footer reads Back and Remove.
     property <bool> duplicates-confirming:
@@ -116,6 +139,10 @@ export component DialogOverlay inherits Rectangle {
     // The import's second step, whose footer reads Back and Apply.
     property <bool> import-reviewing:
         DialogGlobal.kind == DialogKind.correction-import && CorrectionImport.step == ImportStep.review;
+    // The finder's first step with the lookup off, whose footer offers to turn it on.
+    property <bool> lyrics-lookup-off:
+        DialogGlobal.kind == DialogKind.lyrics-finder
+        && LyricsFinder.phase == LyricsSearchPhase.lookup-off;
     // A fact about the form rather than an action on it, stated opposite the buttons.
     property <string> footer-note:
         DialogGlobal.kind == DialogKind.smart-playlist-editor && SmartEditor.match-count >= 0
@@ -265,6 +292,8 @@ export component DialogOverlay inherits Rectangle {
                         ? (DuplicatesUi.confirming ? @tr("Remove") : @tr("Continue"))
                         : DialogGlobal.kind == DialogKind.correction-import
                         ? (root.import-reviewing ? @tr("Apply") : @tr("Review"))
+                        : root.lyrics-lookup-off
+                        ? @tr("Turn On")
                         : DialogGlobal.confirm-label;
                     icon: "";
                     primary: true;
@@ -303,6 +332,7 @@ export component DialogOverlay inherits Rectangle {
                             || (!CorrectionImport.busy
                                 && (root.import-reviewing || CorrectionImport.text != "")))
                         && (DialogGlobal.kind != DialogKind.lyrics-finder
+                            || root.lyrics-lookup-off
                             || (LyricsFinder.phase == LyricsSearchPhase.listing
                                 && LyricsFinder.picked >= 0 && !LyricsFinder.applying));
                     clicked => {

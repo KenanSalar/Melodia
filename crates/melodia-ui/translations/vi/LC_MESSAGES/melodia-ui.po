@@ -303,6 +303,10 @@ msgstr "Áp dụng"
 msgid "Review"
 msgstr "Xem lại"
 
+#: ui/components/dialog/dialog.slint
+msgid "Turn On"
+msgstr "Bật"
+
 #: ui/components/dialog/duplicate-row.slint
 msgid "Identical files"
 msgstr "Tệp giống hệt nhau"
@@ -553,6 +557,10 @@ msgstr "Đồng bộ"
 msgid "Word-timed"
 msgstr "Theo từng từ"
 
+#: ui/components/dialog/lyrics-finder-body.slint
+msgid "\"Look up lyrics online\" is off"
+msgstr "\"Tìm lời bài hát trực tuyến\" đang tắt"
+
 #: ui/components/dialog/lyrics-finder-body.slint ui/views/search-view.slint
 msgid "Searching…"
 msgstr "Đang tìm kiếm…"
@@ -568,6 +576,10 @@ msgstr "Không thể tìm trên lrclib.net"
 #: ui/components/dialog/lyrics-finder-body.slint
 msgid "No lyrics match"
 msgstr "Không có lời nào khớp"
+
+#: ui/components/dialog/lyrics-finder-body.slint
+msgid "Turning it on lets Melodia ask lrclib.net for this track, and for any track without lyrics of its own."
+msgstr "Khi bật, Melodia sẽ hỏi lrclib.net lời cho bản nhạc này và cho mọi bản nhạc không kèm lời."
 
 #: ui/components/dialog/lyrics-finder-body.slint
 msgid "Press Enter to search again in a minute."
@@ -586,8 +598,8 @@ msgid "Couldn't keep the pick. See the log for details."
 msgstr "Không thể lưu lựa chọn. Xem nhật ký để biết chi tiết."
 
 #: ui/components/dialog/lyrics-finder-body.slint
-msgid "Pick a match to see how it starts."
-msgstr "Chọn một kết quả để xem phần mở đầu."
+msgid "Pick a match to read its lyrics."
+msgstr "Chọn một kết quả để đọc lời bài hát."
 
 #: ui/components/dialog/lyrics-finder-body.slint
 msgid "lrclib.net files this recording as instrumental."
@@ -3515,6 +3527,10 @@ msgstr "Tìm lời bài hát"
 #: ui/views/settings/lyrics-section.slint
 msgid "Pick the playing track's lyrics from lrclib.net's matches"
 msgstr "Chọn lời của bản nhạc đang phát từ các kết quả của lrclib.net"
+
+#: ui/views/settings/lyrics-section.slint
+msgid "Turn on \"Show lyrics\" above first"
+msgstr "Hãy bật \"Hiện lời bài hát\" ở trên trước"
 
 #: ui/views/settings/mini-player-section.slint
 msgid "Miniplayer"

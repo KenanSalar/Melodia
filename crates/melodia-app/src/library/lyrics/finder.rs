@@ -18,9 +18,6 @@ use melodia_core::error::AppError;
 use melodia_core::utils::text::filled;
 use melodia_net::services::net::lyrics_directory::{self as directory, LookupError};
 
-/// Enough of a sheet to recognise it, the list leaving little room under itself.
-const PREVIEW_LINES: usize = 8;
-
 /// What a candidate carries, which is what a person tells candidates apart by.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ChoiceKind {
@@ -35,7 +32,7 @@ pub enum ChoiceKind {
 pub struct Choice {
     pub candidate: LyricsCandidate,
     pub kind: ChoiceKind,
-    /// Its first lines, without stamps or glosses.
+    /// Its lines, without stamps or glosses.
     pub preview: String,
 }
 
@@ -162,13 +159,8 @@ impl Choice {
             Timing::Lines => ChoiceKind::Lines,
             Timing::Plain => ChoiceKind::Plain,
         };
-        let preview = lyrics
-            .lines
-            .iter()
-            .map(|line| line.text.as_str())
-            .take(PREVIEW_LINES)
-            .collect::<Vec<_>>()
-            .join("\n");
+        let preview =
+            lyrics.lines.iter().map(|line| line.text.as_str()).collect::<Vec<_>>().join("\n");
         Some(Self { candidate, kind, preview })
     }
 }

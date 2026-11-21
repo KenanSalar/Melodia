@@ -308,6 +308,10 @@ msgstr "Aplicar"
 msgid "Review"
 msgstr "Revisar"
 
+#: ui/components/dialog/dialog.slint
+msgid "Turn On"
+msgstr "Activar"
+
 #: ui/components/dialog/duplicate-row.slint
 msgid "Identical files"
 msgstr "Archivos idénticos"
@@ -565,6 +569,10 @@ msgstr "Sincronizada"
 msgid "Word-timed"
 msgstr "Por palabra"
 
+#: ui/components/dialog/lyrics-finder-body.slint
+msgid "\"Look up lyrics online\" is off"
+msgstr "«Buscar letras en línea» está desactivado"
+
 #: ui/components/dialog/lyrics-finder-body.slint ui/views/search-view.slint
 msgid "Searching…"
 msgstr "Buscando…"
@@ -580,6 +588,10 @@ msgstr "No se pudo buscar en lrclib.net"
 #: ui/components/dialog/lyrics-finder-body.slint
 msgid "No lyrics match"
 msgstr "Ninguna letra coincide"
+
+#: ui/components/dialog/lyrics-finder-body.slint
+msgid "Turning it on lets Melodia ask lrclib.net for this track, and for any track without lyrics of its own."
+msgstr "Al activarla, Melodia consulta lrclib.net para esta pista y para cualquier pista sin letra propia."
 
 #: ui/components/dialog/lyrics-finder-body.slint
 msgid "Press Enter to search again in a minute."
@@ -598,8 +610,8 @@ msgid "Couldn't keep the pick. See the log for details."
 msgstr "No se pudo guardar la elección. Consulta el registro para más detalles."
 
 #: ui/components/dialog/lyrics-finder-body.slint
-msgid "Pick a match to see how it starts."
-msgstr "Elige un resultado para ver cómo empieza."
+msgid "Pick a match to read its lyrics."
+msgstr "Elige un resultado para leer su letra."
 
 #: ui/components/dialog/lyrics-finder-body.slint
 msgid "lrclib.net files this recording as instrumental."
@@ -3573,6 +3585,10 @@ msgstr "Buscar la letra"
 #: ui/views/settings/lyrics-section.slint
 msgid "Pick the playing track's lyrics from lrclib.net's matches"
 msgstr "Elige la letra de la pista en reproducción entre los resultados de lrclib.net"
+
+#: ui/views/settings/lyrics-section.slint
+msgid "Turn on \"Show lyrics\" above first"
+msgstr "Activa primero «Mostrar la letra» arriba"
 
 #: ui/views/settings/mini-player-section.slint
 msgid "Miniplayer"

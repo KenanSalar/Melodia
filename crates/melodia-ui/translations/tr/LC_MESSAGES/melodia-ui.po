@@ -310,6 +310,10 @@ msgstr "Uygula"
 msgid "Review"
 msgstr "Gözden Geçir"
 
+#: ui/components/dialog/dialog.slint
+msgid "Turn On"
+msgstr "Aç"
+
 #: ui/components/dialog/duplicate-row.slint
 msgid "Identical files"
 msgstr "Aynı dosyalar"
@@ -569,6 +573,10 @@ msgstr "Senkron"
 msgid "Word-timed"
 msgstr "Kelime kelime"
 
+#: ui/components/dialog/lyrics-finder-body.slint
+msgid "\"Look up lyrics online\" is off"
+msgstr "\"Şarkı sözlerini çevrimiçi ara\" kapalı"
+
 #: ui/components/dialog/lyrics-finder-body.slint ui/views/search-view.slint
 msgid "Searching…"
 msgstr "Aranıyor…"
@@ -584,6 +592,10 @@ msgstr "lrclib.net'te arama yapılamadı"
 #: ui/components/dialog/lyrics-finder-body.slint
 msgid "No lyrics match"
 msgstr "Eşleşen şarkı sözü yok"
+
+#: ui/components/dialog/lyrics-finder-body.slint
+msgid "Turning it on lets Melodia ask lrclib.net for this track, and for any track without lyrics of its own."
+msgstr "Açıldığında Melodia, bu parça ve kendi sözleri olmayan her parça için lrclib.net'e sorar."
 
 #: ui/components/dialog/lyrics-finder-body.slint
 msgid "Press Enter to search again in a minute."
@@ -602,8 +614,8 @@ msgid "Couldn't keep the pick. See the log for details."
 msgstr "Seçim saklanamadı. Ayrıntılar için günlüğe bak."
 
 #: ui/components/dialog/lyrics-finder-body.slint
-msgid "Pick a match to see how it starts."
-msgstr "Nasıl başladığını görmek için bir sonuç seç."
+msgid "Pick a match to read its lyrics."
+msgstr "Sözlerini okumak için bir sonuç seç."
 
 #: ui/components/dialog/lyrics-finder-body.slint
 msgid "lrclib.net files this recording as instrumental."
@@ -3586,6 +3598,10 @@ msgstr "Şarkı sözü bul"
 #: ui/views/settings/lyrics-section.slint
 msgid "Pick the playing track's lyrics from lrclib.net's matches"
 msgstr "Çalan parçanın sözlerini lrclib.net'in sonuçları arasından seç"
+
+#: ui/views/settings/lyrics-section.slint
+msgid "Turn on \"Show lyrics\" above first"
+msgstr "Önce yukarıdan \"Şarkı sözlerini göster\" seçeneğini aç"
 
 #: ui/views/settings/mini-player-section.slint
 msgid "Miniplayer"

@@ -23,13 +23,17 @@ Status: **Phase 4 landed; Phase 5's hand tests next** · Created: 2026-11-21 · 
 
 - **"Find lyrics…" in the ♪ lyrics menu** of Now Playing, and a **"Find lyrics"** row with a
   **Find…** button in Settings › Lyrics. Both open the finder for the playing track, and both are
-  enabled when lyrics and "Look up lyrics online" are on and a track is loaded.
+  enabled once a track is loaded, the Settings row also needing lyrics on and saying so while
+  greyed. With "Look up lyrics online" off, the dialog opens on a notice whose **Turn On** is that
+  switch.
+- **The card eases between steps**, from Searching to the list and back on Enter, as the
+  duplicates finder's does.
 - **The finder lists lrclib.net's matches, best first.** A row shows title, artist · album,
   duration and a badge: Word-timed, Synced, Plain or Instrumental. The dialog's message states the
   track's own duration beside them.
 - **The search field opens prefilled** with the track's title and artist. Enter searches again with
   whatever was typed.
-- **Picking a row previews its first lines** under the list.
+- **Picking a row shows its whole sheet** under the list, scrolling inside a box the layout sizes.
 - **Apply stores the pick as the track's online answer**, replacing the automatic one, and the
   Now Playing panel reloads with it.
 - **A pick the track's own lyrics would hide is named as such** in the dialog: a `.lrc` beside the
@@ -42,8 +46,8 @@ Status: **Phase 4 landed; Phase 5's hand tests next** · Created: 2026-11-21 · 
 - Find Headphones looks and behaves as today.
 - Automatic lookups run only when nothing is stored, so a pick stays until "Look up again" (the
   reset to automatic), a retag renaming the recording, or the store's pruning.
-- With "Look up lyrics online" off, nothing reaches lrclib: both entries are disabled and the
-  facade refuses.
+- With "Look up lyrics online" off, nothing reaches lrclib until the person turns it on, from the
+  dialog's notice or the switch itself, and the facade refuses until then.
 - "Save to file" writes a picked sheet into the tag as it does any online answer.
 
 ---
@@ -62,9 +66,10 @@ Status: **Phase 4 landed; Phase 5's hand tests next** · Created: 2026-11-21 · 
 
 ### Consent: the online switch
 
-- Both entries need "Look up lyrics online" on, as Find Headphones needs its online switch
-  (`views/settings/headphones-section.slint:73`). The switch's description names lrclib.net, and
-  the README promises nothing contacts it until the switch is on (`README.md:166`).
+- The switch's description names lrclib.net, and the README promises nothing contacts it until
+  the switch is on (`README.md:166`). Both entries open with it off, the dialog asking first: its
+  **Turn On** runs the menu switch's own handler, so the panel looks again too, and only then
+  searches.
 - The facade's `search` reads the switch through the one `online_lookup_enabled`, so
   `lyrics_switch.rs`' single-reader pin holds.
 - A request leaves only on open and on Enter, never per keystroke, through the lyrics pacer and its
@@ -116,7 +121,17 @@ Status: **Phase 4 landed; Phase 5's hand tests next** · Created: 2026-11-21 · 
   refuses, and a search empties the rows, which raises the state block. `PickList` takes no input
   of its own for it.
 - The enums are `LyricsSearchPhase` and `LyricsMasking`, `dialog.slint` already saying "finder"
-  for the duplicates finder.
+  for the duplicates finder. `loading` is the opener's and `searching` each search Rust sends, so
+  the card opens at rest on the default state and every later step, a second Enter's included,
+  has a state of its own to ease into.
+- Never hidden: the menu reserves a row for each entry (`lyrics_switch.rs`), and a hidden command
+  can't be found. With the lookup off both entries open and the dialog explains, its footer
+  reading **Turn On** in a `lookup-off` step with no state of its own, so the card opens at rest
+  on it. The Settings row greys only with lyrics off, as the radio scrobble row does, naming the
+  switch.
+- The preview is the whole sheet in a `DialogScrollPane`, scrolled back to its first line on each
+  pick. Its box stretches beside the list from a short minimum, so a short window shrinks both
+  rather than pushing the footer off the card.
 
 ---
 
@@ -266,6 +281,10 @@ Every file stays well under 800.
 - [x] Docs: `README.md`'s lyrics lines; `lyrics-section.slint`'s header note.
 - [x] Also: `ui-patterns.md`'s catalogue names Find Lyrics beside Find Headphones; a search waits
       out a pick being stored, whose close its retired ticket would strand.
+- [x] After the first hand check: the card eases between steps (`lyrics-searching`, `lyrics-list`,
+      `lyrics-settled` in `dialog.slint`); with the lookup off both entries open on a notice whose
+      Turn On is the switch; the greyed Settings row names "Show lyrics"; the preview shows the
+      whole sheet, scrolling (`DialogScrollPane.scroll-to-start()`).
 
 **Gate:** fmt, clippy, the suite: `dialog_openers.rs`, `lyrics_switch.rs`, `scrollbars.rs`,
 `translations.rs`.
@@ -286,11 +305,15 @@ the dev data folder, each against `main` where it should match.
   - a pick applied and shown; "Look up again" back to automatic; the pick surviving a restart;
   - a pick hidden by a `.lrc` and by a timed tag, the note shown; a plain pick under a plain tag;
   - Enter in the empty box the moment the dialog opens, a hidden pick still showing the note;
-  - online lookup off: both entries greyed, nothing sent;
+  - online lookup off: both entries open on the notice, nothing sent before Turn On; Turn On
+    flipping the switch in the menu and in Settings, then searching; the Settings row greyed and
+    naming "Show lyrics" while lyrics are off;
+  - the card easing from Searching to the list, and down and back up on an Enter over a list;
   - a rate-limited answer; an unreachable lrclib;
   - a word-synced record from the finder, badged Word-timed;
   - a song ending under the dialog, the pick landing on the track it opened on;
-  - long titles, Arabic and Korean rows, the preview of a long sheet;
+  - long titles, Arabic and Korean rows; a long sheet scrolling in the preview, the next pick
+    reading from its first line;
   - the shortest window reachable, a pick showing, the footer inside the card.
 
 ### Tests

@@ -308,6 +308,10 @@ msgstr ""
 msgid "Review"
 msgstr ""
 
+#: ui/components/dialog/dialog.slint
+msgid "Turn On"
+msgstr ""
+
 #: ui/components/dialog/duplicate-row.slint
 msgid "Identical files"
 msgstr ""
@@ -565,6 +569,10 @@ msgstr ""
 msgid "Word-timed"
 msgstr ""
 
+#: ui/components/dialog/lyrics-finder-body.slint
+msgid "\"Look up lyrics online\" is off"
+msgstr ""
+
 #: ui/components/dialog/lyrics-finder-body.slint ui/views/search-view.slint
 msgid "Searching…"
 msgstr ""
@@ -579,6 +587,10 @@ msgstr ""
 
 #: ui/components/dialog/lyrics-finder-body.slint
 msgid "No lyrics match"
+msgstr ""
+
+#: ui/components/dialog/lyrics-finder-body.slint
+msgid "Turning it on lets Melodia ask lrclib.net for this track, and for any track without lyrics of its own."
 msgstr ""
 
 #: ui/components/dialog/lyrics-finder-body.slint
@@ -598,7 +610,7 @@ msgid "Couldn't keep the pick. See the log for details."
 msgstr ""
 
 #: ui/components/dialog/lyrics-finder-body.slint
-msgid "Pick a match to see how it starts."
+msgid "Pick a match to read its lyrics."
 msgstr ""
 
 #: ui/components/dialog/lyrics-finder-body.slint
@@ -3572,6 +3584,10 @@ msgstr ""
 
 #: ui/views/settings/lyrics-section.slint
 msgid "Pick the playing track's lyrics from lrclib.net's matches"
+msgstr ""
+
+#: ui/views/settings/lyrics-section.slint
+msgid "Turn on \"Show lyrics\" above first"
 msgstr ""
 
 #: ui/views/settings/mini-player-section.slint

@@ -310,6 +310,10 @@ msgstr "Alkalmaz"
 msgid "Review"
 msgstr "Ellenőrzés"
 
+#: ui/components/dialog/dialog.slint
+msgid "Turn On"
+msgstr "Bekapcsolás"
+
 #: ui/components/dialog/duplicate-row.slint
 msgid "Identical files"
 msgstr "Azonos fájlok"
@@ -567,6 +571,10 @@ msgstr "Szinkronizált"
 msgid "Word-timed"
 msgstr "Szavanként"
 
+#: ui/components/dialog/lyrics-finder-body.slint
+msgid "\"Look up lyrics online\" is off"
+msgstr "A „Dalszöveg keresése online” ki van kapcsolva"
+
 #: ui/components/dialog/lyrics-finder-body.slint ui/views/search-view.slint
 msgid "Searching…"
 msgstr "Keresés…"
@@ -582,6 +590,10 @@ msgstr "Nem sikerült keresni az lrclib.net-en"
 #: ui/components/dialog/lyrics-finder-body.slint
 msgid "No lyrics match"
 msgstr "Nincs egyező dalszöveg"
+
+#: ui/components/dialog/lyrics-finder-body.slint
+msgid "Turning it on lets Melodia ask lrclib.net for this track, and for any track without lyrics of its own."
+msgstr "Bekapcsolva a Melodia lekérdezi az lrclib.net-et erre a számra, és minden saját dalszöveg nélküli számra."
 
 #: ui/components/dialog/lyrics-finder-body.slint
 msgid "Press Enter to search again in a minute."
@@ -600,8 +612,8 @@ msgid "Couldn't keep the pick. See the log for details."
 msgstr "A választást nem sikerült megtartani. A részleteket a naplóban találod."
 
 #: ui/components/dialog/lyrics-finder-body.slint
-msgid "Pick a match to see how it starts."
-msgstr "Válassz egy találatot, hogy lásd, hogyan kezdődik."
+msgid "Pick a match to read its lyrics."
+msgstr "Válassz egy találatot, hogy elolvasd a dalszövegét."
 
 #: ui/components/dialog/lyrics-finder-body.slint
 msgid "lrclib.net files this recording as instrumental."
@@ -3575,6 +3587,10 @@ msgstr "Dalszöveg keresése"
 #: ui/views/settings/lyrics-section.slint
 msgid "Pick the playing track's lyrics from lrclib.net's matches"
 msgstr "A lejátszott szám dalszövegének kiválasztása az lrclib.net találatai közül"
+
+#: ui/views/settings/lyrics-section.slint
+msgid "Turn on \"Show lyrics\" above first"
+msgstr "Előbb kapcsold be fent ezt: „Dalszöveg megjelenítése”"
 
 #: ui/views/settings/mini-player-section.slint
 msgid "Miniplayer"

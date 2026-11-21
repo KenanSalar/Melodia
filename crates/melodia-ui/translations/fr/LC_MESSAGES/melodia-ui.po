@@ -308,6 +308,10 @@ msgstr "Appliquer"
 msgid "Review"
 msgstr "Vérifier"
 
+#: ui/components/dialog/dialog.slint
+msgid "Turn On"
+msgstr "Activer"
+
 #: ui/components/dialog/duplicate-row.slint
 msgid "Identical files"
 msgstr "Fichiers identiques"
@@ -565,6 +569,10 @@ msgstr "Synchronisées"
 msgid "Word-timed"
 msgstr "Mot à mot"
 
+#: ui/components/dialog/lyrics-finder-body.slint
+msgid "\"Look up lyrics online\" is off"
+msgstr "« Rechercher les paroles en ligne » est désactivé"
+
 #: ui/components/dialog/lyrics-finder-body.slint ui/views/search-view.slint
 msgid "Searching…"
 msgstr "Recherche en cours…"
@@ -580,6 +588,10 @@ msgstr "Impossible de rechercher sur lrclib.net"
 #: ui/components/dialog/lyrics-finder-body.slint
 msgid "No lyrics match"
 msgstr "Aucune parole ne correspond"
+
+#: ui/components/dialog/lyrics-finder-body.slint
+msgid "Turning it on lets Melodia ask lrclib.net for this track, and for any track without lyrics of its own."
+msgstr "Une fois activée, Melodia interroge lrclib.net pour ce titre, et pour tout titre sans paroles propres."
 
 #: ui/components/dialog/lyrics-finder-body.slint
 msgid "Press Enter to search again in a minute."
@@ -598,8 +610,8 @@ msgid "Couldn't keep the pick. See the log for details."
 msgstr "Impossible d'enregistrer ce choix. Consultez le journal pour plus de détails."
 
 #: ui/components/dialog/lyrics-finder-body.slint
-msgid "Pick a match to see how it starts."
-msgstr "Choisissez un résultat pour voir comment il commence."
+msgid "Pick a match to read its lyrics."
+msgstr "Choisissez un résultat pour lire ses paroles."
 
 #: ui/components/dialog/lyrics-finder-body.slint
 msgid "lrclib.net files this recording as instrumental."
@@ -3573,6 +3585,10 @@ msgstr "Trouver les paroles"
 #: ui/views/settings/lyrics-section.slint
 msgid "Pick the playing track's lyrics from lrclib.net's matches"
 msgstr "Choisir les paroles du titre en cours parmi les résultats de lrclib.net"
+
+#: ui/views/settings/lyrics-section.slint
+msgid "Turn on \"Show lyrics\" above first"
+msgstr "Activez d'abord « Afficher les paroles » ci-dessus"
 
 #: ui/views/settings/mini-player-section.slint
 msgid "Miniplayer"
