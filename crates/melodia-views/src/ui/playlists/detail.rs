@@ -238,11 +238,10 @@ pub fn apply_optimistic_move(
     TrackRows::installed(&tracks, TRACKS_LABEL).is_some_and(|model| model.move_rows(rows, to))
 }
 
-/// Whether a slot in the list on show is a position in the playlist: asked again beside
-/// `reorder-enabled` where a drag's display indices reach the keyset or the store. Filtered, the
-/// list is a subset and a slot lands among rows the playlist doesn't hold there, the write still
-/// landing in range. The list on show takes a sort or needle a query after the page, and an
-/// overtaken open can leave another playlist's rows up under this id.
+/// Whether a slot in the list on show is a position in the playlist, `reorder-enabled` asked again
+/// where a drag's display indices reach the keyset or the store. Filtered, a slot lands among rows
+/// the playlist doesn't hold there, still in range; the list on show can trail the sort or needle
+/// the page asked for, or hold another playlist's rows after an overtaken open.
 pub fn slots_are_positions(ui: &AppWindow, playlists_ui: &PlaylistsUi) -> bool {
     let g = ui.global::<PlaylistDetail>();
     let (field, dir) = (g.get_sort_field(), g.get_sort_dir());

@@ -102,7 +102,7 @@ Strawberry draws a line under auto-sort and then places the rows elsewhere.
 | `melodia-views/src/ui/playlists/callbacks/detail.rs` | `wire_drop_in`: the smart gate, choosing the landing (`Landing`), the write, the refresh, the toast |
 | `melodia-views/src/ui/playlists/callbacks/mod.rs` | wiring `wire_drop_in` from `wire_files`, which holds the `NotificationsUi` that `ViewCtx` lacks |
 | `melodia-app/src/library/playlists.rs` | `insert_into_playlist` beside `add_to_playlist` |
-| `melodia-store/src/database/queries/playlist.rs` | `place_items`, which both the append and the insert go through; `items_in_order`, shared with `move_items` |
+| `melodia-store/src/database/queries/playlist.rs` | `place_items`, which both the append and the insert go through; `items_in_order` and `position_writes`, shared with `move_items` |
 | `scripts/install-linux.sh` | a closing uninstall hint that names only `uninstall-linux.sh` |
 
 UI paths are under `crates/melodia-ui/`. Every file stays well under 800 lines.

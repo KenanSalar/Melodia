@@ -1,7 +1,6 @@
 //! `PlaylistDetail.*` callbacks: close-detail, the drags that move rows, the queue's drop, the
 //! edit-artwork picker open and track removal here, the rest through
-//! [`crate::ui::callbacks::track_detail`]. The drop is wired from [`super::wire_files`], for the
-//! notifications its toast needs.
+//! [`crate::ui::callbacks::track_detail`]. The drop is wired from [`super::wire_files`].
 
 use std::rc::Rc;
 use std::sync::Arc;

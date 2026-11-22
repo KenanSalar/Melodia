@@ -264,7 +264,9 @@ fn place_items(
     }
 
     let at = before.map_or(rows.len(), |row| row.min(rows.len()));
-    batch_update_positions_pairs(tx, &positions_opened_at(&rows, at, new.len()))?;
+    let count = new.len();
+    let opened = position_writes(&rows, |row| if row < at { row } else { row + count });
+    batch_update_positions_pairs(tx, &opened)?;
     let start = i32::try_from(at)
         .map_err(|_| AppError::validation_msg("playlist position overflows i32"))?;
     let now = melodia_core::utils::now_rfc3339();
@@ -291,14 +293,13 @@ fn tracks_not_held(rows: &[ItemRow], candidates: Vec<i64>) -> Vec<i64> {
     candidates.into_iter().filter(|&track_id| held.insert(track_id)).collect()
 }
 
-/// The `(id, position)` writes that leave `count` slots free in front of row `at`, every row
-/// numbered by its index and written only where that moves it.
-fn positions_opened_at(rows: &[ItemRow], at: usize, count: usize) -> Vec<(i64, i32)> {
+/// The `(id, position)` writes that number each row as `index_of` maps its index, written only
+/// where that moves it.
+fn position_writes(rows: &[ItemRow], index_of: impl Fn(usize) -> usize) -> Vec<(i64, i32)> {
     rows.iter()
         .enumerate()
         .filter_map(|(row, &(id, _, position))| {
-            let index = if row < at { row } else { row + count };
-            let index = i32::try_from(index).unwrap_or(i32::MAX);
+            let index = i32::try_from(index_of(row)).unwrap_or(i32::MAX);
             (position != index).then_some((id, index))
         })
         .collect()
@@ -510,18 +511,9 @@ fn move_items(
         return Ok(());
     }
 
-    // Only the rows whose index moved, so a drag writes the span it crossed rather than the whole
-    // playlist. A gap left under a hard-deleted track makes every row after it differ, and the
-    // rewrite closes it.
-    let changed: Vec<(i64, i32)> = items
-        .iter()
-        .enumerate()
-        .filter_map(|(index, &(id, _, position))| {
-            let index = i32::try_from(index).unwrap_or(i32::MAX);
-            (position != index).then_some((id, index))
-        })
-        .collect();
-    batch_update_positions_pairs(tx, &changed)?;
+    // A drag writes the span it crossed rather than the whole playlist, but a gap left under a
+    // hard-deleted track makes every row after it differ, and the rewrite closes it.
+    batch_update_positions_pairs(tx, &position_writes(&items, |row| row))?;
     let now = melodia_core::utils::now_rfc3339();
     update_playlist_thumbnail_and_timestamp_tx(tx, playlist_id, &now)
 }
