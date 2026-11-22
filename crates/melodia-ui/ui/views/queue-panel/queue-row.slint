@@ -8,6 +8,7 @@ import { TrackContextMenu } from "../../components/track-list/track-context-menu
 import { ContextClick } from "../../components/context-menu.slint";
 import { SelectionPill } from "../../components/track-list/selection-pill.slint";
 import { TrackTitle } from "../../components/track-list/track-title.slint";
+import { SkeletonBar, SkeletonTile } from "../../components/skeleton.slint";
 
 // Favourite and rating are the row menu's, so the title keeps the room a heart and stars would
 // take. The checkbox starts a selection and the row body extends one, a body click otherwise
@@ -26,6 +27,9 @@ export component QueueRowItem inherits Rectangle {
 
     property <bool> playing: root.row-index == Queue.current-index;
     property <bool> selected: root.row-data.selected;
+    property <bool> pending: root.row-data.pending;
+    property <length> cover-size: 36px;
+    property <length> duration-w: 50px;
     // The lifted row dims through its brushes rather than `opacity`, which would render it into a
     // texture for the length of the drag, and a drag of picks lifts a screenful.
     property <float> fade: root.lifted ? Theme.fade-lifted : 1.0;
@@ -139,19 +143,24 @@ export component QueueRowItem inherits Rectangle {
 
                 VerticalLayout {
                     alignment: center;
-                    ArtworkImage {
+                    if !root.pending: ArtworkImage {
                         artwork-path: root.row-data.artwork_path;
                         cover: Queue.request-cover(root.row-data.artwork_path,
                                                    Queue.covers-generation);
-                        tile-size: 36px;
+                        tile-size: root.cover-size;
                         tile-radius: Theme.radius-sm;
                         fade: root.fade;
+                    }
+                    if root.pending: SkeletonTile {
+                        ink: root.ink;
+                        tile-size: root.cover-size;
+                        tile-radius: Theme.radius-sm;
                     }
                 }
 
                 // `horizontal-stretch: 1` is half of what lets the title elide (`TrackTitle` argues
                 // the other); the padding keeps it off the duration.
-                VerticalLayout {
+                if !root.pending: VerticalLayout {
                     horizontal-stretch: 1;
                     alignment: center;
                     padding-right: Theme.pad-md;
@@ -160,21 +169,40 @@ export component QueueRowItem inherits Rectangle {
                         ink: root.ink;
                     }
                 }
+                // The cell's width is the layout's to hand out, so the bar sits by `x` and `y`,
+                // outside what the cell reports to it.
+                if root.pending: Rectangle {
+                    horizontal-stretch: 1;
+                    SkeletonBar {
+                        x: 0;
+                        y: (parent.height - self.height) / 2;
+                        ink: root.ink;
+                        seed: root.row-index + 1;
+                        span: parent.width;
+                        font-size: Theme.font-size-row;
+                    }
+                }
 
                 // The track list's length cell with the remove button in the heart's place, the
                 // `min-width` landing it on the duration's right edge. Swapped rather than faded,
                 // a fade leaving trails as the pointer sweeps across rows.
                 Rectangle {
-                    min-width: 50px;
+                    min-width: root.duration-w;
                     clip: true;
                     HorizontalLayout {
                         alignment: end;
                         cross-axis-alignment: center;
-                        if !root.shows-remove: Text {
+                        if !root.shows-remove && !root.pending: Text {
                             text: root.row-data.display_duration;
                             color: Theme.text.transparentize(1.0 - root.fade);
                             font-size: Theme.font-size-sm;
                             horizontal-alignment: right;
+                        }
+                        if !root.shows-remove && root.pending: SkeletonBar {
+                            ink: Theme.text.transparentize(1.0 - root.fade);
+                            seed: root.row-index + 2;
+                            span: root.duration-w;
+                            font-size: Theme.font-size-sm;
                         }
                         if root.shows-remove: IconButton {
                             diameter: 26px;

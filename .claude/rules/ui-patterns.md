@@ -39,7 +39,8 @@ Paths are under `crates/melodia-ui/ui/components/` unless stated.
   its count, `GridEmptyState` the empty block for grids and lists alike.
 - **Lists.** `TrackList` with `TrackListScrollbars`; `TrackTitle` for any row showing a track's
   title; `DragSource`, `ListDropTarget` and `DragGhost` for an in-window drag; `WindowRectReport`
-  and `FileDropBanner` for a file dragged in from the OS (`window_chrome::file_drop` has the route).
+  and `FileDropBanner` for a file dragged in from the OS (`window_chrome::file_drop` has the route);
+  `SkeletonBar` and `SkeletonTile` for a row or card still loading.
 - **Heroes.** `TabSearchHeader` (the only `TabBar` mount), `MosaicTabHero` and `LibraryTabBand`,
   `MosaicHeroTile`, `HeroChipStrip`, and `HeroBackdropStack` (bands) / `NpBackdropStack` (Now
   Playing, miniplayer) over `HeroBlurBackdrop` and `AuroraBackdrop`.
@@ -72,6 +73,8 @@ Paths are under `crates/melodia-ui/ui/components/` unless stated.
   the backdrop is pinned; a translucent placeholder's fill has to be a hero token.
 - **A row's play replaces the queue with the view's displayed ids, and there is no single-track
   path** and no Play All pill; Shuffle is the one pill, and appending is the menu's.
+- **A row or card a `PagedRows` holds draws its skeleton while `pending` is set**, never its
+  defaults, and only `PagedRow::placeholder` sets it, so a `VecModel` row never reads as loading.
 - **Track-list insets belong to the list**: pages mount `TrackList` full width with no side padding.
 - **A raise that crosses an `await` owes a `DialogClaim`, and a deferred raise is an opener too**,
   single caller or not: inline chrome bumps nothing. `dialog_openers.rs` walks only the kinds it

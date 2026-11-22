@@ -24,9 +24,8 @@ impl GridRow for UiEntityGridRow {
 }
 
 impl PagedRow for UiEntityStripRow {
-    // Blank but live: a card clicked before its fetch lands still plays and picks by id.
     fn placeholder(id: i64) -> Self {
-        Self { id: clamp_i64_to_i32(id), ..Self::default() }
+        Self { id: clamp_i64_to_i32(id), pending: true, ..Self::default() }
     }
 }
 
@@ -40,6 +39,7 @@ pub fn to_slint_most_played_row(t: &MostPlayedFavorite) -> UiEntityStripRow {
         artwork_path: opt_shared(t.artwork_path.as_deref()),
         play_count: t.play_count,
         is_favorite: t.is_favorite,
+        pending: false,
     }
 }
 

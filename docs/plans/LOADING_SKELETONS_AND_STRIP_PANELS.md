@@ -1,6 +1,6 @@
 # Plan: loading skeletons and card-strip panels (#169)
 
-Status: **proposed**, no phase started. Branch `feat/skeletons-and-strip-panels`.
+Status: **Phase 1 done** and hand-checked; Phase 2 next. Branch `feat/skeletons-and-strip-panels`.
 
 ## What you see now, and after
 
@@ -77,14 +77,16 @@ page's Albums strip, which has a thin line under it. After the change:
   - No single colour stands apart from all of them, but the text's own ink already does.
   - This adds no colour, so it needs no `Palette` slot, and a custom theme's text colour carries
     its skeleton with it.
-- **Bar widths come from the id, by arithmetic.**
+- **Bar widths come from the row's place, by arithmetic.**
   - Slint 1.19 has no hash or random builtin (`i-slint-common-1.19.0/src/builtin_functions.rs`) and
     no `%` operator. `Math.mod` works in `f32` and stays integer-valued for integer input
     (`i-slint-compiler-1.19.0/src/builtin_macros.rs:258-282`).
   - `SkeletonBar` uses one of a few fixed fractions of its `span`, picked by
     `Math.mod(seed * 2, 5)`, which puts consecutive seeds far apart.
-  - The seed is the row's id plus a per-column offset, so the bars in one row differ from each
-    other too.
+  - The seed is the row's place in its list plus a per-column offset, so the bars in one row
+    differ from each other too. Not the id: neighbouring rows' ids are unrelated, so one pair in
+    five matched, and Phase 1's hand check caught a run of four identical rows in title order.
+    Phase 2 and 3 seed a card and a dialog row by its place the same way.
   - It needs no array literal and no global.
 - **No shimmer and no pulse.** Rows fill in a moment after scrolling slows, and an animation would
   keep the window redrawing as long as any skeleton is up.
@@ -151,7 +153,7 @@ Duplication collapsed in the blast radius, each in the phase that touches it:
 
 ## Phases
 
-### Phase 1: the flag, the skeleton parts, the track lists and the queue (not started)
+### Phase 1: the flag, the skeleton parts, the track lists and the queue (done)
 
 **Rust**
 
@@ -160,13 +162,13 @@ Duplication collapsed in the blast radius, each in the phase that touches it:
   `albums/mod.rs:129`, `artists/mod.rs:133`, `genres/mod.rs:102`, `playlists/mod.rs:179`,
   `most_played.rs:28`, `duplicates/kept_out.rs:251`, `duplicates/rows.rs:20`. `PagedRow::placeholder`'s
   doc states the contract.
-- The ten builders that list every field add `pending: false`: `tracks/mod.rs:81`,
+- The eleven builders that list every field add `pending: false`: `tracks/mod.rs:81`,
   `queue_rows.rs:308`, `albums/mod.rs:136`, `artists/mod.rs:140`, `genres/mod.rs:111`,
   `playlists/mod.rs:186`, `most_played.rs:36`, `search/mod.rs:178` and `:191`, `favorites/rows.rs:53`,
   `duplicates/kept_out.rs:273`.
-- `now_playing/up_next.rs:367` builds a queued track the fetch didn't return as
-  `QueueRow { id, ..QueueRow::default() }`. That row is gone, not loading, so it must never read as
-  pending.
+- `now_playing/up_next.rs:367` built a queued track the fetch didn't return through
+  `QueueRow::placeholder`. That row is gone, not loading, so it now builds
+  `QueueRow { id, ..QueueRow::default() }` and never reads as pending.
 - The two test helpers that build a landed row from `placeholder(id)`
   (`paged_rows/tests/grid_tests.rs:57`, `paged_rows/tests/paged_rows_tests.rs:102`) set
   `pending: false`, as a real fetch does.

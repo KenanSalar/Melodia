@@ -12,9 +12,8 @@ use slint::{ComponentHandle, Model, VecModel, Weak};
 use super::source_change::apply_source_change;
 use super::{NowPlayingState, UP_NEXT_N, current_track_id};
 use crate::ui::now_playing_artwork::NowPlayingArtwork;
-use crate::ui::paged_rows::PagedRow;
 use crate::ui::paged_rows::queue_rows;
-use crate::ui::util::len_as_i32;
+use crate::ui::util::{clamp_i64_to_i32, len_as_i32};
 use melodia_app::library;
 use melodia_app::state::AppState;
 use melodia_core::error::describe;
@@ -343,7 +342,7 @@ async fn fetch_slice(
 }
 
 /// Publishes the base index and queue length beside the rows, so a click can skip to a wrapped row.
-/// A row the fetch didn't return shows as a placeholder rather than closing up, which would point
+/// A row the fetch didn't return shows blank rather than closing up, which would point
 /// every click below it one track off. A slice that moved revokes a drag still in flight, whose
 /// lifted index no longer names its track.
 fn show_slice(
@@ -364,7 +363,10 @@ fn show_slice(
     let by_id: HashMap<i64, QueueRow> = fetched.into_iter().collect();
     let rows: Vec<QueueRow> = ids
         .iter()
-        .map(|&id| by_id.get(&id).cloned().unwrap_or_else(|| QueueRow::placeholder(id)))
+        .map(|&id| {
+            let gone = || QueueRow { id: clamp_i64_to_i32(id), ..QueueRow::default() };
+            by_id.get(&id).cloned().unwrap_or_else(gone)
+        })
         .collect();
     crate::ui::model_diff::apply_rows_keyed(up_next_model, rows, |r| r.id);
 

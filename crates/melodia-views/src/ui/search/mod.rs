@@ -182,6 +182,7 @@ pub fn to_slint_album_strip_row(a: &AlbumStats) -> UiEntityStripRow {
         artwork_path: opt_shared(a.artwork_path.as_deref()),
         play_count: 0,
         is_favorite: false,
+        pending: false,
     }
 }
 
@@ -195,6 +196,7 @@ pub fn to_slint_artist_strip_row(a: &ArtistStats, subtitle: &str) -> UiEntityStr
         artwork_path: opt_shared(a.image_path.as_deref()),
         play_count: 0,
         is_favorite: false,
+        pending: false,
     }
 }
 

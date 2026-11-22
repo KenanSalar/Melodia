@@ -54,7 +54,7 @@ impl Grid {
 }
 
 fn landed(id: i64) -> UiAlbumRow {
-    UiAlbumRow { name: SharedString::from(LANDED), ..UiAlbumRow::placeholder(id) }
+    UiAlbumRow { name: SharedString::from(LANDED), pending: false, ..UiAlbumRow::placeholder(id) }
 }
 
 /// The cards of `row` as Slint draws them.

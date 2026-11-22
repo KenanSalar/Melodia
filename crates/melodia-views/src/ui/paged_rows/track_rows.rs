@@ -35,9 +35,8 @@ use melodia_ui::TrackListRow as UiTrackListRow;
 pub type TrackRows = PagedRows<UiTrackListRow>;
 
 impl PagedRow for UiTrackListRow {
-    // Blank but live: a row clicked before its fetch lands still plays, queues and picks by id.
     fn placeholder(id: i64) -> Self {
-        Self { id: clamp_i64_to_i32(id), enabled: true, ..Self::default() }
+        Self { id: clamp_i64_to_i32(id), enabled: true, pending: true, ..Self::default() }
     }
 
     fn set_selected(&mut self, selected: bool) {

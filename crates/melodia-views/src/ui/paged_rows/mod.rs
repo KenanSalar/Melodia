@@ -92,7 +92,8 @@ fn nearest_first(span: Range<usize>, row: usize) -> impl Iterator<Item = usize> 
 
 /// A row a [`PagedRows`] can show.
 pub trait PagedRow: Clone + PartialEq + 'static {
-    /// The row shown for `id` until its fetch lands.
+    /// The row shown for `id` until its fetch lands. It alone sets `pending`, so it draws a
+    /// skeleton, and it stays live: a click acts by id as on a landed row.
     fn placeholder(id: i64) -> Self;
 
     /// Stamps the list's own pick on the row. A card picks through `CardSelection` instead, so a

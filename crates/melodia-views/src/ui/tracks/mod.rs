@@ -94,6 +94,7 @@ pub fn to_slint_track_list_row(r: &RsTrackListRow, pool: &mut StringPool) -> UiT
         selected: false,
         // Browse alone sets `false`, for a file on disk the library doesn't hold.
         enabled: true,
+        pending: false,
         album_id: r.album_id.map_or(0, clamp_i64_to_i32),
         artist_id: r.artist_id.map_or(0, clamp_i64_to_i32),
         genre_id: r.genre_id.map_or(0, clamp_i64_to_i32),

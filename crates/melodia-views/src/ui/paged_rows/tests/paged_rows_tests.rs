@@ -99,7 +99,11 @@ fn unseeded(ids: Arc<[i64]>) -> Keyset<UiTrackListRow> {
 }
 
 fn landed(id: i64) -> UiTrackListRow {
-    UiTrackListRow { title: SharedString::from(LANDED), ..UiTrackListRow::placeholder(id) }
+    UiTrackListRow {
+        title: SharedString::from(LANDED),
+        pending: false,
+        ..UiTrackListRow::placeholder(id)
+    }
 }
 
 /// [`track_keyset`] unfiltered in title order, 2 4 3 1, with `id`'s row rated `rating`.

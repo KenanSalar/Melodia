@@ -11,6 +11,7 @@ import { ContextClick } from "../context-menu.slint";
 import { DataCell } from "track-list-cell.slint";
 import { Checkbox } from "../checkbox.slint";
 import { SelectionPill } from "selection-pill.slint";
+import { SkeletonBar, SkeletonTile } from "../skeleton.slint";
 
 // One body row in a track table. The outer slot is what the ListView measures, `row-gap` of
 // transparent space under the visible `chrome` pill; anything deriving a row pitch reads
@@ -38,9 +39,14 @@ export component TrackListRowItem inherits Rectangle {
 
     property <bool> playing: root.row-data.id == root.playing-track-id;
     property <bool> selected: root.row-data.selected;
+    property <bool> pending: root.row-data.pending;
+    // The tag's number waits for the fetch; the position is the row's own.
+    property <bool> number-pending: root.pending && root.number-mode == "track_number";
     // Every hover binding reads this, so the row stays lit under its own menu.
     property <bool> hovered: touch.has-hover || ctx-menu.is-open;
-    property <bool> favorite-button-shown: root.hovered && root.columns.show_favorite_button;
+    // Not on a pending row, whose heart would state a flag it hasn't loaded.
+    property <bool> favorite-button-shown: root.hovered && root.columns.show_favorite_button
+        && !root.pending;
     // The body picks only once the view holds a selection: the first pick is the box's, which
     // keeps an idle list from selecting by accident.
     property <bool> selecting: root.view-selected-ids.length > 0;
@@ -64,6 +70,7 @@ export component TrackListRowItem inherits Rectangle {
     in property <int> row-count: 0;
     in property <bool> lifted: false;
     property <length> pitch: Theme.track-row-pitch(root.columns.show_artwork);
+    property <length> cover-size: 36px;
 
     callback double-clicked-row();
     callback toggle-favorite();
@@ -164,7 +171,7 @@ export component TrackListRowItem inherits Rectangle {
                 clip: true;
                 VerticalLayout {
                     alignment: center;
-                    if !root.hovered && !root.selected: Text {
+                    if !root.hovered && !root.selected && !root.number-pending: Text {
                         // An untagged track number falls back to the row position.
                         text: root.number-mode == "track_number"
                             ? (root.row-data.track_number > 0
@@ -176,6 +183,12 @@ export component TrackListRowItem inherits Rectangle {
                         color: root.ink;
                         font-size: Theme.font-size-row;
                         horizontal-alignment: left;
+                    }
+                    if !root.hovered && !root.selected && root.number-pending: SkeletonBar {
+                        ink: root.ink;
+                        seed: root.row-index;
+                        span: root.layout.number_w;
+                        font-size: Theme.font-size-row;
                     }
                     if root.hovered || root.selected: Checkbox {
                         checked: root.selected;
@@ -212,17 +225,29 @@ export component TrackListRowItem inherits Rectangle {
                     spacing: Theme.pad-sm;
                     alignment: start;
                     cross-axis-alignment: center;
-                    if root.columns.show_artwork: ArtworkImage {
+                    if root.columns.show_artwork && !root.pending: ArtworkImage {
                         artwork-path: root.row-data.artwork_path;
                         // Per instantiated row, so only visible rows reach the tier; `generation`
                         // repaints a scheduled miss.
                         cover: RowCovers.request(root.row-data.artwork_path,
                             RowCovers.generation);
-                        tile-size: 36px;
+                        tile-size: root.cover-size;
                         tile-radius: Theme.radius-sm;
                         fade: root.fade;
                     }
-                    TrackTitle {
+                    if root.columns.show_artwork && root.pending: SkeletonTile {
+                        ink: root.ink;
+                        tile-size: root.cover-size;
+                        tile-radius: Theme.radius-sm;
+                    }
+                    if root.pending: SkeletonBar {
+                        ink: root.ink;
+                        seed: root.row-index + 1;
+                        span: root.layout.title_w
+                            - (root.columns.show_artwork ? root.cover-size + Theme.pad-sm : 0px);
+                        font-size: Theme.font-size-row;
+                    }
+                    if !root.pending: TrackTitle {
                         title: root.row-data.title;
                         ink: root.ink;
                         favorite-shown: root.columns.show_favorite_mark
@@ -246,6 +271,8 @@ export component TrackListRowItem inherits Rectangle {
                     ? root.row-data.artist
                     : @tr("Unknown artist");
                 ink: root.ink;
+                pending: root.pending;
+                seed: root.row-index + 2;
             }
             if root.columns.show_album: DataCell {
                 x: root.layout.album_x;
@@ -256,6 +283,8 @@ export component TrackListRowItem inherits Rectangle {
                     ? root.row-data.album
                     : @tr("Unknown album");
                 ink: root.ink;
+                pending: root.pending;
+                seed: root.row-index + 3;
             }
             if root.columns.show_genre: DataCell {
                 x: root.layout.genre_x;
@@ -264,6 +293,8 @@ export component TrackListRowItem inherits Rectangle {
                 height: parent.height;
                 text-content: root.row-data.genre;
                 ink: root.ink;
+                pending: root.pending;
+                seed: root.row-index + 4;
             }
 
             if root.columns.show_year: Rectangle {
@@ -274,9 +305,15 @@ export component TrackListRowItem inherits Rectangle {
                 clip: true;
                 VerticalLayout {
                     alignment: center;
-                    Text {
+                    if !root.pending: Text {
                         text: root.row-data.year > 0 ? root.row-data.year : "";
                         color: root.ink;
+                        font-size: Theme.font-size-row;
+                    }
+                    if root.pending: SkeletonBar {
+                        ink: root.ink;
+                        seed: root.row-index + 5;
+                        span: root.layout.year_w;
                         font-size: Theme.font-size-row;
                     }
                 }
@@ -293,12 +330,18 @@ export component TrackListRowItem inherits Rectangle {
                     spacing: Theme.pad-xs;
                     alignment: start;
                     cross-axis-alignment: center;
-                    if !root.favorite-button-shown: Text {
+                    if !root.favorite-button-shown && !root.pending: Text {
                         // Formatted in Rust, not by a pure function re-run on every invalidation.
                         text: root.row-data.display_duration;
                         color: root.ink;
                         font-size: Theme.font-size-row;
                         horizontal-alignment: left;
+                    }
+                    if root.pending: SkeletonBar {
+                        ink: root.ink;
+                        seed: root.row-index + 6;
+                        span: root.layout.length_w;
+                        font-size: Theme.font-size-row;
                     }
                     if root.favorite-button-shown: Rectangle {
                         width: 26px;

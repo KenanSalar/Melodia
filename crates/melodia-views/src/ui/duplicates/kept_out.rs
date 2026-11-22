@@ -249,7 +249,7 @@ impl DialogRows for KeptOutList {
 
 impl PagedRow for KeptOutRow {
     fn placeholder(id: i64) -> Self {
-        Self { id: clamp_i64_to_i32(id), ..Self::default() }
+        Self { id: clamp_i64_to_i32(id), pending: true, ..Self::default() }
     }
 }
 
@@ -276,5 +276,6 @@ fn row(file: &KeptOutFile) -> KeptOutRow {
         folder,
         path: file.path.as_str().into(),
         removed: day_of(&file.excluded_at).into(),
+        pending: false,
     }
 }

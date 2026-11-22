@@ -41,6 +41,10 @@ export global Theme {
     // picked up.
     out property <float> fade-lifted: 0.4;
 
+    // A loading row's bars and tile, off the ink of the text each replaces: that ink already
+    // stands apart from every fill a row can sit on, the hover and selected pills included.
+    out property <float> fade-skeleton: 0.16;
+
     // A lit control at rest, leaving full weight for the hover. Shared because the Now-Playing
     // stars and the glyphs beside them sit in one row, where two hover answers read as a fault.
     out property <float> lit-rest: 0.9;

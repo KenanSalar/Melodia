@@ -1,4 +1,5 @@
 import { Theme } from "../../theme.slint";
+import { SkeletonBar } from "../skeleton.slint";
 
 // The artist, album and genre cells. The leading U+200E keeps the ellipsis at the right edge
 // whatever the script's direction. The host places it, `x` and `width` both: sized by itself, the
@@ -6,15 +7,23 @@ import { Theme } from "../../theme.slint";
 export component DataCell inherits Rectangle {
     in property <string> text-content;
     in property <brush> ink;
+    in property <bool> pending;
+    in property <int> seed;
 
     clip: true;
     VerticalLayout {
         alignment: center;
-        Text {
+        if !root.pending: Text {
             text: "‎" + root.text-content;
             color: root.ink;
             font-size: Theme.font-size-row;
             overflow: elide;
+        }
+        if root.pending: SkeletonBar {
+            ink: root.ink;
+            seed: root.seed;
+            span: root.width;
+            font-size: Theme.font-size-row;
         }
     }
 }
