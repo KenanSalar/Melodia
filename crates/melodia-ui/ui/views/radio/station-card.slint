@@ -79,8 +79,6 @@ export component StationCard inherits Rectangle {
         fallback-text: root.monogram;
         // For a name with no letters to take initials from.
         fallback-icon: "radio";
-        // The covers' zoom on that glyph too; a monogram sits outside the zoom.
-        cover-scale-hover: 1.04;
 
         // The body opens the station's page; the play button over the tile is what tunes in.
         clicked => { root.clicked(); }
