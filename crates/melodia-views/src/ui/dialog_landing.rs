@@ -12,7 +12,7 @@ use slint::ComponentHandle;
 use tokio::runtime::Handle;
 use tokio::task::AbortHandle;
 
-use melodia_core::error::describe;
+use crate::ui::landing::spawn_landing;
 use melodia_ui::{AppWindow, Dialog, DialogKind};
 
 /// Moved by a dialog's next load and by its close, so an answer sent before either lands nowhere.
@@ -81,19 +81,8 @@ pub(crate) trait TicketedDialog: Sized + 'static {
         work: impl Future<Output = T> + Send + 'static,
         land: impl FnOnce(&AppWindow, &Self, Option<T>) + 'static,
     ) -> Option<AbortHandle> {
-        let answer = self.runtime().spawn(work);
-        let abort = answer.abort_handle();
         let dialog = Rc::downgrade(self);
-        let spawned = slint::spawn_local(async_compat::Compat::new(async move {
-            let answer = match answer.await {
-                Ok(answer) => Some(answer),
-                Err(e) => {
-                    if !e.is_cancelled() {
-                        log::warn!("{label}: task failed: {}", describe(&e));
-                    }
-                    None
-                }
-            };
+        spawn_landing(self.runtime(), label, work, move |answer| {
             let Some(dialog) = dialog.upgrade() else {
                 return;
             };
@@ -101,10 +90,6 @@ pub(crate) trait TicketedDialog: Sized + 'static {
                 return;
             };
             land(&ui, &dialog, answer);
-        }));
-        if let Err(e) = &spawned {
-            log::warn!("{label}: not spawned: {}", describe(e));
-        }
-        spawned.is_ok().then_some(abort)
+        })
     }
 }

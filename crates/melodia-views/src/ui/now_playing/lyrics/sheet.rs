@@ -12,6 +12,7 @@ use slint::{ComponentHandle, SharedString, Weak};
 
 use super::rows::rows_for;
 use super::{LyricsUi, NowPlayingState, follow};
+use crate::ui::landing::spawn_landing;
 use melodia_app::library;
 use melodia_app::library::lyrics::LyricsKey;
 use melodia_app::state::AppState;
@@ -55,21 +56,25 @@ fn reseed(weak: &Weak<AppWindow>, state: &AppState, np_state: &Rc<NowPlayingStat
     }
 
     mark_loading(&ui, ly, track.id);
+    let lookup = {
+        let state = state.clone();
+        let track = Arc::clone(&track);
+        async move { fetch(&state, &track).await }
+    };
+    let runtime = &state.runtime;
     let weak = weak.clone();
     let state = state.clone();
     let np_state = np_state.clone();
-    let res = slint::spawn_local(Compat::new(async move {
-        let outcome = fetch(&state, &track).await;
+    spawn_landing(runtime, "ui::now_playing lyrics reseed", lookup, move |outcome| {
+        // A task that never finished still brings the panel off Loading.
+        let outcome = outcome.unwrap_or(LyricsOutcome::Absent);
         let Some(ui) = weak.upgrade() else { return };
         // The song may have moved under the lookup; the claim says so.
         if !np_state.lyrics.holds(track.id) {
             return;
         }
         apply(&ui, &np_state.lyrics, &track, &outcome, state.lyrics_online_enabled.get());
-    }));
-    if let Err(e) = res {
-        log::warn!("ui::now_playing lyrics reseed task spawn_local: {}", describe(&e));
-    }
+    });
 }
 
 /// **Reads what is playing at click time**: the menu outlives any one track, so a handle taken at

@@ -26,6 +26,7 @@ pub mod headphones;
 pub mod hero_backdrop;
 pub mod hero_chips;
 pub mod hero_folds;
+pub mod landing;
 pub mod launcher;
 pub mod list_selection;
 pub mod locale_refresh;

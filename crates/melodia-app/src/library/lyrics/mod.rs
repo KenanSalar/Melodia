@@ -37,8 +37,8 @@ use melodia_core::entities::track::TrackSummary;
 use melodia_core::error::AppError;
 use melodia_net::services::net::pacer::RequestPacer;
 
-/// What this track has, from whichever source has it, ready to draw, in at most two blocking hops:
-/// the local reads together, then the romanization.
+/// What this track has, from whichever source has it, ready to draw, in at most three blocking
+/// hops: the local reads together, a lookup's record, then the romanization.
 pub async fn for_track(state: &AppState, track: &TrackSummary) -> Result<LyricsOutcome, AppError> {
     ensure_enabled(state)?;
     romanized(state, resolve(state, track).await?).await

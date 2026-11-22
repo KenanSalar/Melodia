@@ -44,6 +44,7 @@ use parking_lot::Mutex;
 use slint::{Model, ModelNotify, ModelRc, ModelTracker};
 use tokio::runtime::Handle;
 
+use crate::ui::landing::spawn_landing;
 use crate::ui::util::{self, clamp_i64_to_i32};
 use melodia_core::error::{AppResult, describe};
 use melodia_core::utils::block_move;
@@ -605,17 +606,11 @@ pub fn spawn_fetch<R: PagedRow, T: Send + 'static>(
     land: impl FnOnce(RowRequest<R>, T) + 'static,
     label: &'static str,
 ) {
-    let answer = runtime.spawn(query);
-    let spawned = slint::spawn_local(async_compat::Compat::new(async move {
-        match answer.await {
-            Ok(Ok(answer)) => land(request, answer),
-            Ok(Err(e)) => log::warn!("{label}: fetch failed: {}", describe(&e)),
-            Err(e) => log::warn!("{label}: fetch task failed: {}", describe(&e)),
-        }
-    }));
-    if let Err(e) = spawned {
-        log::warn!("{label}: fetch not spawned: {}", describe(&e));
-    }
+    spawn_landing(runtime, label, query, move |answer| match answer {
+        Some(Ok(answer)) => land(request, answer),
+        Some(Err(e)) => log::warn!("{label}: fetch failed: {}", describe(&e)),
+        None => {}
+    });
 }
 
 impl<R: PagedRow> Drop for RowRequest<R> {
