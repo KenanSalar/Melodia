@@ -6,7 +6,7 @@ import { OverlayScrollbar } from "../overlay-scrollbar.slint";
 import { CollapsibleSectionHeader } from "../collapsible-section-header.slint";
 
 // A horizontally scrolling row of `EntityCard`s under a heading. Every card is built and every
-// cover requested, which is affordable only for a capped carousel; an uncapped set takes
+// cover requested, which is affordable only for a short set; a library-sized one takes
 // `EntityCardGrid`. Its panel is a rounded fill rather than a rounded clip, which would render
 // the cards into a texture on every scroll frame.
 export component HorizontalCardStrip inherits Rectangle {
@@ -29,8 +29,8 @@ export component HorizontalCardStrip inherits Rectangle {
     border-radius: Theme.radius-lg;
 
     VerticalLayout {
-        // No less than the radius, so the strip's square clip stays inside the curve.
-        padding: Theme.pad-md;
+        // The panel's own radius, so the strip's square clip stays inside the curve.
+        padding: root.border-radius;
         spacing: Theme.pad-sm;
 
         if root.collapsible: HorizontalLayout {

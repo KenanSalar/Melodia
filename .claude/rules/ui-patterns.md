@@ -35,7 +35,7 @@ Paths are under `crates/melodia-ui/ui/components/` unless stated.
   slider, `EdgeResizeHandle` for a resizable edge.
 - **Grids.** `EntityCard` inside `grid/card-cell.slint`'s `CardCell`, in a chunked `ListView` sized
   by `GridGeometry` and `GridColumnsSync`. `HorizontalCardStrip`, panel included, for every
-  capped carousel, `EntityCardGrid` otherwise. `CardFavoriteButton` is a card's heart,
+  short set, `EntityCardGrid` otherwise. `CardFavoriteButton` is a card's heart,
   `grid/play-count-badge.slint` its count, `GridEmptyState` the empty block for grids and lists
   alike.
 - **Lists.** `TrackList` with `TrackListScrollbars`; `TrackTitle` for any row showing a track's

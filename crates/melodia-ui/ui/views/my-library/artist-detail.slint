@@ -50,6 +50,7 @@ export component ArtistDetailBody inherits Rectangle {
                         // header.
                         padding-bottom: Theme.pad-lg;
 
+                        // Not virtualized, an artist's albums being few.
                         HorizontalCardStrip {
                             heading: @tr("Albums");
                             rows: ArtistDetail.albums;

@@ -6,7 +6,7 @@ import { CardFavoriteButton } from "card-favorite-button.slint";
 import { DragSource } from "../drag-source.slint";
 
 // The virtualized counterpart to `HorizontalCardStrip` over the same row struct, a strip's plain
-// `for` building every card of an uncapped page.
+// `for` building every card of a library-sized page.
 export component EntityCardGrid inherits Rectangle {
     in property <[EntityGridRow]> rows;
     in property <length> card-width: 180px;
