@@ -104,6 +104,10 @@ Strawberry draws a line under auto-sort and then places the rows elsewhere.
 | `melodia-app/src/library/playlists.rs` | `insert_into_playlist` beside `add_to_playlist` |
 | `melodia-store/src/database/queries/playlist.rs` | `place_items`, which both the append and the insert go through; `items_in_order` and `position_writes`, shared with `move_items` |
 | `scripts/install-linux.sh` | a closing uninstall hint that names only `uninstall-linux.sh` |
+| `ui/components/progress-ring.slint` (new) | `ProgressRing`: a share of a turn, clockwise from twelve |
+| `ui/components/now-playing/play-button.slint` | the hold's ring, through `ProgressRing` |
+| `ui/components/settings/section-button.slint` | a leading `@children` slot; `ink` read out |
+| `ui/components/dialog/notification-card.slint` | the share of its clock left; the ring on a timed card's button |
 
 UI paths are under `crates/melodia-ui/`. Every file stays well under 800 lines.
 
@@ -117,6 +121,8 @@ UI paths are under `crates/melodia-ui/`. Every file stays well under 800 lines.
   fast as Add to Playlist holds by construction.
 - **`apply_optimistic_move`'s order guard becomes `slots_are_positions`,** used by both the reorder
   and the drop.
+- **The play button's hold ring becomes `ProgressRing`**, mounted there before the Undo button
+  mounts it too.
 
 ## Phase 1: queue rows carry their tracks **[done]**
 
@@ -238,9 +244,76 @@ lines offering only `./uninstall-linux.sh`.
 **Gate:** as Phase 1, plus `translations.rs`, `msgfmt -c` and `bash -n scripts/install-linux.sh`
 passing.
 
+## Phase 3.5: the Undo button counts down **[pending]**
+
+Unrelated to the drag, shipped on this branch.
+
+**What you see today:** a removal raises a notice with Undo and ✕ at its right, and nothing says
+how long it stays. It goes after the time set in Settings ▸ Accessibility ▸ Undo, taking Undo with
+it. Its clock stands still while the pointer is over the card, while the card is dragged and while
+the window is in the background, and runs the whole time again when it resumes. A second removal
+merged into the card starts it again too.
+
+**Decisions:**
+
+1. **The ring alone, no seconds inside it.** The setting runs from 4 to 10 s
+   (`UNDO_NOTICE_MS_RANGE`), so the longest would open on two digits, more than a ring the size of
+   the button's icon holds.
+2. **The ring shows the clock as it is: full whenever the clock stands still.** A resume runs the
+   whole interval again, so a ring frozen part way would promise time the clock doesn't keep.
+3. **One `ProgressRing`, extracted from the play button, holding the drawing and no timing.** The
+   hold fills it after waiting out a click; the card's clock empties it, stopping and restarting.
+   Each host keeps its own timing.
+4. **Stepped by a `Timer`, not bound to `animation-tick()`.** The window redraws at the step rather
+   than every frame for the notice's whole life, and a leaving card's ring holds where it stood with
+   nothing to freeze it: a binding on the clock would snap it full mid-fade. The step is the
+   Equalizer overlay's 33 ms, under half a pixel of the ring's end at the shortest setting.
+5. **Any timed card's button gets it, not the undo kind.** Undo is the only one today, every other
+   card with a button being sticky, and a timed one's button goes with its card for the same reason.
+
+**Keeps working:** the play button's hold ring in the bar and the miniplayer, drawn where it was;
+every other `SectionButton`, which passes no children; the card's enter, lift, swipe and leave, its
+clock's pauses, and Ctrl+Z. `mount_fade_tests.rs` pins the card's `init` to its three faded layers,
+so the clock's start is seeded from `enter` and nothing new is animated.
+
+Then the swap:
+
+- **`progress-ring.slint` (new):** `ProgressRing`, taking `progress`, `stroke` and `stroke-width`
+  (2 px). The play button's `if progress > 0: Path` moves into it whole: the arc from twelve, the
+  cap short of a full turn, the unlocalized numbers. Its stroke centres on the circle inscribed in
+  its box, so a host sizes the box to the ring's centre line.
+- **`play-button.slint`:** mounts it in the disc at 76 % of the disc, where the radius-38 arc sat
+  in its 100-unit viewbox, so the ring draws where it did. `ring-delay` and `ring-progress` stay.
+- **`section-button.slint`:** `@children` after the leading icon and image, before the label.
+  `ink` becomes an `out property`, so a child draws in the button's ink, fade and dim included.
+- **`notification-card.slint`:**
+  - The clock's `running` expression becomes a `ticking` property, read by the clock, the step and
+    one `changed` handler.
+  - `clock-from`, the tick the clock started at, and `clock-left`, the share left, 1 at rest.
+  - A `drain` Timer at 33 ms, running while `ticking`, sets `clock-left` from `animation-tick()`
+    against `clock-from` and the clock's interval, clamped.
+  - `changed ticking` re-seeds `clock-from` and refills `clock-left` unless the card is leaving.
+  - The clock's `triggered` empties the ring before it dismisses. A bump's `restart()` re-seeds and
+    refills. `enter` seeds `clock-from` at mount, where `changed` doesn't fire.
+  - The action button takes an id and, on a timed card, a 16 px `ProgressRing` in its `ink`: with
+    the 2 px stroke, the 18 px of the button's icon slot.
+- **Docs:** `.claude/rules/ui-patterns.md`'s Inputs entry gains `ProgressRing` beside
+  `HoldTouchArea`. `README.md`'s undo line says the button counts down the time left.
+
+No Rust and no `@tr` string, so no catalog work.
+
+**What you'll see:** a ring in the Undo button, ahead of the label, starting full and shrinking back
+to twelve o'clock over the notice's time; the notice goes as it empties. Over the card, dragging
+it, or with the window in the background, the ring sits full, and a merged removal fills it again.
+A card closed by Undo, Ctrl+Z or ✕ fades with its ring where it stood. The play button's hold ring
+looks as it does today.
+
+**Gate:** as Phase 1.
+
 ## Phase 4: Tests **[pending]**
 
-The hand test passed on 2026-11-23. The tests wait for your go, naming them.
+Phase 3's hand test passed on 2026-11-23, and Phase 3.5's is next. The tests wait for your go,
+naming them.
 
 ## Verification
 
@@ -261,6 +334,14 @@ The hand test passed on 2026-11-23. The tests wait for your go, naming them.
   - a narrow window with the floating queue
   - a locale with longer labels (German)
   - a few thousand picks against Add to Playlist with the same set
+- **Phase 3.5's list:**
+  - the shortest and the longest setting
+  - the pointer resting on the card, then leaving it
+  - a drag that eases back, and a fling
+  - the window losing focus mid-count
+  - a second removal merging into the card
+  - Undo, Ctrl+Z and ✕ mid-count
+  - the play button's hold in the bar and the miniplayer
 - **Re-check the "keeps working" list after each phase.**
 
 ## Risks
@@ -270,3 +351,5 @@ The hand test passed on 2026-11-23. The tests wait for your go, naming them.
   what keeps their outcomes as they are today.
 - **`QueueButton` is the one target that ignores origin.** Phase 1 gives it its check. A future
   drop target that takes items owes the same check.
+- **An undo notice redraws the window at the ring's step while its clock runs**, where a resting
+  card drew nothing. Lengthening the step is the lever, the ring's size keeping each step small.
