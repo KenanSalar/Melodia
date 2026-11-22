@@ -117,6 +117,8 @@ pub struct AppState {
     pub lyrics_enabled: SharedFlag,
     /// Whether the lyrics panel may look a sheet up online, read once per track change.
     pub lyrics_online_enabled: SharedFlag,
+    /// Whether that lookup runs on a track change rather than only from the finder, read beside it.
+    pub lyrics_auto_lookup: SharedFlag,
     /// Whether the panel draws the romanization it holds. No worker reads it: it is mirrored
     /// because the Settings card and the Now Playing menu both write it, and two writers through
     /// disk race.
@@ -238,6 +240,7 @@ impl AppState {
             radio_scrobble: SharedFlag::new(settings.radio.radio_scrobble),
             lyrics_enabled: SharedFlag::new(settings.lyrics.lyrics_enabled),
             lyrics_online_enabled: SharedFlag::new(settings.lyrics.lyrics_online_enabled),
+            lyrics_auto_lookup: SharedFlag::new(settings.lyrics.lyrics_auto_lookup),
             lyrics_romanization_shown: SharedFlag::new(settings.lyrics.lyrics_romanization_shown),
             lyrics_pacer: Arc::new(crate::library::lyrics::pacer()),
             write_ratings_to_tags: SharedFlag::new(settings.library.write_ratings_to_tags),

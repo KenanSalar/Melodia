@@ -3,6 +3,8 @@
 //! **Every position is milliseconds in an `i32`**, as the `Player` global publishes and the rows
 //! carry: it reaches past three weeks of one track and converts into `f64` without loss.
 
+mod clock;
+mod finder;
 mod follow;
 mod measure;
 mod rows;
@@ -10,7 +12,6 @@ mod sheet;
 
 use std::cell::{Cell, RefCell};
 use std::rc::Rc;
-use std::time::Instant;
 
 use slint::{ComponentHandle, ModelRc, SharedString, VecModel};
 
@@ -21,7 +22,8 @@ use melodia_app::tasks;
 use melodia_core::entities::lyrics::LyricLine;
 use melodia_ui::{AppWindow, LyricRow, Lyrics};
 
-pub(super) use sheet::{release, wire_menu, wire_reseed};
+pub(super) use finder::wire_finder;
+pub(super) use sheet::{release, wire_reseed, wire_save_to_tag};
 
 /// Until the panel reports its own, within a second of mounting. Mid `up-next-width`'s clamp, so
 /// the first draw is close.
@@ -37,6 +39,13 @@ enum RowKind {
     },
 }
 
+/// A sheet's word stamp in the panel's milliseconds: `start` is the word's first byte in `text`.
+#[derive(Clone, Copy)]
+struct WordStamp {
+    start: usize,
+    at_ms: i32,
+}
+
 /// One row as the panel draws it. **The texts are `SharedString`**, so publishing a row on every
 /// re-measure is a refcount bump rather than a resident second copy of the sheet.
 struct Row {
@@ -44,6 +53,8 @@ struct Row {
     /// `None` on an untimed sheet, the two never mixing within one sheet.
     at_ms: Option<i32>,
     text: SharedString,
+    /// In time order, empty on a row lit whole.
+    words: Box<[WordStamp]>,
     /// How the words sound, for a script that does not spell it. `None` for a Latin line.
     romanization: Option<SharedString>,
     /// The gloss a bilingual sheet carries under the words.
@@ -64,6 +75,11 @@ impl Row {
             kind: RowKind::Words,
             at_ms,
             text: SharedString::from(line.text.as_str()),
+            words: line
+                .words
+                .iter()
+                .map(|word| WordStamp { start: word.start, at_ms: rows::millis(word.at_ms) })
+                .collect(),
             romanization: line.romanization.as_deref().map(SharedString::from),
             translation: line.translation.as_deref().map(SharedString::from),
             lines: 1,
@@ -79,6 +95,7 @@ impl Row {
             kind: RowKind::Interlude { until_ms },
             at_ms: Some(from_ms),
             text: SharedString::new(),
+            words: Box::default(),
             romanization: None,
             translation: None,
             lines: 1,
@@ -148,13 +165,13 @@ pub(crate) struct LyricsUi {
     /// Which way the romanization toggle stood when the model was last written, so a re-measure
     /// can tell a flip from a width that moved and publish only for the former.
     published_romanization: Cell<bool>,
-    /// The last position the bridge published, and when it was seen. Together they interpolate a
-    /// roughly one-second tick into something a highlight can follow.
-    anchor_ms: Cell<i32>,
-    anchor_at: Cell<Instant>,
-    /// A clicked row, held until the clock catches up with it.
+    clock: clock::SongClock,
+    /// A clicked row, kept lit over a later row under the same stamp.
     pinned: Cell<Option<usize>>,
     pinned_at_ms: Cell<i32>,
+    /// The row and cut `Lyrics.lit-words` was last written for, so a tick between two words
+    /// builds no string.
+    published_cut: Cell<Option<(usize, usize)>>,
     /// The track the resident sheet belongs to, `None` once the rows are handed back. **This makes
     /// the reseed idempotent**, so the three edges reaching it cost one lookup between them. An id
     /// rather than a path, every track of an image a cue sheet splits sharing its path.
@@ -188,10 +205,10 @@ pub(super) fn install(ui: &AppWindow, state: &AppState) -> Rc<LyricsUi> {
         metrics: Metrics::from_global(&global),
         width: Cell::new(ASSUMED_WIDTH),
         published_romanization: Cell::new(state.lyrics_romanization_shown.get()),
-        anchor_ms: Cell::new(0),
-        anchor_at: Cell::new(Instant::now()),
+        clock: clock::SongClock::new(),
         pinned: Cell::new(None),
         pinned_at_ms: Cell::new(0),
+        published_cut: Cell::new(None),
         holding: RefCell::new(None),
         reseed: RefCell::new(None),
         model,
@@ -203,7 +220,7 @@ pub(super) fn install(ui: &AppWindow, state: &AppState) -> Rc<LyricsUi> {
     ly
 }
 
-/// The header's switch and the two menu rows the Settings card carries as well.
+/// The header's switch and the three menu rows the Settings card carries as well.
 fn wire_toggles(ui: &AppWindow, state: &AppState, ly: &Rc<LyricsUi>) {
     let global = ui.global::<Lyrics>();
 
@@ -243,21 +260,38 @@ fn wire_toggles(ui: &AppWindow, state: &AppState, ly: &Rc<LyricsUi>) {
     }
 
     global.set_online_enabled(state.lyrics_online_enabled.get());
-    {
-        let persist = lyrics_settings::online_handler(ui, state);
-        let weak = ui.as_weak();
-        let ly_online = ly.clone();
-        global.on_set_online_enabled(move |on| {
-            persist(on);
-            let Some(ui) = weak.upgrade() else { return };
-            // On, the claim goes too: `reseed` dedupes on the sheet it holds, here the empty answer
-            // the switch just invalidated. Off re-runs only an empty panel, so it stops naming a
-            // lookup that can no longer run while a sheet on screen is kept.
-            if on || ly_online.rows.borrow().is_empty() {
-                release(&ui, &ly_online);
-                ly_online.kick();
-            }
-        });
+    global.on_set_online_enabled(with_panel_reask(
+        ui,
+        ly,
+        lyrics_settings::online_handler(ui, state),
+    ));
+
+    global.set_auto_lookup(state.lyrics_auto_lookup.get());
+    global.on_set_auto_lookup(with_panel_reask(
+        ui,
+        ly,
+        lyrics_settings::auto_lookup_handler(ui, state),
+    ));
+}
+
+/// A switch deciding whether the directory is asked, plus what it owes the panel. On, the claim
+/// goes too: `reseed` dedupes on the sheet it holds, here the empty answer the switch just
+/// invalidated. Off re-runs only an empty panel, so it stops naming a lookup that can no longer
+/// run while a sheet on screen is kept.
+fn with_panel_reask(
+    ui: &AppWindow,
+    ly: &Rc<LyricsUi>,
+    persist: impl Fn(bool) + 'static,
+) -> impl Fn(bool) + 'static {
+    let weak = ui.as_weak();
+    let ly = ly.clone();
+    move |on| {
+        persist(on);
+        let Some(ui) = weak.upgrade() else { return };
+        if on || ly.rows.borrow().is_empty() {
+            release(&ui, &ly);
+            ly.kick();
+        }
     }
 }
 

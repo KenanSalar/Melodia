@@ -303,6 +303,10 @@ msgstr "Terapkan"
 msgid "Review"
 msgstr "Tinjau"
 
+#: ui/components/dialog/dialog.slint
+msgid "Turn On"
+msgstr "Aktifkan"
+
 #: ui/components/dialog/duplicate-row.slint
 msgid "Identical files"
 msgstr "Berkas identik"
@@ -456,11 +460,6 @@ msgstr "Tidak ada playlist untuk diekspor"
 msgid "Several playlists are saved as one .zip file, which you can import directly without extracting it."
 msgstr "Beberapa playlist disimpan sebagai satu berkas .zip yang dapat Anda impor langsung tanpa mengekstraknya."
 
-#. Translators: {} names who measured the headphones, as oratory1990.
-#: ui/components/dialog/headphone-picker-body.slint
-msgid "Measured by {}"
-msgstr "Diukur oleh {}"
-
 #: ui/components/dialog/headphone-picker-body.slint
 msgid "Find a model…"
 msgstr "Cari model…"
@@ -499,6 +498,11 @@ msgstr "Profil AutoEq untuk model ini berisi baris yang tidak dapat dibaca Melod
 msgid "Couldn't apply the correction. See the log for details."
 msgstr "Koreksi tidak dapat diterapkan. Lihat log untuk detailnya."
 
+#. Translators: {} names who measured the headphones, as oratory1990.
+#: ui/components/dialog/headphone-picker-body.slint
+msgid "Measured by {}"
+msgstr "Diukur oleh {}"
+
 #. Translators: {} is the day the copy left the library, as 2026-11-02.
 #: ui/components/dialog/kept-out-body.slint
 msgid "Removed {}"
@@ -532,6 +536,86 @@ msgstr "Tidak ada yang dikecualikan"
 #: ui/components/dialog/kept-out-body.slint
 msgid "Every removed copy is back in the library."
 msgstr "Semua salinan yang dihapus sudah kembali ke pustaka."
+
+#: ui/components/dialog/lyrics-finder-body.slint
+msgid "Title and artist…"
+msgstr "Judul dan artis…"
+
+#: ui/components/dialog/lyrics-finder-body.slint
+msgid "Instrumental"
+msgstr "Instrumental"
+
+#: ui/components/dialog/lyrics-finder-body.slint
+msgid "Plain"
+msgstr "Polos"
+
+#: ui/components/dialog/lyrics-finder-body.slint
+msgid "Synced"
+msgstr "Tersinkron"
+
+#: ui/components/dialog/lyrics-finder-body.slint
+msgid "Word-timed"
+msgstr "Per kata"
+
+#: ui/components/dialog/lyrics-finder-body.slint
+msgid "\"Look up lyrics online\" is off"
+msgstr "\"Cari lirik secara online\" nonaktif"
+
+#: ui/components/dialog/lyrics-finder-body.slint ui/views/search-view.slint
+msgid "Searching…"
+msgstr "Mencari…"
+
+#: ui/components/dialog/lyrics-finder-body.slint
+msgid "lrclib.net asked Melodia to wait"
+msgstr "lrclib.net meminta Melodia menunggu"
+
+#: ui/components/dialog/lyrics-finder-body.slint
+msgid "Couldn't search lrclib.net"
+msgstr "Tidak dapat mencari di lrclib.net"
+
+#: ui/components/dialog/lyrics-finder-body.slint
+msgid "No lyrics match"
+msgstr "Tidak ada lirik yang cocok"
+
+#: ui/components/dialog/lyrics-finder-body.slint
+msgid "Turning it on lets Melodia ask lrclib.net for this track, and for any track without lyrics of its own."
+msgstr "Jika diaktifkan, Melodia meminta lirik lagu ini dari lrclib.net, juga untuk lagu apa pun yang tidak menyertakan liriknya sendiri."
+
+#: ui/components/dialog/lyrics-finder-body.slint
+msgid "Press Enter to search again in a minute."
+msgstr "Tekan Enter dalam satu menit untuk mencari lagi."
+
+#: ui/components/dialog/lyrics-finder-body.slint
+msgid "Check your connection, then press Enter to search again."
+msgstr "Periksa koneksi Anda, lalu tekan Enter untuk mencari lagi."
+
+#: ui/components/dialog/lyrics-finder-body.slint
+msgid "Try fewer words, or the title alone."
+msgstr "Coba dengan lebih sedikit kata, atau judulnya saja."
+
+#: ui/components/dialog/lyrics-finder-body.slint
+msgid "Couldn't keep the pick. See the log for details."
+msgstr "Pilihan tidak dapat disimpan. Lihat log untuk detailnya."
+
+#: ui/components/dialog/lyrics-finder-body.slint
+msgid "Pick a match to read its lyrics."
+msgstr "Pilih hasil untuk membaca liriknya."
+
+#: ui/components/dialog/lyrics-finder-body.slint
+msgid "lrclib.net files this recording as instrumental."
+msgstr "lrclib.net mencatat rekaman ini sebagai instrumental."
+
+#: ui/components/dialog/lyrics-finder-body.slint
+msgid "The .lrc file beside this track is shown ahead of this pick."
+msgstr "Berkas .lrc di samping lagu ini ditampilkan lebih dulu daripada pilihan ini."
+
+#: ui/components/dialog/lyrics-finder-body.slint
+msgid "The timed lyrics in this track's tags are shown ahead of this pick."
+msgstr "Lirik bertanda waktu di tag lagu ini ditampilkan lebih dulu daripada pilihan ini."
+
+#: ui/components/dialog/lyrics-finder-body.slint
+msgid "This track's tags hold lyrics, which are shown ahead of an untimed pick."
+msgstr "Tag lagu ini berisi lirik, yang ditampilkan lebih dulu daripada pilihan tanpa tanda waktu."
 
 #: ui/components/dialog/playlist-mosaic-picker.slint
 msgid "No artwork"
@@ -1359,8 +1443,13 @@ msgid "Look up lyrics online"
 msgstr "Cari lirik secara online"
 
 #: ui/components/now-playing/lyrics-menu.slint
-msgid "Look up again"
-msgstr "Cari lagi"
+#: ui/views/settings/lyrics-section.slint
+msgid "Look up automatically"
+msgstr "Cari secara otomatis"
+
+#: ui/components/now-playing/lyrics-menu.slint
+msgid "Find lyrics…"
+msgstr "Temukan lirik…"
 
 #: ui/components/now-playing/lyrics-menu.slint
 msgid "Save to file"
@@ -1401,8 +1490,8 @@ msgstr "Aktifkan di menu Lirik"
 
 #. Translators: "Lyrics menu" is the menu whose tooltip reads "Lyrics"
 #: ui/components/now-playing/lyrics-panel.slint
-msgid "Try again from the Lyrics menu"
-msgstr "Coba lagi dari menu Lirik"
+msgid "Find them in the Lyrics menu"
+msgstr "Temukan di menu Lirik"
 
 #: ui/components/now-playing/overflow-menu.slint
 #: ui/components/onboarding/onboarding-overlay.slint
@@ -1539,8 +1628,8 @@ msgstr "Tampilkan lagu yang sedang Anda putar di profil Discord Anda"
 
 #: ui/components/onboarding/features-panel.slint
 #: ui/views/settings/lyrics-section.slint
-msgid "When a track carries no words of its own, ask lrclib.net for them"
-msgstr "Jika lagu tidak menyertakan liriknya sendiri, minta dari lrclib.net"
+msgid "Let Melodia ask lrclib.net for lyrics"
+msgstr "Izinkan Melodia meminta lirik dari lrclib.net"
 
 #: ui/components/onboarding/features-panel.slint
 #: ui/views/settings/scrobbling-section.slint
@@ -2167,6 +2256,15 @@ msgstr "Pilih playlist yang akan diekspor."
 #: ui/views/radio/tab-pills.slint
 msgid "Export"
 msgstr "Ekspor"
+
+#: ui/globals/dialog.slint
+msgid "Find Lyrics"
+msgstr "Temukan Lirik"
+
+#. Translators: {} is the playing track's length, as 3:45.
+#: ui/globals/dialog.slint
+msgid "lrclib.net's matches for this track, which runs {}."
+msgstr "Hasil lrclib.net untuk lagu ini, yang berdurasi {}."
 
 #: ui/globals/duplicates.slint
 msgid "{n} copy removed from the library"
@@ -3051,10 +3149,6 @@ msgid "Play something and it will show up here."
 msgstr "Putar sesuatu dan akan muncul di sini."
 
 #: ui/views/search-view.slint
-msgid "Searching…"
-msgstr "Mencari…"
-
-#: ui/views/search-view.slint
 msgid "Search your library…"
 msgstr "Cari di pustaka Anda…"
 
@@ -3340,6 +3434,7 @@ msgid_plural "{n} removed copies. Their files are still on disk, and scans leave
 msgstr[0] "{n} salinan dihapus. Berkasnya masih ada di disk, dan pemindaian melewatinya."
 
 #: ui/views/settings/duplicates-section.slint
+#: ui/views/settings/lyrics-section.slint
 msgid "Find…"
 msgstr "Cari…"
 
@@ -3423,8 +3518,28 @@ msgid "Show the playing track's words in Now Playing instead of Up Next"
 msgstr "Tampilkan lirik lagu yang sedang diputar di Sedang Diputar alih-alih Berikutnya"
 
 #: ui/views/settings/lyrics-section.slint
+msgid "When a track carries no words of its own, ask lrclib.net for them"
+msgstr "Jika lagu tidak menyertakan liriknya sendiri, minta dari lrclib.net"
+
+#: ui/views/settings/lyrics-section.slint
 msgid "Print how a line sounds in Latin letters under the words, for a script that does not use them"
 msgstr "Tampilkan bunyi tiap baris dalam huruf Latin di bawah liriknya, untuk aksara yang tidak memakai huruf Latin"
+
+#: ui/views/settings/lyrics-section.slint
+msgid "Find lyrics"
+msgstr "Temukan lirik"
+
+#: ui/views/settings/lyrics-section.slint
+msgid "Pick the playing track's lyrics from lrclib.net's matches"
+msgstr "Pilih lirik lagu yang sedang diputar dari hasil lrclib.net"
+
+#: ui/views/settings/lyrics-section.slint
+msgid "Turn on \"Look up lyrics online\" above first"
+msgstr "Aktifkan \"Cari lirik secara online\" di atas terlebih dahulu"
+
+#: ui/views/settings/lyrics-section.slint
+msgid "Turn on \"Show lyrics\" above first"
+msgstr "Aktifkan \"Tampilkan lirik\" di atas terlebih dahulu"
 
 #: ui/views/settings/mini-player-section.slint
 msgid "Miniplayer"

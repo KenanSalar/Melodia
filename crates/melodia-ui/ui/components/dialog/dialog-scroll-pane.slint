@@ -12,10 +12,14 @@ export component DialogScrollPane inherits Rectangle {
     // `max(content, flickable.height)`, so a host sizing itself off it closes a loop.
     out property <length> content-height: column.preferred-height;
 
-    // A write rather than a binding, so the `Flickable` still pulls the view back in range when
-    // the content shrinks, its correction skipping a bound offset.
+    // Writes rather than bindings, so the `Flickable` still pulls the view back in range when the
+    // content shrinks, its correction skipping a bound offset.
     public function scroll-to-end() {
         sv.content-y = min(0px, sv.visible-height - sv.content-height);
+    }
+
+    public function scroll-to-start() {
+        sv.content-y = 0px;
     }
 
     sv := ScrollView {

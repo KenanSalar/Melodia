@@ -1,0 +1,194 @@
+import { ListView } from "std-widgets.slint";
+import { Theme } from "../../theme.slint";
+import { PickRow } from "../../models.slint";
+import { GridEmptyState } from "../grid/grid-empty-state.slint";
+import { MetaChip } from "../meta-chip.slint";
+import { OverlayScrollbar } from "../overlay-scrollbar.slint";
+import { SearchBar } from "../search-bar.slint";
+import { SelectIndicator } from "selectable-picker.slint";
+
+// One entry, a card of its own in the well.
+component PickRowItem inherits Rectangle {
+    in property <PickRow> row-data;
+    in property <string> subtitle;
+    in property <string> badge;
+    in property <bool> picked;
+    in property <bool> list-start;
+    in property <bool> list-end;
+    // The cards' margins inside the list, the right one holding the list's scrollbar.
+    in property <length> inset-left;
+    in property <length> inset-right;
+
+    callback clicked();
+
+    property <length> card-h: 48px;
+    property <length> card-y: root.list-start ? Theme.pad-sm : 2px;
+
+    height: root.card-y + root.card-h + (root.list-end ? Theme.pad-sm : 0px);
+
+    Rectangle {
+        x: root.inset-left;
+        y: root.card-y;
+        width: root.width - root.inset-left - root.inset-right;
+        height: root.card-h;
+        border-radius: Theme.radius-md;
+        background: touch.has-hover || root.picked ? Theme.surface1 : Theme.surface0;
+        animate background { duration: Theme.dur-fast; easing: ease-in-out; enabled: !Theme.recoloring; }
+
+        HorizontalLayout {
+            padding-left: Theme.pad-md;
+            padding-right: Theme.pad-md;
+            spacing: Theme.pad-md;
+
+            VerticalLayout {
+                horizontal-stretch: 1;
+                alignment: center;
+                spacing: 2px;
+
+                Text {
+                    text: root.row-data.title;
+                    color: root.picked ? Theme.accent : Theme.text;
+                    font-size: Theme.font-size-row;
+                    overflow: elide;
+                }
+                Text {
+                    text: root.subtitle;
+                    color: Theme.subtext0;
+                    font-size: Theme.font-size-sm;
+                    overflow: elide;
+                }
+            }
+            if root.row-data.trailing != "": Text {
+                text: root.row-data.trailing;
+                color: Theme.subtext0;
+                font-size: Theme.font-size-sm;
+                vertical-alignment: center;
+            }
+            if root.badge != "": VerticalLayout {
+                alignment: center;
+                MetaChip { text: root.badge; }
+            }
+            VerticalLayout {
+                alignment: center;
+                SelectIndicator { checked: root.picked; }
+            }
+        }
+    }
+
+    touch := TouchArea {
+        x: root.inset-left;
+        y: root.card-y;
+        width: root.width - root.inset-left - root.inset-right;
+        height: root.card-h;
+        mouse-cursor: pointer;
+        clicked => { root.clicked(); }
+    }
+}
+
+// One pick from a list behind a search box, or a state saying why there is none. Each host binds
+// its own global and passes its own strings, so every `@tr` stays with the feature it names. The
+// list is the card's scroller: a host's dialog kind is one of `body-scrolls`.
+export component PickList inherits VerticalLayout {
+    in property <[PickRow]> rows;
+    in property <bool> listing;
+    in property <string> placeholder;
+    // The block shown while not listing, or listing nothing.
+    in property <string> state-icon;
+    in property <string> state-title;
+    in property <string> state-body;
+    // Empty while nothing failed.
+    in property <string> failure;
+    // The labels a row's `badge` indexes, in Rust's order: an inline `[@tr(…)]`.
+    in property <[string]> badges;
+    in-out property <string> filter;
+    in-out property <int> picked: -1;
+    // Bumped by a row's click, the box having no click-outside of its own.
+    in-out property <int> blur-tick;
+
+    callback filter-changed(string);
+    callback filter-accepted();
+    callback row-picked(int /*index*/);
+    // A row's second line, for a host whose wording wraps the raw `subtitle`.
+    pure callback subtitle-for(PickRow) -> string;
+
+    spacing: Theme.pad-md;
+
+    property <length> bar-inset: Theme.pad-xs;
+    property <length> bar-gutter: Theme.scrollbar-slot + 2 * root.bar-inset;
+
+    if root.listing: SearchBar {
+        on-card: true;
+        inset: true;
+        placeholder: root.placeholder;
+        text <=> root.filter;
+        blur-trigger: root.blur-tick;
+        edited(needle) => { root.filter-changed(needle); }
+        cleared => { root.filter-changed(""); }
+        accepted => { root.filter-accepted(); }
+    }
+
+    if !root.listing || root.rows.length == 0: GridEmptyState {
+        min-height: 200px;
+        preferred-height: 240px;
+        vertical-stretch: 1;
+        border-radius: Theme.radius-lg;
+        icon: root.state-icon;
+        title: root.state-title;
+        body: root.state-body;
+    }
+
+    // No `clip`, for the duplicates finder's well's reason.
+    if root.listing && root.rows.length > 0: Rectangle {
+        min-height: 160px;
+        preferred-height: 460px;
+        vertical-stretch: 1;
+        background: Theme.base;
+        border-radius: Theme.radius-lg;
+
+        list := ListView {
+            x: 0px;
+            y: 0px;
+            width: parent.width;
+            height: parent.height;
+            vertical-scrollbar-policy: always-off;
+            horizontal-scrollbar-policy: always-off;
+            // A click picks the row, so a drag mustn't pan the list from under it.
+            mouse-drag-pan-enabled: false;
+
+            for row[idx] in root.rows: PickRowItem {
+                row-data: row;
+                subtitle: root.subtitle-for(row);
+                badge: row.badge >= 0 ? root.badges[row.badge] : "";
+                picked: root.picked == row.index;
+                list-start: idx == 0;
+                list-end: idx == root.rows.length - 1;
+                inset-left: Theme.pad-sm;
+                inset-right: root.bar-gutter;
+                clicked => {
+                    root.picked = row.index;
+                    root.blur-tick += 1;
+                    root.row-picked(row.index);
+                }
+            }
+        }
+
+        OverlayScrollbar {
+            x: parent.width - self.width - root.bar-inset;
+            y: root.bar-inset;
+            width: Theme.scrollbar-slot;
+            height: parent.height - 2 * root.bar-inset;
+            visible-size: list.visible-height;
+            content-size: list.content-height;
+            offset: -list.content-y;
+            track-color: Theme.scrollbar-track-on-card;
+            scroll-to(o) => { list.content-y = -o; }
+        }
+    }
+
+    if root.failure != "": Text {
+        text: root.failure;
+        color: Theme.danger;
+        font-size: Theme.font-size-sm;
+        wrap: word-wrap;
+    }
+}

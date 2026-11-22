@@ -26,6 +26,8 @@ fn row(album: &str, off_by: f64) -> ApiLyrics {
         synced_lyrics: Some("[00:01.00]words".to_owned()),
         plain_lyrics: None,
         instrumental: false,
+        has_word_sync: false,
+        lyricsfile: None,
         duration: TRACK_SECONDS + off_by,
         track_name: TRACK.to_owned(),
         artist_name: ARTIST.to_owned(),
@@ -36,6 +38,49 @@ fn row(album: &str, off_by: f64) -> ApiLyrics {
 /// The album of whichever row was picked, which is what the cases below tell rows apart by.
 fn picked(rows: Vec<ApiLyrics>, album: &str) -> Option<String> {
     pick_timed(rows, &ours(), album, TRACK_MS).map(|row| row.album_name)
+}
+
+/// A Lyricsfile timing one word, and the enhanced LRC it converts to.
+const LYRICSFILE: &str = "lines:
+  - text: words
+    start_ms: 1000
+    end_ms: 2000
+    words:
+      - text: words
+        start_ms: 1000
+";
+const LYRICSFILE_LRC: &str = "[00:01.000]<00:01.000>words<00:02.000>\n";
+
+/// [`row`] with its words timed in a Lyricsfile.
+fn word_timed(album: &str, off_by: f64) -> ApiLyrics {
+    ApiLyrics { has_word_sync: true, lyricsfile: Some(LYRICSFILE.to_owned()), ..row(album, off_by) }
+}
+
+/// [`row`] with a translation under its line.
+fn glossed(album: &str, off_by: f64) -> ApiLyrics {
+    ApiLyrics { synced_lyrics: Some("[00:01.00]words^gloss".to_owned()), ..row(album, off_by) }
+}
+
+/// [`row`] with its words untimed.
+fn plain(album: &str, off_by: f64) -> ApiLyrics {
+    ApiLyrics { synced_lyrics: None, plain_lyrics: Some("words".to_owned()), ..row(album, off_by) }
+}
+
+/// [`row`] with no words at all, calling itself instrumental or not.
+fn wordless(album: &str, off_by: f64, instrumental: bool) -> ApiLyrics {
+    ApiLyrics { synced_lyrics: None, instrumental, ..row(album, off_by) }
+}
+
+/// The albums of the rows a person is offered, in the order offered.
+fn offered(rows: Vec<ApiLyrics>) -> Vec<String> {
+    rank_candidates(rows, &ours(), TRACK_MS).into_iter().map(|row| row.album_name).collect()
+}
+
+fn distinct_albums(rows: Vec<ApiLyrics>) -> Vec<String> {
+    distinct(rows.into_iter().map(ApiLyrics::into_candidate))
+        .into_iter()
+        .map(|candidate| candidate.album)
+        .collect()
 }
 
 #[test]
@@ -98,6 +143,119 @@ fn with_no_album_in_hand_the_index_order_stands() {
 }
 
 #[test]
+fn two_rows_the_same_second_out_are_settled_by_word_times_before_a_gloss() {
+    let rows = vec![glossed("Glossed", 0.5), word_timed("Words", 0.5)];
+    assert_eq!(picked(rows, ""), Some("Words".to_owned()));
+}
+
+#[test]
+fn a_word_timed_row_a_whole_second_further_out_still_loses() {
+    let rows = vec![word_timed("Words", 1.5), row("Near", 0.5)];
+    assert_eq!(picked(rows, ""), Some("Near".to_owned()));
+}
+
+#[test]
+fn a_word_timed_signature_row_settles_the_lookup() {
+    // A sheet outside ASCII is the one the index is otherwise asked about, for a gloss.
+    let unglossed = |has_word_sync| ApiLyrics {
+        synced_lyrics: Some("[00:01.00]言葉".to_owned()),
+        has_word_sync,
+        ..row(ALBUM, 0.0)
+    };
+
+    assert!(settles_it(&unglossed(true)), "its word times");
+    assert!(!settles_it(&unglossed(false)), "and the same sheet without them does not");
+}
+
+#[test]
+fn an_index_row_bringing_word_times_replaces_a_timed_signature_row() {
+    assert!(worth_taking(Some(&row(ALBUM, 0.0)), &word_timed(ALBUM, 0.5)));
+}
+
+#[test]
+fn an_index_row_bringing_a_gloss_replaces_a_timed_signature_row() {
+    assert!(worth_taking(Some(&row(ALBUM, 0.0)), &glossed(ALBUM, 0.5)));
+}
+
+#[test]
+fn an_index_row_timed_no_better_leaves_a_timed_signature_row_standing() {
+    // The signature matched the length exactly; the index's row is only inside the window.
+    assert!(!worth_taking(Some(&row(ALBUM, 0.0)), &row(ALBUM, 0.5)));
+}
+
+#[test]
+fn a_word_timed_row_answers_with_its_lyricsfile_as_enhanced_lrc() {
+    assert_eq!(word_timed(ALBUM, 0.0).into_answer().synced.as_deref(), Some(LYRICSFILE_LRC));
+}
+
+#[test]
+fn a_lyricsfile_that_does_not_read_leaves_the_synced_lyrics_to_answer() {
+    let unreadable = ApiLyrics {
+        lyricsfile: Some("lines: [{text: a, start_ms: soon}]".to_owned()),
+        ..word_timed(ALBUM, 0.0)
+    };
+
+    assert_eq!(unreadable.into_answer().synced.as_deref(), Some("[00:01.00]words"));
+}
+
+#[test]
+fn this_recording_s_rows_are_offered_above_another_s_however_near_its_length() {
+    // Past the lookup's window too: a person reading the list judges a radio edit themselves.
+    let stranger = ApiLyrics { artist_name: "Some Other Band".to_owned(), ..row("Stranger", 0.0) };
+
+    assert_eq!(offered(vec![stranger, row("Ours", 3.0)]), ["Ours", "Stranger"]);
+}
+
+#[test]
+fn a_row_a_whole_second_nearer_is_offered_first_whatever_it_carries() {
+    assert_eq!(offered(vec![word_timed("Words", 1.2), plain("Plain", 0.2)]), ["Plain", "Words"]);
+}
+
+#[test]
+fn within_one_second_rows_are_offered_words_then_lines_then_plain_then_instrumental() {
+    let rows = vec![
+        wordless("Instrumental", 0.1, true),
+        plain("Plain", 0.2),
+        row("Lines", 0.3),
+        word_timed("Words", 0.4),
+    ];
+
+    assert_eq!(offered(rows), ["Words", "Lines", "Plain", "Instrumental"]);
+}
+
+#[test]
+fn rows_ranked_alike_are_offered_in_the_index_s_order() {
+    // No fraction of a second breaks the tie, unlike the lookup's pick.
+    assert_eq!(offered(vec![row("First", 0.2), row("Second", 0.1)]), ["First", "Second"]);
+}
+
+#[test]
+fn a_row_with_nothing_to_read_is_offered_only_when_it_calls_itself_instrumental() {
+    let rows = vec![wordless("Empty", 0.0, false), wordless("Instrumental", 0.0, true)];
+
+    assert_eq!(offered(rows), ["Instrumental"]);
+}
+
+#[test]
+fn one_sheet_filed_under_two_releases_is_offered_once_at_its_better_place() {
+    // Each copy's Lyricsfile names the release it was filed under, so the raw documents differ.
+    let filed_under = |album: &str| ApiLyrics {
+        lyricsfile: Some(format!("album: {album}\n{LYRICSFILE}")),
+        ..word_timed(album, 0.0)
+    };
+
+    assert_eq!(distinct_albums(vec![filed_under("First"), filed_under("Second")]), ["First"]);
+}
+
+#[test]
+fn two_different_sheets_are_both_offered() {
+    let other =
+        ApiLyrics { synced_lyrics: Some("[00:01.00]other words".to_owned()), ..row("Other", 0.0) };
+
+    assert_eq!(distinct_albums(vec![row("First", 0.0), other]), ["First", "Other"]);
+}
+
+#[test]
 fn another_artists_row_is_dropped_at_an_exact_duration() {
     // The duration filter is cheap and runs first, which is exactly why it cannot be the only one:
     // two songs of the same name run the same length often enough.
@@ -120,11 +278,14 @@ fn a_row_arrives_with_every_field_missing() -> Result<(), serde_json::Error> {
 #[test]
 fn the_wire_names_are_the_camel_cased_ones() -> Result<(), serde_json::Error> {
     let json = r#"{"syncedLyrics":"[00:01.00]a","plainLyrics":"a","instrumental":false,
-        "duration":180.5,"trackName":"Song","artistName":"Band","albumName":"Record"}"#;
+        "duration":180.5,"trackName":"Song","artistName":"Band","albumName":"Record",
+        "hasWordSync":true,"lyricsfile":"lines: []"}"#;
     let row: ApiLyrics = serde_json::from_str(json)?;
     assert!(row.is_timed());
     assert_eq!(row.track_name, TRACK);
     assert!(row.recording().matches(&ours()));
+    assert!(row.has_word_sync, "misnamed, no record lights word by word");
+    assert_eq!(row.lyricsfile.as_deref(), Some("lines: []"));
     Ok(())
 }
 

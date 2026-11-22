@@ -1,4 +1,4 @@
-import { CorrectionPickRow, SkippedLineRow } from "../models.slint";
+import { PickRow, SkippedLineRow } from "../models.slint";
 
 // What the picker shows behind its search box: `unreachable` is no cached list and no answer, and
 // `unreadable` a list, cached or fetched, that holds no entry Melodia can read.
@@ -10,13 +10,12 @@ export enum ApplyFailure { none, unreachable, refused, failed }
 // The Find headphones dialog, owned by `ui::correction::picker`. Rust holds the whole list while
 // the dialog is open and hands over only what the filter leaves, capped.
 export global HeadphonePicker {
-    in property <[CorrectionPickRow]> rows;
+    in property <[PickRow]> rows;
     // Raised by the opener, so the dialog opens on Loading rather than on an empty list.
     in-out property <PickerPhase> phase;
     in-out property <string> filter;
-    // Bumped by a row's click, the box having no click-outside of its own.
     in-out property <int> blur-tick;
-    // A `CorrectionPickRow.index`, -1 for none.
+    // A `PickRow.index`, -1 for none.
     in-out property <int> picked: -1;
     in property <bool> applying;
     in property <ApplyFailure> failure;

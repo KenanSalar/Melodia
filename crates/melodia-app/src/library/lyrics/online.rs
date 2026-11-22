@@ -43,18 +43,11 @@ pub(super) async fn look_up(
         }
     };
 
-    let text = answer.as_ref().and_then(|answer| answer.text());
-    let instrumental = answer.as_ref().is_some_and(|answer| answer.instrumental);
-
     // The nothing is recorded too, or the next replay pays the request again.
-    let fetched = match (text, instrumental) {
-        (Some(text), _) => Fetched::Sheet(text),
-        (None, true) => Fetched::Instrumental,
-        (None, false) => Fetched::Nothing,
-    };
+    let fetched = answer.as_ref().map_or(Fetched::Nothing, Fetched::of);
     if let Err(e) = store::write(&state.paths.lyrics_dir, &LyricsKey::from(track), fetched) {
         // Costs a request next time, never the sheet in hand.
-        log::debug!("lyrics: not stored: {}", melodia_core::error::describe(&e));
+        log::debug!("lyrics: not stored: {}", describe(&e));
     }
 
     // Off what was stored, so the panel shows what the next replay will read back.
@@ -69,12 +62,12 @@ pub(super) async fn look_up(
 /// The credit behind the printed artist line, taken only where it renders back to `printed`:
 /// anything else is stale, `tasks::tag_backfill` not having reached that row's files yet. The
 /// fallback costs the lookup precision rather than its answer.
-async fn credit_for(db: &DbPool, track_id: i64, printed: &str) -> ArtistCredit {
+pub(super) async fn credit_for(db: &DbPool, track_id: i64, printed: &str) -> ArtistCredit {
     match queries::track::get_track_credit(db, track_id).await {
         Ok(credit) if credit.line() == Some(printed) => credit,
         Ok(_) => ArtistCredit::from_name(printed),
         Err(e) => {
-            log::debug!("lyrics: credit unread: {}", melodia_core::error::describe(&e));
+            log::debug!("lyrics: credit unread: {}", describe(&e));
             ArtistCredit::from_name(printed)
         }
     }

@@ -73,6 +73,36 @@ fn a_miss_is_remembered_so_the_same_track_costs_one_request() -> Result<(), AppE
     Ok(())
 }
 
+/// What the store reads back for a directory's answer, as a lookup or a pick writes it.
+fn kept_as(synced: Option<&str>, instrumental: bool) -> Result<Option<LyricsOutcome>, AppError> {
+    let tmp = tempfile::TempDir::new()?;
+    let answer = LyricsAnswer { synced: synced.map(str::to_owned), plain: None, instrumental };
+
+    write(tmp.path(), &track(), Fetched::of(&answer))?;
+    Ok(read(tmp.path(), &track()))
+}
+
+#[test]
+fn an_answer_with_words_is_kept_as_its_sheet_though_marked_instrumental() -> Result<(), AppError> {
+    // An instrumental is permanent, so kept as one the words would not be shown again.
+    let kept = kept_as(Some("[00:01.00]a"), true)?;
+
+    assert!(matches!(kept, Some(LyricsOutcome::Sheet(_))), "{kept:?}");
+    Ok(())
+}
+
+#[test]
+fn an_answer_marked_instrumental_with_no_words_is_kept_as_instrumental() -> Result<(), AppError> {
+    assert_eq!(kept_as(None, true)?, Some(LyricsOutcome::Instrumental));
+    Ok(())
+}
+
+#[test]
+fn an_answer_with_neither_is_kept_as_a_miss() -> Result<(), AppError> {
+    assert_eq!(kept_as(None, false)?, Some(LyricsOutcome::Absent));
+    Ok(())
+}
+
 #[test]
 fn a_sheet_outranks_a_marker_left_beside_it() -> Result<(), AppError> {
     // A track asked about before it had a sheet keeps both names; the sheet is the later answer.

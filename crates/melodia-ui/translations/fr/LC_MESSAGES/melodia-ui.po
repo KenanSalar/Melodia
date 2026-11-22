@@ -308,6 +308,10 @@ msgstr "Appliquer"
 msgid "Review"
 msgstr "Vérifier"
 
+#: ui/components/dialog/dialog.slint
+msgid "Turn On"
+msgstr "Activer"
+
 #: ui/components/dialog/duplicate-row.slint
 msgid "Identical files"
 msgstr "Fichiers identiques"
@@ -467,11 +471,6 @@ msgstr "Aucune liste à exporter"
 msgid "Several playlists are saved as one .zip file, which you can import directly without extracting it."
 msgstr "Plusieurs listes sont enregistrées dans un seul fichier .zip, que vous pouvez importer directement sans le décompresser."
 
-#. Translators: {} names who measured the headphones, as oratory1990.
-#: ui/components/dialog/headphone-picker-body.slint
-msgid "Measured by {}"
-msgstr "Mesuré par {}"
-
 #: ui/components/dialog/headphone-picker-body.slint
 msgid "Find a model…"
 msgstr "Trouver un modèle…"
@@ -510,6 +509,11 @@ msgstr "Le profil d'AutoEq pour ce modèle contient des lignes que Melodia ne sa
 msgid "Couldn't apply the correction. See the log for details."
 msgstr "Impossible d'appliquer la correction. Consultez le journal pour plus de détails."
 
+#. Translators: {} names who measured the headphones, as oratory1990.
+#: ui/components/dialog/headphone-picker-body.slint
+msgid "Measured by {}"
+msgstr "Mesuré par {}"
+
 #. Translators: {} is the day the copy left the library, as 2026-11-02.
 #: ui/components/dialog/kept-out-body.slint
 msgid "Removed {}"
@@ -544,6 +548,86 @@ msgstr "Aucun fichier exclu"
 #: ui/components/dialog/kept-out-body.slint
 msgid "Every removed copy is back in the library."
 msgstr "Toutes les copies retirées sont de retour dans la bibliothèque."
+
+#: ui/components/dialog/lyrics-finder-body.slint
+msgid "Title and artist…"
+msgstr "Titre et artiste…"
+
+#: ui/components/dialog/lyrics-finder-body.slint
+msgid "Instrumental"
+msgstr "Instrumental"
+
+#: ui/components/dialog/lyrics-finder-body.slint
+msgid "Plain"
+msgstr "Texte seul"
+
+#: ui/components/dialog/lyrics-finder-body.slint
+msgid "Synced"
+msgstr "Synchronisées"
+
+#: ui/components/dialog/lyrics-finder-body.slint
+msgid "Word-timed"
+msgstr "Mot à mot"
+
+#: ui/components/dialog/lyrics-finder-body.slint
+msgid "\"Look up lyrics online\" is off"
+msgstr "« Rechercher les paroles en ligne » est désactivé"
+
+#: ui/components/dialog/lyrics-finder-body.slint ui/views/search-view.slint
+msgid "Searching…"
+msgstr "Recherche en cours…"
+
+#: ui/components/dialog/lyrics-finder-body.slint
+msgid "lrclib.net asked Melodia to wait"
+msgstr "lrclib.net demande à Melodia de patienter"
+
+#: ui/components/dialog/lyrics-finder-body.slint
+msgid "Couldn't search lrclib.net"
+msgstr "Impossible de rechercher sur lrclib.net"
+
+#: ui/components/dialog/lyrics-finder-body.slint
+msgid "No lyrics match"
+msgstr "Aucune parole ne correspond"
+
+#: ui/components/dialog/lyrics-finder-body.slint
+msgid "Turning it on lets Melodia ask lrclib.net for this track, and for any track without lyrics of its own."
+msgstr "Une fois activée, Melodia interroge lrclib.net pour ce titre, et pour tout titre sans paroles propres."
+
+#: ui/components/dialog/lyrics-finder-body.slint
+msgid "Press Enter to search again in a minute."
+msgstr "Appuyez sur Entrée dans une minute pour relancer la recherche."
+
+#: ui/components/dialog/lyrics-finder-body.slint
+msgid "Check your connection, then press Enter to search again."
+msgstr "Vérifiez votre connexion, puis appuyez sur Entrée pour relancer la recherche."
+
+#: ui/components/dialog/lyrics-finder-body.slint
+msgid "Try fewer words, or the title alone."
+msgstr "Essayez avec moins de mots, ou le titre seul."
+
+#: ui/components/dialog/lyrics-finder-body.slint
+msgid "Couldn't keep the pick. See the log for details."
+msgstr "Impossible d'enregistrer ce choix. Consultez le journal pour plus de détails."
+
+#: ui/components/dialog/lyrics-finder-body.slint
+msgid "Pick a match to read its lyrics."
+msgstr "Choisissez un résultat pour lire ses paroles."
+
+#: ui/components/dialog/lyrics-finder-body.slint
+msgid "lrclib.net files this recording as instrumental."
+msgstr "lrclib.net répertorie cet enregistrement comme instrumental."
+
+#: ui/components/dialog/lyrics-finder-body.slint
+msgid "The .lrc file beside this track is shown ahead of this pick."
+msgstr "Le fichier .lrc à côté de ce titre est affiché avant ce choix."
+
+#: ui/components/dialog/lyrics-finder-body.slint
+msgid "The timed lyrics in this track's tags are shown ahead of this pick."
+msgstr "Les paroles synchronisées des balises de ce titre sont affichées avant ce choix."
+
+#: ui/components/dialog/lyrics-finder-body.slint
+msgid "This track's tags hold lyrics, which are shown ahead of an untimed pick."
+msgstr "Les balises de ce titre contiennent des paroles, affichées avant un choix non synchronisé."
 
 #: ui/components/dialog/playlist-mosaic-picker.slint
 msgid "No artwork"
@@ -1372,8 +1456,13 @@ msgid "Look up lyrics online"
 msgstr "Rechercher les paroles en ligne"
 
 #: ui/components/now-playing/lyrics-menu.slint
-msgid "Look up again"
-msgstr "Rechercher à nouveau"
+#: ui/views/settings/lyrics-section.slint
+msgid "Look up automatically"
+msgstr "Rechercher automatiquement"
+
+#: ui/components/now-playing/lyrics-menu.slint
+msgid "Find lyrics…"
+msgstr "Trouver les paroles…"
 
 #: ui/components/now-playing/lyrics-menu.slint
 msgid "Save to file"
@@ -1414,8 +1503,8 @@ msgstr "Activez-la depuis le menu Paroles"
 
 #. Translators: "Lyrics menu" is the menu whose tooltip reads "Lyrics"
 #: ui/components/now-playing/lyrics-panel.slint
-msgid "Try again from the Lyrics menu"
-msgstr "Réessayez depuis le menu Paroles"
+msgid "Find them in the Lyrics menu"
+msgstr "Trouvez-les depuis le menu Paroles"
 
 #: ui/components/now-playing/overflow-menu.slint
 #: ui/components/onboarding/onboarding-overlay.slint
@@ -1552,8 +1641,8 @@ msgstr "Affiche le morceau que vous écoutez sur votre profil Discord"
 
 #: ui/components/onboarding/features-panel.slint
 #: ui/views/settings/lyrics-section.slint
-msgid "When a track carries no words of its own, ask lrclib.net for them"
-msgstr "Quand un titre ne contient pas ses propres paroles, les demander à lrclib.net"
+msgid "Let Melodia ask lrclib.net for lyrics"
+msgstr "Autoriser Melodia à demander des paroles à lrclib.net"
 
 #: ui/components/onboarding/features-panel.slint
 #: ui/views/settings/scrobbling-section.slint
@@ -2191,6 +2280,15 @@ msgstr "Choisissez les listes à exporter."
 #: ui/views/radio/tab-pills.slint
 msgid "Export"
 msgstr "Exporter"
+
+#: ui/globals/dialog.slint
+msgid "Find Lyrics"
+msgstr "Trouver les paroles"
+
+#. Translators: {} is the playing track's length, as 3:45.
+#: ui/globals/dialog.slint
+msgid "lrclib.net's matches for this track, which runs {}."
+msgstr "Les résultats de lrclib.net pour ce titre, qui dure {}."
 
 #: ui/globals/duplicates.slint
 msgid "{n} copy removed from the library"
@@ -3108,10 +3206,6 @@ msgid "Play something and it will show up here."
 msgstr "Écoutez quelque chose et cela apparaîtra ici."
 
 #: ui/views/search-view.slint
-msgid "Searching…"
-msgstr "Recherche en cours…"
-
-#: ui/views/search-view.slint
 msgid "Search your library…"
 msgstr "Rechercher dans votre bibliothèque…"
 
@@ -3398,6 +3492,7 @@ msgstr[0] "{n} copie retirée. Son fichier est toujours sur le disque, et les an
 msgstr[1] "{n} copies retirées. Leurs fichiers sont toujours sur le disque, et les analyses les ignorent."
 
 #: ui/views/settings/duplicates-section.slint
+#: ui/views/settings/lyrics-section.slint
 msgid "Find…"
 msgstr "Rechercher…"
 
@@ -3481,8 +3576,28 @@ msgid "Show the playing track's words in Now Playing instead of Up Next"
 msgstr "Afficher les paroles du titre en cours dans « Lecture en cours » à la place de « À suivre »"
 
 #: ui/views/settings/lyrics-section.slint
+msgid "When a track carries no words of its own, ask lrclib.net for them"
+msgstr "Quand un titre ne contient pas ses propres paroles, les demander à lrclib.net"
+
+#: ui/views/settings/lyrics-section.slint
 msgid "Print how a line sounds in Latin letters under the words, for a script that does not use them"
 msgstr "Afficher sous les paroles la prononciation de chaque ligne en caractères latins, pour les écritures qui ne les utilisent pas"
+
+#: ui/views/settings/lyrics-section.slint
+msgid "Find lyrics"
+msgstr "Trouver les paroles"
+
+#: ui/views/settings/lyrics-section.slint
+msgid "Pick the playing track's lyrics from lrclib.net's matches"
+msgstr "Choisir les paroles du titre en cours parmi les résultats de lrclib.net"
+
+#: ui/views/settings/lyrics-section.slint
+msgid "Turn on \"Look up lyrics online\" above first"
+msgstr "Activez d'abord « Rechercher les paroles en ligne » ci-dessus"
+
+#: ui/views/settings/lyrics-section.slint
+msgid "Turn on \"Show lyrics\" above first"
+msgstr "Activez d'abord « Afficher les paroles » ci-dessus"
 
 #: ui/views/settings/mini-player-section.slint
 msgid "Miniplayer"

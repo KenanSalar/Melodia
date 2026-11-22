@@ -115,3 +115,10 @@ Write it by hand or with an assistant, whichever you work best with. Review trea
 both the same, which also means the bar is the same: you are responsible for what you
 submit, so understand it well enough to explain it and fix it, and test it for real
 rather than trusting generated tests.
+
+If your assistant speaks MCP, `cargo mcp` runs the debug build with Slint's embedded MCP
+server, which lets it read the element tree, click, type and take screenshots in the
+running app. Point the client at `http://127.0.0.1:9315/mcp`; with Claude Code that is
+`claude mcp add --transport http melodia-ui http://127.0.0.1:9315/mcp`. The server
+listens on localhost only and has no authentication, and only a `cargo mcp` build carries
+it, never a release.

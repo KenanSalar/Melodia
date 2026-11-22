@@ -15,7 +15,7 @@
 
 - **Bit-perfect exclusive output** on Linux and Windows, with a Signal Path panel that grades every stage from the file to the device
 - **Gapless playback and crossfade**, a 10-band equalizer, headphone correction and crossfeed for each output device, ReplayGain that can measure untagged tracks itself, and playback speed from 0.25× to 2.0×
-- **Timed lyrics** from `.lrc` files, tags, or an opt-in online lookup, romanized for around a hundred scripts
+- **Timed lyrics**, lit word by word where a sheet times its words, from `.lrc` files, tags, or an opt-in online lookup, romanized for around a hundred scripts
 - **Internet radio** from a worldwide directory or your own stream URLs, off until you switch it on
 - **Six theme families** in light and dark, and Material You colors drawn from the playing artwork
 - **A library that keeps up**: parallel scanning, live folder watching, full-text search, smart playlists, and tag editing written back to the files
@@ -160,13 +160,14 @@ Shrink the window and the full UI collapses into a mini-player that grows with i
 <details>
 <summary><b>Lyrics</b>: timed sheets, an opt-in online lookup, and romanization</summary>
 
-- A timed sheet in Now Playing, in place of Up Next, that follows the song line by line; click a line to seek to it. Switch it on from that view's header or Settings ▸ Lyrics
+- A timed sheet in Now Playing, in place of Up Next, that follows the song line by line, and word by word where the sheet times its words (Enhanced LRC); click a line to seek to it. Switch it on from that view's header or Settings ▸ Lyrics
 - **Off by default, and off means off**: while lyrics are switched off, nothing looks a sheet up or keeps one in memory
 - Read from a `.lrc` beside the track or from the file's own lyrics tag, so a library that already carries them needs no online lookup
 - **Online lookup is off until you switch it on**: nothing contacts **lrclib.net** until you do, and its answers are cached under your data folder rather than written into your files
+- Once it is on, a track without lyrics of its own is looked up as it plays; switch off **Look up automatically** to ask only when you search
 - Romanization under a line in a script you don't read, around a hundred scripts in all, with engines matched to Korean and Japanese. On by default, and silent for a sheet already in Latin letters
 - A bilingual sheet's translation is drawn under the words it glosses
-- **Look up again** for a wrong match, **Save to file** to write the sheet into the track's tag, and **Edit lyrics…** to fix a stamp by hand
+- **Find lyrics…** to pick one of lrclib.net's matches by hand, for a wrong match or none at all, **Save to file** to write the sheet into the track's tag, and **Edit lyrics…** to fix a stamp by hand
 
 </details>
 

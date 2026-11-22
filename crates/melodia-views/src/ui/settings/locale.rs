@@ -8,6 +8,7 @@ use std::sync::Arc;
 
 use slint::{ComponentHandle, ModelRc, SharedString, VecModel};
 
+use crate::ui::util::item_at;
 use melodia_app::library;
 use melodia_app::state::AppState;
 use melodia_core::entities::locale::{DEFAULT_LOCALE, SUPPORTED_LOCALES};
@@ -86,8 +87,7 @@ fn wire_language_changed(ui: &AppWindow, state: &AppState, shadow: PersistedLoca
     ui.global::<Settings>().on_language_changed(move |idx_i32| {
         let Some(ui) = weak.upgrade() else { return };
 
-        let Some(&code) = usize::try_from(idx_i32).ok().and_then(|idx| SUPPORTED_LOCALES.get(idx))
-        else {
+        let Some(&code) = item_at(SUPPORTED_LOCALES, idx_i32) else {
             log::warn!("language-changed: out-of-range idx {idx_i32}");
             return;
         };

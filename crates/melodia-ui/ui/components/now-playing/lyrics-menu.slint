@@ -12,6 +12,10 @@ import { FlyoutMetrics } from "./flyout-presets.slint";
 // The lyrics panel's menu, beside the switch that mounts the panel. `VisualizerPicker`'s shape with
 // a menu column for a flyout. The switch owns the swap, so everything here acts on a panel that is
 // on screen, and the trigger is inert while lyrics are off.
+//
+// **A switch leaves the menu open**, its effect showing on the rows beside it and the panel behind.
+// A row opening a dialog closes it, and so does Save to file, which would otherwise stay clickable
+// until its write lands.
 export component LyricsMenu inherits Rectangle {
     width: btn.width;
     height: btn.height;
@@ -24,7 +28,7 @@ export component LyricsMenu inherits Rectangle {
 
     // Every row drawn whether it can act or not, so the reserve is a constant and no row moves
     // under the pointer between opens.
-    property <length> menu-h: FlyoutMetrics.menu-row-h * 5 + FlyoutMetrics.chrome-h;
+    property <length> menu-h: FlyoutMetrics.menu-row-h * 6 + FlyoutMetrics.chrome-h;
 
     btn := AccentGlyphButton {
         icon: "lyrics";
@@ -77,7 +81,6 @@ export component LyricsMenu inherits Rectangle {
                     clicked => {
                         Lyrics.romanization-shown = !Lyrics.romanization-shown;
                         Lyrics.set-romanization-shown(Lyrics.romanization-shown);
-                        pop.close();
                     }
                 }
 
@@ -91,18 +94,30 @@ export component LyricsMenu inherits Rectangle {
                     clicked => {
                         Lyrics.online-enabled = !Lyrics.online-enabled;
                         Lyrics.set-online-enabled(Lyrics.online-enabled);
-                        pop.close();
                     }
                 }
 
+                // Greyed while the lookup is off, which it can't act without: the row above is the
+                // switch it waits on, and a menu row has no room to say so.
                 OverflowRow {
-                    icon: "refresh";
-                    label: @tr("Look up again");
-                    // Needs the lookup on: forgetting the directory's answer is the re-ask, so off
-                    // it could only delete the sheet on show.
-                    button-enabled: Lyrics.state != LyricsState.idle && Lyrics.online-enabled;
+                    icon: "auto_awesome";
+                    label: @tr("Look up automatically");
+                    active: Lyrics.auto-lookup;
+                    filled: Lyrics.auto-lookup;
+                    button-enabled: Lyrics.online-enabled;
                     clicked => {
-                        Lyrics.refresh();
+                        Lyrics.auto-lookup = !Lyrics.auto-lookup;
+                        Lyrics.set-auto-lookup(Lyrics.auto-lookup);
+                    }
+                }
+
+                // lrclib.net's sheets for this track, one picked, for a wrong match or none at all.
+                OverflowRow {
+                    icon: "search";
+                    label: @tr("Find lyrics…");
+                    button-enabled: Player.vm.has_track;
+                    clicked => {
+                        Dialog.open-lyrics-finder();
                         pop.close();
                     }
                 }

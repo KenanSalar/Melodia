@@ -20,6 +20,7 @@ use slint::{ComponentHandle, ModelRc, SharedString, VecModel, Weak};
 use crate::ui::settings::signal_path;
 use crate::ui::settings_bind::{read_or_default, toggle_binding};
 use crate::ui::shell::tray_bridge;
+use crate::ui::util::item_at;
 use melodia_app::library;
 use melodia_app::services::settings::OutputFlags;
 use melodia_app::state::{AppState, Shadowed};
@@ -319,7 +320,7 @@ impl Picked {
     }
 
     fn pick_period(&mut self, idx: i32) {
-        if let Some(&period) = usize::try_from(idx).ok().and_then(|i| PERIOD_PRESETS.get(i)) {
+        if let Some(&period) = item_at(&PERIOD_PRESETS, idx) {
             self.choice.tuning = ExclusiveTuning::new(period, self.choice.tuning.drive);
         }
     }

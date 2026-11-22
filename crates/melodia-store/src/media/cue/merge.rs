@@ -178,7 +178,7 @@ fn apply_sheet(meta: &mut ExtractedMetadata, scopes: &Scopes<'_>) {
 /// them by [`apply_sheet`]'s rules. Lyrics describe a recording, so the image's are no track's.
 pub(crate) fn track_tags(sheet: &Sheet, track: CueTrack, image: FileTags) -> FileTags {
     let scopes = Scopes { track: sheet.track(track), sheet };
-    let mut tags = FileTags { lyrics: None, ..image };
+    let mut tags = FileTags { lyrics: Vec::new(), ..image };
     if let Some(performer) = scopes.performer()
         && !restates(&tags.credits.0, performer)
     {

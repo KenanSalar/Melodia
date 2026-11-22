@@ -4,7 +4,7 @@
 [build]
 jobs = 8
 
-# build.jobs does not touch the test harness's runtime threads — cap those too.
+# build.jobs leaves the test harness's runtime threads alone, so cap those too.
 # Non-forced: a dev can still override by exporting RUST_TEST_THREADS themselves.
 [env]
 RUST_TEST_THREADS = "8"
@@ -14,3 +14,12 @@ RUST_TEST_THREADS = "8"
 # was one crate; cargo resolves this against the directory holding `.cargo`, so
 # it keeps meaning the root once packages move under it.
 MELODIA_REPO_ROOT = { value = "", relative = true }
+
+# Read only by a build carrying Slint's `mcp` feature, which `cargo mcp` adds; an
+# exported SLINT_MCP_PORT wins.
+SLINT_MCP_PORT = "9315"
+
+# Slint's MCP server, for an agent to drive the UI, rides only this build: the
+# feature never enters a Cargo.toml, so no release can carry it.
+[alias]
+mcp = "run -p melodia --features slint/mcp"

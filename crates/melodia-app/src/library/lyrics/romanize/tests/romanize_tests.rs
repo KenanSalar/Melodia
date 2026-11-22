@@ -17,6 +17,7 @@ fn sheet(texts: &[&str]) -> Vec<LyricLine> {
             text: (*text).to_owned(),
             romanization: None,
             translation: None,
+            words: Vec::new(),
         })
         .collect()
 }

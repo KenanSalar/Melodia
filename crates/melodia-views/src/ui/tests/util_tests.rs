@@ -33,6 +33,17 @@ fn clamp_i64_to_i32_passes_through_in_range_and_saturates_outside() {
     assert_eq!(clamp_i64_to_i32(i64::MIN), i32::MIN);
 }
 
+#[test]
+fn a_slint_index_names_an_item_only_inside_its_list() {
+    // `-1` is Slint's "nothing picked".
+    const ITEMS: [char; 3] = ['a', 'b', 'c'];
+
+    assert_eq!(
+        [-1, 0, 2, 3].map(|index| item_at(&ITEMS, index).copied()),
+        [None, Some('a'), Some('c'), None]
+    );
+}
+
 /// How blurred a backdrop *looks* is the sigma relative to the buffer it is applied to, so
 /// retuning one of these without the other changes every backdrop in the app — invisibly in
 /// review, and on both tiers at once.

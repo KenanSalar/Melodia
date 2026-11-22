@@ -187,8 +187,8 @@ paths:
 
 ## Testing
 
-- The `slint::testing` module exposes `send_keyboard_string_sequence`, `send_mouse_click`, etc.
-  for synthetic input on a built window.
+- Slint's test API lives in the internal `i-slint-backend-testing` crate, not `slint`; this tree
+  doesn't use it, and `docs/adr/0003-slint-and-femtovg.md` says what pins the UI instead.
 - Treat the UI as a thin reactive shell — test the **library** layer (Rust functions) thoroughly
   and keep UI tests light.
 - Run the app under `RUST_BACKTRACE=1` during dev so panics from inside the UI thread (e.g. wrong

@@ -114,10 +114,10 @@ pub async fn get_tag_edit_rows(db: &DbPool, ids: &[i64]) -> Result<Vec<TagEditRo
     queries::track::get_tag_edit_rows_by_ids(db, ids).await
 }
 
-/// A file's lyrics tag as the tag held it, judged by `library::lyrics`. Apart from
-/// [`read_file_tags`] because that caller wants nothing else. Blocking; the caller owns the
-/// `spawn_blocking`.
-pub fn read_lyrics(path: &Path) -> Result<Option<String>, AppError> {
+/// Every entry of a file's lyrics tag as the tag held it, `library::lyrics` choosing the one shown.
+/// Apart from [`read_file_tags`] because that caller wants nothing else. Blocking; the caller owns
+/// the `spawn_blocking`.
+pub fn read_lyrics(path: &Path) -> Result<Vec<String>, AppError> {
     tag_writer::read_lyrics(path)
 }
 

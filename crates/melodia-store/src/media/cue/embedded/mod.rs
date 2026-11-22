@@ -100,7 +100,7 @@ pub fn read_embedded(image: &Path, tracks: &[CueTrack]) -> Result<EmbeddedSheetT
     };
     let track_tags = |track: CueTrack| match &sheet {
         Some(sheet) => merge::track_tags(sheet, track, tags.clone()),
-        None => FileTags { lyrics: None, ..tags.clone() },
+        None => FileTags { lyrics: Vec::new(), ..tags.clone() },
     };
     let tracks = tracks.iter().map(|&track| (track, track_tags(track))).collect();
     Ok(EmbeddedSheetTags { is_editable, tracks })

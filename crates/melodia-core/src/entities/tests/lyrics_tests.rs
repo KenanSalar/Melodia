@@ -1,9 +1,26 @@
-//! The two invariants the vocabulary carries, and the preference the directory's answer states.
+//! The invariants the vocabulary carries, where a sheet's lines break, and the preference the
+//! directory's answer states.
 
 use super::*;
 
 fn line(at_ms: Option<i64>, text: &str) -> LyricLine {
-    LyricLine { at_ms, end_ms: None, text: text.to_owned(), romanization: None, translation: None }
+    LyricLine {
+        at_ms,
+        end_ms: None,
+        text: text.to_owned(),
+        romanization: None,
+        translation: None,
+        words: Vec::new(),
+    }
+}
+
+/// A stamped line with one word timed at its start, the least that lights word by word.
+fn word_timed(at_ms: i64, text: &str) -> LyricLine {
+    LyricLine { words: vec![WordStamp { start: 0, at_ms }], ..line(Some(at_ms), text) }
+}
+
+fn split(text: &str) -> Vec<&str> {
+    sheet_lines(text).collect()
 }
 
 #[test]
@@ -37,6 +54,43 @@ fn a_sheet_carrying_a_stamp_can_be_followed() {
 fn a_sheet_carrying_no_stamp_cannot() {
     let plain = Lyrics::new(vec![line(None, "a")], LyricsSource::Online);
     assert_eq!(plain.map(|s| s.is_synced()), Some(false));
+}
+
+#[test]
+fn a_sheet_carrying_a_timed_word_can_be_followed() {
+    // Read as untimed, a word-timed tag loses to any timed sheet the lookup finds.
+    let words = Lyrics::new(vec![word_timed(1_000, "a")], LyricsSource::Tag);
+    assert_eq!(words.map(|s| s.is_synced()), Some(true));
+}
+
+#[test]
+fn a_sheet_is_timed_by_the_finest_thing_any_one_line_carries() {
+    let plain = Lyrics::new(vec![line(None, "a")], LyricsSource::Tag);
+    let lines = Lyrics::new(vec![line(Some(1_000), "a")], LyricsSource::Tag);
+    let words =
+        Lyrics::new(vec![line(Some(1_000), "a"), word_timed(2_000, "b")], LyricsSource::Tag);
+
+    assert_eq!(
+        [plain, lines, words].map(|sheet| sheet.map(|s| s.timing())),
+        [Some(Timing::Plain), Some(Timing::Lines), Some(Timing::Words)]
+    );
+}
+
+#[test]
+fn a_lone_carriage_return_breaks_a_line() {
+    // Unbroken, the whole sheet is one row and only its first line's stamps are read.
+    assert_eq!(split("one\rtwo\rthree"), ["one", "two", "three"]);
+}
+
+#[test]
+fn newlines_split_as_they_always_have_blank_verse_lines_included() {
+    assert_eq!(split("one\n\ntwo\r\nthree"), ["one", "", "two", "three"]);
+}
+
+#[test]
+fn a_carriage_return_ending_the_text_or_doubled_before_a_newline_adds_no_blank_line() {
+    assert_eq!(split("one\rtwo\r"), ["one", "two"], "a closing return");
+    assert_eq!(split("one\r\r\ntwo"), ["one", "two"], "a return doubled ahead of a newline");
 }
 
 #[test]

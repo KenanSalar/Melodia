@@ -972,28 +972,29 @@ fn the_tray_ships_on_but_never_overrides_a_saved_answer() -> Result<(), AppError
     Ok(())
 }
 
-/// Two of the three ship off and one ships on, so a derived `Default` would be right about the
-/// feature and the lookup and silently wrong about the romanization. A sheet in a script the
-/// reader cannot sound out is the whole reason that one is on.
+/// Two of the four ship off and two ship on, so a derived `Default` would be right about the
+/// feature and the lookup and silently wrong about the other two.
 #[test]
-fn the_lyrics_switches_ship_as_two_off_and_one_on() {
+fn the_lyrics_switches_ship_as_two_off_and_two_on() {
     let lyrics = reading_env(SettingsData::default).lyrics;
 
     assert!(!lyrics.lyrics_enabled, "the column opens on Up Next");
     assert!(!lyrics.lyrics_online_enabled, "an outbound feature is opt-in");
-    assert!(lyrics.lyrics_romanization_shown);
+    assert!(lyrics.lyrics_auto_lookup, "an install that looked lyrics up keeps looking");
+    assert!(lyrics.lyrics_romanization_shown, "for a script the reader cannot sound out");
 }
 
 #[test]
 fn the_lyrics_switches_take_their_defaults_from_a_file_that_predates_them() -> Result<(), AppError>
 {
     // They are flattened into the same object as every other key, so an older `settings.json` is
-    // missing all three rather than carrying an empty section.
+    // missing all four rather than carrying an empty section.
     let json = r#"{"theme_id": "catppuccin"}"#;
     let settings: SettingsData = serde_json::from_str(json).map_err(json_err)?;
 
     assert!(!settings.lyrics.lyrics_enabled);
     assert!(!settings.lyrics.lyrics_online_enabled);
+    assert!(settings.lyrics.lyrics_auto_lookup);
     assert!(settings.lyrics.lyrics_romanization_shown);
     Ok(())
 }
@@ -1028,6 +1029,17 @@ fn the_romanization_ships_on_but_never_overrides_a_saved_answer() -> Result<(), 
     let settings: SettingsData = serde_json::from_str(json).map_err(json_err)?;
 
     assert!(!settings.lyrics.lyrics_romanization_shown);
+    Ok(())
+}
+
+#[test]
+fn the_automatic_lookup_ships_on_but_never_overrides_a_saved_answer() -> Result<(), AppError> {
+    // The romanization's direction: a default filled in over a saved `false` sends a request on
+    // every track change the person asked not to.
+    let json = r#"{"theme_id": "catppuccin", "lyrics_auto_lookup": false}"#;
+    let settings: SettingsData = serde_json::from_str(json).map_err(json_err)?;
+
+    assert!(!settings.lyrics.lyrics_auto_lookup);
     Ok(())
 }
 

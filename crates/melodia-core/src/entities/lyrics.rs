@@ -4,10 +4,12 @@
 use crate::utils::text::filled;
 
 /// One line, timed or not. `at_ms` is `None` only for a sheet with no timing at all, and clamped
-/// non-negative. `end_ms` is where the sheet says the singing stops, `None` where it didn't say,
-/// which is how the panel tells a pause from a long line. `translation` is a bilingual sheet's
-/// gloss, apart because the panel draws it smaller; `romanization` is derived by
-/// `library::lyrics::romanize`. The panel draws the three in declaration order.
+/// non-negative. `end_ms` is where the sheet says the singing stops, by a blank stamp after the
+/// line or a stamp after its last word, `None` where it didn't say, which is how the panel tells a
+/// pause from a long line. `words` runs in time order from `at_ms`, empty for a line lit whole.
+/// `translation` is a bilingual sheet's gloss, apart because the panel draws it smaller;
+/// `romanization` is derived by `library::lyrics::romanize`. The panel draws the three in
+/// declaration order.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct LyricLine {
     pub at_ms: Option<i64>,
@@ -15,6 +17,23 @@ pub struct LyricLine {
     pub text: String,
     pub romanization: Option<String>,
     pub translation: Option<String>,
+    pub words: Vec<WordStamp>,
+}
+
+/// When a word, or a syllable, lights. `start` is its first byte in the line's `text`, so what is
+/// lit is the text up to the first word not yet due.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct WordStamp {
+    pub start: usize,
+    pub at_ms: i64,
+}
+
+/// How closely a sheet can be followed, ordered so the best of several is the greatest.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub enum Timing {
+    Plain,
+    Lines,
+    Words,
 }
 
 /// Which arm answered: only [`LyricsSource::Online`] is a candidate for the on-disk store.
@@ -49,8 +68,20 @@ impl Lyrics {
 
     /// Derived rather than stored, so it can't drift from the lines.
     #[must_use]
+    pub fn timing(&self) -> Timing {
+        if self.lines.iter().any(|line| !line.words.is_empty()) {
+            Timing::Words
+        } else if self.lines.iter().any(|line| line.at_ms.is_some()) {
+            Timing::Lines
+        } else {
+            Timing::Plain
+        }
+    }
+
+    /// Whether the panel follows the sheet as it plays, by lines at least.
+    #[must_use]
     pub fn is_synced(&self) -> bool {
-        self.lines.iter().any(|line| line.at_ms.is_some())
+        self.timing() != Timing::Plain
     }
 }
 
@@ -72,11 +103,25 @@ pub enum LyricsOutcome {
 /// the crate that asked. `instrumental` is a positive answer, never asked again.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct LyricsAnswer {
-    /// LRC text, where the directory has a timed sheet.
+    /// LRC text, where the directory has a timed sheet, its words timed where the directory
+    /// times them.
     pub synced: Option<String>,
     /// Plain text, where it has only that.
     pub plain: Option<String>,
     pub instrumental: bool,
+}
+
+/// One of a directory's sheets, offered for a person to pick. It carries the sheet, so picking it
+/// costs no second request.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct LyricsCandidate {
+    pub title: String,
+    pub artist: String,
+    pub album: String,
+    /// The length the directory files the upload under, which tells a radio edit from the album
+    /// cut.
+    pub duration_secs: u32,
+    pub answer: LyricsAnswer,
 }
 
 impl LyricsAnswer {
@@ -107,23 +152,36 @@ impl LyricsAnswer {
 /// is parsed.
 pub const TRANSLATION_MARK: char = '^';
 
-/// Only a caret with text either side separates; anywhere else it is a character, and kept.
+/// A line's words and its gloss, cut at [`gloss_caret`].
 #[must_use]
 pub fn split_gloss(line: &str) -> (&str, Option<&str>) {
-    let Some((sung, gloss)) = line.split_once(TRANSLATION_MARK) else {
+    let Some(caret) = gloss_caret(line) else {
         return (line, None);
     };
-    let (sung, gloss) = (sung.trim_end(), gloss.trim());
-    if sung.is_empty() || gloss.is_empty() {
-        return (line, None);
-    }
-    (sung, Some(gloss))
+    let (sung, rest) = line.split_at(caret);
+    let gloss = &rest[TRANSLATION_MARK.len_utf8()..];
+    (sung.trim_end(), Some(gloss.trim()))
+}
+
+/// Where [`split_gloss`] cuts a line, for a caller holding offsets into it whole. Only a caret with
+/// text either side separates; anywhere else it is a character, and kept.
+#[must_use]
+pub fn gloss_caret(line: &str) -> Option<usize> {
+    let (sung, gloss) = line.split_once(TRANSLATION_MARK)?;
+    let separates = !sung.trim_end().is_empty() && !gloss.trim().is_empty();
+    separates.then_some(sung.len())
 }
 
 /// Asked of raw LRC, stamps and all, so it answers before a sheet is parsed.
 #[must_use]
 pub fn carries_gloss(text: &str) -> bool {
-    text.lines().any(|line| split_gloss(line).1.is_some())
+    sheet_lines(text).any(|line| gloss_caret(line).is_some())
+}
+
+/// A sheet's lines, broken at `\n`, `\r\n` or a lone `\r`, the classic Mac OS break some taggers
+/// still write into an M4A. A `\r` closing the text, or doubled in `\r\r\n`, adds no blank line.
+pub fn sheet_lines(text: &str) -> impl Iterator<Item = &str> {
+    text.lines().flat_map(|line| line.trim_suffix('\r').split('\r'))
 }
 
 #[cfg(test)]

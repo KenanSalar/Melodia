@@ -42,6 +42,7 @@ export global Player {
     // For the lyrics follow's 33 ms tick, a Rust read of `vm` cloning all of it.
     out property <bool> vm-is-playing: root.vm.is_playing;
     out property <float> vm-playback-speed: root.vm.playback_speed;
+    out property <int> vm-track-id: root.vm.track.id;
 
     // Outside `vm` for the reason `PlayerVm` in `models.slint` gives.
     in-out property <int> position-ms;

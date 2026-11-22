@@ -14,12 +14,12 @@ use std::time::Instant;
 
 use slint::{ComponentHandle, Model};
 
+use super::clock::Report;
 use super::measure::wrapped_lines;
 use super::{LyricsUi, Metrics, Row, RowKind};
 use melodia_ui::{AppWindow, LyricRow, Lyrics, Player};
 
-/// The position channel reports about once a second, so after a seek it still names the old line;
-/// unpinned, the panel would glide back to it and return.
+/// How long a click keeps its line lit over a later one under the same stamp.
 const PIN_HOLDS_FOR_MS: f64 = 2_000.0;
 
 /// Re-measures every row against the width, rebuilding the model and the offset table.
@@ -112,32 +112,20 @@ pub(super) fn published_row(row: &Row, romanization_shown: bool) -> LyricRow {
     }
 }
 
-/// Move the sung line on, interpolating between the position channel's roughly one-second ticks.
+/// Move the sung line on to where the clock puts the song.
 pub(super) fn follow(ui: &AppWindow, ly: &LyricsUi) {
-    let player = ui.global::<Player>();
-    let reported = player.get_position_ms();
-    // The two projections rather than `get_vm()`, which clones the whole view model — sixteen
-    // strings and two images — for these two numbers, on every tick.
-    let is_playing = player.get_vm_is_playing();
-
-    // A paused player re-anchors every pass, so the interpolation can't run on past where it
-    // holds: its reported position simply stops changing.
-    if reported != ly.anchor_ms.get() || !is_playing {
-        ly.anchor_ms.set(reported);
-        ly.anchor_at.set(Instant::now());
-    }
-    let speed = f64::from(player.get_vm_playback_speed()).max(0.0);
-    let advanced = ly.anchor_at.get().elapsed().as_secs_f64() * 1000.0 * speed;
-    let position = f64::from(ly.anchor_ms.get()) + advanced;
+    let now = Instant::now();
+    ly.clock.observe(report(&ui.global::<Player>()), now);
+    let position = ly.clock.position(now);
 
     let sung = sung_at(&ly.rows.borrow(), position);
 
-    // The pin stands until the clock reaches the clicked line, or until it has had long enough
-    // that something else must have moved the player.
     if let Some(pinned) = ly.pinned.get() {
-        let stale = (position - f64::from(ly.pinned_at_ms.get())).abs() > PIN_HOLDS_FOR_MS;
-        if sung != Some(pinned) && !stale {
-            // Restated rather than left alone, so a table rebuilt under the pin still centres it.
+        let pinned_at = ly.pinned_at_ms.get();
+        let shares_stamp =
+            sung.and_then(|index| ly.rows.borrow().get(index)?.at_ms) == Some(pinned_at);
+        let near = position - f64::from(pinned_at) <= PIN_HOLDS_FOR_MS;
+        if sung != Some(pinned) && shares_stamp && near {
             write_active(ui, ly, Some(pinned), position);
             return;
         }
@@ -145,6 +133,17 @@ pub(super) fn follow(ui: &AppWindow, ly: &LyricsUi) {
     }
 
     write_active(ui, ly, sung, position);
+}
+
+/// Reads projections rather than `get_vm()`, which clones the whole view model, strings and
+/// images, on every tick.
+fn report(player: &Player<'_>) -> Report {
+    Report {
+        track_id: player.get_vm_track_id(),
+        position_ms: player.get_position_ms(),
+        playing: player.get_vm_is_playing(),
+        speed: f64::from(player.get_vm_playback_speed()),
+    }
 }
 
 /// Takes a coordinate rather than a stamp, so the pin names the clicked row: a chorus repeats its
@@ -161,6 +160,7 @@ pub(super) fn seek_at(ui: &AppWindow, ly: &LyricsUi, y: f32) {
 
     ly.pinned.set(Some(index));
     ly.pinned_at_ms.set(at_ms);
+    ly.clock.jump_to(at_ms, Instant::now());
     // The seek's own instant, so a click landing on a gap starts its notes empty rather than
     // wherever the song happened to be when the pointer went down.
     write_active(ui, ly, Some(index), f64::from(at_ms));
@@ -213,6 +213,7 @@ fn write_active(ui: &AppWindow, ly: &LyricsUi, index: Option<usize>, position_ms
     // The whole row, gloss included, so the pair is centred together rather than the words alone.
     global.set_active_height(ly.metrics.row_height(row));
     global.set_interlude_progress(interlude_progress(row, position_ms));
+    publish_words(&global, ly, index, row, position_ms);
 }
 
 /// How far through a gap the song is, for the notes to fill against. Zero on a row of words, which
@@ -235,4 +236,28 @@ pub(super) fn interlude_progress(row: &Row, position_ms: f64) -> f32 {
     )]
     let progress = ((position_ms - from) / span).clamp(0.0, 1.0) as f32;
     progress
+}
+
+/// The sung row's text split at its cut, the strings rebuilt only when the row or the cut moves.
+fn publish_words(global: &Lyrics, ly: &LyricsUi, index: usize, row: &Row, position_ms: f64) {
+    let cut = lit_until(row, position_ms);
+    global.set_active_word_timed(cut.is_some());
+    let Some(cut) = cut else { return };
+    if ly.published_cut.replace(Some((index, cut))) == Some((index, cut)) {
+        return;
+    }
+    // A start off a character boundary, which the parser never writes, lights the row whole.
+    let (lit, unlit) = row.text.split_at_checked(cut).unwrap_or((row.text.as_str(), ""));
+    global.set_lit_words(lit.into());
+    global.set_unlit_words(unlit.into());
+}
+
+/// The byte the sung row's lit words end at, `None` on a row lit whole. Text ahead of the first
+/// word stamp lights with the line.
+pub(super) fn lit_until(row: &Row, position_ms: f64) -> Option<usize> {
+    if row.words.is_empty() {
+        return None;
+    }
+    let due = row.words.partition_point(|word| f64::from(word.at_ms) <= position_ms);
+    Some(row.words.get(due).map_or(row.text.len(), |word| word.start))
 }

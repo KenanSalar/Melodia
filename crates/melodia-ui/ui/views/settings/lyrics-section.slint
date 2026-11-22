@@ -1,19 +1,22 @@
 import { Settings } from "../../settings.slint";
+import { Dialog } from "../../globals/dialog.slint";
+import { Player } from "../../globals/player.slint";
 import { SettingsPage } from "../../globals/settings-page.slint";
+import { SectionButton } from "../../components/settings/section-button.slint";
 import { SectionCard } from "../../components/settings/section-card.slint";
 import { SettingRow } from "../../components/settings/setting-row.slint";
 import { ToggleSwitch } from "../../components/settings/toggle-switch.slint";
 
-// The switch that turns lyrics on, the one that lets the panel reach the network, and the one that
-// decides how it draws a line. The lookup's description names lrclib.net for the radio master
-// row's reason: a user deciding to stay local is entitled to know who would be contacted. Search
-// visibility follows `radio-section.slint`.
+// Lyrics' switches and the finder for the playing track. The lookup's description names
+// lrclib.net for the radio master row's reason: a user deciding to stay local is entitled to know
+// who would be contacted. Search visibility follows `radio-section.slint`.
 //
-// **Unlike Radio's, the two rows under the master stay put while it is off.** Both are defaults a
-// user sets before turning lyrics on, and neither does anything until then. Every switch here is
-// also in Now Playing, the master as the header's switch and the other two in its lyrics menu, each
-// being two things: a default worth finding in Settings, and the one you reach for the moment it
-// is wanted.
+// **Unlike Radio's, the rows under the master stay put while it is off.** The lookup and
+// romanization switches are defaults a user sets before turning lyrics on; the automatic row greys
+// until the lookup is on and the finder until lyrics are, each naming the switch it waits on. Every
+// row here is also in Now Playing, the master as the header's switch and the rest in its lyrics
+// menu, each switch being two things: a default worth finding in Settings, and the one you reach
+// for the moment it is wanted.
 export component LyricsSection inherits Rectangle {
     background: transparent;
     horizontal-stretch: 1;
@@ -35,16 +38,25 @@ export component LyricsSection inherits Rectangle {
     property <string> enabled-desc: @tr("Show the playing track's words in Now Playing instead of Up Next");
 
     property <string> online-label: @tr("Look up lyrics online");
-    property <string> online-desc: @tr("When a track carries no words of its own, ask lrclib.net for them");
+    property <string> online-desc: @tr("Let Melodia ask lrclib.net for lyrics");
+
+    property <string> auto-label: @tr("Look up automatically");
+    property <string> auto-desc: @tr("When a track carries no words of its own, ask lrclib.net for them");
 
     property <string> romanization-label: @tr("Show romanization");
     property <string> romanization-desc: @tr("Print how a line sounds in Latin letters under the words, for a script that does not use them");
 
+    property <string> find-label: @tr("Find lyrics");
+    property <string> find-desc: @tr("Pick the playing track's lyrics from lrclib.net's matches");
+
     property <bool> show-enabled: row-visible(enabled-label, enabled-desc);
     property <bool> show-online: row-visible(online-label, online-desc);
+    property <bool> show-auto: row-visible(auto-label, auto-desc);
     property <bool> show-romanization: row-visible(romanization-label, romanization-desc);
+    property <bool> show-find: row-visible(find-label, find-desc);
 
-    out property <bool> has-matches: show-enabled || show-online || show-romanization;
+    out property <bool> has-matches: show-enabled || show-online || show-auto || show-romanization
+        || show-find;
 
     if has-matches: SectionCard {
         title: root.card-title;
@@ -69,6 +81,18 @@ export component LyricsSection inherits Rectangle {
             }
         }
 
+        if root.show-auto: SettingRow {
+            icon: "auto_awesome";
+            label: root.auto-label;
+            description: Settings.lyrics-online-enabled ? root.auto-desc
+                : @tr("Turn on \"Look up lyrics online\" above first");
+            disabled: !Settings.lyrics-online-enabled;
+            ToggleSwitch {
+                checked <=> Settings.lyrics-auto-lookup;
+                toggled(v) => { Settings.lyrics-auto-lookup-changed(v); }
+            }
+        }
+
         if root.show-romanization: SettingRow {
             icon: "translate";
             label: root.romanization-label;
@@ -76,6 +100,21 @@ export component LyricsSection inherits Rectangle {
             ToggleSwitch {
                 checked <=> Settings.lyrics-romanization-shown;
                 toggled(v) => { Settings.lyrics-romanization-shown-changed(v); }
+            }
+        }
+
+        if root.show-find: SettingRow {
+            icon: "search";
+            label: root.find-label;
+            description: Settings.lyrics-enabled ? root.find-desc
+                : @tr("Turn on \"Show lyrics\" above first");
+            disabled: !Settings.lyrics-enabled;
+            SectionButton {
+                label: @tr("Find…");
+                icon: "";
+                primary: false;
+                button-enabled: Player.vm.has_track;
+                clicked => { Dialog.open-lyrics-finder(); }
             }
         }
     }

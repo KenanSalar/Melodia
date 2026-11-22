@@ -310,6 +310,10 @@ msgstr "Alkalmaz"
 msgid "Review"
 msgstr "Ellenőrzés"
 
+#: ui/components/dialog/dialog.slint
+msgid "Turn On"
+msgstr "Bekapcsolás"
+
 #: ui/components/dialog/duplicate-row.slint
 msgid "Identical files"
 msgstr "Azonos fájlok"
@@ -469,11 +473,6 @@ msgstr "Nincs exportálható lejátszási lista"
 msgid "Several playlists are saved as one .zip file, which you can import directly without extracting it."
 msgstr "Több lejátszási lista egyetlen .zip fájlba kerül, amelyet kicsomagolás nélkül, közvetlenül importálhatsz."
 
-#. Translators: {} names who measured the headphones, as oratory1990.
-#: ui/components/dialog/headphone-picker-body.slint
-msgid "Measured by {}"
-msgstr "Mérte: {}"
-
 #: ui/components/dialog/headphone-picker-body.slint
 msgid "Find a model…"
 msgstr "Modell keresése…"
@@ -512,6 +511,11 @@ msgstr "Az AutoEq profilja ehhez a modellhez olyan sorokat tartalmaz, amelyeket 
 msgid "Couldn't apply the correction. See the log for details."
 msgstr "A korrekciót nem sikerült alkalmazni. A részleteket a naplóban találod."
 
+#. Translators: {} names who measured the headphones, as oratory1990.
+#: ui/components/dialog/headphone-picker-body.slint
+msgid "Measured by {}"
+msgstr "Mérte: {}"
+
 #. Translators: {} is the day the copy left the library, as 2026-11-02.
 #: ui/components/dialog/kept-out-body.slint
 msgid "Removed {}"
@@ -546,6 +550,86 @@ msgstr "Nincs kizárt fájl"
 #: ui/components/dialog/kept-out-body.slint
 msgid "Every removed copy is back in the library."
 msgstr "Minden eltávolított példány visszakerült a könyvtárba."
+
+#: ui/components/dialog/lyrics-finder-body.slint
+msgid "Title and artist…"
+msgstr "Cím és előadó…"
+
+#: ui/components/dialog/lyrics-finder-body.slint
+msgid "Instrumental"
+msgstr "Instrumentális"
+
+#: ui/components/dialog/lyrics-finder-body.slint
+msgid "Plain"
+msgstr "Időzítés nélkül"
+
+#: ui/components/dialog/lyrics-finder-body.slint
+msgid "Synced"
+msgstr "Szinkronizált"
+
+#: ui/components/dialog/lyrics-finder-body.slint
+msgid "Word-timed"
+msgstr "Szavanként"
+
+#: ui/components/dialog/lyrics-finder-body.slint
+msgid "\"Look up lyrics online\" is off"
+msgstr "A „Dalszöveg keresése online” ki van kapcsolva"
+
+#: ui/components/dialog/lyrics-finder-body.slint ui/views/search-view.slint
+msgid "Searching…"
+msgstr "Keresés…"
+
+#: ui/components/dialog/lyrics-finder-body.slint
+msgid "lrclib.net asked Melodia to wait"
+msgstr "Az lrclib.net várakozást kért a Melodiától"
+
+#: ui/components/dialog/lyrics-finder-body.slint
+msgid "Couldn't search lrclib.net"
+msgstr "Nem sikerült keresni az lrclib.net-en"
+
+#: ui/components/dialog/lyrics-finder-body.slint
+msgid "No lyrics match"
+msgstr "Nincs egyező dalszöveg"
+
+#: ui/components/dialog/lyrics-finder-body.slint
+msgid "Turning it on lets Melodia ask lrclib.net for this track, and for any track without lyrics of its own."
+msgstr "Bekapcsolva a Melodia lekérdezi az lrclib.net-et erre a számra, és minden saját dalszöveg nélküli számra."
+
+#: ui/components/dialog/lyrics-finder-body.slint
+msgid "Press Enter to search again in a minute."
+msgstr "Egy perc múlva nyomj Entert az újbóli kereséshez."
+
+#: ui/components/dialog/lyrics-finder-body.slint
+msgid "Check your connection, then press Enter to search again."
+msgstr "Ellenőrizd a kapcsolatot, majd nyomj Entert az újbóli kereséshez."
+
+#: ui/components/dialog/lyrics-finder-body.slint
+msgid "Try fewer words, or the title alone."
+msgstr "Próbálj kevesebb szót, vagy csak a címet."
+
+#: ui/components/dialog/lyrics-finder-body.slint
+msgid "Couldn't keep the pick. See the log for details."
+msgstr "A választást nem sikerült megtartani. A részleteket a naplóban találod."
+
+#: ui/components/dialog/lyrics-finder-body.slint
+msgid "Pick a match to read its lyrics."
+msgstr "Válassz egy találatot, hogy elolvasd a dalszövegét."
+
+#: ui/components/dialog/lyrics-finder-body.slint
+msgid "lrclib.net files this recording as instrumental."
+msgstr "Az lrclib.net ezt a felvételt instrumentálisként tartja nyilván."
+
+#: ui/components/dialog/lyrics-finder-body.slint
+msgid "The .lrc file beside this track is shown ahead of this pick."
+msgstr "A szám melletti .lrc fájl e választás előtt jelenik meg."
+
+#: ui/components/dialog/lyrics-finder-body.slint
+msgid "The timed lyrics in this track's tags are shown ahead of this pick."
+msgstr "A szám címkéiben lévő időzített dalszöveg e választás előtt jelenik meg."
+
+#: ui/components/dialog/lyrics-finder-body.slint
+msgid "This track's tags hold lyrics, which are shown ahead of an untimed pick."
+msgstr "A szám címkéi dalszöveget tartalmaznak, amely egy időzítés nélküli választás előtt jelenik meg."
 
 #: ui/components/dialog/playlist-mosaic-picker.slint
 msgid "No artwork"
@@ -1374,8 +1458,13 @@ msgid "Look up lyrics online"
 msgstr "Dalszöveg keresése online"
 
 #: ui/components/now-playing/lyrics-menu.slint
-msgid "Look up again"
-msgstr "Újbóli keresés"
+#: ui/views/settings/lyrics-section.slint
+msgid "Look up automatically"
+msgstr "Automatikus keresés"
+
+#: ui/components/now-playing/lyrics-menu.slint
+msgid "Find lyrics…"
+msgstr "Dalszöveg keresése…"
 
 #: ui/components/now-playing/lyrics-menu.slint
 msgid "Save to file"
@@ -1416,8 +1505,8 @@ msgstr "Kapcsold be a Dalszöveg menüben"
 
 #. Translators: "Lyrics menu" is the menu whose tooltip reads "Lyrics"
 #: ui/components/now-playing/lyrics-panel.slint
-msgid "Try again from the Lyrics menu"
-msgstr "Próbáld újra a Dalszöveg menüből"
+msgid "Find them in the Lyrics menu"
+msgstr "Keresd meg a Dalszöveg menüben"
 
 #: ui/components/now-playing/overflow-menu.slint
 #: ui/components/onboarding/onboarding-overlay.slint
@@ -1554,8 +1643,8 @@ msgstr "A lejátszott szám megjelenítése a Discord-profilodon"
 
 #: ui/components/onboarding/features-panel.slint
 #: ui/views/settings/lyrics-section.slint
-msgid "When a track carries no words of its own, ask lrclib.net for them"
-msgstr "Ha egy szám nem tartalmaz saját szöveget, lekérés innen: lrclib.net"
+msgid "Let Melodia ask lrclib.net for lyrics"
+msgstr "A Melodia dalszöveget kérhet innen: lrclib.net"
 
 #: ui/components/onboarding/features-panel.slint
 #: ui/views/settings/scrobbling-section.slint
@@ -2193,6 +2282,15 @@ msgstr "Válaszd ki az exportálandó lejátszási listákat."
 #: ui/views/radio/tab-pills.slint
 msgid "Export"
 msgstr "Exportálás"
+
+#: ui/globals/dialog.slint
+msgid "Find Lyrics"
+msgstr "Dalszöveg keresése"
+
+#. Translators: {} is the playing track's length, as 3:45.
+#: ui/globals/dialog.slint
+msgid "lrclib.net's matches for this track, which runs {}."
+msgstr "Az lrclib.net találatai erre a számra, amely {} hosszú."
 
 #: ui/globals/duplicates.slint
 msgid "{n} copy removed from the library"
@@ -3110,10 +3208,6 @@ msgid "Play something and it will show up here."
 msgstr "Játssz le valamit, és itt fog megjelenni."
 
 #: ui/views/search-view.slint
-msgid "Searching…"
-msgstr "Keresés…"
-
-#: ui/views/search-view.slint
 msgid "Search your library…"
 msgstr "Keresés a könyvtáradban…"
 
@@ -3400,6 +3494,7 @@ msgstr[0] "{n} eltávolított példány. A fájlja még a lemezen van, és az á
 msgstr[1] "{n} eltávolított példány. A fájljaik még a lemezen vannak, és az átvizsgálások kihagyják őket."
 
 #: ui/views/settings/duplicates-section.slint
+#: ui/views/settings/lyrics-section.slint
 msgid "Find…"
 msgstr "Keresés…"
 
@@ -3483,8 +3578,28 @@ msgid "Show the playing track's words in Now Playing instead of Up Next"
 msgstr "A lejátszott szám szövegének megjelenítése a Most szól nézetben a Következik lista helyett"
 
 #: ui/views/settings/lyrics-section.slint
+msgid "When a track carries no words of its own, ask lrclib.net for them"
+msgstr "Ha egy szám nem tartalmaz saját szöveget, lekérés innen: lrclib.net"
+
+#: ui/views/settings/lyrics-section.slint
 msgid "Print how a line sounds in Latin letters under the words, for a script that does not use them"
 msgstr "A sor kiejtése latin betűkkel a szöveg alatt, ha az írásrendszer nem latin betűs"
+
+#: ui/views/settings/lyrics-section.slint
+msgid "Find lyrics"
+msgstr "Dalszöveg keresése"
+
+#: ui/views/settings/lyrics-section.slint
+msgid "Pick the playing track's lyrics from lrclib.net's matches"
+msgstr "A lejátszott szám dalszövegének kiválasztása az lrclib.net találatai közül"
+
+#: ui/views/settings/lyrics-section.slint
+msgid "Turn on \"Look up lyrics online\" above first"
+msgstr "Előbb kapcsold be fent ezt: „Dalszöveg keresése online”"
+
+#: ui/views/settings/lyrics-section.slint
+msgid "Turn on \"Show lyrics\" above first"
+msgstr "Előbb kapcsold be fent ezt: „Dalszöveg megjelenítése”"
 
 #: ui/views/settings/mini-player-section.slint
 msgid "Miniplayer"

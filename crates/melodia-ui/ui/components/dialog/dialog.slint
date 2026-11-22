@@ -4,6 +4,7 @@ import { Dialog as DialogGlobal, DialogKind } from "../../globals/dialog.slint";
 import { DuplicatesUi } from "../../globals/duplicates.slint";
 import { CorrectionImport, HeadphonePicker, ImportStep, PickerPhase } from "../../globals/correction-dialogs.slint";
 import { LibrarySettings } from "../../globals/library-settings.slint";
+import { LyricsFinder, LyricsSearchPhase } from "../../globals/lyrics-finder.slint";
 import { SectionButton } from "../settings/section-button.slint";
 import { PlaylistMosaicPicker } from "playlist-mosaic-picker.slint";
 import { PlaylistPicker } from "playlist-picker.slint";
@@ -19,6 +20,7 @@ import { DuplicatesBody } from "duplicates-body.slint";
 import { KeptOutBody } from "kept-out-body.slint";
 import { HeadphonePickerBody } from "headphone-picker-body.slint";
 import { CorrectionImportBody } from "correction-import-body.slint";
+import { LyricsFinderBody } from "lyrics-finder-body.slint";
 import { LabeledInput } from "../labeled-input.slint";
 import { DialogHeader } from "dialog-header.slint";
 import { ModalCard } from "modal-card.slint";
@@ -58,6 +60,7 @@ export component DialogOverlay inherits Rectangle {
         : DialogGlobal.kind == DialogKind.edit-station ? 480px
         : DialogGlobal.kind == DialogKind.headphone-picker ? 560px
         : DialogGlobal.kind == DialogKind.correction-import ? 560px
+        : DialogGlobal.kind == DialogKind.lyrics-finder ? 560px
         : 540px;
     // Confirmation kinds only, mapped by kind so a caller sets nothing extra.
     property <string> kind-icon:
@@ -80,11 +83,12 @@ export component DialogOverlay inherits Rectangle {
         || DialogGlobal.kind == DialogKind.duplicates
         || DialogGlobal.kind == DialogKind.kept-out-files
         || DialogGlobal.kind == DialogKind.headphone-picker
-        || DialogGlobal.kind == DialogKind.correction-import;
+        || DialogGlobal.kind == DialogKind.correction-import
+        || DialogGlobal.kind == DialogKind.lyrics-finder;
     property <length> eased-height: layout.preferred-height;
     // A transition rather than `animate`, which would chase a window resize: its curve ends a
-    // fixed time after the step changed, so a later resize snaps. `in` only, finding being the
-    // default, so the card opens at rest and a close's teardown leaves nothing easing.
+    // fixed time after the step changed, so a later resize snaps. `in` only, each kind's first step
+    // being the default, so the card opens at rest and a close's teardown leaves nothing easing.
     states [
         finder-confirm when root.duplicates-confirming: {
             eased-height: layout.preferred-height;
@@ -105,6 +109,28 @@ export component DialogOverlay inherits Rectangle {
                 animate eased-height { duration: Theme.dur-med; easing: cubic-bezier(0.2, 0, 0, 1); }
             }
         }
+        lyrics-searching when DialogGlobal.kind == DialogKind.lyrics-finder
+            && LyricsFinder.phase == LyricsSearchPhase.searching: {
+            eased-height: layout.preferred-height;
+            in {
+                animate eased-height { duration: Theme.dur-med; easing: cubic-bezier(0.2, 0, 0, 1); }
+            }
+        }
+        lyrics-list when DialogGlobal.kind == DialogKind.lyrics-finder
+            && LyricsFinder.phase == LyricsSearchPhase.listing: {
+            eased-height: layout.preferred-height;
+            in {
+                animate eased-height { duration: Theme.dur-med; easing: cubic-bezier(0.2, 0, 0, 1); }
+            }
+        }
+        lyrics-settled when DialogGlobal.kind == DialogKind.lyrics-finder
+            && (LyricsFinder.phase == LyricsSearchPhase.rate-limited
+                || LyricsFinder.phase == LyricsSearchPhase.failed): {
+            eased-height: layout.preferred-height;
+            in {
+                animate eased-height { duration: Theme.dur-med; easing: cubic-bezier(0.2, 0, 0, 1); }
+            }
+        }
     ]
     // The finder's second step, whose footer reads Back and Remove.
     property <bool> duplicates-confirming:
@@ -112,6 +138,10 @@ export component DialogOverlay inherits Rectangle {
     // The import's second step, whose footer reads Back and Apply.
     property <bool> import-reviewing:
         DialogGlobal.kind == DialogKind.correction-import && CorrectionImport.step == ImportStep.review;
+    // Find Lyrics with the lookup off, whose footer offers to turn it on.
+    property <bool> lyrics-lookup-off:
+        DialogGlobal.kind == DialogKind.lyrics-finder
+        && LyricsFinder.phase == LyricsSearchPhase.lookup-off;
     // A fact about the form rather than an action on it, stated opposite the buttons.
     property <string> footer-note:
         DialogGlobal.kind == DialogKind.smart-playlist-editor && SmartEditor.match-count >= 0
@@ -214,6 +244,8 @@ export component DialogOverlay inherits Rectangle {
 
             if DialogGlobal.kind == DialogKind.correction-import: CorrectionImportBody { }
 
+            if DialogGlobal.kind == DialogKind.lyrics-finder: LyricsFinderBody { }
+
             HorizontalLayout {
                 spacing: Theme.pad-sm;
                 padding-top: Theme.pad-sm;
@@ -259,6 +291,8 @@ export component DialogOverlay inherits Rectangle {
                         ? (DuplicatesUi.confirming ? @tr("Remove") : @tr("Continue"))
                         : DialogGlobal.kind == DialogKind.correction-import
                         ? (root.import-reviewing ? @tr("Apply") : @tr("Review"))
+                        : root.lyrics-lookup-off
+                        ? @tr("Turn On")
                         : DialogGlobal.confirm-label;
                     icon: "";
                     primary: true;
@@ -295,7 +329,11 @@ export component DialogOverlay inherits Rectangle {
                                 && HeadphonePicker.picked >= 0 && !HeadphonePicker.applying))
                         && (DialogGlobal.kind != DialogKind.correction-import
                             || (!CorrectionImport.busy
-                                && (root.import-reviewing || CorrectionImport.text != "")));
+                                && (root.import-reviewing || CorrectionImport.text != "")))
+                        && (DialogGlobal.kind != DialogKind.lyrics-finder
+                            || root.lyrics-lookup-off
+                            || (LyricsFinder.phase == LyricsSearchPhase.listing
+                                && LyricsFinder.picked >= 0 && !LyricsFinder.applying));
                     clicked => {
                         DialogGlobal.accepted();
                         // A kind making a request stays open across it and Rust closes it.
@@ -305,7 +343,8 @@ export component DialogOverlay inherits Rectangle {
                                 && DialogGlobal.kind != DialogKind.edit-station
                                 && DialogGlobal.kind != DialogKind.duplicates
                                 && DialogGlobal.kind != DialogKind.headphone-picker
-                                && DialogGlobal.kind != DialogKind.correction-import) {
+                                && DialogGlobal.kind != DialogKind.correction-import
+                                && DialogGlobal.kind != DialogKind.lyrics-finder) {
                             DialogGlobal.open = false;
                         }
                     }

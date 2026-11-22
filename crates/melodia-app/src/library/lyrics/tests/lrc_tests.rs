@@ -16,10 +16,28 @@ fn stamps(text: &str) -> Vec<Option<i64>> {
     drawn(text).into_iter().map(|(at, _)| at).collect()
 }
 
-/// Each line with the end a blank stamp closed it at, which the two are only distinguishable by.
+/// Each line with its end, the one trace a blank or end stamp leaves on the sheet.
 fn folded(text: &str) -> Vec<(Option<i64>, Option<i64>, String)> {
     parse(text, LyricsSource::Sidecar).map_or_else(Vec::new, |sheet| {
         sheet.lines.into_iter().map(|line| (line.at_ms, line.end_ms, line.text)).collect()
+    })
+}
+
+/// A line's word stamps as `(start, at)`, a start being a byte into the line's drawn text.
+type Words = Vec<(usize, i64)>;
+
+fn words(text: &str) -> Vec<Words> {
+    paced(text).into_iter().map(|(_, words)| words).collect()
+}
+
+/// Each line's end beside its word stamps, which an end stamp and the span check move together.
+fn paced(text: &str) -> Vec<(Option<i64>, Words)> {
+    parse(text, LyricsSource::Sidecar).map_or_else(Vec::new, |sheet| {
+        sheet
+            .lines
+            .into_iter()
+            .map(|line| (line.end_ms, line.words.iter().map(|w| (w.start, w.at_ms)).collect()))
+            .collect()
     })
 }
 
@@ -98,7 +116,7 @@ fn an_offset_past_the_first_stamp_clamps_at_the_start() {
 }
 
 #[test]
-fn word_stamps_are_dropped_and_their_words_kept() {
+fn word_stamps_are_taken_out_of_the_text_and_their_words_kept() {
     assert_eq!(
         drawn("[00:01.00]<00:01.00>one <00:01.50>two"),
         vec![(Some(1_000), "one two".to_owned())]
@@ -108,6 +126,211 @@ fn word_stamps_are_dropped_and_their_words_kept() {
 #[test]
 fn an_angle_bracket_that_is_not_a_stamp_stays_in_the_line() {
     assert_eq!(drawn("[00:01.00]i <3 you"), vec![(Some(1_000), "i <3 you".to_owned())]);
+}
+
+#[test]
+fn a_seam_keeps_one_of_its_own_spaces_where_it_has_one_either_side() {
+    // The line #177 reported.
+    assert_eq!(
+        drawn("[00:12.50] <00:12.50> Hello <00:12.80> world"),
+        vec![(Some(12_500), "Hello world".to_owned())]
+    );
+}
+
+#[test]
+fn a_stamp_inside_a_word_joins_its_syllables() {
+    assert_eq!(
+        drawn("[00:01.00]<00:01.00>Hel<00:01.20>lo"),
+        vec![(Some(1_000), "Hello".to_owned())]
+    );
+}
+
+#[test]
+fn a_full_width_space_at_a_seam_is_the_space_kept() {
+    assert_eq!(
+        drawn("[00:01.00]<00:01.00>一\u{3000}<00:02.00>二"),
+        vec![(Some(1_000), "一\u{3000}二".to_owned())]
+    );
+}
+
+#[test]
+fn each_word_keeps_its_first_byte_in_the_drawn_text_and_its_time() {
+    assert_eq!(words("[00:01.00]<00:01.00>one <00:01.50>two"), vec![vec![(0, 1_000), (4, 1_500)]]);
+}
+
+#[test]
+fn a_word_s_start_counts_bytes_rather_than_characters() {
+    // The panel cuts the text at it, where a character count lights the wrong syllables.
+    assert_eq!(
+        words("[00:01.00]<00:01.00>안녕 <00:01.50>세계"),
+        vec![vec![(0, 1_000), (7, 1_500)]]
+    );
+}
+
+#[test]
+fn the_first_word_starts_past_any_text_written_ahead_of_its_stamp() {
+    assert_eq!(words("[00:01.00]Oh <00:01.50>yeah"), vec![vec![(3, 1_500)]]);
+}
+
+#[test]
+fn an_offset_moves_the_words_with_their_line() {
+    assert_eq!(
+        words("[offset:+500]\n[00:10.00]<00:10.00>a <00:10.50>b"),
+        vec![vec![(0, 9_500), (2, 10_000)]]
+    );
+}
+
+#[test]
+fn a_line_written_under_two_stamps_lights_its_words_on_both() {
+    assert_eq!(
+        words("[00:10.00][00:30.00]<00:10.00>la <00:10.50>la"),
+        vec![vec![(0, 10_000), (3, 10_500)], vec![(0, 30_000), (3, 30_500)]]
+    );
+}
+
+#[test]
+fn words_timed_against_a_later_repeat_light_on_the_first_too() {
+    // Each copy keeps the gaps from the stamp the words were written against, whichever it is.
+    assert_eq!(
+        words("[00:10.00][00:30.00]<00:30.00>la <00:30.50>la"),
+        vec![vec![(0, 10_000), (3, 10_500)], vec![(0, 30_000), (3, 30_500)]]
+    );
+}
+
+#[test]
+fn a_line_whose_words_come_before_its_only_stamp_lights_whole() {
+    // Refused rather than shifted onto the stamp: nothing says which of the two is wrong.
+    assert_eq!(words("[00:01.00]<00:00.999>a <00:01.50>b"), vec![Vec::new()]);
+}
+
+#[test]
+fn a_stamp_after_the_last_word_is_the_line_s_end_rather_than_a_word() {
+    assert_eq!(
+        paced("[00:01.00]<00:01.00>one <00:01.50>two <00:02.00>\n[00:20.00]next"),
+        vec![(Some(2_000), vec![(0, 1_000), (4, 1_500)]), (None, Vec::new())]
+    );
+}
+
+#[test]
+fn an_end_stamp_outranks_the_blank_stamp_after_it() {
+    // The blank would push the notes of the break back to 10 s, after the singing stopped at 2.
+    assert_eq!(
+        folded("[00:01.00]<00:01.00>a <00:02.00>\n[00:10.00]\n[00:20.00]b"),
+        vec![(Some(1_000), Some(2_000), "a".to_owned()), (Some(20_000), None, "b".to_owned())]
+    );
+}
+
+#[test]
+fn an_end_stamp_moves_with_the_copy_it_ends() {
+    assert_eq!(
+        folded("[00:10.00][00:30.00]<00:10.00>la <00:11.00>"),
+        vec![
+            (Some(10_000), Some(11_000), "la".to_owned()),
+            (Some(30_000), Some(31_000), "la".to_owned()),
+        ]
+    );
+}
+
+#[test]
+fn a_stamp_inside_the_gloss_is_no_word_and_breaks_no_order() {
+    // 1.20 runs backwards from 1.50; read as a word, it would light the whole line at once.
+    assert_eq!(
+        words("[00:01.00]<00:01.00>one <00:01.50>two^<00:01.20>uno dos"),
+        vec![vec![(0, 1_000), (4, 1_500)]]
+    );
+}
+
+#[test]
+fn a_stamp_inside_the_gloss_is_taken_out_of_its_text() {
+    assert_eq!(
+        glossed("[00:01.00]<00:01.00>one <00:01.50>two^<00:01.20>uno dos"),
+        vec![("one two".to_owned(), Some("uno dos".to_owned()))]
+    );
+}
+
+#[test]
+fn words_out_of_order_light_their_line_whole() {
+    assert_eq!(words("[00:01.00]<00:01.00>a <00:01.50>b <00:01.20>c"), vec![Vec::new()]);
+}
+
+#[test]
+fn two_words_on_one_instant_are_in_order() {
+    assert_eq!(words("[00:01.00]<00:01.00>a <00:01.00>b"), vec![vec![(0, 1_000), (2, 1_000)]]);
+}
+
+#[test]
+fn an_end_stamp_before_the_last_word_drops_the_words_and_the_end_together() {
+    assert_eq!(
+        paced("[00:01.00]<00:01.00>a <00:02.00>b <00:01.50>\n[00:20.00]c"),
+        vec![(None, Vec::new()), (None, Vec::new())]
+    );
+}
+
+#[test]
+fn a_line_s_words_may_run_up_to_the_next_line_s_stamp_and_not_past_it() {
+    assert_eq!(
+        words("[00:01.00]<00:01.00>a <00:03.00>b\n[00:03.00]c"),
+        vec![vec![(0, 1_000), (2, 3_000)], Vec::new()],
+        "a word on the next stamp"
+    );
+    assert_eq!(
+        words("[00:01.00]<00:01.00>a <00:03.001>b\n[00:03.00]c"),
+        vec![Vec::new(), Vec::new()],
+        "a millisecond past it"
+    );
+}
+
+#[test]
+fn an_end_stamp_past_the_next_line_s_stamp_lights_its_line_whole() {
+    assert_eq!(
+        paced("[00:01.00]<00:01.00>a <00:04.00>\n[00:03.00]b"),
+        vec![(None, Vec::new()), (None, Vec::new())]
+    );
+}
+
+#[test]
+fn a_blank_stamp_bounds_the_words_before_it_as_a_line_would() {
+    // Lit whole, the line then ends at the blank as any line does.
+    assert_eq!(
+        paced("[00:01.00]<00:01.00>a <00:05.00>b\n[00:03.00]\n[00:10.00]c"),
+        vec![(Some(3_000), Vec::new()), (None, Vec::new())]
+    );
+}
+
+#[test]
+fn a_line_sharing_its_stamp_with_the_next_is_bounded_by_the_stamp_after_both() {
+    // A couplet under one stamp: bounded by its neighbour's, the first line would light whole.
+    assert_eq!(
+        words("[00:01.00]<00:01.00>a <00:02.00>b\n[00:01.00]c\n[00:05.00]d"),
+        vec![vec![(0, 1_000), (2, 2_000)], Vec::new(), Vec::new()]
+    );
+}
+
+#[test]
+fn the_last_millisecond_an_i64_holds_is_a_stamp_and_the_next_is_not() {
+    assert_eq!(stamps("[0:9223372036854775.807]a"), vec![Some(i64::MAX)]);
+    assert_eq!(stamps("[0:9223372036854775.808]a"), vec![None]);
+}
+
+#[test]
+fn a_stamp_whose_minutes_or_seconds_overflow_milliseconds_is_not_a_stamp() {
+    // Text from a tag or a download: unchecked, the overflow panics a debug build and wraps a
+    // release one.
+    assert_eq!(stamps("[200000000000000000:00]a"), vec![None], "minutes");
+    assert_eq!(stamps("[0:9223372036854776]a"), vec![None], "seconds");
+}
+
+#[test]
+fn a_sheet_broken_only_by_carriage_returns_reads_line_by_line() {
+    assert_eq!(
+        drawn("[ti:x]\r[00:01.00]one\r[00:03.00]two\r"),
+        vec![(Some(1_000), "one".to_owned()), (Some(3_000), "two".to_owned())]
+    );
+}
+
+#[test]
+fn a_sheet_broken_by_carriage_returns_keeps_its_offset() {
+    assert_eq!(stamps("[offset:+500]\r[00:10.00]a"), vec![Some(9_500)]);
 }
 
 #[test]
@@ -241,6 +464,7 @@ fn a_sheet_is_timed_when_any_line_carries_a_stamp() {
     // parsed `Lyrics`. They are different questions and this is the one a promotion is decided on.
     assert!(is_timed("[00:01.00]a"));
     assert!(is_timed("stray words\n[00:01.00]a"), "one stamped line is enough");
+    assert!(is_timed("stray words\r[00:01.00]a"), "behind a lone carriage return too");
     assert!(!is_timed("just words\nand more"));
     assert!(!is_timed(""));
     assert!(!is_timed("[ti:Song]"), "an identification tag is not a stamp");

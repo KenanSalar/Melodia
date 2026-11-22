@@ -9,6 +9,9 @@
 
 use std::path::PathBuf;
 
+use lofty::config::WriteOptions;
+use lofty::ogg::tag::VorbisComments;
+use lofty::tag::TagExt;
 use tempfile::TempDir;
 
 use super::*;
@@ -29,9 +32,27 @@ struct Staged {
 
 impl Staged {
     fn new() -> Result<Self, AppError> {
+        Self::copy_of("silence.mp3")
+    }
+
+    /// A FLAC whose lyrics tag holds `entries` in this order, as Vorbis comments may and a save
+    /// through the tag writer never leaves.
+    fn with_entries(entries: [&str; 2]) -> Result<Self, AppError> {
+        let staged = Self::copy_of("silence.flac")?;
+        let mut comments = VorbisComments::new();
+        for entry in entries {
+            comments.push("LYRICS".to_owned(), entry.to_owned());
+        }
+        comments
+            .save_to_path(&staged.track, WriteOptions::default())
+            .map_err(|e| AppError::metadata("the fixture's lyrics must save", e))?;
+        Ok(staged)
+    }
+
+    fn copy_of(asset: &str) -> Result<Self, AppError> {
         let tmp = TempDir::new()?;
-        let track = tmp.path().join("track.mp3");
-        std::fs::copy(PathBuf::from(ASSETS_DIR).join("silence.mp3"), &track)?;
+        let track = tmp.path().join(asset);
+        std::fs::copy(PathBuf::from(ASSETS_DIR).join(asset), &track)?;
 
         let lyrics_dir = tmp.path().join("lyrics");
         std::fs::create_dir_all(&lyrics_dir)?;
@@ -175,6 +196,16 @@ fn a_plain_tag_leaves_the_store_free_to_answer() -> Result<(), AppError> {
 }
 
 #[test]
+fn a_timed_entry_behind_a_plain_one_is_the_sheet_the_panel_follows() -> Result<(), AppError> {
+    let staged = Staged::with_entries([PLAIN, TIMED])?;
+
+    let local = staged.local()?;
+
+    assert_eq!(local.own.as_ref().map(Lyrics::is_synced), Some(true));
+    Ok(())
+}
+
+#[test]
 fn nothing_anywhere_is_no_sheet_rather_than_an_error() -> Result<(), AppError> {
     let staged = Staged::new()?;
 
@@ -195,6 +226,14 @@ fn the_sidecar_text_is_what_the_editor_is_offered() -> Result<(), AppError> {
     staged.write_sidecar(PLAIN)?;
 
     assert_eq!(staged.text()?.as_deref(), Some(PLAIN));
+    Ok(())
+}
+
+#[test]
+fn the_editor_is_offered_the_entry_the_panel_shows() -> Result<(), AppError> {
+    let staged = Staged::with_entries([PLAIN, TIMED])?;
+
+    assert_eq!(staged.text()?.as_deref(), Some(TIMED));
     Ok(())
 }
 

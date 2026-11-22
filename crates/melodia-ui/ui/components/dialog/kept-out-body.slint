@@ -176,7 +176,7 @@ export component KeptOutBody inherits VerticalLayout {
         body: KeptOutUi.busy || KeptOutUi.failed ? "" : @tr("Every removed copy is back in the library.");
     }
 
-    // No `clip`, for the finder's well's reason.
+    // No `clip`, for the duplicates finder's well's reason.
     if KeptOutUi.listing: Rectangle {
         min-height: 160px;
         preferred-height: 520px;

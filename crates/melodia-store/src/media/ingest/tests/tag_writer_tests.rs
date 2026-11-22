@@ -11,7 +11,7 @@ use std::path::{Path, PathBuf};
 
 use lofty::file::TaggedFileExt;
 use lofty::prelude::{Accessor, ItemKey};
-use lofty::tag::{Tag, TagType};
+use lofty::tag::{ItemValue, Tag, TagItem, TagType};
 use tempfile::TempDir;
 
 use super::*;
@@ -258,10 +258,66 @@ fn clearing_lyrics_removes_both_keys() {
     assert_eq!(text(&tag, ItemKey::UnsyncLyrics), None);
 }
 
+/// A tag holding one lyrics entry under each `(key, text)`, in order, as a file with several
+/// reads into lofty's generic tag.
+fn lyrics_tag(tag_type: TagType, entries: &[(ItemKey, &str)]) -> Tag {
+    let mut tag = Tag::new(tag_type);
+    for &(key, entry) in entries {
+        let pushed = tag.push(TagItem::new(key, ItemValue::Text(entry.to_owned())));
+        assert!(pushed, "{key:?} has no home in {tag_type:?}, so the fixture is missing an entry");
+    }
+    tag
+}
+
+#[test]
+fn every_lyrics_entry_is_read_by_key_and_then_in_tag_order() {
+    let tag = lyrics_tag(
+        TagType::VorbisComments,
+        &[
+            (ItemKey::Lyrics, "first"),
+            (ItemKey::UnsyncLyrics, "unsynced"),
+            (ItemKey::Lyrics, "second"),
+        ],
+    );
+
+    assert_eq!(lyrics_entries(&tag), ["first", "second", "unsynced"]);
+}
+
+#[test]
+fn a_blank_lyrics_entry_is_not_an_entry() {
+    let tag =
+        lyrics_tag(TagType::VorbisComments, &[(ItemKey::Lyrics, ""), (ItemKey::Lyrics, "words")]);
+
+    assert_eq!(lyrics_entries(&tag), ["words"]);
+}
+
+/// The entries left after saving `new` over a tag holding one entry under `held_under`.
+fn entries_after_saving_over(tag_type: TagType, held_under: ItemKey) -> Vec<String> {
+    let mut tag = lyrics_tag(tag_type, &[(held_under, "old")]);
+    apply_edit(
+        &mut tag,
+        &TagEdit { lyrics: FieldEdit::Set("new".into()), ..TagEdit::default() },
+        None,
+    );
+    lyrics_entries(&tag)
+}
+
+#[test]
+fn saving_lyrics_replaces_an_m4a_entry_read_under_the_other_key() {
+    // A `©lyr` atom reads back as `Lyrics` where a save writes `UnsyncLyrics`, so clearing only
+    // the key it writes leaves the old atom first.
+    assert_eq!(entries_after_saving_over(TagType::Mp4Ilst, ItemKey::Lyrics), ["new"]);
+}
+
+#[test]
+fn saving_lyrics_replaces_a_flac_entry_under_the_other_key() {
+    assert_eq!(entries_after_saving_over(TagType::VorbisComments, ItemKey::UnsyncLyrics), ["new"]);
+}
+
 /// The dialog's single-selection Lyrics tab reads via `read_lyrics`, which must
 /// see whatever `apply_edit` wrote — including on MP3, where lyrics land in
 /// `USLT` (there is no `ID3v2` `Lyrics` mapping) and only the `UnsyncLyrics`
-/// fallback finds them. A writer↔reader round-trip; neither half is meaningful
+/// read finds them. A writer↔reader round-trip; neither half is meaningful
 /// alone.
 #[test]
 fn read_lyrics_round_trips_on_flac_and_mp3() -> Result<(), AppError> {
@@ -273,7 +329,7 @@ fn read_lyrics_round_trips_on_flac_and_mp3() -> Result<(), AppError> {
         &TagEdit { lyrics: FieldEdit::Set("first line\nsecond line".into()), ..TagEdit::default() },
         None,
     )?;
-    assert_eq!(read_lyrics(&flac)?.as_deref(), Some("first line\nsecond line"));
+    assert_eq!(read_lyrics(&flac)?, ["first line\nsecond line"]);
 
     let mp3 = stage(&tmp, "silence.mp3")?;
     apply_to_file(
@@ -281,7 +337,7 @@ fn read_lyrics_round_trips_on_flac_and_mp3() -> Result<(), AppError> {
         &TagEdit { lyrics: FieldEdit::Set("mp3 lyrics".into()), ..TagEdit::default() },
         None,
     )?;
-    assert_eq!(read_lyrics(&mp3)?.as_deref(), Some("mp3 lyrics"));
+    assert_eq!(read_lyrics(&mp3)?, ["mp3 lyrics"]);
 
     Ok(())
 }
@@ -600,7 +656,7 @@ fn an_oga_round_trips_a_full_edit_despite_its_extension() -> Result<(), AppError
     let tag = read_primary(&audio)?;
     assert_eq!(tag.tag_type(), TagType::VorbisComments);
     assert_full_edit_landed(&tag)?;
-    assert_eq!(read_lyrics(&audio)?.as_deref(), Some("la la la"));
+    assert_eq!(read_lyrics(&audio)?, ["la la la"]);
     Ok(())
 }
 

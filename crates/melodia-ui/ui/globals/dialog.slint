@@ -2,12 +2,15 @@ import { PlaylistPickRow, PlaylistExportPickRow, RadioStationRow } from "../mode
 import { SmartEditor, TagEditor, ScrobbleUi, RadioForm } from "dialog-forms.slint";
 import { DuplicatesUi, KeptOutUi } from "duplicates.slint";
 import { CorrectionImport, HeadphonePicker, ImportStep } from "correction-dialogs.slint";
+import { LyricsFinder, LyricsSearchPhase } from "lyrics-finder.slint";
+import { Player } from "player.slint";
 import { Radio } from "radio.slint";
 import { LibrarySettings } from "library-settings.slint";
 import { Playlists, PlaylistDetail } from "playlists.slint";
 import { Queue } from "queue.slint";
 import { WindowChrome } from "shell.slint";
 import { Settings } from "../settings.slint";
+import { Theme } from "../theme.slint";
 
 // `none` first, so a dialog never opened and one torn down read the same.
 export enum DialogKind {
@@ -40,6 +43,7 @@ export enum DialogKind {
     kept-out-files,
     headphone-picker,
     correction-import,
+    lyrics-finder,
 }
 
 // Why a removal asks first where an undo would otherwise follow, each with its own message.
@@ -195,6 +199,12 @@ export global Dialog {
             } else {
                 CorrectionImport.apply();
             }
+        } else if (root.kind == DialogKind.lyrics-finder) {
+            if (LyricsFinder.phase == LyricsSearchPhase.lookup-off) {
+                LyricsFinder.turn-on-lookup();
+            } else {
+                LyricsFinder.apply(LyricsFinder.picked);
+            }
         }
     }
     cancelled => { }
@@ -231,6 +241,9 @@ export global Dialog {
         CorrectionImport.step = ImportStep.paste;
         CorrectionImport.text = "";
         CorrectionImport.released();
+        LyricsFinder.query = "";
+        LyricsFinder.picked = -1;
+        LyricsFinder.released();
         root.export-pick-rows = [];
         root.export-select-all = false;
         root.export-selected-count = 0;
@@ -461,5 +474,22 @@ export global Dialog {
         root.cancel-label = @tr("Cancel");
         root.destructive = false;
         root.kind = DialogKind.export-playlists;
+    }
+
+    // Two callers, the lyrics menu and Settings, both meaning the playing track: Rust reads it at
+    // `load`, as the message reads its length here. Neither gates on the lookup, which the dialog
+    // asks for in `lookup-off`.
+    public function open-lyrics-finder() {
+        root.claim-request();
+        root.title = @tr("Find Lyrics");
+        // Translators: {} is the playing track's length, as 3:45.
+        root.message = @tr("lrclib.net's matches for this track, which runs {}.", Theme.format-duration(Player.vm.track.duration_ms));
+        root.confirm-label = @tr("Apply");
+        root.cancel-label = @tr("Cancel");
+        root.destructive = false;
+        root.kind = DialogKind.lyrics-finder;
+        LyricsFinder.phase = LyricsSearchPhase.loading;
+        root.open = true;
+        LyricsFinder.load();
     }
 }

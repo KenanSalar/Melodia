@@ -14,7 +14,7 @@ use std::time::{Duration, SystemTime};
 
 use super::lrc;
 use melodia_core::entities::cue::CueTrack;
-use melodia_core::entities::lyrics::{LyricsOutcome, LyricsSource};
+use melodia_core::entities::lyrics::{LyricsAnswer, LyricsOutcome, LyricsSource};
 use melodia_core::entities::track::{TagEditRow, TrackSummary};
 use melodia_core::error::AppError;
 use melodia_core::utils::atomic_file;
@@ -59,7 +59,7 @@ impl From<&TagEditRow> for LyricsKey {
 /// anyone has, short enough to read in a directory listing.
 const HASH_HEX_LEN: usize = 16;
 
-/// A fetched sheet, verbatim as the directory sent it.
+/// A sheet from the directory, a pick's included, as the LRC its client hands back.
 const SHEET_EXT: &str = "lrc";
 /// A recording the directory says has no words. Permanent: the answer will not change.
 const INSTRUMENTAL_EXT: &str = "instrumental";
@@ -90,13 +90,25 @@ pub(super) fn read(dir: &Path, track: &LyricsKey) -> Option<LyricsOutcome> {
     None
 }
 
-/// What came back, as the store keeps it. A sheet crosses as the directory's text, so re-reading
-/// it later can't differ from reading it now.
+/// What came back, as the store keeps it. A sheet crosses as the LRC the client handed back, so
+/// re-reading it later can't differ from reading it now.
 #[derive(Clone, Copy)]
 pub(super) enum Fetched<'a> {
     Sheet(&'a str),
     Instrumental,
     Nothing,
+}
+
+impl<'a> Fetched<'a> {
+    /// A sheet wherever the answer has words, so an upload both timed and marked instrumental is
+    /// kept as the words.
+    pub(super) fn of(answer: &'a LyricsAnswer) -> Self {
+        match answer.text() {
+            Some(text) => Self::Sheet(text),
+            None if answer.instrumental => Self::Instrumental,
+            None => Self::Nothing,
+        }
+    }
 }
 
 /// Records an answer, so the same track never costs a second request.

@@ -1,6 +1,6 @@
 //! The lyrics feature's contract, in the parts only its source text carries.
 //!
-//! One setting decides whether a track with no words of its own is looked up, and it is read in
+//! One setting decides whether the lyrics directory may be asked at all, and it is read in
 //! one place: `library::lyrics`' `online_lookup_enabled`. That only works while two things stay
 //! true, and neither is checkable from inside the crate holding it — nothing else in the facade
 //! reads the flag for itself, and nothing outside the facade reaches the directory client at all.
@@ -172,8 +172,7 @@ const WELCOME_CARD: &str =
 #[test]
 fn the_lyrics_switch_reads_the_same_on_both_cards() {
     const LABEL: &str = r#"@tr("Look up lyrics online")"#;
-    const DESCRIPTION: &str =
-        r#"@tr("When a track carries no words of its own, ask lrclib.net for them")"#;
+    const DESCRIPTION: &str = r#"@tr("Let Melodia ask lrclib.net for lyrics")"#;
 
     assert!(SETTINGS_CARD.contains(LABEL), "the Settings card no longer spells the label");
     assert!(WELCOME_CARD.contains(LABEL), "the welcome card no longer spells the label");

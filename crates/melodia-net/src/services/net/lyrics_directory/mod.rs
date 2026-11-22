@@ -1,17 +1,19 @@
-//! The lyrics directories, and the one call the app makes onto them. A caller gets a
-//! [`LyricsAnswer`] or nothing, never the service's wire shape or which service answered.
+//! The lyrics directories, and the calls the app makes onto them: [`fetch`] for the one answer a
+//! track gets, [`search`] for the candidates a person picks among. A caller gets a
+//! [`LyricsAnswer`], never the service's wire shape or which service answered.
 //!
 //! [`recording`] is shared rather than per client: whether a row is the recording we hold tags
 //! for is a question about tags, not about any one service.
 
 mod lrclib;
+mod lyricsfile;
 mod recording;
 
 use std::fmt;
 use std::time::Duration;
 
 use melodia_core::entities::artist::ArtistCredit;
-use melodia_core::entities::lyrics::LyricsAnswer;
+use melodia_core::entities::lyrics::{LyricsAnswer, LyricsCandidate};
 use melodia_core::error::AppError;
 
 use super::pacer::RequestPacer;
@@ -72,4 +74,25 @@ pub async fn fetch(
     duration_ms: i64,
 ) -> Result<Option<LyricsAnswer>, LookupError> {
     lrclib::fetch(client, pacer, title, credit, album, duration_ms).await
+}
+
+/// Every sheet the directory has for a typed query, best first for the track whose tags and length
+/// are given. Unlike [`fetch`] it keeps what a lookup would refuse, a person reading the list.
+pub async fn search(
+    client: &reqwest::Client,
+    pacer: &RequestPacer,
+    query: &str,
+    title: &str,
+    credit: &ArtistCredit,
+    duration_ms: i64,
+) -> Result<Vec<LyricsCandidate>, LookupError> {
+    lrclib::search(client, pacer, query, title, credit, duration_ms).await
+}
+
+/// What a search for this track starts from: the terms [`fetch`]'s own search asks with, as one
+/// line a person can edit.
+#[must_use]
+pub fn query_for(title: &str, credit: &ArtistCredit) -> String {
+    let (title, artist) = recording::search_terms(title, credit);
+    [title, artist].into_iter().filter(|term| !term.is_empty()).collect::<Vec<_>>().join(" ")
 }

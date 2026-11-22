@@ -313,6 +313,10 @@ msgstr "Застосувати"
 msgid "Review"
 msgstr "Перевірити"
 
+#: ui/components/dialog/dialog.slint
+msgid "Turn On"
+msgstr "Увімкнути"
+
 #: ui/components/dialog/duplicate-row.slint
 msgid "Identical files"
 msgstr "Однакові файли"
@@ -478,11 +482,6 @@ msgstr "Немає плейлистів для експорту"
 msgid "Several playlists are saved as one .zip file, which you can import directly without extracting it."
 msgstr "Кілька плейлистів зберігаються в один файл .zip, який можна імпортувати одразу, не розпаковуючи."
 
-#. Translators: {} names who measured the headphones, as oratory1990.
-#: ui/components/dialog/headphone-picker-body.slint
-msgid "Measured by {}"
-msgstr "Вимірювання: {}"
-
 #: ui/components/dialog/headphone-picker-body.slint
 msgid "Find a model…"
 msgstr "Знайти модель…"
@@ -521,6 +520,11 @@ msgstr "Профіль AutoEq для цієї моделі містить ряд
 msgid "Couldn't apply the correction. See the log for details."
 msgstr "Не вдалося застосувати корекцію. Подробиці в журналі."
 
+#. Translators: {} names who measured the headphones, as oratory1990.
+#: ui/components/dialog/headphone-picker-body.slint
+msgid "Measured by {}"
+msgstr "Вимірювання: {}"
+
 #. Translators: {} is the day the copy left the library, as 2026-11-02.
 #: ui/components/dialog/kept-out-body.slint
 msgid "Removed {}"
@@ -556,6 +560,86 @@ msgstr "Виключених файлів немає"
 #: ui/components/dialog/kept-out-body.slint
 msgid "Every removed copy is back in the library."
 msgstr "Усі вилучені копії знову в медіатеці."
+
+#: ui/components/dialog/lyrics-finder-body.slint
+msgid "Title and artist…"
+msgstr "Назва й виконавець…"
+
+#: ui/components/dialog/lyrics-finder-body.slint
+msgid "Instrumental"
+msgstr "Інструментал"
+
+#: ui/components/dialog/lyrics-finder-body.slint
+msgid "Plain"
+msgstr "Простий"
+
+#: ui/components/dialog/lyrics-finder-body.slint
+msgid "Synced"
+msgstr "Синхронний"
+
+#: ui/components/dialog/lyrics-finder-body.slint
+msgid "Word-timed"
+msgstr "По словах"
+
+#: ui/components/dialog/lyrics-finder-body.slint
+msgid "\"Look up lyrics online\" is off"
+msgstr "«Шукати тексти в інтернеті» вимкнено"
+
+#: ui/components/dialog/lyrics-finder-body.slint ui/views/search-view.slint
+msgid "Searching…"
+msgstr "Пошук…"
+
+#: ui/components/dialog/lyrics-finder-body.slint
+msgid "lrclib.net asked Melodia to wait"
+msgstr "lrclib.net попросив Melodia зачекати"
+
+#: ui/components/dialog/lyrics-finder-body.slint
+msgid "Couldn't search lrclib.net"
+msgstr "Не вдалося виконати пошук на lrclib.net"
+
+#: ui/components/dialog/lyrics-finder-body.slint
+msgid "No lyrics match"
+msgstr "Відповідних текстів немає"
+
+#: ui/components/dialog/lyrics-finder-body.slint
+msgid "Turning it on lets Melodia ask lrclib.net for this track, and for any track without lyrics of its own."
+msgstr "Після ввімкнення Melodia запитуватиме в lrclib.net текст цього треку й будь-якого треку без власного тексту."
+
+#: ui/components/dialog/lyrics-finder-body.slint
+msgid "Press Enter to search again in a minute."
+msgstr "За хвилину натисніть Enter, щоб шукати знову."
+
+#: ui/components/dialog/lyrics-finder-body.slint
+msgid "Check your connection, then press Enter to search again."
+msgstr "Перевірте підключення, потім натисніть Enter, щоб шукати знову."
+
+#: ui/components/dialog/lyrics-finder-body.slint
+msgid "Try fewer words, or the title alone."
+msgstr "Спробуйте менше слів або лише назву."
+
+#: ui/components/dialog/lyrics-finder-body.slint
+msgid "Couldn't keep the pick. See the log for details."
+msgstr "Не вдалося зберегти вибір. Подробиці в журналі."
+
+#: ui/components/dialog/lyrics-finder-body.slint
+msgid "Pick a match to read its lyrics."
+msgstr "Виберіть результат, щоб прочитати його текст."
+
+#: ui/components/dialog/lyrics-finder-body.slint
+msgid "lrclib.net files this recording as instrumental."
+msgstr "lrclib.net позначає цей запис як інструментальний."
+
+#: ui/components/dialog/lyrics-finder-body.slint
+msgid "The .lrc file beside this track is shown ahead of this pick."
+msgstr "Файл .lrc поруч із цим треком показується раніше за цей вибір."
+
+#: ui/components/dialog/lyrics-finder-body.slint
+msgid "The timed lyrics in this track's tags are shown ahead of this pick."
+msgstr "Синхронізований текст у тегах цього треку показується раніше за цей вибір."
+
+#: ui/components/dialog/lyrics-finder-body.slint
+msgid "This track's tags hold lyrics, which are shown ahead of an untimed pick."
+msgstr "Теги цього треку містять текст, який показується раніше за несинхронізований вибір."
 
 #: ui/components/dialog/playlist-mosaic-picker.slint
 msgid "No artwork"
@@ -1385,8 +1469,13 @@ msgid "Look up lyrics online"
 msgstr "Шукати тексти в інтернеті"
 
 #: ui/components/now-playing/lyrics-menu.slint
-msgid "Look up again"
-msgstr "Шукати знову"
+#: ui/views/settings/lyrics-section.slint
+msgid "Look up automatically"
+msgstr "Шукати автоматично"
+
+#: ui/components/now-playing/lyrics-menu.slint
+msgid "Find lyrics…"
+msgstr "Знайти текст…"
 
 #: ui/components/now-playing/lyrics-menu.slint
 msgid "Save to file"
@@ -1427,8 +1516,8 @@ msgstr "Увімкніть його в меню «Текст пісні»"
 
 #. Translators: "Lyrics menu" is the menu whose tooltip reads "Lyrics"
 #: ui/components/now-playing/lyrics-panel.slint
-msgid "Try again from the Lyrics menu"
-msgstr "Спробуйте ще раз з меню «Текст пісні»"
+msgid "Find them in the Lyrics menu"
+msgstr "Знайдіть його в меню «Текст пісні»"
 
 #: ui/components/now-playing/overflow-menu.slint
 #: ui/components/onboarding/onboarding-overlay.slint
@@ -1565,8 +1654,8 @@ msgstr "Показувати трек, що грає, у профілі Discord"
 
 #: ui/components/onboarding/features-panel.slint
 #: ui/views/settings/lyrics-section.slint
-msgid "When a track carries no words of its own, ask lrclib.net for them"
-msgstr "Якщо в треку немає власного тексту, запитувати його в lrclib.net"
+msgid "Let Melodia ask lrclib.net for lyrics"
+msgstr "Дозволити Melodia запитувати тексти в lrclib.net"
 
 #: ui/components/onboarding/features-panel.slint
 #: ui/views/settings/scrobbling-section.slint
@@ -2215,6 +2304,15 @@ msgstr "Виберіть плейлисти для експорту."
 #: ui/views/radio/tab-pills.slint
 msgid "Export"
 msgstr "Експорт"
+
+#: ui/globals/dialog.slint
+msgid "Find Lyrics"
+msgstr "Знайти текст"
+
+#. Translators: {} is the playing track's length, as 3:45.
+#: ui/globals/dialog.slint
+msgid "lrclib.net's matches for this track, which runs {}."
+msgstr "Результати lrclib.net для цього треку тривалістю {}."
 
 #: ui/globals/duplicates.slint
 msgid "{n} copy removed from the library"
@@ -3165,10 +3263,6 @@ msgid "Play something and it will show up here."
 msgstr "Увімкніть щось, і воно зʼявиться тут."
 
 #: ui/views/search-view.slint
-msgid "Searching…"
-msgstr "Пошук…"
-
-#: ui/views/search-view.slint
 msgid "Search your library…"
 msgstr "Пошук у медіатеці…"
 
@@ -3456,6 +3550,7 @@ msgstr[1] "{n} вилучені копії. Їхні файли досі на д
 msgstr[2] "{n} вилучених копій. Їхні файли досі на диску, а сканування їх пропускають."
 
 #: ui/views/settings/duplicates-section.slint
+#: ui/views/settings/lyrics-section.slint
 msgid "Find…"
 msgstr "Знайти…"
 
@@ -3539,8 +3634,28 @@ msgid "Show the playing track's words in Now Playing instead of Up Next"
 msgstr "Показувати текст треку, що грає, на екрані «Зараз грає» замість списку «Далі»"
 
 #: ui/views/settings/lyrics-section.slint
+msgid "When a track carries no words of its own, ask lrclib.net for them"
+msgstr "Якщо в треку немає власного тексту, запитувати його в lrclib.net"
+
+#: ui/views/settings/lyrics-section.slint
 msgid "Print how a line sounds in Latin letters under the words, for a script that does not use them"
 msgstr "Показувати під рядком його звучання латиницею, якщо текст написано іншим письмом"
+
+#: ui/views/settings/lyrics-section.slint
+msgid "Find lyrics"
+msgstr "Знайти текст"
+
+#: ui/views/settings/lyrics-section.slint
+msgid "Pick the playing track's lyrics from lrclib.net's matches"
+msgstr "Вибрати текст треку, що грає, з результатів lrclib.net"
+
+#: ui/views/settings/lyrics-section.slint
+msgid "Turn on \"Look up lyrics online\" above first"
+msgstr "Спершу ввімкніть «Шукати тексти в інтернеті» вище"
+
+#: ui/views/settings/lyrics-section.slint
+msgid "Turn on \"Show lyrics\" above first"
+msgstr "Спершу ввімкніть «Показати текст» вище"
 
 #: ui/views/settings/mini-player-section.slint
 msgid "Miniplayer"

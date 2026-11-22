@@ -15,6 +15,7 @@ use slint::{ComponentHandle, Image, ModelRc, TimerMode, VecModel};
 
 use crate::ui::appearance::token_duration;
 use crate::ui::now_playing_artwork::NowPlayingArtwork;
+use crate::ui::util::item_at;
 use melodia_app::state::AppState;
 use melodia_artwork::media::image::cover_thumbs::CoverThumbs;
 use melodia_core::entities::track::TrackSummary;
@@ -250,7 +251,8 @@ pub fn install(
     install_artwork_releaser(ui, state, np_artwork, &np_state);
 
     lyrics::wire_reseed(ui, state, &np_state);
-    lyrics::wire_menu(ui, state, &np_state);
+    lyrics::wire_save_to_tag(ui, state, &np_state);
+    lyrics::wire_finder(ui, state, &np_state);
 
     // No artwork seed: it decodes on the first open, or on `kick_artwork`.
     Ok(np_state)
@@ -449,8 +451,7 @@ fn clear_unshown_slot(
 }
 
 pub(super) fn current_track_id(qvm: &QueueViewModel) -> Option<i64> {
-    let idx = usize::try_from(qvm.queue_index).ok()?;
-    qvm.ids.get(idx).copied()
+    item_at(&qvm.ids, qvm.queue_index).copied()
 }
 
 #[cfg(test)]

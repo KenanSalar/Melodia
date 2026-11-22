@@ -309,6 +309,10 @@ msgstr "Εφαρμογή"
 msgid "Review"
 msgstr "Έλεγχος"
 
+#: ui/components/dialog/dialog.slint
+msgid "Turn On"
+msgstr "Ενεργοποίηση"
+
 #: ui/components/dialog/duplicate-row.slint
 msgid "Identical files"
 msgstr "Πανομοιότυπα αρχεία"
@@ -468,11 +472,6 @@ msgstr "Δεν υπάρχουν λίστες για εξαγωγή"
 msgid "Several playlists are saved as one .zip file, which you can import directly without extracting it."
 msgstr "Πολλές λίστες αποθηκεύονται ως ένα αρχείο .zip, το οποίο μπορείτε να εισαγάγετε απευθείας χωρίς αποσυμπίεση."
 
-#. Translators: {} names who measured the headphones, as oratory1990.
-#: ui/components/dialog/headphone-picker-body.slint
-msgid "Measured by {}"
-msgstr "Μέτρηση από {}"
-
 #: ui/components/dialog/headphone-picker-body.slint
 msgid "Find a model…"
 msgstr "Εύρεση μοντέλου…"
@@ -511,6 +510,11 @@ msgstr "Το προφίλ του AutoEq για αυτό το μοντέλο πε
 msgid "Couldn't apply the correction. See the log for details."
 msgstr "Δεν ήταν δυνατή η εφαρμογή της διόρθωσης. Δείτε το αρχείο καταγραφής για λεπτομέρειες."
 
+#. Translators: {} names who measured the headphones, as oratory1990.
+#: ui/components/dialog/headphone-picker-body.slint
+msgid "Measured by {}"
+msgstr "Μέτρηση από {}"
+
 #. Translators: {} is the day the copy left the library, as 2026-11-02.
 #: ui/components/dialog/kept-out-body.slint
 msgid "Removed {}"
@@ -545,6 +549,86 @@ msgstr "Δεν εξαιρείται τίποτα"
 #: ui/components/dialog/kept-out-body.slint
 msgid "Every removed copy is back in the library."
 msgstr "Όλα τα αντίγραφα που αφαιρέθηκαν είναι ξανά στη βιβλιοθήκη."
+
+#: ui/components/dialog/lyrics-finder-body.slint
+msgid "Title and artist…"
+msgstr "Τίτλος και καλλιτέχνης…"
+
+#: ui/components/dialog/lyrics-finder-body.slint
+msgid "Instrumental"
+msgstr "Ορχηστρικό"
+
+#: ui/components/dialog/lyrics-finder-body.slint
+msgid "Plain"
+msgstr "Απλό"
+
+#: ui/components/dialog/lyrics-finder-body.slint
+msgid "Synced"
+msgstr "Συγχρονισμένο"
+
+#: ui/components/dialog/lyrics-finder-body.slint
+msgid "Word-timed"
+msgstr "Ανά λέξη"
+
+#: ui/components/dialog/lyrics-finder-body.slint
+msgid "\"Look up lyrics online\" is off"
+msgstr "Το \"Αναζήτηση στίχων στο διαδίκτυο\" είναι απενεργοποιημένο"
+
+#: ui/components/dialog/lyrics-finder-body.slint ui/views/search-view.slint
+msgid "Searching…"
+msgstr "Αναζήτηση…"
+
+#: ui/components/dialog/lyrics-finder-body.slint
+msgid "lrclib.net asked Melodia to wait"
+msgstr "Το lrclib.net ζήτησε από το Melodia να περιμένει"
+
+#: ui/components/dialog/lyrics-finder-body.slint
+msgid "Couldn't search lrclib.net"
+msgstr "Δεν ήταν δυνατή η αναζήτηση στο lrclib.net"
+
+#: ui/components/dialog/lyrics-finder-body.slint
+msgid "No lyrics match"
+msgstr "Δεν ταιριάζουν στίχοι"
+
+#: ui/components/dialog/lyrics-finder-body.slint
+msgid "Turning it on lets Melodia ask lrclib.net for this track, and for any track without lyrics of its own."
+msgstr "Με την ενεργοποίηση, το Melodia ρωτά το lrclib.net για αυτό το κομμάτι και για κάθε κομμάτι χωρίς δικούς του στίχους."
+
+#: ui/components/dialog/lyrics-finder-body.slint
+msgid "Press Enter to search again in a minute."
+msgstr "Πατήστε Enter σε ένα λεπτό για νέα αναζήτηση."
+
+#: ui/components/dialog/lyrics-finder-body.slint
+msgid "Check your connection, then press Enter to search again."
+msgstr "Ελέγξτε τη σύνδεσή σας και πατήστε Enter για νέα αναζήτηση."
+
+#: ui/components/dialog/lyrics-finder-body.slint
+msgid "Try fewer words, or the title alone."
+msgstr "Δοκιμάστε λιγότερες λέξεις ή μόνο τον τίτλο."
+
+#: ui/components/dialog/lyrics-finder-body.slint
+msgid "Couldn't keep the pick. See the log for details."
+msgstr "Δεν ήταν δυνατή η αποθήκευση της επιλογής. Δείτε το αρχείο καταγραφής για λεπτομέρειες."
+
+#: ui/components/dialog/lyrics-finder-body.slint
+msgid "Pick a match to read its lyrics."
+msgstr "Επιλέξτε ένα αποτέλεσμα για να διαβάσετε τους στίχους του."
+
+#: ui/components/dialog/lyrics-finder-body.slint
+msgid "lrclib.net files this recording as instrumental."
+msgstr "Το lrclib.net καταγράφει αυτή την ηχογράφηση ως ορχηστρική."
+
+#: ui/components/dialog/lyrics-finder-body.slint
+msgid "The .lrc file beside this track is shown ahead of this pick."
+msgstr "Το αρχείο .lrc δίπλα σε αυτό το κομμάτι εμφανίζεται πριν από αυτή την επιλογή."
+
+#: ui/components/dialog/lyrics-finder-body.slint
+msgid "The timed lyrics in this track's tags are shown ahead of this pick."
+msgstr "Οι συγχρονισμένοι στίχοι στις ετικέτες αυτού του κομματιού εμφανίζονται πριν από αυτή την επιλογή."
+
+#: ui/components/dialog/lyrics-finder-body.slint
+msgid "This track's tags hold lyrics, which are shown ahead of an untimed pick."
+msgstr "Οι ετικέτες αυτού του κομματιού περιέχουν στίχους, που εμφανίζονται πριν από μια μη συγχρονισμένη επιλογή."
 
 #: ui/components/dialog/playlist-mosaic-picker.slint
 msgid "No artwork"
@@ -1373,8 +1457,13 @@ msgid "Look up lyrics online"
 msgstr "Αναζήτηση στίχων στο διαδίκτυο"
 
 #: ui/components/now-playing/lyrics-menu.slint
-msgid "Look up again"
-msgstr "Νέα αναζήτηση"
+#: ui/views/settings/lyrics-section.slint
+msgid "Look up automatically"
+msgstr "Αυτόματη αναζήτηση"
+
+#: ui/components/now-playing/lyrics-menu.slint
+msgid "Find lyrics…"
+msgstr "Εύρεση στίχων…"
 
 #: ui/components/now-playing/lyrics-menu.slint
 msgid "Save to file"
@@ -1415,8 +1504,8 @@ msgstr "Ενεργοποιήστε την από το μενού Στίχοι"
 
 #. Translators: "Lyrics menu" is the menu whose tooltip reads "Lyrics"
 #: ui/components/now-playing/lyrics-panel.slint
-msgid "Try again from the Lyrics menu"
-msgstr "Δοκιμάστε ξανά από το μενού Στίχοι"
+msgid "Find them in the Lyrics menu"
+msgstr "Βρείτε τους από το μενού Στίχοι"
 
 #: ui/components/now-playing/overflow-menu.slint
 #: ui/components/onboarding/onboarding-overlay.slint
@@ -1553,8 +1642,8 @@ msgstr "Εμφάνιση του κομματιού που ακούς στο πρ
 
 #: ui/components/onboarding/features-panel.slint
 #: ui/views/settings/lyrics-section.slint
-msgid "When a track carries no words of its own, ask lrclib.net for them"
-msgstr "Όταν ένα κομμάτι δεν έχει δικούς του στίχους, ζητούνται από το lrclib.net"
+msgid "Let Melodia ask lrclib.net for lyrics"
+msgstr "Το Melodia μπορεί να ζητά στίχους από το lrclib.net"
 
 #: ui/components/onboarding/features-panel.slint
 #: ui/views/settings/scrobbling-section.slint
@@ -2193,6 +2282,15 @@ msgstr "Επιλέξτε λίστες για εξαγωγή."
 #: ui/views/radio/tab-pills.slint
 msgid "Export"
 msgstr "Εξαγωγή"
+
+#: ui/globals/dialog.slint
+msgid "Find Lyrics"
+msgstr "Εύρεση στίχων"
+
+#. Translators: {} is the playing track's length, as 3:45.
+#: ui/globals/dialog.slint
+msgid "lrclib.net's matches for this track, which runs {}."
+msgstr "Τα αποτελέσματα του lrclib.net για αυτό το κομμάτι, διάρκειας {}."
 
 #: ui/globals/duplicates.slint
 msgid "{n} copy removed from the library"
@@ -3110,10 +3208,6 @@ msgid "Play something and it will show up here."
 msgstr "Παίξε κάτι και θα εμφανιστεί εδώ."
 
 #: ui/views/search-view.slint
-msgid "Searching…"
-msgstr "Αναζήτηση…"
-
-#: ui/views/search-view.slint
 msgid "Search your library…"
 msgstr "Αναζήτηση στη βιβλιοθήκη σας…"
 
@@ -3402,6 +3496,7 @@ msgstr[0] "{n} αντίγραφο αφαιρέθηκε. Το αρχείο του
 msgstr[1] "{n} αντίγραφα αφαιρέθηκαν. Τα αρχεία τους είναι ακόμα στον δίσκο και οι σαρώσεις τα παραλείπουν."
 
 #: ui/views/settings/duplicates-section.slint
+#: ui/views/settings/lyrics-section.slint
 msgid "Find…"
 msgstr "Εύρεση…"
 
@@ -3485,8 +3580,28 @@ msgid "Show the playing track's words in Now Playing instead of Up Next"
 msgstr "Εμφάνιση των στίχων του κομματιού που παίζει στην οθόνη «Αναπαράγεται τώρα» αντί για τα «Επόμενα»"
 
 #: ui/views/settings/lyrics-section.slint
+msgid "When a track carries no words of its own, ask lrclib.net for them"
+msgstr "Όταν ένα κομμάτι δεν έχει δικούς του στίχους, ζητούνται από το lrclib.net"
+
+#: ui/views/settings/lyrics-section.slint
 msgid "Print how a line sounds in Latin letters under the words, for a script that does not use them"
 msgstr "Εμφάνιση της προφοράς κάθε στίχου με λατινικούς χαρακτήρες κάτω από τα λόγια, για γραφές που δεν τους χρησιμοποιούν"
+
+#: ui/views/settings/lyrics-section.slint
+msgid "Find lyrics"
+msgstr "Εύρεση στίχων"
+
+#: ui/views/settings/lyrics-section.slint
+msgid "Pick the playing track's lyrics from lrclib.net's matches"
+msgstr "Επιλογή των στίχων του τρέχοντος κομματιού από τα αποτελέσματα του lrclib.net"
+
+#: ui/views/settings/lyrics-section.slint
+msgid "Turn on \"Look up lyrics online\" above first"
+msgstr "Ενεργοποιήστε πρώτα το \"Αναζήτηση στίχων στο διαδίκτυο\" παραπάνω"
+
+#: ui/views/settings/lyrics-section.slint
+msgid "Turn on \"Show lyrics\" above first"
+msgstr "Ενεργοποιήστε πρώτα το \"Εμφάνιση στίχων\" παραπάνω"
 
 #: ui/views/settings/mini-player-section.slint
 msgid "Miniplayer"
