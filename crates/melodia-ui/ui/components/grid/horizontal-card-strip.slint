@@ -3,31 +3,46 @@ import { Theme } from "../../theme.slint";
 import { EntityStripRow } from "../../models.slint";
 import { EntityCard } from "entity-card.slint";
 import { OverlayScrollbar } from "../overlay-scrollbar.slint";
+import { CollapsibleSectionHeader } from "../collapsible-section-header.slint";
 
 // A horizontally scrolling row of `EntityCard`s under a heading. Every card is built and every
 // cover requested, which is affordable only for a capped carousel; an uncapped set takes
-// `EntityCardGrid`.
+// `EntityCardGrid`. Its panel is a rounded fill rather than a rounded clip, which would render
+// the cards into a texture on every scroll frame.
 export component HorizontalCardStrip inherits Rectangle {
     in property <string>             heading;
     in property <[EntityStripRow]>   rows;
     in property <length>             card-width: 160px;
     in property <length>             card-height: 206px;
-    in property <length>             card-gap: 12px;
     in property <bool>               circular: false;
-    in property <bool>               show-play-count: false;
     in property <string>             fallback-icon: "music-note";
-    in property <string>             empty-text;
+    in property <bool>               collapsible: false;
+    in property <bool>               collapsed: false;
 
     pure callback request-cover(string) -> image;
     callback row-clicked(int);
+    callback toggled();
 
     private property <length> strip-height: root.card-height + 18px;
 
+    background: Theme.surface0;
+    border-radius: Theme.radius-lg;
+
     VerticalLayout {
+        // No less than the radius, so the strip's square clip stays inside the curve.
+        padding: Theme.pad-md;
         spacing: Theme.pad-sm;
 
-        // A host with its own header passes `""` rather than a second flag.
-        if root.heading != "": Text {
+        if root.collapsible: HorizontalLayout {
+            alignment: start;
+
+            CollapsibleSectionHeader {
+                label: root.heading;
+                collapsed: root.collapsed;
+                toggled => { root.toggled(); }
+            }
+        }
+        if !root.collapsible: Text {
             text: root.heading;
             color: Theme.text;
             font-size: Theme.font-size-md;
@@ -35,14 +50,8 @@ export component HorizontalCardStrip inherits Rectangle {
             letter-spacing: 0.4px;
         }
 
-        if root.rows.length == 0 && root.empty-text != "": Text {
-            text: root.empty-text;
-            color: Theme.subtext0;
-            font-size: Theme.font-size-sm;
-            wrap: word-wrap;
-        }
-
-        if root.rows.length > 0: Rectangle {
+        // Unmounted rather than hidden, since a collapse hands the strip's covers back.
+        if root.rows.length > 0 && !root.collapsed: Rectangle {
             height: root.strip-height;
             clip: true;
 
@@ -56,7 +65,7 @@ export component HorizontalCardStrip inherits Rectangle {
                 content-height: self.height;
 
                 HorizontalLayout {
-                    spacing: root.card-gap;
+                    spacing: Theme.pad-md;
                     alignment: start;
 
                     for row in root.rows: EntityCard {
@@ -68,7 +77,8 @@ export component HorizontalCardStrip inherits Rectangle {
                         card-height: root.card-height;
                         circular: root.circular;
                         fallback-icon: root.fallback-icon;
-                        play-count: root.show-play-count ? row.play_count : 0;
+                        cover-scale-hover: row.artwork_path == "" ? 1.15 : 1.04;
+                        on-card: true;
                         clicked => { root.row-clicked(row.id); }
                     }
                 }
@@ -80,6 +90,7 @@ export component HorizontalCardStrip inherits Rectangle {
                 y: parent.height - self.height;
                 width: parent.width;
                 height: 8px;
+                track-color: Theme.scrollbar-track-on-card;
                 visible-size: sv.visible-width;
                 content-size: sv.content-width;
                 offset: -sv.content-x;

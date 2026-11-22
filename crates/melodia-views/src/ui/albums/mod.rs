@@ -26,6 +26,7 @@ use melodia_artwork::media::image::cover_thumbs::CoverThumbs;
 use melodia_core::entities::album::AlbumStats;
 use melodia_ui::{
     AlbumDetail, AlbumGridRow as UiAlbumGridRow, AlbumRow as UiAlbumRow, Albums, AppWindow,
+    EntityStripRow as UiEntityStripRow,
 };
 
 use grid::AlbumsGrid;
@@ -142,6 +143,20 @@ pub fn to_slint_album_row(a: &AlbumStats) -> UiAlbumRow {
         total_duration_ms: i32::try_from(a.total_duration_ms.clamp(0, i64::from(i32::MAX)))
             .unwrap_or(i32::MAX),
         artwork_path: opt_shared(a.artwork_path.as_deref()),
+        pending: false,
+    }
+}
+
+/// An `AlbumStats` as a strip card, subtitled by its host, which knows whether the page already
+/// names the artist.
+pub fn to_slint_album_strip_row(a: &AlbumStats, subtitle: &str) -> UiEntityStripRow {
+    UiEntityStripRow {
+        id: clamp_i64_to_i32(a.id),
+        title: SharedString::from(a.name.as_str()),
+        subtitle: SharedString::from(subtitle),
+        artwork_path: opt_shared(a.artwork_path.as_deref()),
+        play_count: 0,
+        is_favorite: false,
         pending: false,
     }
 }

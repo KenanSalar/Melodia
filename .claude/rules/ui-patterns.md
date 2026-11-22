@@ -34,9 +34,10 @@ Paths are under `crates/melodia-ui/ui/components/` unless stated.
   `HoldTouchArea` for a press whose hold differs from its click, `SliderPointer` under every
   slider, `EdgeResizeHandle` for a resizable edge.
 - **Grids.** `EntityCard` inside `grid/card-cell.slint`'s `CardCell`, in a chunked `ListView` sized
-  by `GridGeometry` and `GridColumnsSync`. `HorizontalCardStrip` only for a capped carousel,
-  `EntityCardGrid` otherwise. `CardFavoriteButton` is a card's heart, `grid/play-count-badge.slint`
-  its count, `GridEmptyState` the empty block for grids and lists alike.
+  by `GridGeometry` and `GridColumnsSync`. `HorizontalCardStrip`, panel included, for every
+  capped carousel, `EntityCardGrid` otherwise. `CardFavoriteButton` is a card's heart,
+  `grid/play-count-badge.slint` its count, `GridEmptyState` the empty block for grids and lists
+  alike.
 - **Lists.** `TrackList` with `TrackListScrollbars`; `TrackTitle` for any row showing a track's
   title; `DragSource`, `ListDropTarget` and `DragGhost` for an in-window drag; `WindowRectReport`
   and `FileDropBanner` for a file dragged in from the OS (`window_chrome::file_drop` has the route);
@@ -64,7 +65,8 @@ Paths are under `crates/melodia-ui/ui/components/` unless stated.
 - **Escape and a section leave drop a selection**, an unseen set being indistinguishable from none.
 - **A floating surface edges with `Theme.surface2`, never `Theme.border`**, and a control resting
   on a card fills with `Theme.card-control` / `card-control-hover`. Card-only controls default to
-  the pair; `FilledChip`, `SliderTrack` and `SearchBar` (`on-card`) take it from a card host.
+  the pair; `FilledChip` and `SliderTrack` take it from a card host, `SearchBar` and `EntityCard`
+  through `on-card`.
 - **Sorting** goes through `next_sort`, `persist_view_sort` and `persisted_sort`, and a view whose
   natural order is a synthetic field (`"position"`) through `next_sort_with_natural`. Where the
   order *is* the page, `sortable: false` instead.

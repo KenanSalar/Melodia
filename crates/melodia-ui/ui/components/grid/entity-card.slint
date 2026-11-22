@@ -28,6 +28,9 @@ export component EntityCard inherits Rectangle {
 
     in property <float> cover-scale-hover: 1.04;
 
+    // On a `surface0` panel, which the default hover fill would vanish into.
+    in property <bool> on-card: false;
+
     // Opens the `@children` overlay slot and gates nothing else: the card draws no controls of
     // its own, so a host raising it never gets buttons it has no callbacks for.
     in property <bool> show-overlay-actions: false;
@@ -111,7 +114,9 @@ export component EntityCard inherits Rectangle {
         border-radius: Theme.radius-md;
         // Hover fill and selection ring on one element, so the renderer tucks the fill under the
         // stroke and the corner is antialiased once.
-        background: root.card-hovered ? Theme.surface0 : transparent;
+        background: root.card-hovered
+            ? (root.on-card ? Theme.card-control : Theme.surface0)
+            : transparent;
         animate background { duration: Theme.dur-fast; easing: ease-in-out; enabled: !Theme.recoloring; }
         border-width: root.selected ? 2px : 0px;
         border-color: Theme.accent;

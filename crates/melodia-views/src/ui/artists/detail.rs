@@ -23,7 +23,7 @@ use melodia_core::entities::album::AlbumStats;
 use melodia_core::entities::artist::ArtistStats;
 use melodia_core::entities::track_list::TrackListScope;
 use melodia_core::error::{AppResult, describe};
-use melodia_ui::{AlbumRow as UiAlbumRow, AppWindow, ArtistDetail, NavEnterFrom};
+use melodia_ui::{AppWindow, ArtistDetail, EntityStripRow as UiEntityStripRow, NavEnterFrom};
 
 impl TrackDetail for ArtistsUi {
     type Global = ArtistDetail<'static>;
@@ -126,8 +126,7 @@ where
         let header = to_slint_artist_row(&detail);
         g.set_artist(header);
 
-        let album_rows: Vec<UiAlbumRow> =
-            albums.iter().map(crate::ui::albums::to_slint_album_row).collect();
+        let album_rows: Vec<UiEntityStripRow> = albums.iter().map(album_card).collect();
         write_albums_model(&g, album_rows);
         *artists_ui.detail.albums.lock() = albums;
 
@@ -185,15 +184,21 @@ pub async fn refresh_detail(
 /// Narrows the Albums strip to the cards whose name the needle matches. UI thread.
 fn apply_albums_filter(g: &ArtistDetail<'_>, artists_ui: &ArtistsUi) {
     let needle = artists_ui.detail.cache.needle();
-    let album_rows: Vec<UiAlbumRow> = artists_ui
+    let album_rows: Vec<UiEntityStripRow> = artists_ui
         .detail
         .albums
         .lock()
         .iter()
         .filter(|a| needle.contains(&a.name))
-        .map(crate::ui::albums::to_slint_album_row)
+        .map(album_card)
         .collect();
     write_albums_model(g, album_rows);
+}
+
+/// An album as its strip card, subtitled with its year, the artist being the page's.
+fn album_card(a: &AlbumStats) -> UiEntityStripRow {
+    let year = a.year.filter(|&y| y > 0).map_or_default(|y| y.to_string());
+    crate::ui::albums::to_slint_album_strip_row(a, &year)
 }
 
 /// Reopens the artist on screen at the last shutdown: now if the launch shows the Artists tab,
@@ -224,9 +229,9 @@ pub fn restore_detail(ui: &AppWindow, state: &AppState, artists_ui: &Arc<Artists
 }
 
 /// Writes the strip through the keyed diff, so a keystroke that leaves it alone rebuilds no card.
-fn write_albums_model(g: &ArtistDetail, rows: Vec<UiAlbumRow>) {
+fn write_albums_model(g: &ArtistDetail, rows: Vec<UiEntityStripRow>) {
     let model = g.get_albums();
-    if let Some(vm) = model.as_any().downcast_ref::<VecModel<UiAlbumRow>>() {
+    if let Some(vm) = model.as_any().downcast_ref::<VecModel<UiEntityStripRow>>() {
         crate::ui::model_diff::apply_rows_keyed(vm, rows, |r| r.id);
     } else {
         g.set_albums(ModelRc::from(Rc::new(VecModel::from(rows))));

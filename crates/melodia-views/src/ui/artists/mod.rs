@@ -27,8 +27,8 @@ use melodia_app::state::AppState;
 use melodia_artwork::media::image::cover_thumbs::CoverThumbs;
 use melodia_core::entities::artist::ArtistStats;
 use melodia_ui::{
-    AlbumRow as UiAlbumRow, AppWindow, ArtistDetail, ArtistGridRow as UiArtistGridRow,
-    ArtistRow as UiArtistRow, Artists,
+    AppWindow, ArtistDetail, ArtistGridRow as UiArtistGridRow, ArtistRow as UiArtistRow, Artists,
+    EntityStripRow as UiEntityStripRow,
 };
 
 use grid::ArtistsGrid;
@@ -112,7 +112,7 @@ fn install_models(
     let cache = DetailCache::new(g.as_weak(), tracks.scroll_point());
     g.set_tracks(ModelRc::from(tracks));
 
-    let albums: Rc<VecModel<UiAlbumRow>> = Rc::new(VecModel::default());
+    let albums: Rc<VecModel<UiEntityStripRow>> = Rc::new(VecModel::default());
     g.set_albums(ModelRc::from(albums));
 
     let sel: Rc<VecModel<i32>> = Rc::new(VecModel::default());

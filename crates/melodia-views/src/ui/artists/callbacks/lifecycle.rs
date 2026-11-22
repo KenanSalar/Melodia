@@ -13,7 +13,9 @@ use crate::ui::model_diff::clear_vec_model;
 use crate::ui::tab_bar::UNFETCHED_COUNT;
 use melodia_app::state::AppState;
 use melodia_core::error::AppResult;
-use melodia_ui::{AlbumRow as UiAlbumRow, AppWindow, ArtistDetail, Artists, NavEnterFrom};
+use melodia_ui::{
+    AppWindow, ArtistDetail, Artists, EntityStripRow as UiEntityStripRow, NavEnterFrom,
+};
 
 pub(super) fn wire(ui: &AppWindow, state: &AppState, artists_ui: &Arc<ArtistsUi>) {
     grid_tab::wire(ui, state, artists_ui);
@@ -35,7 +37,7 @@ impl GridTab for ArtistsUi {
     }
 
     fn release_beside(&self, g: &ArtistDetail<'static>) {
-        clear_vec_model::<UiAlbumRow>(&g.get_albums(), "artists: clear detail albums");
+        clear_vec_model::<UiEntityStripRow>(&g.get_albums(), "artists: clear detail albums");
     }
 
     /// The detail's artwork and Albums strip, and the grid tier's pixels down to proxies. One tier

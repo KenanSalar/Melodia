@@ -4,11 +4,9 @@ import { ArtistDetail } from "../../globals/artists.slint";
 import { MyLibrary } from "../../globals/my-library.slint";
 import { Player } from "../../globals/player.slint";
 import { CompositeScroll } from "../../globals/shell.slint";
-import { EntityCard } from "../../components/grid/entity-card.slint";
+import { HorizontalCardStrip } from "../../components/grid/horizontal-card-strip.slint";
 import { TrackList } from "../../components/track-list/track-list.slint";
 import { CompositeScrollbars } from "../../components/composite-scrollbars.slint";
-import { OverlayScrollbar } from "../../components/overlay-scrollbar.slint";
-import { CollapsibleSectionHeader } from "../../components/collapsible-section-header.slint";
 
 // `AlbumDetailBody` with an optional Albums strip above the list, whose card click hands off to
 // the Albums tab. Insets are per child: `below-hero` is the region `CompositeScrollbars` measures
@@ -17,8 +15,6 @@ export component ArtistDetailBody inherits Rectangle {
     // Smaller than the grid's, so several albums fit without dominating the page.
     property <length> album-card-w: 140px;
     property <length> album-card-h: 184px;
-    // The strip's scrollbar band, reserved below the cards as `HorizontalCardStrip` does.
-    property <length> albums-bar-h: 8px;
 
     // A composite view: one outer `ScrollView` over the strip and the list, the list capped at
     // the outer viewport so its `ListView` keeps virtualizing.
@@ -50,73 +46,23 @@ export component ArtistDetailBody inherits Rectangle {
                         padding-left: Theme.pad-lg;
                         padding-right: Theme.pad-lg;
                         padding-top: Theme.pad-md;
-                        // The outer column has no `spacing`, so this keeps the divider off the
-                        // list header.
+                        // The outer column has no `spacing`, so this keeps the panel off the list
+                        // header.
                         padding-bottom: Theme.pad-lg;
-                        spacing: Theme.pad-sm;
 
-                        HorizontalLayout {
-                            alignment: start;
-
-                            CollapsibleSectionHeader {
-                                label: @tr("Albums");
-                                collapsed: ArtistDetail.albums-collapsed;
-                                toggled => { ArtistDetail.toggle-albums-collapsed(); }
+                        HorizontalCardStrip {
+                            heading: @tr("Albums");
+                            rows: ArtistDetail.albums;
+                            card-width: root.album-card-w;
+                            card-height: root.album-card-h;
+                            fallback-icon: "album";
+                            collapsible: true;
+                            collapsed: ArtistDetail.albums-collapsed;
+                            toggled => { ArtistDetail.toggle-albums-collapsed(); }
+                            request-cover(p) => {
+                                return ArtistDetail.request-album-cover(p);
                             }
-                        }
-
-                        // Not virtualized, an artist's albums being few. Its bar sits inside the
-                        // `if`, an id there being unreadable from outside.
-                        if !ArtistDetail.albums-collapsed: Rectangle {
-                            height: root.album-card-h + 2 * Theme.pad-xs + root.albums-bar-h;
-
-                            albums-sv := ScrollView {
-                                width: 100%;
-                                height: 100%;
-                                vertical-scrollbar-policy: always-off;
-                                horizontal-scrollbar-policy: always-off;
-                                content-height: self.height;
-
-                                HorizontalLayout {
-                                    spacing: Theme.pad-md;
-                                    padding-top: Theme.pad-xs;
-                                    // Clears the bar's band, so the cards keep their full
-                                    // height and nothing paints under the thumb.
-                                    padding-bottom: Theme.pad-xs + root.albums-bar-h;
-                                    alignment: start;
-
-                                    for album in ArtistDetail.albums: EntityCard {
-                                        card-width: root.album-card-w;
-                                        card-height: root.album-card-h;
-                                        artwork-path: album.artwork_path;
-                                        cover: ArtistDetail.request-album-cover(album.artwork_path);
-                                        fallback-icon: "album";
-                                        cover-scale-hover: album.artwork_path == "" ? 1.15 : 1.04;
-                                        title: album.name;
-                                        subtitle: album.year > 0 ? "\{album.year}" : "";
-                                        clicked => { ArtistDetail.open-album(album.id); }
-                                    }
-                                }
-                            }
-
-                            OverlayScrollbar {
-                                horizontal: true;
-                                x: 0;
-                                y: parent.height - self.height;
-                                width: parent.width;
-                                height: root.albums-bar-h;
-                                visible-size: albums-sv.visible-width;
-                                content-size: albums-sv.content-width;
-                                offset: -albums-sv.content-x;
-                                scroll-to(o) => { albums-sv.content-x = -o; }
-                            }
-                        }
-
-                        // **Outside the collapse `if`**, so it survives the collapse and
-                        // gives the hidden sub-section a clear lower edge against the list.
-                        Rectangle {
-                            height: 1px;
-                            background: Theme.surface2.with-alpha(0.5);
+                            row-clicked(id) => { ArtistDetail.open-album(id); }
                         }
                     }
 

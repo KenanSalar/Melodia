@@ -1,7 +1,8 @@
 # Plan: loading skeletons and card-strip panels (#169)
 
-Status: **Phases 1–3 done** and hand-checked, except the kept-out list, which the dev library has
-no files for, and Phase 3's seed step of two, which landed after the check; Phase 4 next.
+Status: **Phases 1–4 done** and hand-checked, except two dialog checks the dev library can't
+reach: the kept-out list, which it has no files for, and Phase 3's seed step of two, its 14
+duplicate groups loading in the first fetch. Phase 5 next.
 Branch `feat/skeletons-and-strip-panels`.
 
 ## What you see now, and after
@@ -127,7 +128,8 @@ Duplication collapsed in the blast radius, each in the phase that touches it:
   - `search::to_slint_album_strip_row` takes its subtitle as an argument and moves to
     `albums/mod.rs`, the shape `to_slint_artist_strip_row` already has. Search passes the artist
     name and the artist page the year, so both build album cards one way;
-  - `HorizontalCardStrip.empty-text`, which no mount sets, is deleted.
+  - `HorizontalCardStrip`'s `empty-text`, `show-play-count` and `card-gap`, which no mount sets,
+    are deleted, along with the `heading: ""` escape only the artist page's own header needed.
 
 ## Prior art
 
@@ -264,7 +266,7 @@ skeletons whenever a drag outruns the fetch.
 
 **Done when** both lists show skeletons on their `surface0` cards during a fast scroll.
 
-### Phase 4: the strip panels (not started)
+### Phase 4: the strip panels (done)
 
 **Rust**
 
@@ -286,14 +288,15 @@ skeletons whenever a drag outruns the fetch.
     (`artists/callbacks/detail.rs:57-59`).
   - **Bar and cards:** the bar takes `track-color: Theme.scrollbar-track-on-card`, and cards pass
     `on-card: true`.
-  - **Removed:** `empty-text`.
+  - **Removed:** `empty-text`, `show-play-count`, `card-gap` (now `Theme.pad-md`, the 12 px it
+    defaulted to) and the `heading: ""` escape.
 - `EntityCard.on-card`: the hover fill becomes `card-control` instead of `surface0`, because the
   panel is `surface0`. This matches what `SearchBar.on-card` does.
 - `CollapsibleSectionHeader` hovers to `card-control` instead of `surface1`. Its only mount now sits
   on the panel, and in several palettes `surface1` is almost the same as `surface0`.
 - `artist-detail.slint`:
   - the hand-built strip and the 1 px line give way to one `HorizontalCardStrip` mount: 140 × 184
-    cards, a `pad-md` gap, `request-album-cover`, `open-album`, and `collapsible`;
+    cards, `request-album-cover`, `open-album`, and `collapsible`;
   - the wrapper's bottom padding now keeps the panel off the list header.
 - `search-view.slint` is unchanged apart from the panel it inherits.
 - **Coverless hover zoom:** the strip binds `cover-scale-hover` to the rule every grid and the

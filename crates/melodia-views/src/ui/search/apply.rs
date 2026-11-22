@@ -7,7 +7,8 @@ use slint::{ComponentHandle, SharedString, Weak};
 
 use super::state::COMPACT_TRACK_LIMIT;
 use super::top_result::{TopKind, TopResult, TopSubtitle, compute_top_result};
-use super::{SearchUi, to_slint_album_strip_row, to_slint_artist_strip_row};
+use super::{SearchUi, to_slint_artist_strip_row};
+use crate::ui::albums::to_slint_album_strip_row;
 use crate::ui::genres::genre_accent;
 use crate::ui::list_selection;
 use crate::ui::model_diff;
@@ -35,7 +36,7 @@ pub fn apply_results_to_slint(
     let top = compute_top_result(results, query);
 
     let album_rows: Vec<UiEntityStripRow> =
-        results.albums.iter().map(to_slint_album_strip_row).collect();
+        results.albums.iter().map(|a| to_slint_album_strip_row(a, &a.artist_name)).collect();
     // Artist rows wait for the closure, their subtitle being a plural only the UI thread can
     // translate.
     let artists: Vec<ArtistStats> = results.artists.clone();
