@@ -38,7 +38,7 @@ export component GenreGrid inherits Rectangle {
             // The style's default too, pinned: a drag-pan takes any press that drifts.
             mouse-drag-pan-enabled: false;
 
-            for grid-row in root.rows: Rectangle {
+            for grid-row[row-idx] in root.rows: Rectangle {
                 min-height: root.row-height;
                 max-height: root.row-height;
 
@@ -48,7 +48,7 @@ export component GenreGrid inherits Rectangle {
                     spacing: root.gap;
                     alignment: start;
 
-                    for genre in grid-row.genres: cell := CardCell {
+                    for genre[col-idx] in grid-row.genres: cell := CardCell {
                         card-width: root.card-width;
                         card-height: root.card-height;
                         scope: "genres";
@@ -68,6 +68,9 @@ export component GenreGrid inherits Rectangle {
                                 @tr("{n} track" | "{n} tracks" % genre.track_count)
                                 + " · " + genre.display_duration;
                             clicked => { root.open-genre(genre.id); }
+                            pending: genre.pending;
+                            row-index: row-idx;
+                            column-index: col-idx;
 
                             selectable: true;
                             selected: cell.selected;

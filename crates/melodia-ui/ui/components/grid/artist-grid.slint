@@ -40,7 +40,7 @@ export component ArtistGrid inherits Rectangle {
             // The style's default too, pinned: a drag-pan takes any press that drifts.
             mouse-drag-pan-enabled: false;
 
-            for grid-row in root.rows: Rectangle {
+            for grid-row[row-idx] in root.rows: Rectangle {
                 min-height: root.row-height;
                 max-height: root.row-height;
 
@@ -50,7 +50,7 @@ export component ArtistGrid inherits Rectangle {
                     spacing: root.gap;
                     alignment: start;
 
-                    for artist in grid-row.artists: cell := CardCell {
+                    for artist[col-idx] in grid-row.artists: cell := CardCell {
                         card-width: root.card-width;
                         card-height: root.card-height;
                         scope: "artists";
@@ -73,6 +73,9 @@ export component ArtistGrid inherits Rectangle {
                                     ? " · " + @tr("{n} album" | "{n} albums" % artist.album_count)
                                     : "");
                             clicked => { root.open-artist(artist.id); }
+                            pending: artist.pending;
+                            row-index: row-idx;
+                            column-index: col-idx;
 
                             selectable: true;
                             selected: cell.selected;

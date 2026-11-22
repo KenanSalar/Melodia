@@ -4,6 +4,7 @@ import { Checkbox } from "../checkbox.slint";
 import { MaterialIcon } from "../material-icon.slint";
 import { PlayCountBadge } from "play-count-badge.slint";
 import { ContextClick } from "../context-menu.slint";
+import { SkeletonBar, SkeletonTile } from "../skeleton.slint";
 
 // The card every grid and strip draws. Its slot is a fixed size the host derives from the
 // available width, so the grid stays stable.
@@ -49,6 +50,11 @@ export component EntityCard inherits Rectangle {
     // The host's scope already holds a pick, which makes a body click a pick too.
     in property <bool> selection-live: false;
 
+    in property <bool> pending: false;
+    // The card's place in its grid, which picks its skeleton's bar widths.
+    in property <int> row-index;
+    in property <int> column-index;
+
     callback clicked();
     callback select-clicked(bool /*shift*/, bool /*ctrl*/);
     // In the card's own frame.
@@ -89,6 +95,12 @@ export component EntityCard inherits Rectangle {
     // Through the brushes, not `opacity`, which would hold a texture per dimmed card. The badges
     // skip it: Browse, the one host disabling cards, sets neither.
     private property <float> fade: root.enabled ? 1.0 : Theme.fade-disk-only;
+    private property <brush> title-ink: Theme.text.transparentize(1.0 - root.fade);
+    private property <brush> subtitle-ink: Theme.subtext0.transparentize(1.0 - root.fade);
+    private property <length> tile-radius: root.circular ? root.tile-size / 2 : Theme.radius-md;
+    // Twice the row, so no two touching cards share a width, diagonals included. Not the place in
+    // the whole list, which at five or ten columns would match every card down a column.
+    private property <int> seed: 2 * root.row-index + root.column-index;
 
     width: card-width;
     height: card-height;
@@ -118,11 +130,11 @@ export component EntityCard inherits Rectangle {
             padding: Theme.pad-sm;
             spacing: Theme.pad-sm;
 
-            ArtworkImage {
+            if !root.pending: ArtworkImage {
                 artwork-path: root.artwork-path;
                 cover: root.cover;
                 tile-size: root.tile-size;
-                tile-radius: root.circular ? root.tile-size / 2 : Theme.radius-md;
+                tile-radius: root.tile-radius;
                 cover-scale: root.card-hovered ? root.cover-scale-hover : 1.0;
                 fallback-icon: root.fallback-icon;
                 fallback-text: root.fallback-text;
@@ -131,20 +143,25 @@ export component EntityCard inherits Rectangle {
                 tile-icon-color: root.tile-icon-color;
                 fade: root.fade;
             }
+            if root.pending: SkeletonTile {
+                ink: root.title-ink;
+                tile-size: root.tile-size;
+                tile-radius: root.tile-radius;
+            }
 
-            VerticalLayout {
+            if !root.pending: VerticalLayout {
                 spacing: 2px;
                 // The LRM keeps mixed-script titles from drifting, as in the rows.
                 Text {
                     text: "‎" + root.title;
-                    color: Theme.text.transparentize(1.0 - root.fade);
+                    color: root.title-ink;
                     font-size: Theme.font-size-md;
                     font-weight: 600;
                     overflow: elide;
                 }
                 Text {
                     text: "‎" + root.subtitle;
-                    color: Theme.subtext0.transparentize(1.0 - root.fade);
+                    color: root.subtitle-ink;
                     font-size: Theme.font-size-sm;
                     overflow: elide;
                     visible: root.subtitle != "";
@@ -155,6 +172,22 @@ export component EntityCard inherits Rectangle {
                     font-size: Theme.font-size-sm;
                     overflow: elide;
                     visible: root.subtitle2 != "";
+                }
+            }
+            // Spaced wider than the text, a bar being shorter than the line box it stands in for.
+            if root.pending: VerticalLayout {
+                spacing: Theme.pad-xs;
+                SkeletonBar {
+                    ink: root.title-ink;
+                    seed: root.seed;
+                    span: root.tile-size;
+                    font-size: Theme.font-size-md;
+                }
+                SkeletonBar {
+                    ink: root.subtitle-ink;
+                    seed: root.seed + 1;
+                    span: root.tile-size;
+                    font-size: Theme.font-size-sm;
                 }
             }
 

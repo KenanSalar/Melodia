@@ -1,6 +1,7 @@
 # Plan: loading skeletons and card-strip panels (#169)
 
-Status: **Phase 1 done** and hand-checked; Phase 2 next. Branch `feat/skeletons-and-strip-panels`.
+Status: **Phase 1 done** and hand-checked; **Phase 2 done**, awaiting its hand check; Phase 3 next.
+Branch `feat/skeletons-and-strip-panels`.
 
 ## What you see now, and after
 
@@ -86,7 +87,8 @@ page's Albums strip, which has a thin line under it. After the change:
   - The seed is the row's place in its list plus a per-column offset, so the bars in one row
     differ from each other too. Not the id: neighbouring rows' ids are unrelated, so one pair in
     five matched, and Phase 1's hand check caught a run of four identical rows in title order.
-    Phase 2 and 3 seed a card and a dialog row by its place the same way.
+    A card is seeded by its row and column in the grid (Phase 2), and Phase 3 seeds a dialog row
+    by its place.
   - It needs no array literal and no global.
 - **No shimmer and no pulse.** Rows fill in a moment after scrolling slows, and an animation would
   keep the window redrawing as long as any skeleton is up.
@@ -203,16 +205,25 @@ Duplication collapsed in the blast radius, each in the phase that touches it:
 **Done when** the gates pass and Songs, the four details, Favorites' Songs and the queue show
 skeletons whenever a drag outruns the fetch.
 
-### Phase 2: the grids (not started)
+### Phase 2: the grids (done)
 
-- `EntityCard` takes `pending`. While it is set the card shows:
+- `EntityCard` takes `pending`, and `row-index` and `column-index` for its place in the grid. While
+  `pending` is set the card shows:
   - a `SkeletonTile` in the tile's place, round when `circular`;
-  - a title bar in `Theme.text`'s ink and a subtitle bar in `subtext0`'s;
-  - no `subtitle2`, no hover zoom and no play-count badge.
+  - a title bar in `Theme.text`'s ink and a subtitle bar in `subtext0`'s. Both bars swap in as one
+    block with `Theme.pad-xs` between them, since a bar is shorter than the line box it replaces;
+  - no `subtitle2` and no hover zoom. The play-count and smart-playlist badges need no gate: a
+    placeholder's zero count and `is_smart: false` already hide them, and the zero rule stays the
+    leaf's (`play_count_badge_tests.rs`).
+- The bar seed is `2 * row + column`. The doubled row keeps every touching card, diagonals included,
+  off a shared width. The place in the whole list would match a whole column at 5 or 10 columns.
+  The rule lives in `EntityCard`, so a host passes the two indices and nothing else.
+- The title and subtitle inks and the tile radius are named once, the text and its bar or tile
+  each reading them.
 - Selection box, click, context menu and drag are unchanged.
-- The five grid hosts pass `pending: <card>.pending`: `album-grid.slint`, `artist-grid.slint`,
-  `genre-grid.slint`, `playlist-grid.slint` and `entity-card-grid.slint`. The last covers Most Played
-  on both pages, and Favorite Artists, which pages the same row type.
+- The five grid hosts pass `pending`, `row-index` and `column-index`: `album-grid.slint`,
+  `artist-grid.slint`, `genre-grid.slint`, `playlist-grid.slint` and `entity-card-grid.slint`. The
+  last covers Most Played on both pages, and Favorite Artists, which pages the same row type.
 - `entity-card-grid.slint` hides `CardFavoriteButton` while pending, because the heart shows a fact
   the card doesn't have yet. The playlist hover trio stays, since it acts by id.
 - Constraints to hold (`crates/melodia/tests/`):

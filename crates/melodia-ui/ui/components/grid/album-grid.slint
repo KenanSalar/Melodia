@@ -42,7 +42,7 @@ export component AlbumGrid inherits Rectangle {
             // The style's default too, pinned: a drag-pan takes any press that drifts.
             mouse-drag-pan-enabled: false;
 
-            for grid-row in root.rows: Rectangle {
+            for grid-row[row-idx] in root.rows: Rectangle {
                 min-height: root.row-height;
                 max-height: root.row-height;
 
@@ -52,7 +52,7 @@ export component AlbumGrid inherits Rectangle {
                     spacing: root.gap;
                     alignment: start;
 
-                    for album in grid-row.albums: cell := CardCell {
+                    for album[col-idx] in grid-row.albums: cell := CardCell {
                         card-width: root.card-width;
                         card-height: root.card-height;
                         scope: "albums";
@@ -74,6 +74,9 @@ export component AlbumGrid inherits Rectangle {
                                 : album.artist_name)
                                 + (album.year > 0 ? " · \{album.year}" : "");
                             clicked => { root.open-album(album.id); }
+                            pending: album.pending;
+                            row-index: row-idx;
+                            column-index: col-idx;
 
                             selectable: true;
                             selected: cell.selected;
