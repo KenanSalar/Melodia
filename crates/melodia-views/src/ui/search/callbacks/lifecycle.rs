@@ -1,4 +1,5 @@
-//! The Search section's leave: the models on the UI thread, then the tiers off it.
+//! The Search section's leave, the models on the UI thread and then the tiers off it, and its
+//! return, which re-runs the query the leave kept.
 
 use std::sync::Arc;
 
@@ -21,14 +22,32 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, search_ui: &Arc<SearchUi>) 
         let weak = weak.clone();
         g.on_section_active_changed(move |active| {
             su.set_section_active(active);
-            if !active && let Some(ui) = weak.upgrade() {
+            if active {
+                if let Some(ui) = weak.upgrade() {
+                    rerun_kept_query(&ui);
+                }
+                return;
+            }
+            if let Some(ui) = weak.upgrade() {
                 teardown_models_on_leave(&ui);
             }
-            if !active {
-                let su = su.clone();
-                let runtime = s.runtime.clone();
-                runtime.spawn_blocking(move || su.release_section_state());
-            }
+            let su = su.clone();
+            s.runtime.spawn_blocking(move || su.release_section_state());
         });
     }
+}
+
+/// Commits the query a leave kept, as Enter does, the leave having released its results: left
+/// alone, the box would hold the query over "No results found".
+fn rerun_kept_query(ui: &AppWindow) {
+    let g = ui.global::<Search>();
+    let query = g.get_query();
+    if query.trim().is_empty() {
+        return;
+    }
+    // Raised now rather than when the fetch posts it, which would let the empty state paint first.
+    g.set_loading(true);
+    // A keystroke still pending at the leave would otherwise commit a second time.
+    g.set_debounce_tick_applied(g.get_debounce_tick_pending());
+    g.invoke_commit_search(query);
 }

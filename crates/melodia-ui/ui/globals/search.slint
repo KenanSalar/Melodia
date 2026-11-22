@@ -2,8 +2,8 @@ import { TrackListRow, TrackColumns, EntityStripRow } from "../models.slint";
 
 // **The compact row count is Rust's `COMPACT_TRACK_LIMIT`**, never restated here. **The query is
 // the only driver**: no library change refreshes the results, a scan finishing mid-query not being
-// allowed to swap them out from under the user. A leave releases the strip covers and keeps
-// `query` and `recent-rows`.
+// allowed to swap them out from under the user. A leave releases the results and strip covers and
+// keeps `query` and `recent-rows`, and a return re-runs the query.
 export global Search {
     // The view's `Timer` fires `commit-search` once `pending` moves past `applied`.
     in-out property <string> query;
