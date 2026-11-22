@@ -111,6 +111,7 @@ paths:
 - **`is_smart` gates off every manual-membership edit**, each writing `playlist_items` a smart list
   never reads: reorder and remove in Slint (`playlist-detail.slint`, the row menu's
   `view-context`), file drop and Add to Playlist in Rust (`DetailPage::drop_target`,
-  `add_picker`).
+  `add_picker`), and the queue's drop in both (`playlist-detail.slint`'s `takes-items`,
+  `wire_drop_in`).
 - **A smart playlist becomes a regular one only through `queries::playlist_convert`**, which reads
   the membership inside the write that flips `is_smart` (`convert_to_regular`).

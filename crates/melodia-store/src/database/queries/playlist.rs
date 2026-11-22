@@ -230,34 +230,78 @@ pub async fn add_tracks_to_playlist(
     if track_ids.is_empty() {
         return Ok(Vec::new());
     }
-    db.transaction(move |tx| append_items(tx, playlist_id, &track_ids)).await
+    db.transaction(move |tx| place_items(tx, playlist_id, &track_ids, None)).await
 }
 
-fn append_items(
+/// [`add_tracks_to_playlist`] in front of row `before` of the playlist's own order, a row past its
+/// end being the end.
+pub async fn insert_tracks_into_playlist(
+    db: &DbPool,
+    playlist_id: i64,
+    track_ids: Vec<i64>,
+    before: usize,
+) -> Result<Vec<i64>, AppError> {
+    if track_ids.is_empty() {
+        return Ok(Vec::new());
+    }
+    db.transaction(move |tx| place_items(tx, playlist_id, &track_ids, Some(before))).await
+}
+
+/// Puts the tracks of `track_ids` the playlist lacks, each once and in order, in front of row
+/// `before` or at the end, and returns those that landed. The rows already there come out numbered
+/// from zero, closing any gap a hard-deleted track left.
+fn place_items(
     tx: &Transaction<'_>,
     playlist_id: i64,
     track_ids: &[i64],
+    before: Option<usize>,
 ) -> Result<Vec<i64>, AppError> {
-    let present = present_in_order(tx, track_ids)?;
-
-    let max_pos: Option<i32> = sql::fetch_one(
-        tx,
-        "SELECT MAX(position) FROM playlist_items WHERE playlist_id = ?",
-        (playlist_id,),
-    )?;
-
-    let start_position = max_pos.unwrap_or(-1) + 1;
-    let now = melodia_core::utils::now_rfc3339();
-    let landed = insert_items_tx(tx, playlist_id, &contiguous(&present, start_position, &now)?)?;
+    let rows = items_in_order(tx, playlist_id)?;
+    let new = tracks_not_held(&rows, present_in_order(tx, track_ids)?);
     // A playlist that took nothing keeps its `updated_at`, so its card keeps its place.
-    if landed.is_empty() {
-        return Ok(landed);
+    if new.is_empty() {
+        return Ok(new);
     }
 
-    // Closes the gaps ignored duplicates leave.
-    renumber_playlist_positions_tx(tx, playlist_id)?;
+    let at = before.map_or(rows.len(), |row| row.min(rows.len()));
+    batch_update_positions_pairs(tx, &positions_opened_at(&rows, at, new.len()))?;
+    let start = i32::try_from(at)
+        .map_err(|_| AppError::validation_msg("playlist position overflows i32"))?;
+    let now = melodia_core::utils::now_rfc3339();
+    let landed = insert_items_tx(tx, playlist_id, &contiguous(&new, start, &now)?)?;
     update_playlist_thumbnail_and_timestamp_tx(tx, playlist_id, &now)?;
     Ok(landed)
+}
+
+/// A `playlist_items` row: `(id, track_id, position)`.
+type ItemRow = (i64, i64, i32);
+
+fn items_in_order(tx: &Transaction<'_>, playlist_id: i64) -> Result<Vec<ItemRow>, AppError> {
+    sql::fetch_all(
+        tx,
+        "SELECT id, track_id, position FROM playlist_items WHERE playlist_id = ?
+         ORDER BY position, id",
+        (playlist_id,),
+    )
+}
+
+/// `candidates` less the tracks `rows` hold and any repeat after the first.
+fn tracks_not_held(rows: &[ItemRow], candidates: Vec<i64>) -> Vec<i64> {
+    let mut held: HashSet<i64> = rows.iter().map(|&(_, track_id, _)| track_id).collect();
+    candidates.into_iter().filter(|&track_id| held.insert(track_id)).collect()
+}
+
+/// The `(id, position)` writes that leave `count` slots free in front of row `at`, every row
+/// numbered by its index and written only where that moves it.
+fn positions_opened_at(rows: &[ItemRow], at: usize, count: usize) -> Vec<(i64, i32)> {
+    rows.iter()
+        .enumerate()
+        .filter_map(|(row, &(id, _, position))| {
+            let index = if row < at { row } else { row + count };
+            let index = i32::try_from(index).unwrap_or(i32::MAX);
+            (position != index).then_some((id, index))
+        })
+        .collect()
 }
 
 /// A `playlist_items` row to insert.
@@ -447,12 +491,7 @@ fn move_items(
     track_ids: &[i64],
     to: usize,
 ) -> Result<(), AppError> {
-    let mut items: Vec<(i64, i64, i32)> = sql::fetch_all(
-        tx,
-        "SELECT id, track_id, position FROM playlist_items WHERE playlist_id = ?
-         ORDER BY position, id",
-        (playlist_id,),
-    )?;
+    let mut items = items_in_order(tx, playlist_id)?;
 
     let moving: HashSet<i64> = track_ids.iter().copied().collect();
     let rows: Vec<usize> = items

@@ -90,18 +90,19 @@ Strawberry draws a line under auto-sort and then places the rows elsewhere.
 | File | Owns after this |
 |---|---|
 | `ui/globals/drag.slint` | the payload; `revoke` keeping the origin |
-| `ui/components/list-drop-target.slint` | own-row moves gated on `in-order` and an armed index; `draws-line`, read by both the line and the edge scroll |
+| `ui/components/list-drop-target.slint` | own-row moves gated on `in-order` and an armed index; `draws-line` for the line, `aims` for the edge scroll |
 | `ui/components/drop-label.slint` (new) | `DropLabel`: the icon and elided text naming what letting go does |
 | `ui/views/queue-panel/queue-panel.slint`, `queue-row.slint` | rows arming their tracks; `allow-copy`; the header mounting `DropLabel` |
 | `ui/globals/queue.slint` | `picked-ids()` |
 | `ui/components/now-playing/queue-button.slint` | refusing a drag that came from the queue |
-| `ui/components/track-list/track-list.slint` | `takes-items`, `drop-label`, `dropped-items`; the header slot showing `DropLabel` while it holds items |
-| `ui/views/my-library/playlist-detail.slint`, `ui/globals/playlists.slint` | the gate (queue origin, not smart, not floating), the label text, `PlaylistDetail.drop-in` |
+| `ui/components/track-list/track-list.slint` | `takes-items`, `drop-label`, `dropped-items`, `holds-items`; the header slot showing `DropLabel` while it holds items |
+| `ui/views/my-library/playlist-detail.slint`, `ui/globals/playlists.slint` | the gate (queue origin, not smart, not floating), the label text, the empty state giving way, `PlaylistDetail.drop-in` |
 | `melodia-views/src/ui/queue_panel/callbacks.rs` | `on_picked_ids` |
 | `melodia-views/src/ui/playlists/detail.rs` | `slots_are_positions`, extracted from `apply_optimistic_move` |
-| `melodia-views/src/ui/playlists/callbacks/detail.rs` | `wire_drop_in`: the smart gate, choosing the landing, the write, the refresh, the toast |
+| `melodia-views/src/ui/playlists/callbacks/detail.rs` | `wire_drop_in`: the smart gate, choosing the landing (`Landing`), the write, the refresh, the toast |
+| `melodia-views/src/ui/playlists/callbacks/mod.rs` | wiring `wire_drop_in` from `wire_files`, which holds the `NotificationsUi` that `ViewCtx` lacks |
 | `melodia-app/src/library/playlists.rs` | `insert_into_playlist` beside `add_to_playlist` |
-| `melodia-store/src/database/queries/playlist.rs` | `place_items`, which both the append and the insert go through |
+| `melodia-store/src/database/queries/playlist.rs` | `place_items`, which both the append and the insert go through; `items_in_order`, shared with `move_items` |
 | `scripts/install-linux.sh` | a closing uninstall hint that names only `uninstall-linux.sh` |
 
 UI paths are under `crates/melodia-ui/`. Every file stays well under 800 lines.
@@ -147,7 +148,7 @@ ignores it.
 **Gate:** `cargo fmt --all`, the workspace clippy gate, `cargo test --locked --workspace`, then the
 `code-style.md` comment audit.
 
-## Phase 2: the store inserts at a slot **[pending]**
+## Phase 2: the store inserts at a slot **[done]**
 
 **Keeps working:** Add to Playlist from any row menu, file drops onto a playlist, and New
 Playlist… (`create_playlist_with_tracks`, left untouched). Tracks still land at the end; a track
@@ -165,8 +166,9 @@ Then the swap:
     the moved rows through `batch_update_positions_pairs`, the new ones through `insert_items_tx`,
     then stamps.
   - Positions come out contiguous, which closes a gap a deleted track left, as the renumber did.
-- **`append_items`:** becomes `place_items` at the end. Its `MAX(position)` read and its
-  `renumber_playlist_positions_tx` call go away; the function itself stays for its other callers.
+- **`append_items`:** goes, `add_tracks_to_playlist` calling `place_items` at the end. Its
+  `MAX(position)` read and its renumber go with it; `renumber_playlist_positions_tx` stays for its
+  other callers. The rows read moves into `items_in_order`, which `move_items` shares.
 - **New `insert_tracks_into_playlist(db, playlist_id, track_ids, before: usize)`** beside
   `add_tracks_to_playlist`, plus `library::playlists::insert_into_playlist`, which mirrors
   `add_to_playlist`.
@@ -178,15 +180,17 @@ Then the swap:
 **Gate:** as Phase 1. The existing append tests in `playlist_tests.rs` must pass unchanged, and any
 that break get fixed in this phase.
 
-## Phase 3: the playlist takes the drop **[pending]**
+## Phase 3: the playlist takes the drop **[done]**
 
 - **Extract `DropLabel`** from the queue header's drop row and mount it there first (see Structure).
 - **`list-drop-target.slint`:**
   - New `in property <bool> in-order: true`. An own drag moves only while it holds.
-  - New `draws-line`: `moves || (items-drag && in-order)`. Both the line and the edge-scroll
-    `Timer` read it, so a list without a line doesn't scroll toward a slot nothing will use.
+  - New `draws-line`: `moves || (items-drag && in-order)`, read by the line.
+  - New `aims`: `reorders || (items-drag && in-order)`, read by the edge-scroll `Timer`, so a list
+    without a line doesn't scroll toward a slot nothing will use. It isn't `draws-line`, which is
+    false inside an own drag's lifted run: a run taller than the list would stop scrolling.
 - **`track-list.slint`:**
-  - New `takes-items`, `drop-label` and `callback dropped-items(int)`.
+  - New `takes-items`, `drop-label`, `callback dropped-items(int)` and `out holds-items`.
   - The drop target gets `enabled: moves-rows || takes-items` and `in-order: moves-rows`.
   - The header slot hides `TrackListHeader` and shows `DropLabel` while `drop.holds-items`, the way
     the queue does: hidden rather than unmounted, so nothing rebuilds as a drag passes through.
@@ -196,18 +200,24 @@ that break get fixed in this phase.
   - Label: `@tr("Add {n} track to this playlist" | "Add {n} tracks to this playlist" % ...)` over
     `Drag.payload.items.ids.length`, with a `// Translators:` line above it.
   - `dropped-items` calls `PlaylistDetail.drop-in(ids, slot)`.
+  - The empty state hides while `tl.holds-items`: it is opaque and covers the header row the label
+    takes.
   - The `reorder-enabled` binding stays word for word, since `playlists_tests.rs` pins it.
   - `!Queue.floating` is needed because the scrim's `TouchArea` passes drag events through to the
     dimmed page.
 - **Rust:**
-  - Extract `slots_are_positions` in `playlists/detail.rs`.
-  - `wire_drop_in` in `playlists/callbacks/detail.rs`:
+  - Extract `slots_are_positions` in `playlists/detail.rs`. `playlists_tests.rs`' two guard pins
+    follow it there, and check that `apply_optimistic_move` still asks it.
+  - `wire_drop_in` in `playlists/callbacks/detail.rs`, wired from `callbacks::wire_files` for the
+    `NotificationsUi` the toast needs:
     - Refuses when no playlist is open or it's smart. That is the drop's Rust-side `is_smart` gate;
       the Slint one is `takes-items`.
     - Calls `insert_into_playlist` at the slot where `slots_are_positions` holds, and
-      `add_to_playlist` otherwise.
+      `add_to_playlist` otherwise (`Landing`).
     - Awaits the write in `slint::spawn_local(Compat)`, as `add_picker` does.
-    - Then runs `refresh_after_edit` and shows the toast where Decision 2 calls for it.
+    - Then runs `refresh_after_edit` and shows the toast where Decision 2 calls for it
+      (`Landing::notice`). A drop of tracks the playlist all holds writes nothing and toasts the
+      Warning with Add to Playlist's zero counts.
   - Update the file's `//!` header.
 - **Translations:** run `scripts/update-translations.py`, then fill all 15 catalogs, plural forms
   included: no empty `msgstr` and no `#, fuzzy`. `DropLabel` elides, so longer labels fit.
@@ -230,7 +240,7 @@ passing.
 
 ## Phase 4: Tests **[pending]**
 
-On your go, after your hand test.
+The hand test passed on 2026-11-23. The tests wait for your go, naming them.
 
 ## Verification
 

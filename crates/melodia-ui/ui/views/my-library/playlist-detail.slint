@@ -1,7 +1,8 @@
 import { MyLibrary } from "../../globals/my-library.slint";
 import { Player } from "../../globals/player.slint";
 import { PlaylistDetail } from "../../globals/playlists.slint";
-import { DragOrigin, FileDrag, FileDropTarget } from "../../globals/drag.slint";
+import { Queue } from "../../globals/queue.slint";
+import { Drag, DragOrigin, FileDrag, FileDropTarget } from "../../globals/drag.slint";
 import { TrackList } from "../../components/track-list/track-list.slint";
 import { GridEmptyState } from "../../components/grid/grid-empty-state.slint";
 import { TrackListScrollbars } from "../../components/track-list-scrollbars.slint";
@@ -34,6 +35,14 @@ export component PlaylistDetailBody inherits Rectangle {
                 && PlaylistDetail.sort-dir != "desc"
                 && PlaylistDetail.filter == ""
                 && !PlaylistDetail.playlist.is_smart;
+            // The queue's rows, into a playlist whose membership is its own. Not while the queue
+            // floats: its scrim passes a drag through to the page it dims.
+            takes-items: Drag.payload.origin == DragOrigin.queue
+                && !PlaylistDetail.playlist.is_smart
+                && !Queue.floating;
+            // Translators: `{n}` is how many tracks are being dragged into the playlist
+            drop-label: @tr("Add {n} track to this playlist" | "Add {n} tracks to this playlist"
+                % Drag.payload.items.ids.length);
 
             columns <=> PlaylistDetail.track-columns;
 
@@ -58,10 +67,13 @@ export component PlaylistDetailBody inherits Rectangle {
             reorder(from, to) => { PlaylistDetail.reorder(from, to); }
             move-picks(slot) => { PlaylistDetail.move-picks(slot); }
             picked-run => { return PlaylistDetail.picked-run(); }
+            dropped-items(slot) => { PlaylistDetail.drop-in(Drag.payload.items.ids, slot); }
             remove-from-playlist(ids) => { PlaylistDetail.remove-track(ids); }
         }
 
         if PlaylistDetail.playlist.track_count == 0: GridEmptyState {
+            // Gives way while the queue's rows are over the list, the header row naming the drop.
+            visible: !tl.holds-items;
             icon: "music_note";
             title: PlaylistDetail.playlist.is_smart
                 ? @tr("No matching tracks")

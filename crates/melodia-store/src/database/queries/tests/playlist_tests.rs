@@ -342,9 +342,8 @@ async fn rewriting_the_criteria_of_a_missing_playlist_is_reported() -> Result<()
     Ok(())
 }
 
-/// The other renumber, and the one nothing reached: an add is `INSERT OR IGNORE` against
-/// positions computed from the old maximum, so re-adding a track the playlist already holds
-/// burns the position it was given and leaves a hole behind the duplicate it skipped.
+/// A track the playlist already holds is skipped without spending a position, so the next one
+/// lands straight behind the last row rather than past a hole.
 #[tokio::test]
 async fn re_adding_a_track_leaves_no_hole_where_it_was_skipped() -> Result<(), AppError> {
     let db = setup_seeded_db().await?;
@@ -353,8 +352,7 @@ async fn re_adding_a_track_leaves_no_hole_where_it_was_skipped() -> Result<(), A
     let pl = queries::playlist::create_playlist(&db, "Re-added", None).await?;
     queries::playlist::add_tracks_to_playlist(&db, pl.id, vec![track_ids[0]]).await?;
 
-    // The first id is already seated at 0, so its slot in this batch is ignored and the second
-    // id lands at 2.
+    // The first id is already seated at 0, so only the second goes in, at 1.
     queries::playlist::add_tracks_to_playlist(&db, pl.id, track_ids[..2].to_vec()).await?;
 
     assert_eq!(positions(&db, pl.id).await?, [0, 1]);

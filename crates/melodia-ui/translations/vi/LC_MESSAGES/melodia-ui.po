@@ -2903,6 +2903,12 @@ msgstr "Chưa có nghệ sĩ nào"
 msgid "No genres yet"
 msgstr "Chưa có thể loại nào"
 
+#. Translators: `{n}` is how many tracks are being dragged into the playlist
+#: ui/views/my-library/playlist-detail.slint
+msgid "Add {n} track to this playlist"
+msgid_plural "Add {n} tracks to this playlist"
+msgstr[0] "Thêm {n} bản nhạc vào danh sách phát này"
+
 #: ui/views/my-library/playlist-detail.slint
 msgid "No matching tracks"
 msgstr "Không có bản nhạc phù hợp"

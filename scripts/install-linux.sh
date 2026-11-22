@@ -111,5 +111,5 @@ Optional: add Melodia to your PATH:
     mkdir -p \$HOME/.local/bin
     ln -sf "$INSTALL_DIR/Melodia" \$HOME/.local/bin/melodia
 
-Uninstall: ./uninstall-linux.sh (or rm -rf $INSTALL_DIR and the .desktop/icon)
+Uninstall: ./uninstall-linux.sh
 EOF

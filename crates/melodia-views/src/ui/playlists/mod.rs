@@ -41,14 +41,14 @@ pub use grid::reload_grid;
 
 pub(super) use detail::{
     apply_optimistic_move, open_playlist, picked_rows, refresh_detail, refresh_header,
-    restore_detail, track_ids_at,
+    restore_detail, slots_are_positions, track_ids_at,
 };
 pub(super) use grid::{refresh_after_write, refresh_play_stats, shown_card};
 
 pub(crate) use callbacks::{PlaylistConvertUndo, PlaylistCutUndo, PlaylistDeleteUndo};
 
-/// The M3U8 import and export and the Add-to-Playlist wiring, outside [`install`] for the
-/// `Rc<NotificationsUi>` their toasts need, which exists only after the views.
+/// The M3U8 import and export, the Add-to-Playlist wiring and the queue's drop on the detail,
+/// outside [`install`] for the `Rc<NotificationsUi>` their toasts need, which `ViewCtx` lacks.
 pub use callbacks::wire_files;
 
 /// Installs the grid and detail models and wires every `Playlists.*` / `PlaylistDetail.*`

@@ -1,6 +1,6 @@
 //! Import and export of the kept station list, wired from boot's `install_ui` as
-//! `ui::playlists::wire_files` is: the completion toasts need a notifications stack that doesn't
-//! exist at install time.
+//! `ui::playlists::wire_files` is: the completion toasts need a notifications stack that `ViewCtx`
+//! doesn't carry.
 
 use std::path::PathBuf;
 use std::rc::Rc;

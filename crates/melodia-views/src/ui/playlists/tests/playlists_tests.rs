@@ -113,18 +113,22 @@ fn the_sort_cycle_still_offers_a_way_back_to_the_curated_order() {
 /// reading the same field elsewhere in `detail.rs` can't satisfy the assertion
 /// while the guard itself has stopped asking. Each needle carries its operator
 /// for the same reason the drag-pan pin above matches a binding — a dropped `!`
-/// or an `&&` in place of the `||` inverts the guard, and a bare token match
+/// or a `||` in place of the `&&` inverts the guard, and a bare token match
 /// can't see either.
 #[test]
 fn the_optimistic_reorder_refuses_a_filtered_list() {
     let src = code_tokens(DETAIL);
-    let guard = reorder_guard(&src);
+    let guard = slot_guard(&src);
     assert!(
-        guard.contains("!is_manual_order(&field, &dir)"),
+        optimistic_move_head(&src).contains("if !slots_are_positions(ui, playlists_ui)"),
+        "the reorder must ask the guard before the display indices reach the keyset"
+    );
+    assert!(
+        guard.contains("; is_manual_order(&field, &dir) &&"),
         "the order half must be asked before the display indices reach the keyset"
     );
     assert!(
-        guard.contains("|| playlists_ui.detail.is_filtered()"),
+        guard.contains("&& !playlists_ui.detail.is_filtered()"),
         "so must the filter half — a filtered index is in range, so the write lands"
     );
 }
@@ -136,15 +140,21 @@ fn the_optimistic_reorder_refuses_a_filtered_list() {
 fn the_optimistic_reorder_refuses_a_list_not_shown_in_the_playlists_own_order() {
     let src = code_tokens(DETAIL);
     assert!(
-        reorder_guard(&src).contains("|| !playlists_ui.detail.shows_own_order()"),
+        slot_guard(&src).contains("&& playlists_ui.detail.shows_own_order()"),
         "the guard must ask the list on show, not only the sort and filter the page asked for"
     );
 }
 
 /// `apply_optimistic_move` up to where the display indices reach the keyset.
-fn reorder_guard(src: &str) -> &str {
+fn optimistic_move_head(src: &str) -> &str {
     let body = src.split_once("pub fn apply_optimistic_move").map_or("", |(_, rest)| rest);
     body.split_once("let tracks =").map_or("", |(head, _)| head)
+}
+
+/// The body of `slots_are_positions`, which holds no brace of its own.
+fn slot_guard(src: &str) -> &str {
+    let body = src.split_once("pub fn slots_are_positions").map_or("", |(_, rest)| rest);
+    body.split_once('}').map_or("", |(head, _)| head)
 }
 
 /// The reload a removal brings prunes nothing under a filter, so the removal drops its own rows

@@ -12,6 +12,7 @@ import { OverlayScrollbar } from "../../components/overlay-scrollbar.slint";
 import { EdgeResizeHandle, GrowEdge } from "../../components/edge-resize-handle.slint";
 import { DragSource } from "../../components/drag-source.slint";
 import { ListDropTarget } from "../../components/list-drop-target.slint";
+import { DropLabel } from "../../components/drop-label.slint";
 import { Drag, DragItems, DragOrigin, FileDrag, FileDropTarget } from "../../globals/drag.slint";
 import { WindowRectReport } from "../../components/window-rect-report.slint";
 import { FileDropBanner } from "../../components/file-drop-banner.slint";
@@ -192,8 +193,7 @@ export component QueuePanel inherits Rectangle {
             spacing: 0px;
             padding-bottom: root.body-pad-bottom;
 
-            // Gives way to what letting go would do while another list's drag holds the rows: a
-            // banner over them would hide the line the drop lands at.
+            // Gives way to what letting go would do while another list's drag holds the rows.
             Rectangle {
                 height: 56px;
 
@@ -262,24 +262,10 @@ export component QueuePanel inherits Rectangle {
                     }
                 }
 
-                if drop.holds-items: HorizontalLayout {
+                if drop.holds-items: DropLabel {
                     padding-left: 20px;
                     padding-right: 20px;
-                    spacing: Theme.pad-sm;
-                    cross-axis-alignment: center;
-                    MaterialIcon {
-                        name: "library_add";
-                        icon-size: 22px;
-                        icon-color: Theme.accent;
-                    }
-                    Text {
-                        text: root.drop-label;
-                        color: Theme.text;
-                        font-size: Theme.font-size-md;
-                        font-weight: 600;
-                        overflow: elide;
-                        horizontal-stretch: 1;
-                    }
+                    text: root.drop-label;
                 }
             }
 

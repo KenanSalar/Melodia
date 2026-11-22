@@ -129,7 +129,7 @@ Shrink the window and the full UI collapses into a mini-player that grows with i
 - Crossfeed for headphones under Settings ▸ Effects, from subtle to strong: each ear hears a little of the other channel, as it would from speakers, so a hard-panned instrument reaches both ears. Each output device keeps its own, sound panned to the center passes through at its level, and mono and surround files are left as they are
 - ReplayGain in track or album mode, with preamp and peak-based clip prevention, reached the same two ways. Tracks without loudness tags can be measured in the background, opt-in under Settings ▸ Effects, with albums measured as a whole and the files left unchanged
 - A queue with shuffle and repeat in a resizable side panel, which floats over the page once the window is too narrow to dock it. Playing from any list queues that list behind your pick
-- Drag tracks, albums, artists, genres, playlists, or files from your file manager into the queue or a playlist where you let go; a selection reorders together in the queue, Up Next, and the mini-player
+- Drag tracks, albums, artists, genres, playlists, or files from your file manager into the queue or a playlist where you let go, and queue rows into an open playlist; a selection reorders together in the queue, Up Next, and the mini-player
 - Hold Previous or Next to scan through a track in audible jumps that grow the longer you hold, and hold Play/Pause to stop
 - Full-screen Now Playing with an up-next list and a spectrum, mirrored, or waveform visualizer tinted to the album's own colors
 - Right-click the playing song in the player bar for the menu its row has in a list

@@ -39,7 +39,8 @@ Paths are under `crates/melodia-ui/ui/components/` unless stated.
   `grid/play-count-badge.slint` its count, `GridEmptyState` the empty block for grids and lists
   alike.
 - **Lists.** `TrackList` with `TrackListScrollbars`; `TrackTitle` for any row showing a track's
-  title; `DragSource`, `ListDropTarget` and `DragGhost` for an in-window drag; `WindowRectReport`
+  title; `DragSource`, `ListDropTarget` and `DragGhost` for an in-window drag, and `DropLabel` for
+  the header row naming what letting go of another list's drag does; `WindowRectReport`
   and `FileDropBanner` for a file dragged in from the OS (`window_chrome::file_drop` has the route);
   `SkeletonBar` and `SkeletonTile` for a row or card still loading, `SkeletonLines` for a list
   row's stacked text.

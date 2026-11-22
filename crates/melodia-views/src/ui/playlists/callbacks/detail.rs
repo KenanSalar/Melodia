@@ -1,18 +1,24 @@
-//! `PlaylistDetail.*` callbacks: close-detail, the drags that move rows, the edit-artwork picker
-//! open and track removal here, the rest through [`crate::ui::callbacks::track_detail`].
+//! `PlaylistDetail.*` callbacks: close-detail, the drags that move rows, the queue's drop, the
+//! edit-artwork picker open and track removal here, the rest through
+//! [`crate::ui::callbacks::track_detail`]. The drop is wired from [`super::wire_files`], for the
+//! notifications its toast needs.
 
+use std::rc::Rc;
 use std::sync::Arc;
 
 use async_compat::Compat;
 use slint::{ComponentHandle, SharedString, Weak};
 
 use super::artwork::open_edit_artwork;
+use super::refresh_after_edit;
 use crate::ui::callbacks::{DialogClaim, collect_track_ids};
 use crate::ui::callbacks::{grid_tab, track_detail};
 use crate::ui::drag;
 use crate::ui::paged_rows::track_rows;
 use crate::ui::playlists::{self as playlists_ui_mod, PlaylistsUi};
+use crate::ui::shell::notifications::{Completion, NotificationsUi};
 use crate::ui::undo::{Removal, tracks_removed_from};
+use crate::ui::util::len_as_i32;
 use crate::ui::view_ctx::ViewCtx;
 use melodia_app::library;
 use melodia_app::state::AppState;
@@ -20,7 +26,7 @@ use melodia_core::entities::playlist::{PlaylistIdentity, PlaylistItemsCut};
 use melodia_core::entities::undo::{RemovalSize, UndoCapture, UndoKind};
 use melodia_core::error::{AppError, describe};
 use melodia_core::utils::block_move;
-use melodia_ui::{AppWindow, PlaylistDetail};
+use melodia_ui::{AppWindow, PlaylistDetail, Settings};
 
 pub(super) fn wire(cx: ViewCtx<'_>, playlists_ui: &Arc<PlaylistsUi>) {
     let ViewCtx { app: ui, state, .. } = cx;
@@ -157,6 +163,105 @@ fn move_tracks(
         }
         playlists_ui_mod::refresh_after_write(&s, &pu, &weak);
     });
+}
+
+/// The queue's rows let go over the list, read back from the database once they land rather than
+/// put up ahead of the write.
+pub(super) fn wire_drop_in(
+    ui: &AppWindow,
+    state: &AppState,
+    playlists_ui: &Arc<PlaylistsUi>,
+    notifications: &Rc<NotificationsUi>,
+) {
+    let (s, pu, weak) = (state.clone(), playlists_ui.clone(), ui.as_weak());
+    let notifications = notifications.clone();
+    ui.global::<PlaylistDetail>().on_drop_in(move |ids, slot| {
+        let Some(ui) = weak.upgrade() else { return };
+        let track_ids = collect_track_ids(&ids);
+        let playlist_id = pu.detail_playlist_id();
+        // The Rust half of the smart gate, `takes-items` being the Slint one.
+        let is_smart = ui.global::<PlaylistDetail>().get_playlist().is_smart;
+        if playlist_id < 0 || is_smart || track_ids.is_empty() {
+            return;
+        }
+        let landing = Landing::for_slot(&ui, &pu, slot);
+        let (s, pu, weak) = (s.clone(), pu.clone(), weak.clone());
+        let notifications = notifications.clone();
+        let spawned = slint::spawn_local(Compat::new(async move {
+            let handed = track_ids.len();
+            let Some(landed) = write_drop(&s, playlist_id, track_ids, landing).await else {
+                return;
+            };
+            if landed > 0 {
+                refresh_after_edit(&s, &pu, weak.clone(), &[playlist_id], "playlists::drop_in")
+                    .await;
+            }
+            let Some(completion) = landing.notice(handed, landed) else { return };
+            let Some(ui) = weak.upgrade() else { return };
+            let settings = ui.global::<Settings>();
+            notifications.show_completion(
+                completion,
+                settings.invoke_add_to_playlist_title(i32::from(landed > 0)),
+                settings.invoke_add_to_playlist_message(len_as_i32(landed)),
+            );
+        }));
+        if let Err(e) = spawned {
+            log::warn!("playlists::drop_in spawn_local: {}", describe(&e));
+        }
+    });
+}
+
+/// Where a drop's tracks go in the playlist.
+#[derive(Clone, Copy)]
+enum Landing {
+    /// In front of the row the line was drawn above.
+    Slot(usize),
+    /// After the last row, for a list on show whose slots name no position.
+    End,
+}
+
+impl Landing {
+    fn for_slot(ui: &AppWindow, playlists_ui: &PlaylistsUi, slot: i32) -> Self {
+        match usize::try_from(slot) {
+            Ok(slot) if playlists_ui_mod::slots_are_positions(ui, playlists_ui) => Self::Slot(slot),
+            _ => Self::End,
+        }
+    }
+
+    /// The toast a drop landing here owes, Add to Playlist's. None where every track went in at
+    /// the line, the rows appearing there being the answer.
+    fn notice(self, handed: usize, landed: usize) -> Option<Completion> {
+        let skipped = landed < handed;
+        match self {
+            Self::Slot(_) if !skipped => None,
+            Self::Slot(_) | Self::End => Some(Completion::partial_if(skipped)),
+        }
+    }
+}
+
+/// How many of `track_ids` landed, or `None` once a failed write is logged.
+async fn write_drop(
+    state: &AppState,
+    playlist_id: i64,
+    track_ids: Vec<i64>,
+    landing: Landing,
+) -> Option<usize> {
+    let written = match landing {
+        Landing::Slot(before) => {
+            library::playlists::insert_into_playlist(&state.db, playlist_id, track_ids, before)
+                .await
+        }
+        Landing::End => {
+            library::playlists::add_to_playlist(&state.db, playlist_id, track_ids).await
+        }
+    };
+    match written {
+        Ok(landed) => Some(landed.len()),
+        Err(e) => {
+            log::warn!("playlists::drop_in: {}", describe(&e));
+            None
+        }
+    }
 }
 
 /// Opens the Edit Artwork picker on `PlaylistDetail.cover`, already decoded for the open detail.

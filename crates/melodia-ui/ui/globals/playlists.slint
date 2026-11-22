@@ -129,6 +129,9 @@ export global PlaylistDetail {
     callback move-picks(int /*slot*/);
     // Asked by a press on a picked row; only Rust holds the whole list.
     callback picked-run() -> LiftedRun;
+    // The queue's rows let go over the list. Only Rust can tell whether the list on show is the
+    // playlist in its own order, so it decides between slot `slot` and the end.
+    callback drop-in([int] /*track_ids*/, int /*slot*/);
 
     // Rust queries the covers first and raises the picker from a fresh tick.
     callback request-edit-artwork();

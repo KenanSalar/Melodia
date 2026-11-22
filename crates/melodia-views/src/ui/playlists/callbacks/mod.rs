@@ -87,4 +87,5 @@ pub fn wire_files(
     notifications: &Rc<NotificationsUi>,
 ) {
     files::wire(ui, state, playlists_ui, notifications);
+    detail::wire_drop_in(ui, state, playlists_ui, notifications);
 }

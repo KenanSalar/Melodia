@@ -231,21 +231,24 @@ pub fn apply_optimistic_move(
     rows: &[usize],
     to: usize,
 ) -> bool {
-    let g = ui.global::<PlaylistDetail>();
-    let field = g.get_sort_field();
-    let dir = g.get_sort_dir();
-    // Asked again beside `reorder-enabled`, here being where display indices reach the keyset.
-    // Filtered, the list is a subset and `to` lands among rows the playlist doesn't hold there,
-    // the write still landing in range. The list on show takes a sort or needle a query after the
-    // page, and an overtaken open can leave another playlist's rows up under this id.
-    if !is_manual_order(&field, &dir)
-        || playlists_ui.detail.is_filtered()
-        || !playlists_ui.detail.shows_own_order()
-    {
+    if !slots_are_positions(ui, playlists_ui) {
         return false;
     }
-    let tracks = g.get_tracks();
+    let tracks = ui.global::<PlaylistDetail>().get_tracks();
     TrackRows::installed(&tracks, TRACKS_LABEL).is_some_and(|model| model.move_rows(rows, to))
+}
+
+/// Whether a slot in the list on show is a position in the playlist: asked again beside
+/// `reorder-enabled` where a drag's display indices reach the keyset or the store. Filtered, the
+/// list is a subset and a slot lands among rows the playlist doesn't hold there, the write still
+/// landing in range. The list on show takes a sort or needle a query after the page, and an
+/// overtaken open can leave another playlist's rows up under this id.
+pub fn slots_are_positions(ui: &AppWindow, playlists_ui: &PlaylistsUi) -> bool {
+    let g = ui.global::<PlaylistDetail>();
+    let (field, dir) = (g.get_sort_field(), g.get_sort_dir());
+    is_manual_order(&field, &dir)
+        && !playlists_ui.detail.is_filtered()
+        && playlists_ui.detail.shows_own_order()
 }
 
 /// Where the rows the page's picks name sit on show, in order.

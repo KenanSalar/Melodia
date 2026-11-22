@@ -2956,6 +2956,13 @@ msgstr "Δεν υπάρχουν καλλιτέχνες ακόμη"
 msgid "No genres yet"
 msgstr "Δεν υπάρχουν είδη ακόμη"
 
+#. Translators: `{n}` is how many tracks are being dragged into the playlist
+#: ui/views/my-library/playlist-detail.slint
+msgid "Add {n} track to this playlist"
+msgid_plural "Add {n} tracks to this playlist"
+msgstr[0] "Προσθήκη {n} κομματιού σε αυτή τη λίστα"
+msgstr[1] "Προσθήκη {n} κομματιών σε αυτή τη λίστα"
+
 #: ui/views/my-library/playlist-detail.slint
 msgid "No matching tracks"
 msgstr "Κανένα κομμάτι δεν ταιριάζει"
