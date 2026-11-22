@@ -9,7 +9,6 @@ export component HeadphonePickerBody inherits PickList {
     listing: HeadphonePicker.phase == PickerPhase.listing;
     filter <=> HeadphonePicker.filter;
     picked <=> HeadphonePicker.picked;
-    blur-tick <=> HeadphonePicker.blur-tick;
     placeholder: @tr("Find a model…");
 
     state-icon: root.loading ? "headphones" : root.listing ? "search_off" : "error";

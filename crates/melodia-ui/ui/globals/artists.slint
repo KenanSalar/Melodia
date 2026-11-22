@@ -1,4 +1,4 @@
-import { ArtistRow, ArtistGridRow, AlbumRow, TrackListRow, TrackColumns } from "../models.slint";
+import { ArtistRow, ArtistGridRow, EntityStripRow, TrackListRow, TrackColumns } from "../models.slint";
 
 // On `Albums`' contract.
 export global Artists {
@@ -27,7 +27,7 @@ export global ArtistDetail {
     // See `AlbumDetail.restoring`.
     in-out property <bool> restoring: false;
     in-out property <ArtistRow> artist;
-    in-out property <[AlbumRow]> albums;
+    in-out property <[EntityStripRow]> albums;
     in-out property <[TrackListRow]> tracks;
 
     in-out property <TrackColumns> track-columns;

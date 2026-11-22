@@ -43,7 +43,14 @@ impl SearchHistoryState {
         self.shared.history.lock().queries.clone()
     }
 
+    /// Re-adding the newest query writes nothing, a re-run search adding it each time.
     pub async fn add(&self, query: &str) -> AppResult<Vec<String>> {
+        {
+            let history = self.shared.history.lock();
+            if history.queries.first().is_some_and(|newest| newest == query.trim()) {
+                return Ok(history.queries.clone());
+            }
+        }
         self.change(|history| add_query(history, query)).await
     }
 

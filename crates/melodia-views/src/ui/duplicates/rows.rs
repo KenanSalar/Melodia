@@ -18,7 +18,7 @@ use melodia_ui::{DuplicateMatch, DuplicateRow};
 
 impl PagedRow for DuplicateRow {
     fn placeholder(id: i64) -> Self {
-        Self { id: clamp_i64_to_i32(id), is_header: id < 0, ..Self::default() }
+        Self { id: clamp_i64_to_i32(id), is_header: id < 0, pending: true, ..Self::default() }
     }
 
     fn set_selected(&mut self, selected: bool) {

@@ -39,6 +39,8 @@ export struct TrackListRow {
     // `enabled` on a file in a library folder but not the database (`id == 0`), dimming it.
     selected: bool,
     enabled: bool,
+    // Only `PagedRow::placeholder` sets it.
+    pending: bool,
     // The context menu's "Go to …" targets; 0 hides the entry.
     album_id: int,
     artist_id: int,
@@ -99,6 +101,7 @@ export struct AlbumRow {
     track_count: int,
     total_duration_ms: int,
     artwork_path: string,
+    pending: bool,
 }
 
 // A row of up to `columns` cards, so the grid's `ListView` virtualizes by row. Every `*GridRow` is
@@ -114,6 +117,7 @@ export struct ArtistRow {
     track_count: int,
     album_count: int,
     total_duration_ms: int,
+    pending: bool,
 }
 
 export struct ArtistGridRow {
@@ -130,6 +134,7 @@ export struct GenreRow {
     display_duration: string,
     tile_color_1: color,
     tile_color_2: color,
+    pending: bool,
 }
 
 export struct GenreGridRow {
@@ -145,6 +150,7 @@ export struct PlaylistRow {
     total_duration_ms: int,
     // Rules decide membership, so card and detail disable every manual edit.
     is_smart: bool,
+    pending: bool,
 }
 
 export struct PlaylistGridRow {
@@ -208,6 +214,7 @@ export struct DuplicateRow {
     rating: int,   // 0–5, 0 = unrated
     favorite: bool,
     playlists: int,
+    pending: bool,
 }
 
 // A file Remove kept out of the library. `id` is the exclusion's, as it has no track.
@@ -217,6 +224,7 @@ export struct KeptOutRow {
     folder: string,
     path: string,
     removed: string,
+    pending: bool,
 }
 
 // One entry in a `PickList`. `index` is the entry's place in the list Rust holds, so a pick
@@ -340,6 +348,7 @@ export struct QueueRow {
     selected: bool,
     is_favorite: bool,
     rating: int,   // 0–5, 0 = unrated
+    pending: bool,
     // The context menu's "Go to …" targets; 0 hides the entry.
     album_id: int,
     artist_id: int,
@@ -405,6 +414,7 @@ export struct EntityStripRow {
     play_count: int,
     // A track card's heart; no other kind mounts one.
     is_favorite: bool,
+    pending: bool,
 }
 
 export struct EntityGridRow {

@@ -16,7 +16,6 @@ export global LyricsFinder {
     // Raised by the opener, so the dialog opens on Searching rather than on an empty list.
     in-out property <LyricsSearchPhase> phase;
     in-out property <string> query;
-    in-out property <int> blur-tick;
     // A `PickRow.index`, -1 for none.
     in-out property <int> picked: -1;
     // The picked sheet's lines; empty for an instrumental pick, which has none.

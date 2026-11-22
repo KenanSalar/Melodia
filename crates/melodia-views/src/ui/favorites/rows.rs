@@ -57,5 +57,6 @@ pub fn to_slint_fav_artist_row(a: &FavoriteArtist, subtitle: SharedString) -> Ui
         artwork_path: opt_shared(a.image_path.as_deref()),
         play_count: 0,
         is_favorite: false,
+        pending: false,
     }
 }

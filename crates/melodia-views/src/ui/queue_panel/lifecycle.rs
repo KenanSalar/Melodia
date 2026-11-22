@@ -6,10 +6,10 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::time::Duration;
 
-use async_compat::Compat;
 use slint::{ComponentHandle, Weak};
 
 use super::rows::{read_queue, show_queue};
+use crate::ui::landing::spawn_landing;
 use crate::ui::nav_transition;
 use crate::ui::paged_rows::queue_rows::{self, QueueRows};
 use melodia_app::state::AppState;
@@ -20,6 +20,8 @@ use melodia_ui::{AppWindow, Nav, NavEnterFrom, Queue};
 /// How long a hidden panel keeps its rows and covers: past its ease out, so they don't vanish
 /// from a panel still on screen.
 const TEARDOWN_DELAY: Duration = Duration::from_millis(350);
+
+const SEED_LABEL: &str = "queue panel seed";
 
 pub(super) fn wire(
     ui: &AppWindow,
@@ -113,30 +115,20 @@ impl Showing {
         show_queue(&ui, &self.rows, read);
         drop(ui);
 
-        let seeded = {
+        let seeding = {
             let state = self.state.clone();
-            self.state.runtime.spawn(async move { queue_rows::seed(&state, ids, at).await })
+            async move { queue_rows::seed(&state, ids, at).await }
         };
         let (rows, shown) = (self.rows.clone(), self.shown.clone());
-        let spawned = slint::spawn_local(Compat::new(async move {
-            let keyset = match seeded.await {
-                Ok(Ok(keyset)) => keyset,
-                Ok(Err(e)) => {
-                    log::warn!("queue panel: seed fetch failed: {}", describe(&e));
-                    return;
+        spawn_landing(&self.state.runtime, SEED_LABEL, seeding, move |seeded| match seeded {
+            Some(Ok(keyset)) => {
+                if shown.load(Ordering::Relaxed) {
+                    rows.land_seed(keyset);
                 }
-                Err(e) => {
-                    log::warn!("queue panel: seed task failed: {}", describe(&e));
-                    return;
-                }
-            };
-            if shown.load(Ordering::Relaxed) {
-                rows.land_seed(keyset);
             }
-        }));
-        if let Err(e) = spawned {
-            log::warn!("queue panel: show not spawned: {}", describe(&e));
-        }
+            Some(Err(e)) => log::warn!("{SEED_LABEL}: fetch failed: {}", describe(&e)),
+            None => {}
+        });
     }
 
     /// Once the panel has stayed hidden past the delay, drop the rows and decoded covers and hand

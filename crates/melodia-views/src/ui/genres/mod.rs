@@ -98,9 +98,8 @@ impl GridRow for UiGenreGridRow {
 }
 
 impl PagedRow for UiGenreRow {
-    // Blank but live: a card clicked before its fetch lands still opens, plays and picks by id.
     fn placeholder(id: i64) -> Self {
-        Self { id: clamp_i64_to_i32(id), ..Self::default() }
+        Self { id: clamp_i64_to_i32(id), pending: true, ..Self::default() }
     }
 }
 
@@ -119,6 +118,7 @@ pub fn to_slint_genre_row(g: &GenreStats) -> UiGenreRow {
         )),
         tile_color_1: accent.tile_color_1,
         tile_color_2: accent.tile_color_2,
+        pending: false,
     }
 }
 

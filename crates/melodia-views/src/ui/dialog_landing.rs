@@ -12,7 +12,7 @@ use slint::ComponentHandle;
 use tokio::runtime::Handle;
 use tokio::task::AbortHandle;
 
-use melodia_core::error::describe;
+use crate::ui::landing::spawn_landing;
 use melodia_ui::{AppWindow, Dialog, DialogKind};
 
 /// Moved by a dialog's next load and by its close, so an answer sent before either lands nowhere.
@@ -73,27 +73,16 @@ pub(crate) trait TicketedDialog: Sized + 'static {
     }
 
     /// [`Self::after`] for an answer that lands whatever the ticket: a write a dialog closed mid-run
-    /// still made, or a count shown outside the dialog. `None` is a task that didn't finish, so a
-    /// busy flag set for it still comes down. Answers its abort handle if the landing spawned.
+    /// still made, or a count shown outside the dialog. Lands [`spawn_landing`]'s `None` too, so a
+    /// busy flag set for it still comes down.
     fn after_any_ticket<T: Send + 'static>(
         self: &Rc<Self>,
         label: &'static str,
         work: impl Future<Output = T> + Send + 'static,
         land: impl FnOnce(&AppWindow, &Self, Option<T>) + 'static,
     ) -> Option<AbortHandle> {
-        let answer = self.runtime().spawn(work);
-        let abort = answer.abort_handle();
         let dialog = Rc::downgrade(self);
-        let spawned = slint::spawn_local(async_compat::Compat::new(async move {
-            let answer = match answer.await {
-                Ok(answer) => Some(answer),
-                Err(e) => {
-                    if !e.is_cancelled() {
-                        log::warn!("{label}: task failed: {}", describe(&e));
-                    }
-                    None
-                }
-            };
+        spawn_landing(self.runtime(), label, work, move |answer| {
             let Some(dialog) = dialog.upgrade() else {
                 return;
             };
@@ -101,10 +90,6 @@ pub(crate) trait TicketedDialog: Sized + 'static {
                 return;
             };
             land(&ui, &dialog, answer);
-        }));
-        if let Err(e) = &spawned {
-            log::warn!("{label}: not spawned: {}", describe(e));
-        }
-        spawned.is_ok().then_some(abort)
+        })
     }
 }

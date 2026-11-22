@@ -27,8 +27,8 @@ use melodia_app::state::AppState;
 use melodia_artwork::media::image::cover_thumbs::CoverThumbs;
 use melodia_core::entities::artist::ArtistStats;
 use melodia_ui::{
-    AlbumRow as UiAlbumRow, AppWindow, ArtistDetail, ArtistGridRow as UiArtistGridRow,
-    ArtistRow as UiArtistRow, Artists,
+    AppWindow, ArtistDetail, ArtistGridRow as UiArtistGridRow, ArtistRow as UiArtistRow, Artists,
+    EntityStripRow as UiEntityStripRow,
 };
 
 use grid::ArtistsGrid;
@@ -112,7 +112,7 @@ fn install_models(
     let cache = DetailCache::new(g.as_weak(), tracks.scroll_point());
     g.set_tracks(ModelRc::from(tracks));
 
-    let albums: Rc<VecModel<UiAlbumRow>> = Rc::new(VecModel::default());
+    let albums: Rc<VecModel<UiEntityStripRow>> = Rc::new(VecModel::default());
     g.set_albums(ModelRc::from(albums));
 
     let sel: Rc<VecModel<i32>> = Rc::new(VecModel::default());
@@ -129,9 +129,8 @@ impl GridRow for UiArtistGridRow {
 }
 
 impl PagedRow for UiArtistRow {
-    // Blank but live: a card clicked before its fetch lands still opens, plays and picks by id.
     fn placeholder(id: i64) -> Self {
-        Self { id: clamp_i64_to_i32(id), ..Self::default() }
+        Self { id: clamp_i64_to_i32(id), pending: true, ..Self::default() }
     }
 }
 
@@ -145,6 +144,7 @@ pub fn to_slint_artist_row(a: &ArtistStats) -> UiArtistRow {
         album_count: a.album_count,
         total_duration_ms: i32::try_from(a.total_duration_ms.clamp(0, i64::from(i32::MAX)))
             .unwrap_or(i32::MAX),
+        pending: false,
     }
 }
 

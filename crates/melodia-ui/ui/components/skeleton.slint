@@ -1,0 +1,64 @@
+import { Theme } from "../theme.slint";
+
+// What a row or card still loading draws in place of its text and cover, in the ink of what each
+// stands in for. A host swaps them in behind an `if`, so a pending row shapes no text and holds no
+// rounded clip, and both stay childless and still, so nothing redraws while one shows.
+export component SkeletonBar inherits Rectangle {
+    in property <brush> ink;
+    // Picks the width: the host's place in its list or grid, offset per bar so one host's bars
+    // differ. A place, not an id, since neighbours' ids are unrelated and match one time in five.
+    in property <int> seed;
+    // A width the host knows, never that of the layout holding the bar, which it would feed.
+    in property <length> span;
+    in property <length> font-size;
+
+    // Doubled so consecutive seeds land at least two of the five widths apart.
+    property <int> step: Math.mod(root.seed * 2, 5);
+
+    width: root.span * (0.45 + 0.1 * root.step);
+    // About the text's cap height, so the bar reads as a line rather than a block. Shorter than the
+    // line box it stands in for, so stacked bars want `Theme.pad-xs` between them.
+    height: root.font-size * 0.7;
+    // A `Text` reports none and a `Rectangle` one, which would let the cell holding the bar take
+    // room the text left to its neighbours.
+    horizontal-stretch: 0;
+    vertical-stretch: 0;
+    border-radius: self.height / 2;
+    background: root.ink.transparentize(1.0 - Theme.fade-skeleton);
+}
+
+// A list row's text block while it loads. Each bar's seed sits two past the one above, so up to
+// three lines, the bars either side of a row's edge differ.
+export component SkeletonLines inherits VerticalLayout {
+    in property <int> seed;
+    in property <length> span;
+    in property <length> title-size;
+    in property <int> lines: 2;
+
+    alignment: center;
+    spacing: Theme.pad-xs;
+
+    SkeletonBar {
+        ink: Theme.text;
+        seed: root.seed;
+        span: root.span;
+        font-size: root.title-size;
+    }
+    for line in root.lines - 1: SkeletonBar {
+        ink: Theme.subtext0;
+        seed: root.seed + 2 * (line + 1);
+        span: root.span;
+        font-size: Theme.font-size-sm;
+    }
+}
+
+export component SkeletonTile inherits Rectangle {
+    in property <brush> ink;
+    in property <length> tile-size;
+    in property <length> tile-radius;
+
+    width: root.tile-size;
+    height: root.tile-size;
+    border-radius: root.tile-radius;
+    background: root.ink.transparentize(1.0 - Theme.fade-skeleton);
+}

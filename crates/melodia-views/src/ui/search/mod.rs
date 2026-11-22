@@ -24,7 +24,6 @@ use crate::ui::artists::ArtistsUi;
 use crate::ui::util::{clamp_i64_to_i32, opt_shared};
 use crate::ui::view_ctx::ViewCtx;
 use melodia_artwork::media::image::cover_thumbs::CoverThumbs;
-use melodia_core::entities::album::AlbumStats;
 use melodia_core::entities::artist::ArtistStats;
 use melodia_core::entities::track::TrackListRow as RsTrackListRow;
 use melodia_ui::{
@@ -173,28 +172,17 @@ fn install_models(ui: &AppWindow) {
     g.set_selected_ids(ModelRc::from(sel));
 }
 
-/// An `AlbumStats` as its strip card, subtitled with the artist.
-pub fn to_slint_album_strip_row(a: &AlbumStats) -> UiEntityStripRow {
-    UiEntityStripRow {
-        id: clamp_i64_to_i32(a.id),
-        title: SharedString::from(a.name.as_str()),
-        subtitle: SharedString::from(a.artist_name.as_str()),
-        artwork_path: opt_shared(a.artwork_path.as_deref()),
-        play_count: 0,
-        is_favorite: false,
-    }
-}
-
 /// An `ArtistStats` as its strip card. `subtitle` is the translated album count, which only the
 /// UI thread can resolve.
-pub fn to_slint_artist_strip_row(a: &ArtistStats, subtitle: &str) -> UiEntityStripRow {
+pub fn to_slint_artist_strip_row(a: &ArtistStats, subtitle: SharedString) -> UiEntityStripRow {
     UiEntityStripRow {
         id: clamp_i64_to_i32(a.id),
         title: SharedString::from(a.name.as_str()),
-        subtitle: SharedString::from(subtitle),
+        subtitle,
         artwork_path: opt_shared(a.image_path.as_deref()),
         play_count: 0,
         is_favorite: false,
+        pending: false,
     }
 }
 

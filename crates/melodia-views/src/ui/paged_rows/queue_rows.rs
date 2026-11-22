@@ -274,10 +274,9 @@ impl Model for QueueRows {
 }
 
 impl PagedRow for QueueRow {
-    // Blank but live: a row clicked before its fetch lands still skips to and removes by
-    // position, and picks by its entry, which the panel holds whatever the fetch.
+    // Acts by position, and picks by the entry the panel holds whatever the fetch.
     fn placeholder(id: i64) -> Self {
-        Self { id: clamp_i64_to_i32(id), ..Self::default() }
+        Self { id: clamp_i64_to_i32(id), pending: true, ..Self::default() }
     }
 }
 
@@ -314,6 +313,7 @@ pub fn to_queue_row(row: &RsTrackListRow, pool: &mut StringPool) -> QueueRow {
         selected: false,
         is_favorite: row.is_favorite,
         rating: row.rating,
+        pending: false,
         album_id: row.album_id.map_or(0, clamp_i64_to_i32),
         artist_id: row.artist_id.map_or(0, clamp_i64_to_i32),
         genre_id: row.genre_id.map_or(0, clamp_i64_to_i32),

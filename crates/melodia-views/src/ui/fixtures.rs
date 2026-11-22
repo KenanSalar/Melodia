@@ -3,6 +3,7 @@
 //! `#[cfg(test)] pub(crate)`, as `melodia-app`'s `state::fixtures` is: nothing past this crate's
 //! own tests reads it.
 
+use melodia_core::entities::album::AlbumStats;
 use melodia_core::entities::track::TrackListRow;
 use melodia_core::utils::needle::fold_needle;
 use melodia_ui::TrackListRow as UiTrackListRow;
@@ -32,6 +33,31 @@ pub(crate) fn track_row(id: i64, title: &str) -> TrackListRow {
         artist_id: None,
         genre_id: None,
         sort_key: None,
+    }
+}
+
+/// An album whose year is the only field a test sets.
+pub(crate) fn dated_album(year: Option<i32>) -> AlbumStats {
+    AlbumStats {
+        id: 1,
+        name: "Kind of Blue".into(),
+        sort_name: None,
+        artist_id: 1,
+        artist_name: "Miles Davis".into(),
+        year,
+        disc_count: None,
+        is_compilation: false,
+        musicbrainz_release_group_id: None,
+        label: None,
+        catalog_number: None,
+        barcode: None,
+        media: None,
+        release_type: None,
+        release_country: None,
+        musicbrainz_id: None,
+        artwork_path: None,
+        track_count: 5,
+        total_duration_ms: 2_733_000,
     }
 }
 

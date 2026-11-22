@@ -1,10 +1,12 @@
 //! The lyrics directory, and the only thing in this feature that opens a socket.
 
+use std::sync::Arc;
+
 use super::lrc;
 use super::store::{self, Fetched, LyricsKey};
 use crate::state::AppState;
 use melodia_core::entities::artist::ArtistCredit;
-use melodia_core::entities::lyrics::{LyricsOutcome, LyricsSource};
+use melodia_core::entities::lyrics::{LyricsAnswer, LyricsOutcome, LyricsSource};
 use melodia_core::entities::track::TrackSummary;
 use melodia_core::error::{AppError, describe};
 use melodia_core::utils::text::filled;
@@ -43,20 +45,37 @@ pub(super) async fn look_up(
         }
     };
 
-    // The nothing is recorded too, or the next replay pays the request again.
-    let fetched = answer.as_ref().map_or(Fetched::Nothing, Fetched::of);
-    if let Err(e) = store::write(&state.paths.lyrics_dir, &LyricsKey::from(track), fetched) {
-        // Costs a request next time, never the sheet in hand.
-        log::debug!("lyrics: not stored: {}", describe(&e));
-    }
+    let answer = record(state, LyricsKey::from(track), answer).await?;
 
     // Off what was stored, so the panel shows what the next replay will read back.
-    Ok(match fetched {
+    Ok(match answer.as_ref().map_or(Fetched::Nothing, Fetched::of) {
         Fetched::Sheet(text) => lrc::parse(text, LyricsSource::Online)
             .map_or(LyricsOutcome::Absent, LyricsOutcome::Sheet),
         Fetched::Instrumental => LyricsOutcome::Instrumental,
         Fetched::Nothing => LyricsOutcome::Absent,
     })
+}
+
+/// Records the directory's answer, the nothing included, or the next replay pays the request again.
+async fn record(
+    state: &AppState,
+    track: LyricsKey,
+    answer: Option<LyricsAnswer>,
+) -> Result<Option<LyricsAnswer>, AppError> {
+    let paths = Arc::clone(&state.paths);
+
+    state
+        .runtime
+        .spawn_blocking(move || {
+            let fetched = answer.as_ref().map_or(Fetched::Nothing, Fetched::of);
+            if let Err(e) = store::write(&paths.lyrics_dir, &track, fetched) {
+                // Costs a request next time, never the sheet in hand.
+                log::debug!("lyrics: not stored: {}", describe(&e));
+            }
+            answer
+        })
+        .await
+        .map_err(AppError::io_source)
 }
 
 /// The credit behind the printed artist line, taken only where it renders back to `printed`:

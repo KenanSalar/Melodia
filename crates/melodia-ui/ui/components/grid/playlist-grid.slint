@@ -47,7 +47,7 @@ export component PlaylistGrid inherits Rectangle {
             // The style's default too, pinned: a drag-pan takes any press that drifts.
             mouse-drag-pan-enabled: false;
 
-            for grid-row in root.rows: Rectangle {
+            for grid-row[row-idx] in root.rows: Rectangle {
                 min-height: root.row-height;
                 max-height: root.row-height;
 
@@ -57,7 +57,7 @@ export component PlaylistGrid inherits Rectangle {
                     spacing: root.gap;
                     alignment: start;
 
-                    for playlist in grid-row.playlists: cell := CardCell {
+                    for playlist[col-idx] in grid-row.playlists: cell := CardCell {
                         card-width: root.card-width;
                         card-height: root.card-height;
                         scope: "playlists";
@@ -78,8 +78,6 @@ export component PlaylistGrid inherits Rectangle {
                             cover: root.request-cover(playlist.artwork_path,
                                 root.covers-generation);
                             fallback-icon: "playlist";
-                            // Real artwork stays gentle so a cover doesn't jitter in the clip.
-                            cover-scale-hover: playlist.artwork_path == "" ? 1.15 : 1.04;
                             title: playlist.name;
                             // An empty playlist drops the duration rather than trailing a zero.
                             subtitle: playlist.track_count > 0
@@ -88,6 +86,9 @@ export component PlaylistGrid inherits Rectangle {
                                 : @tr("0 tracks");
                             badge-icon: playlist.is_smart ? "auto_awesome" : "";
                             clicked => { root.open-playlist(playlist.id); }
+                            pending: playlist.pending;
+                            row-index: row-idx;
+                            column-index: col-idx;
 
                             selectable: true;
                             selected: cell.selected;

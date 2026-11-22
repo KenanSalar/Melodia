@@ -7,7 +7,8 @@ use slint::{ComponentHandle, SharedString, Weak};
 
 use super::state::COMPACT_TRACK_LIMIT;
 use super::top_result::{TopKind, TopResult, TopSubtitle, compute_top_result};
-use super::{SearchUi, to_slint_album_strip_row, to_slint_artist_strip_row};
+use super::{SearchUi, to_slint_artist_strip_row};
+use crate::ui::albums::to_slint_album_strip_row;
 use crate::ui::genres::genre_accent;
 use crate::ui::list_selection;
 use crate::ui::model_diff;
@@ -34,8 +35,11 @@ pub fn apply_results_to_slint(
     let (rows, total) = sort_track_rows(&results.tracks, &sort);
     let top = compute_top_result(results, query);
 
-    let album_rows: Vec<UiEntityStripRow> =
-        results.albums.iter().map(to_slint_album_strip_row).collect();
+    let album_rows: Vec<UiEntityStripRow> = results
+        .albums
+        .iter()
+        .map(|a| to_slint_album_strip_row(a, SharedString::from(a.artist_name.as_str())))
+        .collect();
     // Artist rows wait for the closure, their subtitle being a plural only the UI thread can
     // translate.
     let artists: Vec<ArtistStats> = results.artists.clone();
@@ -95,7 +99,7 @@ fn write_strips(g: &Search, album_rows: Vec<UiEntityStripRow>, artists: &[Artist
     model_diff::replace_rows(&g.get_album_rows(), album_rows, "Search.album-rows");
     let artist_rows: Vec<UiEntityStripRow> = artists
         .iter()
-        .map(|a| to_slint_artist_strip_row(a, &g.invoke_album_count_label(a.album_count)))
+        .map(|a| to_slint_artist_strip_row(a, g.invoke_album_count_label(a.album_count)))
         .collect();
     model_diff::replace_rows(&g.get_artist_rows(), artist_rows, "Search.artist-rows");
 }

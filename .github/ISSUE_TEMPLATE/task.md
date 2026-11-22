@@ -1,13 +1,13 @@
 ---
 name: Task or tracking issue
-about: Planned work — a feature, a refactor, a chore, or a multi-phase migration
+about: "Planned work: a feature, a refactor, a chore, or a multi-phase migration"
 title: ''
 labels: ''
 assignees: ''
 ---
 
 <!--
-A starting skeleton, not a form. Rewrite, reorder, or delete any of it — an
+A starting skeleton, not a form. Rewrite, reorder, or delete any of it: an
 empty heading is worse than a missing one. Each comment says when its section
 doesn't apply.
 
@@ -21,7 +21,7 @@ These comments don't render in the posted issue.
 ## Why
 
 <!--
-Delete this when the title is the reason — "add radio" doesn't need a section
+Delete this when the title is the reason: "add radio" doesn't need a section
 explaining that radio is missing.
 
 It earns its place on refactors and migrations, where the cost of leaving
@@ -47,7 +47,7 @@ sideways later.
 
 <!--
 Open questions, decisions already made, traps that will build and look right
-and be wrong — or just a link to a working doc under `docs/plans/` carrying the
+and be wrong. Or just a link to a working doc under `docs/plans/` carrying the
 real design, if the work is big enough to have one.
 
 A working doc is deleted when its feature ships, so anything in it that is a

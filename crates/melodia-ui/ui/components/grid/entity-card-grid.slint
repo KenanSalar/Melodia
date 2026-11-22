@@ -6,7 +6,7 @@ import { CardFavoriteButton } from "card-favorite-button.slint";
 import { DragSource } from "../drag-source.slint";
 
 // The virtualized counterpart to `HorizontalCardStrip` over the same row struct, a strip's plain
-// `for` building every card of an uncapped page.
+// `for` building every card of a library-sized page.
 export component EntityCardGrid inherits Rectangle {
     in property <[EntityGridRow]> rows;
     in property <length> card-width: 180px;
@@ -58,7 +58,7 @@ export component EntityCardGrid inherits Rectangle {
             // The style's default too, pinned: a drag-pan takes any press that drifts.
             mouse-drag-pan-enabled: false;
 
-            for grid-row in root.rows: Rectangle {
+            for grid-row[row-idx] in root.rows: Rectangle {
                 min-height: root.row-height;
                 max-height: root.row-height;
 
@@ -68,7 +68,7 @@ export component EntityCardGrid inherits Rectangle {
                     spacing: root.gap;
                     alignment: start;
 
-                    for entity in grid-row.entities: cell := CardCell {
+                    for entity[col-idx] in grid-row.entities: cell := CardCell {
                         card-width: root.card-width;
                         card-height: root.card-height;
                         scope: root.selection-scope;
@@ -86,12 +86,13 @@ export component EntityCardGrid inherits Rectangle {
                             cover: root.request-cover(entity.artwork_path, root.covers-generation);
                             circular: root.circular;
                             fallback-icon: root.fallback-icon;
-                            // Real artwork stays gentle so a cover doesn't jitter in the clip.
-                            cover-scale-hover: entity.artwork_path == "" ? 1.15 : 1.04;
                             title: entity.title;
                             subtitle: entity.subtitle;
                             play-count: root.show-play-count ? entity.play_count : 0;
                             clicked => { root.row-clicked(entity.id); }
+                            pending: entity.pending;
+                            row-index: row-idx;
+                            column-index: col-idx;
 
                             selectable: true;
                             selected: cell.selected;
@@ -106,9 +107,10 @@ export component EntityCardGrid inherits Rectangle {
                         }
 
                         // Hidden rather than `if`-mounted, the card reading its hover above. The
-                        // page's `library_changed` refetch repaints it.
+                        // page's `library_changed` refetch repaints it. Not on a pending card,
+                        // whose heart would state a flag it hasn't loaded.
                         fav := CardFavoriteButton {
-                            visible: root.show-favorite;
+                            visible: root.show-favorite && !entity.pending;
                             card-width: root.card-width;
                             is-favorite: entity.is_favorite;
                             marks-kept: root.favorite-marks-kept;

@@ -82,8 +82,6 @@ export component BrowseCardGrid inherits Rectangle {
                         artwork-path: card.artwork_path;
                         cover: root.request-cover(card.artwork_path, root.covers-generation);
                         fallback-icon: card.is_folder ? "folder" : "music-note";
-                        // Real artwork stays gentle so a cover doesn't jitter in the tile clip.
-                        cover-scale-hover: card.artwork_path == "" ? 1.15 : 1.04;
                         title: card.title;
                         subtitle: card.is_folder ? @tr("Folder") : card.subtitle;
                         enabled: card.enabled;

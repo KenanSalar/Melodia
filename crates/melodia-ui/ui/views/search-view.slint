@@ -162,9 +162,7 @@ export component SearchView inherits Rectangle {
                 Search.debounce-tick-pending += 1;
                 Search.query-changed(t);
             }
-            // Enter commits at once, aligning the ticks so the pending fire doesn't commit it
-            // again. It is also how a query kept across a leave, which released the results,
-            // is re-run.
+            // Enter commits at once, the ticks aligned so the pending fire doesn't repeat it.
             accepted => {
                 Search.debounce-tick-applied = Search.debounce-tick-pending;
                 Search.commit-search(Search.query);
