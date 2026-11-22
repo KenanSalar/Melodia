@@ -8,11 +8,11 @@ export component SkeletonBar inherits Rectangle {
     // Picks the width: the row's place in its list plus the cell's in the row. A place, not an id,
     // since neighbouring rows' ids are unrelated and match one time in five.
     in property <int> seed;
-    // A width the host already knows, never the layout's holding the bar, which this would feed.
+    // A width the host knows, never that of the layout holding the bar, which it would feed.
     in property <length> span;
     in property <length> font-size;
 
-    // Doubled so consecutive seeds land two of the five widths apart.
+    // Doubled so consecutive seeds land at least two of the five widths apart.
     property <int> step: Math.mod(root.seed * 2, 5);
 
     width: root.span * (0.45 + 0.1 * root.step);

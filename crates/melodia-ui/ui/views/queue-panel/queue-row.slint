@@ -35,6 +35,7 @@ export component QueueRowItem inherits Rectangle {
     property <float> fade: root.lifted ? Theme.fade-lifted : 1.0;
     // `Theme.text`, as in the track lists: these rows shouldn't read dimmer than the lists beside.
     property <brush> ink: (root.playing ? Theme.accent : Theme.text).transparentize(1.0 - root.fade);
+    property <brush> duration-ink: Theme.text.transparentize(1.0 - root.fade);
     // What every hover-driven binding reads, so the row stays lit under its own menu.
     property <bool> hovered: touch.has-hover || ctx-menu.is-open;
     // An open menu takes the panel's hover, so the winit filter reads the press on an entry as a
@@ -194,12 +195,12 @@ export component QueueRowItem inherits Rectangle {
                         cross-axis-alignment: center;
                         if !root.shows-remove && !root.pending: Text {
                             text: root.row-data.display_duration;
-                            color: Theme.text.transparentize(1.0 - root.fade);
+                            color: root.duration-ink;
                             font-size: Theme.font-size-sm;
                             horizontal-alignment: right;
                         }
                         if !root.shows-remove && root.pending: SkeletonBar {
-                            ink: Theme.text.transparentize(1.0 - root.fade);
+                            ink: root.duration-ink;
                             seed: root.row-index + 2;
                             span: root.duration-w;
                             font-size: Theme.font-size-sm;

@@ -342,9 +342,9 @@ async fn fetch_slice(
 }
 
 /// Publishes the base index and queue length beside the rows, so a click can skip to a wrapped row.
-/// A row the fetch didn't return shows blank rather than closing up, which would point
-/// every click below it one track off. A slice that moved revokes a drag still in flight, whose
-/// lifted index no longer names its track.
+/// A row the fetch didn't return shows blank rather than closing up, which would point every click
+/// below it one track off. A slice that moved revokes a drag still in flight, whose lifted index no
+/// longer names its track.
 fn show_slice(
     ui: &AppWindow,
     up_next_model: &VecModel<QueueRow>,
