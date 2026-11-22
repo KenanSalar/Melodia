@@ -43,9 +43,8 @@ The script itself is Python 3, standard library only.
 
 ## Reporting a bug
 
-Open an issue with the bug report template. `Melodia --logs` prints the log directory
-on Linux and macOS; on Windows it is `%APPDATA%\Melodia\logs\`. Attaching the tail of
-the log helps a lot, and it holds no credentials by design.
+Open an issue with the bug report template, which says what to attach. A security
+problem goes through the [security policy](SECURITY.md) instead, never a public issue.
 
 ## Before you build something big
 
