@@ -149,11 +149,11 @@ pub fn to_slint_album_row(a: &AlbumStats) -> UiAlbumRow {
 
 /// An `AlbumStats` as a strip card, subtitled by its host, which knows whether the page already
 /// names the artist.
-pub fn to_slint_album_strip_row(a: &AlbumStats, subtitle: &str) -> UiEntityStripRow {
+pub fn to_slint_album_strip_row(a: &AlbumStats, subtitle: SharedString) -> UiEntityStripRow {
     UiEntityStripRow {
         id: clamp_i64_to_i32(a.id),
         title: SharedString::from(a.name.as_str()),
-        subtitle: SharedString::from(subtitle),
+        subtitle,
         artwork_path: opt_shared(a.artwork_path.as_deref()),
         play_count: 0,
         is_favorite: false,

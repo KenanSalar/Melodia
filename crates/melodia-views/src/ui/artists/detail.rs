@@ -5,7 +5,7 @@ use std::path::PathBuf;
 use std::rc::Rc;
 use std::sync::Arc;
 
-use slint::{ComponentHandle, Model, ModelRc, VecModel, Weak};
+use slint::{ComponentHandle, Model, ModelRc, ToSharedString, VecModel, Weak};
 
 use super::{ArtistsUi, to_slint_artist_row};
 use crate::ui::detail_artwork::decode_detail_pair;
@@ -197,8 +197,8 @@ fn apply_albums_filter(g: &ArtistDetail<'_>, artists_ui: &ArtistsUi) {
 
 /// An album as its strip card, subtitled with its year, the artist being the page's.
 fn album_card(a: &AlbumStats) -> UiEntityStripRow {
-    let year = a.year.filter(|&y| y > 0).map_or_default(|y| y.to_string());
-    crate::ui::albums::to_slint_album_strip_row(a, &year)
+    let year = a.year.filter(|&y| y > 0).map_or_default(|y| y.to_shared_string());
+    crate::ui::albums::to_slint_album_strip_row(a, year)
 }
 
 /// Reopens the artist on screen at the last shutdown: now if the launch shows the Artists tab,

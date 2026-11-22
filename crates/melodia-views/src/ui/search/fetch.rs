@@ -16,8 +16,8 @@ use melodia_core::entities::search::SearchResults;
 use melodia_core::error::{AppResult, describe};
 use melodia_ui::{AppWindow, Search};
 
-/// Runs `search_all` and applies it unless a newer commit moved the fetch token meanwhile.
-/// `loading` goes up before the await and down with the apply; an empty query clears instead.
+/// Runs `search_all` and applies it unless a newer commit or a leave came meanwhile. `loading`
+/// goes up before the await and down with the apply; an empty query clears instead.
 pub async fn kick_search(
     state: &AppState,
     search_ui: &Arc<SearchUi>,
@@ -47,6 +47,13 @@ pub async fn kick_search(
         }
     }
 
+    // The leave released what this would fill and lowered `loading`, and a return re-runs the
+    // query. It still counts as searched.
+    if !search_ui.section_active() {
+        schedule_history_add(state, search_ui, weak, query);
+        return Ok(());
+    }
+
     *search_ui.state().last_results.lock() = Some(results.clone());
     (*search_ui.state().last_query.lock()).clone_from(&trimmed);
     apply_results_to_slint(search_ui, weak, &results, &trimmed);
@@ -60,6 +67,10 @@ pub async fn kick_search(
 /// UI thread at paint time. Returns whether it yielded, which obliges the caller to re-check its
 /// token.
 async fn prewarm_result_covers(search_ui: &SearchUi, results: &SearchResults) -> bool {
+    // The leave's release can't drop a decode that starts after it.
+    if !search_ui.section_active() {
+        return false;
+    }
     let track_covers: Vec<PathBuf> = crate::ui::grid_prewarm::unique_artwork_paths(
         results.tracks.iter().map(|t| t.artwork_path.as_deref()),
         search_ui.cover_thumbs.capacity(),
