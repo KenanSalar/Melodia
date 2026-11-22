@@ -64,8 +64,6 @@ export component ArtistGrid inherits Rectangle {
                             fallback-icon: "person";
                             artwork-path: artist.image_path;
                             cover: root.request-cover(artist.image_path, root.covers-generation);
-                            // Real artwork stays gentle so a cover doesn't jitter in the clip.
-                            cover-scale-hover: artist.image_path == "" ? 1.15 : 1.04;
                             title: artist.name;
                             subtitle:
                                 @tr("{n} track" | "{n} tracks" % artist.track_count)

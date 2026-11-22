@@ -78,8 +78,6 @@ export component PlaylistGrid inherits Rectangle {
                             cover: root.request-cover(playlist.artwork_path,
                                 root.covers-generation);
                             fallback-icon: "playlist";
-                            // Real artwork stays gentle so a cover doesn't jitter in the clip.
-                            cover-scale-hover: playlist.artwork_path == "" ? 1.15 : 1.04;
                             title: playlist.name;
                             // An empty playlist drops the duration rather than trailing a zero.
                             subtitle: playlist.track_count > 0

@@ -77,7 +77,6 @@ export component HorizontalCardStrip inherits Rectangle {
                         card-height: root.card-height;
                         circular: root.circular;
                         fallback-icon: root.fallback-icon;
-                        cover-scale-hover: row.artwork_path == "" ? 1.15 : 1.04;
                         on-card: true;
                         clicked => { root.row-clicked(row.id); }
                     }

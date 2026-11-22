@@ -7,7 +7,7 @@ import { GridEmptyState } from "../grid/grid-empty-state.slint";
 import { IconButton } from "../icon-button.slint";
 import { MaterialIcon } from "../material-icon.slint";
 import { OverlayScrollbar } from "../overlay-scrollbar.slint";
-import { SkeletonBar } from "../skeleton.slint";
+import { SkeletonLines } from "../skeleton.slint";
 import { TooltipSide } from "../tooltip.slint";
 import { KeptOutMenu } from "duplicates-menus.slint";
 import { ToolbarChip } from "toolbar-chip.slint";
@@ -18,7 +18,6 @@ component KeptOutRowItem inherits Rectangle {
     in property <KeptOutRow> row-data;
     in property <bool> list-start;
     in property <bool> list-end;
-    // Seeds its skeleton's bars, for `DuplicateRowItem`'s reason.
     in property <int> row-index;
     // The cards' margins inside the list, the right one holding the list's scrollbar.
     in property <length> inset-left;
@@ -84,22 +83,10 @@ component KeptOutRowItem inherits Rectangle {
                     }
                 }
             }
-            if root.pending: VerticalLayout {
-                alignment: center;
-                spacing: Theme.pad-xs;
-
-                SkeletonBar {
-                    ink: Theme.text;
-                    seed: root.row-index;
-                    span: root.text-w;
-                    font-size: Theme.font-size-row;
-                }
-                SkeletonBar {
-                    ink: Theme.subtext0;
-                    seed: root.row-index + 2;
-                    span: root.text-w;
-                    font-size: Theme.font-size-sm;
-                }
+            if root.pending: SkeletonLines {
+                seed: root.row-index;
+                span: root.text-w;
+                title-size: Theme.font-size-row;
             }
         }
     }

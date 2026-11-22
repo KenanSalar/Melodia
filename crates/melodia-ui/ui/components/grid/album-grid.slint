@@ -66,8 +66,6 @@ export component AlbumGrid inherits Rectangle {
                             artwork-path: album.artwork_path;
                             cover: root.request-cover(album.artwork_path, root.covers-generation);
                             fallback-icon: "album";
-                            // Real artwork stays gentle so a cover doesn't jitter in the clip.
-                            cover-scale-hover: album.artwork_path == "" ? 1.15 : 1.04;
                             title: album.name;
                             subtitle: (album.artist_name == ""
                                 ? @tr("Unknown artist")

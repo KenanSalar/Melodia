@@ -27,6 +27,31 @@ export component SkeletonBar inherits Rectangle {
     background: root.ink.transparentize(1.0 - Theme.fade-skeleton);
 }
 
+// A list row's text block while it loads. Each bar's seed sits two past the one above, so where
+// rows stack, the bars either side of an edge differ.
+export component SkeletonLines inherits VerticalLayout {
+    in property <int> seed;
+    in property <length> span;
+    in property <length> title-size;
+    in property <int> lines: 2;
+
+    alignment: center;
+    spacing: Theme.pad-xs;
+
+    SkeletonBar {
+        ink: Theme.text;
+        seed: root.seed;
+        span: root.span;
+        font-size: root.title-size;
+    }
+    for line in root.lines - 1: SkeletonBar {
+        ink: Theme.subtext0;
+        seed: root.seed + 2 * (line + 1);
+        span: root.span;
+        font-size: Theme.font-size-sm;
+    }
+}
+
 export component SkeletonTile inherits Rectangle {
     in property <brush> ink;
     in property <length> tile-size;

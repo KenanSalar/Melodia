@@ -61,8 +61,6 @@ export component GenreGrid inherits Rectangle {
                             fallback-icon: "theater_comedy";
                             tile-bg: Theme.tile-gradient(genre.tile_color_1, genre.tile_color_2);
                             tile-icon-color: #ffffff.with-alpha(0.3);
-                            // On a glyph at half the tile, the covers' gentle zoom reads as none.
-                            cover-scale-hover: 1.15;
                             title: genre.name;
                             subtitle:
                                 @tr("{n} track" | "{n} tracks" % genre.track_count)

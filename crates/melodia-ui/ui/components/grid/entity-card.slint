@@ -26,7 +26,9 @@ export component EntityCard inherits Rectangle {
     in property <brush> tile-bg: Theme.accent.with-alpha(0.15);
     in property <brush> tile-icon-color: Theme.accent;
 
-    in property <float> cover-scale-hover: 1.04;
+    // On a fallback glyph at half the tile, the covers' gentle zoom reads as none; real artwork
+    // stays gentle so it doesn't jitter in the clip.
+    in property <float> cover-scale-hover: root.artwork-path == "" ? 1.15 : 1.04;
 
     // On a `surface0` panel, which the default hover fill would vanish into.
     in property <bool> on-card: false;

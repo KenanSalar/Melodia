@@ -41,7 +41,8 @@ Paths are under `crates/melodia-ui/ui/components/` unless stated.
 - **Lists.** `TrackList` with `TrackListScrollbars`; `TrackTitle` for any row showing a track's
   title; `DragSource`, `ListDropTarget` and `DragGhost` for an in-window drag; `WindowRectReport`
   and `FileDropBanner` for a file dragged in from the OS (`window_chrome::file_drop` has the route);
-  `SkeletonBar` and `SkeletonTile` for a row or card still loading.
+  `SkeletonBar` and `SkeletonTile` for a row or card still loading, `SkeletonLines` for a list
+  row's stacked text.
 - **Heroes.** `TabSearchHeader` (the only `TabBar` mount), `MosaicTabHero` and `LibraryTabBand`,
   `MosaicHeroTile`, `HeroChipStrip`, and `HeroBackdropStack` (bands) / `NpBackdropStack` (Now
   Playing, miniplayer) over `HeroBlurBackdrop` and `AuroraBackdrop`.

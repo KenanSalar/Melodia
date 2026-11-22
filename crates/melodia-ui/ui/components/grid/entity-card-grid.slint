@@ -86,8 +86,6 @@ export component EntityCardGrid inherits Rectangle {
                             cover: root.request-cover(entity.artwork_path, root.covers-generation);
                             circular: root.circular;
                             fallback-icon: root.fallback-icon;
-                            // Real artwork stays gentle so a cover doesn't jitter in the clip.
-                            cover-scale-hover: entity.artwork_path == "" ? 1.15 : 1.04;
                             title: entity.title;
                             subtitle: entity.subtitle;
                             play-count: root.show-play-count ? entity.play_count : 0;
