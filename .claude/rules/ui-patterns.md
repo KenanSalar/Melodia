@@ -129,6 +129,8 @@ Paths are under `crates/melodia-ui/ui/components/` unless stated.
   survive a failed read.
 - **A platform-gated control reads `library::playback`'s `*_SUPPORTED` constants**, never a
   `cfg!(target_os)` of its own.
+- **A `runtime.spawn` whose answer is awaited on the UI thread goes through
+  `ui::landing::spawn_landing`**, never a `JoinHandle` awaited inside a `spawn_local` of its own.
 
 ## The three tabbed pages
 

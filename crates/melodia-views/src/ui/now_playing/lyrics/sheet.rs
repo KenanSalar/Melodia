@@ -34,7 +34,7 @@ async fn fetch(state: &AppState, track: &TrackSummary) -> LyricsOutcome {
     }
 }
 
-/// Brings the panel in line with what is playing, claiming the track before the first `.await`.
+/// Brings the panel in line with what is playing, claiming the track before the lookup is spawned.
 fn reseed(weak: &Weak<AppWindow>, state: &AppState, np_state: &Rc<NowPlayingState>) {
     let Some(ui) = weak.upgrade() else { return };
     let ly = &np_state.lyrics;
@@ -189,7 +189,7 @@ fn apply(
     }
 }
 
-/// **Claims the track before the `.await`**: the lookup can reach a file and then a socket, and a
+/// **Claims the track before the lookup starts**: it can reach a file and then a socket, and a
 /// reseed landing in that window would start a second one for the same song.
 fn mark_loading(ui: &AppWindow, ly: &LyricsUi, track_id: i64) {
     clear(ui, ly);

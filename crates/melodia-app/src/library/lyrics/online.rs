@@ -45,7 +45,7 @@ pub(super) async fn look_up(
         }
     };
 
-    let answer = remember(state, LyricsKey::from(track), answer).await?;
+    let answer = record(state, LyricsKey::from(track), answer).await?;
 
     // Off what was stored, so the panel shows what the next replay will read back.
     Ok(match answer.as_ref().map_or(Fetched::Nothing, Fetched::of) {
@@ -57,7 +57,7 @@ pub(super) async fn look_up(
 }
 
 /// Records the directory's answer, the nothing included, or the next replay pays the request again.
-async fn remember(
+async fn record(
     state: &AppState,
     track: LyricsKey,
     answer: Option<LyricsAnswer>,

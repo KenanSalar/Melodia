@@ -73,8 +73,8 @@ pub(crate) trait TicketedDialog: Sized + 'static {
     }
 
     /// [`Self::after`] for an answer that lands whatever the ticket: a write a dialog closed mid-run
-    /// still made, or a count shown outside the dialog. `None` is a task that didn't finish, so a
-    /// busy flag set for it still comes down. Answers its abort handle if the landing spawned.
+    /// still made, or a count shown outside the dialog. Lands [`spawn_landing`]'s `None` too, so a
+    /// busy flag set for it still comes down.
     fn after_any_ticket<T: Send + 'static>(
         self: &Rc<Self>,
         label: &'static str,
