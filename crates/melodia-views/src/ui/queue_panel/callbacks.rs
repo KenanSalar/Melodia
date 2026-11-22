@@ -1,5 +1,4 @@
-//! `Queue.*` callback wiring: a row's play, the moves and what a press lifts, a drop from another
-//! list, the row menu's favourite and rating, and the picks. Removals are `removal`'s.
+//! The `Queue.*` callbacks over the rows and their picks, removals excepted, which are `removal`'s.
 
 use std::rc::Rc;
 

@@ -9,14 +9,15 @@ Status: **approved** · Owner: Kenan · Created: 2026-11-22 · Issue: #181 · Br
   queue's header turns into "Add 3 tracks to the queue", a line shows the slot, and the tracks land
   there.
 - **The other direction does nothing.** A queue row you pick up only reorders the queue. Carried
-  over the playlist, no line appears, no chip follows the pointer, the cursor refuses, and letting
-  go does nothing.
+  over the playlist, the chip follows the pointer, but no line appears, the cursor refuses, and
+  letting go does nothing.
 - **The only route is the row menu's Add to Playlist.** It opens a dialog where you find the
   playlist by name, shows a toast, and always puts the tracks at the end.
 
 ## Why
 
-Three things keep a queue drag inside the queue, and the page has nothing that would take it:
+Three things keep a queue drag inside the queue, and the page has nothing that would take it.
+Phase 1 handles the first two:
 
 1. **Queue rows carry no tracks.** A press arms the drag with `src.arm(idx)` (`queue-panel.slint`,
    the row's `pressed`), so `Drag.payload.items.kind` is `""`. Every target that takes another
@@ -29,7 +30,7 @@ Three things keep a queue drag inside the queue, and the page has nothing that w
 
 The store can only append, too: `queries::playlist::append_items` starts at `MAX(position) + 1`.
 
-Two hazards appear as soon as queue rows carry ids:
+Two hazards appear as soon as queue rows carry ids, and Phase 1 handles both:
 
 - **The picked ids can change mid-drag.** `Queue.selected-ids` is a single `VecModel`.
   `list_selection::write_selection_ids` rewrites it in place each time `publish_picks` runs, which
