@@ -7,6 +7,7 @@ import { ContextClick } from "../context-menu.slint";
 import { IconButton } from "../icon-button.slint";
 import { MaterialIcon } from "../material-icon.slint";
 import { MetaChip } from "../meta-chip.slint";
+import { SkeletonBar } from "../skeleton.slint";
 import { TooltipSide } from "../tooltip.slint";
 import { DuplicateRowMenu } from "duplicates-menus.slint";
 
@@ -56,10 +57,12 @@ component RowChip inherits VerticalLayout {
 // A group's header, the top of its card: the copies below it close the card.
 component GroupHeaderRow inherits Rectangle {
     in property <DuplicateRow> row-data;
+    in property <int> row-index;
     in property <length> trailing-room;
 
-    // A placeholder's group facts are defaults, so they wait for the row a fetch lands.
-    property <bool> loaded: root.row-data.title != "";
+    property <bool> pending: root.row-data.pending;
+    // A pending header has no chips beside its text.
+    property <length> text-w: root.width - Theme.pad-md - root.trailing-room;
     property <bool> sure-match: root.row-data.match_kind == DuplicateMatch.identical
         || root.row-data.match_kind == DuplicateMatch.same-release;
     property <string> match-label:
@@ -79,7 +82,7 @@ component GroupHeaderRow inherits Rectangle {
         padding-right: root.trailing-room;
         spacing: Theme.pad-sm;
 
-        VerticalLayout {
+        if !root.pending: VerticalLayout {
             horizontal-stretch: 1;
             alignment: center;
             spacing: 2px;
@@ -98,20 +101,37 @@ component GroupHeaderRow inherits Rectangle {
                 overflow: elide;
             }
         }
-        if root.loaded: RowChip {
+        if root.pending: VerticalLayout {
+            alignment: center;
+            spacing: Theme.pad-xs;
+
+            SkeletonBar {
+                ink: Theme.text;
+                seed: root.row-index;
+                span: root.text-w;
+                font-size: Theme.font-size-md;
+            }
+            SkeletonBar {
+                ink: Theme.subtext0;
+                seed: root.row-index + 1;
+                span: root.text-w;
+                font-size: Theme.font-size-sm;
+            }
+        }
+        if !root.pending: RowChip {
             icon: root.sure-match ? "check_circle" : "info";
             text: root.match-label;
             fill: root.sure-match ? Theme.accent.with-alpha(0.18) : Theme.card-control;
             label-color: root.sure-match ? Theme.accent : Theme.text;
             icon-color: root.sure-match ? Theme.accent : Theme.yellow;
         }
-        if root.loaded && root.row-data.dismissed: RowChip {
+        if !root.pending && root.row-data.dismissed: RowChip {
             icon: "visibility_off";
             text: @tr("Dismissed");
             fill: Theme.card-control;
             label-color: Theme.subtext0;
         }
-        if root.loaded: Text {
+        if !root.pending: Text {
             text: @tr("{n} copy" | "{n} copies" % root.row-data.copy_count);
             color: Theme.subtext0;
             font-size: Theme.font-size-sm;
@@ -135,11 +155,14 @@ component CopyRow inherits Rectangle {
     in property <bool> hovered;
     in property <bool> first-copy;
     in property <bool> last-copy;
+    in property <int> row-index;
     in property <length> trailing-room;
 
+    property <bool> pending: root.row-data.pending;
     property <length> checkbox-w: 16px;
     // Where the text column starts, which the divider above it starts at too.
     property <length> text-x: Theme.pad-md + root.checkbox-w + Theme.pad-md;
+    property <length> text-w: root.width - root.text-x - root.trailing-room;
 
     background: Theme.surface0;
     border-bottom-left-radius: root.last-copy ? Theme.radius-md : 0px;
@@ -184,7 +207,7 @@ component CopyRow inherits Rectangle {
             }
         }
 
-        VerticalLayout {
+        if !root.pending: VerticalLayout {
             horizontal-stretch: 1;
             alignment: center;
             spacing: 2px;
@@ -275,6 +298,29 @@ component CopyRow inherits Rectangle {
                 }
             }
         }
+        if root.pending: VerticalLayout {
+            alignment: center;
+            spacing: Theme.pad-xs;
+
+            SkeletonBar {
+                ink: Theme.text;
+                seed: root.row-index;
+                span: root.text-w;
+                font-size: Theme.font-size-row;
+            }
+            SkeletonBar {
+                ink: Theme.subtext0;
+                seed: root.row-index + 1;
+                span: root.text-w;
+                font-size: Theme.font-size-sm;
+            }
+            SkeletonBar {
+                ink: Theme.subtext0;
+                seed: root.row-index + 2;
+                span: root.text-w;
+                font-size: Theme.font-size-sm;
+            }
+        }
     }
 }
 
@@ -286,6 +332,8 @@ export component DuplicateRowItem inherits Rectangle {
     in property <bool> first-copy;
     in property <bool> last-copy;
     in property <bool> list-end;
+    // Picks its skeleton's bar widths.
+    in property <int> row-index;
     // The card's margins inside the list, the right one holding the list's scrollbar.
     in property <length> inset-left;
     in property <length> inset-right;
@@ -310,6 +358,7 @@ export component DuplicateRowItem inherits Rectangle {
         width: root.card-w;
         height: root.card-h;
         row-data: root.row-data;
+        row-index: root.row-index;
         trailing-room: root.trailing-room;
     }
 
@@ -322,6 +371,7 @@ export component DuplicateRowItem inherits Rectangle {
         hovered: root.hovered;
         first-copy: root.first-copy;
         last-copy: root.last-copy;
+        row-index: root.row-index;
         trailing-room: root.trailing-room;
     }
 

@@ -1,6 +1,7 @@
 # Plan: loading skeletons and card-strip panels (#169)
 
-Status: **Phase 1 done** and hand-checked; **Phase 2 done**, awaiting its hand check; Phase 3 next.
+Status: **Phases 1–3 done** and hand-checked, except the kept-out list, which the dev library has
+no files for; Phase 4 next.
 Branch `feat/skeletons-and-strip-panels`.
 
 ## What you see now, and after
@@ -87,8 +88,8 @@ page's Albums strip, which has a thin line under it. After the change:
   - The seed is the row's place in its list plus a per-column offset, so the bars in one row
     differ from each other too. Not the id: neighbouring rows' ids are unrelated, so one pair in
     five matched, and Phase 1's hand check caught a run of four identical rows in title order.
-    A card is seeded by its row and column in the grid (Phase 2), and Phase 3 seeds a dialog row
-    by its place.
+    A card is seeded by its row and column in the grid (Phase 2), and a dialog row by its place
+    plus its line (Phase 3).
   - It needs no array literal and no global.
 - **No shimmer and no pulse.** Rows fill in a moment after scrolling slows, and an animation would
   keep the window redrawing as long as any skeleton is up.
@@ -211,7 +212,8 @@ skeletons whenever a drag outruns the fetch.
   `pending` is set the card shows:
   - a `SkeletonTile` in the tile's place, round when `circular`;
   - a title bar in `Theme.text`'s ink and a subtitle bar in `subtext0`'s. Both bars swap in as one
-    block with `Theme.pad-xs` between them, since a bar is shorter than the line box it replaces;
+    block with `Theme.pad-xs` between them, since a bar is shorter than the line box it replaces.
+    Phase 3 moved that reason onto `SkeletonBar`'s height, which every stack of bars shares;
   - no `subtitle2` and no hover zoom. The play-count and smart-playlist badges need no gate: a
     placeholder's zero count and `is_smart: false` already hide them, and the zero rule stays the
     leaf's (`play_count_badge_tests.rs`).
@@ -233,17 +235,30 @@ skeletons whenever a drag outruns the fetch.
 
 **Done when** the four library grids and Most Played paint skeleton cards during a fast scroll.
 
-### Phase 3: the dialog lists (not started)
+### Phase 3: the dialog lists (done)
 
-- `KeptOutRowItem` (`components/dialog/kept-out-body.slint`): `loaded` becomes
-  `!row-data.pending`, and the file name and folder lines become bars.
-- `DuplicateRowItem` (`components/dialog/duplicate-row.slint`):
-  - the header's `loaded` becomes `!pending`, and its title and artist become bars;
-  - a copy's three lines become bars;
-  - the copy's "From a cue sheet" chip and its checkbox wait for `!pending`. Today a loading copy
-    shows the chip, because `removable` defaults to false.
-  - The issue's list leaves out the finder's rows, but they load as you scroll, which is the issue's
-    own test for being in scope.
+- Each row reads `pending` and swaps its text block for a block of bars, with `alignment: center`
+  and `Theme.pad-xs` between bars. Each bar takes the ink and font size of its line.
+  - **Span:** a named `text-w`, the text column's width, derived from the card width the host
+    binds.
+  - **Seed:** `row-index + line`, the row's place in the list. The same line in consecutive rows
+    lands two widths apart, and one row's lines all differ. `KeptOutBody` and `DuplicatesBody`
+    pass `idx`, and `DuplicateRowItem` hands it to both children.
+- `KeptOutRowItem` (`components/dialog/kept-out-body.slint`): the `path != ""` guess gives way to
+  `pending`. A file name bar and a folder bar, and Bring Back waits for `!pending`.
+- `GroupHeaderRow` (`components/dialog/duplicate-row.slint`): the `title != ""` guess gives way to
+  `pending`. A title bar and an artist bar. The match chip, the Dismissed chip and the copy count
+  wait for the fetch.
+- `CopyRow`: the whole three-line column swaps for three bars, so each chip and fact waits with its
+  line.
+  - This covers "From a cue sheet", which a loading copy showed because `removable` defaults to
+    false.
+  - It covers Now Playing too. That chip is a fact the row already has, but splitting the line to
+    keep it for the moment before a fetch lands isn't worth it.
+  - The checkbox and the pointer cursor need no gate: `removable` defaulting to false already
+    holds them back, the same rule as Phase 2's badges.
+- The issue's list leaves out the finder's rows, but they load as you scroll, which is the issue's
+  own test for being in scope.
 
 **Done when** both lists show skeletons on their `surface0` cards during a fast scroll.
 
@@ -329,6 +344,9 @@ skeletons whenever a drag outruns the fetch.
   short-lived, and accurate, since it is no longer a track.
 - **A pending row's menu** opens with defaults for its heart and rating. It corrects itself when the
   row lands, because the menu reads the live row.
+  - A pending kept-out row's Copy Path copies nothing until the row lands, for the same reason.
+  - Its Open Containing Folder returns on the empty path (`duplicates/kept_out.rs:199-202`).
+  - A pending group header offers Not Duplicates even on a dismissed group.
 - **KDE light:** its `crust` is almost the same as `surface0` (`kde.rs:62-63`), so the strip's
   on-card track is as faint there as every dialog's track is today.
 - **Search:** the panels beside the bordered `TopResultCard` need a look by eye, as the issue says.

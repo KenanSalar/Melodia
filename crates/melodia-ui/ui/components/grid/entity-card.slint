@@ -174,7 +174,6 @@ export component EntityCard inherits Rectangle {
                     visible: root.subtitle2 != "";
                 }
             }
-            // Spaced wider than the text, a bar being shorter than the line box it stands in for.
             if root.pending: VerticalLayout {
                 spacing: Theme.pad-xs;
                 SkeletonBar {

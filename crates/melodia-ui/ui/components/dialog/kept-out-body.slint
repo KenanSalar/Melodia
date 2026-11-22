@@ -7,6 +7,7 @@ import { GridEmptyState } from "../grid/grid-empty-state.slint";
 import { IconButton } from "../icon-button.slint";
 import { MaterialIcon } from "../material-icon.slint";
 import { OverlayScrollbar } from "../overlay-scrollbar.slint";
+import { SkeletonBar } from "../skeleton.slint";
 import { TooltipSide } from "../tooltip.slint";
 import { KeptOutMenu } from "duplicates-menus.slint";
 import { ToolbarChip } from "toolbar-chip.slint";
@@ -17,17 +18,19 @@ component KeptOutRowItem inherits Rectangle {
     in property <KeptOutRow> row-data;
     in property <bool> list-start;
     in property <bool> list-end;
+    // Picks its skeleton's bar widths.
+    in property <int> row-index;
     // The cards' margins inside the list, the right one holding the list's scrollbar.
     in property <length> inset-left;
     in property <length> inset-right;
 
+    property <bool> pending: root.row-data.pending;
     property <length> card-h: 60px;
     property <length> more-d: 28px;
     property <length> card-y: root.list-start ? Theme.pad-md : Theme.pad-xs;
     property <length> card-w: root.width - root.inset-left - root.inset-right;
-    // A placeholder's path is empty until its fetch lands, so it offers no Bring Back yet.
-    property <bool> loaded: root.row-data.path != "";
     property <length> trailing-room: Theme.pad-sm + bring.width + Theme.pad-sm + root.more-d + Theme.pad-sm;
+    property <length> text-w: root.card-w - Theme.pad-md - root.trailing-room;
     // The chip and the button sit over the row's touch area, so their hover counts as the row's.
     property <bool> hovered: touch.has-hover || bring.has-hover || more.has-hover || menu.is-open;
 
@@ -46,7 +49,7 @@ component KeptOutRowItem inherits Rectangle {
             padding-left: Theme.pad-md;
             padding-right: root.trailing-room;
 
-            VerticalLayout {
+            if !root.pending: VerticalLayout {
                 alignment: center;
                 spacing: 2px;
 
@@ -81,6 +84,23 @@ component KeptOutRowItem inherits Rectangle {
                     }
                 }
             }
+            if root.pending: VerticalLayout {
+                alignment: center;
+                spacing: Theme.pad-xs;
+
+                SkeletonBar {
+                    ink: Theme.text;
+                    seed: root.row-index;
+                    span: root.text-w;
+                    font-size: Theme.font-size-row;
+                }
+                SkeletonBar {
+                    ink: Theme.subtext0;
+                    seed: root.row-index + 1;
+                    span: root.text-w;
+                    font-size: Theme.font-size-sm;
+                }
+            }
         }
     }
 
@@ -105,7 +125,8 @@ component KeptOutRowItem inherits Rectangle {
         x: root.inset-left + root.card-w - Theme.pad-sm - root.more-d - Theme.pad-sm - self.width;
         y: root.card-y + (root.card-h - self.height) / 2;
         width: self.preferred-width;
-        visible: root.loaded && !KeptOutUi.bringing-back;
+        // Not on a pending row, which can't yet say which file it would bring back.
+        visible: !root.pending && !KeptOutUi.bringing-back;
         icon: "library_add";
         label: @tr("Bring Back");
         clicked => { KeptOutUi.bring-back(root.row-data.id); }
@@ -197,6 +218,7 @@ export component KeptOutBody inherits VerticalLayout {
                 row-data: row;
                 list-start: idx == 0;
                 list-end: idx == KeptOutUi.rows.length - 1;
+                row-index: idx;
                 inset-left: Theme.pad-md;
                 inset-right: root.bar-gutter;
             }

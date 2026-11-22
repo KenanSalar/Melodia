@@ -16,7 +16,8 @@ export component SkeletonBar inherits Rectangle {
     property <int> step: Math.mod(root.seed * 2, 5);
 
     width: root.span * (0.45 + 0.1 * root.step);
-    // About the text's cap height, so the bar reads as a line rather than a block.
+    // About the text's cap height, so the bar reads as a line rather than a block. Shorter than the
+    // line box it stands in for, so stacked bars want `Theme.pad-xs` between them.
     height: root.font-size * 0.7;
     // A `Text` reports none and a `Rectangle` one, which would let the cell holding the bar take
     // room the text left to its neighbours.
