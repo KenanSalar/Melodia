@@ -1,4 +1,5 @@
 import { ListView } from "std-widgets.slint";
+import { Dialog } from "../../globals/dialog.slint";
 import { Theme } from "../../theme.slint";
 import { PickRow } from "../../models.slint";
 import { GridEmptyState } from "../grid/grid-empty-state.slint";
@@ -102,8 +103,6 @@ export component PickList inherits VerticalLayout {
     in property <[string]> badges;
     in-out property <string> filter;
     in-out property <int> picked: -1;
-    // Bumped by a row's click, the box having no click-outside of its own.
-    in-out property <int> blur-tick;
 
     callback filter-changed(string);
     callback filter-accepted();
@@ -121,7 +120,7 @@ export component PickList inherits VerticalLayout {
         inset: true;
         placeholder: root.placeholder;
         text <=> root.filter;
-        blur-trigger: root.blur-tick;
+        blur-trigger: Dialog.blur-tick;
         edited(needle) => { root.filter-changed(needle); }
         cleared => { root.filter-changed(""); }
         accepted => { root.filter-accepted(); }
@@ -166,7 +165,8 @@ export component PickList inherits VerticalLayout {
                 inset-right: root.bar-gutter;
                 clicked => {
                     root.picked = row.index;
-                    root.blur-tick += 1;
+                    // The row takes the click, so the card never bumps the tick for it.
+                    Dialog.blur-tick += 1;
                     root.row-picked(row.index);
                 }
             }

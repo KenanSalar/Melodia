@@ -168,6 +168,7 @@ export component DialogOverlay inherits Rectangle {
             DialogGlobal.cancelled();
             DialogGlobal.open = false;
         }
+        card-clicked => { DialogGlobal.blur-tick += 1; }
 
         layout := VerticalLayout {
             x: 0px;

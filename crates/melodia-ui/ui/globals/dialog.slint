@@ -65,6 +65,8 @@ export global Dialog {
     in-out property <string> confirm-label: "OK";
     in-out property <string> cancel-label;
     in-out property <bool> destructive;
+    // A body's search box lets go of the focus on each bump, a click on the card being one.
+    in-out property <int> blur-tick;
 
     in-out property <DialogKind> kind;
     in-out property <int> target-id: -1;

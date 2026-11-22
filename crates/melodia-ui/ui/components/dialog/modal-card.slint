@@ -13,6 +13,8 @@ export component ModalCard inherits Rectangle {
     in property <length> max-card-width;
     in property <length> card-height;
     callback backdrop-clicked();
+    // A click on the card that nothing on it took.
+    callback card-clicked();
 
     out property <length> card-width: card.width;
     // A centred card left uncapped runs off both edges of a short window.
@@ -57,7 +59,7 @@ export component ModalCard inherits Rectangle {
             width: 100%;
             height: 100%;
             enabled: root.interactive;
-            clicked => { }
+            clicked => { root.card-clicked(); }
         }
 
         @children
