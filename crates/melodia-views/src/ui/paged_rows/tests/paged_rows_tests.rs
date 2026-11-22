@@ -1,5 +1,5 @@
-//! What a paged list asks the database for, what it tells Slint to read again, how a drag moves its
-//! rows, and the order its keyset loads show in.
+//! What a paged list asks the database for, what it shows for a row not fetched yet, what it tells
+//! Slint to read again, how a drag moves its rows, and the order its keyset loads show in.
 //!
 //! Two doubles stand in for what surrounds a list. The fetcher is the one the model takes as a
 //! parameter, recording each request until a test lands it or drops it, which is a fetch failing.
@@ -18,7 +18,10 @@ use slint::{FilterModel, Model, ModelRc, SharedString};
 use super::track_rows::TrackRows;
 use super::{Keyset, KeysetTickets, Load, PagedRow, ReadStamp, RowRequest, Ticket, window};
 use crate::ui::fixtures::track_keyset;
-use melodia_ui::TrackListRow as UiTrackListRow;
+use melodia_ui::{
+    AlbumRow, ArtistRow, DuplicateRow, EntityStripRow, GenreRow, KeptOutRow, PlaylistRow, QueueRow,
+    TrackListRow as UiTrackListRow,
+};
 
 /// What a landed row reads, where a placeholder's title is empty.
 const LANDED: &str = "landed";
@@ -297,6 +300,40 @@ fn a_row_not_fetched_yet_still_carries_its_selection_flag() {
     let row = list.rows.row_data(499);
 
     assert_eq!(row.map(|row| (row.title.is_empty(), row.selected)), Some((true, true)));
+}
+
+/// `..Self::default()` leaves `pending` false, so a placeholder that forgets it draws its defaults
+/// as tags rather than a skeleton.
+#[test]
+fn every_placeholder_reads_as_pending() {
+    let pending = [
+        ("TrackListRow", UiTrackListRow::placeholder(1).pending),
+        ("QueueRow", QueueRow::placeholder(1).pending),
+        ("AlbumRow", AlbumRow::placeholder(1).pending),
+        ("ArtistRow", ArtistRow::placeholder(1).pending),
+        ("GenreRow", GenreRow::placeholder(1).pending),
+        ("PlaylistRow", PlaylistRow::placeholder(1).pending),
+        ("EntityStripRow", EntityStripRow::placeholder(1).pending),
+        ("KeptOutRow", KeptOutRow::placeholder(1).pending),
+        ("DuplicateRow header", DuplicateRow::placeholder(-1).pending),
+        ("DuplicateRow copy", DuplicateRow::placeholder(1).pending),
+    ];
+
+    assert_eq!(
+        pending,
+        [
+            ("TrackListRow", true),
+            ("QueueRow", true),
+            ("AlbumRow", true),
+            ("ArtistRow", true),
+            ("GenreRow", true),
+            ("PlaylistRow", true),
+            ("EntityStripRow", true),
+            ("KeptOutRow", true),
+            ("DuplicateRow header", true),
+            ("DuplicateRow copy", true),
+        ]
+    );
 }
 
 /// What a drag of the picks lifts, so it reads the rows as shown, and a pick a filter hid is not

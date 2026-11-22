@@ -237,3 +237,7 @@ fn write_albums_model(g: &ArtistDetail, rows: Vec<UiEntityStripRow>) {
         g.set_albums(ModelRc::from(Rc::new(VecModel::from(rows))));
     }
 }
+
+#[cfg(test)]
+#[path = "tests/detail_tests.rs"]
+mod tests;

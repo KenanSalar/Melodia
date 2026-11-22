@@ -5,7 +5,7 @@
 //! along the same seam their sources do.
 
 use super::{HeroFold, dominant_genre, fold_tracks, year_span};
-use melodia_core::entities::album::AlbumStats;
+use crate::ui::fixtures::dated_album;
 use melodia_core::entities::track::TrackListRow;
 
 /// Only the two fields [`fold_tracks`] reads.
@@ -34,31 +34,6 @@ fn track(artist_id: Option<i64>, album_id: Option<i64>) -> TrackListRow {
 /// Genre lines as `genre_lines` answers them: each line with how many tracks carry it.
 fn lines(spelled: &[(&str, i64)]) -> Vec<(String, i64)> {
     spelled.iter().map(|&(line, tracks)| (line.to_owned(), tracks)).collect()
-}
-
-/// Only the one field [`year_span`] reads.
-fn dated_album(year: Option<i32>) -> AlbumStats {
-    AlbumStats {
-        id: 1,
-        name: "Kind of Blue".into(),
-        sort_name: None,
-        artist_id: 1,
-        artist_name: "Miles Davis".into(),
-        year,
-        disc_count: None,
-        is_compilation: false,
-        musicbrainz_release_group_id: None,
-        label: None,
-        catalog_number: None,
-        barcode: None,
-        media: None,
-        release_type: None,
-        release_country: None,
-        musicbrainz_id: None,
-        artwork_path: None,
-        track_count: 5,
-        total_duration_ms: 2_733_000,
-    }
 }
 
 #[test]
