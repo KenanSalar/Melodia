@@ -39,6 +39,8 @@ export component ListDropTarget inherits DropArea {
     property <length> scroll-step: 6px;
 
     property <bool> own-drag: Drag.payload.origin == root.origin;
+    // A revoked drag keeps its origin but names no row, so it moves nothing.
+    property <bool> reorders: root.own-drag && root.lifted >= 0;
     property <bool> items-drag: root.takes-items && !root.own-drag
         && Drag.payload.items.kind != "";
     property <int> lifted: Drag.payload.index;
@@ -69,7 +71,7 @@ export component ListDropTarget inherits DropArea {
     property <LiftedRun> run: Drag.payload.run;
     property <bool> still: root.run.count > 0 && root.slot >= root.run.first
         && root.slot <= root.run.first + root.run.count;
-    property <bool> moves: root.own-drag && !root.still && root.same-run;
+    property <bool> moves: root.reorders && !root.still && root.same-run;
 
     function follow(y: length) {
         root.pointer-y = y;
@@ -77,7 +79,7 @@ export component ListDropTarget inherits DropArea {
     }
 
     can-drop(event) => {
-        if (!root.own-drag && !root.items-drag) {
+        if (!root.reorders && !root.items-drag) {
             return DragAction.none;
         }
         root.follow(event.position.y);
@@ -109,7 +111,7 @@ export component ListDropTarget inherits DropArea {
 
     Timer {
         interval: 16ms;
-        running: root.has-drag && (root.own-drag || root.items-drag) && root.edge != 0;
+        running: root.has-drag && (root.reorders || root.items-drag) && root.edge != 0;
         triggered => {
             root.scroll-by(root.edge * root.scroll-step);
         }

@@ -298,6 +298,7 @@ export component QueuePanel inherits Rectangle {
 
                 src := DragSource {
                     origin: DragOrigin.queue;
+                    allow-copy: true;
                     allow-move: true;
                     x: 0;
                     y: 0;
@@ -323,7 +324,7 @@ export component QueuePanel inherits Rectangle {
                             next-selected: idx < Queue.rows.length - 1 && Queue.rows[idx + 1].selected;
                             lifted: src.lifts(idx) || (row.selected && src.lifting-picks);
                             pressed => {
-                                src.arm(idx);
+                                src.arm-items(idx, self.drag-items());
                                 if (Selection.acts-on-set(row.selected, Queue.selected-count)) {
                                     src.lift-picks(Queue.picked-run());
                                 }

@@ -1,17 +1,21 @@
 import { CardActions } from "../../globals/card-actions.slint";
-import { Drag } from "../../globals/drag.slint";
+import { Drag, DragOrigin } from "../../globals/drag.slint";
 import { Queue } from "../../globals/queue.slint";
 import { IconButton } from "../icon-button.slint";
 
 // The bar's queue button, which also takes a drag. A drop on it is Add to Queue on what was
 // dragged, the whole pick included. A drag held over it opens the panel, docked or as the overlay,
-// so the drop can be placed at a slot instead.
+// so the drop can be placed at a slot instead. A drag out of the queue is refused, its rows being
+// queued already.
 export component QueueButton inherits Rectangle {
     in property <length> diameter;
     in property <length> icon-size;
 
     // How long a drag rests on the button before the panel opens: GTK's own hover-to-switch delay.
     private property <duration> open-delay: 500ms;
+
+    private property <bool> takes-drag: Drag.payload.items.kind != ""
+        && Drag.payload.origin != DragOrigin.queue;
 
     // Sized to the button, a `DropArea` asking for the stretch the bar's row would hand it.
     width: root.diameter;
@@ -22,7 +26,7 @@ export component QueueButton inherits Rectangle {
         height: 100%;
 
         can-drop(event) => {
-            if (Drag.payload.items.kind == "") {
+            if (!root.takes-drag) {
                 return DragAction.none;
             }
             Drag.follow(self.absolute-position.x + event.position.x,
@@ -32,7 +36,7 @@ export component QueueButton inherits Rectangle {
         // A drop goes to whatever the pointer is over, even where another target took the last
         // move, so it asks again.
         dropped(event) => {
-            if (Drag.payload.items.kind == "") {
+            if (!root.takes-drag) {
                 return DragAction.none;
             }
             CardActions.add-to-queue(Drag.payload.items.kind, Drag.payload.items.ids);
