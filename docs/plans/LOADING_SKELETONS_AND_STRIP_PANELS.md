@@ -1,7 +1,7 @@
 # Plan: loading skeletons and card-strip panels (#169)
 
 Status: **Phases 1–3 done** and hand-checked, except the kept-out list, which the dev library has
-no files for; Phase 4 next.
+no files for, and Phase 3's seed step of two, which landed after the check; Phase 4 next.
 Branch `feat/skeletons-and-strip-panels`.
 
 ## What you see now, and after
@@ -241,9 +241,11 @@ skeletons whenever a drag outruns the fetch.
   and `Theme.pad-xs` between bars. Each bar takes the ink and font size of its line.
   - **Span:** a named `text-w`, the text column's width, derived from the card width the host
     binds.
-  - **Seed:** `row-index + line`, the row's place in the list. The same line in consecutive rows
-    lands two widths apart, and one row's lines all differ. `KeptOutBody` and `DuplicatesBody`
-    pass `idx`, and `DuplicateRowItem` hands it to both children.
+  - **Seed:** `row-index + 2 × line`, the row's place in the list. The same line in consecutive
+    rows lands two widths apart, and one row's lines all differ. Stepping two per line also keeps
+    a row's last bar off the next row's first, which a step of one matched in every two-line row.
+    `KeptOutBody` and `DuplicatesBody` pass `idx`, and `DuplicateRowItem` hands it to both
+    children.
 - `KeptOutRowItem` (`components/dialog/kept-out-body.slint`): the `path != ""` guess gives way to
   `pending`. A file name bar and a folder bar, and Bring Back waits for `!pending`.
 - `GroupHeaderRow` (`components/dialog/duplicate-row.slint`): the `title != ""` guess gives way to
@@ -340,8 +342,12 @@ skeletons whenever a drag outruns the fetch.
 ## Risks and notes
 
 - **A row deleted since its list was read** comes back missing from its fetch and stays a skeleton
-  until the library tick that deleted it reloads the list (`paged_rows/mod.rs:585-587`). This is
+  until the library tick that deleted it reloads the list (`paged_rows/mod.rs:586-588`). This is
   short-lived, and accurate, since it is no longer a track.
+  - The duplicates finder follows no library tick, only a new find re-reading it, so there a copy
+    deleted while the dialog is open stays a skeleton until the next find. So does its group's
+    header when that copy was the group's lead, the header being built from it
+    (`duplicates/rows.rs`'s `build`).
 - **A pending row's menu** opens with defaults for its heart and rating. It corrects itself when the
   row lands, because the menu reads the live row.
   - A pending kept-out row's Copy Path copies nothing until the row lands, for the same reason.

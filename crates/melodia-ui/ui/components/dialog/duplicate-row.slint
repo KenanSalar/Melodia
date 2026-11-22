@@ -113,7 +113,7 @@ component GroupHeaderRow inherits Rectangle {
             }
             SkeletonBar {
                 ink: Theme.subtext0;
-                seed: root.row-index + 1;
+                seed: root.row-index + 2;
                 span: root.text-w;
                 font-size: Theme.font-size-sm;
             }
@@ -310,13 +310,13 @@ component CopyRow inherits Rectangle {
             }
             SkeletonBar {
                 ink: Theme.subtext0;
-                seed: root.row-index + 1;
+                seed: root.row-index + 2;
                 span: root.text-w;
                 font-size: Theme.font-size-sm;
             }
             SkeletonBar {
                 ink: Theme.subtext0;
-                seed: root.row-index + 2;
+                seed: root.row-index + 4;
                 span: root.text-w;
                 font-size: Theme.font-size-sm;
             }
@@ -332,7 +332,7 @@ export component DuplicateRowItem inherits Rectangle {
     in property <bool> first-copy;
     in property <bool> last-copy;
     in property <bool> list-end;
-    // Picks its skeleton's bar widths.
+    // Seeds its skeleton's bars, two per line so the bars either side of a row's edge differ.
     in property <int> row-index;
     // The card's margins inside the list, the right one holding the list's scrollbar.
     in property <length> inset-left;

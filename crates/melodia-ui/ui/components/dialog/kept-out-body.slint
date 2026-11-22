@@ -18,7 +18,7 @@ component KeptOutRowItem inherits Rectangle {
     in property <KeptOutRow> row-data;
     in property <bool> list-start;
     in property <bool> list-end;
-    // Picks its skeleton's bar widths.
+    // Seeds its skeleton's bars, for `DuplicateRowItem`'s reason.
     in property <int> row-index;
     // The cards' margins inside the list, the right one holding the list's scrollbar.
     in property <length> inset-left;
@@ -96,7 +96,7 @@ component KeptOutRowItem inherits Rectangle {
                 }
                 SkeletonBar {
                     ink: Theme.subtext0;
-                    seed: root.row-index + 1;
+                    seed: root.row-index + 2;
                     span: root.text-w;
                     font-size: Theme.font-size-sm;
                 }
