@@ -2,7 +2,7 @@
 
 Created: 2026-11-23 · Branch: `chore/bump-notify-9`
 
-Status: Phase 1 **done** · Phase 2 **done** · Phase 3 **pending** · Phase 4 **pending**
+Status: Phase 1 **done** · Phase 2 **done** · Phase 3 **done** · Phase 4 **pending**
 
 Crate sources cited below are the extracted copies under
 `~/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/`. Line numbers into `watcher.rs` and
@@ -64,8 +64,10 @@ wrong, three stale comments are missing from its list, and a few side effects ar
 - A file created and removed inside one window now comes through as a `Remove`.
   `handle_removed` does nothing for a path with no row (`watch_batch.rs:393-397`).
 - On Windows, a created entry is classed by a stat as `Folder` or `File`, and as `Any` only when
-  the stat fails (`windows.rs:810-824`). FSEvents sends `Create(Any)` for an entry of no known
-  type (`fsevent.rs:334`).
+  the stat fails, and a removed one is always `Any` (`windows.rs:810-830`). That is because
+  extended information, which would carry the entry's attributes, is off by default
+  (`config.rs:276`) and nothing here turns it on. FSEvents sends `Create(Any)` for an entry of no
+  known type (`fsevent.rs:334`).
 
 **Wrong or incomplete**
 1. **`retarget`'s order is still load-bearing, for a new reason.** notify 9's `unwatch` does keep
@@ -75,10 +77,12 @@ wrong, three stale comments are missing from its list, and a few side effects ar
    child.
 
    So if a child were unwatched after the parent replacing it had been added, the parent would
-   lose its cached IDs for that subtree. Those IDs are what pair a Windows or macOS move between
-   folders into a rename. Linux keeps no such cache, so the order matters only on Windows and
-   macOS. The order stays as it is, and the comment is rewritten to this reason rather than
-   deleted.
+   lose its cached IDs for that subtree. Neither backend tags the two halves of a rename, so the
+   debouncer pairs them by those IDs (`lib.rs:811-861`): a rename in place on Windows, and on
+   macOS any rename, a move between folders included (`fsevent.rs:20`). A Windows move between
+   folders arrives as a removal and a create, which the debouncer never pairs (Phase 3). Linux
+   keeps no such cache, so the order matters only on Windows and macOS. The order stays as it is,
+   and the comment is rewritten to this reason rather than deleted.
 2. **Three more comments go stale.**
    - The comment on the `Create(Folder)` arm (`watcher.rs:215-216`) gives only inotify's reason,
      but notify 9 on Windows also reports a folder moved in as `Create(Folder)`, with nothing for
@@ -199,13 +203,42 @@ data folder, with its usual backup and restore.
   the database's file-backed pages, and only notify 9's run carried the probe.
 - **FileIdMap harness** over the three roots: peak heap 23.12M on 0.7 against 19.48M on 0.8.
 
-## Phase 3: Windows checks [pending]
+## Phase 3: Windows checks [done]
 
-You run these on a Windows machine.
+Claude ran these unattended on Windows 11 with a debug build of `43e4777c`. The data folder was a
+scratch one (`MELODIA_DATA_DIR`), and its library was album folders copied from the 50,500-track
+test library. The checking launch's `RUST_LOG` traced the backend's actions and the debouncer's
+raw events. History was written into `melodia.db` between launches and compared by file name,
+never by id.
 
 1. A folder of audio moved in from outside the library adds its tracks.
 2. A folder moved between two parents inside the library lands at the new path with its tracks'
    history (play counts, ratings).
+3. The same folder renamed in place keeps that history too.
+4. The Phase 2 probe, repeated: create, modify, rename and remove one file.
+
+**Results** (2026-11-23, one run):
+- **Moved in:** one `FILE_ACTION_ADDED`, which the stat typed `Create(Folder)`. The walk made it
+  one batch of 9 file events, all 9 tracks were added, and nothing reconciled.
+- **Moved between parents:** `FILE_ACTION_REMOVED` for the old path and `FILE_ACTION_ADDED` for
+  the new, which became `Remove(Any)` and `Create(Folder)`, plus a `Modify(Any)` on each parent.
+  The debouncer doesn't pair a removal with a create (`lib.rs:719-749`). So the batch carried a
+  `DirectoryGone`, which held tracks and became the reconcile. The reconcile detected 7 moved
+  files by hash and left no row at the old path. All 7 kept `play_count`, `rating`,
+  `is_favorite`, `last_played` and `date_added`.
+- **Renamed in place:** `RENAMED_OLD_NAME` and `RENAMED_NEW_NAME`, which became `From` and `To`.
+  One reconcile followed, again detecting 7 moved files with all their history. Paired or not,
+  that pair ends in the same reconcile, so this run can't tell whether the debouncer paired it.
+- **Probe:** each step arrived as one batch of one event:
+  - the create came as `Create(File)`, with the copy's `Modify(Any)` events folded into it;
+  - the overwrite came as `Modify(Any)`;
+  - the rename came as `From` and `To`, which the debouncer paired, because the batch logged
+    `Renamed track` rather than `Detected moved file`;
+  - the remove came as `Remove(Any)`.
+
+  The row took the new title, kept its id and `date_added` through the modify and the rename,
+  and was gone after the remove.
+- **Log:** the checking launch has no `Watch error`, overflow, panic or `ERROR` line.
 
 ## Phase 4: Tests [pending]
 

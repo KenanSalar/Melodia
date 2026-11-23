@@ -94,7 +94,7 @@ impl FolderWatcher {
         };
 
         // Dropped roots go first: unwatching a child drops the debouncer's file IDs beneath it
-        // even under a parent still watching, and Windows and macOS pair a move by those IDs.
+        // even under a parent still watching, and Windows and macOS pair a rename by those IDs.
         self.roots.retain(|root| {
             if paths.contains(root) {
                 return true;
