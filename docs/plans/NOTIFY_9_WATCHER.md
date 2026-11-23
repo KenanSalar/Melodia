@@ -5,7 +5,8 @@ Created: 2026-11-23 · Branch: `chore/bump-notify-9`
 Status: Phase 1 **done** · Phase 2 **pending** · Phase 3 **pending** · Phase 4 **pending**
 
 Crate sources cited below are the extracted copies under
-`~/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/`.
+`~/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/`. Line numbers into `watcher.rs` and
+`watcher_tests.rs` are against `d2e0ee8c`, before Phase 1.
 
 ## Context
 

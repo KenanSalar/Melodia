@@ -51,6 +51,8 @@ impl FolderWatcher {
 
         let tx = self.tx.clone();
 
+        // `new_debouncer`'s event mask keeps opens and closes out of inotify's queue, where every
+        // walk, scan, hash and playback would otherwise add an event for each entry it opens.
         let debouncer =
             new_debouncer(Duration::from_secs(2), None, move |result: DebounceEventResult| {
                 match result {
@@ -127,8 +129,8 @@ impl FolderWatcher {
     }
 }
 
-/// Back-pressures the debouncer rather than dropping the event, and fails only once the receiver
-/// is gone at shutdown.
+/// Back-pressures the debouncer rather than dropping the event. The send fails only once the
+/// receiver is gone at shutdown.
 fn forward(tx: &mpsc::Sender<FileEvent>, event: FileEvent) {
     if let Err(e) = tx.blocking_send(event) {
         log::warn!("File event channel closed (shutdown?): {}", describe(&e));
