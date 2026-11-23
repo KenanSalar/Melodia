@@ -2,7 +2,7 @@
 
 Created: 2026-11-23 · Branch: `chore/bump-notify-9`
 
-Status: Phase 1 **pending** · Phase 2 **pending** · Phase 3 **pending** · Phase 4 **pending**
+Status: Phase 1 **done** · Phase 2 **pending** · Phase 3 **pending** · Phase 4 **pending**
 
 Crate sources cited below are the extracted copies under
 `~/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/`.
@@ -37,7 +37,9 @@ changes are all measurable:
 - the debouncer thread sleeps while idle (`lib.rs:1313`).
 
 One new cost has to be measured: 0.8's file-ID cache keeps a per-directory children index beside
-its per-file map (`file_id_map.rs:14-19`).
+its per-file map (`file_id_map.rs:14-19`). Only Windows and macOS pay it. On Linux,
+`RecommendedCache` is `NoCache` (`notify-debouncer-full-0.8.0/src/cache.rs:117-122`, and the same
+in 0.7).
 
 ## Is the issue correct?
 
@@ -68,8 +70,9 @@ wrong, three stale comments are missing from its list, and a few side effects ar
 
    So if a child were unwatched after the parent replacing it had been added, the parent would
    lose its cached IDs for that subtree. Those IDs are what pair a Windows or macOS move between
-   folders into a rename. The order stays as it is, and the comment is rewritten to this reason
-   rather than deleted.
+   folders into a rename. Linux keeps no such cache, so the order matters only on Windows and
+   macOS. The order stays as it is, and the comment is rewritten to this reason rather than
+   deleted.
 2. **Three more comments go stale.**
    - The comment on the `Create(Folder)` arm (`watcher.rs:215-216`) gives only inotify's reason,
      but notify 9 on Windows also reports a folder moved in as `Create(Folder)`, with nothing for
@@ -80,8 +83,10 @@ wrong, three stale comments are missing from its list, and a few side effects ar
    change". It does come from this change: from the bump (notify 9's Windows create kinds), not
    from deleting the wrapper. The behaviour is the same, and Phase 3 checks it.
 4. **Lockfile:** `inotify` will resolve to the newest 0.11.x, which is 0.11.5 on crates.io today,
-   not the 0.11.4 the issue names. `xxhash-rust` is new and resolves to 0.8.21. `rustc-hash`
-   2.1.2, the debouncer's new dependency, is already locked.
+   not the 0.11.4 the issue names. That version requires `inotify-sys` ^0.1.8
+   (`inotify-0.11.5/Cargo.toml:76-77`), so `inotify-sys` also moves from 0.1.5 to 0.1.8; `inotify`
+   is its only dependent. `xxhash-rust` is new and resolves to 0.8.21. `rustc-hash` 2.1.2, the
+   debouncer's new dependency, is already locked.
 5. **Not mentioned; checked, and no code change needed:**
    - A Linux unmount arrives as `Remove(Other)` with info "unmount" (`inotify.rs:380-384`), which
      `classify_event`'s `_ => {}` drops.
@@ -117,13 +122,13 @@ wrong, three stale comments are missing from its list, and a few side effects ar
   the repo root, with `watcher.rs` as the known positive). No doc, rule or ADR goes stale. Both
   touched files shrink.
 
-## Phase 1: bump and delete the wrapper (one commit) [pending]
+## Phase 1: bump and delete the wrapper (one commit) [done]
 
 1. In `Cargo.toml`, set `notify = "9.0.0"` and `notify-debouncer-full = "0.8.0"`, then run
    `cargo update -p notify -p notify-debouncer-full`. Read the lockfile diff and expect exactly
    these moves:
    - notify 9.0.0, notify-debouncer-full 0.8.0;
-   - notify-types 2.3.1, inotify 0.11.x;
+   - notify-types 2.3.1, inotify 0.11.5, inotify-sys 0.1.8;
    - xxhash-rust added.
 2. In `watcher.rs`:
    - delete the wrapper and trim the imports;
@@ -151,13 +156,19 @@ data folder, with its usual backup and restore.
 
 1. Build release binaries of `main` and of the branch, each in its own detached worktree, and
    `cmp` them before measuring. Wrap every launch in `systemd-run --user --scope`.
-2. Run `strace -f -e trace=inotify_add_watch` over a launch of each build. `main` should show
-   `IN_OPEN|IN_CLOSE_WRITE` in its masks, and the branch should show neither.
+2. Read each launch's watch masks from `/proc/<pid>/fdinfo/<fd>` for its `anon_inode:inotify`
+   fd (strace isn't installed here). `main` should show `IN_OPEN` (0x20) and `IN_CLOSE_WRITE`
+   (0x8), and the branch should show neither. Phase 1 already read the branch's mask this way from
+   the end-to-end watcher test's binary: `0xfc6`, which is `MODIFY ATTRIB MOVED_FROM MOVED_TO
+   CREATE DELETE DELETE_SELF MOVE_SELF`.
 3. Create, modify, rename and remove a probe audio file in a library folder. Each change should
    reach the library ("Processing batch of N file events" in the log, and the row in the UI).
 4. Memory: run `heaptrack --record-only` over a launch with an incremental scan only (never a full
-   scan) for both builds. Compare the peak heap and the allocations from the debouncer's
-   `FileIdMap`, plus `/usr/bin/time -v` peak RSS.
+   scan) for both builds. Compare the peak heap and `/usr/bin/time -v` peak RSS. Linux builds no
+   `FileIdMap`, so its cost needs a scratchpad harness instead. The harness calls
+   `FileIdMap::new()` and then `add_path(root, RecursiveMode::Recursive)` over the test library. It
+   is built once against 0.7 and once against 0.8, each under heaptrack. Both types are `pub`, and
+   `file-id` reads inodes on Linux.
 5. Idle: read `voluntary_ctxt_switches` for the debouncer thread from `/proc/<pid>/task/*/status`
    60 s apart on both builds. The thread's 15-byte name is `notify-rs debou`.
 

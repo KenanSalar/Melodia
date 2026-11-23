@@ -251,7 +251,7 @@ fn renamed(mode: RenameMode) -> EventKind {
 }
 
 /// The OS says nothing about the files inside a moved directory, so every way a backend reports
-/// the new path has to reach a reconcile. `Create(Any)` is Windows's for a move between parents.
+/// the new path has to reach a reconcile, an untyped `Create(Any)` from Windows or macOS too.
 #[test]
 fn a_directory_with_audio_at_a_new_path_asks_for_a_reconcile() -> Result<(), AppError> {
     let tmp = TempDir::new()?;
@@ -287,8 +287,8 @@ fn a_directory_without_audio_at_a_new_path_asks_for_nothing() -> Result<(), AppE
 }
 
 /// A `From` or a removal names the side that left, which only the database can say held tracks,
-/// and inotify's `Create(Folder)` is a new directory, whose files written before its watch existed
-/// raise no event of their own.
+/// and `Create(Folder)` is a directory whose files raise no event of their own: one moved in on
+/// Windows, or one inotify began watching after a copy wrote into it.
 #[test]
 fn a_directory_reported_any_other_way_is_not_taken_for_a_rename() -> Result<(), AppError> {
     let tmp = TempDir::new()?;
@@ -314,9 +314,9 @@ fn a_directory_reported_any_other_way_is_not_taken_for_a_rename() -> Result<(), 
 // (kernel queue overflow on inotify, equivalent on other backends) and emits
 // `FileEvent::RescanNeeded` instead of running `classify_event`. That
 // contract rests on `notify::event::Event::new(kind).set_flag(Flag::Rescan)`
-// yielding `need_rescan() == true` — this test pins that assumption so a
-// silent breaking change in a future `notify` version trips CI rather than
-// silently dropping kernel-overflow rescans in production.
+// yielding `need_rescan() == true`, which this test pins so a breaking change
+// in a future `notify` version trips CI rather than silently dropping
+// kernel-overflow rescans in production.
 #[test]
 fn rescan_flag_round_trips_through_notify_event() {
     use notify::event::{Event, Flag};
@@ -343,86 +343,6 @@ fn audio_file_covers_every_scanned_extension() {
 #[test]
 fn alac_is_not_an_audio_extension() {
     assert!(!super::is_audio_file(&PathBuf::from("music").join("song.alac")));
-}
-
-// === Access events, dropped ahead of the debouncer ===
-
-/// What `SkipAccess` hands on of `events`, fed through it in order.
-fn passed_on(events: Vec<notify::Result<notify::Event>>) -> Vec<notify::Result<notify::Event>> {
-    use notify::EventHandler;
-
-    let (tx, rx) = std::sync::mpsc::channel();
-    let mut filter = super::SkipAccess(tx);
-    for event in events {
-        filter.handle_event(event);
-    }
-    drop(filter);
-    rx.into_iter().collect()
-}
-
-/// Every folder a walk reads and every file a scan or playback opens raises one, and the
-/// debouncer would queue each for nothing.
-#[test]
-fn an_access_event_never_reaches_the_debouncer() {
-    use notify::event::{AccessKind, AccessMode};
-
-    let accesses =
-        [AccessKind::Open(AccessMode::Any), AccessKind::Read, AccessKind::Close(AccessMode::Write)];
-    let events =
-        accesses.into_iter().map(|kind| Ok(notify::Event::new(EventKind::Access(kind)))).collect();
-
-    let passed = passed_on(events);
-
-    assert!(passed.is_empty(), "handed on {passed:?}");
-}
-
-#[test]
-fn a_change_event_reaches_the_debouncer() {
-    let kinds = [
-        EventKind::Create(CreateKind::File),
-        EventKind::Modify(ModifyKind::Data(DataChange::Content)),
-        EventKind::Modify(ModifyKind::Name(RenameMode::Both)),
-        EventKind::Remove(RemoveKind::File),
-    ];
-    let events = kinds.iter().map(|&kind| Ok(notify::Event::new(kind))).collect();
-
-    let passed: Vec<Option<EventKind>> =
-        passed_on(events).into_iter().map(|event| event.ok().map(|event| event.kind)).collect();
-
-    assert_eq!(passed, kinds.map(Some));
-}
-
-/// The rescan flag rides an event of any kind, an access included, and is the one thing about
-/// such an event that matters.
-#[test]
-fn an_access_event_asking_for_a_rescan_reaches_the_debouncer() {
-    use notify::event::{AccessKind, Flag};
-
-    let rescan = notify::Event::new(EventKind::Access(AccessKind::Read)).set_flag(Flag::Rescan);
-
-    let passed: Vec<Option<bool>> = passed_on(vec![Ok(rescan)])
-        .into_iter()
-        .map(|event| event.ok().map(|event| event.need_rescan()))
-        .collect();
-
-    assert_eq!(passed, [Some(true)]);
-}
-
-/// A kernel queue overflow and a failing watch both mean the library may have moved unseen, and
-/// dropping either leaves it stale until the next launch.
-#[test]
-fn a_rescan_flag_and_a_watcher_error_reach_the_debouncer() {
-    use notify::event::Flag;
-
-    let rescan = notify::Event::new(EventKind::Other).set_flag(Flag::Rescan);
-    let events = vec![Ok(rescan), Err(notify::Error::generic("watch lost"))];
-
-    let passed: Vec<Option<bool>> = passed_on(events)
-        .into_iter()
-        .map(|event| event.ok().map(|event| event.need_rescan()))
-        .collect();
-
-    assert_eq!(passed, [Some(true), None], "(the rescan, the error)");
 }
 
 // === Starting the watcher ===
