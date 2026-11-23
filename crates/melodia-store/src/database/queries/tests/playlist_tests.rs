@@ -451,8 +451,8 @@ async fn a_playlist_created_with_tracks_holds_them_in_the_order_given() -> Resul
     Ok(())
 }
 
-/// An import hands over whatever the file repeats, and the unique index keeps a track's first
-/// slot, so the slot it skips has to be closed or the next add lands on a position two rows share.
+/// An import hands over whatever the file repeats, and a track sits in a playlist once: a repeat
+/// that kept a slot of its own would leave a hole in the positions after it.
 #[tokio::test]
 async fn a_repeated_track_keeps_its_first_slot_and_leaves_no_gap() -> Result<(), AppError> {
     let db = setup_seeded_db().await?;

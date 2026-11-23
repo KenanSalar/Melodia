@@ -54,16 +54,8 @@ pub async fn create_playlist_with_tracks(
     track_ids: Vec<i64>,
 ) -> Result<i64, AppError> {
     db.transaction(move |tx| {
-        let present = present_in_order(tx, &track_ids)?;
         let playlist_id = create_playlist_on(tx, &name, description.as_deref())?.id;
-
-        let now = melodia_core::utils::now_rfc3339();
-        let landed = insert_items_tx(tx, playlist_id, &contiguous(&present, 0, &now)?)?;
-        // Only a repeated track leaves a gap, the unique index keeping its first slot.
-        if landed.len() < present.len() {
-            renumber_playlist_positions_tx(tx, playlist_id)?;
-        }
-        update_playlist_thumbnail_and_timestamp_tx(tx, playlist_id, &now)?;
+        place_items(tx, playlist_id, &track_ids, None)?;
         Ok(playlist_id)
     })
     .await

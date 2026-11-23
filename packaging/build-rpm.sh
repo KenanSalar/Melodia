@@ -19,8 +19,8 @@
 
 set -euo pipefail
 
-REPO_ROOT="$(git -C "$(dirname "$0")" rev-parse --show-toplevel)"
-cd "$REPO_ROOT"
+# shellcheck source=SCRIPTDIR/build-env.sh
+source "$(dirname "$0")/build-env.sh"
 
 if [[ "${1:-}" == "--build" ]]; then
   # `-p melodia` because the root is virtual: a bare build would compile every
@@ -31,21 +31,7 @@ fi
 
 BINARY="${BINARY:-$REPO_ROOT/target/release/Melodia}"
 [[ -f "$BINARY" ]] || { echo "ERROR: $BINARY not found. Run with --build first."; exit 1; }
-
-# Every member inherits the version from `[workspace.package]`, so `[package]`
-# reads `version.workspace = true` and carries no literal. Anchor on the table
-# rather than taking the file's first `version = ` line.
-VERSION="$(awk -F'"' '
-  /^\[/                  { in_ws = ($0 == "[workspace.package]") }
-  in_ws && /^version = / { print $2; exit }
-' Cargo.toml)"
-[[ -n "$VERSION" ]] || { echo "ERROR: no version in Cargo.toml's [workspace.package]"; exit 1; }
 FEDORA_REL="$(rpm -E '%{?dist}' | sed 's/^\.//')"
-ARCH="${ARCH:-$(uname -m)}"
-case "$ARCH" in
-  x86_64|aarch64) ;;
-  *) echo "ERROR: unsupported ARCH=$ARCH (expected x86_64 or aarch64)"; exit 1 ;;
-esac
 
 echo "==> packaging melodia $VERSION for $FEDORA_REL ($ARCH)"
 

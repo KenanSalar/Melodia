@@ -9,7 +9,7 @@ use async_compat::Compat;
 use slint::{ComponentHandle, SharedString, Weak};
 
 use super::artwork::open_edit_artwork;
-use super::refresh_after_edit;
+use super::{Added, refresh_after_edit};
 use crate::ui::callbacks::{DialogClaim, collect_track_ids};
 use crate::ui::callbacks::{grid_tab, track_detail};
 use crate::ui::drag;
@@ -17,7 +17,6 @@ use crate::ui::paged_rows::track_rows;
 use crate::ui::playlists::{self as playlists_ui_mod, PlaylistsUi};
 use crate::ui::shell::notifications::{Completion, NotificationsUi};
 use crate::ui::undo::{Removal, tracks_removed_from};
-use crate::ui::util::len_as_i32;
 use crate::ui::view_ctx::ViewCtx;
 use melodia_app::library;
 use melodia_app::state::AppState;
@@ -25,7 +24,7 @@ use melodia_core::entities::playlist::{PlaylistIdentity, PlaylistItemsCut};
 use melodia_core::entities::undo::{RemovalSize, UndoCapture, UndoKind};
 use melodia_core::error::{AppError, describe};
 use melodia_core::utils::block_move;
-use melodia_ui::{AppWindow, PlaylistDetail, Settings};
+use melodia_ui::{AppWindow, PlaylistDetail};
 
 pub(super) fn wire(cx: ViewCtx<'_>, playlists_ui: &Arc<PlaylistsUi>) {
     let ViewCtx { app: ui, state, .. } = cx;
@@ -197,12 +196,8 @@ pub(super) fn wire_drop_in(
             }
             let Some(completion) = landing.notice(handed, landed) else { return };
             let Some(ui) = weak.upgrade() else { return };
-            let settings = ui.global::<Settings>();
-            notifications.show_completion(
-                completion,
-                settings.invoke_add_to_playlist_title(i32::from(landed > 0)),
-                settings.invoke_add_to_playlist_message(len_as_i32(landed)),
-            );
+            let added = Added { playlists: usize::from(landed > 0), tracks: landed };
+            added.show_toast(&ui, &notifications, completion);
         }));
         if let Err(e) = spawned {
             log::warn!("playlists::drop_in spawn_local: {}", describe(&e));

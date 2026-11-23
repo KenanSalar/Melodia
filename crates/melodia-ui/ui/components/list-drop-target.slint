@@ -46,9 +46,10 @@ export component ListDropTarget inherits DropArea {
     property <bool> reorders: root.own-drag && root.lifted >= 0 && root.in-order;
     property <bool> items-drag: root.takes-items && !root.own-drag
         && Drag.payload.items.kind != "";
+    property <bool> places-items: root.items-drag && root.in-order;
     // A slot the drop can land at, which the edge scroll brings into reach. Wider than the line,
     // which a reorder skips inside its own run: a run taller than the list still scrolls.
-    property <bool> aims: root.reorders || (root.items-drag && root.in-order);
+    property <bool> aims: root.reorders || root.places-items;
     property <int> lifted: Drag.payload.index;
 
     // Kept, so the slot follows the content scrolling under a pointer at rest.
@@ -78,7 +79,7 @@ export component ListDropTarget inherits DropArea {
     property <bool> still: root.run.count > 0 && root.slot >= root.run.first
         && root.slot <= root.run.first + root.run.count;
     property <bool> moves: root.reorders && !root.still && root.same-run;
-    property <bool> draws-line: root.moves || (root.items-drag && root.in-order);
+    property <bool> draws-line: root.moves || root.places-items;
 
     function follow(y: length) {
         root.pointer-y = y;
