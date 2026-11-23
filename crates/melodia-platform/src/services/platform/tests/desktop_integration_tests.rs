@@ -3,40 +3,39 @@ use std::path::PathBuf;
 use tempfile::tempdir;
 
 use crate::services::platform::desktop_integration::{
-    TEST_DESKTOP_TEMPLATE, TEST_ICON_SVG, TEST_METAINFO, render_desktop, test_write_if_changed,
+    TEST_DESKTOP_ENTRY, TEST_ICON_SVG, TEST_METAINFO, render_desktop, test_write_if_changed,
 };
 
 type TestResult = Result<(), Box<dyn std::error::Error>>;
 
 #[test]
-fn render_desktop_substitutes_exec_placeholder_with_absolute_path() {
+fn render_desktop_swaps_the_packaged_command_for_the_absolute_path() {
     let exec = PathBuf::from("/home/user/.local/share/Melodia/Melodia");
-    let rendered = render_desktop(TEST_DESKTOP_TEMPLATE, &exec);
+    let rendered = render_desktop(TEST_DESKTOP_ENTRY, &exec);
     assert!(
-        rendered.contains("Exec=/home/user/.local/share/Melodia/Melodia"),
-        "Exec= line must carry the absolute path; got:\n{rendered}"
+        rendered.contains("Exec=/home/user/.local/share/Melodia/Melodia %F"),
+        "Exec= line must carry the absolute path and keep its field code; got:\n{rendered}"
     );
-    assert!(!rendered.contains("@EXEC@"), "placeholder must be substituted; got:\n{rendered}");
+    assert!(
+        !rendered.contains("Exec=melodia "),
+        "the packaged command must be swapped out; got:\n{rendered}"
+    );
 }
 
 #[test]
 fn render_desktop_preserves_mime_block() {
     let exec = PathBuf::from("/usr/bin/melodia");
-    let rendered = render_desktop(TEST_DESKTOP_TEMPLATE, &exec);
-    // Spot-check a couple of representative MIME types — if these
-    // ever drift, the package-manager copies and the self-installed
-    // copies will diverge and users will lose audio-file
-    // associations.
+    let rendered = render_desktop(TEST_DESKTOP_ENTRY, &exec);
     assert!(rendered.contains("audio/flac"));
     assert!(rendered.contains("audio/mpeg"));
     assert!(rendered.contains("audio/mp4"));
     assert!(rendered.contains("audio/ogg"));
     // Same single-key invariant the spec mandates; mirrors the
-    // assertion in `packaging_melodia_desktop_preserves_mime_block`.
+    // assertion in `the_desktop_entry_declares_every_audio_type_once`.
     let mime_keys = rendered.match_indices("\nMimeType=").count();
     assert_eq!(
         mime_keys, 1,
-        "rendered template must have exactly one MimeType= key, found {mime_keys}; got:\n{rendered}"
+        "rendered entry must have exactly one MimeType= key, found {mime_keys}; got:\n{rendered}"
     );
 }
 
@@ -45,19 +44,19 @@ fn render_desktop_preserves_mime_block() {
 #[test]
 fn render_desktop_quotes_a_path_with_spaces() {
     let exec = PathBuf::from("/home/User Name/.local/share/Melodia/Melodia");
-    let rendered = render_desktop(TEST_DESKTOP_TEMPLATE, &exec);
+    let rendered = render_desktop(TEST_DESKTOP_ENTRY, &exec);
     assert!(
         rendered.contains("Exec=\"/home/User Name/.local/share/Melodia/Melodia\" %F"),
         "a path with a space must be quoted with the field code left outside; got:\n{rendered}"
     );
 }
 
-/// The common case has to stay unquoted — it is what the four packaged sources
-/// ship, and the drift guard compares against them.
+/// The common case stays unquoted, as `install-linux.sh` writes it, or every
+/// tarball install's first launch rewrites its entry.
 #[test]
 fn render_desktop_leaves_an_ordinary_path_unquoted() {
     let exec = PathBuf::from("/home/user/.local/share/Melodia/Melodia");
-    let rendered = render_desktop(TEST_DESKTOP_TEMPLATE, &exec);
+    let rendered = render_desktop(TEST_DESKTOP_ENTRY, &exec);
     assert!(!rendered.contains('"'), "no quoting was called for; got:\n{rendered}");
 }
 
@@ -67,7 +66,7 @@ fn render_desktop_leaves_an_ordinary_path_unquoted() {
 #[test]
 fn render_desktop_escapes_a_backslash_for_both_unescaping_layers() {
     let exec = PathBuf::from(r"/home/od\d/Melodia");
-    let rendered = render_desktop(TEST_DESKTOP_TEMPLATE, &exec);
+    let rendered = render_desktop(TEST_DESKTOP_ENTRY, &exec);
     assert!(
         rendered.contains(r#"Exec="/home/od\\\\d/Melodia" %F"#),
         "a literal backslash must survive both layers as four; got:\n{rendered}"
@@ -128,63 +127,69 @@ fn icon_svg_is_non_empty() {
     assert_eq!(TEST_ICON_SVG.first(), Some(&b'<'), "compiled-in icon must look like an SVG");
 }
 
+/// Every Linux format installs this one file, so a type it lacks is one no format offers Melodia
+/// for under "Open with". Hand-maintained rather than derived from
+/// `utils::audio_ext::AUDIO_EXTENSIONS`, because the two don't correspond: freedesktop maps `.oga`
+/// to four types and `.caf` to none.
 #[test]
-fn packaging_melodia_desktop_preserves_mime_block() {
-    // This file ships verbatim to DEB and to the tarball staging, while the
-    // self-deploy renders the template `render_desktop_preserves_mime_block`
-    // covers. They must agree, or one release gives three package formats three
-    // different sets of audio associations.
-    //
-    // Three other regressions have bitten here: a duplicate key (which the spec
-    // forbids and `desktop-file-validate` rejects), a dropped
-    // `Exec`/`Icon`/`StartupWMClass`, and `Keywords=` drift.
-    const PACKAGING_DESKTOP: &str = include_str!("../../../../../../packaging/Melodia.desktop");
+fn the_desktop_entry_declares_every_audio_type_once() {
+    const AUDIO_TYPES: &[&str] = &[
+        "audio/mpeg",
+        "audio/flac",
+        "audio/x-flac",
+        "audio/mp4",
+        "audio/x-m4a",
+        "audio/x-m4b",
+        "audio/ogg",
+        "audio/x-vorbis+ogg",
+        "audio/x-flac+ogg",
+        "audio/x-opus+ogg",
+        "audio/wav",
+        "audio/x-wav",
+        "audio/aac",
+        "audio/x-aac",
+        "audio/aiff",
+        "audio/x-aiff",
+        "audio/x-aifc",
+        "audio/x-matroska",
+        "application/x-cue",
+    ];
 
-    for mime in &["audio/mpeg", "audio/flac", "audio/mp4", "audio/ogg", "audio/wav", "audio/aac"] {
+    for mime in AUDIO_TYPES {
         assert!(
-            PACKAGING_DESKTOP.contains(mime),
-            "packaging/Melodia.desktop missing MIME `{mime}`; got:\n{PACKAGING_DESKTOP}"
-        );
-    }
-
-    for key in &[
-        "Type=Application",
-        "Exec=melodia %F",
-        "Icon=melodia",
-        "StartupWMClass=com.github.kenansalar.melodia",
-        "Keywords=",
-    ] {
-        assert!(
-            PACKAGING_DESKTOP.contains(key),
-            "packaging/Melodia.desktop missing key `{key}`; got:\n{PACKAGING_DESKTOP}"
+            TEST_DESKTOP_ENTRY.contains(mime),
+            "the desktop entry is missing MIME `{mime}`; got:\n{TEST_DESKTOP_ENTRY}"
         );
     }
 
     // A key may appear at most once per group, and a copy-paste duplicating the
     // whole MIME line has shipped once. Anchored at a line start so a mention in
     // a header comment can't count.
-    let mime_keys = PACKAGING_DESKTOP.match_indices("\nMimeType=").count();
+    let mime_keys = TEST_DESKTOP_ENTRY.match_indices("\nMimeType=").count();
     assert_eq!(
         mime_keys, 1,
-        "packaging/Melodia.desktop must have exactly one MimeType= key, found {mime_keys}; got:\n{PACKAGING_DESKTOP}"
+        "the desktop entry must have exactly one MimeType= key, found {mime_keys}; got:\n{TEST_DESKTOP_ENTRY}"
     );
 }
 
+/// A blanked or trimmed entry still installs, into a launcher tile that can't start Melodia or
+/// group its window.
 #[test]
-fn desktop_template_contains_expected_keys() {
-    // Same defence as the icon test: a blanked template still renders, into a
-    // useless `.desktop`.
+fn the_desktop_entry_carries_the_keys_launchers_read() {
     for key in &[
         "Type=Application",
         "Name=Melodia",
         "Icon=melodia",
-        "Exec=@EXEC@",
         "StartupWMClass=com.github.kenansalar.melodia",
         "Keywords=",
+        // The command every package installs, which `render_desktop` swaps out. `%F` is what
+        // hands the app the files it was opened with: `%U` would need `file://` decoded, and
+        // `%f` starts one process per file.
+        "Exec=melodia %F",
     ] {
         assert!(
-            TEST_DESKTOP_TEMPLATE.contains(key),
-            "compiled-in template missing `{key}`; got:\n{TEST_DESKTOP_TEMPLATE}"
+            TEST_DESKTOP_ENTRY.contains(key),
+            "the desktop entry is missing `{key}`; got:\n{TEST_DESKTOP_ENTRY}"
         );
     }
 }
@@ -208,98 +213,9 @@ fn metainfo_declares_expected_component() {
     }
 }
 
-#[test]
-fn all_desktop_sources_agree_on_mime_and_wmclass() {
-    // Four sources materialise a `.desktop` body independently, and drift
-    // between them is silent at build time and corrosive after: an AppImage user
-    // can't open audio files from a file manager, KDE shows two taskbar entries,
-    // and "Open with…" offers a different set per package format.
-    const APPIMAGE_SCRIPT: &str = include_str!("../../../../../../packaging/build-appimage.sh");
-    const RPM_SCRIPT: &str = include_str!("../../../../../../packaging/build-rpm.sh");
-    const PACKAGING_DESKTOP: &str = include_str!("../../../../../../packaging/Melodia.desktop");
-    // The full set the production template carries; every format declares it or
-    // the associations diverge.
-    //
-    // Hand-maintained rather than derived from `utils::audio_ext::AUDIO_EXTENSIONS`, because the
-    // two don't correspond: freedesktop maps `.oga` to four types and `.caf` to none,
-    // so a derived assertion would be wrong in both directions.
-    const CANONICAL_MIME_TYPES: &[&str] = &[
-        "audio/mpeg",
-        "audio/flac",
-        "audio/x-flac",
-        "audio/mp4",
-        "audio/x-m4a",
-        "audio/x-m4b",
-        "audio/ogg",
-        "audio/x-vorbis+ogg",
-        "audio/x-flac+ogg",
-        "audio/x-opus+ogg",
-        "audio/wav",
-        "audio/x-wav",
-        "audio/aac",
-        "audio/x-aac",
-        "audio/aiff",
-        "audio/x-aiff",
-        "audio/x-aifc",
-        "audio/x-matroska",
-        "application/x-cue",
-    ];
-
-    let sources = [
-        ("template", TEST_DESKTOP_TEMPLATE),
-        ("packaging/Melodia.desktop", PACKAGING_DESKTOP),
-        ("packaging/build-appimage.sh heredoc", APPIMAGE_SCRIPT),
-        ("packaging/build-rpm.sh heredoc", RPM_SCRIPT),
-    ];
-
-    for (name, body) in &sources {
-        for mime in CANONICAL_MIME_TYPES {
-            assert!(
-                body.contains(mime),
-                "{name} missing MIME `{mime}` — drift between desktop sources will produce \
-                 inconsistent file-manager associations across package formats"
-            );
-        }
-        assert!(
-            body.contains("StartupWMClass=com.github.kenansalar.melodia"),
-            "{name} missing `StartupWMClass=com.github.kenansalar.melodia` — KDE shows two \
-             taskbar entries without it",
-        );
-        assert!(
-            body.contains("Keywords="),
-            "{name} missing `Keywords=` — launcher search loses fuzzy matches",
-        );
-
-        // The MIME block makes Melodia offerable; the field code is what makes
-        // it work — without one the spec passes no filenames, so the app opens
-        // and plays nothing. `%F` over `%U` (no `file://` to percent-decode) and
-        // over `%f` (one process per selected file).
-        let mut execs = exec_lines(body).peekable();
-        assert!(execs.peek().is_some(), "{name} declares no `Exec=` at all");
-        for exec in execs {
-            assert!(
-                exec.ends_with(" %F"),
-                "{name}'s Exec line is `{exec}`, which carries no `%F` — the desktop environment \
-                 hands it no paths and the MimeType list above is decorative"
-            );
-        }
-    }
-}
-
-/// Every `Exec=` line of a desktop-entry body, wherever they sit.
-///
-/// Extracted rather than `contains`d because two of the four sources are whole
-/// shell scripts, where a comment about the line reads exactly like the line —
-/// the hole `strip_xml_comments` closes for the MSI. All of them rather than the
-/// first, because a second heredoc is what a fixed index walks past.
-fn exec_lines(body: &str) -> impl Iterator<Item = &str> {
-    body.lines().filter(|line| line.starts_with("Exec="))
-}
-
-/// The fifth source is a rewriter, not a body, so the guard above can't see it:
-/// `install-linux.sh` seds the `Exec=` of the *same file* the DEB ships verbatim
-/// to make the command absolute. Anchored at `.*` it ate the field code too, so
-/// `%F` lived in the DEB and died in the tarball with nothing able to tell.
+/// `install-linux.sh` seds the `Exec=` of the *same file* every package ships, to
+/// make the command absolute. Anchored at `.*` it ate the field code too, so `%F`
+/// lived in the packages and died in the tarball with nothing able to tell.
 #[test]
 fn the_tarball_installer_rewrite_keeps_the_field_code() {
     const INSTALLER: &str = include_str!("../../../../../../packaging/install-linux.sh");

@@ -92,24 +92,7 @@ chmod 0755 "$PKG_DIR/melodia-update-helper"
 cp "$REPO_ROOT/packaging/com.github.kenansalar.melodia.update.policy" \
    "$PKG_DIR/com.github.kenansalar.melodia.update.policy"
 
-# Desktop file named after the reverse-DNS app id so its desktop-id
-# matches the AppStream component id `com.github.kenansalar.melodia` —
-# software centres need that match to merge the .desktop entry with the
-# MetaInfo component instead of generating a separate stub.
-cat > "$PKG_DIR/com.github.kenansalar.melodia.desktop" <<'EOF'
-[Desktop Entry]
-Type=Application
-Name=Melodia
-GenericName=Music Player
-Comment=Cross-platform desktop music player
-Exec=melodia %F
-Icon=melodia
-Categories=AudioVideo;Audio;Player;Music;
-Keywords=music;audio;player;library;sound;songs;tracks;mp3;flac;ogg;
-Terminal=false
-StartupWMClass=com.github.kenansalar.melodia
-MimeType=audio/mpeg;audio/flac;audio/x-flac;audio/mp4;audio/x-m4a;audio/x-m4b;audio/ogg;audio/x-vorbis+ogg;audio/x-flac+ogg;audio/x-opus+ogg;audio/wav;audio/x-wav;audio/aac;audio/x-aac;audio/aiff;audio/x-aiff;audio/x-aifc;audio/x-matroska;application/x-cue;
-EOF
+cp "$REPO_ROOT/packaging/com.github.kenansalar.melodia.desktop" "$PKG_DIR/"
 
 # AppStream MetaInfo — KDE Discover / GNOME Software read this for the
 # app's display name, developer and license. Shipped verbatim (no

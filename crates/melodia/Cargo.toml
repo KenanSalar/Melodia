@@ -69,7 +69,7 @@ and Material You."""
 # the binary would be looked for as an ordinary file that no build has put there.
 assets = [
     ["target/release/Melodia", "usr/bin/melodia", "755"],
-    ["../../packaging/Melodia.desktop", "usr/share/applications/com.github.kenansalar.melodia.desktop", "644"],
+    ["../../packaging/com.github.kenansalar.melodia.desktop", "usr/share/applications/com.github.kenansalar.melodia.desktop", "644"],
     ["../../packaging/com.github.kenansalar.melodia.metainfo.xml", "usr/share/metainfo/com.github.kenansalar.melodia.metainfo.xml", "644"],
     ["../../assets/icons/logo-with-background.svg", "usr/share/icons/hicolor/scalable/apps/melodia.svg", "644"],
     ["../../LICENSE", "usr/share/doc/melodia/LICENSE", "644"],

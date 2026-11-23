@@ -6,8 +6,8 @@
 //!
 //! Skipped on RPM/DEB, where user-scoped copies diverging from the package's would leave which one
 //! wins to `XDG_DATA_DIRS` order, on an `AppImage`, and on a development build, whose `Exec=` would
-//! hijack the installed entry. `@EXEC@` takes the binary's absolute path, a tarball install not
-//! being on `$PATH`.
+//! hijack the installed entry. The entry is the one every package ships, its `Exec=` taking the
+//! binary's absolute path, a tarball install not being on `$PATH`.
 
 use std::path::Path;
 
@@ -15,7 +15,11 @@ use melodia_core::error::{AppError, AppResult, describe};
 
 use super::install_kind::{install_target, linux_pkg};
 
-const DESKTOP_TEMPLATE: &str = include_str!("../../../../../assets/desktop/Melodia.desktop.tmpl");
+const DESKTOP_ENTRY: &str =
+    include_str!("../../../../../packaging/com.github.kenansalar.melodia.desktop");
+
+/// The command a package puts on `$PATH`, which [`render_desktop`] swaps for the binary's path.
+const PACKAGED_EXEC: &str = "Exec=melodia ";
 
 /// The with-background variant, the disc belonging in launcher contexts, matching what
 /// `install-linux.sh` and `build-rpm.sh` ship.
@@ -78,7 +82,7 @@ pub fn refresh_user_install() -> AppResult<()> {
     let metainfo_path =
         data_home.join("metainfo").join("com.github.kenansalar.melodia.metainfo.xml");
 
-    let desktop_body = render_desktop(DESKTOP_TEMPLATE, &exec_path);
+    let desktop_body = render_desktop(DESKTOP_ENTRY, &exec_path);
 
     // `None` is a failed write, `Some(changed)` a successful one.
     let write = |path: &Path, payload: &[u8]| -> Option<bool> {
@@ -116,12 +120,13 @@ pub fn refresh_user_install() -> AppResult<()> {
     Ok(())
 }
 
-pub(crate) fn render_desktop(template: &str, exec: &Path) -> String {
-    template.replace("@EXEC@", &quote_exec(&exec.display().to_string()))
+pub(crate) fn render_desktop(entry: &str, exec: &Path) -> String {
+    let command = quote_exec(&exec.display().to_string());
+    entry.replace(PACKAGED_EXEC, &format!("Exec={command} "))
 }
 
 /// `Exec=` is parsed with shell-like quoting, so a home directory with a space would split in two.
-/// Quoted only when needed, an unquoted command being what the packaged sources ship;
+/// Quoted only when needed, an unquoted command being what the packaged entry ships;
 /// `install-linux.sh` makes the same call.
 fn quote_exec(command: &str) -> String {
     const RESERVED: &[char] = &[
@@ -192,7 +197,7 @@ mod tests;
 
 /// The bundled payloads, reachable by tests without the runtime probe gating.
 #[cfg(test)]
-pub(crate) const TEST_DESKTOP_TEMPLATE: &str = DESKTOP_TEMPLATE;
+pub(crate) const TEST_DESKTOP_ENTRY: &str = DESKTOP_ENTRY;
 #[cfg(test)]
 pub(crate) const TEST_ICON_SVG: &[u8] = ICON_SVG;
 #[cfg(test)]

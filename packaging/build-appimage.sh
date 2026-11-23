@@ -99,8 +99,10 @@ APPDIR="$(mktemp -d)/Melodia.AppDir"
 trap 'rm -rf "$(dirname "$APPDIR")"' EXIT
 mkdir -p "$APPDIR/usr/bin" "$APPDIR/usr/share/applications" "$APPDIR/usr/share/icons/hicolor/256x256/apps"
 
-cp "$BINARY" "$APPDIR/usr/bin/Melodia"
-chmod +x "$APPDIR/usr/bin/Melodia"
+# Lowercase, the name RPM and DEB install it under, so the shared desktop
+# entry's `Exec=melodia` names it here too.
+cp "$BINARY" "$APPDIR/usr/bin/melodia"
+chmod +x "$APPDIR/usr/bin/melodia"
 
 # Icon — linuxdeploy uses the basename to derive `Icon=` in the desktop
 # file, so the SVG filename must match the .desktop's Icon= field. Use
@@ -110,32 +112,7 @@ chmod +x "$APPDIR/usr/bin/Melodia"
 # titlebar where the window mantle already provides the disc.
 cp "$REPO_ROOT/assets/icons/logo-with-background.svg" "$APPDIR/melodia.svg"
 
-# Body kept in lockstep with `packaging/build-rpm.sh` + `Cargo.toml`'s
-# DEB asset `packaging/Melodia.desktop` + `assets/desktop/Melodia.desktop.tmpl`.
-# Drift here means AppImage users can't open audio files via "Open with…"
-# and KDE shows two taskbar entries (no StartupWMClass to merge them).
-# The MIME drift-guard test in
-# `crates/melodia-platform/src/services/platform/tests/desktop_integration_tests.rs`
-# covers the four sources — keep this body byte-identical bar the `Exec=`
-# command: AppImage binaries sit at the AppDir root so `Melodia` is the relative
-# name, RPM/DEB resolve `melodia` via PATH. The ` %F` is not optional; without it
-# the MimeType list above is unusable.
-# Desktop file named after the reverse-DNS app id so its desktop-id
-# matches the AppStream component id `com.github.kenansalar.melodia`.
-cat > "$APPDIR/com.github.kenansalar.melodia.desktop" <<'EOF'
-[Desktop Entry]
-Type=Application
-Name=Melodia
-GenericName=Music Player
-Comment=Cross-platform desktop music player
-Exec=Melodia %F
-Icon=melodia
-Categories=AudioVideo;Audio;Player;Music;
-Keywords=music;audio;player;library;sound;songs;tracks;mp3;flac;ogg;
-Terminal=false
-StartupWMClass=com.github.kenansalar.melodia
-MimeType=audio/mpeg;audio/flac;audio/x-flac;audio/mp4;audio/x-m4a;audio/x-m4b;audio/ogg;audio/x-vorbis+ogg;audio/x-flac+ogg;audio/x-opus+ogg;audio/wav;audio/x-wav;audio/aac;audio/x-aac;audio/aiff;audio/x-aiff;audio/x-aifc;audio/x-matroska;application/x-cue;
-EOF
+cp "$REPO_ROOT/packaging/com.github.kenansalar.melodia.desktop" "$APPDIR/"
 
 # AppStream MetaInfo — software centres and AppImage catalogues read
 # this from usr/share/metainfo/ inside the bundle. appimagetool
@@ -165,7 +142,7 @@ OUTPUT="$OUTPUT" \
   --appdir "$APPDIR" \
   --desktop-file "$APPDIR/com.github.kenansalar.melodia.desktop" \
   --icon-file "$APPDIR/melodia.svg" \
-  --executable "$APPDIR/usr/bin/Melodia" \
+  --executable "$APPDIR/usr/bin/melodia" \
   --output appimage
 
 echo "==> wrote $OUTPUT"

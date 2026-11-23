@@ -1,9 +1,10 @@
-//! The app id against the desktop entry it names, an agreement no compiler sees. The template
-//! stands for all four desktop sources, which `desktop_integration_tests.rs` holds to one another.
+//! The app id against the desktop entry it names, an agreement no compiler sees. Every Linux
+//! format installs that one entry.
 
 use super::APP_ID;
 
-const DESKTOP_TEMPLATE: &str = include_str!("../../../../assets/desktop/Melodia.desktop.tmpl");
+const DESKTOP_ENTRY: &str =
+    include_str!("../../../../packaging/com.github.kenansalar.melodia.desktop");
 const METAINFO: &str =
     include_str!("../../../../packaging/com.github.kenansalar.melodia.metainfo.xml");
 
@@ -11,7 +12,7 @@ const METAINFO: &str =
 /// Matched to none, KDE gives the window a taskbar entry apart from its launcher's.
 #[test]
 fn the_desktop_entry_matches_the_app_id_on_x11() {
-    let wm_class = DESKTOP_TEMPLATE.lines().find_map(|line| line.strip_prefix("StartupWMClass="));
+    let wm_class = DESKTOP_ENTRY.lines().find_map(|line| line.strip_prefix("StartupWMClass="));
 
     assert_eq!(wm_class, Some(APP_ID));
 }
