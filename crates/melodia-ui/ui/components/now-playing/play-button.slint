@@ -2,6 +2,7 @@ import { Theme } from "../../theme.slint";
 import { MaterialIcon } from "../material-icon.slint";
 import { Tooltip } from "../tooltip.slint";
 import { HoldTouchArea } from "../hold-touch-area.slint";
+import { ProgressTrace } from "../progress-trace.slint";
 
 // The now-playing bar's play / pause button, with the ring a hold fills and the optional
 // Equalizer overlay. The overlay's four bars ride one shared phase counter rather than an
@@ -141,28 +142,12 @@ export component PlayButton inherits Rectangle {
             }
         }
 
-        // Clockwise from twelve. Short of a full turn, where an arc's two ends meet and it draws
-        // nothing; the hold fires there anyway.
-        if root.ring-progress > 0: Path {
-            property <float> radius: 38;
-            property <angle> sweep: min(root.ring-progress, 0.999) * 360deg;
-
-            x: 0;
-            y: 0;
-            width: 100%;
-            height: 100%;
-            viewbox-width: 100;
-            viewbox-height: 100;
-            fit: fill;
+        // The ring's centre line at 76 % of the disc, each measured inside the stroke.
+        ProgressTrace {
+            width: (parent.width - self.stroke-width) * 0.76 + self.stroke-width;
+            height: self.width;
+            progress: root.ring-progress;
             stroke: root.icon-color;
-            stroke-width: 2px;
-            // Unlocalized, or a locale's decimal comma breaks the path.
-            commands: "M 50 " + (50 - self.radius).to-string-unlocalized()
-                + " A " + self.radius.to-string-unlocalized() + " "
-                + self.radius.to-string-unlocalized() + " 0 "
-                + (self.sweep > 180deg ? "1" : "0") + " 1 "
-                + (50 + self.radius * sin(self.sweep)).to-string-unlocalized() + " "
-                + (50 - self.radius * cos(self.sweep)).to-string-unlocalized();
         }
     }
 

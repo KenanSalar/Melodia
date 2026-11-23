@@ -38,6 +38,9 @@ export global Queue {
     callback move-picks(int /*slot*/);
     // Asked by a press on a picked row; only Rust holds the whole list.
     callback picked-run() -> LiftedRun;
+    // `selected-ids` in a model of its own for a drag to carry: that one is rewritten in place
+    // whenever the queue moves, which would change the tracks under the drag.
+    callback picked-ids() -> [int];
     // Another list's drag let go over the rows: what Add to Queue on it would queue, in front of
     // play-order slot `slot`.
     callback drop-in(string /*kind*/, [int] /*ids*/, int /*slot*/);

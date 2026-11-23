@@ -80,7 +80,7 @@ fn the_titlebar_mark_takes_its_colour_from_the_theme() {
 /// The dark arm is the asset's own pair, so the two can't drift.
 ///
 /// The SVG still feeds the tray raster, the launcher icon and
-/// `scripts/gen-discord-assets.sh`, none of which can read a Slint theme — so
+/// `scripts/gen-discord-assets.py`, none of which can read a Slint theme, so
 /// recolouring the mark for *them* is exactly the edit that leaves this copy
 /// behind.
 #[test]

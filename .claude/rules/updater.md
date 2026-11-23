@@ -5,8 +5,8 @@ paths:
   - crates/melodia/Cargo.toml
   - packaging/melodia-update-helper
   - packaging/com.github.kenansalar.melodia.update.policy
+  - packaging/build-rpm.sh
   - scripts/build-latest-json.py
-  - scripts/build-rpm.sh
 ---
 
 # In-app updater

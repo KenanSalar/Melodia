@@ -9,12 +9,15 @@ import { TrackListHeader } from "track-list-header.slint";
 import { TrackListRowItem } from "track-list-row.slint";
 import { DragSource } from "../drag-source.slint";
 import { ListDropTarget } from "../list-drop-target.slint";
+import { DropLabel } from "../drop-label.slint";
 
 // The track table every list view embeds, each owning its column state. The columns always fit
 // the width, shrinking rather than dropping out, so nothing pans sideways.
 //
 // A list that takes its own rows back names itself in `origin` (Playlist Detail), and reorders
 // only while `reorder-enabled`, a reorder being ambiguous in any sort but the insertion one.
+// Another list's items, where it `takes-items`, land at a slot only in that order too, and
+// `drop-label` takes the header row while they are over the rows.
 //
 // The host mounts the scrollbar, so it sits flush with the panel's edge rather than inside this
 // padding (`TrackListScrollbars`).
@@ -51,6 +54,11 @@ export component TrackList inherits Rectangle {
     // payload as its own row.
     property <bool> moves-rows: root.reorderable && root.reorder-enabled;
 
+    in property <bool> takes-items: false;
+    in property <string> drop-label;
+    // For an overlay over the list that would hide the label.
+    out property <bool> holds-items: drop.holds-items;
+
     pure function in-travel(y: length) -> length {
         return ListTravel.pin(y, inner-list.visible-height, inner-list.content-height);
     }
@@ -69,6 +77,7 @@ export component TrackList inherits Rectangle {
     callback move-picks(int /*slot*/);
     // Only the host's Rust can say where the picks sit in a list it pages.
     callback picked-run() -> LiftedRun;
+    callback dropped-items(int /*slot*/);
     callback remove-from-playlist([int] /*track_ids*/);
 
     in property <string> view-context;
@@ -97,7 +106,9 @@ export component TrackList inherits Rectangle {
         padding-right: root.inset-right;
         spacing: Theme.pad-xs;
 
-        TrackListHeader {
+        header := TrackListHeader {
+            // Hidden rather than swapped out, so a drag passing in and out rebuilds nothing.
+            visible: !drop.holds-items;
             columns <=> root.columns;
             layout: root.layout;
             sort-field: root.sort-field;
@@ -162,18 +173,31 @@ export component TrackList inherits Rectangle {
         }
     }
 
-    ListDropTarget {
+    if drop.holds-items: DropLabel {
+        x: header.absolute-position.x - root.absolute-position.x;
+        y: header.absolute-position.y - root.absolute-position.y;
+        width: header.width;
+        height: header.height;
+        padding-left: Theme.pad-sm;
+        padding-right: Theme.pad-sm;
+        text: root.drop-label;
+    }
+
+    drop := ListDropTarget {
         x: inner-list.absolute-position.x - root.absolute-position.x;
         y: inner-list.absolute-position.y - root.absolute-position.y;
         width: inner-list.width;
         height: inner-list.height;
-        enabled: root.moves-rows;
+        enabled: root.moves-rows || root.takes-items;
         origin: root.origin;
+        takes-items: root.takes-items;
+        in-order: root.moves-rows;
         row-height: Theme.track-row-pitch(root.columns.show_artwork);
         row-count: root.rows.length;
         content-y: inner-list.content-y;
         reorder(from, to) => { root.reorder(from, to); }
         move-picks(slot) => { root.move-picks(slot); }
+        dropped-items(slot) => { root.dropped-items(slot); }
         scroll-by(dy) => {
             inner-list.content-y = root.in-travel(inner-list.content-y - dy);
         }

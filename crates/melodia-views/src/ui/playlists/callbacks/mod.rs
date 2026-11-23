@@ -14,14 +14,15 @@ mod smart;
 use std::rc::Rc;
 use std::sync::Arc;
 
-use slint::Weak;
+use slint::{ComponentHandle, Weak};
 
 use crate::ui::playlists::{self as playlists_ui_mod, PlaylistsUi};
-use crate::ui::shell::notifications::NotificationsUi;
+use crate::ui::shell::notifications::{Completion, NotificationsUi};
+use crate::ui::util::len_as_i32;
 use crate::ui::view_ctx::ViewCtx;
 use melodia_app::state::AppState;
 use melodia_core::error::describe;
-use melodia_ui::AppWindow;
+use melodia_ui::{AppWindow, Settings};
 
 pub(crate) use convert::PlaylistConvertUndo;
 pub(crate) use crud::PlaylistDeleteUndo;
@@ -72,6 +73,24 @@ fn spawn_refresh_after_edit(
     });
 }
 
+/// What an add to playlists landed: the playlists that took at least one track, and the tracks
+/// that went into at least one.
+struct Added {
+    playlists: usize,
+    tracks: usize,
+}
+
+impl Added {
+    fn show_toast(&self, ui: &AppWindow, notifications: &NotificationsUi, completion: Completion) {
+        let settings = ui.global::<Settings>();
+        notifications.show_completion(
+            completion,
+            settings.invoke_add_to_playlist_title(len_as_i32(self.playlists)),
+            settings.invoke_add_to_playlist_message(len_as_i32(self.tracks)),
+        );
+    }
+}
+
 /// A description as stored: blank means none, so the database holds NULL rather than an empty
 /// string.
 fn optional_text(text: &str) -> Option<String> {
@@ -87,4 +106,5 @@ pub fn wire_files(
     notifications: &Rc<NotificationsUi>,
 ) {
     files::wire(ui, state, playlists_ui, notifications);
+    detail::wire_drop_in(ui, state, playlists_ui, notifications);
 }

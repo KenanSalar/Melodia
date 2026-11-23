@@ -1,5 +1,7 @@
 import { Theme } from "../../theme.slint";
 import { Queue } from "../../globals/queue.slint";
+import { Selection } from "../../globals/selection.slint";
+import { DragItems } from "../../globals/drag.slint";
 import { QueueRow } from "../../models.slint";
 import { ArtworkImage } from "../../components/artwork-image.slint";
 import { IconButton } from "../../components/icon-button.slint";
@@ -59,6 +61,18 @@ export component QueueRowItem inherits Rectangle {
     // isn't held, so a pick on a selected row always removes it.
     function pick(ctrl: bool, shift: bool) {
         Queue.toggle-select(root.row-index, ctrl || !shift, shift);
+    }
+
+    // The set this row's menu acts on, under its own title and cover.
+    public function drag-items() -> DragItems {
+        return {
+            kind: "track",
+            ids: Selection.acts-on-set(root.selected, Queue.selected-count)
+                ? Queue.picked-ids()
+                : [root.row-data.id],
+            title: root.row-data.title,
+            cover: Queue.request-cover(root.row-data.artwork_path, Queue.covers-generation),
+        };
     }
 
     height: root.row-height;

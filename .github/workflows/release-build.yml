@@ -88,13 +88,13 @@ jobs:
       - name: Package tarball
         if: inputs.kind == 'linux-tarball'
         shell: bash
-        run: bash scripts/build-tarball.sh "melodia-${TAG}-${ARCH}-linux.tar.gz"
+        run: bash packaging/build-tarball.sh "melodia-${TAG}-${ARCH}-linux.tar.gz"
 
       # ARCH also selects the linuxdeploy build, SHA256-pinned in the script.
       - name: Package AppImage
         if: inputs.kind == 'linux-appimage'
         shell: bash
-        run: bash scripts/build-appimage.sh "melodia-${TAG}-${ARCH}.AppImage"
+        run: bash packaging/build-appimage.sh "melodia-${TAG}-${ARCH}.AppImage"
 
       # ARCH drives `rpmbuild --target` and ExclusiveArch, which is what puts
       # the output under ~/rpmbuild/RPMS/$ARCH/.
@@ -102,7 +102,7 @@ jobs:
         if: inputs.kind == 'linux-rpm'
         shell: bash
         run: |
-          bash scripts/build-rpm.sh
+          bash packaging/build-rpm.sh
           cp ~/rpmbuild/RPMS/${ARCH}/melodia-*.rpm .
 
       # Compiled from source rather than taiki-e/install-action, whose manifest

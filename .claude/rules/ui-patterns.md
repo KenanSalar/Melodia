@@ -31,15 +31,17 @@ Paths are under `crates/melodia-ui/ui/components/` unless stated.
   `RemoveRowButton` closes an editor's row; `dialog/selectable-picker.slint` is the toolkit both
   picker dialogs wire up, `dialog/pick-list.slint`'s `PickList` a single pick behind a search box
   (Find Headphones, Find Lyrics), and `dialog/toolbar-chip.slint` an action over a dialog's list.
-  `HoldTouchArea` for a press whose hold differs from its click, `SliderPointer` under every
-  slider, `EdgeResizeHandle` for a resizable edge.
+  `HoldTouchArea` for a press whose hold differs from its click, `ProgressTrace` for how far a hold
+  or a countdown has got, traced round a circle or a pill, `SliderPointer` under every slider,
+  `EdgeResizeHandle` for a resizable edge.
 - **Grids.** `EntityCard` inside `grid/card-cell.slint`'s `CardCell`, in a chunked `ListView` sized
   by `GridGeometry` and `GridColumnsSync`. `HorizontalCardStrip`, panel included, for every
   short set, `EntityCardGrid` otherwise. `CardFavoriteButton` is a card's heart,
   `grid/play-count-badge.slint` its count, `GridEmptyState` the empty block for grids and lists
   alike.
 - **Lists.** `TrackList` with `TrackListScrollbars`; `TrackTitle` for any row showing a track's
-  title; `DragSource`, `ListDropTarget` and `DragGhost` for an in-window drag; `WindowRectReport`
+  title; `DragSource`, `ListDropTarget` and `DragGhost` for an in-window drag, and `DropLabel` for
+  the header row naming what letting go of another list's drag does; `WindowRectReport`
   and `FileDropBanner` for a file dragged in from the OS (`window_chrome::file_drop` has the route);
   `SkeletonBar` and `SkeletonTile` for a row or card still loading, `SkeletonLines` for a list
   row's stacked text.

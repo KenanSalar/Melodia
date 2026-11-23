@@ -4,6 +4,7 @@ import { NotificationRow, NotificationVariant } from "../../models.slint";
 import { MaterialIcon } from "../material-icon.slint";
 import { IconButton } from "../icon-button.slint";
 import { SectionButton } from "../settings/section-button.slint";
+import { ProgressTrace } from "../progress-trace.slint";
 import { TuckedFill } from "../tucked-fill.slint";
 
 // One card in the notification stack. A dismiss only marks the row leaving, and Rust drops it
@@ -27,18 +28,52 @@ export component NotificationCard inherits Rectangle {
         triggered => {
             self.running = false;
             root.shown = true;
+            // `changed ticking` skips the value the card mounts with.
+            root.rewind();
         }
     }
 
     // Here rather than in Rust so it can stand still while the card is read or held, or the window
     // is in the background; a resume runs the whole interval again.
+    private property <bool> ticking: root.data.timeout-ms > 0 && !root.data.leaving
+        && !root.dragging && !sentinel.has-hover && Theme.window-focused;
+    private property <duration> clock-interval: root.data.timeout-ms * 1ms;
     clock := Timer {
-        interval: root.data.timeout-ms * 1ms;
-        running: root.data.timeout-ms > 0 && !root.data.leaving && !root.dragging
-            && !sentinel.has-hover && Theme.window-focused;
+        interval: root.clock-interval;
+        running: root.ticking;
         triggered => {
+            root.clock-left = 0;
             Notifications.dismiss(root.data.id);
         }
+    }
+
+    // The share of the clock left, traced round the action button.
+    private property <float> clock-left: 1;
+    private property <duration> clock-from;
+    private property <bool> traced: root.data.action-label != "" && root.data.timeout-ms > 0;
+    // Stepped rather than bound to `animation-tick()`, which would redraw every frame of the card's
+    // life and snap a leaving card's trace full. Reading it still costs each step a frame, so only
+    // a traced card steps. Shorten the step if the trace's end visibly jumps.
+    drain := Timer {
+        interval: 33ms;
+        running: root.ticking && root.traced;
+        triggered => {
+            root.clock-left = clamp(
+                1 - (animation-tick() - root.clock-from) / root.clock-interval, 0, 1);
+        }
+    }
+
+    // A clock standing still refills the trace, its resume running the whole interval; a leaving
+    // card's trace holds where it stood.
+    changed ticking => {
+        if (!root.data.leaving) {
+            root.rewind();
+        }
+    }
+
+    function rewind() {
+        root.clock-from = animation-tick();
+        root.clock-left = 1;
     }
 
     // Only a running clock: `restart()` re-arms a stopped timer, and `running` is re-read only
@@ -48,6 +83,7 @@ export component NotificationCard inherits Rectangle {
         root.lifted = true;
         if (clock.running) {
             clock.restart();
+            root.rewind();
         }
     }
 
@@ -262,13 +298,24 @@ export component NotificationCard inherits Rectangle {
                     }
                 }
 
-                if root.data.action-label != "": SectionButton {
+                if root.data.action-label != "": action-button := SectionButton {
                     label: root.data.action-label;
                     icon: "";
                     primary: true;
                     fade: root.fade;
                     clicked => {
                         Notifications.action(root.data.id, root.data.kind);
+                    }
+
+                    if root.traced: ProgressTrace {
+                        // Whole pixels, or the straights blur across a pixel row.
+                        property <length> inset: 4px;
+                        x: self.inset;
+                        y: self.inset;
+                        width: action-button.width - 2 * self.inset;
+                        height: action-button.height - 2 * self.inset;
+                        progress: root.clock-left;
+                        stroke: action-button.ink;
                     }
                 }
 

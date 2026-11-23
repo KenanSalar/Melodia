@@ -512,7 +512,7 @@ async fn play_next_with_nothing_picked_does_not_reach_the_queue() -> Result<(), 
 // --- Opening a file from outside the app ------------------------------------
 //
 // The Rust end of the file-association handoff, and the only half of it nothing pinned. `%F` on
-// the four `.desktop` sources, `wix/main.wxs`'s `FileAssociations`, the single-instance claim and
+// the desktop entry, `wix/main.wxs`'s `FileAssociations`, the single-instance claim and
 // `boot::tasks::serve_file_opens`' backlog are all held somewhere; what they hand to was not.
 //
 // The queue order survives the round trip because `existing_in_order` keeps the ids in the order it

@@ -17,7 +17,7 @@ export struct DragItems {
 
 export struct DragPayload {
     origin: DragOrigin,
-    // In its own list's order.
+    // In its own list's order; -1 for a card, or once revoked.
     index: int,
     // Whether the press lifted every row its list holds picked, rather than that row alone.
     picks: bool,
@@ -81,10 +81,11 @@ export global Drag {
     }
 
     // For a list whose rows moved under a live drag: the drag goes on, but its index no longer
-    // names the row it lifted. The items are ids and still hold.
+    // names the row it lifted. The items are ids and still hold, and the origin stays so the list
+    // doesn't take its own rows back as another list's items.
     public function revoke(origin: DragOrigin) {
         if (self.payload.origin == origin) {
-            self.payload = { origin: DragOrigin.none, index: -1, items: self.payload.items };
+            self.payload = { origin: origin, index: -1, items: self.payload.items };
         }
     }
 

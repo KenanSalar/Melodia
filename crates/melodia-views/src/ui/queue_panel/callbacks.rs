@@ -1,9 +1,8 @@
-//! `Queue.*` callback wiring: a row's play, the drags that move rows, a drop from another list,
-//! the row menu's favourite and rating, and the picks. Removals are `removal`'s.
+//! The `Queue.*` callbacks over the rows and their picks, removals excepted, which are `removal`'s.
 
 use std::rc::Rc;
 
-use slint::{ComponentHandle, Weak};
+use slint::{ComponentHandle, ModelRc, VecModel, Weak};
 
 use super::publish_picks;
 use crate::ui::callbacks::card_actions::spawn_with_track_ids;
@@ -20,6 +19,7 @@ use melodia_ui::{AppWindow, Queue, QueueRow};
 pub(super) fn wire_callbacks(ui: &AppWindow, state: &AppState, rows: &Rc<QueueRows>) {
     wire_skip_to(ui, state);
     wire_moves(ui, state, rows);
+    wire_lift(ui, rows);
     wire_drop_in(ui, state, rows);
     wire_row_flags(ui, state);
     wire_selection(ui, rows);
@@ -56,20 +56,15 @@ fn wire_moves(ui: &AppWindow, state: &AppState, rows: &Rc<QueueRows>) {
         });
     }
 
-    {
-        let (s, rows) = (state.clone(), rows.clone());
-        queue.on_move_picks(move |slot| {
-            let Ok(slot) = usize::try_from(slot) else {
-                return;
-            };
-            let picked = rows.picked_rows();
-            let to = block_move::landing(&picked, slot);
-            send_move(&s, &rows, picked, to);
-        });
-    }
-
-    let rows = rows.clone();
-    queue.on_picked_run(move || drag::lifted_run(&rows.picked_rows()));
+    let (s, rows) = (state.clone(), rows.clone());
+    queue.on_move_picks(move |slot| {
+        let Ok(slot) = usize::try_from(slot) else {
+            return;
+        };
+        let picked = rows.picked_rows();
+        let to = block_move::landing(&picked, slot);
+        send_move(&s, &rows, picked, to);
+    });
 }
 
 /// Moves `moved` on show first, so the queue the engine publishes back is the one already on show
@@ -83,6 +78,22 @@ fn send_move(state: &AppState, rows: &QueueRows, moved: Vec<usize>, to: usize) {
         if let Err(e) = library::queue::queue_move(&s, &moved, to) {
             log::warn!("queue_move({} rows → {to}): {}", moved.len(), describe(&e));
         }
+    });
+}
+
+/// What a press on a pick lifts: where the picks sit, and their tracks.
+fn wire_lift(ui: &AppWindow, rows: &Rc<QueueRows>) {
+    let queue = ui.global::<Queue>();
+
+    {
+        let rows = rows.clone();
+        queue.on_picked_run(move || drag::lifted_run(&rows.picked_rows()));
+    }
+
+    let rows = rows.clone();
+    queue.on_picked_ids(move || {
+        let (_, tracks) = rows.picked_tracks();
+        ModelRc::new(VecModel::from(tracks))
     });
 }
 

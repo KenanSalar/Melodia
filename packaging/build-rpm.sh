@@ -5,9 +5,9 @@
 # Output: ~/rpmbuild/RPMS/<arch>/melodia-<ver>-1.fc<rel>.<arch>.rpm
 #
 # Usage:
-#   ./scripts/build-rpm.sh                # uses existing release binary
-#   ./scripts/build-rpm.sh --build        # cargo build --release first
-#   ARCH=aarch64 ./scripts/build-rpm.sh   # aarch64 (default: native uname -m)
+#   ./packaging/build-rpm.sh              # uses existing release binary
+#   ./packaging/build-rpm.sh --build      # cargo build --release first
+#   ARCH=aarch64 ./packaging/build-rpm.sh # aarch64 (default: native uname -m)
 #   sudo dnf install ~/rpmbuild/RPMS/x86_64/melodia-*.rpm
 #
 # The RPM packages the prebuilt binary + a .desktop file + AppStream
@@ -19,8 +19,8 @@
 
 set -euo pipefail
 
-REPO_ROOT="$(git -C "$(dirname "$0")" rev-parse --show-toplevel)"
-cd "$REPO_ROOT"
+# shellcheck source=SCRIPTDIR/build-env.sh
+source "$(dirname "$0")/build-env.sh"
 
 if [[ "${1:-}" == "--build" ]]; then
   # `-p melodia` because the root is virtual: a bare build would compile every
@@ -31,21 +31,7 @@ fi
 
 BINARY="${BINARY:-$REPO_ROOT/target/release/Melodia}"
 [[ -f "$BINARY" ]] || { echo "ERROR: $BINARY not found. Run with --build first."; exit 1; }
-
-# Every member inherits the version from `[workspace.package]`, so `[package]`
-# reads `version.workspace = true` and carries no literal. Anchor on the table
-# rather than taking the file's first `version = ` line.
-VERSION="$(awk -F'"' '
-  /^\[/                  { in_ws = ($0 == "[workspace.package]") }
-  in_ws && /^version = / { print $2; exit }
-' Cargo.toml)"
-[[ -n "$VERSION" ]] || { echo "ERROR: no version in Cargo.toml's [workspace.package]"; exit 1; }
 FEDORA_REL="$(rpm -E '%{?dist}' | sed 's/^\.//')"
-ARCH="${ARCH:-$(uname -m)}"
-case "$ARCH" in
-  x86_64|aarch64) ;;
-  *) echo "ERROR: unsupported ARCH=$ARCH (expected x86_64 or aarch64)"; exit 1 ;;
-esac
 
 echo "==> packaging melodia $VERSION for $FEDORA_REL ($ARCH)"
 
@@ -92,24 +78,7 @@ chmod 0755 "$PKG_DIR/melodia-update-helper"
 cp "$REPO_ROOT/packaging/com.github.kenansalar.melodia.update.policy" \
    "$PKG_DIR/com.github.kenansalar.melodia.update.policy"
 
-# Desktop file named after the reverse-DNS app id so its desktop-id
-# matches the AppStream component id `com.github.kenansalar.melodia` —
-# software centres need that match to merge the .desktop entry with the
-# MetaInfo component instead of generating a separate stub.
-cat > "$PKG_DIR/com.github.kenansalar.melodia.desktop" <<'EOF'
-[Desktop Entry]
-Type=Application
-Name=Melodia
-GenericName=Music Player
-Comment=Cross-platform desktop music player
-Exec=melodia %F
-Icon=melodia
-Categories=AudioVideo;Audio;Player;Music;
-Keywords=music;audio;player;library;sound;songs;tracks;mp3;flac;ogg;
-Terminal=false
-StartupWMClass=com.github.kenansalar.melodia
-MimeType=audio/mpeg;audio/flac;audio/x-flac;audio/mp4;audio/x-m4a;audio/x-m4b;audio/ogg;audio/x-vorbis+ogg;audio/x-flac+ogg;audio/x-opus+ogg;audio/wav;audio/x-wav;audio/aac;audio/x-aac;audio/aiff;audio/x-aiff;audio/x-aifc;audio/x-matroska;application/x-cue;
-EOF
+cp "$REPO_ROOT/packaging/com.github.kenansalar.melodia.desktop" "$PKG_DIR/"
 
 # AppStream MetaInfo — KDE Discover / GNOME Software read this for the
 # app's display name, developer and license. Shipped verbatim (no

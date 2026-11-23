@@ -1,5 +1,5 @@
-//! What drag-to-reorder and the row menu's removal need to stay alive, none of
-//! which any other pin can see go missing.
+//! What drag-to-reorder, the queue's drop and the row menu's removal need to stay
+//! alive, none of which any other pin can see go missing.
 
 use super::detail::{DetailPage, POSITION_FIELD, is_manual_order};
 use melodia_testkit::{block_after, code_tokens};
@@ -83,6 +83,21 @@ fn the_reorder_gate_reads_every_term_the_drag_depends_on() {
     );
 }
 
+/// Rust's drop handler can't see the floating queue, so without this term a row let go just
+/// outside the floating panel lands in the playlist it dims, silently where it lands at the line.
+#[test]
+fn the_queue_drop_gate_refuses_a_smart_playlist_and_the_page_under_the_floating_queue() {
+    assert!(
+        code_tokens(DETAIL_VIEW).contains(
+            "takes-items: Drag.payload.origin == DragOrigin.queue \
+             && !PlaylistDetail.playlist.is_smart \
+             && !Queue.floating;"
+        ),
+        "playlist-detail.slint must take only the queue's rows, into a curated playlist, \
+         and only while the queue is docked"
+    );
+}
+
 /// `"position"` is what drag-to-reorder is gated on and no header cell asks for
 /// it, so the sort cycle is the only way back. Drop the natural field and the
 /// first click on any column retires reordering for the whole install —
@@ -113,18 +128,22 @@ fn the_sort_cycle_still_offers_a_way_back_to_the_curated_order() {
 /// reading the same field elsewhere in `detail.rs` can't satisfy the assertion
 /// while the guard itself has stopped asking. Each needle carries its operator
 /// for the same reason the drag-pan pin above matches a binding — a dropped `!`
-/// or an `&&` in place of the `||` inverts the guard, and a bare token match
+/// or a `||` in place of the `&&` inverts the guard, and a bare token match
 /// can't see either.
 #[test]
 fn the_optimistic_reorder_refuses_a_filtered_list() {
     let src = code_tokens(DETAIL);
-    let guard = reorder_guard(&src);
+    let guard = slot_guard(&src);
     assert!(
-        guard.contains("!is_manual_order(&field, &dir)"),
+        optimistic_move_head(&src).contains("if !slots_are_positions(ui, playlists_ui)"),
+        "the reorder must ask the guard before the display indices reach the keyset"
+    );
+    assert!(
+        guard.contains("; is_manual_order(&field, &dir) &&"),
         "the order half must be asked before the display indices reach the keyset"
     );
     assert!(
-        guard.contains("|| playlists_ui.detail.is_filtered()"),
+        guard.contains("&& !playlists_ui.detail.is_filtered()"),
         "so must the filter half — a filtered index is in range, so the write lands"
     );
 }
@@ -136,15 +155,36 @@ fn the_optimistic_reorder_refuses_a_filtered_list() {
 fn the_optimistic_reorder_refuses_a_list_not_shown_in_the_playlists_own_order() {
     let src = code_tokens(DETAIL);
     assert!(
-        reorder_guard(&src).contains("|| !playlists_ui.detail.shows_own_order()"),
+        slot_guard(&src).contains("&& playlists_ui.detail.shows_own_order()"),
         "the guard must ask the list on show, not only the sort and filter the page asked for"
     );
 }
 
 /// `apply_optimistic_move` up to where the display indices reach the keyset.
-fn reorder_guard(src: &str) -> &str {
+fn optimistic_move_head(src: &str) -> &str {
     let body = src.split_once("pub fn apply_optimistic_move").map_or("", |(_, rest)| rest);
     body.split_once("let tracks =").map_or("", |(head, _)| head)
+}
+
+/// The body of `slots_are_positions`, which holds no brace of its own.
+fn slot_guard(src: &str) -> &str {
+    let body = src.split_once("pub fn slots_are_positions").map_or("", |(_, rest)| rest);
+    body.split_once('}').map_or("", |(head, _)| head)
+}
+
+/// The drop target hands over a slot in any order, and only this guard keeps one from a sorted or
+/// filtered list, where no line was drawn, out of the store.
+#[test]
+fn the_queue_drop_lands_at_its_slot_only_where_slots_are_positions() {
+    let src = code_tokens(DETAIL_CALLBACKS);
+    assert!(
+        block_after(&src, "fn for_slot(").contains(
+            "match usize::try_from(slot) { Ok(slot) if \
+             playlists_ui_mod::slots_are_positions(ui, playlists_ui) => Self::Slot(slot), \
+             _ => Self::End, }"
+        ),
+        "a slot reaches the store only past the reorder's guard; anything else lands at the end"
+    );
 }
 
 /// The reload a removal brings prunes nothing under a filter, so the removal drops its own rows

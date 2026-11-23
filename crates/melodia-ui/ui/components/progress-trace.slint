@@ -1,0 +1,56 @@
+// A share of the way round the pill inscribed in its box, clockwise from the top centre: a circle
+// when the box is square, and no box may be taller than wide. Slint fits a path inside its stroke,
+// so the box, set at the mount, is the trace's outer edge.
+export component ProgressTrace {
+    in property <float> progress;
+    in property <brush> stroke;
+    in property <length> stroke-width: 2px;
+
+    if root.progress > 0: Path {
+        // In pixels of the centre line, the viewbox being the box less the stroke.
+        property <float> w: (root.width - root.stroke-width) / 1px;
+        property <float> h: (root.height - root.stroke-width) / 1px;
+        property <float> r: self.h / 2;
+        property <float> straight: self.w - self.h;
+        property <float> cap: self.r * (180deg / 1rad);
+        property <float> reach: min(root.progress, 1) * 2 * (self.straight + self.cap);
+        // How far into each piece the trace reaches.
+        property <float> top-right: min(self.reach, self.straight / 2);
+        property <angle> right-cap: clamp(self.reach - self.straight / 2, 0, self.cap) / self.r * 1rad;
+        property <float> bottom: clamp(self.reach - self.straight / 2 - self.cap, 0, self.straight);
+        property <angle> left-cap:
+            clamp(self.reach - 1.5 * self.straight - self.cap, 0, self.cap) / self.r * 1rad;
+        property <float> top-left:
+            clamp(self.reach - 1.5 * self.straight - 2 * self.cap, 0, self.straight / 2);
+
+        x: 0;
+        y: 0;
+        width: 100%;
+        height: 100%;
+        viewbox-width: self.w;
+        viewbox-height: self.h;
+        fit: fill;
+        stroke: root.stroke;
+        stroke-width: root.stroke-width;
+        // No arc passes half a turn, so each takes the small-arc flag.
+        commands: "M " + root.point(self.w / 2, 0)
+            + (self.top-right > 0 ? " L " + root.point(self.w / 2 + self.top-right, 0) : "")
+            + (self.right-cap > 0deg
+                ? " A " + root.point(self.r, self.r) + " 0 0 1 " + root.point(
+                    self.w - self.r + self.r * sin(self.right-cap),
+                    self.r - self.r * cos(self.right-cap))
+                : "")
+            + (self.bottom > 0 ? " L " + root.point(self.w - self.r - self.bottom, self.h) : "")
+            + (self.left-cap > 0deg
+                ? " A " + root.point(self.r, self.r) + " 0 0 1 " + root.point(
+                    self.r - self.r * sin(self.left-cap),
+                    self.r + self.r * cos(self.left-cap))
+                : "")
+            + (self.top-left > 0 ? " L " + root.point(self.r + self.top-left, 0) : "");
+    }
+
+    // Unlocalized, or a locale's decimal comma breaks the path.
+    pure function point(x: float, y: float) -> string {
+        return x.to-string-unlocalized() + " " + y.to-string-unlocalized();
+    }
+}

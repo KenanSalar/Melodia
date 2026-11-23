@@ -342,9 +342,8 @@ async fn rewriting_the_criteria_of_a_missing_playlist_is_reported() -> Result<()
     Ok(())
 }
 
-/// The other renumber, and the one nothing reached: an add is `INSERT OR IGNORE` against
-/// positions computed from the old maximum, so re-adding a track the playlist already holds
-/// burns the position it was given and leaves a hole behind the duplicate it skipped.
+/// A track the playlist already holds is skipped without spending a position, so the next one
+/// lands straight behind the last row rather than past a hole.
 #[tokio::test]
 async fn re_adding_a_track_leaves_no_hole_where_it_was_skipped() -> Result<(), AppError> {
     let db = setup_seeded_db().await?;
@@ -353,8 +352,7 @@ async fn re_adding_a_track_leaves_no_hole_where_it_was_skipped() -> Result<(), A
     let pl = queries::playlist::create_playlist(&db, "Re-added", None).await?;
     queries::playlist::add_tracks_to_playlist(&db, pl.id, vec![track_ids[0]]).await?;
 
-    // The first id is already seated at 0, so its slot in this batch is ignored and the second
-    // id lands at 2.
+    // The first id is already seated at 0, so only the second goes in, at 1.
     queries::playlist::add_tracks_to_playlist(&db, pl.id, track_ids[..2].to_vec()).await?;
 
     assert_eq!(positions(&db, pl.id).await?, [0, 1]);
@@ -453,8 +451,8 @@ async fn a_playlist_created_with_tracks_holds_them_in_the_order_given() -> Resul
     Ok(())
 }
 
-/// An import hands over whatever the file repeats, and the unique index keeps a track's first
-/// slot, so the slot it skips has to be closed or the next add lands on a position two rows share.
+/// An import hands over whatever the file repeats, and a track sits in a playlist once: a repeat
+/// that was given a slot of its own would leave a hole in the positions after it.
 #[tokio::test]
 async fn a_repeated_track_keeps_its_first_slot_and_leaves_no_gap() -> Result<(), AppError> {
     let db = setup_seeded_db().await?;
@@ -505,17 +503,15 @@ async fn a_track_the_library_lacks_is_left_out_of_a_new_playlist() -> Result<(),
     Ok(())
 }
 
-/// The insert runs in chunks, so the second chunk has to carry on from the first one's positions
-/// and a repeat spanning the two still has to collapse.
+/// The insert runs in chunks, so the second chunk has to carry on from the first one's positions.
 #[tokio::test]
 async fn tracks_past_the_first_insert_chunk_land_in_order_with_no_gap() -> Result<(), AppError> {
+    // The first chunk ends on ids[248], so ids[249] opens the second.
     let (db, ids) = numbered_library(250).await?;
-    // The first chunk ends on ids[248]; the second opens on it again, then ids[249].
-    let mut given = ids[..249].to_vec();
-    given.extend([ids[248], ids[249]]);
 
     let playlist =
-        queries::playlist::create_playlist_with_tracks(&db, "Long".to_owned(), None, given).await?;
+        queries::playlist::create_playlist_with_tracks(&db, "Long".to_owned(), None, ids.clone())
+            .await?;
 
     assert_eq!(order(&db, playlist).await?, ids);
     assert_eq!(position_spread(&db, playlist).await?, (250, 0, 249, 250));
@@ -575,6 +571,98 @@ async fn an_add_that_lands_nothing_leaves_the_playlist_unstamped() -> Result<(),
 
         assert_eq!(updated_at(&db, playlist).await?, EARLIER, "{what}");
     }
+    Ok(())
+}
+
+/// Numbered on from the last position, an add would carry the gap a deleted track left.
+#[tokio::test]
+async fn an_add_closes_the_gap_a_deleted_track_left() -> Result<(), AppError> {
+    let (db, ids) = numbered_library(4).await?;
+    let playlist = playlist_holding(&db, "Gapped", &ids[..3]).await?;
+    delete_track(&db, ids[1]).await?;
+
+    queries::playlist::add_tracks_to_playlist(&db, playlist, vec![ids[3]]).await?;
+
+    assert_eq!(
+        (order(&db, playlist).await?, positions(&db, playlist).await?),
+        (on_rows(&ids, &[0, 2, 3]), vec![0, 1, 2])
+    );
+    Ok(())
+}
+
+// --- insert_tracks_into_playlist ---
+
+async fn three_track_playlist_of_five() -> Result<(DbPool, i64, Vec<i64>), AppError> {
+    let (db, ids) = numbered_library(5).await?;
+    let playlist = playlist_holding(&db, "Three", &ids[..3]).await?;
+    Ok((db, playlist, ids))
+}
+
+/// A slot past the end lands at the end: the slot counts the rows on show, which a track the
+/// library lost since can outnumber.
+#[tokio::test]
+async fn an_insert_lands_its_tracks_together_in_front_of_the_row_it_names() -> Result<(), AppError>
+{
+    let rows: [(&str, usize, [usize; 5]); 6] = [
+        ("the first row", 0, [3, 4, 0, 1, 2]),
+        ("the second row", 1, [0, 3, 4, 1, 2]),
+        ("the last row", 2, [0, 1, 3, 4, 2]),
+        ("the end", 3, [0, 1, 2, 3, 4]),
+        ("one past the end", 4, [0, 1, 2, 3, 4]),
+        ("the furthest slot there is", usize::MAX, [0, 1, 2, 3, 4]),
+    ];
+    for (what, before, expected) in rows {
+        let (db, playlist, ids) = three_track_playlist_of_five().await?;
+
+        queries::playlist::insert_tracks_into_playlist(&db, playlist, ids[3..].to_vec(), before)
+            .await?;
+
+        assert_eq!(
+            (order(&db, playlist).await?, positions(&db, playlist).await?),
+            (on_rows(&ids, &expected), vec![0, 1, 2, 3, 4]),
+            "{what}"
+        );
+    }
+    Ok(())
+}
+
+/// Room opens only for the tracks that go in, or each one skipped leaves a gap behind those that
+/// did. A track the playlist holds stays where it is.
+#[tokio::test]
+async fn an_insert_opens_room_only_for_the_tracks_that_land() -> Result<(), AppError> {
+    let (db, ids) = numbered_library(4).await?;
+    let rows = [
+        ("a track the playlist holds", vec![ids[1], ids[3]]),
+        ("a track handed over twice", vec![ids[3], ids[3]]),
+        ("a track the library lost", vec![9_999, ids[3]]),
+    ];
+    for (what, handed) in rows {
+        let playlist = playlist_holding(&db, what, &ids[..3]).await?;
+
+        queries::playlist::insert_tracks_into_playlist(&db, playlist, handed, 1).await?;
+
+        assert_eq!(
+            (order(&db, playlist).await?, positions(&db, playlist).await?),
+            (on_rows(&ids, &[0, 3, 1, 2]), vec![0, 1, 2, 3]),
+            "{what}"
+        );
+    }
+    Ok(())
+}
+
+/// A gap ahead of the slot closes too, though the rows there make no room.
+#[tokio::test]
+async fn an_insert_closes_the_gap_a_deleted_track_left() -> Result<(), AppError> {
+    let (db, ids) = numbered_library(5).await?;
+    let playlist = playlist_holding(&db, "Gapped", &ids[..4]).await?;
+    delete_track(&db, ids[1]).await?;
+
+    queries::playlist::insert_tracks_into_playlist(&db, playlist, vec![ids[4]], 2).await?;
+
+    assert_eq!(
+        (order(&db, playlist).await?, positions(&db, playlist).await?),
+        (on_rows(&ids, &[0, 2, 4, 3]), vec![0, 1, 2, 3])
+    );
     Ok(())
 }
 
@@ -646,8 +734,8 @@ async fn a_reorder_closes_the_gap_a_deleted_track_left() -> Result<(), AppError>
     Ok(())
 }
 
-/// How many rows closing each gap moves in a three-track playlist: an add renumbers with no gap to
-/// close, and rewriting the whole playlist for it is what this guards against.
+/// How many rows closing each gap moves in a three-track playlist: a removal from the end leaves no
+/// gap to close, and rewriting the whole playlist for it is what this guards against.
 #[tokio::test]
 async fn a_renumber_writes_only_the_rows_that_move() -> Result<(), AppError> {
     let cases: [(&[usize], u64); 4] = [(&[], 0), (&[0], 2), (&[1], 1), (&[2], 0)];
@@ -667,6 +755,24 @@ async fn a_renumber_writes_only_the_rows_that_move() -> Result<(), AppError> {
         assert_eq!(written, moved, "tracks deleted at {deleted:?}");
     }
     Ok(())
+}
+
+/// An add at the end of a playlist with no gap moves no row, and rewriting every row for it is
+/// what this guards against.
+#[test]
+fn position_writes_name_only_the_rows_whose_position_changes() {
+    let cases = [
+        ("no gap", [(10, 100, 0), (11, 101, 1), (12, 102, 2)], vec![]),
+        (
+            "a gap at the front",
+            [(10, 100, 1), (11, 101, 2), (12, 102, 3)],
+            vec![(10, 0), (11, 1), (12, 2)],
+        ),
+        ("a gap in the middle", [(10, 100, 0), (11, 101, 2), (12, 102, 3)], vec![(11, 1), (12, 2)]),
+    ];
+    for (what, rows, expected) in cases {
+        assert_eq!(super::position_writes(&rows, |row| row), expected, "{what}");
+    }
 }
 
 #[tokio::test]

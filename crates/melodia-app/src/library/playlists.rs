@@ -109,6 +109,16 @@ pub async fn add_to_playlist(
     queries::playlist::add_tracks_to_playlist(db, playlist_id, track_ids).await
 }
 
+/// [`add_to_playlist`] in front of row `before` of the playlist's own order.
+pub async fn insert_into_playlist(
+    db: &DbPool,
+    playlist_id: i64,
+    track_ids: Vec<i64>,
+    before: usize,
+) -> Result<Vec<i64>, AppError> {
+    queries::playlist::insert_tracks_into_playlist(db, playlist_id, track_ids, before).await
+}
+
 /// For the Add-to-Playlist picker: how many of `track_ids` each playlist already holds, playlists
 /// with none omitted.
 pub async fn count_tracks_in_playlists_for_selection(

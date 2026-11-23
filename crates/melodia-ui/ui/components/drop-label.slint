@@ -1,0 +1,26 @@
+import { Theme } from "../theme.slint";
+import { MaterialIcon } from "material-icon.slint";
+
+// What letting go of another list's drag does, in place of the header above the rows it lands
+// among: a banner over them would hide the line that says where.
+export component DropLabel inherits HorizontalLayout {
+    in property <string> text;
+
+    spacing: Theme.pad-sm;
+    cross-axis-alignment: center;
+
+    MaterialIcon {
+        name: "library_add";
+        icon-size: 22px;
+        icon-color: Theme.accent;
+    }
+
+    Text {
+        text: root.text;
+        color: Theme.text;
+        font-size: Theme.font-size-md;
+        font-weight: 600;
+        overflow: elide;
+        horizontal-stretch: 1;
+    }
+}

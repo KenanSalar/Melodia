@@ -3005,6 +3005,14 @@ msgstr "Виконавців поки немає"
 msgid "No genres yet"
 msgstr "Жанрів поки немає"
 
+#. Translators: `{n}` is how many tracks are being dragged into the playlist
+#: ui/views/my-library/playlist-detail.slint
+msgid "Add {n} track to this playlist"
+msgid_plural "Add {n} tracks to this playlist"
+msgstr[0] "Додати {n} трек до цього плейлиста"
+msgstr[1] "Додати {n} треки до цього плейлиста"
+msgstr[2] "Додати {n} треків до цього плейлиста"
+
 #: ui/views/my-library/playlist-detail.slint
 msgid "No matching tracks"
 msgstr "Немає відповідних треків"

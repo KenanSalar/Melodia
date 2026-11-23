@@ -11,14 +11,14 @@ use slint::{ComponentHandle, Model, ModelRc, SharedString, VecModel};
 use super::{add_pickable, refresh_add_selection_meta, set_all_picks, toggle_pick};
 use crate::ui::callbacks::DialogClaim;
 use crate::ui::playlists::PlaylistsUi;
-use crate::ui::playlists::callbacks::refresh_after_edit;
+use crate::ui::playlists::callbacks::{Added, refresh_after_edit};
 use crate::ui::shell::notifications::{Completion, NotificationsUi};
-use crate::ui::util::{len_as_i32, opt_shared};
+use crate::ui::util::opt_shared;
 use melodia_app::library;
 use melodia_app::state::AppState;
 use melodia_core::entities::playlist::PlaylistStats;
 use melodia_core::error::describe;
-use melodia_ui::{AppWindow, Dialog, PlaylistPickRow as UiPlaylistPickRow, Playlists, Settings};
+use melodia_ui::{AppWindow, Dialog, PlaylistPickRow as UiPlaylistPickRow, Playlists};
 
 pub(super) fn wire(
     ui: &AppWindow,
@@ -182,21 +182,10 @@ fn wire_add_tracks_to_selected(
                 .await;
 
             let Some(ui) = weak.upgrade() else { return };
-            let settings = ui.global::<Settings>();
-            notifications.show_completion(
-                Completion::partial_if(added.playlists < pids.len()),
-                settings.invoke_add_to_playlist_title(len_as_i32(added.playlists)),
-                settings.invoke_add_to_playlist_message(len_as_i32(added.tracks)),
-            );
+            let completion = Completion::partial_if(added.playlists < pids.len());
+            added.show_toast(&ui, &notifications, completion);
         }));
     });
-}
-
-/// What [`add_to_each`] added: the playlists that took at least one track, and the tracks that
-/// landed in at least one.
-struct Added {
-    playlists: usize,
-    tracks: usize,
 }
 
 async fn add_to_each(state: &AppState, pids: &[i64], track_ids: &[i64]) -> Added {

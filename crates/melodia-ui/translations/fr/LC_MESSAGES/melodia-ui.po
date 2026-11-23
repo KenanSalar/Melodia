@@ -2954,6 +2954,13 @@ msgstr "Aucun artiste pour l'instant"
 msgid "No genres yet"
 msgstr "Aucun genre pour l'instant"
 
+#. Translators: `{n}` is how many tracks are being dragged into the playlist
+#: ui/views/my-library/playlist-detail.slint
+msgid "Add {n} track to this playlist"
+msgid_plural "Add {n} tracks to this playlist"
+msgstr[0] "Ajouter {n} piste à cette liste"
+msgstr[1] "Ajouter {n} pistes à cette liste"
+
 #: ui/views/my-library/playlist-detail.slint
 msgid "No matching tracks"
 msgstr "Aucun titre correspondant"
