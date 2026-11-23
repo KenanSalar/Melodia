@@ -2,7 +2,7 @@
 
 Created: 2026-11-23 · Branch: `chore/bump-notify-9`
 
-Status: Phase 1 **done** · Phase 2 **pending** · Phase 3 **pending** · Phase 4 **pending**
+Status: Phase 1 **done** · Phase 2 **done** · Phase 3 **pending** · Phase 4 **pending**
 
 Crate sources cited below are the extracted copies under
 `~/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/`. Line numbers into `watcher.rs` and
@@ -37,10 +37,15 @@ changes are all measurable:
 - the launch walk no longer fills the queue with opens;
 - the debouncer thread sleeps while idle (`lib.rs:1313`).
 
-One new cost has to be measured: 0.8's file-ID cache keeps a per-directory children index beside
-its per-file map (`file_id_map.rs:14-19`). Only Windows and macOS pay it. On Linux,
-`RecommendedCache` is `NoCache` (`notify-debouncer-full-0.8.0/src/cache.rs:117-122`, and the same
-in 0.7).
+Two costs, both measured in Phase 2. notify 9's inotify loop keeps each watched path four times
+where notify 8 kept it twice, the `watch_paths` set (#1094) and the watch's `reported_path` (#901)
+joining the `watches` key and the descriptor's `paths` entry, now a one-path `Vec` (#1072). The
+watch's metadata also doubles each `watches` entry (`notify-9.0.0/src/inotify.rs:110-134`,
+`walk.rs:33-39`; `notify-8.2.2/src/inotify.rs:40-41`). The heap grows with the number of watched
+folders, and neither those PRs nor the changelog mention memory. 0.8's file-ID cache adds a
+per-directory children index (`file_id_map.rs:14-19`), which only Windows and macOS build: on
+Linux, `RecommendedCache` is `NoCache` (`notify-debouncer-full-0.8.0/src/cache.rs:117-122`, and
+the same in 0.7).
 
 ## Is the issue correct?
 
@@ -150,13 +155,14 @@ wrong, three stale comments are missing from its list, and a few side effects ar
    - `cargo test --locked --workspace`
    - the comment audit from `code-style.md` / `/doc-style`.
 
-## Phase 2: Linux checks on the test library [pending]
+## Phase 2: Linux checks on the test library [done]
 
 You run these by hand, or Claude runs them unattended once you say go. They use the `Melodia-dev`
 data folder, with its usual backup and restore.
 
-1. Build release binaries of `main` and of the branch, each in its own detached worktree, and
-   `cmp` them before measuring. Wrap every launch in `systemd-run --user --scope`.
+1. Build release binaries of `d2e0ee8c` (notify 8) and `1dba0b77` (notify 9), each in its own
+   detached worktree, and `cmp` them before measuring. They differ by Phase 1 alone, where `main`
+   and the branch tip carry other bumps too. Wrap every launch in `systemd-run --user --scope`.
 2. Read each launch's watch masks from `/proc/<pid>/fdinfo/<fd>` for its `anon_inode:inotify`
    fd (strace isn't installed here). `main` should show `IN_OPEN` (0x20) and `IN_CLOSE_WRITE`
    (0x8), and the branch should show neither. Phase 1 already read the branch's mask this way from
@@ -172,6 +178,26 @@ data folder, with its usual backup and restore.
    `file-id` reads inodes on Linux.
 5. Idle: read `voluntary_ctxt_switches` for the debouncer thread from `/proc/<pid>/task/*/status`
    60 s apart on both builds. The thread's 15-byte name is `notify-rs debou`.
+
+**Results** (2026-11-23, one plain and one heaptrack launch per build):
+- **Masks:** 6,320 watches in each build. notify 8 sets `0x3ee` on folders and `0xfee` on the three
+  roots, notify 9 `0x3c6` and `0xfc6`: the difference is exactly `OPEN | CLOSE_WRITE`. No launch
+  logged an overflow.
+- **Probe:** create, modify, rename and remove each arrived as one batch of one event. The row, read
+  from `melodia.db` rather than the UI, took the new title, kept its id and `date_added` through the
+  modify and the rename, and was gone after the remove.
+- **Idle:** the debouncer thread made 120 voluntary switches in 60 s on notify 8 and 0 on notify 9,
+  in both pairs. The inotify thread made 0 in every launch.
+- **Heap:** peak 36.61M against 38.43M. Frames under `notify::` hold 2,083,800 B against
+  3,969,608 B, all still held at exit. A harness running the bare watcher over the same roots
+  reproduces both totals within 0.3%. notify 9's extra 1,887,110 B, about 300 B per watched
+  folder, is two more path copies 1,083,742 B, the wider `watches` table 393,216 B, the
+  `watch_paths` tree nodes 256,384 B and the per-descriptor `Vec` 151,680 B. The harness's
+  `RssAnon` grows by that live heap alone (+2,304 kB against +4,364 kB), malloc's free chunks
+  not growing. In the app, idle `RssAnon` rose 2.3 MiB in the plain pair and 2.0 MiB in the
+  heaptrack pair. Peak RSS (502,556 kB against 510,440 kB) can't separate the builds: it follows
+  the database's file-backed pages, and only notify 9's run carried the probe.
+- **FileIdMap harness** over the three roots: peak heap 23.12M on 0.7 against 19.48M on 0.8.
 
 ## Phase 3: Windows checks [pending]
 
