@@ -268,9 +268,8 @@ merged into the card starts it again too.
 4. **Stepped by a `Timer`, not bound to `animation-tick()`.** The window redraws at the step rather
    than every frame for the notice's whole life, and a leaving card's trace holds where it stood
    with nothing to freeze it: a binding on the clock would snap it full mid-fade. The step is the
-   Equalizer overlay's 33 ms. At 4 s it moves the trace's end 0.59 px on the narrowest pill and
-   1.71 px on a 100 px one, and the hand test says whether that reads as motion. It can't follow
-   the button's width: a `Timer`'s `interval` may not read a layout property.
+   Equalizer overlay's 33 ms, which the hand test read as a glide at the shortest setting. It can't
+   follow the button's width: a `Timer`'s `interval` may not read a layout property.
 5. **Any timed card's button gets it, not the undo kind.** Undo is the only one today, every other
    card with a button being sticky, and a timed one's button goes with its card for the same reason.
 
