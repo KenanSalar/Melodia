@@ -32,7 +32,7 @@ fn render_desktop_preserves_mime_block() {
     assert!(rendered.contains("audio/mp4"));
     assert!(rendered.contains("audio/ogg"));
     // Same single-key invariant the spec mandates; mirrors the
-    // assertion in `scripts_melodia_desktop_preserves_mime_block`.
+    // assertion in `packaging_melodia_desktop_preserves_mime_block`.
     let mime_keys = rendered.match_indices("\nMimeType=").count();
     assert_eq!(
         mime_keys, 1,
@@ -129,7 +129,7 @@ fn icon_svg_is_non_empty() {
 }
 
 #[test]
-fn scripts_melodia_desktop_preserves_mime_block() {
+fn packaging_melodia_desktop_preserves_mime_block() {
     // This file ships verbatim to DEB and to the tarball staging, while the
     // self-deploy renders the template `render_desktop_preserves_mime_block`
     // covers. They must agree, or one release gives three package formats three
@@ -138,12 +138,12 @@ fn scripts_melodia_desktop_preserves_mime_block() {
     // Three other regressions have bitten here: a duplicate key (which the spec
     // forbids and `desktop-file-validate` rejects), a dropped
     // `Exec`/`Icon`/`StartupWMClass`, and `Keywords=` drift.
-    const SCRIPTS_DESKTOP: &str = include_str!("../../../../../../scripts/Melodia.desktop");
+    const PACKAGING_DESKTOP: &str = include_str!("../../../../../../packaging/Melodia.desktop");
 
     for mime in &["audio/mpeg", "audio/flac", "audio/mp4", "audio/ogg", "audio/wav", "audio/aac"] {
         assert!(
-            SCRIPTS_DESKTOP.contains(mime),
-            "scripts/Melodia.desktop missing MIME `{mime}`; got:\n{SCRIPTS_DESKTOP}"
+            PACKAGING_DESKTOP.contains(mime),
+            "packaging/Melodia.desktop missing MIME `{mime}`; got:\n{PACKAGING_DESKTOP}"
         );
     }
 
@@ -155,18 +155,18 @@ fn scripts_melodia_desktop_preserves_mime_block() {
         "Keywords=",
     ] {
         assert!(
-            SCRIPTS_DESKTOP.contains(key),
-            "scripts/Melodia.desktop missing key `{key}`; got:\n{SCRIPTS_DESKTOP}"
+            PACKAGING_DESKTOP.contains(key),
+            "packaging/Melodia.desktop missing key `{key}`; got:\n{PACKAGING_DESKTOP}"
         );
     }
 
     // A key may appear at most once per group, and a copy-paste duplicating the
     // whole MIME line has shipped once. Anchored at a line start so a mention in
     // a header comment can't count.
-    let mime_keys = SCRIPTS_DESKTOP.match_indices("\nMimeType=").count();
+    let mime_keys = PACKAGING_DESKTOP.match_indices("\nMimeType=").count();
     assert_eq!(
         mime_keys, 1,
-        "scripts/Melodia.desktop must have exactly one MimeType= key, found {mime_keys}; got:\n{SCRIPTS_DESKTOP}"
+        "packaging/Melodia.desktop must have exactly one MimeType= key, found {mime_keys}; got:\n{PACKAGING_DESKTOP}"
     );
 }
 
@@ -214,9 +214,9 @@ fn all_desktop_sources_agree_on_mime_and_wmclass() {
     // between them is silent at build time and corrosive after: an AppImage user
     // can't open audio files from a file manager, KDE shows two taskbar entries,
     // and "Open with…" offers a different set per package format.
-    const APPIMAGE_SCRIPT: &str = include_str!("../../../../../../scripts/build-appimage.sh");
-    const RPM_SCRIPT: &str = include_str!("../../../../../../scripts/build-rpm.sh");
-    const SCRIPTS_DESKTOP: &str = include_str!("../../../../../../scripts/Melodia.desktop");
+    const APPIMAGE_SCRIPT: &str = include_str!("../../../../../../packaging/build-appimage.sh");
+    const RPM_SCRIPT: &str = include_str!("../../../../../../packaging/build-rpm.sh");
+    const PACKAGING_DESKTOP: &str = include_str!("../../../../../../packaging/Melodia.desktop");
     // The full set the production template carries; every format declares it or
     // the associations diverge.
     //
@@ -247,9 +247,9 @@ fn all_desktop_sources_agree_on_mime_and_wmclass() {
 
     let sources = [
         ("template", TEST_DESKTOP_TEMPLATE),
-        ("scripts/Melodia.desktop", SCRIPTS_DESKTOP),
-        ("scripts/build-appimage.sh heredoc", APPIMAGE_SCRIPT),
-        ("scripts/build-rpm.sh heredoc", RPM_SCRIPT),
+        ("packaging/Melodia.desktop", PACKAGING_DESKTOP),
+        ("packaging/build-appimage.sh heredoc", APPIMAGE_SCRIPT),
+        ("packaging/build-rpm.sh heredoc", RPM_SCRIPT),
     ];
 
     for (name, body) in &sources {
@@ -302,7 +302,7 @@ fn exec_lines(body: &str) -> impl Iterator<Item = &str> {
 /// `%F` lived in the DEB and died in the tarball with nothing able to tell.
 #[test]
 fn the_tarball_installer_rewrite_keeps_the_field_code() {
-    const INSTALLER: &str = include_str!("../../../../../../scripts/install-linux.sh");
+    const INSTALLER: &str = include_str!("../../../../../../packaging/install-linux.sh");
 
     assert!(
         INSTALLER.contains("s|^Exec=[^ ]*|"),

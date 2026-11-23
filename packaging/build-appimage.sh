@@ -3,9 +3,9 @@
 # binary using upstream `linuxdeploy` + `linuxdeploy-plugin-appimage`.
 #
 # Usage:
-#   ./scripts/build-appimage.sh                       # x86_64, Melodia-<ver>-x86_64.AppImage
-#   ./scripts/build-appimage.sh /tmp/Custom.AppImage  # x86_64, specific output path
-#   ARCH=aarch64 ./scripts/build-appimage.sh          # aarch64, Melodia-<ver>-aarch64.AppImage
+#   ./packaging/build-appimage.sh                       # x86_64, Melodia-<ver>-x86_64.AppImage
+#   ./packaging/build-appimage.sh /tmp/Custom.AppImage  # x86_64, specific output path
+#   ARCH=aarch64 ./packaging/build-appimage.sh          # aarch64, Melodia-<ver>-aarch64.AppImage
 #
 # Arch defaults to the runner's `uname -m`, so a developer on ARM64 Linux
 # builds natively without ceremony; CI sets it per matrix slot.
@@ -110,8 +110,8 @@ chmod +x "$APPDIR/usr/bin/Melodia"
 # titlebar where the window mantle already provides the disc.
 cp "$REPO_ROOT/assets/icons/logo-with-background.svg" "$APPDIR/melodia.svg"
 
-# Body kept in lockstep with `scripts/build-rpm.sh` + `Cargo.toml`'s
-# DEB asset `scripts/Melodia.desktop` + `assets/desktop/Melodia.desktop.tmpl`.
+# Body kept in lockstep with `packaging/build-rpm.sh` + `Cargo.toml`'s
+# DEB asset `packaging/Melodia.desktop` + `assets/desktop/Melodia.desktop.tmpl`.
 # Drift here means AppImage users can't open audio files via "Open with…"
 # and KDE shows two taskbar entries (no StartupWMClass to merge them).
 # The MIME drift-guard test in

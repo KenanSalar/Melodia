@@ -166,12 +166,12 @@ const MSI_SOURCE: &str = "crates/melodia/wix/main.wxs";
 /// `%files` line and the staged copy goes unread in the *build* directory, which `check-files`
 /// never looks at — no warning, and a pin on the `cp` still green.
 const LICENSE_SHIPPERS: [(&str, &str); 5] = [
-    ("scripts/build-rpm.sh", "%license LICENSE licenses/"),
+    ("packaging/build-rpm.sh", "%license LICENSE licenses/"),
     // The binary's manifest, not the workspace root's: `[package.metadata.deb]` is package
     // metadata and went with the package. Its `../../` is why the needle stops at the glob.
     ("crates/melodia/Cargo.toml", "licenses/*\""),
-    ("scripts/build-tarball.sh", "cp -r \"$REPO_ROOT/licenses\""),
-    ("scripts/build-appimage.sh", "cp -r \"$REPO_ROOT/licenses\""),
+    ("packaging/build-tarball.sh", "cp -r \"$REPO_ROOT/licenses\""),
+    ("packaging/build-appimage.sh", "cp -r \"$REPO_ROOT/licenses\""),
     (MSI_SOURCE, "$(var.RepoRoot)\\licenses\\"),
 ];
 

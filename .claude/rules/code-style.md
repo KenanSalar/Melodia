@@ -3,8 +3,8 @@ paths:
   - crates/**/*.rs
   - crates/melodia-ui/ui/**/*.slint
   - migrations/**/*.sql
+  - packaging/*.sh
   - scripts/*.py
-  - scripts/*.sh
 ---
 
 # Code style and comments
@@ -171,7 +171,7 @@ cloc --by-file <new files>
 | Rust | `///` outer, `//!` module/crate | Markdown; 3rd-person summary ("Returns…"); `# Examples`/`# Panics`/`# Errors`. Doc examples don't run here — `[lib] doctest = false` |
 | Slint | none — `//` and `/* */` only | Nothing extracts docs from `.slint`, so a note above a component, property or callback is the whole affordance; keep it to why the binding is shaped that way |
 
-SQL migrations (`--`) and the `scripts/` helpers (`#`) have no doc-comment form either; the
+SQL migrations (`--`) and the shell and Python scripts (`#`) have no doc-comment form either; the
 generic rules above are the whole contract there. A shipped migration's comments are frozen with
 its SQL: the whole file is checksummed, so trimming one fails the store's build or the migration
 run on every database that already applied it.

@@ -4,9 +4,9 @@
 # user-writable, which is what lets the in-app updater replace the binary.
 #
 # Usage:
-#   ./scripts/build-tarball.sh                          # melodia-v<ver>-<uname -m>-linux.tar.gz
-#   ./scripts/build-tarball.sh /tmp/custom.tar.gz       # specific output path
-#   ARCH=aarch64 ./scripts/build-tarball.sh             # aarch64
+#   ./packaging/build-tarball.sh                        # melodia-v<ver>-<uname -m>-linux.tar.gz
+#   ./packaging/build-tarball.sh /tmp/custom.tar.gz     # specific output path
+#   ARCH=aarch64 ./packaging/build-tarball.sh           # aarch64
 #
 # The `-<arch>-linux.tar.gz` suffix is not cosmetic: build-latest-json.py's
 # PLATFORM_PATTERNS matches on it, and an artifact it cannot classify aborts the
@@ -44,9 +44,9 @@ cp "$BINARY"                                       "$BUNDLE/Melodia"
 cp "$REPO_ROOT/LICENSE"                            "$BUNDLE/"
 cp -r "$REPO_ROOT/licenses"                        "$BUNDLE/licenses"
 cp "$REPO_ROOT/assets/icons/logo-with-background.svg" "$BUNDLE/melodia.svg"
-cp "$REPO_ROOT/scripts/Melodia.desktop"            "$BUNDLE/com.github.kenansalar.melodia.desktop"
-cp "$REPO_ROOT/scripts/install-linux.sh"           "$BUNDLE/install-linux.sh"
-cp "$REPO_ROOT/scripts/uninstall-linux.sh"         "$BUNDLE/uninstall-linux.sh"
+cp "$REPO_ROOT/packaging/Melodia.desktop"          "$BUNDLE/com.github.kenansalar.melodia.desktop"
+cp "$REPO_ROOT/packaging/install-linux.sh"         "$BUNDLE/install-linux.sh"
+cp "$REPO_ROOT/packaging/uninstall-linux.sh"       "$BUNDLE/uninstall-linux.sh"
 chmod +x "$BUNDLE/install-linux.sh" "$BUNDLE/uninstall-linux.sh"
 
 tar -C "$STAGING" -czf "$OUTPUT" melodia

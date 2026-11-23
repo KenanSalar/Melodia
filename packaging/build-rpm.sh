@@ -5,9 +5,9 @@
 # Output: ~/rpmbuild/RPMS/<arch>/melodia-<ver>-1.fc<rel>.<arch>.rpm
 #
 # Usage:
-#   ./scripts/build-rpm.sh                # uses existing release binary
-#   ./scripts/build-rpm.sh --build        # cargo build --release first
-#   ARCH=aarch64 ./scripts/build-rpm.sh   # aarch64 (default: native uname -m)
+#   ./packaging/build-rpm.sh              # uses existing release binary
+#   ./packaging/build-rpm.sh --build      # cargo build --release first
+#   ARCH=aarch64 ./packaging/build-rpm.sh # aarch64 (default: native uname -m)
 #   sudo dnf install ~/rpmbuild/RPMS/x86_64/melodia-*.rpm
 #
 # The RPM packages the prebuilt binary + a .desktop file + AppStream

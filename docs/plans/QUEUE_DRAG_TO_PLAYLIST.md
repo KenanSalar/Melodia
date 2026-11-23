@@ -103,7 +103,7 @@ Strawberry draws a line under auto-sort and then places the rows elsewhere.
 | `melodia-views/src/ui/playlists/callbacks/mod.rs` | wiring `wire_drop_in` from `wire_files`, which holds the `NotificationsUi` that `ViewCtx` lacks |
 | `melodia-app/src/library/playlists.rs` | `insert_into_playlist` beside `add_to_playlist` |
 | `melodia-store/src/database/queries/playlist.rs` | `place_items`, which both the append and the insert go through; `items_in_order` and `position_writes`, shared with `move_items` |
-| `scripts/install-linux.sh` | a closing uninstall hint that names only `uninstall-linux.sh` |
+| `packaging/install-linux.sh` | a closing uninstall hint that names only `uninstall-linux.sh` |
 | `ui/components/progress-ring.slint` (new) | `ProgressRing`: a share of a turn, clockwise from twelve |
 | `ui/components/now-playing/play-button.slint` | the hold's ring, through `ProgressRing` |
 | `ui/components/settings/section-button.slint` | a leading `@children` slot; `ink` read out |
@@ -232,7 +232,7 @@ that break get fixed in this phase.
     `playlist-detail.slint`, Rust `wire_drop_in`).
   - `.claude/rules/ui-patterns.md`: the Lists catalogue entry gains `DropLabel`.
   - `README.md`'s drag-and-drop feature line says queue rows drag into a playlist.
-- **`scripts/install-linux.sh`, unrelated to the drag:** its closing hint offers
+- **`packaging/install-linux.sh`, unrelated to the drag:** its closing hint offers
   `rm -rf $INSTALL_DIR` as an alternative to `./uninstall-linux.sh`. `$INSTALL_DIR` defaults to
   `$XDG_DATA_HOME/Melodia`, which is the data folder, so that command deletes the library along
   with the program. The hint names only the uninstall script, which keeps the data and prints how
@@ -241,7 +241,7 @@ that break get fixed in this phase.
 **What you'll see:** everything under "What you'll see after", and the tarball installer's last
 lines offering only `./uninstall-linux.sh`.
 
-**Gate:** as Phase 1, plus `translations.rs`, `msgfmt -c` and `bash -n scripts/install-linux.sh`
+**Gate:** as Phase 1, plus `translations.rs`, `msgfmt -c` and `bash -n packaging/install-linux.sh`
 passing.
 
 ## Phase 3.5: the Undo button counts down **[pending]**
