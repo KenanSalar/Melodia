@@ -225,7 +225,7 @@ serde_json = "1.0.154"
 serde-saphyr = { version = "2.2.0", default-features = false, features = ["deserialize"] }
 # The default features, which flexi_logger turns on anyway: `ZonedDateTime::now` reads the system
 # zone through `tz-system`, and Windows, holding no copy of the tzdb, gets the bundled one.
-jiff = "1.0.1"
+jiff = "1.0.2"
 dirs = "7.0.0"
 
 # Logging / errors
@@ -253,7 +253,7 @@ interprocess = "2.4.9"
 
 # Utilities
 rand = "0.10.4"
-lru = "0.19.0"
+lru = "0.19.2"
 # Atomic file writes (settings/queue/search-history persistence)
 tempfile = "3.27.0"
 # Several playlists export as one archive of `.m3u8` files. Deflate is the one method an
@@ -262,7 +262,7 @@ tempfile = "3.27.0"
 # no backend of its own: `lofty` already builds `flate2` with its pure-Rust one, and a tree
 # that lost that would fail to compile rather than misbehave. No date feature: `jiff-02`
 # converts jiff 0.2's types, a second jiff beside ours, so `archive.rs` dates each entry itself.
-zip = { version = "9.8.1", default-features = false, features = ["deflate-flate2"] }
+zip = { version = "9.8.2", default-features = false, features = ["deflate-flate2"] }
 # Test-only: the rules pin expands each `.claude/rules` `paths:` glob.
 glob = "0.3.4"
 # Test-only: the translations pin reads the bundled faces' character maps, which needs
