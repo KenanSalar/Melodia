@@ -138,7 +138,7 @@ ebur128 = "0.1.11"
 # key is unmapped, and `VorbisComments::split_tag` leaves an unmapped key in the remainder, where no
 # `ItemKey` lookup on the `TaggedFile` a scan reads can reach it.
 lofty = "0.25.5"
-walkdir = "2.5"
+walkdir = "2.5.1"
 notify = "9.0.0"
 notify-debouncer-full = "0.8.0"
 rayon = "1.12"
