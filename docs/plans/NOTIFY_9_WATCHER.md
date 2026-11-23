@@ -1,0 +1,180 @@
+# Plan: filter the watcher's open events in the kernel with notify 9 (#129)
+
+Created: 2026-11-23 · Branch: `chore/bump-notify-9`
+
+Status: Phase 1 **pending** · Phase 2 **pending** · Phase 3 **pending** · Phase 4 **pending**
+
+Crate sources cited below are the extracted copies under
+`~/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/`.
+
+## Context
+
+**What you see today.** On the 6,318-folder test library you see nothing: according to the issue,
+no launch has logged an overflow. The case that could show up is a much bigger library, which the
+issue estimates (from notify 8's source, without measuring it) at somewhere between roughly 8,000
+and 16,000 folders. There the launch's own folder walk could fill the kernel's queue of 16,384
+inotify events. The overflow becomes one redundant full reconcile and the "Library re-syncing"
+toast (`settings.slint:321`) on every launch.
+
+The half you can't see: notify 8 adds `IN_OPEN` and `IN_CLOSE_WRITE` to every watch
+(`notify-8.2.2/src/inotify.rs:427-434`). So every open by a walk, a scan, a hash or playback queues
+a kernel event, which `ChangeWatcher` (`watcher.rs:40-84`) then drops in the app. On top of that,
+the 0.7 debouncer's thread wakes every tick (the 2 s timeout / 4) for the life of the process, even
+when idle (`notify-debouncer-full-0.7.0/src/lib.rs:670-674`).
+
+**Why.** notify 9 builds the inotify mask from an `EventKindMask`
+(`notify-9.0.0/src/inotify.rs:50-92`). Debouncer 0.8's `new_debouncer` asks for
+`EventKindMask::CORE` (`notify-debouncer-full-0.8.0/src/lib.rs:207,1353-1371`), and CORE leaves
+`OPEN`, `CLOSE_WRITE` and `CLOSE_NOWRITE` out of the kernel mask (the crate's own test at
+`inotify.rs:5400-5420`). The wrapper can't survive the bump anyway, because it implements
+`Watcher::paths_mut`, which notify 9 removes (#705).
+
+**What you'll see after.** Nothing on screen changes. Creates, edits, removals and renames reach
+the library exactly as before, and an overflow still becomes one reconcile with the toast. The
+changes are all measurable:
+- no `inotify_add_watch` mask carries `IN_OPEN`;
+- the launch walk no longer fills the queue with opens;
+- the debouncer thread sleeps while idle (`lib.rs:1313`).
+
+One new cost has to be measured: 0.8's file-ID cache keeps a per-directory children index beside
+its per-file map (`file_id_map.rs:14-19`).
+
+## Is the issue correct?
+
+Mostly yes. Every mechanism it relies on checks out against the shipped sources. One reason is
+wrong, three stale comments are missing from its list, and a few side effects aren't mentioned.
+
+**Confirmed**
+- notify 9.0.0 and debouncer-full 0.8.0 were both published on 2026-11-21 and are the latest
+  versions (crates.io, checked 2026-11-23). Both need Rust 1.91, and the pin is 1.100
+  (`Cargo.toml:26`).
+- An overflow still arrives. `Q_OVERFLOW` becomes `Other` with the rescan flag and is handed on
+  before the mask filter runs (`inotify.rs:590-593`). The debouncer then emits it ahead of every
+  other event (`lib.rs:467-473`).
+- notify-rs/notify#727 recovers directories only, not files (`inotify.rs:1122-1125`), so the
+  `Create(Folder)` walk has to stay.
+- A file created and removed inside one window now comes through as a `Remove`.
+  `handle_removed` does nothing for a path with no row (`watch_batch.rs:393-397`).
+- On Windows, a created entry is classed by a stat as `Folder` or `File`, and as `Any` only when
+  the stat fails (`windows.rs:810-824`). FSEvents sends `Create(Any)` for an entry of no known
+  type (`fsevent.rs:334`).
+
+**Wrong or incomplete**
+1. **`retarget`'s order is still load-bearing, for a new reason.** notify 9's `unwatch` does keep
+   an ancestor's OS watches (#1097). But debouncer 0.8's `remove_root` (`lib.rs:1114-1134`) drops
+   the cached file IDs under the path being unwatched, and re-adds only the roots nested *under*
+   that path, never an ancestor that still covers it. #1028 fixes unwatching a parent, not a
+   child.
+
+   So if a child were unwatched after the parent replacing it had been added, the parent would
+   lose its cached IDs for that subtree. Those IDs are what pair a Windows or macOS move between
+   folders into a rename. The order stays as it is, and the comment is rewritten to this reason
+   rather than deleted.
+2. **Three more comments go stale.**
+   - The comment on the `Create(Folder)` arm (`watcher.rs:215-216`) gives only inotify's reason,
+     but notify 9 on Windows also reports a folder moved in as `Create(Folder)`, with nothing for
+     the files inside it.
+   - `watcher_tests.rs:253-254` says `Create(Any)` is how Windows reports a move between parents.
+   - `watcher_tests.rs:289-291` says `Create(Folder)` is inotify's.
+3. The issue says Windows now takes the per-file walk for a folder moved in "not from this
+   change". It does come from this change: from the bump (notify 9's Windows create kinds), not
+   from deleting the wrapper. The behaviour is the same, and Phase 3 checks it.
+4. **Lockfile:** `inotify` will resolve to the newest 0.11.x, which is 0.11.5 on crates.io today,
+   not the 0.11.4 the issue names. `xxhash-rust` is new and resolves to 0.8.21. `rustc-hash`
+   2.1.2, the debouncer's new dependency, is already locked.
+5. **Not mentioned; checked, and no code change needed:**
+   - A Linux unmount arrives as `Remove(Other)` with info "unmount" (`inotify.rs:380-384`), which
+     `classify_event`'s `_ => {}` drops.
+   - Windows now reports a watched root that disappears as `Remove(Folder)`
+     (`windows.rs:951-957`), and macOS reports a root change as a removal or `From`
+     (`fsevent.rs:288-307`). Either becomes `DirectoryGone`, which costs one reconcile, and
+     `scan_one` refuses a folder that doesn't exist instead of pruning its rows
+     (`scan/mod.rs:189`). Linux's `DELETE_SELF` already works this way.
+   - A subfolder a recursive watch can't enter is now reported through the handler while the rest
+     of the tree stays watched (#970, `walk.rs:15-22`). Melodia logs one `Watch error` per such
+     folder. Running out of watches still fails `watch()` as it does today.
+   - The new create-then-remove `Remove` for a non-library temp file on Windows becomes a
+     `DirectoryGone`. The `holds_tracks_under` read drops it, at the cost of one read.
+
+## Structure
+
+- **`crates/melodia-store/src/media/ingest/watcher.rs`** still owns the watcher and
+  `classify_event`. It loses `ChangeWatcher`, `SkipAccess` and the `Watcher` impl.
+  `FolderWatcher.debouncer` becomes `Debouncer<RecommendedWatcher, RecommendedCache>`, built by
+  `new_debouncer`.
+- **Duplication collapsed in the blast radius.** The callback writes the `blocking_send` and the
+  same "File event channel closed" warning twice (`watcher.rs:115-120, 127-132`). One small free
+  function, `forward(tx, event)`, takes both. The overflow log line loses its em dash in the same
+  edit.
+- **`tests/watcher_tests.rs`** loses the "Access events, dropped ahead of the debouncer" section
+  (`:348-426`: `passed_on` and its four tests), along with `SkipAccess`. These stay:
+  - `classify_access_skipped`, since `classify_event` still ignores access events;
+  - the end-to-end `a_file_appearing_under_a_watched_folder_reaches_the_channel`, which now runs
+    against the CORE mask.
+- **Root `Cargo.toml:142-143`** gets the new versions. `melodia-store/Cargo.toml` inherits them
+  through `workspace = true` and doesn't change.
+- **Nothing else names the wrapper**, `IN_OPEN` or the debouncer constructors (`rg --hidden` from
+  the repo root, with `watcher.rs` as the known positive). No doc, rule or ADR goes stale. Both
+  touched files shrink.
+
+## Phase 1: bump and delete the wrapper (one commit) [pending]
+
+1. In `Cargo.toml`, set `notify = "9.0.0"` and `notify-debouncer-full = "0.8.0"`, then run
+   `cargo update -p notify -p notify-debouncer-full`. Read the lockfile diff and expect exactly
+   these moves:
+   - notify 9.0.0, notify-debouncer-full 0.8.0;
+   - notify-types 2.3.1, inotify 0.11.x;
+   - xxhash-rust added.
+2. In `watcher.rs`:
+   - delete the wrapper and trim the imports;
+   - build with `new_debouncer(Duration::from_secs(2), None, …)`;
+   - add `forward`;
+   - rewrite three comments:
+     - `retarget`'s, to the cache reason in finding 1;
+     - `relocates_an_audio_directory`'s Windows sentence: Windows reports `Create(Folder)` after a
+       stat and `Create(Any)` only when that fails, and FSEvents sends `Create(Any)` for an entry
+       of no known type;
+     - the `Create(Folder)` arm's, widened to both reasons: a folder moved in on Windows, and
+       files written before inotify's watch.
+3. In `watcher_tests.rs`, delete `:348-426` and fix the doc comments at `:253-254` and
+   `:289-291`.
+4. Gates:
+   - `cargo fmt --all`
+   - `cargo clippy --all-targets --locked --workspace -- -D warnings`
+   - `cargo test --locked --workspace`
+   - the comment audit from `code-style.md` / `/doc-style`.
+
+## Phase 2: Linux checks on the test library [pending]
+
+You run these by hand, or Claude runs them unattended once you say go. They use the `Melodia-dev`
+data folder, with its usual backup and restore.
+
+1. Build release binaries of `main` and of the branch, each in its own detached worktree, and
+   `cmp` them before measuring. Wrap every launch in `systemd-run --user --scope`.
+2. Run `strace -f -e trace=inotify_add_watch` over a launch of each build. `main` should show
+   `IN_OPEN|IN_CLOSE_WRITE` in its masks, and the branch should show neither.
+3. Create, modify, rename and remove a probe audio file in a library folder. Each change should
+   reach the library ("Processing batch of N file events" in the log, and the row in the UI).
+4. Memory: run `heaptrack --record-only` over a launch with an incremental scan only (never a full
+   scan) for both builds. Compare the peak heap and the allocations from the debouncer's
+   `FileIdMap`, plus `/usr/bin/time -v` peak RSS.
+5. Idle: read `voluntary_ctxt_switches` for the debouncer thread from `/proc/<pid>/task/*/status`
+   60 s apart on both builds. The thread's 15-byte name is `notify-rs debou`.
+
+## Phase 3: Windows checks [pending]
+
+You run these on a Windows machine.
+
+1. A folder of audio moved in from outside the library adds its tracks.
+2. A folder moved between two parents inside the library lands at the new path with its tracks'
+   history (play counts, ratings).
+
+## Phase 4: Tests [pending]
+
+This waits for your hand test and a go that names the tests.
+
+## Verification
+
+Phase 1 is done when the four gates pass. Phases 2 and 3 are the behavioural evidence. When Phase
+4 lands, this doc is deleted, and the issue is linked in the PR's Development sidebar (no closing
+keyword).
