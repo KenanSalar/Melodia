@@ -99,8 +99,8 @@ APPDIR="$(mktemp -d)/Melodia.AppDir"
 trap 'rm -rf "$(dirname "$APPDIR")"' EXIT
 mkdir -p "$APPDIR/usr/bin" "$APPDIR/usr/share/applications" "$APPDIR/usr/share/icons/hicolor/256x256/apps"
 
-# Lowercase, the name RPM and DEB install it under, so the shared desktop
-# entry's `Exec=melodia` names it here too.
+# Lowercase, the name RPM and DEB install it under: linuxdeploy links AppRun
+# to the file the shared entry's `Exec=melodia` names and fails without one.
 cp "$BINARY" "$APPDIR/usr/bin/melodia"
 chmod +x "$APPDIR/usr/bin/melodia"
 

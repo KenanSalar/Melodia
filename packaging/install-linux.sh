@@ -71,17 +71,17 @@ LICENSE_FILES=("$SCRIPT_DIR"/licenses/*)
 [[ -f "$SCRIPT_DIR/LICENSE" ]] && install -m 0644 "$SCRIPT_DIR/LICENSE" "$INSTALL_DIR/LICENSE"
 [[ -e "${LICENSE_FILES[0]}" ]] && install -D -m 0644 -t "$INSTALL_DIR/licenses" "${LICENSE_FILES[@]}"
 
-# Point Exec at the real install path — the tarballed .desktop assumes the
+# Point Exec at the real install path: the tarballed .desktop assumes the
 # binary is on $PATH. GNU sed (universal on the target distros) takes `-i`
 # with no backup suffix.
 #
 # Only the command token, never the rest of the line: a `.*` here eats the
-# ` %F` field code that makes file-opening work — silently, and only in the
-# tarball, since the DEB ships this same source file verbatim.
+# ` %F` field code that makes file-opening work, silently and only in the
+# tarball, since every package ships this same file verbatim.
 #
 # Exec is parsed with shell-like quoting, so a home directory with a space
 # needs quotes or the launcher splits it into two arguments. Only when
-# needed, an unquoted command being what every other source ships.
+# needed, so the common case matches the entry Melodia self-deploys.
 case "$INSTALL_DIR" in
   *\ *) EXEC_COMMAND="\"$INSTALL_DIR/Melodia\"" ;;
   *)    EXEC_COMMAND="$INSTALL_DIR/Melodia" ;;

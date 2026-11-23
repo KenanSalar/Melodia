@@ -155,12 +155,14 @@ fn the_desktop_entry_declares_every_audio_type_once() {
         "application/x-cue",
     ];
 
-    for mime in AUDIO_TYPES {
-        assert!(
-            TEST_DESKTOP_ENTRY.contains(mime),
-            "the desktop entry is missing MIME `{mime}`; got:\n{TEST_DESKTOP_ENTRY}"
-        );
-    }
+    let declared: Vec<&str> = TEST_DESKTOP_ENTRY
+        .lines()
+        .find_map(|line| line.strip_prefix("MimeType="))
+        .map_or_default(|types| types.trim_suffix(';').split(';').collect());
+    assert_eq!(
+        declared, AUDIO_TYPES,
+        "every Linux format offers Melodia for exactly the types this line lists"
+    );
 
     // A key may appear at most once per group, and a copy-paste duplicating the
     // whole MIME line has shipped once. Anchored at a line start so a mention in

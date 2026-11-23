@@ -2,8 +2,8 @@
 
 /// The sole gate on what Melodia ingests: containers an encoder emits, hence no `alac`, which
 /// lives in `.m4a`. A new entry owes two `crates/melodia/wix/main.wxs` rows (pinned by
-/// `crates/melodia/tests/packaging.rs`) and a MIME entry in the four `.desktop` sources where
-/// freedesktop defines one.
+/// `crates/melodia/tests/packaging.rs`) and a MIME type in
+/// `packaging/com.github.kenansalar.melodia.desktop` where freedesktop defines one.
 pub const AUDIO_EXTENSIONS: &[&str] = &[
     "mp3", "flac", "m4a", "m4b", "aac", "ogg", "oga", "opus", "wav", "aiff", "aif", "aifc", "mka",
     "caf",
