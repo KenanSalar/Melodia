@@ -104,10 +104,10 @@ Strawberry draws a line under auto-sort and then places the rows elsewhere.
 | `melodia-app/src/library/playlists.rs` | `insert_into_playlist` beside `add_to_playlist` |
 | `melodia-store/src/database/queries/playlist.rs` | `place_items`, which both the append and the insert go through; `items_in_order` and `position_writes`, shared with `move_items` |
 | `packaging/install-linux.sh` | a closing uninstall hint that names only `uninstall-linux.sh` |
-| `ui/components/progress-ring.slint` (new) | `ProgressRing`: a share of a turn, clockwise from twelve |
-| `ui/components/now-playing/play-button.slint` | the hold's ring, through `ProgressRing` |
-| `ui/components/settings/section-button.slint` | a leading `@children` slot; `ink` read out |
-| `ui/components/dialog/notification-card.slint` | the share of its clock left; the ring on a timed card's button |
+| `ui/components/progress-trace.slint` (new) | `ProgressTrace`: a share of the way round the pill inscribed in its box, a circle in a square one |
+| `ui/components/now-playing/play-button.slint` | the hold's ring, through `ProgressTrace` |
+| `ui/components/settings/section-button.slint` | an `@children` layer over the button; `ink` read out |
+| `ui/components/dialog/notification-card.slint` | the share of its clock left; the trace round a timed card's button |
 
 UI paths are under `crates/melodia-ui/`. Every file stays well under 800 lines.
 
@@ -121,7 +121,7 @@ UI paths are under `crates/melodia-ui/`. Every file stays well under 800 lines.
   fast as Add to Playlist holds by construction.
 - **`apply_optimistic_move`'s order guard becomes `slots_are_positions`,** used by both the reorder
   and the drop.
-- **The play button's hold ring becomes `ProgressRing`**, mounted there before the Undo button
+- **The play button's hold ring becomes `ProgressTrace`**, mounted there before the Undo button
   mounts it too.
 
 ## Phase 1: queue rows carry their tracks **[done]**
@@ -244,7 +244,7 @@ lines offering only `./uninstall-linux.sh`.
 **Gate:** as Phase 1, plus `translations.rs`, `msgfmt -c` and `bash -n packaging/install-linux.sh`
 passing.
 
-## Phase 3.5: the Undo button counts down **[pending]**
+## Phase 3.5: the Undo button counts down **[done]**
 
 Unrelated to the drag, shipped on this branch.
 
@@ -256,18 +256,21 @@ merged into the card starts it again too.
 
 **Decisions:**
 
-1. **The ring alone, no seconds inside it.** The setting runs from 4 to 10 s
-   (`UNDO_NOTICE_MS_RANGE`), so the longest would open on two digits, more than a ring the size of
-   the button's icon holds.
-2. **The ring shows the clock as it is: full whenever the clock stands still.** A resume runs the
-   whole interval again, so a ring frozen part way would promise time the clock doesn't keep.
-3. **One `ProgressRing`, extracted from the play button, holding the drawing and no timing.** The
-   hold fills it after waiting out a click; the card's clock empties it, stopping and restarting.
-   Each host keeps its own timing.
+1. **A trace inside the button's edge, as the play button's ring sits inside its disc, and no
+   seconds.** A ring ahead of the label would widen the button by 22 px, taken from the card's
+   message, and read as an icon. The trace takes no room, which seconds would.
+2. **The trace shows the clock as it is: full whenever the clock stands still.** A resume runs the
+   whole interval again, so a trace frozen part way would promise time the clock doesn't keep.
+3. **One `ProgressTrace`, extracted from the play button, holding the drawing and no timing.** It
+   traces the pill inscribed in its box, a circle when the box is square, so the hold's ring and
+   the Undo button's trace are one drawing. The hold fills it after waiting out a click; the card's
+   clock empties it, stopping and restarting. Each host keeps its own timing.
 4. **Stepped by a `Timer`, not bound to `animation-tick()`.** The window redraws at the step rather
-   than every frame for the notice's whole life, and a leaving card's ring holds where it stood with
-   nothing to freeze it: a binding on the clock would snap it full mid-fade. The step is the
-   Equalizer overlay's 33 ms, under half a pixel of the ring's end at the shortest setting.
+   than every frame for the notice's whole life, and a leaving card's trace holds where it stood
+   with nothing to freeze it: a binding on the clock would snap it full mid-fade. The step is the
+   Equalizer overlay's 33 ms. At 4 s it moves the trace's end 0.59 px on the narrowest pill and
+   1.71 px on a 100 px one, and the hand test says whether that reads as motion. It can't follow
+   the button's width: a `Timer`'s `interval` may not read a layout property.
 5. **Any timed card's button gets it, not the undo kind.** Undo is the only one today, every other
    card with a button being sticky, and a timed one's button goes with its card for the same reason.
 
@@ -278,14 +281,19 @@ so the clock's start is seeded from `enter` and nothing new is animated.
 
 Then the swap:
 
-- **`progress-ring.slint` (new):** `ProgressRing`, taking `progress`, `stroke` and `stroke-width`
-  (2 px). The play button's `if progress > 0: Path` moves into it whole: the arc from twelve, the
-  cap short of a full turn, the unlocalized numbers. Its stroke centres on the circle inscribed in
-  its box, so a host sizes the box to the ring's centre line.
-- **`play-button.slint`:** mounts it in the disc at 76 % of the disc, where the radius-38 arc sat
-  in its 100-unit viewbox, so the ring draws where it did. `ring-delay` and `ring-progress` stay.
-- **`section-button.slint`:** `@children` after the leading icon and image, before the label.
-  `ink` becomes an `out property`, so a child draws in the button's ink, fade and dim included.
+- **`progress-trace.slint` (new):** `ProgressTrace`, taking `progress`, `stroke` and
+  `stroke-width` (2 px). The play button's `if progress > 0: Path` moves into it, its arc grown
+  into the pill inscribed in the box: clockwise from the top centre through five pieces (top-right
+  straight, right cap, bottom, left cap, top-left straight), each drawn once the trace reaches it.
+  In a square box the straights are empty and it is the play button's circle. No arc meets its own
+  start, so the cap short of a full turn goes. Slint fits a path inside its stroke
+  (`fitted_path_events`, `items/path.rs`), so the box is the trace's outer edge.
+- **`play-button.slint`:** mounts it in the disc, sized `(disc − stroke) × 0.76 + stroke`: the
+  radius-38 arc sat at 38 % of the disc less the stroke, so the ring draws where it did.
+  `ring-delay` and `ring-progress` stay.
+- **`section-button.slint`:** `@children` after the label row, over the whole button, each child
+  setting its own `x` and `y` to stay out of the button's size. `ink` becomes an `out property`, so
+  a child draws in the button's ink, fade and dim included.
 - **`notification-card.slint`:**
   - The clock's `running` expression becomes a `ticking` property, read by the clock, the step and
     one `changed` handler.
@@ -293,27 +301,28 @@ Then the swap:
   - A `drain` Timer at 33 ms, running while `ticking`, sets `clock-left` from `animation-tick()`
     against `clock-from` and the clock's interval, clamped.
   - `changed ticking` re-seeds `clock-from` and refills `clock-left` unless the card is leaving.
-  - The clock's `triggered` empties the ring before it dismisses. A bump's `restart()` re-seeds and
-    refills. `enter` seeds `clock-from` at mount, where `changed` doesn't fire.
-  - The action button takes an id and, on a timed card, a 16 px `ProgressRing` in its `ink`: with
-    the 2 px stroke, the 18 px of the button's icon slot.
-- **Docs:** `.claude/rules/ui-patterns.md`'s Inputs entry gains `ProgressRing` beside
-  `HoldTouchArea`. `README.md`'s undo line says the button counts down the time left.
+  - The clock's `triggered` empties the trace before it dismisses. A bump's `restart()` re-seeds
+    and refills. `enter` seeds `clock-from` at mount, where `changed` doesn't fire.
+  - The action button takes an id and, on a timed card, a `ProgressTrace` in its `ink`, inset 4 px:
+    whole pixels, so its straights don't blur across a pixel row.
+- **Docs:** `.claude/rules/ui-patterns.md`'s Inputs entry gains `ProgressTrace` beside
+  `HoldTouchArea`. `README.md`'s undo line says the trace round the Undo button counts down.
 
 No Rust and no `@tr` string, so no catalog work.
 
-**What you'll see:** a ring in the Undo button, ahead of the label, starting full and shrinking back
-to twelve o'clock over the notice's time; the notice goes as it empties. Over the card, dragging
-it, or with the window in the background, the ring sits full, and a merged removal fills it again.
-A card closed by Undo, Ctrl+Z or ✕ fades with its ring where it stood. The play button's hold ring
-looks as it does today.
+**What you'll see:** a line traced just inside the Undo button's edge, starting as a full outline
+and shrinking back, clockwise, to the top centre over the notice's time; the notice goes as it
+empties, and the button keeps the width of its label. Over the card, dragging it, or with the
+window in the background, the trace sits full, and a merged removal fills it again. A card closed
+by Undo, Ctrl+Z or ✕ fades with its trace where it stood. The play button's hold ring looks as it
+does today.
 
 **Gate:** as Phase 1.
 
 ## Phase 4: Tests **[pending]**
 
-Phase 3's hand test passed on 2026-11-23, and Phase 3.5's is next. The tests wait for your go,
-naming them.
+The hand tests for Phase 3 and Phase 3.5 passed on 2026-11-23. The tests wait for your go, naming
+them.
 
 ## Verification
 
@@ -335,7 +344,8 @@ naming them.
   - a locale with longer labels (German)
   - a few thousand picks against Add to Playlist with the same set
 - **Phase 3.5's list:**
-  - the shortest and the longest setting
+  - the shortest and the longest setting, the trace's end gliding rather than stepping
+  - a locale with a long Undo label (German), the pill and its trace widening together
   - the pointer resting on the card, then leaving it
   - a drag that eases back, and a fling
   - the window losing focus mid-count
@@ -351,5 +361,5 @@ naming them.
   what keeps their outcomes as they are today.
 - **`QueueButton` is the one target that ignores origin.** Phase 1 gives it its check. A future
   drop target that takes items owes the same check.
-- **An undo notice redraws the window at the ring's step while its clock runs**, where a resting
-  card drew nothing. Lengthening the step is the lever, the ring's size keeping each step small.
+- **An undo notice redraws the window at the trace's step while its clock runs**, where a resting
+  card drew nothing. The step trades those redraws against how far the trace's end jumps at each.

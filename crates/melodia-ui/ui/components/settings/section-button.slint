@@ -1,7 +1,9 @@
 import { Theme } from "../../theme.slint";
 import { MaterialIcon } from "../material-icon.slint";
 
-// The labelled pill button, filled primary or outline secondary.
+// The labelled pill button, filled primary or outline secondary. A host's children lie over it,
+// each setting its own `x` and `y` to stay out of the button's size, and paint in `ink`, which
+// carries the button's dim and fade.
 export component SectionButton inherits Rectangle {
     in property <string> label;
     in property <string> icon;            // empty = no leading icon
@@ -22,7 +24,7 @@ export component SectionButton inherits Rectangle {
 
     // Through each brush, `opacity` holding a texture for as long as it stays disabled.
     private property <float> dim: root.button-enabled ? 1.0 : 0.5;
-    private property <brush> ink: (root.primary
+    out property <brush> ink: (root.primary
             ? (root.destructive ? Theme.danger-text : Theme.accent-text)
             : Theme.text)
         .transparentize(1.0 - root.dim * root.fade);
@@ -78,6 +80,8 @@ export component SectionButton inherits Rectangle {
             vertical-alignment: center;
         }
     }
+
+    @children
 
     touch := TouchArea {
         mouse-cursor: root.button-enabled ? pointer : default;
