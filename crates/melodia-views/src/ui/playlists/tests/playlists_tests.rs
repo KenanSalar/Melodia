@@ -1,5 +1,5 @@
-//! What drag-to-reorder and the row menu's removal need to stay alive, none of
-//! which any other pin can see go missing.
+//! What drag-to-reorder, the queue's drop and the row menu's removal need to stay
+//! alive, none of which any other pin can see go missing.
 
 use super::detail::{DetailPage, POSITION_FIELD, is_manual_order};
 use melodia_testkit::{block_after, code_tokens};
@@ -83,6 +83,21 @@ fn the_reorder_gate_reads_every_term_the_drag_depends_on() {
     );
 }
 
+/// Rust's drop handler can't see the floating queue, so without this term a row let go just
+/// outside the floating panel lands in the playlist it dims, silently where it lands at the line.
+#[test]
+fn the_queue_drop_gate_refuses_a_smart_playlist_and_the_page_under_the_floating_queue() {
+    assert!(
+        code_tokens(DETAIL_VIEW).contains(
+            "takes-items: Drag.payload.origin == DragOrigin.queue \
+             && !PlaylistDetail.playlist.is_smart \
+             && !Queue.floating;"
+        ),
+        "playlist-detail.slint must take only the queue's rows, into a curated playlist, \
+         and only while the queue is docked"
+    );
+}
+
 /// `"position"` is what drag-to-reorder is gated on and no header cell asks for
 /// it, so the sort cycle is the only way back. Drop the natural field and the
 /// first click on any column retires reordering for the whole install —
@@ -155,6 +170,21 @@ fn optimistic_move_head(src: &str) -> &str {
 fn slot_guard(src: &str) -> &str {
     let body = src.split_once("pub fn slots_are_positions").map_or("", |(_, rest)| rest);
     body.split_once('}').map_or("", |(head, _)| head)
+}
+
+/// The drop target hands over a slot in any order, and only this guard keeps one from a sorted or
+/// filtered list, where no line was drawn, out of the store.
+#[test]
+fn the_queue_drop_lands_at_its_slot_only_where_slots_are_positions() {
+    let src = code_tokens(DETAIL_CALLBACKS);
+    assert!(
+        block_after(&src, "fn for_slot(").contains(
+            "match usize::try_from(slot) { Ok(slot) if \
+             playlists_ui_mod::slots_are_positions(ui, playlists_ui) => Self::Slot(slot), \
+             _ => Self::End, }"
+        ),
+        "a slot reaches the store only past the reorder's guard; anything else lands at the end"
+    );
 }
 
 /// The reload a removal brings prunes nothing under a filter, so the removal drops its own rows

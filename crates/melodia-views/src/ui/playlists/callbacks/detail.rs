@@ -363,3 +363,7 @@ fn refresh_after_removal(
         playlists_ui_mod::refresh_after_write(&s, &pu, &weak);
     });
 }
+
+#[cfg(test)]
+#[path = "tests/detail_tests.rs"]
+mod tests;
