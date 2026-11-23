@@ -50,11 +50,13 @@ export component NotificationCard inherits Rectangle {
     // The share of the clock left, traced round the action button.
     private property <float> clock-left: 1;
     private property <duration> clock-from;
+    private property <bool> traced: root.data.action-label != "" && root.data.timeout-ms > 0;
     // Stepped rather than bound to `animation-tick()`, which would redraw every frame of the card's
-    // life and snap a leaving card's trace full. Shorten it if the trace's end visibly jumps.
+    // life and snap a leaving card's trace full. Reading it still costs each step a frame, so only
+    // a traced card steps. Shorten the step if the trace's end visibly jumps.
     drain := Timer {
         interval: 33ms;
-        running: root.ticking;
+        running: root.ticking && root.traced;
         triggered => {
             root.clock-left = clamp(
                 1 - (animation-tick() - root.clock-from) / root.clock-interval, 0, 1);
@@ -305,7 +307,7 @@ export component NotificationCard inherits Rectangle {
                         Notifications.action(root.data.id, root.data.kind);
                     }
 
-                    if root.data.timeout-ms > 0: ProgressTrace {
+                    if root.traced: ProgressTrace {
                         // Whole pixels, or the straights blur across a pixel row.
                         property <length> inset: 4px;
                         x: self.inset;
