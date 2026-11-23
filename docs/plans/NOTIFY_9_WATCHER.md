@@ -2,7 +2,7 @@
 
 Created: 2026-11-23 · Branch: `chore/bump-notify-9`
 
-Status: Phase 1 **done** · Phase 2 **done** · Phase 3 **done** · Phase 4 **pending**
+Status: Phase 1 **done** · Phase 2 **done** · Phase 3 **done** · Phase 4 **in progress**
 
 Crate sources cited below are the extracted copies under
 `~/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/`. Line numbers into `watcher.rs` and
@@ -240,9 +240,10 @@ never by id.
   and was gone after the remove.
 - **Log:** the checking launch has no `Watch error`, overflow, panic or `ERROR` line.
 
-## Phase 4: Tests [pending]
+## Phase 4: Tests [in progress]
 
-This waits for your hand test and a go that names the tests.
+This waits for your hand test and a go that names the tests. The Windows-only test is in; the
+rest are written on Linux.
 
 ## Verification
 

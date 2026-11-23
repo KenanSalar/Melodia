@@ -347,7 +347,7 @@ fn alac_is_not_an_audio_extension() {
 
 // === Starting the watcher ===
 //
-// Everything above classifies an event `notify` already delivered. These two are the wiring that
+// Everything above classifies an event `notify` already delivered. These are the wiring that
 // decides whether one is delivered at all, and it is the half no amount of `classify_event`
 // coverage reaches: a `start` that refuses, or that watches nothing, leaves the library silently
 // out of step with the disk until the next manual rescan.
@@ -402,5 +402,41 @@ async fn a_file_appearing_under_a_watched_folder_reaches_the_channel() -> Result
         "expected a Created for {}, got {event:?}",
         arriving.display()
     );
+    Ok(())
+}
+
+/// The next flush read to the end: dropping the watcher lets the debouncer's thread finish the
+/// callback it is in and then drop the last sender, so what a flush left out shows without a sleep.
+#[cfg(target_os = "windows")]
+async fn next_flush(watcher: FolderWatcher, rx: &mut mpsc::Receiver<FileEvent>) -> Vec<FileEvent> {
+    let first = tokio::time::timeout(BEFORE_GIVING_UP, rx.recv()).await;
+    drop(watcher);
+    let mut flush: Vec<FileEvent> = first.ok().flatten().into_iter().collect();
+    while let Ok(Some(event)) = tokio::time::timeout(BEFORE_GIVING_UP, rx.recv()).await {
+        flush.push(event);
+    }
+    flush
+}
+
+/// Windows reports a folder moved in as one `Create(Folder)`, typed by a stat, and nothing for the
+/// files it carries, so its tracks reach the library through the walk alone. Linux reports the
+/// same move as an unpaired `To`, which asks for a reconcile instead.
+#[cfg(target_os = "windows")]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn a_folder_moved_in_on_windows_reaches_the_channel_as_its_tracks() -> Result<(), AppError> {
+    let tmp = TempDir::new()?;
+    let library = tmp.path().join("library");
+    std::fs::create_dir(&library)?;
+    let outside = album_holding(&tmp, "song.flac")?;
+    std::fs::write(outside.join("cover.jpg"), b"bytes")?;
+    let (tx, mut rx) = mpsc::channel(8);
+    let mut watcher = FolderWatcher::new(tx);
+    watcher.start(std::slice::from_ref(&library))?;
+
+    let moved_in = library.join("album");
+    std::fs::rename(&outside, &moved_in)?;
+
+    let flush = next_flush(watcher, &mut rx).await;
+    assert_eq!(flush, [FileEvent::Created(moved_in.join("disc 1").join("song.flac"))]);
     Ok(())
 }
