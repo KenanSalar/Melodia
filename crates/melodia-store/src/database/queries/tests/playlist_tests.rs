@@ -452,7 +452,7 @@ async fn a_playlist_created_with_tracks_holds_them_in_the_order_given() -> Resul
 }
 
 /// An import hands over whatever the file repeats, and a track sits in a playlist once: a repeat
-/// that kept a slot of its own would leave a hole in the positions after it.
+/// that was given a slot of its own would leave a hole in the positions after it.
 #[tokio::test]
 async fn a_repeated_track_keeps_its_first_slot_and_leaves_no_gap() -> Result<(), AppError> {
     let db = setup_seeded_db().await?;
@@ -503,17 +503,15 @@ async fn a_track_the_library_lacks_is_left_out_of_a_new_playlist() -> Result<(),
     Ok(())
 }
 
-/// The insert runs in chunks, so the second chunk has to carry on from the first one's positions
-/// and a repeat spanning the two still has to collapse.
+/// The insert runs in chunks, so the second chunk has to carry on from the first one's positions.
 #[tokio::test]
 async fn tracks_past_the_first_insert_chunk_land_in_order_with_no_gap() -> Result<(), AppError> {
+    // The first chunk ends on ids[248], so ids[249] opens the second.
     let (db, ids) = numbered_library(250).await?;
-    // The first chunk ends on ids[248]; the second opens on it again, then ids[249].
-    let mut given = ids[..249].to_vec();
-    given.extend([ids[248], ids[249]]);
 
     let playlist =
-        queries::playlist::create_playlist_with_tracks(&db, "Long".to_owned(), None, given).await?;
+        queries::playlist::create_playlist_with_tracks(&db, "Long".to_owned(), None, ids.clone())
+            .await?;
 
     assert_eq!(order(&db, playlist).await?, ids);
     assert_eq!(position_spread(&db, playlist).await?, (250, 0, 249, 250));

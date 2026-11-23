@@ -34,15 +34,7 @@ jobs:
           REF_NAME: ${{ github.ref_name }}
         run: |
           # Bare checkout, no toolchain, so a scrape rather than `cargo metadata`.
-          # Anchor on `[workspace.package]`: the first `version = ` isn't it.
-          VERSION="$(awk -F'"' '
-            /^\[/                  { in_ws = ($0 == "[workspace.package]") }
-            in_ws && /^version = / { print $2; exit }
-          ' Cargo.toml)"
-          if [[ -z "$VERSION" ]]; then
-            echo "ERROR: no version in Cargo.toml's [workspace.package]" >&2
-            exit 1
-          fi
+          source packaging/build-env.sh
           # The tag triggers, but Cargo.toml is what the binary, all five package
           # formats and latest.json carry, so a mismatch would ship artifacts
           # naming the previous version; caught here, not an hour into the matrix.

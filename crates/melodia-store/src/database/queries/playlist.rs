@@ -43,8 +43,8 @@ fn create_playlist_on(
     )
 }
 
-/// Creates a playlist already holding `track_ids` in order, less any the library lost since they
-/// were read, and returns its id.
+/// Creates a playlist already holding `track_ids` in order, each once, less any the library lost
+/// since they were read, and returns its id.
 ///
 /// One transaction, so an insert that fails leaves no empty playlist behind.
 pub async fn create_playlist_with_tracks(

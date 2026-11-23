@@ -1,13 +1,12 @@
 # shellcheck shell=bash
-# The build scripts source this for REPO_ROOT, made the working directory, VERSION and ARCH;
-# each check's `exit` ends the build that sourced it.
+# Sourced for REPO_ROOT, made the working directory, VERSION and ARCH; each check's `exit`
+# ends the script that sourced it.
 
 REPO_ROOT="$(git -C "$(dirname "${BASH_SOURCE[0]}")" rev-parse --show-toplevel)"
 cd "$REPO_ROOT" || exit
 
-# Every member inherits the version from `[workspace.package]`, so `[package]`
-# reads `version.workspace = true` and carries no literal. Anchor on the table
-# rather than taking the file's first `version = ` line.
+# Every member inherits the version, so its one literal sits under `[workspace.package]`.
+# Anchor on that table rather than taking the file's first `version = ` line.
 VERSION="$(awk -F'"' '
   /^\[/                  { in_ws = ($0 == "[workspace.package]") }
   in_ws && /^version = / { print $2; exit }
