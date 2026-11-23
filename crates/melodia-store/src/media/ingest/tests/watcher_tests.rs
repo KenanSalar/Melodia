@@ -405,6 +405,53 @@ async fn a_file_appearing_under_a_watched_folder_reaches_the_channel() -> Result
     Ok(())
 }
 
+/// `IN_ACCESS | IN_CLOSE_WRITE | IN_CLOSE_NOWRITE | IN_OPEN`.
+#[cfg(target_os = "linux")]
+const INOTIFY_ACCESS_EVENTS: u32 = 0x01 | 0x08 | 0x10 | 0x20;
+
+/// The access bits of this process's inotify watch on `dir`, `None` without one, from the line
+/// `/proc/self/fdinfo` lists per watch: `inotify wd:1 ino:240 sdev:36 mask:fc6 …`.
+#[cfg(target_os = "linux")]
+fn inotify_access_events_on(dir: &Path) -> Result<Option<u32>, AppError> {
+    use std::os::unix::fs::MetadataExt;
+
+    let inode = format!("ino:{:x}", std::fs::metadata(dir)?.ino());
+    for descriptor in std::fs::read_dir("/proc/self/fdinfo")? {
+        // Another test can close its descriptor between the listing and the read.
+        let Ok(info) = std::fs::read_to_string(descriptor?.path()) else {
+            continue;
+        };
+        let watch = info
+            .lines()
+            .filter(|line| line.starts_with("inotify "))
+            .find(|line| line.split_whitespace().any(|field| field == inode));
+        if let Some(watch) = watch {
+            let mask = watch.split_whitespace().find_map(|field| field.strip_prefix("mask:"));
+            let mask = mask.and_then(|hex| u32::from_str_radix(hex, 16).ok());
+            return Ok(mask.map(|mask| mask & INOTIFY_ACCESS_EVENTS));
+        }
+    }
+    Ok(None)
+}
+
+/// The channel can't show a watch asking for access events, `classify_event` dropping each one,
+/// and notify's own default config asks for opens and closes.
+#[cfg(target_os = "linux")]
+#[test]
+fn no_watch_asks_inotify_for_access_events() -> Result<(), AppError> {
+    let tmp = TempDir::new()?;
+    let album = tmp.path().join("album");
+    std::fs::create_dir(&album)?;
+    let (tx, _rx) = mpsc::channel(8);
+    let mut watcher = FolderWatcher::new(tx);
+
+    watcher.start(&[tmp.path().to_path_buf()])?;
+
+    let watched = [inotify_access_events_on(tmp.path())?, inotify_access_events_on(&album)?];
+    assert_eq!(watched, [Some(0), Some(0)], "(the root, its subfolder)");
+    Ok(())
+}
+
 /// The next flush read to the end: dropping the watcher lets the debouncer's thread finish the
 /// callback it is in and then drop the last sender, so what a flush left out shows without a sleep.
 #[cfg(target_os = "windows")]
