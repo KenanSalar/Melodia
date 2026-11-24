@@ -1,8 +1,9 @@
-//! Scan-time database operations: the three write transactions a library change lands in, and the
-//! pieces they are built from.
+//! Scan-time database operations: the write transactions a library change lands in, and the pieces
+//! they are built from.
 //!
-//! [`commit_scan`], [`commit_retag`] and [`apply_watch_batch`] each own their transaction, and are
-//! the only writes here another crate can reach: every query taking a transaction is `pub(crate)`.
+//! [`commit_scan`], [`purge_unwalked`], [`commit_retag`], [`commit_reread`] and
+//! [`apply_watch_batch`] each own their transaction, and are the only writes here another crate can
+//! reach: every query taking a transaction is `pub(crate)`.
 //! A scan chunk's cue sheet writes run on `ingest::commit_scan_chunk`'s, a watcher batch's on
 //! [`apply_watch_batch`]'s.
 
@@ -32,7 +33,7 @@ pub(crate) use mutations::{
     update_track_metadata,
 };
 pub(crate) use name_cache::NameCache;
-pub use retag::{Retag, RetaggedFile, commit_retag};
+pub use retag::{Retag, RetaggedFile, commit_reread, commit_retag};
 pub use sort_key::to_natural_sort_key;
 pub(crate) use upserts::upsert_album;
 pub use upserts::{CreditDetails, album_artist_name_for, album_credit_for};

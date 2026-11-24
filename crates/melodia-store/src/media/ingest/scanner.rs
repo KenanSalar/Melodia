@@ -240,7 +240,7 @@ pub fn scan_files_parallel(
 /// Rows arrive one at a time and find their files by binary search, so only an orphan's path is
 /// copied, and the sort is on the lossy string a row stores so the two compare equal. Orphans are
 /// the rows the **whole** walk didn't find, never those of the files left to parse, which would
-/// read a no-change rescan's entire library as gone.
+/// read a no-change rescan's entire library as gone, and only once a `stat` finds the file gone.
 pub struct WalkIndex {
     files: WalkedPaths,
     stamps: Vec<Option<PackedStamp>>,
@@ -327,20 +327,29 @@ impl WalkIndex {
             .collect()
     }
 
-    /// The paths of the rows the walk didn't find, each once however many rows it held.
+    /// Whether a row the walk didn't find awaits [`Self::take_orphans`]' check.
+    pub fn has_orphans(&self) -> bool {
+        !self.orphans.is_empty()
+    }
+
+    /// The paths of the rows the walk didn't find and whose files are gone, each once however many
+    /// rows it held. **Blocking**: a `stat` per row the walk didn't find.
     pub fn take_orphans(&mut self) -> Vec<String> {
         let mut orphans = std::mem::take(&mut self.orphans);
         orphans.sort_unstable();
         orphans.dedup();
+        orphans.retain(|path| is_gone(path));
         orphans
     }
 
-    /// Those of `paths` the walk didn't find, sparing those under a path it couldn't read as
-    /// [`Self::add_row`] spares a row.
+    /// Those of `paths` the walk didn't find and that are gone, sparing those under a path it
+    /// couldn't read as [`Self::add_row`] spares a row. **Blocking**, as [`Self::take_orphans`].
     pub fn unwalked(&self, paths: impl IntoIterator<Item = String>) -> Vec<String> {
         paths
             .into_iter()
-            .filter(|path| self.files.spelled(path).is_empty() && !self.under_unreadable(path))
+            .filter(|path| {
+                self.files.spelled(path).is_empty() && !self.under_unreadable(path) && is_gone(path)
+            })
             .collect()
     }
 
@@ -366,6 +375,16 @@ impl WalkIndex {
 
     fn under_unreadable(&self, path: &str) -> bool {
         self.unreadable.iter().any(|dir| Path::new(path).starts_with(dir))
+    }
+}
+
+/// Whether the file at `path`, which a walk didn't find, is gone rather than missed: a directory
+/// read promises nothing about an entry renamed while it runs, which is how a tag write lands its
+/// copy. A regular file is spared, as is one whose `stat` fails any other way.
+fn is_gone(path: &str) -> bool {
+    match std::fs::symlink_metadata(path) {
+        Ok(meta) => !meta.is_file(),
+        Err(e) => e.kind() == std::io::ErrorKind::NotFound,
     }
 }
 

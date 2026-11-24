@@ -143,8 +143,7 @@ fn a_tag_with_no_rating_key_carries_no_stars() {
 
 // ------------------------------------------------------------------ writing
 
-/// lofty encodes `ID3v2` and `Ilst` itself, dropping anything but the triple, so each is handed one
-/// under the email whose scale it stores on. Vorbis is handed the number already scaled.
+/// Each tag type is handed the one shape its writer keeps, as `write_stars` argues.
 #[test]
 fn id3v2_and_ilst_are_written_as_a_popm_triple_and_vorbis_as_a_percentage() {
     let mut id3 = Tag::new(TagType::Id3v2);

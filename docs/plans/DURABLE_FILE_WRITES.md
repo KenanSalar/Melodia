@@ -186,7 +186,7 @@ for write, calls `sync_all` and renames (`writer.rs:746-789`).
 7. **Gates.** fmt, then clippy `--workspace`. The `atomic_file_tests.rs` rewrite tests break on
    the closure's new signature and are fixed here.
 
-### Phase 2: check the audio before the swap (open: items 1-5 done, 6 to run)
+### Phase 2: check the audio before the swap (done)
 
 1. **Extract, inside `melodia-audio`:**
    - `FileSource` moves out of `file_decode.rs` into `file_source.rs`, with an end-of-audio
@@ -248,21 +248,82 @@ for write, calls `sync_all` and renames (`writer.rs:746-789`).
      and decodes identically in ffmpeg.
    - Every `test-assets/silence.*` lofty can write reads as `Same` after a real write, and as
      `Changed` once its last tenth is cut.
-6. **Measure in a release build, before and after each phase:**
-   - **A 12-track FLAC album edit and a 12-track MP3 album edit.** These give the per-file write
-     cost.
-   - **One rating.** This gives the cost a single click pays.
-   - **8 ratings at quit**, against `SHUTDOWN_FLUSH_MAX`'s shared 3 s budget. Run it on the
-     slowest disk a library can sit on (a USB drive or a share), since each write now waits for
-     its whole copy to reach the disk.
-   - **The slowest file's write time**, against `self_writes`' 30 s TTL.
-   - A throwaway `Instant` log around `run_write_pass` times them. You run the edits in the dev
-     data folder. Figures go in the PR.
+6. **Measure in a release build, before and after each phase (done 2026-11-24).**
+   - **How:** release builds of `0c2de974` (before), `c8df08f5` (Phase 1) and `dfe983f2` (Phase
+     2), each in a detached worktree with its own `target/`. A throwaway hook ran the scenarios
+     through `apply_tag_edit` and `ratings::set_rating`, the star-click path, after the boot scan
+     settled, and `Instant` logs timed `run_write_pass` and the exit flush. Dev data folder, backed
+     up and restored.
+   - **Data:** a 12-track MP3 album (7.0-17.0 MB, median 12.1) and its 16-bit FLAC transcode
+     (17.9-48.3 MB, median 31.7).
+   - **Local disk:** btrfs on NVMe, where `fs::copy` reflinks. Files evicted from the page cache
+     before each launch, so the first edit is cold and the next two warm. Two launches per build,
+     interleaved; each cell gives both, or their range.
+
+     | | Before | Phase 1 | Phase 2 |
+     |---|---|---|---|
+     | FLAC album edit, cold | 232, 236 ms | 227, 214 ms | 362, 376 ms |
+     | FLAC album edit, warm | 110 ms | 115 ms | 173-182 ms |
+     | FLAC per file, cold / warm (median) | 58-62 / 1-2 ms | 60-64 / 4-7 ms | 98-108 / 44-50 ms |
+     | MP3 album edit, cold | 75, 83 ms | 90, 93 ms | 119, 123 ms |
+     | MP3 album edit, warm | 43-44 ms | 47-48 ms | 52-54 ms |
+     | One rating (FLAC write) | 51-97 ms | 53-100 ms | 78-157 ms |
+     | 8 ratings at quit | 287, 300 ms | 287, 279 ms | 410, 417 ms |
+     | Slowest file | 163 ms | 167 ms | 255 ms |
+
+   - **Slow disk:** an ext4 image through `fuse2fs`, so a copy writes every byte, its process held
+     by cgroup to 8 MB/s write and 25 MB/s read, a USB 2.0 stick's rates. One launch per build.
+
+     | | Before | Phase 1 | Phase 2 |
+     |---|---|---|---|
+     | One rating, 17.9 / 33.2 / 27.9 MB FLAC | 1.0 / 1.5 / 1.1 s | 1.0 / 1.4 / 4.6 s | 3.3 / 5.7 / 4.6 s |
+     | 8 ratings at quit | 0 of 8 written | 0 of 8 written | 0 of 8 written |
+     | Left beside the tracks | 4 partial copies | 4 partial copies | 4 partial copies |
+
+   - **Phase 1's flush costs almost nothing on btrfs:** the copy is a reflink, so the flush writes
+     only the blocks the tag changed.
+   - **Phase 2's check is the cost that shows:** it reads the original and the copy whole, about
+     45 ms more per warm FLAC and 12 ms per warm MP3. A 12-track FLAC album edit goes from about
+     110 to 175 ms warm.
+   - **The budgets hold on a fast disk:** 8 ratings at quit take under 0.42 s against 3 s, and the
+     slowest file under 0.26 s locally and 5.7 s on the slow disk, against the 30 s TTL.
+   - **The exit flush overruns a slow disk in every build, before the branch too.** Reading 8 cold
+     files whole at USB 2.0 rates already outlasts 3 s. The 8 tags go unwritten, the rows keep
+     their stars, and each quit left 4 hidden partial `.tmp` copies of about 15 MB beside the
+     tracks, one per write thread, which nothing removed. The tracks stay intact. Both phases
+     lengthen each write, Phase 2 most, since it reads each file twice. Item 7 removes the copies.
+   - **Not resolved:** Phase 1's flush cost on the slow disk, which showed on one file of three.
+     `fuse2fs` passes a flush down by syncing its whole image, so what one flush waits for depends
+     on what else is dirty.
+7. **The exit removes the copies of writes still in flight (done).** No count cap fits 3 s on a
+   slow disk, one file alone taking up to 5.7 s, and `process::exit` skips the temp's `Drop`.
+   - `atomic_file` lists each temp while its write runs, and `main` calls `remove_unfinished`
+     after the task budget, ahead of both ways out. It removes the listed temps and refuses any
+     write that starts after. A slow disk costs those tags, as the cap already accepted, and no
+     longer leaves copies behind.
+   - Each temp is created outside the list's lock, so a slow create stalls no other write.
+   - On the slow disk: 0 files left beside the tracks where every earlier build left 4, the log
+     reading "Removed 4 unfinished write(s) at exit".
+   - The cost: the first unlink waits behind the copies' queued writes, 8.14 s in a direct test
+     on the slow disk, so the exit ran 7 and 11 s in two runs instead of 4. It falls after the
+     window has gone, and only when the budget was overrun.
+8. **Found on the way, and fixed: a scan could delete the rows of tracks a tag edit was writing.**
+   - A directory read promises nothing about an entry renamed while it runs. On btrfs a
+     rename-over during a read hid the file 5 times in 5, and a scan took the rows it missed for
+     orphans and purged them, ratings and play counts with them.
+   - It happened in one measuring launch: an album edit ran under the boot scan, which logged
+     "Removed 2 orphaned tracks" for two files still there.
+   - `WalkIndex` now confirms each file the walk missed with a `stat` before calling it gone. That
+     covers tracks, kept-out files and cue sheets, and runs off the async workers.
+   - Through the real scanner, with renames running under the walk: across 10 rounds the walk
+     missed 274 of 3,000 files, and none came back as orphans.
 
 ### Phase 3: Windows (open, on a real machine)
 
 - **Tag edit on the playing track.** Does `MoveFileExW` answer `ACCESS_DENIED`, so that std's
-  POSIX fallback replaces the held-open file?
+  POSIX fallback replaces the held-open file? Also with a third-party handle on the track (an
+  antivirus scan, the Search indexer), where std's `FILE_SHARE_DELETE` doesn't apply: the edit
+  should either land or fail cleanly, the original whole and no temp left.
 - **The flush.** `FlushFileBuffers` on the read and write handle succeeds, and a refused write
   fails the save.
 - **The copy.** `fs::copy` is `CopyFileExW`, whose handle Melodia never sees. Check that a write

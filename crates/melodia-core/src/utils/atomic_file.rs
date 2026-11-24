@@ -2,11 +2,16 @@
 //! track's tag rewrite. The reads need no lock because every write lands through a same-directory
 //! temp file and a rename, so a reader only ever sees one whole file and a crash or power cut
 //! leaves one. The temp is flushed before the rename and, on unix, its folder after, so on unix a
-//! save that has returned survives a power cut too.
+//! save that has returned survives a power cut too. A temp still being written when `main` exits
+//! is removed then ([`remove_unfinished`]).
 
 use std::fs::File;
 use std::io::{BufWriter, Write};
+use std::mem::DropGuard;
 use std::path::{Path, PathBuf};
+use std::sync::{Mutex, MutexGuard, PoisonError};
+
+use tempfile::NamedTempFile;
 
 use serde::Serialize;
 use serde::de::DeserializeOwned;
@@ -99,7 +104,7 @@ pub fn write_with_sync(
 ) -> AppResult<()> {
     let folder = folder_of(path);
     std::fs::create_dir_all(folder)?;
-    let mut tmp = tempfile::NamedTempFile::new_in(folder)?;
+    let (_unfinished, mut tmp) = unfinished_temp(folder)?;
     {
         let mut writer = BufWriter::new(tmp.as_file_mut());
         write(&mut writer)?;
@@ -125,7 +130,8 @@ pub fn rewrite_with_sync(
     // Resolved first: a rename replaces a symlink where a write in place followed it.
     let path = &std::fs::canonicalize(path)?;
     // Closed for `fs::copy`, which opens it itself; no extension, so the watcher skips it.
-    let tmp = tempfile::NamedTempFile::new_in(folder_of(path))?.into_temp_path();
+    let (_unfinished, tmp) = unfinished_temp(folder_of(path))?;
+    let tmp = tmp.into_temp_path();
     std::fs::copy(path, &tmp)?;
     {
         let mut copy = File::options().read(true).write(true).open(&tmp)?;
@@ -168,6 +174,66 @@ pub fn sync_parent(path: &Path) {
         log::debug!("{} can't be flushed: {}", folder.display(), describe(&e));
     } else {
         log::warn!("Failed to flush {}: {}", folder.display(), describe(&e));
+    }
+}
+
+/// The temps of writes still running.
+static UNFINISHED: Mutex<Unfinished> = Mutex::new(Unfinished { closed: false, temps: Vec::new() });
+
+struct Unfinished {
+    /// Set by [`remove_unfinished`], after which no write starts.
+    closed: bool,
+    temps: Vec<PathBuf>,
+}
+
+fn unfinished() -> MutexGuard<'static, Unfinished> {
+    UNFINISHED.lock().unwrap_or_else(PoisonError::into_inner)
+}
+
+/// Unlists its temp from [`UNFINISHED`] once dropped.
+type Unlisting = DropGuard<PathBuf, fn(PathBuf)>;
+
+/// A temp in `folder`, listed as unfinished until the guard drops. Bound guard first, so the temp
+/// is gone or renamed before it is unlisted. Created outside the lock, which a slow disk would
+/// hold for every other write, and refused once [`remove_unfinished`] has run, its drop removing it.
+fn unfinished_temp(folder: &Path) -> AppResult<(Unlisting, NamedTempFile)> {
+    let tmp = NamedTempFile::new_in(folder)?;
+    let mut unfinished = unfinished();
+    if unfinished.closed {
+        return Err(AppError::io_other("Melodia is quitting, so no write starts"));
+    }
+    unfinished.temps.push(tmp.path().to_path_buf());
+    let unlist: fn(PathBuf) = |tmp| finished(&tmp);
+    Ok((DropGuard::new(tmp.path().to_path_buf(), unlist), tmp))
+}
+
+fn finished(tmp: &Path) {
+    let mut unfinished = unfinished();
+    if let Some(at) = unfinished.temps.iter().position(|held| held == tmp) {
+        unfinished.temps.swap_remove(at);
+    }
+}
+
+/// Removes the temps of writes still running and lets no other start, for `main`'s way out, which
+/// runs no destructor: a write the shutdown budget cut short would leave its copy beside the file
+/// for good. Each original stays whole, its rename never having run.
+pub fn remove_unfinished() {
+    let temps = {
+        let mut unfinished = unfinished();
+        unfinished.closed = true;
+        std::mem::take(&mut unfinished.temps)
+    };
+    let mut removed = 0;
+    for tmp in &temps {
+        match std::fs::remove_file(tmp) {
+            Ok(()) => removed += 1,
+            // Renamed over its file since: the write landed.
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
+            Err(e) => log::warn!("Failed to remove {}: {}", tmp.display(), describe(&e)),
+        }
+    }
+    if removed > 0 {
+        log::info!("Removed {removed} unfinished write(s) at exit");
     }
 }
 

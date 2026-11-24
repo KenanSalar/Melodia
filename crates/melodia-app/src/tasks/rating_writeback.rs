@@ -66,10 +66,10 @@ impl Writeback {
 /// still writes, up to [`SHUTDOWN_FLUSH_MAX`].
 const QUIET_PERIOD: Duration = Duration::from_secs(2);
 
-/// How many tracks the shutdown drain still writes. `shutdown::flush_tasks_and_db` gives every
-/// task one shared budget, and a tag write is a whole-file copy, check and flush nothing can
-/// cancel, so an overrun leaves the tag unwritten and a `.tmp` copy of the track beside it: hence
-/// a cap rather than a timeout. The rows keep their stars either way.
+/// How many tracks the shutdown drain still writes, inside the one budget
+/// `shutdown::flush_tasks_and_db` gives every task. A tag write is a whole-file copy, check and
+/// flush nothing can cancel, so one the budget cuts short leaves its tag unwritten, `main` removing
+/// its copy. The rows keep their stars either way.
 const SHUTDOWN_FLUSH_MAX: usize = 8;
 
 /// A silent no-op when the task was never spawned.

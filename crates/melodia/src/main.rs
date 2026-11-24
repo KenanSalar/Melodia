@@ -132,6 +132,8 @@ fn main() -> AppResult<()> {
              persisted state is already flushed by save_state_on_exit."
         );
     }
+    // Ahead of both ways out below, neither of which runs a destructor.
+    melodia_core::utils::atomic_file::remove_unfinished();
 
     // `!Send`, so it can't ride into the background drop thread.
     drop(runtime_guard);

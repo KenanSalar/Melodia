@@ -66,19 +66,20 @@ would have damaged any of those 8.
   `write_tag_edit`: self-write marks, the audio check, and the retag commit that carries loudness.
   The M4A pass writes through it unchanged.
 - **The re-read.** `queries::scan::commit_retag` refreshes a row from its re-read file and carries
-  its loudness measurement (`retag.rs:116`). The repair re-reads through it, not through a rescan:
-  the general ingest never carries loudness, so the album would be measured again.
+  its loudness measurement (`retag.rs:116`). The repair re-reads through its refresh, not through
+  a rescan: the general ingest never carries loudness, so the album would be measured again.
 
 ## Structure
 
 | File | Owns after this plan |
 |---|---|
 | `melodia-app/src/tasks/one_shot.rs` | the keyset page walk (`Pages`), the scan-pool page read (`read_page`) and the per-file read that counts what was out of reach (`read_files`), beside `spawn` |
-| `melodia-store/src/database/queries/track/lookup.rs` | the whole-file page queries by codec, the library's and every row's, over one builder; the rated-MP4 page; and one row's rating |
+| `melodia-store/src/database/queries/track/lookup.rs` | the whole-file page queries by codec, the library's, every row's and the rated MP4 rows', over one builder; and one row's rating |
+| `melodia-store/src/database/queries/scan/retag.rs` | `commit_reread`, `commit_retag`'s refresh for a re-read with no edit, which always rolls up album covers and prunes orphans |
 | `melodia-store/src/media/ingest/metadata.rs` | `codec_name`, the one spelling of the `codec` column |
 | `melodia-store/src/media/ingest/rating_tags.rs` | `read_stars`, one file's stars |
 | `melodia-app/src/tasks/m4a_rating_backfill.rs` (new) | the M4A pass |
-| `melodia-store/src/media/ingest/iff_repair.rs` (new) | the container size and `include_final_pad`, the damage fingerprints over chunk headers, and the repair through `atomic_file::rewrite_with_sync`, a chain folded into one chunk |
+| `melodia-store/src/media/ingest/iff_repair.rs` (new) | the container size and `include_final_pad`, the damage fingerprints over chunk headers, and the repair through `atomic_file::rewrite_with_sync`, a chain folded into one chunk, the walk checked clean after the mend and again after the fold |
 | `melodia-store/src/media/ingest/tag_writer.rs` | `save_tags`, open to the crate for the fold; `include_final_pad` leaves it |
 | `melodia-app/src/tasks/iff_tag_repair.rs` (new) | the WAV and AIFF pass: page, repair, re-read |
 | `melodia-app/src/services/settings/library.rs` | two markers, `m4a_ratings_backfilled` and `iff_tags_repaired` |
@@ -89,7 +90,7 @@ would have damaged any of those 8.
 - **The page loop.** It was spelled out in `rating_import.rs` and `embedded_cue_probe.rs`, each
   with its own `PAGE_ROWS` of 2,000. It moves into `one_shot` before a third and fourth copy
   exist, and so does the cue probe's split of a page's reads into read, unreadable and out of
-  reach, which the M4A pass and the repair share.
+  reach, which the M4A pass, the repair and the rating import's per-file read share.
 - **The codec page query.** `WHOLE_FLACS_AFTER` (`lookup.rs`) becomes a query taking its codecs
   as lofty `FileType`s, spelled through `codec_name` as the ingest writes them. The cue probe asks
   for `Flac`, the repair for `Wav` and `Aiff`. Phase 2 splits its scope: the cue probe keeps the
@@ -172,14 +173,16 @@ would have damaged any of those 8.
      (`id3/v2/frame/list.rs:239`). The repair saves that merge over the first chunk through
      `tag_writer::save_tags` and cuts the rest.
    - Write through `atomic_file::rewrite_with_sync` with the file marked as a self-write. The copy
-     must show the damage `diagnose` found, and walk clean once mended.
+     must show the damage `diagnose` found, and walk clean once mended and again once folded.
    - Run `tag_writer::require_same_audio` in the closure as a guard. A damaged AIFF won't demux,
      so the guard writes it unchecked with a warning; the mended span holds tag chunks only.
    - Tried in the scratch crate on every damaged representative: each walk came out clean, the
      audio bytes matched, and lofty, TagLib and ffprobe agreed on every tag.
-4. **The re-read.** Extract the repaired file and commit it through `commit_retag` with an edit
-   that keeps everything. The row gets its tags back and its loudness measurement is carried. The
-   row's stars give way only to a rating the tag holds (`mutations.rs:315`).
+4. **The re-read.** Extract the repaired file and commit it through `commit_reread`. The row gets
+   its tags back and its loudness measurement is carried. A repair moves its row off file-name
+   metadata, so the commit always rolls up album covers and prunes orphans, or an album it
+   recreates stays coverless until a later scan writes. The row's stars give way only to a rating
+   the tag holds (`mutations.rs:315`).
 5. **No switch.** It runs whatever "write ratings to tags" says: a tag edit damages a file as
    surely as a star click, and the repair restores the user's own data.
 6. **Failures and log:** as in Phase 1. One summary line names how many files were repaired, and
@@ -213,6 +216,8 @@ would have damaged any of those 8.
     decodes identically, its row shows its title again, and its loudness row is kept.
   - A clean WAV and AIFF, and the 3,575 even-sized files, stay byte for byte.
   - A second launch runs nothing.
+  - Pending since the switch to `commit_reread`: an album the repair recreates shows its cover in
+    the Albums grid, and no album or artist the file-name rows held is left orphaned.
   - Done 2026-11-24 under `cargo mcp`, the data folder backed up and restored. A test library
     folder held the 8 damaged Madih copies (one chained) and six step 1 shapes, beside one damaged
     WAV opened from outside the library and two clean controls:

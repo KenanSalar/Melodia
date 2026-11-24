@@ -527,7 +527,7 @@ pub async fn get_whole_file_paths_after(
     db.read(move |conn| page.fetch_all(conn)).await
 }
 
-/// The statement both codec pages run, `None` for no codecs, `scope` narrowing the whole files.
+/// The statement every codec page runs, `None` for no codecs, `scope` narrowing the whole files.
 fn codec_page(
     codecs: &[FileType],
     scope: Option<&'static str>,
@@ -552,14 +552,6 @@ fn codec_page(
     Some(sql)
 }
 
-static RATED_WHOLE_FILES_OF_CODEC_AFTER: LazyLock<String> = LazyLock::new(|| {
-    format!(
-        "SELECT id, file_path FROM tracks
-         WHERE rating > 0 AND codec = ? AND id > ? AND {WHOLE_FILE}
-         ORDER BY id LIMIT ?"
-    )
-});
-
 /// One page of the rated whole-file MP4 rows past `after_id`, the one-shot M4A rating backfill's
 /// work list. Rows outside the library are included, a star set on one reaching its file too.
 pub async fn get_rated_mp4_paths_after(
@@ -567,12 +559,10 @@ pub async fn get_rated_mp4_paths_after(
     after_id: i64,
     limit: i64,
 ) -> Result<Vec<(i64, String)>, AppError> {
-    let codec = codec_name(FileType::Mp4);
-    db.read(move |conn| {
-        let statement = RATED_WHOLE_FILES_OF_CODEC_AFTER.as_str();
-        sql::fetch_all(conn, statement, (codec, after_id, limit))
-    })
-    .await
+    let Some(page) = codec_page(&[FileType::Mp4], Some("rating > 0"), after_id, limit) else {
+        return Ok(Vec::new());
+    };
+    db.read(move |conn| page.fetch_all(conn)).await
 }
 
 /// The stars `id`'s row holds, `None` for a missing id.

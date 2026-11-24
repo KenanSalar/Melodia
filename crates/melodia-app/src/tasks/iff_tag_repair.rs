@@ -1,7 +1,7 @@
 //! Gives back, once, the WAVs and AIFFs whose ID3 chunk a tag write broke, and their rows' tags.
 //!
-//! Nothing else mends one: a rescan reads the same broken chunks. Each mended file lands through the
-//! tag edit's commit rather than a rescan, which keeps its loudness measurement.
+//! Nothing else mends one: a rescan reads the same broken chunks. Each mended file lands through a
+//! re-read commit rather than a rescan, which keeps its loudness measurement.
 
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -10,7 +10,6 @@ use lofty::file::FileType;
 
 use crate::state::AppState;
 use crate::tasks::{TaskSpawner, one_shot};
-use melodia_core::entities::tags::TagEdit;
 use melodia_core::error::{AppError, AppResult, describe};
 use melodia_store::database::queries;
 use melodia_store::media::ingest::iff_repair::{self, Damage, Verdict};
@@ -144,9 +143,7 @@ async fn repair_file(
 
     let marked = PathBuf::from(&path);
     let file = queries::scan::RetaggedFile { id, path, meta };
-    if let Err(e) =
-        queries::scan::commit_retag(&state.db, vec![file], &TagEdit::default(), None).await
-    {
+    if let Err(e) = queries::scan::commit_reread(&state.db, vec![file]).await {
         state.self_writes.unmark(&[marked]);
         return Err(e);
     }

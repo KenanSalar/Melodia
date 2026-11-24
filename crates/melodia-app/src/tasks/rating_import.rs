@@ -6,7 +6,6 @@
 //! rows are read, and only once, since `rating = 0` can't tell an untouched row from a cleared one.
 
 use std::collections::HashMap;
-use std::path::Path;
 
 use crate::state::{AppState, Signal};
 use crate::tasks::{TaskSpawner, one_shot};
@@ -78,17 +77,10 @@ async fn import_into(db: &DbPool, page_rows: i64) -> AppResult<usize> {
     Ok(imported)
 }
 
-/// **Blocking**, fanned out like `retroactive_hash`.
+/// **Blocking**: each file of `unrated` that holds stars, with them.
 fn read_each(unrated: &[(i64, String)]) -> Vec<(i64, i32)> {
-    use rayon::prelude::*;
-
-    unrated
-        .par_iter()
-        .filter_map(|(id, path)| {
-            let stars = rating_tags::read_stars(Path::new(path)).ok().flatten()?;
-            Some((*id, stars))
-        })
-        .collect()
+    let reads = one_shot::read_files(unrated, rating_tags::read_stars);
+    reads.read.into_iter().filter_map(|(id, stars)| Some((id, stars?))).collect()
 }
 
 #[cfg(test)]

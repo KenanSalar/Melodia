@@ -1,5 +1,5 @@
-//! The database half of an Edit Track Information save: the rows of files whose tags were already
-//! rewritten and read back, refreshed in one transaction.
+//! The database half of a tag write: the rows of files whose tags were already rewritten and read
+//! back, refreshed in one transaction.
 
 use std::collections::HashMap;
 
@@ -53,6 +53,18 @@ pub async fn commit_retag(
         cached_artwork,
     };
     db.transaction(move |tx| refresh_rows(tx, &files, &edit)).await
+}
+
+/// [`commit_retag`] for a file rewritten without an edit, whose re-read can re-home its row, so
+/// the cover roll-up and the orphan prune always run.
+pub async fn commit_reread(db: &DbPool, files: Vec<RetaggedFile>) -> Result<Vec<Retag>, AppError> {
+    let facts = EditFacts {
+        artwork: ArtworkEdit::Keep,
+        cleared_release: ClearedReleaseTags::default(),
+        moves_between_parents: true,
+        cached_artwork: None,
+    };
+    db.transaction(move |tx| refresh_rows(tx, &files, &facts)).await
 }
 
 /// What the commit needs from its [`TagEdit`] and the cached cover, owned by the transaction.

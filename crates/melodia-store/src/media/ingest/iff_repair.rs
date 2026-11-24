@@ -91,7 +91,7 @@ pub fn diagnose(path: &Path) -> AppResult<Verdict> {
 }
 
 /// Undoes `damage` in a copy of `path`, renamed over it only once the copy shows the same damage,
-/// walks clean mended, and plays as the original does. Blocking.
+/// walks clean mended and folded, and plays as the original does. Blocking.
 ///
 /// A damaged AIFF won't demux, so its audio goes unchecked; the span mended holds tag chunks only.
 ///
@@ -99,21 +99,18 @@ pub fn diagnose(path: &Path) -> AppResult<Verdict> {
 ///
 /// A file that changed since [`diagnose`] read it, a failed write, or a refused copy.
 pub fn repair(path: &Path, damage: Damage) -> AppResult<()> {
+    let require = |copy: &mut File, expected: Verdict, failure: &str| -> AppResult<()> {
+        if diagnose_file(copy)? == expected {
+            return Ok(());
+        }
+        Err(AppError::metadata_msg(format!("{} {failure}", path.display())))
+    };
     atomic_file::rewrite_with_sync(path, |copy, copy_path| {
-        if diagnose_file(copy)? != Verdict::Damaged(damage) {
-            return Err(AppError::metadata_msg(format!(
-                "{} changed since it was read",
-                path.display()
-            )));
-        }
+        require(copy, Verdict::Damaged(damage), "changed since it was read")?;
         damage.mend(copy)?;
-        if diagnose_file(copy)? != Verdict::Clean {
-            return Err(AppError::metadata_msg(format!(
-                "{} still breaks once mended",
-                path.display()
-            )));
-        }
+        require(copy, Verdict::Clean, "still breaks once mended")?;
         damage.fold_chain(copy, copy_path)?;
+        require(copy, Verdict::Clean, "breaks once its chain is folded")?;
         tag_writer::require_same_audio(path, copy_path)
     })
 }
