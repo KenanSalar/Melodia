@@ -569,7 +569,7 @@ export global Settings {
     toast-restart-required-message => {
         return @tr("Melodia couldn't relaunch itself. Close and reopen it to apply the change.");
     }
-    // Only inotify runs out of watches, so the body can name Linux's setting.
+    // Only Linux raises this card, so the body can name its setting.
     pure callback toast-watch-limit-title() -> string;
     toast-watch-limit-title => {
         return @tr("Folder watch limit reached");

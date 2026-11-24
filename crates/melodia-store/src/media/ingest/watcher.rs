@@ -1,3 +1,4 @@
+use std::mem;
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
@@ -68,7 +69,7 @@ impl FolderWatcher {
                         for error in &errors {
                             log::warn!("Watch error: {}", describe(error));
                         }
-                        for gap in watch_gaps(&errors) {
+                        for gap in first_of_each_kind(errors.iter().filter_map(watch_gap)) {
                             gap.report();
                         }
                     }
@@ -102,6 +103,7 @@ impl FolderWatcher {
             false
         });
 
+        let mut gaps = Vec::new();
         for path in paths {
             if self.roots.contains(path) || !path.exists() {
                 continue;
@@ -119,9 +121,12 @@ impl FolderWatcher {
                     if gap == WatchGap::Limit {
                         self.roots.push(path.clone());
                     }
-                    gap.report();
+                    gaps.push(gap);
                 }
             }
+        }
+        for gap in first_of_each_kind(gaps) {
+            gap.report();
         }
     }
 
@@ -143,9 +148,9 @@ fn forward(tx: &mpsc::Sender<FileEvent>, event: FileEvent) {
 
 /// What a watch error leaves unwatched, which the user otherwise learns of only when a change
 /// never arrives.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, PartialEq)]
 enum WatchGap {
-    /// The OS ran out of watches, so every folder past the limit goes unwatched.
+    /// inotify ran out of watches, so every folder past the limit goes unwatched.
     Limit,
     Folder(PathBuf),
 }
@@ -161,21 +166,28 @@ impl WatchGap {
     }
 }
 
-/// The gaps one batch of watch errors leaves, each kind once: a walk reports every folder it can't
-/// enter, and the first sends the user looking while the log names the rest.
-fn watch_gaps(errors: &[notify::Error]) -> Vec<WatchGap> {
-    let gaps: Vec<WatchGap> = errors.iter().filter_map(watch_gap).collect();
-    let limit = gaps.iter().find(|gap| **gap == WatchGap::Limit);
-    let folder = gaps.iter().find(|gap| matches!(gap, WatchGap::Folder(_)));
-    limit.into_iter().chain(folder).cloned().collect()
+/// The first gap of each kind: a walk reports every folder it can't enter, and the first sends the
+/// user looking while the log names the rest.
+fn first_of_each_kind(gaps: impl IntoIterator<Item = WatchGap>) -> Vec<WatchGap> {
+    let mut firsts = Vec::new();
+    for gap in gaps {
+        let kind_seen =
+            firsts.iter().any(|kept| mem::discriminant(kept) == mem::discriminant(&gap));
+        if !kind_seen {
+            firsts.push(gap);
+        }
+    }
+    firsts
 }
 
-/// `None` for a path gone before its watch and a watch already gone, which leave nothing out, and
-/// for a failure naming no folder, which leaves the user nothing to act on.
+/// `None` where nothing is left out (a path gone before its watch, a watch already gone, a link
+/// looping back up its tree) or the error names no folder for the user to act on.
 fn watch_gap(error: &notify::Error) -> Option<WatchGap> {
     match error.kind {
-        ErrorKind::MaxFilesWatch => Some(WatchGap::Limit),
-        ErrorKind::PathNotFound | ErrorKind::WatchNotFound => None,
+        // The card names inotify's setting, where FSEvents caps roots by the open-file limit.
+        ErrorKind::MaxFilesWatch if cfg!(target_os = "linux") => Some(WatchGap::Limit),
+        // A walk's one generic error is that link loop.
+        ErrorKind::PathNotFound | ErrorKind::WatchNotFound | ErrorKind::Generic(_) => None,
         _ => error.paths.first().cloned().map(WatchGap::Folder),
     }
 }

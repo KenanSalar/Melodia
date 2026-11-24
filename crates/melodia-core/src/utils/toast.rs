@@ -30,8 +30,8 @@ pub enum ToastKind {
     /// An exclusive claim fell back to shared, once per distinct refusal. The detail is the
     /// device's name; the reason stays in the Output settings, translated there.
     ExclusiveRefused,
-    /// The OS ran out of folder watches, so the library stops following some folders. No detail:
-    /// the remedy is the same however many it left out.
+    /// inotify ran out of watches, so the library stops following some folders. No detail: the
+    /// remedy is the same however many it left out.
     WatchLimit,
     /// The watcher couldn't watch a folder. The detail is its path, the error staying in the log.
     FolderUnwatched,
