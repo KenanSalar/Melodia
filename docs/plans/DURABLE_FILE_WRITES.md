@@ -30,17 +30,18 @@ rox's `writer.rs:786`, so the search does match real calls. As a result:
 **After.** The same saves, a little slower (measured in Phase 2).
 
 - On Linux, a save that has returned survives a power cut.
-- On Windows, a power cut brings back the old file whole or the new one, until Phase 3 decides
-  on write-through.
+- On Windows, a power cut brings back the old file whole or the new one.
+- On Windows, a tag edit keeps a track hidden, system or out of the search index, as it was.
 - A save the disk or share refuses fails that file in the toast's count, and the original stays.
 - A tag write whose copy would play differently is refused the same way.
 
 **What keeps working:**
 
-- editing tags on the playing track, with playback carrying on from the file it opened
+- editing tags on the playing track, with playback carrying on from the file it opened. On an
+  exFAT or FAT disk under Windows the edit fails cleanly instead, as it did before.
 - the watcher ignoring Melodia's own writes. Opens, closes and fsyncs raise no inotify event it
   subscribes to (`notify-9.0.0/src/inotify.rs:50-91`), and every flush lands on the temp before
-  the rename.
+  the rename. On Windows the app run suppressed every echo.
 - a failed write leaving the original untouched, with no temp file behind
 - loudness carried through a tag edit, now checked rather than assumed
 - every settings and state file reading back as it does today
@@ -95,9 +96,8 @@ for write, calls `sync_all` and renames (`writer.rs:746-789`).
    cut-short last frame is `Err(UnexpectedEof)` (`adts.rs:285-292, 308`). So the comparison ends
    where both sides end the same way, an error included, not only at end of stream.
 5. **Windows rename.** std's fallback fires on any `ACCESS_DENIED`, and its comment frames it as
-   handling read-only files (`sys/fs/windows.rs:1306-1367`). Whether a held-open target produces
-   that error is up to Win32, so "falls back when the track is held open" stays for Phase 3 to
-   confirm, as does `atomic_file.rs:130-133`, which makes the same claim.
+   handling read-only files (`sys/fs/windows.rs:1306-1367`). Phase 3 confirmed that a held-open
+   target produces that error, and that the fallback replaces it on NTFS only.
 6. **Resolved from the issue's "Not checked yet":**
    - lofty 0.25.5 no longer undoes unsync twice on ID3v2.4 (`id3/v2/read.rs:34`,
      `frame/read.rs:67-69`).
@@ -126,7 +126,8 @@ for write, calls `sync_all` and renames (`writer.rs:746-789`).
 
 | File | Owns after this plan |
 |---|---|
-| `melodia-core/src/utils/atomic_file.rs` | the temp, the flush on the writing handle, the rename, the folder flush (`sync_parent`, public for the updater) |
+| `melodia-core/src/utils/atomic_file.rs` | the temp, the flush on the writing handle, the track's attributes carried over on Windows, the rename, the folder flush (`sync_parent`, public for the updater) |
+| `melodia-store/src/database/queries/ingest.rs` | which move candidates are gone (`keep_gone_from`), for the scan and the watcher alike |
 | `melodia-audio/src/player/source/file_source.rs` (new, extracted) | the file `MediaSource`, optionally ending early |
 | `melodia-audio/src/player/source/decode.rs` | `probe`, extracted from `open` |
 | `melodia-audio/src/audio_match.rs` (new) | the side-by-side packet comparison and the trailing-tag bound |
@@ -139,12 +140,15 @@ for write, calls `sync_all` and renames (`writer.rs:746-789`).
 - `FileSource` is extracted before its second user exists.
 - The probe call has one home, shared by `decode::open` and the check.
 - `write_if_changed` becomes a call to `write_with_sync`.
+- The watcher's own `exists()` filter gives way to the scan's rule for a gone candidate.
 
 **Files that grow (800-line cap):**
 
 | File | Before | After |
 |---|---|---|
-| `atomic_file.rs` | 150 | 181 |
+| `atomic_file.rs` | 150 | 249 |
+| `ingest.rs` | 725 | 736 |
+| `watch_batch.rs` | 577 | 581 |
 | `tag_writer.rs` | 492 | 516 |
 | `decode.rs` | 415 | 425 |
 | `audio_match.rs` | new | 192 |
@@ -324,26 +328,79 @@ for write, calls `sync_all` and renames (`writer.rs:746-789`).
    - Through the real scanner, with renames running under the walk: across 10 rounds the walk
      missed 274 of 3,000 files, and none came back as orphans.
 
-### Phase 3: Windows (open, on a real machine)
+### Phase 3: Windows (in progress, run 2026-11-24)
 
-- **Tag edit on the playing track.** Does `MoveFileExW` answer `ACCESS_DENIED`, so that std's
-  POSIX fallback replaces the held-open file? Also with a third-party handle on the track (an
-  antivirus scan, the Search indexer), where std's `FILE_SHARE_DELETE` doesn't apply: the edit
-  should either land or fail cleanly, the original whole and no temp left.
-- **The flush.** `FlushFileBuffers` on the read and write handle succeeds, and a refused write
-  fails the save.
-- **The copy.** `fs::copy` is `CopyFileExW`, whose handle Melodia never sees. Check that a write
-  it can't land fails the save, rather than leaving a short copy the flush can't see.
-- **`MOVEFILE_WRITE_THROUGH` for targets nobody holds open.** It needs a `MoveFileExW` of our own
-  and the `Win32_Storage_FileSystem` feature, which the workspace doesn't enable
-  (`Cargo.toml:302-311`). It can't cover the playing track. Decide whether it is worth having.
-- **Attributes.** tempfile's Windows `keep` sets `FILE_ATTRIBUTE_NORMAL` (`tempfile
-  windows.rs:81-90`). Check whether a hidden or read-only track keeps its attributes through a
-  tag edit. This one is not new.
-- **Quit during a slow tag write.** Can `remove_unfinished` unlink a temp while `CopyFileExW` or
-  the rewrite still holds it open? The temp should be gone, or the warning should name it, and the
-  original should be whole.
-- **A file retagged and renamed by case outside Melodia.** After a scan it has one row, not two.
+Run on Windows 11 Pro 10.0.26300, not elevated:
+
+- **The disks:** an NTFS `C:` on NVMe, and a SanDisk USB 3.2 stick formatted exFAT as `D:`.
+- **Melodia's write path:** a throwaway example calling `apply_to_file`, `rewrite_with_sync` and
+  `remove_unfinished`.
+- **Win32 alone:** a PowerShell P/Invoke harness.
+- **The app:** under `cargo mcp` on a scratch data folder, whose library held copies of 12 real
+  MP3s, their FLAC transcodes and the fixtures.
+
+1. **Tag edit on the playing track.**
+   - `MoveFileExW` answers `ERROR_ACCESS_DENIED` for a held target, whatever the holder shares
+     and on both disks, so std's POSIX fallback runs every time.
+   - **NTFS, held as the deck holds it** (read, write and delete sharing): the edit lands, and the
+     held handle reads the original bytes. In the app, an Album edit on the playing FLAC landed,
+     playback carried on, the row kept its id, and the watcher suppressed the echo.
+   - **A holder that denies delete sharing**, as an antivirus scan can: the edit fails with
+     "Access is denied", the original byte for byte and no temp left. In the app, a two-track edit
+     with the MP3 held so updated the FLAC and counted the MP3 failed.
+   - **exFAT:** the fallback refuses even the deck's holder, so the playing track's edit fails
+     the same clean way, and an unheld edit lands. A limit of the platform, not fixed here.
+2. **The flush.**
+   - Every write that succeeded passed `FlushFileBuffers` on the read and write handle, since
+     `sync_all` returns its error.
+   - The stick, filled until the copy fit and lofty's growth didn't: the write through the handle
+     failed with "There is not enough space on the disk. (os error 112)", the original whole and no
+     temp left.
+   - Not verified: a refusal reported only at the flush. A local disk reports it at `WriteFile`;
+     only a share defers it, and none was to hand.
+3. **The copy.** Not run: the stick was taken out first. `CopyFileExW` writes through a handle
+   Melodia never sees, so whether a refusal it defers reaches the flush stays unverified.
+4. **`MOVEFILE_WRITE_THROUGH`: not worth having.**
+   - Microsoft documents its flush only for "a move performed as a copy and delete operation",
+     which a rename within one folder never is.
+   - It can't cover the playing track, which renames through std's fallback.
+   - It would be melodia-core's first FFI.
+   - The data is flushed before NTFS journals the rename, so a power cut brings back the old file
+     or the new one.
+5. **Attributes: fixed.**
+   - **The bug:** `CopyFileExW` adds the track's hidden and system flags to the temp's `TEMPORARY`,
+     and drops `NOT_CONTENT_INDEXED`. `keep` then reset the lot to `NORMAL`, so a hidden, system or
+     unindexed track lost its flag on every tag edit.
+   - **The fix:** `rewrite_with_sync` sets the track's own attribute word on the temp, which also
+     clears `TEMPORARY`. It uses `fs::set_permissions` with the track's `Permissions`, which on
+     Windows hands the whole word to `SetFileAttributesW`. That call ignores the bits it can't set
+     (compressed, sparse, encrypted), which was checked.
+   - **After:** hidden, system and unindexed tracks keep the flag, held or not, in the harness and
+     in the app. A read-only track is refused at the copy's open for write, with no temp left.
+     NTFS compression is a storage state, not an attribute, and didn't carry before either.
+6. **Quit during a slow tag write.**
+   - **During the rewrite:** the temp goes ("Removed 1 unfinished write(s) at exit"), the original
+     whole.
+   - **During `CopyFileExW`:** it holds the temp without delete sharing, so the unlink fails with
+     os error 32 and the warning names the temp. The original is whole, but the partial copy stays
+     beside the track for good, and visible, since Windows doesn't hide a dot-name.
+   - The 8 ratings at quit, with the library on a slow disk: not run, the stick taken out first.
+7. **A file renamed by case outside Melodia.**
+   - **Retagged and renamed:** one row after a boot scan or a watched batch. It is a new row: with
+     the bytes changed nothing ties it to the old one, as for any outside retag and rename.
+   - **Renamed by case alone, through the boot scan:** the row moves, with its id and play count.
+   - **Found and fixed: renamed by case alone while the app watched.** The row was re-created and
+     its play count lost. The watcher's move detection asked a bare `exists()`, which a disk that
+     ignores case answers for the old spelling, so the old file looked still there. It now asks the
+     scan's rule, `ingest::keep_gone_from`: a path counts as there only when its folder lists it
+     under that spelling and no new file respells it. The row now moves with its id. Every disk
+     that ignores case had it, macOS and FAT on Linux included.
+8. **The flush's cost on NTFS.** NTFS copies every byte where btrfs reflinked, so Phase 1's cost
+   shows here. Warm, three runs, `CopyFileExW` then `FlushFileBuffers` per file:
+   - MP3s of 12–24 MB: the copy 3–5 ms, the flush 13–24 ms, so 0.19 s more per 12-track album.
+   - FLACs of 36–117 MB: the copy 7–22 ms, the flush 18–185 ms, so 0.45–1.4 s more per 12-track
+     album.
+   - The slowest flush, 185 ms, leaves the exit budget its margin: 3 s for 8 ratings.
 
 ### Phase 4: Tests (open)
 

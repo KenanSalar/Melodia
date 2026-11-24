@@ -111,7 +111,10 @@ pub fn write_with_sync(
         writer.flush()?;
     }
     tmp.as_file().sync_all()?;
-    rename_over(tmp.into_temp_path(), path)
+    // `keep` clears the `FILE_ATTRIBUTE_TEMPORARY` the temp was created with, or every file written
+    // here tells the cache manager not to flush it.
+    let tmp = tmp.into_temp_path().keep().map_err(|e| AppError::Io(e.error))?;
+    rename_over(&tmp, path)
 }
 
 /// Hands `rewrite` a copy of `path`, as a read-write handle and its path, renamed over the original
@@ -131,30 +134,29 @@ pub fn rewrite_with_sync(
     let path = &std::fs::canonicalize(path)?;
     // Closed for `fs::copy`, which opens it itself; no extension, so the watcher skips it.
     let (_unfinished, tmp) = unfinished_temp(folder_of(path))?;
-    let tmp = tmp.into_temp_path();
+    let mut tmp = tmp.into_temp_path();
     std::fs::copy(path, &tmp)?;
     {
         let mut copy = File::options().read(true).write(true).open(&tmp)?;
         rewrite(&mut copy, &tmp)?;
         copy.sync_all()?;
     }
-    rename_over(tmp, path)
+    // A Windows `Permissions` is the whole attribute word: the track's hidden or system flag carries
+    // over, and the `TEMPORARY` the copy left on the temp goes, where `keep` would clear them all.
+    #[cfg(windows)]
+    std::fs::set_permissions(&tmp, std::fs::metadata(path)?.permissions())?;
+    tmp.disable_cleanup(true);
+    rename_over(&tmp, path)
 }
 
-/// Renames `tmp` over `path`, removing it if the rename fails. Not `TempPath::persist`, a bare
-/// `MoveFileExW` on Windows that can't take a name a playing deck holds open; `std::fs::rename`
-/// retries with POSIX semantics, which can. A handle denying delete sharing still fails the write
-/// rather than corrupting it.
-///
-/// [`TempPath::keep`] first, clearing the `FILE_ATTRIBUTE_TEMPORARY` the temp was created with, or
-/// every file written here tells the cache manager not to flush it.
-///
-/// [`TempPath::keep`]: tempfile::TempPath::keep
-fn rename_over(tmp: tempfile::TempPath, path: &Path) -> AppResult<()> {
-    let tmp = tmp.keep().map_err(|e| AppError::Io(e.error))?;
-    std::fs::rename(&tmp, path).inspect_err(|_| {
-        // `keep` disarmed the cleanup, and there is nothing to report past the rename's own error.
-        let _ = std::fs::remove_file(&tmp);
+/// Renames `tmp`, its cleanup disarmed, over `path`, removing it if the rename fails. Not
+/// `TempPath::persist`, a bare `MoveFileExW` on Windows that can't take a name a playing deck holds
+/// open; `std::fs::rename` retries with POSIX semantics, which can on NTFS. Elsewhere, or against a
+/// handle denying delete sharing, the write fails rather than corrupting the file.
+fn rename_over(tmp: &Path, path: &Path) -> AppResult<()> {
+    std::fs::rename(tmp, path).inspect_err(|_| {
+        // Its cleanup is disarmed, and there is nothing to report past the rename's own error.
+        let _ = std::fs::remove_file(tmp);
     })?;
     #[cfg(unix)]
     sync_parent(path);

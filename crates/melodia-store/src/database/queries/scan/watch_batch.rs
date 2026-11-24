@@ -192,19 +192,23 @@ fn log_failed(change: &WatchedChange, e: &AppError) {
 async fn moved_candidates(db: &DbPool, changes: &[WatchedChange]) -> MoveCandidates {
     let mut hashes: Vec<String> = Vec::new();
     let mut image_hashes: Vec<String> = Vec::new();
+    let mut new_paths: Vec<PathBuf> = Vec::new();
     for change in changes {
         match change {
             // Either kind may have moved: the sheet inside splits a file only where it places two
             // tracks.
-            WatchedChange::Created { meta, .. } => {
+            WatchedChange::Created { path, meta } => {
                 hashes.push(meta.file_hash.clone());
                 if matches!(meta.embedded_cue, EmbeddedCue::Present(_)) {
                     image_hashes.push(meta.file_hash.clone());
                 }
+                new_paths.push(path.clone());
             }
             WatchedChange::Sheets { cue, images } => {
-                let claimed = images.iter().filter(|image| cue.claims(&image.path));
-                image_hashes.extend(claimed.map(|image| image.metadata.file_hash.clone()));
+                for image in images.iter().filter(|image| cue.claims(&image.path)) {
+                    image_hashes.push(image.metadata.file_hash.clone());
+                    new_paths.push(image.path.clone());
+                }
             }
             _ => {}
         }
@@ -213,7 +217,7 @@ async fn moved_candidates(db: &DbPool, changes: &[WatchedChange]) -> MoveCandida
         return MoveCandidates::default();
     }
 
-    let mut candidates = match read_candidates(db, hashes, image_hashes).await {
+    let candidates = match read_candidates(db, hashes, image_hashes).await {
         Ok(candidates) => candidates,
         Err(e) => {
             log::warn!("Move detection skipped for this batch: {}", describe(&e));
@@ -221,10 +225,10 @@ async fn moved_candidates(db: &DbPool, changes: &[WatchedChange]) -> MoveCandida
         }
     };
     tokio::task::spawn_blocking(move || {
-        let still_present: HashSet<String> =
+        let existing: HashSet<String> =
             candidates.old_paths().into_iter().filter(|path| Path::new(path).exists()).collect();
-        candidates.retain_gone(&still_present);
-        candidates
+        let new_paths: Vec<&Path> = new_paths.iter().map(PathBuf::as_path).collect();
+        ingest::keep_gone_from(candidates, existing, &new_paths)
     })
     .await
     .unwrap_or_default()
