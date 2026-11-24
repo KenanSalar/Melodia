@@ -2,13 +2,16 @@ use std::path::{Path, PathBuf};
 use std::time::Duration;
 
 use notify::event::{CreateKind, ModifyKind, RemoveKind, RenameMode};
-use notify::{EventKind, RecommendedWatcher, RecursiveMode};
-use notify_debouncer_full::{DebounceEventResult, Debouncer, RecommendedCache, new_debouncer};
+use notify::{ErrorKind, EventKind, RecommendedWatcher, RecursiveMode};
+use notify_debouncer_full::{
+    DebounceEventResult, DebouncedEvent, Debouncer, RecommendedCache, new_debouncer,
+};
 use tokio::sync::mpsc;
 use walkdir::WalkDir;
 
 use melodia_core::error::{AppError, describe};
 use melodia_core::utils::audio_ext::{is_audio_extension, is_cue_sheet, is_library_extension};
+use melodia_core::utils::toast::{self, ToastKind};
 use melodia_core::utils::trash_dir::in_trash_dir;
 
 /// Classified file system event sent through the mpsc channel to the event processor.
@@ -57,24 +60,16 @@ impl FolderWatcher {
             new_debouncer(Duration::from_secs(2), None, move |result: DebounceEventResult| {
                 match result {
                     Ok(events) => {
-                        // A rescan flag means the kernel dropped events, so none around it can
-                        // be trusted.
-                        if events.iter().any(|e| e.need_rescan()) {
-                            log::warn!(
-                                "Watcher queue overflow flag set, requesting a full library rescan"
-                            );
-                            forward(&tx, FileEvent::RescanNeeded);
-                            return;
-                        }
-                        for event in events {
-                            for file_event in classify_event(event.kind, &event.paths) {
-                                forward(&tx, file_event);
-                            }
+                        for file_event in batch_events(&events) {
+                            forward(&tx, file_event);
                         }
                     }
                     Err(errors) => {
-                        for error in errors {
-                            log::warn!("Watch error: {}", describe(&error));
+                        for error in &errors {
+                            log::warn!("Watch error: {}", describe(error));
+                        }
+                        for gap in watch_gaps(&errors) {
+                            gap.report();
                         }
                     }
                 }
@@ -116,7 +111,16 @@ impl FolderWatcher {
                     log::info!("Watching folder: {}", path.display());
                     self.roots.push(path.clone());
                 }
-                Err(e) => log::warn!("Failed to watch {}: {}", path.display(), describe(&e)),
+                Err(e) => {
+                    log::warn!("Failed to watch {}: {}", path.display(), describe(&e));
+                    let Some(gap) = watch_gap(&e) else { continue };
+                    // A walk the limit stopped keeps the watches it added, which only an unwatch
+                    // releases.
+                    if gap == WatchGap::Limit {
+                        self.roots.push(path.clone());
+                    }
+                    gap.report();
+                }
             }
         }
     }
@@ -135,6 +139,55 @@ fn forward(tx: &mpsc::Sender<FileEvent>, event: FileEvent) {
     if let Err(e) = tx.blocking_send(event) {
         log::warn!("File event channel closed (shutdown?): {}", describe(&e));
     }
+}
+
+/// What a watch error leaves unwatched, which the user otherwise learns of only when a change
+/// never arrives.
+#[derive(Debug, Clone, PartialEq)]
+enum WatchGap {
+    /// The OS ran out of watches, so every folder past the limit goes unwatched.
+    Limit,
+    Folder(PathBuf),
+}
+
+impl WatchGap {
+    fn report(self) {
+        match self {
+            Self::Limit => toast::notify(ToastKind::WatchLimit, ""),
+            Self::Folder(path) => {
+                toast::notify(ToastKind::FolderUnwatched, path.display().to_string());
+            }
+        }
+    }
+}
+
+/// The gaps one batch of watch errors leaves, each kind once: a walk reports every folder it can't
+/// enter, and the first sends the user looking while the log names the rest.
+fn watch_gaps(errors: &[notify::Error]) -> Vec<WatchGap> {
+    let gaps: Vec<WatchGap> = errors.iter().filter_map(watch_gap).collect();
+    let limit = gaps.iter().find(|gap| **gap == WatchGap::Limit);
+    let folder = gaps.iter().find(|gap| matches!(gap, WatchGap::Folder(_)));
+    limit.into_iter().chain(folder).cloned().collect()
+}
+
+/// `None` for a path gone before its watch and a watch already gone, which leave nothing out, and
+/// for a failure naming no folder, which leaves the user nothing to act on.
+fn watch_gap(error: &notify::Error) -> Option<WatchGap> {
+    match error.kind {
+        ErrorKind::MaxFilesWatch => Some(WatchGap::Limit),
+        ErrorKind::PathNotFound | ErrorKind::WatchNotFound => None,
+        _ => error.paths.first().cloned().map(WatchGap::Folder),
+    }
+}
+
+/// The `FileEvent`s one debounced batch means for the library. A rescan flag anywhere in it means
+/// the kernel dropped events, so none around it can be trusted.
+fn batch_events(events: &[DebouncedEvent]) -> Vec<FileEvent> {
+    if events.iter().any(|e| e.need_rescan()) {
+        log::warn!("Watcher queue overflow flag set, requesting a full library rescan");
+        return vec![FileEvent::RescanNeeded];
+    }
+    events.iter().flat_map(|event| classify_event(event.kind, &event.paths)).collect()
 }
 
 /// The `FileEvent`s a notify event means for the library's files, audio and cue sheets.

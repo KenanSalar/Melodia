@@ -2709,6 +2709,19 @@ msgid "Melodia couldn't relaunch itself. Close and reopen it to apply the change
 msgstr "Melodia không thể tự khởi động lại. Hãy đóng và mở lại để áp dụng thay đổi."
 
 #: ui/settings.slint
+msgid "Folder watch limit reached"
+msgstr "Đã đạt giới hạn theo dõi thư mục"
+
+#. Translators: keep fs.inotify.max_user_watches as is, a Linux setting.
+#: ui/settings.slint
+msgid "Changes in some library folders show up only after the next scan. Raise fs.inotify.max_user_watches, then restart Melodia."
+msgstr "Thay đổi trong một số thư mục thư viện chỉ hiện ra sau lần quét tiếp theo. Hãy tăng fs.inotify.max_user_watches rồi khởi động lại Melodia."
+
+#: ui/settings.slint
+msgid "Can't watch a folder"
+msgstr "Không thể theo dõi một thư mục"
+
+#: ui/settings.slint
 msgid "Added to {n} playlist"
 msgid_plural "Added to {n} playlists"
 msgstr[0] "Đã thêm vào {n} danh sách phát"
