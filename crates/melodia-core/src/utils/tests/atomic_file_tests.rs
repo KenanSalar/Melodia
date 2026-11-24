@@ -349,6 +349,83 @@ fn a_rewrite_keeps_the_tracks_permissions() -> Result<(), AppError> {
     Ok(())
 }
 
+#[cfg(target_os = "windows")]
+const FILE_ATTRIBUTE_HIDDEN: u32 = 0x2;
+#[cfg(target_os = "windows")]
+const FILE_ATTRIBUTE_SYSTEM: u32 = 0x4;
+#[cfg(target_os = "windows")]
+const FILE_SHARE_READ: u32 = 0x1;
+
+/// The temp becomes the track, so the attributes it carries are the track's from then on: its own
+/// `TEMPORARY` in place of a hidden or system flag the user set.
+#[cfg(target_os = "windows")]
+#[test]
+fn a_rewrite_keeps_the_tracks_attributes() -> Result<(), AppError> {
+    use std::os::windows::fs::{MetadataExt, OpenOptionsExt};
+
+    let rows = [
+        ("a plain track", 0),
+        ("a hidden system track", FILE_ATTRIBUTE_HIDDEN | FILE_ATTRIBUTE_SYSTEM),
+    ];
+    for (what, attributes) in rows {
+        let dir = tempfile::tempdir()?;
+        let path = dir.path().join("track.mp3");
+        let mut track =
+            File::options().write(true).create_new(true).attributes(attributes).open(&path)?;
+        track.write_all(b"original bytes")?;
+        drop(track);
+        let before = std::fs::metadata(&path)?.file_attributes();
+
+        rewrite_with_sync(&path, |_, _| Ok(()))?;
+
+        assert_eq!(std::fs::metadata(&path)?.file_attributes(), before, "{what}");
+    }
+    Ok(())
+}
+
+/// A bare `MoveFileExW` won't replace a name held open, even by a holder sharing delete as the
+/// deck's `File::open` does; std's POSIX rename will, and leaves the deck on the file it opened.
+#[cfg(target_os = "windows")]
+#[test]
+fn a_rewrite_lands_over_a_track_a_deck_holds_open() -> Result<(), AppError> {
+    let dir = tempfile::tempdir()?;
+    let path = dir.path().join("track.mp3");
+    std::fs::write(&path, "original bytes")?;
+    let mut deck = File::open(&path)?;
+
+    rewrite_with_sync(&path, |copy, _| {
+        copy.set_len(0)?;
+        Ok(copy.write_all(b"edited bytes")?)
+    })?;
+
+    let mut playing = String::new();
+    deck.read_to_string(&mut playing)?;
+    assert_eq!(std::fs::read_to_string(&path)?, "edited bytes", "the edit missed the held track");
+    assert_eq!(playing, "original bytes", "the deck was moved off the file it opened");
+    Ok(())
+}
+
+/// A holder denying delete sharing refuses even the POSIX rename. The temp's cleanup is disarmed by
+/// then, and Windows hides no dot-name, so a temp left behind would sit in plain sight.
+#[cfg(target_os = "windows")]
+#[test]
+fn a_rewrite_a_holder_refuses_leaves_no_temp_file_behind() -> Result<(), AppError> {
+    use std::os::windows::fs::OpenOptionsExt;
+
+    let dir = tempfile::tempdir()?;
+    let path = dir.path().join("track.mp3");
+    std::fs::write(&path, "original bytes")?;
+    let _holder = File::options().read(true).share_mode(FILE_SHARE_READ).open(&path)?;
+
+    let refused = rewrite_with_sync(&path, |_, _| Ok(()));
+
+    let denied =
+        matches!(&refused, Err(AppError::Io(e)) if e.kind() == io::ErrorKind::PermissionDenied);
+    assert!(denied, "{refused:?}");
+    assert_eq!(entries_in(dir.path())?, BTreeSet::from(["track.mp3".to_owned()]));
+    Ok(())
+}
+
 /// **The `canonicalize` call's whole reason.** A rename replaces the *link* where a write in place
 /// followed it, so a symlinked track would become a regular file holding the edit and the file the
 /// user actually keeps would be left untouched.
