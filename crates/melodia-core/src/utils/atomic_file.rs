@@ -124,8 +124,8 @@ pub fn write_with_sync(
 /// in-place fallback: a second write path is the one nobody exercises. A read-only file is refused.
 ///
 /// The copy and `rewrite` both write through the handle, never a second open of the path: a write
-/// the disk or share refuses can surface only at the writer's close, whose error `Drop` discards, so
-/// the flush that reports it runs on the handle that wrote. `fs::copy` would write through
+/// the disk or share refuses can surface only at the writer's close, whose error `Drop` discards,
+/// so the flush that reports it runs on the handle that wrote. `fs::copy` would write through
 /// `CopyFileExW`'s own handle, which denies delete, so [`remove_unfinished`] couldn't clear a copy
 /// cut short at exit.
 pub fn rewrite_with_sync(
@@ -135,7 +135,9 @@ pub fn rewrite_with_sync(
     // Resolved first: a rename replaces a symlink where a write in place followed it.
     let path = &std::fs::canonicalize(path)?;
     let track = File::open(path)?;
-    if track.metadata()?.permissions().readonly() {
+    let permissions = track.metadata()?.permissions();
+    // rename(2) asks the folder's permission, not the file's, so on unix nothing else refuses it.
+    if permissions.readonly() {
         let refusal = io::Error::new(io::ErrorKind::PermissionDenied, "the file is read-only");
         return Err(AppError::Io(refusal));
     }
@@ -147,9 +149,9 @@ pub fn rewrite_with_sync(
     rewrite(&mut copy, &tmp)?;
     copy.sync_all()?;
     drop(copy);
-    // The track's mode, or on Windows its whole attribute word, which carries a hidden or system flag
-    // over and clears the temp's `TEMPORARY`, where `keep` would clear them all.
-    std::fs::set_permissions(&tmp, std::fs::metadata(path)?.permissions())?;
+    // The temp is owner-only on unix and `TEMPORARY` on Windows: the track's permissions undo
+    // both and carry a hidden or system flag over, where `keep` would clear every attribute.
+    std::fs::set_permissions(&tmp, permissions)?;
     tmp.disable_cleanup(true);
     rename_over(&tmp, path)
 }
@@ -205,8 +207,8 @@ fn unfinished() -> MutexGuard<'static, Unfinished> {
 type Unlisting = DropGuard<PathBuf, fn(PathBuf)>;
 
 /// A temp in `folder`, listed as unfinished until the guard drops. Bound guard first, so the temp
-/// is gone or renamed before it is unlisted. Created outside the lock, which a slow disk would
-/// hold for every other write, and refused once [`remove_unfinished`] has run, its drop removing it.
+/// is gone or renamed before it is unlisted. Created outside the lock, which a slow disk would hold
+/// for every other write, and refused once [`remove_unfinished`] has run, its drop removing it.
 fn unfinished_temp(folder: &Path) -> AppResult<(Unlisting, NamedTempFile)> {
     let tmp = NamedTempFile::new_in(folder)?;
     let mut unfinished = unfinished();

@@ -145,7 +145,7 @@ for write, calls `sync_all` and renames (`writer.rs:746-789`).
 
 | File | Before | After |
 |---|---|---|
-| `atomic_file.rs` | 150 | 258 |
+| `atomic_file.rs` | 150 | 260 |
 | `ingest.rs` | 725 | 736 |
 | `watch_batch.rs` | 577 | 581 |
 | `tag_writer.rs` | 492 | 516 |
@@ -375,8 +375,14 @@ Run on Windows 11 Pro 10.0.26300, not elevated:
      - 12 MP3s: 31–34 ms against 41–42 ms.
      - Reads of 256 KiB took 251–265 ms and 4 MiB 233–239 ms, so 1 MiB is the read size.
      - About 6 ms more per FLAC, against the flush's 18–185 ms.
-   - **Accepted loss:** NTFS alternate data streams, such as the downloaded-from-the-web mark, no
-     longer carry over.
+     - Not measured: storage that offloads a copy (ODX), which `CopyFileExW` uses where the
+       storage supports it, keeping the bytes on the storage. There the copy now reads the track
+       and writes it back, beside the two whole reads Phase 2's check already makes.
+   - **Accepted losses:**
+     - NTFS alternate data streams, such as the downloaded-from-the-web mark, no longer carry over.
+     - EFS encryption set on the track alone, in a folder that isn't encrypted. `CopyFileExW`
+       encrypted the copy with the track's keys, and `SetFileAttributesW` can't set the flag
+       (item 5).
    - **Checked on Windows:**
      - every fixture lofty can write still saves and passes the audio check
      - hidden, system and unindexed tracks keep the flag
@@ -386,6 +392,8 @@ Run on Windows 11 Pro 10.0.26300, not elevated:
        id and the watcher suppressed the echo
    - **Still to check on Linux:** a read-only track refused, the mode kept, and a btrfs edit costing
      what Phase 2 measured.
+   - **Still to check on Windows:** an EFS track (`cipher /e`) edited in a plain folder and in an
+     encrypted one, read back with `cipher`.
 4. **`MOVEFILE_WRITE_THROUGH`: not worth having.**
    - Microsoft documents its flush only for "a move performed as a copy and delete operation",
      which a rename within one folder never is.
