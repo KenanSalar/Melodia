@@ -35,3 +35,8 @@ pub use scan::ResolvedIds;
 /// Whether two spellings of a path differing only in case name one file, by each platform's
 /// default: a case-sensitive APFS volume, or a vfat mount on Linux, answers wrongly.
 pub(crate) const DISK_IGNORES_CASE: bool = cfg!(any(target_os = "windows", target_os = "macos"));
+
+/// `path` as a disk that ignores case compares it, so every check for a respelled path agrees.
+pub(crate) fn case_folded(path: &str) -> String {
+    path.to_lowercase()
+}

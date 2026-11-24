@@ -499,11 +499,12 @@ fn forget_respelled(still_present: &mut HashSet<String>, new_files: &[&ScannedFi
         .iter()
         .map(|f| {
             let spelling = f.path.to_string_lossy();
-            (spelling.to_lowercase(), spelling)
+            (queries::case_folded(&spelling), spelling)
         })
         .collect();
     still_present.retain(|old_path| {
-        spelling_by_fold.get(&old_path.to_lowercase()).is_none_or(|new_path| new_path == old_path)
+        let new_path = spelling_by_fold.get(&queries::case_folded(old_path));
+        new_path.is_none_or(|new_path| new_path == old_path)
     });
 }
 

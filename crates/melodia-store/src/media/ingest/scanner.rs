@@ -1,10 +1,12 @@
 use std::borrow::Cow;
+use std::collections::HashMap;
 use std::ops::Range;
 use std::path::{Path, PathBuf};
 
 use rayon::prelude::*;
 use walkdir::{DirEntry, WalkDir};
 
+use crate::database::queries::{DISK_IGNORES_CASE, case_folded};
 use crate::media::ingest::metadata::extract_or_filename_row;
 use melodia_core::entities::scan::{FileStamp, FileStampRef, ScannedFile};
 use melodia_core::utils::audio_ext::{is_audio_extension, is_cue_sheet};
@@ -97,6 +99,10 @@ impl WalkedPaths {
             WalkedPath::Text { start, end } => Cow::Borrowed(&self.text[start..end]),
             WalkedPath::Foreign(slot) => self.foreign[slot].to_string_lossy(),
         }
+    }
+
+    fn spellings(&self) -> impl Iterator<Item = Cow<'_, str>> {
+        self.entries.iter().map(|&entry| self.spelling(entry))
     }
 
     /// Orders the paths by [`Self::spelling`] on the current rayon pool.
@@ -239,8 +245,8 @@ pub fn scan_files_parallel(
 ///
 /// Rows arrive one at a time and find their files by binary search, so only an orphan's path is
 /// copied, and the sort is on the lossy string a row stores so the two compare equal. Orphans are
-/// the rows the **whole** walk didn't find, never those of the files left to parse, which would
-/// read a no-change rescan's entire library as gone, and only once a `stat` finds the file gone.
+/// the rows the **whole** walk didn't find and whose files are gone, never those of the files left
+/// to parse, which would read a no-change rescan's entire library as gone.
 pub struct WalkIndex {
     files: WalkedPaths,
     stamps: Vec<Option<PackedStamp>>,
@@ -338,19 +344,44 @@ impl WalkIndex {
         let mut orphans = std::mem::take(&mut self.orphans);
         orphans.sort_unstable();
         orphans.dedup();
-        orphans.retain(|path| is_gone(path));
-        orphans
+        self.keep_gone(orphans)
     }
 
     /// Those of `paths` the walk didn't find and that are gone, sparing those under a path it
     /// couldn't read as [`Self::add_row`] spares a row. **Blocking**, as [`Self::take_orphans`].
     pub fn unwalked(&self, paths: impl IntoIterator<Item = String>) -> Vec<String> {
-        paths
+        let missed = paths
             .into_iter()
-            .filter(|path| {
-                self.files.spelled(path).is_empty() && !self.under_unreadable(path) && is_gone(path)
-            })
-            .collect()
+            .filter(|path| self.files.spelled(path).is_empty() && !self.under_unreadable(path))
+            .collect();
+        self.keep_gone(missed)
+    }
+
+    /// Those of `missed` whose files are gone. A disk that ignores case answers a `stat` for a
+    /// file the walk found under another spelling, which leaves this spelling gone all the same.
+    fn keep_gone(&self, missed: Vec<String>) -> Vec<String> {
+        let (mut gone, on_disk): (Vec<String>, Vec<String>) =
+            missed.into_iter().partition(|path| is_gone(path));
+        if DISK_IGNORES_CASE && !on_disk.is_empty() {
+            gone.extend(self.respelled(on_disk));
+        }
+        gone
+    }
+
+    /// Those of `missed` the walk found under another spelling, as [`case_folded`] compares them.
+    fn respelled(&self, missed: Vec<String>) -> Vec<String> {
+        let mut by_fold: HashMap<String, String> =
+            missed.into_iter().map(|path| (case_folded(&path), path)).collect();
+        let mut respelled = Vec::new();
+        for walked in self.files.spellings() {
+            if by_fold.is_empty() {
+                break;
+            }
+            if let Some(path) = by_fold.remove(&case_folded(&walked)) {
+                respelled.push(path);
+            }
+        }
+        respelled
     }
 
     fn stamp_files(&mut self, found: Range<usize>, stamp: FileStamp) {
@@ -380,7 +411,7 @@ impl WalkIndex {
 
 /// Whether the file at `path`, which a walk didn't find, is gone rather than missed: a directory
 /// read promises nothing about an entry renamed while it runs, which is how a tag write lands its
-/// copy. A regular file is spared, as is one whose `stat` fails any other way.
+/// copy. A regular file is there, as is one whose `stat` fails any other way.
 fn is_gone(path: &str) -> bool {
     match std::fs::symlink_metadata(path) {
         Ok(meta) => !meta.is_file(),

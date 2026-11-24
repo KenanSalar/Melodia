@@ -315,6 +315,9 @@ for write, calls `sync_all` and renames (`writer.rs:746-789`).
      "Removed 2 orphaned tracks" for two files still there.
    - `WalkIndex` now confirms each file the walk missed with a `stat` before calling it gone. That
      covers tracks, kept-out files and cue sheets, and runs off the async workers.
+   - Where the disk ignores case, a `stat` also finds a file renamed by case alone. A path the walk
+     found under another spelling therefore counts as gone, or a file retagged and renamed outside
+     Melodia would keep its old row beside the new one.
    - Through the real scanner, with renames running under the walk: across 10 rounds the walk
      missed 274 of 3,000 files, and none came back as orphans.
 
@@ -334,6 +337,10 @@ for write, calls `sync_all` and renames (`writer.rs:746-789`).
 - **Attributes.** tempfile's Windows `keep` sets `FILE_ATTRIBUTE_NORMAL` (`tempfile
   windows.rs:81-90`). Check whether a hidden or read-only track keeps its attributes through a
   tag edit. This one is not new.
+- **Quit during a slow tag write.** Can `remove_unfinished` unlink a temp while `CopyFileExW` or
+  the rewrite still holds it open? The temp should be gone, or the warning should name it, and the
+  original should be whole.
+- **A file retagged and renamed by case outside Melodia.** After a scan it has one row, not two.
 
 ### Phase 4: Tests (open)
 

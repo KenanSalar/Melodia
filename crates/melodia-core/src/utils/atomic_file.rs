@@ -227,7 +227,7 @@ pub fn remove_unfinished() {
     for tmp in &temps {
         match std::fs::remove_file(tmp) {
             Ok(()) => removed += 1,
-            // Renamed over its file since: the write landed.
+            // Gone already: renamed over its file, or removed by its own failed write.
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
             Err(e) => log::warn!("Failed to remove {}: {}", tmp.display(), describe(&e)),
         }
