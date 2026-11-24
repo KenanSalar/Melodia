@@ -1,5 +1,5 @@
-//! What both decoders need around the codec: the registry, the track pick, the open and the
-//! packet cursor. [`super::file_decode`] and [`super::stream_decode`] differ in what they hand
+//! What both decoders need around the codec: the registry, the probe, the track pick, the open and
+//! the packet cursor. [`super::file_decode`] and [`super::stream_decode`] differ in what they hand
 //! [`open`] and in nothing after, so the two can't drift apart.
 //!
 //! Against Symphonia 0.6, whose probe scores its candidates where 0.5's matched a two-byte marker
@@ -43,7 +43,7 @@ static CODECS: LazyLock<CodecRegistry> = LazyLock::new(|| {
 /// container's default flag before the codec
 /// ([symphonia#258](https://github.com/pdeljanov/Symphonia/issues/258)), so a null track can win
 /// the pick unless filtered.
-pub(super) fn audio_track(format: &dyn FormatReader) -> Option<&Track> {
+pub(crate) fn audio_track(format: &dyn FormatReader) -> Option<&Track> {
     format
         .default_track(TrackType::Audio)
         .filter(|track| audio_params(track).is_some())
@@ -166,11 +166,21 @@ pub(super) enum OpenError {
 }
 
 /// `hint` is a file's extension or a mount's content type, which 0.6 ignores, scoring instead.
-pub(super) fn open(source: Box<dyn MediaSource>, hint: &Hint) -> Result<Opened, OpenError> {
+pub(crate) fn probe(
+    source: Box<dyn MediaSource>,
+    hint: &Hint,
+) -> Result<Box<dyn FormatReader>, SymphoniaError> {
     let mss = MediaSourceStream::new(source, MediaSourceStreamOptions::default());
-    let mut format = symphonia::default::get_probe()
-        .probe(hint, mss, FormatOptions::default(), MetadataOptions::default())
-        .map_err(OpenError::Unreadable)?;
+    symphonia::default::get_probe().probe(
+        hint,
+        mss,
+        FormatOptions::default(),
+        MetadataOptions::default(),
+    )
+}
+
+pub(super) fn open(source: Box<dyn MediaSource>, hint: &Hint) -> Result<Opened, OpenError> {
+    let mut format = probe(source, hint).map_err(OpenError::Unreadable)?;
 
     let track = audio_track(&*format).ok_or(OpenError::NoAudio)?;
     let params = audio_params(track).ok_or(OpenError::NoCodec)?.clone();

@@ -41,7 +41,8 @@ paths:
   `atomic_file::rewrite_with_sync` hands over, never `save_to_path`, whose own handle drops a write
   error at close (that function's doc argues it)
 - Be aware that saving may rewrite the entire file for some formats
-- Back up or verify before bulk tag writes
+- A new write into a library file calls `tag_writer::require_same_audio` inside that closure,
+  after the save: lofty can write a copy that plays differently, and the check refuses it
 
 ## Error Handling
 

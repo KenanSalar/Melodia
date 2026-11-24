@@ -28,12 +28,13 @@ use lofty::tag::items::Timestamp;
 use lofty::tag::{ItemValue, Tag, TagExt, TagItem, TagType};
 
 use super::{metadata, rating_tags, role_tags};
+use melodia_audio::audio_match::{self, AudioMatch};
 use melodia_core::entities::artist::ArtistCredit;
 use melodia_core::entities::genre::GenreList;
 use melodia_core::entities::tags::{
     ArtworkEdit, FieldEdit, FileTags, RoleCreditEdit, TagEdit, TagField,
 };
-use melodia_core::error::AppError;
+use melodia_core::error::{AppError, describe};
 use melodia_core::utils::atomic_file;
 
 /// The highest BPM written; past it is a typo, not a tempo.
@@ -410,13 +411,35 @@ pub fn apply_to_file(
     let unsupported = apply_edit(tag, edit, picture);
 
     // Not in place: a tag edit routinely targets the track a deck holds open.
-    atomic_file::rewrite_with_sync(path, move |copy, _| {
+    atomic_file::rewrite_with_sync(path, move |copy, copy_path| {
         save_tags(tagged, copy).map_err(|e| {
             AppError::metadata(format!("Failed to write tags to {}", path.display()), e)
-        })
+        })?;
+        require_same_audio(path, copy_path)
     })?;
 
     Ok(WriteOutcome { format, unsupported })
+}
+
+/// Refuses the rewrite at `copy` where its audio differs from `original`'s. An original that won't
+/// demux is written unchecked, its tags still worth fixing, and no measurement rides on it: the
+/// loudness pass reads through the same demuxer. Blocking.
+pub(crate) fn require_same_audio(original: &Path, copy: &Path) -> Result<(), AppError> {
+    match audio_match::compare(original, copy) {
+        AudioMatch::Same => Ok(()),
+        AudioMatch::Unchecked(reason) => {
+            log::warn!(
+                "Writing tags to {} without checking its audio: {}",
+                original.display(),
+                describe(&reason)
+            );
+            Ok(())
+        }
+        AudioMatch::Changed(change) => Err(AppError::metadata(
+            format!("Refused to write tags to {}", original.display()),
+            change,
+        )),
+    }
 }
 
 /// Saves `tagged` into `copy`, a `VorbisComments` primary as [`vorbis_comments`] builds it: lofty's

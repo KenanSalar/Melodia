@@ -2,8 +2,7 @@
 //! registry and the cursor are [`super::decode`]'s, shared with [`super::stream_decode`].
 
 use std::collections::VecDeque;
-use std::fs::{File, Metadata};
-use std::io::{Read, Seek, SeekFrom};
+use std::fs::File;
 use std::path::Path;
 use std::sync::Arc;
 use std::time::Duration;
@@ -11,9 +10,7 @@ use std::time::Duration;
 use symphonia::core::audio::Position;
 use symphonia::core::codecs::audio::AudioDecoder;
 use symphonia::core::codecs::audio::well_known::CODEC_ID_OPUS;
-use symphonia::core::formats::probe::Hint;
 use symphonia::core::formats::{FormatReader, SeekMode, SeekTo};
-use symphonia::core::io::MediaSource;
 use symphonia::core::units::{Time, TimeBase, Timestamp};
 
 use melodia_core::entities::cue::CueSpan;
@@ -26,6 +23,7 @@ use super::audio::{
     frames_to_duration, interleaved,
 };
 use super::decode::{self, Ended, Rounding};
+use super::file_source::{self, FileSource};
 use super::mkv_trim;
 use super::opus;
 use super::span::Span;
@@ -35,45 +33,6 @@ use super::span::Span;
 /// which a drag to the slider's right edge asks for exactly. Clears the gap between a stated length
 /// and the last decodable frame, which tags overstate routinely, and still sounds like the end.
 const SEEK_END_MARGIN: Duration = Duration::from_millis(100);
-
-/// A file with its seekability and length taken once: Symphonia's own `File` source re-reads the
-/// filesystem on every call, which the demuxer makes per probe and per seek. No `BufReader`,
-/// [`MediaSourceStream`] already being the read-ahead buffer.
-struct FileSource {
-    inner: File,
-    seekable: bool,
-    byte_len: Option<u64>,
-}
-
-impl FileSource {
-    fn new(inner: File) -> Self {
-        // Anything but a regular file is a pipe or a device wearing an audio extension.
-        let regular = inner.metadata().ok().filter(Metadata::is_file);
-        Self { seekable: regular.is_some(), byte_len: regular.map(|m| m.len()), inner }
-    }
-}
-
-impl Read for FileSource {
-    fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
-        self.inner.read(buf)
-    }
-}
-
-impl Seek for FileSource {
-    fn seek(&mut self, pos: SeekFrom) -> std::io::Result<u64> {
-        self.inner.seek(pos)
-    }
-}
-
-impl MediaSource for FileSource {
-    fn is_seekable(&self) -> bool {
-        self.seekable
-    }
-
-    fn byte_len(&self) -> Option<u64> {
-        self.byte_len
-    }
-}
 
 /// How much of the container's timeline isn't music, filled by [`super::aac_trim`],
 /// [`FileDecoder::opus_padding`] and [`super::mkv_trim`].
@@ -150,11 +109,6 @@ impl FileDecoder {
         let edits = aac_trim::edit_lists(&mut file);
         let discards = mkv_trim::discard_padding(&mut file);
 
-        let mut hint = Hint::new();
-        if let Some(extension) = path.extension().and_then(|e| e.to_str()) {
-            hint.with_extension(extension);
-        }
-
         let decode::Opened {
             format,
             decoder,
@@ -164,7 +118,7 @@ impl FileDecoder {
             time_base,
             total_duration,
             first_pts,
-        } = decode::open(Box::new(FileSource::new(file)), &hint)
+        } = decode::open(Box::new(FileSource::new(file)), &file_source::extension_hint(path))
             .map_err(|e| AppError::player(path.display().to_string(), e))?;
 
         let mut decoded = Self {

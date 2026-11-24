@@ -142,13 +142,14 @@ for write, calls `sync_all` and renames (`writer.rs:746-789`).
 
 **Files that grow (800-line cap):**
 
-| File | Before | After (estimate) |
+| File | Before | After |
 |---|---|---|
-| `atomic_file.rs` | 150 | ~175 |
-| `tag_writer.rs` | 492 | ~505 |
-| `decode.rs` | 405 | ~410 |
-| `audio_match.rs` | new | ~200 |
-| `file_decode.rs` | 497 | shrinks |
+| `atomic_file.rs` | 150 | 181 |
+| `tag_writer.rs` | 492 | 516 |
+| `decode.rs` | 415 | 425 |
+| `audio_match.rs` | new | 192 |
+| `file_source.rs` | new | 87 |
+| `file_decode.rs` | 510 | 464 |
 | `desktop_integration.rs` | | shrinks |
 
 ## Phases
@@ -185,26 +186,28 @@ for write, calls `sync_all` and renames (`writer.rs:746-789`).
 7. **Gates.** fmt, then clippy `--workspace`. The `atomic_file_tests.rs` rewrite tests break on
    the closure's new signature and are fixed here.
 
-### Phase 2: check the audio before the swap (open)
+### Phase 2: check the audio before the swap (open: items 1-5 done, 6 to run)
 
 1. **Extract, inside `melodia-audio`:**
-   - `FileSource` moves out of `file_decode.rs:38-76` into its own module, with an
-     end-of-audio bound.
-   - `decode::probe` is split out of `decode::open` (`decode.rs:164-170`).
+   - `FileSource` moves out of `file_decode.rs` into `file_source.rs`, with an end-of-audio
+     bound, beside the extension `Hint` both of its users build.
+   - `decode::probe` is split out of `decode::open`.
 2. **`audio_match::compare(original, copy) -> AudioMatch`.** It returns `Same`,
    `Unchecked(reason)` or `Changed(AudioChange)`, where `AudioChange` is an `Error`.
    - **The bound.** Each file is bounded where a trailing ID3v1 (`TAG`, 128 bytes) and an APEv2
      footer before it start. That applies to every file: lofty writes those tags only on MP3 and
      AAC, and a file without them is bounded at its own length.
-   - **The original won't open.** Return `Unchecked`, so its tags can still be fixed. No loudness
-     row is at stake, since the loudness pass decodes through the same Symphonia
-     (`loudness/mod.rs:119`).
+   - **The original won't open,** or has no audio track to compare. Return `Unchecked`, so its
+     tags can still be fixed. No loudness row is at stake, since the loudness pass decodes
+     through the same Symphonia (`loudness/mod.rs:119`).
    - **The copy won't open.** Return `Changed`.
-   - **The tracks.** Same count, and per track the same codec, sample rate, channels and
-     `extra_data`.
-   - **The packets.** Read in lockstep. Each pair must have the same `track_id`, `pts`, `dur`,
-     `trim_start`, `trim_end` and `data`, and both sides must end at the same packet the same
-     way.
+   - **The tracks.** Same count, and per track the same id, time base, codec, sample rate,
+     channels and `extra_data`.
+   - **The packets.** Read in lockstep. Each pair must match in every field, and both sides must
+     end at the same packet the same way.
+   - **A chained Ogg** raises `ResetRequired` on both sides at each new link
+     (`symphonia-format-ogg demuxer.rs:92-96`). The comparison compares the tracks again and
+     carries on, so a later link is checked too.
    - **Memory.** Two packets at a time, nothing buffered per file.
 3. **The caller.**
    - One `tag_writer` helper runs inside both lofty closures, after the save and before the
@@ -213,18 +216,38 @@ for write, calls `sync_all` and renames (`writer.rs:746-789`).
      any failed file. No new UI string.
    - `Unchecked` logs a warning.
 4. **Docs this phase makes wrong:**
-   - `queries/loudness/mod.rs:3-6, 67-70`: `carry_over` now names the check that makes its
-     premise hold.
-   - `melodia-store/Cargo.toml:18-20`'s note on the `melodia-audio` edge, which calls the
-     duration probe the one use.
-5. **Confirm by hand on real files:**
+   - `database/queries/loudness/mod.rs`: `carry_over` now names the check that makes its premise
+     hold.
+   - `melodia-store/Cargo.toml`'s note on the `melodia-audio` edge, and the crate doc's line on
+     it. Both called the duration probe the one use, which the loudness types had already made
+     wrong.
+   - `melodia-audio/src/lib.rs`'s crate doc names the check.
+   - `rating_writeback.rs`: the uncancellable write now includes the check.
+   - `.claude/rules/lofty.md`: a new write path calls the check.
+5. **Confirm by hand on real files (done).** The shapes below were run through `apply_to_file`
+   from a scratch binary, then again in the app.
+   - **The app run:** one Album edit over all 15 tracks of a test library folder, in the dev data
+     folder. The folder held the shapes below, a FLAC carrying its sheet, and a copy of a real
+     file in each of the eight formats, the MP3 playing.
+   - **The result:** the toast read "13 tracks updated, 2 files failed", the two being the shapes
+     refused below.
+   - **The written files:** every one decodes in ffmpeg identically to its pristine copy.
+   - **The playing track:** the deck played on from the replaced inode.
+   - **The watcher:** it suppressed all 12 events and re-ingested nothing.
    - An Ogg file with an unparsable page and a fragmented M4A with an absolute `tfhd` offset are
-     both refused.
+     both refused. Each file is left byte for byte as it was, with no temp beside it.
    - A fragmented M4A carrying a `sidx`: Symphonia reads only its duration (`isomp4
-     demuxer.rs:189-209`), so the check can't see it. Confirm ffmpeg still seeks the copy
-     correctly, and refuse such files before writing if it doesn't.
+     demuxer.rs:189-209`), so the check can't see it. Its references are relative and move with
+     the fragments. The written copy decodes identically to the original in ffmpeg, whole and
+     from six seek points, so it needs no refusal.
    - A multiplexed Ogg: lofty numbers every page with one counter across streams
-     (`write.rs:123-133`). Same treatment as the `sidx` case.
+     (`write.rs:123-133`). lofty refuses the file at the read ("file missing magic signature"),
+     taking the second stream's first page for the comment header. The Ogg spec puts every
+     stream's first page ahead of any header, so it is never written.
+   - A chained Ogg keeps each link's pages consecutive. It is written, checked across both links,
+     and decodes identically in ffmpeg.
+   - Every `test-assets/silence.*` lofty can write reads as `Same` after a real write, and as
+     `Changed` once its last tenth is cut.
 6. **Measure in a release build, before and after each phase:**
    - **A 12-track FLAC album edit and a 12-track MP3 album edit.** These give the per-file write
      cost.

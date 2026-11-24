@@ -65,9 +65,11 @@ pub struct AlbumJob {
 }
 
 /// Moves the measurements of `path`'s rows taken at `old_hash` onto the hash the rows now carry,
-/// once they have read back a file Melodia wrote only tags into: left alone, every rated track's
-/// album is decoded again. Never from the general ingest, where a tag write and a replaced file
-/// look the same.
+/// once they have read back a file Melodia wrote only tags into, the write having held its audio
+/// to the original's ([`require_same_audio`]): left alone, every rated track's album is decoded
+/// again. Never from the general ingest, where a tag write and a replaced file look the same.
+///
+/// [`require_same_audio`]: crate::media::ingest::tag_writer::require_same_audio
 pub(crate) fn carry_over(tx: &Transaction<'_>, path: &str, old_hash: &str) -> Result<(), AppError> {
     sql::execute(
         tx,

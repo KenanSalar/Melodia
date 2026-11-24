@@ -22,7 +22,7 @@ use super::merge::{self, CueRow};
 use super::parse::{self, Files, Sheet};
 use super::write::{self, SheetEdit, SheetRows};
 use crate::media::ingest::metadata::{self, TagScope};
-use crate::media::ingest::tag_writer::file_tags_of;
+use crate::media::ingest::tag_writer::{self, file_tags_of};
 use melodia_core::entities::cue::{CueTrack, EmbeddedCue, EmbeddedSheet, EmbeddedSource};
 use melodia_core::entities::scan::ExtractedMetadata;
 use melodia_core::entities::tags::{EmbeddedSheetTags, FileTags};
@@ -147,10 +147,11 @@ impl EmbeddedWrite {
     /// playing it reads on from the file it opened. The whole `FlacFile` is saved, lofty dropping
     /// every picture a bare comment block doesn't hold. Blocking.
     pub fn save(self, image: &Path) -> Result<(), AppError> {
-        atomic_file::rewrite_with_sync(image, move |copy, _| {
+        atomic_file::rewrite_with_sync(image, move |copy, copy_path| {
             self.0.save_to(copy, WriteOptions::default()).map_err(|e| {
                 AppError::metadata(format!("Failed to write tags to {}", image.display()), e)
-            })
+            })?;
+            tag_writer::require_same_audio(image, copy_path)
         })
     }
 }

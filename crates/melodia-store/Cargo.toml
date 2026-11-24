@@ -15,8 +15,8 @@ doctest = false
 melodia-core = { path = "../melodia-core" }
 # The scanner and the metadata reader both cache covers through the store.
 melodia-artwork = { path = "../melodia-artwork" }
-# `ingest::metadata`'s duration probe, for the containers lofty can't measure. The one edge
-# this crate has into the audio stack, and it points at its bottom tier.
+# The duration probe for the containers lofty can't measure, the check that a tag write kept the
+# audio, and the loudness types the store records: its edge into the audio stack's bottom tier.
 melodia-audio = { path = "../melodia-audio" }
 
 rusqlite.workspace = true
