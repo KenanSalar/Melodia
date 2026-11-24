@@ -104,10 +104,13 @@ pub(super) fn attempt_post_swap_rollback(target: &Path) {
         // A missing binary beats a broken one posing as a valid install.
         let _ = std::fs::remove_file(target);
         match std::fs::rename(&old, target) {
-            Ok(()) => log::info!(
-                "updater: rolled back swap — restored {} from .old snapshot",
-                target.display()
-            ),
+            Ok(()) => {
+                melodia_core::utils::atomic_file::sync_parent(target);
+                log::info!(
+                    "updater: rolled back swap — restored {} from .old snapshot",
+                    target.display()
+                );
+            }
             Err(e) => log::warn!(
                 "updater: rollback failed: could not rename {} → {}: {}",
                 old.display(),

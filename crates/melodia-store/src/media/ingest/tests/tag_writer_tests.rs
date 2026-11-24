@@ -478,7 +478,7 @@ fn flac_round_trips_a_full_edit_with_lyrics_under_the_lyrics_key() -> Result<(),
 }
 
 /// The `read_cover_art` trap: `apply_to_file` must parse WITH pictures, or
-/// `save_to_path` rewrites the tag from a picture-less parse and silently deletes
+/// lofty's save rewrites the tag from a picture-less parse and silently deletes
 /// every embedded image.
 #[test]
 fn an_embedded_picture_survives_an_edit_that_does_not_touch_artwork() -> Result<(), AppError> {

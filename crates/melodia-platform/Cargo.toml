@@ -27,8 +27,7 @@ jiff.workspace = true
 dirs.workspace = true
 # The tray icon is decoded from the embedded PNG at startup.
 image.workspace = true
-# The single-instance socket name is a hash of the data directory, and
-# `desktop_integration` compares a staged file against what is already installed.
+# The single-instance socket and the KWin keep-above script are named by a hash of the data root.
 blake3.workspace = true
 
 [target.'cfg(target_os = "linux")'.dependencies]

@@ -29,7 +29,7 @@ rox's `writer.rs:786`, so the search does match real calls. As a result:
 
 **After.** The same saves, a little slower (measured in Phase 2).
 
-- On Linux and macOS, a save that has returned survives a power cut.
+- On Linux, a save that has returned survives a power cut.
 - On Windows, a power cut brings back the old file whole or the new one, until Phase 3 decides
   on write-through.
 - A save the disk or share refuses fails that file in the toast's count, and the original stays.
@@ -75,6 +75,9 @@ for write, calls `sync_all` and renames (`writer.rs:746-789`).
    copy" runs, the error it is meant to catch can already be gone. rox reopens the copy and has
    the same hole. lofty has a `save_to(&mut File)` for both `AudioFile` and `TagExt`, so Melodia
    can hand it the handle and flush that handle.
+   - The copy's audio bytes still come from `fs::copy`, through std's own handle, which it drops
+     (std `sys/fs/unix.rs:2302-2310`). On Linux the flush on the fresh handle still reports a
+     writeback error no descriptor has seen (errseq, kernel 4.17). Windows is Phase 3's.
 2. **The audio check must compare codec parameters too, not packets alone.**
    - The Vorbis setup header, which lofty re-packs, goes to `extra_data`, not to packets
      (`symphonia-format-ogg-0.6.1/src/mappings/vorbis.rs:244-255`).
@@ -226,25 +229,27 @@ for write, calls `sync_all` and renames (`writer.rs:746-789`).
    - **A 12-track FLAC album edit and a 12-track MP3 album edit.** These give the per-file write
      cost.
    - **One rating.** This gives the cost a single click pays.
-   - **8 ratings at quit**, against `SHUTDOWN_FLUSH_MAX`'s shared 3 s budget.
+   - **8 ratings at quit**, against `SHUTDOWN_FLUSH_MAX`'s shared 3 s budget. Run it on the
+     slowest disk a library can sit on (a USB drive or a share), since each write now waits for
+     its whole copy to reach the disk.
    - **The slowest file's write time**, against `self_writes`' 30 s TTL.
    - A throwaway `Instant` log around `run_write_pass` times them. You run the edits in the dev
      data folder. Figures go in the PR.
 
-### Phase 3: Windows and macOS (open, on real machines)
+### Phase 3: Windows (open, on a real machine)
 
 - **Tag edit on the playing track.** Does `MoveFileExW` answer `ACCESS_DENIED`, so that std's
   POSIX fallback replaces the held-open file?
 - **The flush.** `FlushFileBuffers` on the read and write handle succeeds, and a refused write
   fails the save.
+- **The copy.** `fs::copy` is `CopyFileExW`, whose handle Melodia never sees. Check that a write
+  it can't land fails the save, rather than leaving a short copy the flush can't see.
 - **`MOVEFILE_WRITE_THROUGH` for targets nobody holds open.** It needs a `MoveFileExW` of our own
   and the `Win32_Storage_FileSystem` feature, which the workspace doesn't enable
   (`Cargo.toml:302-311`). It can't cover the playing track. Decide whether it is worth having.
 - **Attributes.** tempfile's Windows `keep` sets `FILE_ATTRIBUTE_NORMAL` (`tempfile
   windows.rs:81-90`). Check whether a hidden or read-only track keeps its attributes through a
   tag edit. This one is not new.
-- **macOS.** `sync_all` is `F_FULLFSYNC` (`std unix.rs:1270-1273`). Check that it works on a
-  folder, and what it costs per settings write.
 
 ### Phase 4: Tests (open)
 
@@ -257,4 +262,4 @@ for write, calls `sync_all` and renames (`writer.rs:746-789`).
   - Settings survive a restart.
 - **Phase 2.** The hand checks above, a tag edit on each of the eight formats, and the costs from
   item 6.
-- **Phase 3.** The checklist above, run on Windows and macOS.
+- **Phase 3.** The checklist above, run on Windows.

@@ -37,8 +37,9 @@ paths:
 
 ## Writing Metadata
 
-- Save with `save_to` through the handle `atomic_file::rewrite_with_sync` hands over, never
-  `save_to_path`, whose own handle drops a write error at close (that function's doc argues it)
+- A write into a library file saves with `save_to` through the handle
+  `atomic_file::rewrite_with_sync` hands over, never `save_to_path`, whose own handle drops a write
+  error at close (that function's doc argues it)
 - Be aware that saving may rewrite the entire file for some formats
 - Back up or verify before bulk tag writes
 

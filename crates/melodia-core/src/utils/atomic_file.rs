@@ -1,8 +1,8 @@
 //! Whole-file read and atomic whole-file write: the JSON and text beside the database, and a
 //! track's tag rewrite. The reads need no lock because every write lands through a same-directory
 //! temp file and a rename, so a reader only ever sees one whole file and a crash or power cut
-//! leaves one. The temp is flushed before the rename and, on unix, its folder after, so a save that
-//! has returned there survives a power cut too.
+//! leaves one. The temp is flushed before the rename and, on unix, its folder after, so on unix a
+//! save that has returned survives a power cut too.
 
 use std::fs::File;
 use std::io::{BufWriter, Write};
@@ -110,10 +110,10 @@ pub fn write_with_sync(
 }
 
 /// Hands `rewrite` a copy of `path`, as a read-write handle and its path, renamed over the original
-/// once `rewrite` succeeds. A rewrite in place moves every byte after the edit under
-/// whoever has the file open, so a deck playing the track would read the wrong offsets; a rename
-/// leaves it on the file it opened. Costs one copy and write permission on the directory, with no
-/// in-place fallback: a second write path is the one nobody exercises.
+/// once `rewrite` succeeds. A rewrite in place moves every byte after the edit under whoever has
+/// the file open, so a deck playing the track would read the wrong offsets; a rename leaves it on
+/// the file it opened. Costs one copy and write permission on the directory, with no in-place
+/// fallback: a second write path is the one nobody exercises.
 ///
 /// `rewrite` writes through the handle, never a second open of the path: a write the disk or share
 /// refuses can surface only at the writer's close, whose error `Drop` discards, so the flush that

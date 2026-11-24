@@ -2,7 +2,7 @@
 //!
 //! RPM/DEB redeploy theirs on every upgrade and an `AppImage` carries its own, but the in-app
 //! updater's binary swap never refreshes what `install-linux.sh` deployed. So the payloads are
-//! compiled in and every boot BLAKE3s the on-disk copies against them, rewriting on mismatch.
+//! compiled in and every boot compares the on-disk copies against them, rewriting on mismatch.
 //!
 //! Skipped on RPM/DEB, where user-scoped copies diverging from the package's would leave which one
 //! wins to `XDG_DATA_DIRS` order, on an `AppImage`, and on a development build, whose `Exec=` would
@@ -158,10 +158,10 @@ fn quote_exec(command: &str) -> String {
     quoted
 }
 
-/// Writes only when the on-disk BLAKE3 differs, returning whether it did.
+/// Writes only when the on-disk bytes differ, returning whether it did.
 fn write_if_changed(path: &Path, payload: &[u8]) -> AppResult<bool> {
     if let Ok(existing) = std::fs::read(path)
-        && blake3::hash(&existing) == blake3::hash(payload)
+        && existing == payload
     {
         return Ok(false);
     }
