@@ -485,16 +485,17 @@ fn keep_gone(
     pool: &ScanPool,
 ) -> MoveCandidates {
     let mut still_present = batch_still_on_disk(candidates.old_paths(), pool);
-    if queries::DISK_IGNORES_CASE {
-        forget_respelled(&mut still_present, new_files);
-    }
+    forget_respelled(&mut still_present, new_files);
     candidates.retain_gone(&still_present);
     candidates
 }
 
-/// Drops the old paths a new file only respells: where the disk ignores case, two paths folding
-/// alike are one file, so the new one can't be a copy sitting beside it.
+/// Drops the old paths a new file only respells, naming the same file on a disk that ignores case,
+/// so the new one can't be a copy sitting beside it.
 fn forget_respelled(still_present: &mut HashSet<String>, new_files: &[&ScannedFile]) {
+    if still_present.is_empty() {
+        return;
+    }
     let spelling_by_fold: HashMap<String, Cow<'_, str>> = new_files
         .iter()
         .map(|f| {
@@ -504,7 +505,9 @@ fn forget_respelled(still_present: &mut HashSet<String>, new_files: &[&ScannedFi
         .collect();
     still_present.retain(|old_path| {
         let new_path = spelling_by_fold.get(&queries::case_folded(old_path));
-        new_path.is_none_or(|new_path| new_path == old_path)
+        new_path.is_none_or(|new_path| {
+            new_path == old_path || !queries::names_one_file(old_path, new_path)
+        })
     });
 }
 

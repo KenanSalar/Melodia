@@ -216,8 +216,12 @@ would have damaged any of those 8.
     decodes identically, its row shows its title again, and its loudness row is kept.
   - A clean WAV and AIFF, and the 3,575 even-sized files, stay byte for byte.
   - A second launch runs nothing.
-  - Pending since the switch to `commit_reread`: an album the repair recreates shows its cover in
-    the Albums grid, and no album or artist the file-name rows held is left orphaned.
+  - Since the switch to `commit_reread`, an album the repair recreates shows its cover in the
+    Albums grid, and no album or artist the file-name rows held is left orphaned. Done 2026-11-24
+    under `cargo mcp`: two cut-id WAVs of one album, each with an embedded cover, ingested as
+    file-name rows with no such album. The repair brought both back to "HT Cover Album", the album
+    row took the cover from its tracks, the grid drew it, and no album, artist or genre was left
+    without tracks.
   - Done 2026-11-24 under `cargo mcp`, the data folder backed up and restored. A test library
     folder held the 8 damaged Madih copies (one chained) and six step 1 shapes, beside one damaged
     WAV opened from outside the library and two clean controls:

@@ -316,8 +316,11 @@ for write, calls `sync_all` and renames (`writer.rs:746-789`).
    - `WalkIndex` now confirms each file the walk missed with a `stat` before calling it gone. That
      covers tracks, kept-out files and cue sheets, and runs off the async workers.
    - Where the disk ignores case, a `stat` also finds a file renamed by case alone. A path the walk
-     found under another spelling therefore counts as gone, or a file retagged and renamed outside
-     Melodia would keep its old row beside the new one.
+     found under another spelling of the same file therefore counts as gone, or a file retagged and
+     renamed outside Melodia would keep its old row beside the new one.
+   - "The same file" is asked of the disk on Unix, by device and inode (`queries::names_one_file`),
+     so a FAT or exFAT mount on Linux answers rightly, where the platform default `DISK_IGNORES_CASE`
+     can't. The move detection asks it too, so such a rename keeps its row, rating and play count.
    - Through the real scanner, with renames running under the walk: across 10 rounds the walk
      missed 274 of 3,000 files, and none came back as orphans.
 
