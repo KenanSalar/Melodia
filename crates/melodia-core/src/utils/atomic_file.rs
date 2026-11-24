@@ -6,7 +6,7 @@
 //! is removed then ([`remove_unfinished`]).
 
 use std::fs::File;
-use std::io::{BufWriter, Write};
+use std::io::{self, BufReader, BufWriter, Seek, Write};
 use std::mem::DropGuard;
 use std::path::{Path, PathBuf};
 use std::sync::{Mutex, MutexGuard, PoisonError};
@@ -117,37 +117,46 @@ pub fn write_with_sync(
     rename_over(&tmp, path)
 }
 
-/// Hands `rewrite` a copy of `path`, as a read-write handle and its path, renamed over the original
-/// once `rewrite` succeeds. A rewrite in place moves every byte after the edit under whoever has
-/// the file open, so a deck playing the track would read the wrong offsets; a rename leaves it on
-/// the file it opened. Costs one copy and write permission on the directory, with no in-place
-/// fallback: a second write path is the one nobody exercises.
+/// Hands `rewrite` a copy of `path`, as a read-write handle at its start and its path, renamed over
+/// the original once `rewrite` succeeds. A rewrite in place moves every byte after the edit under
+/// whoever has the file open, so a deck playing the track would read the wrong offsets; a rename
+/// leaves it on the file it opened. Costs one copy and write permission on the directory, with no
+/// in-place fallback: a second write path is the one nobody exercises. A read-only file is refused.
 ///
-/// `rewrite` writes through the handle, never a second open of the path: a write the disk or share
-/// refuses can surface only at the writer's close, whose error `Drop` discards, so the flush that
-/// reports it runs on the handle that wrote.
+/// The copy and `rewrite` both write through the handle, never a second open of the path: a write
+/// the disk or share refuses can surface only at the writer's close, whose error `Drop` discards, so
+/// the flush that reports it runs on the handle that wrote. `fs::copy` would write through
+/// `CopyFileExW`'s own handle, which denies delete, so [`remove_unfinished`] couldn't clear a copy
+/// cut short at exit.
 pub fn rewrite_with_sync(
     path: &Path,
     rewrite: impl FnOnce(&mut File, &Path) -> AppResult<()>,
 ) -> AppResult<()> {
     // Resolved first: a rename replaces a symlink where a write in place followed it.
     let path = &std::fs::canonicalize(path)?;
-    // Closed for `fs::copy`, which opens it itself; no extension, so the watcher skips it.
-    let (_unfinished, tmp) = unfinished_temp(folder_of(path))?;
-    let mut tmp = tmp.into_temp_path();
-    std::fs::copy(path, &tmp)?;
-    {
-        let mut copy = File::options().read(true).write(true).open(&tmp)?;
-        rewrite(&mut copy, &tmp)?;
-        copy.sync_all()?;
+    let track = File::open(path)?;
+    if track.metadata()?.permissions().readonly() {
+        let refusal = io::Error::new(io::ErrorKind::PermissionDenied, "the file is read-only");
+        return Err(AppError::Io(refusal));
     }
-    // A Windows `Permissions` is the whole attribute word: the track's hidden or system flag carries
-    // over, and the `TEMPORARY` the copy left on the temp goes, where `keep` would clear them all.
-    #[cfg(windows)]
+    // No extension, so the watcher skips it.
+    let (_unfinished, tmp) = unfinished_temp(folder_of(path))?;
+    let (mut copy, mut tmp) = tmp.into_parts();
+    io::copy(&mut BufReader::with_capacity(COPY_READ_SIZE, track), &mut copy)?;
+    copy.rewind()?;
+    rewrite(&mut copy, &tmp)?;
+    copy.sync_all()?;
+    drop(copy);
+    // The track's mode, or on Windows its whole attribute word, which carries a hidden or system flag
+    // over and clears the temp's `TEMPORARY`, where `keep` would clear them all.
     std::fs::set_permissions(&tmp, std::fs::metadata(path)?.permissions())?;
     tmp.disable_cleanup(true);
     rename_over(&tmp, path)
 }
+
+/// The read size of a track's copy: std's own buffer would cost a call every few kilobytes, which
+/// shows across an album of lossless files.
+const COPY_READ_SIZE: usize = 1 << 20;
 
 /// Renames `tmp`, its cleanup disarmed, over `path`, removing it if the rename fails. Not
 /// `TempPath::persist`, a bare `MoveFileExW` on Windows that can't take a name a playing deck holds

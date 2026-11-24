@@ -76,9 +76,8 @@ for write, calls `sync_all` and renames (`writer.rs:746-789`).
    copy" runs, the error it is meant to catch can already be gone. rox reopens the copy and has
    the same hole. lofty has a `save_to(&mut File)` for both `AudioFile` and `TagExt`, so Melodia
    can hand it the handle and flush that handle.
-   - The copy's audio bytes still come from `fs::copy`, through std's own handle, which it drops
-     (std `sys/fs/unix.rs:2302-2310`). On Linux the flush on the fresh handle still reports a
-     writeback error no descriptor has seen (errseq, kernel 4.17). Windows is Phase 3's.
+   - The copy's audio bytes go through that handle too (Phase 3, item 3), so one flush covers every
+     byte the rewrite put on disk.
 2. **The audio check must compare codec parameters too, not packets alone.**
    - The Vorbis setup header, which lofty re-packs, goes to `extra_data`, not to packets
      (`symphonia-format-ogg-0.6.1/src/mappings/vorbis.rs:244-255`).
@@ -126,7 +125,7 @@ for write, calls `sync_all` and renames (`writer.rs:746-789`).
 
 | File | Owns after this plan |
 |---|---|
-| `melodia-core/src/utils/atomic_file.rs` | the temp, the flush on the writing handle, the track's attributes carried over on Windows, the rename, the folder flush (`sync_parent`, public for the updater) |
+| `melodia-core/src/utils/atomic_file.rs` | the temp, the track's copy through the temp's own handle, the flush on that handle, the track's permissions carried over and a read-only track refused, the rename, the folder flush (`sync_parent`, public for the updater) |
 | `melodia-store/src/database/queries/ingest.rs` | which move candidates are gone (`keep_gone_from`), for the scan and the watcher alike |
 | `melodia-audio/src/player/source/file_source.rs` (new, extracted) | the file `MediaSource`, optionally ending early |
 | `melodia-audio/src/player/source/decode.rs` | `probe`, extracted from `open` |
@@ -146,7 +145,7 @@ for write, calls `sync_all` and renames (`writer.rs:746-789`).
 
 | File | Before | After |
 |---|---|---|
-| `atomic_file.rs` | 150 | 249 |
+| `atomic_file.rs` | 150 | 258 |
 | `ingest.rs` | 725 | 736 |
 | `watch_batch.rs` | 577 | 581 |
 | `tag_writer.rs` | 492 | 516 |
@@ -358,8 +357,35 @@ Run on Windows 11 Pro 10.0.26300, not elevated:
      temp left.
    - Not verified: a refusal reported only at the flush. A local disk reports it at `WriteFile`;
      only a share defers it, and none was to hand.
-3. **The copy.** Not run: the stick was taken out first. `CopyFileExW` writes through a handle
-   Melodia never sees, so whether a refusal it defers reaches the flush stays unverified.
+3. **The copy: now through the temp's own handle.**
+   - **Why:** `fs::copy` is `CopyFileExW` on Windows, which writes through a handle of its own,
+     opened denying delete (item 6). A refusal it defers reaching the flush stayed unverified, since
+     the stick was taken out first.
+   - **The change:** `rewrite_with_sync` opens the track, copies it into the temp's own handle,
+     rewinds it and hands it to the rewrite, so the copy, the rewrite and the flush share one
+     handle. It sets the track's permissions on the temp, which `fs::copy` did, and refuses a
+     read-only track up front, which a copy of the read-only flag used to do by accident.
+   - **Linux:** std's `fs::copy` is itself an open, a permission set and `io::copy`, which reaches
+     `copy_file_range` (`sys/fs/unix.rs:2302-2308`). `io::copy` from a `BufReader` takes the same
+     path (`kernel_copy/linux.rs:408, 593`), so btrfs still reflinks. macOS, which would lose its
+     clone, isn't shipped.
+   - **Windows cost, copy alone,** warm, interleaved, four runs, a dev build:
+     - 12 FLACs, 860 MB: `fs::copy` took 160–164 ms. `io::copy` took 234–239 ms with 1 MiB reads,
+       and 747–844 ms with std's own buffer.
+     - 12 MP3s: 31–34 ms against 41–42 ms.
+     - Reads of 256 KiB took 251–265 ms and 4 MiB 233–239 ms, so 1 MiB is the read size.
+     - About 6 ms more per FLAC, against the flush's 18–185 ms.
+   - **Accepted loss:** NTFS alternate data streams, such as the downloaded-from-the-web mark, no
+     longer carry over.
+   - **Checked on Windows:**
+     - every fixture lofty can write still saves and passes the audio check
+     - hidden, system and unindexed tracks keep the flag
+     - a read-only track fails with "the file is read-only", untouched and with no temp
+     - the deck's holder and a holder denying delete behave as in item 1
+     - in the app, an Album edit on the playing FLAC landed, playback carried on, the row kept its
+       id and the watcher suppressed the echo
+   - **Still to check on Linux:** a read-only track refused, the mode kept, and a btrfs edit costing
+     what Phase 2 measured.
 4. **`MOVEFILE_WRITE_THROUGH`: not worth having.**
    - Microsoft documents its flush only for "a move performed as a copy and delete operation",
      which a rename within one folder never is.
@@ -376,14 +402,16 @@ Run on Windows 11 Pro 10.0.26300, not elevated:
      Windows hands the whole word to `SetFileAttributesW`. That call ignores the bits it can't set
      (compressed, sparse, encrypted), which was checked.
    - **After:** hidden, system and unindexed tracks keep the flag, held or not, in the harness and
-     in the app. A read-only track is refused at the copy's open for write, with no temp left.
-     NTFS compression is a storage state, not an attribute, and didn't carry before either.
+     in the app, and again after item 3. NTFS compression is a storage state, not an attribute, and
+     didn't carry before either.
 6. **Quit during a slow tag write.**
    - **During the rewrite:** the temp goes ("Removed 1 unfinished write(s) at exit"), the original
      whole.
-   - **During `CopyFileExW`:** it holds the temp without delete sharing, so the unlink fails with
-     os error 32 and the warning names the temp. The original is whole, but the partial copy stays
-     beside the track for good, and visible, since Windows doesn't hide a dot-name.
+   - **During `CopyFileExW`:** it held the temp without delete sharing, so the unlink failed with
+     os error 32 and the warning named the temp. The original stayed whole, but the partial copy
+     stayed beside the track for good, and visible, since Windows doesn't hide a dot-name.
+   - **Fixed by item 3:** the copy now goes through the temp's own handle, which shares delete, so a
+     quit 150 ms into a 3 GiB copy removes the temp ("Removed 1 unfinished write(s) at exit").
    - The 8 ratings at quit, with the library on a slow disk: not run, the stick taken out first.
 7. **A file renamed by case outside Melodia.**
    - **Retagged and renamed:** one row after a boot scan or a watched batch. It is a new row: with
