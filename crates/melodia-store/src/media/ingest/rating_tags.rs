@@ -23,6 +23,10 @@ const PERCENT_PER_STAR: i32 = 100 / MAX_STARS;
 /// duplicated.
 const POPM_EMAIL: &str = "Windows Media Player 9 Series";
 
+/// The email whose scale lofty writes an MP4 `rate` atom on, the 0–100 percentage, and the one it
+/// reads every `rate` back through.
+const RATE_EMAIL: &str = "MusicBee";
+
 /// Star ratings live in 0–5, 0 being unrated. Every path into the database or a tag clamps
 /// through here, so a hand-edited or out-of-range value can never reach either.
 pub fn clamp_stars(stars: i32) -> i32 {
@@ -39,10 +43,10 @@ pub fn stars_from_tag(tag: &Tag) -> Option<i32> {
 
 /// Two shapes arrive under the one key, told apart by the separator.
 ///
-/// lofty renders a `POPM` frame, and a `RATING:<email>` key, as `email|stars|counter`, the byte
-/// already mapped through that email's scale. Everything else passes through as the number the
-/// file holds. A `POPM` byte of 0 means unrated, but lofty reads it as one star, so only the bare
-/// forms can still say unrated.
+/// lofty renders a `POPM` frame, a `RATING:<email>` key and a text `rate` atom as
+/// `email|stars|counter`, the value already mapped through that email's scale. Everything else
+/// passes through as the number the file holds. A `POPM` byte of 0 means unrated, but lofty reads
+/// it as one star, so only the bare forms can still say unrated.
 fn parse_stars(raw: &str) -> Option<i32> {
     let raw = raw.trim();
 
@@ -63,7 +67,7 @@ fn parse_stars(raw: &str) -> Option<i32> {
 
 /// Writes `stars` in the shape the tag's format wants, 0 clearing it, and answers false only for a
 /// tag type with no rating key. Collapses a file's ratings to one, so a fresh `POPM` can't sit
-/// disagreeing beside another player's stale one.
+/// disagreeing beside another player's stale one, an integer `rate` in the remainder excepted.
 pub fn write_stars(tag: &mut Tag, stars: i32) -> bool {
     let stars = clamp_stars(stars);
     if stars == 0 {
@@ -71,11 +75,12 @@ pub fn write_stars(tag: &mut Tag, stars: i32) -> bool {
         return true;
     }
 
-    // lofty encodes `ID3v2` alone, its writer converting the whole tag. `tag_writer` writes Vorbis
-    // items verbatim, never through lofty's merge, so a value lands in `RATING` as given, and `Ilst`
-    // passes text straight through: both are handed the number already scaled.
+    // lofty encodes `ID3v2` and `Ilst`, parsing this triple and mapping the stars through the
+    // email's scale, and drops anything else. `tag_writer` writes Vorbis items verbatim, never
+    // through lofty's merge, so `RATING` is handed the number already scaled.
     let value = match tag.tag_type() {
         TagType::Id3v2 => format!("{POPM_EMAIL}|{stars}|0"),
+        TagType::Mp4Ilst => format!("{RATE_EMAIL}|{stars}|0"),
         _ => (stars * PERCENT_PER_STAR).to_string(),
     };
     tag.insert_text(ItemKey::Popularimeter, value)
