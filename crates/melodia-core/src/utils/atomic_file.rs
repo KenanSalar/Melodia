@@ -156,14 +156,14 @@ pub fn rewrite_with_sync(
     rename_over(&tmp, path)
 }
 
-/// The read size of a track's copy: std's own buffer would cost a call every few kilobytes, which
-/// shows across an album of lossless files.
+/// The read size of a track's copy off Linux, which hands it to `copy_file_range`: std's own
+/// buffer would cost a call every few kilobytes, which shows across an album of lossless files.
 const COPY_READ_SIZE: usize = 1 << 20;
 
 /// Renames `tmp`, its cleanup disarmed, over `path`, removing it if the rename fails. Not
 /// `TempPath::persist`, a bare `MoveFileExW` on Windows that can't take a name a playing deck holds
-/// open; `std::fs::rename` retries with POSIX semantics, which can on NTFS. Elsewhere, or against a
-/// handle denying delete sharing, the write fails rather than corrupting the file.
+/// open; `std::fs::rename` retries with POSIX semantics, which can on NTFS. On another Windows
+/// disk, or against a handle denying delete sharing, the write fails and the file stays whole.
 fn rename_over(tmp: &Path, path: &Path) -> AppResult<()> {
     std::fs::rename(tmp, path).inspect_err(|_| {
         // Its cleanup is disarmed, and there is nothing to report past the rename's own error.

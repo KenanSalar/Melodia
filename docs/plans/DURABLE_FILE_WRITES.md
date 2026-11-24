@@ -327,7 +327,7 @@ for write, calls `sync_all` and renames (`writer.rs:746-789`).
    - Through the real scanner, with renames running under the walk: across 10 rounds the walk
      missed 274 of 3,000 files, and none came back as orphans.
 
-### Phase 3: Windows (in progress, run 2026-11-24)
+### Phase 3: Windows (done, run 2026-11-24)
 
 Run on Windows 11 Pro 10.0.26300, not elevated:
 
@@ -390,9 +390,20 @@ Run on Windows 11 Pro 10.0.26300, not elevated:
      - the deck's holder and a holder denying delete behave as in item 1
      - in the app, an Album edit on the playing FLAC landed, playback carried on, the row kept its
        id and the watcher suppressed the echo
-   - **Still to check on Linux:** a read-only track refused, the mode kept, and a btrfs edit costing
-     what Phase 2 measured.
-   - **Still to check on Windows:** an EFS track (`cipher /e`) edited in a plain folder and in an
+   - **Checked on Linux** (btrfs on NVMe, 2026-11-24, the app under `cargo mcp`):
+     - a read-only track fails with "the file is read-only" and the toast counts it failed, the file
+       byte for byte as it was, at 0444 and with no temp
+     - tracks at 0640 and 0664 keep their mode on the new inode, and their rows keep their id
+     - the copy still reflinks. After an Album edit that kept the tags' size, each new file's audio
+       sat on the old inode's own blocks, which `filefrag` marked shared, and only the 3 rewritten
+       blocks were new. An edit that changes the tags' size moves every byte after them, since
+       lofty writes no padding (`flac/write.rs:137`, lofty-rs#445), so it shares nothing whichever
+       copy runs.
+     - **Cost, a release build, warm, interleaved, four runs, nothing rewritten:** 12 FLACs of 387
+       MB took 12.0–12.4 ms through `fs::copy` and 11.7–12.6 ms through the temp's own handle; 12
+       MP3s of 182 MB took 11.0–12.3 ms against 11.0–12.4 ms. The rest of the edit runs the same
+       code, so a btrfs edit costs what Phase 2 measured.
+   - **Not run on Windows:** an EFS track (`cipher /e`) edited in a plain folder and in an
      encrypted one, read back with `cipher`.
 4. **`MOVEFILE_WRITE_THROUGH`: not worth having.**
    - Microsoft documents its flush only for "a move performed as a copy and delete operation",
@@ -431,6 +442,9 @@ Run on Windows 11 Pro 10.0.26300, not elevated:
      scan's rule, `ingest::keep_gone_from`: a path counts as there only when its folder lists it
      under that spelling and no new file respells it. The row now moves with its id. Every disk
      that ignores case had it, macOS and FAT on Linux included.
+   - **On Linux, a vfat loop mount (2026-11-24):** the same rename, made while the app watched,
+     moved the row with its id and added date. Linux's `rename(2)` does nothing when both spellings
+     name one file, so the rename went through a second name, both steps in one watched batch.
 8. **The flush's cost on NTFS.** NTFS copies every byte where btrfs reflinked, so Phase 1's cost
    shows here. Warm, three runs, `CopyFileExW` then `FlushFileBuffers` per file:
    - MP3s of 12–24 MB: the copy 3–5 ms, the flush 13–24 ms, so 0.19 s more per 12-track album.

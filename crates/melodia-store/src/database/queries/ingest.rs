@@ -489,13 +489,13 @@ fn keep_gone(
     keep_gone_from(candidates, existing, &new_paths)
 }
 
-/// Keeps the candidates whose file is gone, `existing` holding the old paths `exists()` answered for
-/// and `new_paths` the files the batch found new.
+/// Keeps the candidates whose file is gone, `existing` holding the old paths `exists()` answered
+/// for and `new_paths` the files the batch found new.
 ///
 /// An old path counts as there only under its own spelling: a case-insensitive or normalizing
-/// filesystem answers `exists()` for a spelling no entry carries, and a rename that changed only case
-/// or normalization is a move. Only the file name is asked, the folder root above it being spelled as
-/// the user added it, which leaves a directory renamed by case alone to [`forget_respelled`].
+/// filesystem answers `exists()` for a spelling no entry carries, and a rename by case or
+/// normalization alone is a move. Only the file name is asked, the folder root above it spelled as
+/// the user added it, leaving a directory renamed by case alone to [`forget_respelled`].
 pub(crate) fn keep_gone_from(
     mut candidates: MoveCandidates,
     existing: HashSet<String>,
