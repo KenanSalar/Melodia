@@ -1,6 +1,6 @@
 # Plan: durable file writes (issue #175)
 
-Status: **proposed** · Owner: Kenan · Created: 2026-11-24 · Issue #175, branch `fix/durable-file-writes`
+Status: **in progress** · Owner: Kenan · Created: 2026-11-24 · Issue #175, branch `fix/durable-file-writes`
 
 > **Validated 2026-11-24** against `a2e45283`, rox `f95ccf4` (`rox-library/src/writer.rs`), and
 > the locked sources: lofty 0.25.5, symphonia 0.6.1, tempfile 3.27.0, std 1.100.0, the SQLite in
@@ -150,7 +150,7 @@ for write, calls `sync_all` and renames (`writer.rs:746-789`).
 
 ## Phases
 
-### Phase 1: flush before the swap (open)
+### Phase 1: flush before the swap (done, hand-checked on Linux)
 
 1. **`write_with_sync`.** Call `sync_all` on the temp's own handle after the `BufWriter` flush and
    before `into_temp_path`. A failure drops the `NamedTempFile`, which removes the temp.

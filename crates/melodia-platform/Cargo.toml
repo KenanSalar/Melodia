@@ -30,8 +30,6 @@ image.workspace = true
 # The single-instance socket name is a hash of the data directory, and
 # `desktop_integration` compares a staged file against what is already installed.
 blake3.workspace = true
-# `desktop_integration` stages its `.desktop` and icon through a temp file and a rename.
-tempfile.workspace = true
 
 [target.'cfg(target_os = "linux")'.dependencies]
 zbus.workspace = true
@@ -48,6 +46,7 @@ tray-icon.workspace = true
 
 [dev-dependencies]
 melodia-testkit = { path = "../melodia-testkit" }
+tempfile.workspace = true
 
 [lints]
 workspace = true

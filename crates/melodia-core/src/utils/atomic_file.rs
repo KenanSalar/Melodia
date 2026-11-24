@@ -1,6 +1,8 @@
 //! Whole-file read and atomic whole-file write: the JSON and text beside the database, and a
 //! track's tag rewrite. The reads need no lock because every write lands through a same-directory
-//! temp file and a rename, so a reader or a crash only ever sees one whole file.
+//! temp file and a rename, so a reader only ever sees one whole file and a crash or power cut
+//! leaves one. The temp is flushed before the rename and, on unix, its folder after, so a save that
+//! has returned there survives a power cut too.
 
 use std::fs::File;
 use std::io::{BufWriter, Write};
@@ -95,35 +97,41 @@ pub fn write_with_sync(
     path: &Path,
     write: impl FnOnce(&mut BufWriter<&mut File>) -> AppResult<()>,
 ) -> AppResult<()> {
-    if let Some(parent) = path.parent() {
-        std::fs::create_dir_all(parent)?;
-    }
-    let dir = path.parent().unwrap_or_else(|| Path::new("."));
-    let mut tmp = tempfile::NamedTempFile::new_in(dir)?;
+    let folder = folder_of(path);
+    std::fs::create_dir_all(folder)?;
+    let mut tmp = tempfile::NamedTempFile::new_in(folder)?;
     {
         let mut writer = BufWriter::new(tmp.as_file_mut());
         write(&mut writer)?;
         writer.flush()?;
     }
+    tmp.as_file().sync_all()?;
     rename_over(tmp.into_temp_path(), path)
 }
 
-/// Hands `rewrite` a copy of `path`, renamed over the original once `rewrite` succeeds, for a
-/// library that opens the path itself. A rewrite in place moves every byte after the edit under
+/// Hands `rewrite` a copy of `path`, as a read-write handle and its path, renamed over the original
+/// once `rewrite` succeeds. A rewrite in place moves every byte after the edit under
 /// whoever has the file open, so a deck playing the track would read the wrong offsets; a rename
 /// leaves it on the file it opened. Costs one copy and write permission on the directory, with no
 /// in-place fallback: a second write path is the one nobody exercises.
+///
+/// `rewrite` writes through the handle, never a second open of the path: a write the disk or share
+/// refuses can surface only at the writer's close, whose error `Drop` discards, so the flush that
+/// reports it runs on the handle that wrote.
 pub fn rewrite_with_sync(
     path: &Path,
-    rewrite: impl FnOnce(&Path) -> AppResult<()>,
+    rewrite: impl FnOnce(&mut File, &Path) -> AppResult<()>,
 ) -> AppResult<()> {
     // Resolved first: a rename replaces a symlink where a write in place followed it.
     let path = &std::fs::canonicalize(path)?;
-    let dir = path.parent().unwrap_or_else(|| Path::new("."));
-    // Closed, `rewrite` opening it itself, and without an extension, so the watcher skips it.
-    let tmp = tempfile::NamedTempFile::new_in(dir)?.into_temp_path();
+    // Closed for `fs::copy`, which opens it itself; no extension, so the watcher skips it.
+    let tmp = tempfile::NamedTempFile::new_in(folder_of(path))?.into_temp_path();
     std::fs::copy(path, &tmp)?;
-    rewrite(&tmp)?;
+    {
+        let mut copy = File::options().read(true).write(true).open(&tmp)?;
+        rewrite(&mut copy, &tmp)?;
+        copy.sync_all()?;
+    }
     rename_over(tmp, path)
 }
 
@@ -142,7 +150,30 @@ fn rename_over(tmp: tempfile::TempPath, path: &Path) -> AppResult<()> {
         // `keep` disarmed the cleanup, and there is nothing to report past the rename's own error.
         let _ = std::fs::remove_file(&tmp);
     })?;
+    #[cfg(unix)]
+    sync_parent(path);
     Ok(())
+}
+
+/// Flushes the folder holding `path`, so a rename into it survives a power cut. Logged rather than
+/// returned: the rename has landed by then.
+#[cfg(unix)]
+pub fn sync_parent(path: &Path) {
+    let folder = folder_of(path);
+    let Err(e) = File::open(folder).and_then(|handle| handle.sync_all()) else {
+        return;
+    };
+    // A filesystem that can't flush a folder says so on every write, thousands in a batch edit.
+    if matches!(e.kind(), std::io::ErrorKind::Unsupported | std::io::ErrorKind::InvalidInput) {
+        log::debug!("{} can't be flushed: {}", folder.display(), describe(&e));
+    } else {
+        log::warn!("Failed to flush {}: {}", folder.display(), describe(&e));
+    }
+}
+
+/// The folder `path` sits in, `.` for a bare file name, whose empty parent won't open.
+fn folder_of(path: &Path) -> &Path {
+    path.parent().filter(|folder| !folder.as_os_str().is_empty()).unwrap_or(Path::new("."))
 }
 
 #[cfg(test)]

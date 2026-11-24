@@ -36,7 +36,7 @@ hit, so this table finds them. A rule missed where needed gets a wider glob, nev
 
 ```bash
 cargo run -p melodia                       # debug
-cargo mcp                                  # debug, with Slint's MCP server on 127.0.0.1:9315
+cargo mcp                                  # debug (preferred), with Slint's MCP server on 127.0.0.1:9315
 cargo build --release -p melodia && target/release/Melodia
 cargo fmt --all                            # CI gates it with --check
 cargo clippy --all-targets --locked --workspace -- -D warnings   # the whole gate; never cargo check

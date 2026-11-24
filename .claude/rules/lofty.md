@@ -1,6 +1,7 @@
 ---
 paths:
   - crates/melodia-store/src/media/ingest/**/*.rs
+  - crates/melodia-store/src/media/cue/**/*.rs
   - crates/melodia-artwork/src/media/image/**/*.rs
   - crates/melodia-app/src/library/tags.rs
   - crates/melodia-app/src/tasks/file_event_processor/**/*.rs
@@ -36,7 +37,8 @@ paths:
 
 ## Writing Metadata
 
-- Always save tags back with `tagged_file.save()` or `tag.save_to_path()`
+- Save with `save_to` through the handle `atomic_file::rewrite_with_sync` hands over, never
+  `save_to_path`, whose own handle drops a write error at close (that function's doc argues it)
 - Be aware that saving may rewrite the entire file for some formats
 - Back up or verify before bulk tag writes
 

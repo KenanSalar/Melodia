@@ -147,8 +147,8 @@ impl EmbeddedWrite {
     /// playing it reads on from the file it opened. The whole `FlacFile` is saved, lofty dropping
     /// every picture a bare comment block doesn't hold. Blocking.
     pub fn save(self, image: &Path) -> Result<(), AppError> {
-        atomic_file::rewrite_with_sync(image, move |copy| {
-            self.0.save_to_path(copy, WriteOptions::default()).map_err(|e| {
+        atomic_file::rewrite_with_sync(image, move |copy, _| {
+            self.0.save_to(copy, WriteOptions::default()).map_err(|e| {
                 AppError::metadata(format!("Failed to write tags to {}", image.display()), e)
             })
         })

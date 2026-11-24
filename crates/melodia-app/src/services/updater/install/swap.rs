@@ -194,6 +194,8 @@ pub(super) fn swap_in_place(target: &Path, staged: &Path) -> AppResult<()> {
         }
         return Err(AppError::from(e));
     }
+    // `staged` sits beside `target`, so one flush covers both renames.
+    melodia_core::utils::atomic_file::sync_parent(target);
 
     // `.old` stays for the smoke test's rollback; the new binary's first boot reaps it.
     Ok(())

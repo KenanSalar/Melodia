@@ -15,6 +15,7 @@
 //! and stale against the primary. `WriteOptions`' `remove_others: false` must stay: flipping it
 //! strips those tags outright.
 
+use std::fs::File;
 use std::path::Path;
 
 use lofty::config::WriteOptions;
@@ -409,8 +410,8 @@ pub fn apply_to_file(
     let unsupported = apply_edit(tag, edit, picture);
 
     // Not in place: a tag edit routinely targets the track a deck holds open.
-    atomic_file::rewrite_with_sync(path, move |target| {
-        save_tags(tagged, target).map_err(|e| {
+    atomic_file::rewrite_with_sync(path, move |copy, _| {
+        save_tags(tagged, copy).map_err(|e| {
             AppError::metadata(format!("Failed to write tags to {}", path.display()), e)
         })
     })?;
@@ -418,16 +419,16 @@ pub fn apply_to_file(
     Ok(WriteOutcome { format, unsupported })
 }
 
-/// Saves `tagged` to `target`, a `VorbisComments` primary as [`vorbis_comments`] builds it: lofty's
+/// Saves `tagged` into `copy`, a `VorbisComments` primary as [`vorbis_comments`] builds it: lofty's
 /// generic save writes that block from mapped items alone, dropping the companion.
-fn save_tags(mut tagged: TaggedFile, target: &Path) -> Result<(), FileEncodingError> {
+fn save_tags(mut tagged: TaggedFile, copy: &mut File) -> Result<(), FileEncodingError> {
     let options = WriteOptions::default();
     if tagged.primary_tag_type() == TagType::VorbisComments
         && let Some(tag) = tagged.remove(TagType::VorbisComments)
     {
-        return vorbis_comments(tag).save_to_path(target, options);
+        return vorbis_comments(tag).save_to(copy, options);
     }
-    tagged.save_to_path(target, options)
+    tagged.save_to(copy, options)
 }
 
 /// `tag`'s mapped items verbatim, as lofty's generic save writes them, beside its pictures and

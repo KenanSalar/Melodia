@@ -1,5 +1,5 @@
 use std::collections::BTreeSet;
-use std::io::{Seek, SeekFrom};
+use std::io::{Read, Seek, SeekFrom};
 
 use serde::Deserialize;
 
@@ -238,8 +238,8 @@ fn a_rewrite_that_fails_leaves_the_file_as_it_was() -> Result<(), AppError> {
     let path = dir.path().join("track.mp3");
     std::fs::write(&path, "original bytes")?;
 
-    let failed = rewrite_with_sync(&path, |target| {
-        std::fs::write(target, "half an edit")?;
+    let failed = rewrite_with_sync(&path, |copy, _| {
+        copy.write_all(b"half an edit")?;
         Err(AppError::io_other("the tag writer gave up"))
     });
 
@@ -256,7 +256,7 @@ fn a_rewrite_that_fails_leaves_no_temp_file_behind() -> Result<(), AppError> {
     let path = dir.path().join("track.mp3");
     std::fs::write(&path, "original bytes")?;
 
-    let failed = rewrite_with_sync(&path, |_| Err(AppError::io_other("the tag writer gave up")));
+    let failed = rewrite_with_sync(&path, |_, _| Err(AppError::io_other("the tag writer gave up")));
 
     assert!(failed.is_err());
     assert_eq!(entries_in(dir.path())?, BTreeSet::from(["track.mp3".to_owned()]));
@@ -273,8 +273,8 @@ fn the_copy_is_written_beside_the_file_it_replaces() -> Result<(), AppError> {
     let resolved = std::fs::canonicalize(&path)?;
 
     let mut wrote_into = None;
-    rewrite_with_sync(&path, |target| {
-        wrote_into = target.parent().map(Path::to_path_buf);
+    rewrite_with_sync(&path, |_, copy_path| {
+        wrote_into = copy_path.parent().map(Path::to_path_buf);
         Ok(())
     })?;
 
@@ -282,21 +282,21 @@ fn the_copy_is_written_beside_the_file_it_replaces() -> Result<(), AppError> {
     Ok(())
 }
 
-/// The caller opens the path for itself and rewrites the whole file, so it has to be handed the
-/// content rather than an empty temp with the right name.
+/// The caller reads the file through the handle it is given and rewrites it whole, so the handle
+/// has to start at the content rather than at an empty temp with the right name.
 #[test]
 fn a_rewrite_hands_the_closure_the_bytes_it_started_with() -> Result<(), AppError> {
     let dir = tempfile::tempdir()?;
     let path = dir.path().join("track.mp3");
     std::fs::write(&path, "original bytes")?;
 
-    let mut handed = None;
-    rewrite_with_sync(&path, |target| {
-        handed = Some(std::fs::read_to_string(target)?);
+    let mut handed = String::new();
+    rewrite_with_sync(&path, |copy, _| {
+        copy.read_to_string(&mut handed)?;
         Ok(())
     })?;
 
-    assert_eq!(handed.as_deref(), Some("original bytes"));
+    assert_eq!(handed, "original bytes");
     Ok(())
 }
 
@@ -312,7 +312,10 @@ fn a_rewrite_replaces_the_file_the_link_points_at_rather_than_the_link() -> Resu
     std::fs::write(&kept, "original bytes")?;
     std::os::unix::fs::symlink(&kept, &link)?;
 
-    rewrite_with_sync(&link, |target| Ok(std::fs::write(target, "edited bytes")?))?;
+    rewrite_with_sync(&link, |copy, _| {
+        copy.set_len(0)?;
+        Ok(copy.write_all(b"edited bytes")?)
+    })?;
 
     assert_eq!(std::fs::read_to_string(&kept)?, "edited bytes", "the edit missed the kept file");
     assert!(
