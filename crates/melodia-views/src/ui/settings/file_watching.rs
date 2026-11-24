@@ -36,6 +36,9 @@ pub fn install(ui: &AppWindow, state: &AppState, notifications: &Rc<Notification
             }
         });
 
+        // Either way the watcher they describe is gone, and a new one reports what still fails.
+        notifications.dismiss_by_kind(NotificationKind::WatchLimit);
+        notifications.dismiss_by_kind(NotificationKind::FolderUnwatched);
         if on {
             notifications.dismiss_by_kind(NotificationKind::WatcherDisabled);
         } else {

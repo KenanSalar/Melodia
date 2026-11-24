@@ -2754,6 +2754,19 @@ msgid "Melodia couldn't relaunch itself. Close and reopen it to apply the change
 msgstr "Melodia konnte sich nicht selbst neu starten. Schließen und öffnen Sie die App erneut, um die Änderung zu übernehmen."
 
 #: ui/settings.slint
+msgid "Folder watch limit reached"
+msgstr "Limit für die Ordnerüberwachung erreicht"
+
+#. Translators: keep fs.inotify.max_user_watches as is, a Linux setting.
+#: ui/settings.slint
+msgid "Changes in some library folders show up only after the next scan. Raise fs.inotify.max_user_watches, then restart Melodia."
+msgstr "Änderungen in einigen Bibliotheksordnern erscheinen erst nach dem nächsten Scan. Erhöhe fs.inotify.max_user_watches und starte Melodia dann neu."
+
+#: ui/settings.slint
+msgid "Can't watch a folder"
+msgstr "Ordner kann nicht überwacht werden"
+
+#: ui/settings.slint
 msgid "Added to {n} playlist"
 msgid_plural "Added to {n} playlists"
 msgstr[0] "Zu {n} Playlist hinzugefügt"

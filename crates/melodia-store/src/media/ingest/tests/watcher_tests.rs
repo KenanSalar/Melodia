@@ -251,7 +251,7 @@ fn renamed(mode: RenameMode) -> EventKind {
 }
 
 /// The OS says nothing about the files inside a moved directory, so every way a backend reports
-/// the new path has to reach a reconcile. `Create(Any)` is Windows's for a move between parents.
+/// the new path has to reach a reconcile, an untyped `Create(Any)` from Windows or macOS too.
 #[test]
 fn a_directory_with_audio_at_a_new_path_asks_for_a_reconcile() -> Result<(), AppError> {
     let tmp = TempDir::new()?;
@@ -287,8 +287,8 @@ fn a_directory_without_audio_at_a_new_path_asks_for_nothing() -> Result<(), AppE
 }
 
 /// A `From` or a removal names the side that left, which only the database can say held tracks,
-/// and inotify's `Create(Folder)` is a new directory, whose files written before its watch existed
-/// raise no event of their own.
+/// and `Create(Folder)` is a directory whose files raise no event of their own: one moved in on
+/// Windows, or one inotify began watching after a copy wrote into it.
 #[test]
 fn a_directory_reported_any_other_way_is_not_taken_for_a_rename() -> Result<(), AppError> {
     let tmp = TempDir::new()?;
@@ -314,9 +314,9 @@ fn a_directory_reported_any_other_way_is_not_taken_for_a_rename() -> Result<(), 
 // (kernel queue overflow on inotify, equivalent on other backends) and emits
 // `FileEvent::RescanNeeded` instead of running `classify_event`. That
 // contract rests on `notify::event::Event::new(kind).set_flag(Flag::Rescan)`
-// yielding `need_rescan() == true` — this test pins that assumption so a
-// silent breaking change in a future `notify` version trips CI rather than
-// silently dropping kernel-overflow rescans in production.
+// yielding `need_rescan() == true`, which this test pins so a breaking change
+// in a future `notify` version trips CI rather than silently dropping
+// kernel-overflow rescans in production.
 #[test]
 fn rescan_flag_round_trips_through_notify_event() {
     use notify::event::{Event, Flag};
@@ -345,89 +345,9 @@ fn alac_is_not_an_audio_extension() {
     assert!(!super::is_audio_file(&PathBuf::from("music").join("song.alac")));
 }
 
-// === Access events, dropped ahead of the debouncer ===
-
-/// What `SkipAccess` hands on of `events`, fed through it in order.
-fn passed_on(events: Vec<notify::Result<notify::Event>>) -> Vec<notify::Result<notify::Event>> {
-    use notify::EventHandler;
-
-    let (tx, rx) = std::sync::mpsc::channel();
-    let mut filter = super::SkipAccess(tx);
-    for event in events {
-        filter.handle_event(event);
-    }
-    drop(filter);
-    rx.into_iter().collect()
-}
-
-/// Every folder a walk reads and every file a scan or playback opens raises one, and the
-/// debouncer would queue each for nothing.
-#[test]
-fn an_access_event_never_reaches_the_debouncer() {
-    use notify::event::{AccessKind, AccessMode};
-
-    let accesses =
-        [AccessKind::Open(AccessMode::Any), AccessKind::Read, AccessKind::Close(AccessMode::Write)];
-    let events =
-        accesses.into_iter().map(|kind| Ok(notify::Event::new(EventKind::Access(kind)))).collect();
-
-    let passed = passed_on(events);
-
-    assert!(passed.is_empty(), "handed on {passed:?}");
-}
-
-#[test]
-fn a_change_event_reaches_the_debouncer() {
-    let kinds = [
-        EventKind::Create(CreateKind::File),
-        EventKind::Modify(ModifyKind::Data(DataChange::Content)),
-        EventKind::Modify(ModifyKind::Name(RenameMode::Both)),
-        EventKind::Remove(RemoveKind::File),
-    ];
-    let events = kinds.iter().map(|&kind| Ok(notify::Event::new(kind))).collect();
-
-    let passed: Vec<Option<EventKind>> =
-        passed_on(events).into_iter().map(|event| event.ok().map(|event| event.kind)).collect();
-
-    assert_eq!(passed, kinds.map(Some));
-}
-
-/// The rescan flag rides an event of any kind, an access included, and is the one thing about
-/// such an event that matters.
-#[test]
-fn an_access_event_asking_for_a_rescan_reaches_the_debouncer() {
-    use notify::event::{AccessKind, Flag};
-
-    let rescan = notify::Event::new(EventKind::Access(AccessKind::Read)).set_flag(Flag::Rescan);
-
-    let passed: Vec<Option<bool>> = passed_on(vec![Ok(rescan)])
-        .into_iter()
-        .map(|event| event.ok().map(|event| event.need_rescan()))
-        .collect();
-
-    assert_eq!(passed, [Some(true)]);
-}
-
-/// A kernel queue overflow and a failing watch both mean the library may have moved unseen, and
-/// dropping either leaves it stale until the next launch.
-#[test]
-fn a_rescan_flag_and_a_watcher_error_reach_the_debouncer() {
-    use notify::event::Flag;
-
-    let rescan = notify::Event::new(EventKind::Other).set_flag(Flag::Rescan);
-    let events = vec![Ok(rescan), Err(notify::Error::generic("watch lost"))];
-
-    let passed: Vec<Option<bool>> = passed_on(events)
-        .into_iter()
-        .map(|event| event.ok().map(|event| event.need_rescan()))
-        .collect();
-
-    assert_eq!(passed, [Some(true), None], "(the rescan, the error)");
-}
-
 // === Starting the watcher ===
 //
-// Everything above classifies an event `notify` already delivered. These two are the wiring that
+// Everything above classifies an event `notify` already delivered. These are the wiring that
 // decides whether one is delivered at all, and it is the half no amount of `classify_event`
 // coverage reaches: a `start` that refuses, or that watches nothing, leaves the library silently
 // out of step with the disk until the next manual rescan.
@@ -482,5 +402,88 @@ async fn a_file_appearing_under_a_watched_folder_reaches_the_channel() -> Result
         "expected a Created for {}, got {event:?}",
         arriving.display()
     );
+    Ok(())
+}
+
+/// `IN_ACCESS | IN_CLOSE_WRITE | IN_CLOSE_NOWRITE | IN_OPEN`.
+#[cfg(target_os = "linux")]
+const INOTIFY_ACCESS_EVENTS: u32 = 0x01 | 0x08 | 0x10 | 0x20;
+
+/// The access bits of this process's inotify watch on `dir`, `None` without one, from the line
+/// `/proc/self/fdinfo` lists per watch: `inotify wd:1 ino:240 sdev:36 mask:fc6 …`.
+#[cfg(target_os = "linux")]
+fn inotify_access_events_on(dir: &Path) -> Result<Option<u32>, AppError> {
+    use std::os::unix::fs::MetadataExt;
+
+    let inode = format!("ino:{:x}", std::fs::metadata(dir)?.ino());
+    for descriptor in std::fs::read_dir("/proc/self/fdinfo")? {
+        // Another test can close its descriptor between the listing and the read.
+        let Ok(info) = std::fs::read_to_string(descriptor?.path()) else {
+            continue;
+        };
+        let watch = info
+            .lines()
+            .filter(|line| line.starts_with("inotify "))
+            .find(|line| line.split_whitespace().any(|field| field == inode));
+        if let Some(watch) = watch {
+            let mask = watch.split_whitespace().find_map(|field| field.strip_prefix("mask:"));
+            let mask = mask.and_then(|hex| u32::from_str_radix(hex, 16).ok());
+            return Ok(mask.map(|mask| mask & INOTIFY_ACCESS_EVENTS));
+        }
+    }
+    Ok(None)
+}
+
+/// The channel can't show a watch asking for access events, `classify_event` dropping each one,
+/// and notify's own default config asks for opens and closes.
+#[cfg(target_os = "linux")]
+#[test]
+fn no_watch_asks_inotify_for_access_events() -> Result<(), AppError> {
+    let tmp = TempDir::new()?;
+    let album = tmp.path().join("album");
+    std::fs::create_dir(&album)?;
+    let (tx, _rx) = mpsc::channel(8);
+    let mut watcher = FolderWatcher::new(tx);
+
+    watcher.start(&[tmp.path().to_path_buf()])?;
+
+    let watched = [inotify_access_events_on(tmp.path())?, inotify_access_events_on(&album)?];
+    assert_eq!(watched, [Some(0), Some(0)], "(the root, its subfolder)");
+    Ok(())
+}
+
+/// The next flush read to the end: dropping the watcher lets the debouncer's thread finish the
+/// callback it is in and then drop the last sender, so what a flush left out shows without a sleep.
+#[cfg(target_os = "windows")]
+async fn next_flush(watcher: FolderWatcher, rx: &mut mpsc::Receiver<FileEvent>) -> Vec<FileEvent> {
+    let first = tokio::time::timeout(BEFORE_GIVING_UP, rx.recv()).await;
+    drop(watcher);
+    let mut flush: Vec<FileEvent> = first.ok().flatten().into_iter().collect();
+    while let Ok(Some(event)) = tokio::time::timeout(BEFORE_GIVING_UP, rx.recv()).await {
+        flush.push(event);
+    }
+    flush
+}
+
+/// Windows reports a folder moved in as one `Create(Folder)`, typed by a stat, and nothing for the
+/// files it carries, so its tracks reach the library through the walk alone. Linux reports the
+/// same move as an unpaired `To`, which asks for a reconcile instead.
+#[cfg(target_os = "windows")]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn a_folder_moved_in_on_windows_reaches_the_channel_as_its_tracks() -> Result<(), AppError> {
+    let tmp = TempDir::new()?;
+    let library = tmp.path().join("library");
+    std::fs::create_dir(&library)?;
+    let outside = album_holding(&tmp, "song.flac")?;
+    std::fs::write(outside.join("cover.jpg"), b"bytes")?;
+    let (tx, mut rx) = mpsc::channel(8);
+    let mut watcher = FolderWatcher::new(tx);
+    watcher.start(std::slice::from_ref(&library))?;
+
+    let moved_in = library.join("album");
+    std::fs::rename(&outside, &moved_in)?;
+
+    let flush = next_flush(watcher, &mut rx).await;
+    assert_eq!(flush, [FileEvent::Created(moved_in.join("disc 1").join("song.flac"))]);
     Ok(())
 }

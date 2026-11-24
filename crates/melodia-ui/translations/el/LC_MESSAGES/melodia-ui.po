@@ -2755,6 +2755,19 @@ msgid "Melodia couldn't relaunch itself. Close and reopen it to apply the change
 msgstr "Το Melodia δεν μπόρεσε να επανεκκινήσει. Κλείστε και ανοίξτε ξανά την εφαρμογή για να εφαρμοστεί η αλλαγή."
 
 #: ui/settings.slint
+msgid "Folder watch limit reached"
+msgstr "Συμπληρώθηκε το όριο παρακολούθησης φακέλων"
+
+#. Translators: keep fs.inotify.max_user_watches as is, a Linux setting.
+#: ui/settings.slint
+msgid "Changes in some library folders show up only after the next scan. Raise fs.inotify.max_user_watches, then restart Melodia."
+msgstr "Οι αλλαγές σε ορισμένους φακέλους της βιβλιοθήκης εμφανίζονται μόνο μετά την επόμενη σάρωση. Αυξήστε το fs.inotify.max_user_watches και επανεκκινήστε το Melodia."
+
+#: ui/settings.slint
+msgid "Can't watch a folder"
+msgstr "Δεν είναι δυνατή η παρακολούθηση φακέλου"
+
+#: ui/settings.slint
 msgid "Added to {n} playlist"
 msgid_plural "Added to {n} playlists"
 msgstr[0] "Προστέθηκε σε {n} λίστα"

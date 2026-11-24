@@ -2755,6 +2755,19 @@ msgid "Melodia couldn't relaunch itself. Close and reopen it to apply the change
 msgstr "A Melodia nem tudta újraindítani magát. A módosítás érvényesítéséhez zárd be, és nyisd meg újra."
 
 #: ui/settings.slint
+msgid "Folder watch limit reached"
+msgstr "Elérted a mappafigyelési korlátot"
+
+#. Translators: keep fs.inotify.max_user_watches as is, a Linux setting.
+#: ui/settings.slint
+msgid "Changes in some library folders show up only after the next scan. Raise fs.inotify.max_user_watches, then restart Melodia."
+msgstr "Egyes könyvtármappák változásai csak a következő átvizsgálás után jelennek meg. Növeld az fs.inotify.max_user_watches értékét, majd indítsd újra a Melodiát."
+
+#: ui/settings.slint
+msgid "Can't watch a folder"
+msgstr "Egy mappa nem figyelhető"
+
+#: ui/settings.slint
 msgid "Added to {n} playlist"
 msgid_plural "Added to {n} playlists"
 msgstr[0] "Hozzáadva {n} lejátszási listához"

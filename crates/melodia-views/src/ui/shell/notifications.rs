@@ -364,6 +364,8 @@ fn run_action(ui: &AppWindow, id: i32, kind: NotificationKind) {
         | NotificationKind::UpdateFailed
         | NotificationKind::WatcherDisabled
         | NotificationKind::LibraryResyncing
+        | NotificationKind::WatchLimit
+        | NotificationKind::FolderUnwatched
         | NotificationKind::AudioDeviceLost
         | NotificationKind::ArtworkRestoring => {}
     }
