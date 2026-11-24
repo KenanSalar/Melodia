@@ -153,6 +153,22 @@ fn the_padding_a_matroska_file_states_is_never_handed_out() -> Result<(), AppErr
     Ok(())
 }
 
+/// One second went in. Read as RFC 7845's, the fixture's big-endian pre-skip of 312 is 14,337, and
+/// its stated length counts the padding.
+#[test]
+fn opus_in_mp4_decodes_to_the_second_it_was_encoded_from() -> Result<(), AppError> {
+    assert_eq!(decoded_frames("silence-opus.m4a")?, 48_000);
+    Ok(())
+}
+
+/// The seek bar's length, off a container length that counts the priming and the padding.
+#[test]
+fn opus_in_mp4_states_the_length_it_plays() -> Result<(), AppError> {
+    let decoder = FileDecoder::open(&asset("silence-opus.m4a"))?;
+    assert_eq!(decoder.total_duration(), Some(Duration::from_secs(1)));
+    Ok(())
+}
+
 /// The pre-roll is per codec, and the gate is the codec id rather than the presence of a field.
 /// Widening every format's seek would change behaviour nothing here has evidence for.
 #[test]
@@ -326,5 +342,100 @@ mod layout {
         assert_eq!(trim_count(0), 0);
         assert_eq!(trim_count(312), 312);
         assert_eq!(trim_count(u64::MAX), usize::MAX);
+    }
+}
+
+/// `standardize_head` over each container's form of the identification header.
+mod head {
+    use symphonia::core::audio::Channels;
+    use symphonia::core::codecs::audio::AudioCodecParameters;
+    use symphonia::core::codecs::audio::well_known::{CODEC_ID_FLAC, CODEC_ID_OPUS};
+
+    use super::super::{pre_skip, standardize_head};
+
+    /// Stereo, pre-skip 312, input rate 48 kHz, gain -256 (one decibel down), family 0, as RFC 7845
+    /// section 5.1 lays it out: version 1, every field little-endian.
+    const RFC_7845: [u8; 19] = [
+        b'O', b'p', b'u', b's', b'H', b'e', b'a', b'd', 1, 2, 0x38, 0x01, 0x80, 0xBB, 0x00, 0x00,
+        0x00, 0xFF, 0,
+    ];
+
+    /// The same header as isomp4 hands an MP4's `dOps` over: behind the magic, version 0 and every
+    /// field big-endian.
+    const DOPS: [u8; 19] = [
+        b'O', b'p', b'u', b's', b'H', b'e', b'a', b'd', 0, 2, 0x01, 0x38, 0x00, 0x00, 0xBB, 0x80,
+        0xFF, 0x00, 0,
+    ];
+
+    fn opus(extra_data: &[u8], rate: Option<u32>) -> AudioCodecParameters {
+        let mut params = AudioCodecParameters::new();
+        params.for_codec(CODEC_ID_OPUS).with_channels(Channels::Discrete(2));
+        params.with_extra_data(extra_data.into());
+        if let Some(rate) = rate {
+            params.with_sample_rate(rate);
+        }
+        params
+    }
+
+    #[test]
+    fn an_mp4_header_is_restated_in_rfc_7845s_form() {
+        let mut params = opus(&DOPS, Some(48_000));
+
+        standardize_head(&mut params, None);
+
+        assert_eq!(params.extra_data.as_deref(), Some(&RFC_7845[..]));
+    }
+
+    #[test]
+    fn an_rfc_7845_header_is_left_as_it_came() {
+        let mut params = opus(&RFC_7845, Some(48_000));
+
+        standardize_head(&mut params, Some(1_000));
+
+        assert_eq!(params.extra_data.as_deref(), Some(&RFC_7845[..]));
+    }
+
+    /// A CAF hands over Apple's cookie of encoder settings, which states none of the header's fields.
+    #[test]
+    fn a_header_is_built_where_the_container_hands_over_another_kind() {
+        let mut params = opus(b"an encoder's cookie", Some(48_000));
+
+        standardize_head(&mut params, Some(312));
+
+        let built: [u8; 19] = [
+            b'O', b'p', b'u', b's', b'H', b'e', b'a', b'd', 1, 2, 0x38, 0x01, 0x80, 0xBB, 0, 0, 0,
+            0, 0,
+        ];
+        assert_eq!(params.extra_data.as_deref(), Some(&built[..]));
+    }
+
+    /// A CAF counts its priming at its `desc` rate, the header at the decode rate.
+    #[test]
+    fn a_built_header_states_the_priming_at_the_decode_rate() {
+        let rows = [
+            ("at 48 kHz", Some(48_000), Some(312), 312),
+            ("at 16 kHz", Some(16_000), Some(104), 312),
+            ("at no stated rate", None, Some(312), 312),
+            ("with no priming", Some(48_000), None, 0),
+            ("at the most a header states", Some(48_000), Some(65_535), 65_535),
+            ("one frame past it", Some(48_000), Some(65_536), 65_535),
+        ];
+        for (what, rate, priming, expected) in rows {
+            let mut params = opus(b"an encoder's cookie", rate);
+
+            standardize_head(&mut params, priming);
+
+            assert_eq!(pre_skip(&params), expected, "{what}");
+        }
+    }
+
+    #[test]
+    fn another_codecs_parameters_are_left_as_they_came() {
+        let mut flac = AudioCodecParameters::new();
+        flac.for_codec(CODEC_ID_FLAC).with_extra_data(DOPS.into());
+
+        standardize_head(&mut flac, Some(312));
+
+        assert_eq!(flac.extra_data.as_deref(), Some(&DOPS[..]));
     }
 }

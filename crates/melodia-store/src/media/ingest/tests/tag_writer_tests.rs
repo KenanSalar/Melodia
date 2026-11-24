@@ -1055,3 +1055,58 @@ fn mp3_round_trips_the_movement_pair_the_bump_taught_it() -> Result<(), AppError
     assert_eq!(text(&tag, ItemKey::MovementTotal).as_deref(), Some("4"));
     Ok(())
 }
+
+/// The tag in memory holds the stars whatever lofty's save then drops, so only a read of the file
+/// shows they landed.
+#[test]
+fn an_m4a_keeps_the_stars_a_write_gives_it() -> Result<(), AppError> {
+    let tmp = TempDir::new()?;
+    let path = stage(&tmp, "silence.m4a")?;
+
+    apply_to_file(&path, &TagEdit { rating: FieldEdit::Set(4), ..TagEdit::default() }, None)?;
+
+    assert_eq!(rating_tags::read_stars(&path)?, Some(4));
+    Ok(())
+}
+
+// ---------------------------------------------------------- the audio check
+
+/// `ogg` with a page holding no segments ahead of its last, the audio page, which takes the next
+/// number. The format allows such a page; lofty's reader refuses one.
+fn with_an_empty_page_ahead_of_the_audio(mut ogg: Vec<u8>) -> Result<Vec<u8>, AppError> {
+    let audio_at =
+        ogg.windows(4).rposition(|bytes| bytes == b"OggS").ok_or_else(|| missing("an Ogg page"))?;
+    let mut empty = ogg[audio_at..audio_at + 26].to_vec();
+    // No flags, the audio page's end of stream among them, and it ends no packet: granule -1.
+    empty[5] = 0;
+    empty[6..14].fill(0xFF);
+    empty.push(0);
+    melodia_testkit::restate_ogg_checksum(&mut empty);
+
+    let numbered = ogg[audio_at + 18..audio_at + 22].first_chunk::<4>().copied();
+    let sequence = u32::from_le_bytes(numbered.ok_or_else(|| missing("a page number"))?) + 1;
+    ogg[audio_at + 18..audio_at + 22].copy_from_slice(&sequence.to_le_bytes());
+    melodia_testkit::restate_ogg_checksum(&mut ogg[audio_at..]);
+    ogg.splice(audio_at..audio_at, empty);
+    Ok(ogg)
+}
+
+/// lofty rewrites an Ogg by copying its pages back until one fails to parse, and reports success,
+/// so the copy here ends ahead of the audio.
+#[test]
+fn a_tag_write_whose_copy_would_play_differently_is_refused() -> Result<(), AppError> {
+    let tmp = TempDir::new()?;
+    let path = stage(&tmp, "silence.ogg")?;
+    let original = with_an_empty_page_ahead_of_the_audio(std::fs::read(&path)?)?;
+    std::fs::write(&path, &original)?;
+
+    let refused = apply_to_file(
+        &path,
+        &TagEdit { title: FieldEdit::Set("Kept".into()), ..TagEdit::default() },
+        None,
+    );
+
+    assert!(matches!(refused, Err(AppError::Metadata { .. })), "{refused:?}");
+    assert_eq!(std::fs::read(&path)?, original, "the file a refused write would have replaced");
+    Ok(())
+}

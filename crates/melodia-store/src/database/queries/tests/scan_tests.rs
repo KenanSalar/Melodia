@@ -1092,3 +1092,45 @@ async fn a_guest_who_is_nobodys_primary_artist_survives_the_prune() -> Result<()
     assert_eq!(bob, 1);
     Ok(())
 }
+
+// === A re-read with no edit behind it ===
+
+/// A row filed under "Old Album", re-read as "New Album" with a cover, as a repair gives a row on
+/// file-name metadata its tags back.
+async fn reread_into_a_new_album() -> Result<DbPool, AppError> {
+    let db = DbPool::test_pool().await?;
+    queries::folder::insert_folder(&db, "/music", true).await?;
+    let path = "/music/a.wav";
+    let id = insert_test_track(&db, path, "a", "Old Artist", "Old Album", "Rock").await?;
+    let mut meta = make_test_metadata("Title");
+    meta.artist = ArtistCredit::from_name("New Artist");
+    meta.album = Some("New Album".to_owned());
+    meta.artwork_path = Some("/art/new.jpg".to_owned());
+
+    let file = queries::scan::RetaggedFile { id, path: path.to_owned(), meta };
+    queries::scan::commit_reread(&db, vec![file]).await?;
+    Ok(db)
+}
+
+/// An album the repair emptied would otherwise stay a card with no tracks.
+#[tokio::test]
+async fn a_reread_that_moves_its_row_prunes_the_album_it_left() -> Result<(), AppError> {
+    let db = reread_into_a_new_album().await?;
+
+    let left: i64 = fetch_one(&db, "SELECT COUNT(*) FROM albums WHERE name = 'Old Album'").await?;
+
+    assert_eq!(left, 0);
+    Ok(())
+}
+
+/// An album the repair creates would otherwise stay coverless until a later scan writes.
+#[tokio::test]
+async fn a_reread_hands_the_album_it_lands_in_its_tracks_cover() -> Result<(), AppError> {
+    let db = reread_into_a_new_album().await?;
+
+    let cover: Option<String> =
+        fetch_one(&db, "SELECT artwork_path FROM albums WHERE name = 'New Album'").await?;
+
+    assert_eq!(cover.as_deref(), Some("/art/new.jpg"));
+    Ok(())
+}

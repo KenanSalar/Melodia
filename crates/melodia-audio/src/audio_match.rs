@@ -190,3 +190,7 @@ fn same_error(original: &SymphoniaError, copy: &SymphoniaError) -> bool {
         _ => false,
     }
 }
+
+#[cfg(test)]
+#[path = "tests/audio_match_tests.rs"]
+mod tests;

@@ -383,3 +383,7 @@ fn read_at<const N: usize>(file: &mut File, at: u64) -> io::Result<[u8; N]> {
     file.read_exact(&mut bytes)?;
     Ok(bytes)
 }
+
+#[cfg(test)]
+#[path = "tests/iff_repair_tests.rs"]
+mod tests;

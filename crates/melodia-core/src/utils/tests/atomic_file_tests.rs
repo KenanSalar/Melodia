@@ -300,6 +300,55 @@ fn a_rewrite_hands_the_closure_the_bytes_it_started_with() -> Result<(), AppErro
     Ok(())
 }
 
+#[test]
+fn a_rewrite_replaces_the_file_with_what_the_closure_wrote() -> Result<(), AppError> {
+    let dir = tempfile::tempdir()?;
+    let path = dir.path().join("track.mp3");
+    std::fs::write(&path, "original bytes")?;
+
+    rewrite_with_sync(&path, |copy, _| {
+        copy.set_len(0)?;
+        Ok(copy.write_all(b"edited bytes")?)
+    })?;
+
+    assert_eq!(std::fs::read_to_string(&path)?, "edited bytes");
+    Ok(())
+}
+
+#[test]
+fn a_read_only_track_is_refused_and_left_as_it_was() -> Result<(), AppError> {
+    let dir = tempfile::tempdir()?;
+    let path = dir.path().join("track.mp3");
+    std::fs::write(&path, "original bytes")?;
+    let mut permissions = std::fs::metadata(&path)?.permissions();
+    permissions.set_readonly(true);
+    std::fs::set_permissions(&path, permissions)?;
+
+    let refused = rewrite_with_sync(&path, |copy, _| Ok(copy.write_all(b"edited bytes")?));
+
+    let denied =
+        matches!(&refused, Err(AppError::Io(e)) if e.kind() == io::ErrorKind::PermissionDenied);
+    assert!(denied, "{refused:?}");
+    assert_eq!(std::fs::read_to_string(&path)?, "original bytes");
+    Ok(())
+}
+
+#[cfg(unix)]
+#[test]
+fn a_rewrite_keeps_the_tracks_permissions() -> Result<(), AppError> {
+    use std::os::unix::fs::PermissionsExt;
+
+    let dir = tempfile::tempdir()?;
+    let path = dir.path().join("track.mp3");
+    std::fs::write(&path, "original bytes")?;
+    std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o640))?;
+
+    rewrite_with_sync(&path, |_, _| Ok(()))?;
+
+    assert_eq!(std::fs::metadata(&path)?.permissions().mode() & 0o777, 0o640);
+    Ok(())
+}
+
 /// **The `canonicalize` call's whole reason.** A rename replaces the *link* where a write in place
 /// followed it, so a symlinked track would become a regular file holding the edit and the file the
 /// user actually keeps would be left untouched.

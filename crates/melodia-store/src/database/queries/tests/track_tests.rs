@@ -1,5 +1,7 @@
 use std::collections::HashSet;
 
+use lofty::file::FileType;
+
 use crate::database::DbPool;
 use crate::database::bulk::IDS_AFTER_HEAD;
 use crate::database::queries;
@@ -1532,5 +1534,122 @@ async fn a_scope_misses_exactly_the_picks_its_list_no_longer_holds() -> Result<(
 
         assert_eq!(missing, expected, "{what}");
     }
+    Ok(())
+}
+
+// --- the codec pages a one-shot sweep walks ---
+
+/// A library at `/music`, folder 1, and a folder outside it at `/downloads`, folder 2.
+async fn music_and_downloads() -> Result<DbPool, AppError> {
+    let db = DbPool::test_pool().await?;
+    queries::folder::insert_folder(&db, "/music", true).await?;
+    queries::folder::insert_folder(&db, "/downloads", false).await?;
+    Ok(db)
+}
+
+/// A row at `/music/<file_name>` read off fixture `fixture`, so it holds the codec the ingest
+/// writes and a page is held to that rather than to a spelling of its own.
+async fn filed(db: &DbPool, fixture: &str, file_name: &str) -> Result<i64, AppError> {
+    let artwork = tempfile::tempdir()?;
+    let fixture = std::path::Path::new(melodia_testkit::ASSETS_DIR).join(fixture);
+    let cover_cache = melodia_artwork::media::image::artwork::new_cover_cache();
+    let meta = crate::media::ingest::metadata::extract_metadata(
+        &fixture,
+        artwork.path(),
+        &cover_cache,
+        true,
+    )?;
+    insert_tagged_track(db, &format!("/music/{file_name}"), &meta).await
+}
+
+fn ids(page: &[(i64, String)]) -> Vec<i64> {
+    page.iter().map(|(id, _)| *id).collect()
+}
+
+#[tokio::test]
+async fn a_codec_page_finds_the_files_the_ingest_read_as_those_codecs() -> Result<(), AppError> {
+    let db = music_and_downloads().await?;
+    let wav = filed(&db, "silence.wav", "a.wav").await?;
+    filed(&db, "silence.flac", "b.flac").await?;
+    let aiff = filed(&db, "silence.aiff", "c.aiff").await?;
+    filed(&db, "silence.m4a", "d.m4a").await?;
+
+    let page =
+        queries::track::get_whole_file_paths_after(&db, &[FileType::Wav, FileType::Aiff], 0, 100)
+            .await?;
+
+    assert_eq!(ids(&page), [wav, aiff]);
+    Ok(())
+}
+
+/// The cue sheet probe reads the library's files alone.
+#[tokio::test]
+async fn the_library_page_leaves_out_a_file_opened_from_outside_it() -> Result<(), AppError> {
+    let db = music_and_downloads().await?;
+    let kept = filed(&db, "silence.wav", "a.wav").await?;
+    let outside = filed(&db, "silence.wav", "b.wav").await?;
+    execute(&db, &format!("UPDATE tracks SET folder_id = 2 WHERE id = {outside}")).await?;
+
+    let page = queries::track::get_library_file_paths_after(&db, &[FileType::Wav], 0, 100).await?;
+
+    assert_eq!(ids(&page), [kept]);
+    Ok(())
+}
+
+#[tokio::test]
+async fn the_whole_file_page_keeps_a_file_from_outside_the_library() -> Result<(), AppError> {
+    let db = music_and_downloads().await?;
+    let kept = filed(&db, "silence.wav", "a.wav").await?;
+    let outside = filed(&db, "silence.wav", "b.wav").await?;
+    execute(&db, &format!("UPDATE tracks SET folder_id = 2 WHERE id = {outside}")).await?;
+
+    let page = queries::track::get_whole_file_paths_after(&db, &[FileType::Wav], 0, 100).await?;
+
+    assert_eq!(ids(&page), [kept, outside]);
+    Ok(())
+}
+
+/// A sheet's track owns no file, its image's tags stating the whole disc.
+#[tokio::test]
+async fn a_codec_page_leaves_out_the_tracks_a_cue_sheet_carves() -> Result<(), AppError> {
+    let db = music_and_downloads().await?;
+    let whole = filed(&db, "silence.wav", "a.wav").await?;
+    let carved = filed(&db, "silence.wav", "b.wav").await?;
+    execute(&db, &format!("UPDATE tracks SET cue_track = 1, cue_start = 0 WHERE id = {carved}"))
+        .await?;
+
+    let page = queries::track::get_whole_file_paths_after(&db, &[FileType::Wav], 0, 100).await?;
+
+    assert_eq!(ids(&page), [whole]);
+    Ok(())
+}
+
+#[tokio::test]
+async fn a_codec_page_starts_past_the_id_it_is_given_and_holds_at_most_its_limit()
+-> Result<(), AppError> {
+    let db = music_and_downloads().await?;
+    let first = filed(&db, "silence.wav", "a.wav").await?;
+    let second = filed(&db, "silence.wav", "b.wav").await?;
+    filed(&db, "silence.wav", "c.wav").await?;
+
+    let page = queries::track::get_whole_file_paths_after(&db, &[FileType::Wav], first, 1).await?;
+
+    assert_eq!(ids(&page), [second]);
+    Ok(())
+}
+
+#[tokio::test]
+async fn the_rated_mp4_page_holds_every_rated_whole_mp4() -> Result<(), AppError> {
+    let db = music_and_downloads().await?;
+    let rated = filed(&db, "silence.m4a", "a.m4a").await?;
+    let rated_outside = filed(&db, "silence.m4a", "b.m4a").await?;
+    let unrated = filed(&db, "silence.m4a", "c.m4a").await?;
+    let rated_flac = filed(&db, "silence.flac", "d.flac").await?;
+    queries::track::set_rating(&db, &[rated, rated_outside, rated_flac], 4).await?;
+    execute(&db, &format!("UPDATE tracks SET folder_id = 2 WHERE id = {rated_outside}")).await?;
+
+    let page = queries::track::get_rated_mp4_paths_after(&db, 0, 100).await?;
+
+    assert_eq!(ids(&page), [rated, rated_outside], "never {unrated} or {rated_flac}");
     Ok(())
 }

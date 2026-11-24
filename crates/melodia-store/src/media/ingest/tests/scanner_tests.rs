@@ -644,3 +644,68 @@ fn a_kept_out_file_under_a_path_the_walk_could_not_read_is_spared() {
 
     assert_eq!(unwalked, [stored(&gone)]);
 }
+
+// ── a file the walk missed while a tag write renamed its copy over it ──
+
+/// Purged, a row the walk only missed would take its rating and play count with it.
+#[test]
+fn a_row_the_walk_missed_is_an_orphan_only_once_its_file_is_gone() -> Result<(), AppError> {
+    let tmp = TempDir::new()?;
+    let (on_disk, gone, now_a_folder) =
+        (tmp.path().join("a.mp3"), tmp.path().join("b.mp3"), tmp.path().join("c.mp3"));
+    fs::write(&on_disk, b"fake audio")?;
+    fs::create_dir(&now_a_folder)?;
+    let mut index = WalkIndex::new(WalkedPaths::default(), Vec::new());
+    for path in [&on_disk, &gone, &now_a_folder] {
+        index.add_row(stored(path), any_row());
+    }
+
+    assert_eq!(index.take_orphans(), [stored(&gone), stored(&now_a_folder)]);
+    Ok(())
+}
+
+#[test]
+fn a_kept_out_file_the_walk_missed_is_unwalked_only_once_it_is_gone() -> Result<(), AppError> {
+    let tmp = TempDir::new()?;
+    let (on_disk, gone) = (tmp.path().join("spare.mp3"), tmp.path().join("gone.mp3"));
+    fs::write(&on_disk, b"fake audio")?;
+    let index = WalkIndex::new(WalkedPaths::default(), Vec::new());
+
+    let unwalked = index.unwalked([stored(&on_disk), stored(&gone)]);
+
+    assert_eq!(unwalked, [stored(&gone)]);
+    Ok(())
+}
+
+/// A hard link stands in for a disk that ignores case: two spellings one `stat` answers alike.
+#[cfg(target_os = "linux")]
+#[test]
+fn a_row_whose_file_the_walk_found_under_another_spelling_is_an_orphan() -> Result<(), AppError> {
+    let tmp = TempDir::new()?;
+    let (respelled, old) = (tmp.path().join("Song.mp3"), tmp.path().join("song.mp3"));
+    fs::write(&respelled, b"fake audio")?;
+    fs::hard_link(&respelled, &old)?;
+    let mut index = WalkIndex::new(walked_paths(slice::from_ref(&respelled)), Vec::new());
+    index.add_row(stored(&respelled), any_row());
+    index.add_row(stored(&old), any_row());
+
+    assert_eq!(index.take_orphans(), [stored(&old)]);
+    Ok(())
+}
+
+/// Where the disk keeps case apart, the twin is another file.
+#[cfg(target_os = "linux")]
+#[test]
+fn a_row_the_walk_missed_beside_its_case_twin_is_no_orphan_while_its_file_is_there()
+-> Result<(), AppError> {
+    let tmp = TempDir::new()?;
+    let (twin, missed) = (tmp.path().join("Song.mp3"), tmp.path().join("song.mp3"));
+    fs::write(&twin, b"fake audio")?;
+    fs::write(&missed, b"other audio")?;
+    let mut index = WalkIndex::new(walked_paths(slice::from_ref(&twin)), Vec::new());
+    index.add_row(stored(&twin), any_row());
+    index.add_row(stored(&missed), any_row());
+
+    assert_eq!(index.take_orphans(), Vec::<String>::new());
+    Ok(())
+}

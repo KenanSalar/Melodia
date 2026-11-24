@@ -85,3 +85,7 @@ impl MediaSource for FileSource {
         self.end.or(self.byte_len)
     }
 }
+
+#[cfg(test)]
+#[path = "tests/file_source_tests.rs"]
+mod tests;
