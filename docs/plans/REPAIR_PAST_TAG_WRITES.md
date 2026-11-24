@@ -11,6 +11,8 @@ v0.23.0 may see:
 
 - An M4A's stars in Melodia and in no other player. A library rebuild loses them.
 - A WAV or AIFF listed under its file name, untagged in every app, after a tag edit or a star click.
+- Such an AIFF also won't play: symphonia's AIFF reader rejects the broken chunk past `SSND`, in
+  `decode::probe`, which playback and the audio check share.
 
 **Why.** Both bugs arrived with lofty 0.25.4, first shipped in v0.17.0 (2026-09-22) and still the
 behaviour of 0.25.5, the latest release. "Write ratings to tags" ships on, so a star click was
@@ -72,11 +74,12 @@ would have damaged any of those 8.
 | File | Owns after this plan |
 |---|---|
 | `melodia-app/src/tasks/one_shot.rs` | the keyset page walk (`Pages`), the scan-pool page read (`read_page`) and the per-file read that counts what was out of reach (`read_files`), beside `spawn` |
-| `melodia-store/src/database/queries/track/lookup.rs` | one whole-file page query by codec, the rated-MP4 page, and one row's rating |
+| `melodia-store/src/database/queries/track/lookup.rs` | the whole-file page queries by codec, the library's and every row's, over one builder; the rated-MP4 page; and one row's rating |
 | `melodia-store/src/media/ingest/metadata.rs` | `codec_name`, the one spelling of the `codec` column |
 | `melodia-store/src/media/ingest/rating_tags.rs` | `read_stars`, one file's stars |
 | `melodia-app/src/tasks/m4a_rating_backfill.rs` (new) | the M4A pass |
-| `melodia-store/src/media/ingest/iff_repair.rs` (new) | the damage fingerprints over chunk headers, and the repair through `atomic_file::rewrite_with_sync` |
+| `melodia-store/src/media/ingest/iff_repair.rs` (new) | the container size and `include_final_pad`, the damage fingerprints over chunk headers, and the repair through `atomic_file::rewrite_with_sync`, a chain folded into one chunk |
+| `melodia-store/src/media/ingest/tag_writer.rs` | `save_tags`, open to the crate for the fold; `include_final_pad` leaves it |
 | `melodia-app/src/tasks/iff_tag_repair.rs` (new) | the WAV and AIFF pass: page, repair, re-read |
 | `melodia-app/src/services/settings/library.rs` | two markers, `m4a_ratings_backfilled` and `iff_tags_repaired` |
 | `melodia/src/boot/tasks.rs` | spawns both beside `rating_import` |
@@ -89,7 +92,12 @@ would have damaged any of those 8.
   reach, which the M4A pass and the repair share.
 - **The codec page query.** `WHOLE_FLACS_AFTER` (`lookup.rs`) becomes a query taking its codecs
   as lofty `FileType`s, spelled through `codec_name` as the ingest writes them. The cue probe asks
-  for `Flac`, the repair for `Wav` and `Aiff`.
+  for `Flac`, the repair for `Wav` and `Aiff`. Phase 2 splits its scope: the cue probe keeps the
+  library's rows (`get_library_file_paths_after`), the repair takes every row
+  (`get_whole_file_paths_after`), a star on a file opened from outside the library having cut its
+  chunk too.
+- **The container size.** `include_final_pad` read and wrote it inside `tag_writer`. It moves into
+  `iff_repair`, whose fingerprints and repair read and write the size through the same type.
 - **`LibraryFlags`' lint reason.** Its `#[expect(clippy::struct_excessive_bools)]` said "six
   independent settings.json keys, four of them one-shot markers". Phase 1 restates it for seven
   and five, Phase 2 for eight and six.
@@ -126,28 +134,49 @@ would have damaged any of those 8.
 7. **Docs this phase makes wrong:** `one_shot.rs`' `//!` (it owns the page loop too),
    `rating_import.rs`' and `embedded_cue_probe.rs`' paging docs, and `LibraryFlags`' doc.
 
-### Phase 2: repair WAV and AIFF tag chunks (open)
+### Phase 2: repair WAV and AIFF tag chunks (done)
 
-1. **Reproduce every damaged shape first.** Run lofty 0.25.5's `save_to_path` on generated
-   fixtures, with each combination:
-   - the old `ID3 ` chunk last, not last, or absent
-   - a new tag that fits in place (WAV's `JUNK` path) or doesn't
+1. **Reproduce every damaged shape first** (done 2026-11-24, a scratch crate outside the repo).
+   144 hand-built at-risk fixtures, each written three times: twice by lofty 0.25.5 as old
+   Melodia saved, then once after `include_final_pad`'s restate. They crossed:
    - WAV and AIFF
-   - an upper- and a lower-case chunk id
+   - the old `ID3 ` chunk last, ahead of an odd last chunk, or absent
+   - `ID3 ` and `id3 `, which made no difference
+   - an old tag roomy enough for WAV's in-place `JUNK` path, or not, and small and large edits
+   - with and without `LIST INFO` (WAV) or `NAME` (AIFF)
 
-   Record each resulting shape. One is confirmed so far, on a WAV whose tag chunk was last and
-   grew: the walk lands on `D3 ` with the chunk's size, `ID3` starts 7 bytes on, and exactly one
-   stray byte follows the chunk. Where the chunk was not last or absent, reading lofty's splice
-   suggests the `I` survives and the walk takes it for the previous chunk's pad instead. Step 1
-   settles that.
-2. **Fingerprints.** One per shape found, each matched exactly from chunk headers alone: a few small
-   reads per file. Anything else is left alone.
+   232 of the 432 writes left damage, all in two shapes, both a walk that lands on `D3 ` with the
+   chunk's size and `ID3` 7 bytes on, the drifted pad a zero byte past the new chunk:
+   - **Cut id** (128): the chunk lost its `I` to the drain. The old chunk was last and the new one
+     didn't fit, or a WAV's earlier in-place write left `JUNK` last, which swallowed the `I`.
+     Every reader loses the tag.
+   - **Landed early** (104): the chunk starts in the odd last chunk's pad slot, its `I` the pad.
+     lofty and Melodia read it, ffmpeg doesn't, and TagLib only sometimes.
+
+   A cut-id file written again grows a chain: the old writer splices each later chunk in ahead of
+   the stray byte, and the fixed writer appends it past the byte, now counted. A landed-early file
+   heals under the fixed writer. An AIFF with a `NAME` chunk was never damaged, its text-chunk
+   write restating the size first. On a copy of one of the 8 Madih WAVs, one write cut the id and
+   a second chained.
+2. **Fingerprints.** One strict walk over the chunk headers, which reads the ID3v2 header too
+   where one is cut. It requires the tag's stated length to match the chunk's, nothing but `ID3 `
+   and `JUNK` chunks past it, and exactly one stray zero byte: the last one, or one just ahead of
+   an `ID3 ` chunk. The `I` in the pad slot of an odd chunk tells the two shapes apart. Anything
+   else is left alone.
 3. **The repair.**
-   - Rebuild the chunk header, drop the stray byte, and restate the container size.
-   - Write through `atomic_file::rewrite_with_sync` with the file marked as a self-write.
-   - Run `tag_writer::require_same_audio` in the closure as a guard.
-   - Tried by hand on the confirmed shape: the chunk walk came out clean, ffprobe read the original
-     title and the edited album, and the audio matched the pristine file.
+   - Write in the missing byte (an `I` at the break, or a zero pad ahead of a landed-early chunk),
+     shift what follows up to the stray byte one place on over it, and restate the container size.
+     The file keeps its length.
+   - **Fold a chain.** TagLib reads only the first ID3 chunk, so a chain's later edits were
+     invisible to it. lofty merges a chain's frames, later ones winning
+     (`id3/v2/frame/list.rs:239`). The repair saves that merge over the first chunk through
+     `tag_writer::save_tags` and cuts the rest.
+   - Write through `atomic_file::rewrite_with_sync` with the file marked as a self-write. The copy
+     must show the damage `diagnose` found, and walk clean once mended.
+   - Run `tag_writer::require_same_audio` in the closure as a guard. A damaged AIFF won't demux,
+     so the guard writes it unchecked with a warning; the mended span holds tag chunks only.
+   - Tried in the scratch crate on every damaged representative: each walk came out clean, the
+     audio bytes matched, and lofty, TagLib and ffprobe agreed on every tag.
 4. **The re-read.** Extract the repaired file and commit it through `commit_retag` with an edit
    that keeps everything. The row gets its tags back and its loudness measurement is carried. The
    row's stars give way only to a rating the tag holds (`mutations.rs:315`).
@@ -155,9 +184,12 @@ would have damaged any of those 8.
    surely as a star click, and the repair restores the user's own data.
 6. **Failures and log:** as in Phase 1. One summary line names how many files were repaired, and
    one debug line per file that matched no fingerprint while looking damaged (a walk that
-   breaks).
-7. **Docs this phase makes wrong:** `include_final_pad`'s doc, which names the bug the repair
-   undoes, gains a pointer to `iff_repair`.
+   breaks). A failed repair or re-read is counted and unmarks the file, so the watcher reads back
+   whatever did land.
+7. **Docs this phase makes wrong:** `include_final_pad` moves into `iff_repair`, whose `//!`
+   names the splice once for both the prevention and the undo.
+
+### Phase 3: Tests (open)
 
 ## Verification
 
@@ -176,7 +208,23 @@ would have damaged any of those 8.
   - Done 2026-11-24, on three generated M4As opened from outside the library, all as above.
 - **Phase 2, by hand:**
   - Damage copies of the 8 at-risk WAVs with plain lofty 0.25.5 setting an album, a scratch program
-    outside the repo.
-  - Launch. Each file's chunk walk is clean, its tags read back in ffprobe, its audio decodes
-    identically, its row shows its title again, and its loudness row is kept.
+    outside the repo, one of them written twice for a chain, beside a landed-early fixture.
+  - Launch. Each file's chunk walk is clean, its tags read back in ffprobe and TagLib, its audio
+    decodes identically, its row shows its title again, and its loudness row is kept.
   - A clean WAV and AIFF, and the 3,575 even-sized files, stay byte for byte.
+  - A second launch runs nothing.
+  - Done 2026-11-24 under `cargo mcp`, the data folder backed up and restored. A test library
+    folder held the 8 damaged Madih copies (one chained) and six step 1 shapes, beside one damaged
+    WAV opened from outside the library and two clean controls:
+    - With the outside file moved away, the pass repaired 14, failed 0, and failed the run as one
+      out of reach, marker down. With the file back, the next launch repaired it alone and
+      recorded the marker. The launch after ran nothing.
+    - Each file walked clean, one ID3 chunk per chain, and TagLib and ffprobe read its original
+      title with the edited fields. The audio bytes matched the originals.
+    - Each row took back its title (Songs showed the 8 Madih titles under "Hand Test Album") and
+      its seeded loudness row moved to the new hash with its gain kept. Later boots re-parsed
+      none of the 16 library files.
+    - The controls stayed byte for byte, and all 3,583 library WAV and AIFF files kept their
+      inode, size and modified time.
+    - The audio check passed the three damaged AIFFs unchecked (symphonia rejects the broken
+      chunk), and decoded them once repaired.

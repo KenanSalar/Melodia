@@ -9,7 +9,7 @@ use serde::{Deserialize, Serialize};
 #[serde(default)]
 #[expect(
     clippy::struct_excessive_bools,
-    reason = "seven independent settings.json keys, five of them one-shot markers; any grouping would be a container invented for the lint rather than one describing something"
+    reason = "eight independent settings.json keys, six of them one-shot markers; any grouping would be a container invented for the lint rather than one describing something"
 )]
 pub struct LibraryFlags {
     pub folder_watching_enabled: bool,
@@ -33,6 +33,9 @@ pub struct LibraryFlags {
     /// Whether every rated M4A's file has been brought to its row's stars. Marked, since only
     /// reading each file could tell.
     pub m4a_ratings_backfilled: bool,
+    /// Whether every WAV and AIFF a tag write broke the ID3 chunk of has been mended. Marked, since
+    /// only reading each file's chunks could tell.
+    pub iff_tags_repaired: bool,
 }
 
 impl Default for LibraryFlags {
@@ -45,6 +48,7 @@ impl Default for LibraryFlags {
             tags_backfilled: false,
             embedded_cues_probed: false,
             m4a_ratings_backfilled: false,
+            iff_tags_repaired: false,
         }
     }
 }

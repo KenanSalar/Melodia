@@ -34,6 +34,7 @@ pub fn spawn_background_tasks(
     tasks::artwork_renormalize::spawn(spawner, state);
     tasks::rating_import::spawn(spawner, state);
     tasks::m4a_rating_backfill::spawn(spawner, state);
+    tasks::iff_tag_repair::spawn(spawner, state);
     tasks::tag_backfill::spawn(spawner, state);
     tasks::embedded_cue_probe::spawn(spawner, state);
     // Before any callback can set a rating.

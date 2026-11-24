@@ -62,7 +62,7 @@ async fn mark_carriers(db: &DbPool) -> AppResult<Tally> {
     let mut pages = one_shot::Pages::default();
     while let Some(page) = pages
         .next_page(|after_id| {
-            queries::track::get_whole_file_paths_after(
+            queries::track::get_library_file_paths_after(
                 db,
                 &[FileType::Flac],
                 after_id,

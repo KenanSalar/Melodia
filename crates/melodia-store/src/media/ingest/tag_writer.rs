@@ -16,7 +16,6 @@
 //! strips those tags outright.
 
 use std::fs::File;
-use std::io::{Read, Seek, SeekFrom, Write};
 use std::path::Path;
 
 use lofty::config::WriteOptions;
@@ -28,7 +27,7 @@ use lofty::prelude::ItemKey;
 use lofty::tag::items::Timestamp;
 use lofty::tag::{ItemValue, Tag, TagExt, TagItem, TagType};
 
-use super::{metadata, rating_tags, role_tags};
+use super::{iff_repair, metadata, rating_tags, role_tags};
 use melodia_audio::audio_match::{self, AudioMatch};
 use melodia_core::entities::artist::ArtistCredit;
 use melodia_core::entities::genre::GenreList;
@@ -44,12 +43,6 @@ const MAX_BPM: f64 = 1000.0;
 /// Every key a lyrics entry is read from, in read order, so a save clearing them all leaves no old
 /// entry to read back.
 const LYRICS_KEYS: [ItemKey; 2] = [ItemKey::Lyrics, ItemKey::UnsyncLyrics];
-
-/// Where a RIFF or AIFF container states its size, after its four-byte id.
-const IFF_SIZE_AT: u64 = 4;
-
-/// The id and the size, which the stated size leaves out.
-const IFF_HEADER_LEN: u64 = 8;
 
 /// What a write left unwritten, and the container that would not take it, named as its users know
 /// it, which [`apply_edit`], handed only a `Tag`, can't say.
@@ -451,8 +444,8 @@ pub(crate) fn require_same_audio(original: &Path, copy: &Path) -> Result<(), App
 
 /// Saves `tagged` into `copy`, a `VorbisComments` primary as [`vorbis_comments`] builds it: lofty's
 /// generic save writes that block from mapped items alone, dropping the companion.
-fn save_tags(mut tagged: TaggedFile, copy: &mut File) -> Result<(), FileEncodingError> {
-    include_final_pad(copy, tagged.file_type())?;
+pub(crate) fn save_tags(mut tagged: TaggedFile, copy: &mut File) -> Result<(), FileEncodingError> {
+    iff_repair::include_final_pad(copy, tagged.file_type())?;
     let options = WriteOptions::default();
     if tagged.primary_tag_type() == TagType::VorbisComments
         && let Some(tag) = tagged.remove(TagType::VorbisComments)
@@ -460,31 +453,6 @@ fn save_tags(mut tagged: TaggedFile, copy: &mut File) -> Result<(), FileEncoding
         return vorbis_comments(tag).save_to(copy, options);
     }
     tagged.save_to(copy, options)
-}
-
-/// Includes a WAV's or AIFF's final pad byte in the copy's container size where its header left
-/// it out. lofty splices a new tag in at the stated end, inside the old tag chunk it then drains,
-/// which cuts the new chunk's first byte off and leaves its tags unreadable.
-fn include_final_pad(copy: &mut File, file_type: FileType) -> std::io::Result<()> {
-    let big_endian = match file_type {
-        FileType::Wav => false,
-        FileType::Aiff => true,
-        _ => return Ok(()),
-    };
-    let mut size = [0; 4];
-    copy.seek(SeekFrom::Start(IFF_SIZE_AT))?;
-    copy.read_exact(&mut size)?;
-    let stated = if big_endian { u32::from_be_bytes(size) } else { u32::from_le_bytes(size) };
-
-    // Every chunk pads to an even length, so an odd size one byte short of the file lacks its pad.
-    let file_len = copy.metadata()?.len();
-    let lacks_pad = !stated.is_multiple_of(2) && u64::from(stated) + IFF_HEADER_LEN + 1 == file_len;
-    let Some(counted) = stated.checked_add(1).filter(|_| lacks_pad) else {
-        return Ok(());
-    };
-    let size = if big_endian { counted.to_be_bytes() } else { counted.to_le_bytes() };
-    copy.seek(SeekFrom::Start(IFF_SIZE_AT))?;
-    copy.write_all(&size)
 }
 
 /// `tag`'s mapped items verbatim, as lofty's generic save writes them, beside its pictures and

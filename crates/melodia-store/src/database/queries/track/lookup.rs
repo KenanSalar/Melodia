@@ -501,26 +501,55 @@ static UNRATED_WHOLE_FILES_AFTER: LazyLock<String> = LazyLock::new(|| {
 
 /// One page of the library's whole-file rows past `after_id` whose container is one of `codecs`,
 /// the work list of a one-shot sweep over one kind of file.
+pub async fn get_library_file_paths_after(
+    db: &DbPool,
+    codecs: &[FileType],
+    after_id: i64,
+    limit: i64,
+) -> Result<Vec<(i64, String)>, AppError> {
+    let Some(page) = codec_page(codecs, Some(IN_LIBRARY), after_id, limit) else {
+        return Ok(Vec::new());
+    };
+    db.read(move |conn| page.fetch_all(conn)).await
+}
+
+/// [`get_library_file_paths_after`] with the files opened from outside the library, the work list
+/// of a sweep over what a tag write reached.
 pub async fn get_whole_file_paths_after(
     db: &DbPool,
     codecs: &[FileType],
     after_id: i64,
     limit: i64,
 ) -> Result<Vec<(i64, String)>, AppError> {
-    if codecs.is_empty() {
+    let Some(page) = codec_page(codecs, None, after_id, limit) else {
         return Ok(Vec::new());
+    };
+    db.read(move |conn| page.fetch_all(conn)).await
+}
+
+/// The statement both codec pages run, `None` for no codecs, `scope` narrowing the whole files.
+fn codec_page(
+    codecs: &[FileType],
+    scope: Option<&'static str>,
+    after_id: i64,
+    limit: i64,
+) -> Option<Sql> {
+    if codecs.is_empty() {
+        return None;
     }
     let mut sql = Sql::vouched(format!(
-        "SELECT id, file_path FROM tracks
-         WHERE codec IN ({}) AND id > ? AND {WHOLE_FILE} AND {IN_LIBRARY}
-         ORDER BY id LIMIT ?",
+        "SELECT id, file_path FROM tracks WHERE codec IN ({}) AND id > ? AND {WHOLE_FILE}",
         placeholders(codecs.len())
     ));
+    if let Some(term) = scope {
+        sql.push(" AND ").push(term);
+    }
+    sql.push(" ORDER BY id LIMIT ?");
     for &codec in codecs {
         sql.bind(codec_name(codec));
     }
     sql.bind(after_id).bind(limit);
-    db.read(move |conn| sql.fetch_all(conn)).await
+    Some(sql)
 }
 
 static RATED_WHOLE_FILES_OF_CODEC_AFTER: LazyLock<String> = LazyLock::new(|| {
