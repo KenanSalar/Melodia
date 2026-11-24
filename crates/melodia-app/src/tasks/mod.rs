@@ -12,6 +12,7 @@ pub mod file_event_processor;
 pub mod heap_trim;
 pub mod loudness;
 pub mod lyrics_cache;
+pub mod m4a_rating_backfill;
 pub mod material_you;
 pub mod one_shot;
 pub mod play_count_flusher;

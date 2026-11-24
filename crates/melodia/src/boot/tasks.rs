@@ -30,9 +30,10 @@ pub fn spawn_background_tasks(
     tasks::search_text_backfill::spawn(spawner, state);
     tasks::artwork_restore::spawn(spawner, state);
     tasks::artwork_sweep::spawn(spawner, state);
-    // The four once-per-install passes, each gated on its own settings marker.
+    // The once-per-install passes, each gated on its own settings marker.
     tasks::artwork_renormalize::spawn(spawner, state);
     tasks::rating_import::spawn(spawner, state);
+    tasks::m4a_rating_backfill::spawn(spawner, state);
     tasks::tag_backfill::spawn(spawner, state);
     tasks::embedded_cue_probe::spawn(spawner, state);
     // Before any callback can set a rating.

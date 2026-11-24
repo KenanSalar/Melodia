@@ -9,8 +9,14 @@
 //! No `FMPS_Rating`: it buys precision a whole-star strip can't show, and lofty has no mapping, so
 //! reading it would take a second parse past [`crate::media::ingest::metadata::read_tags`].
 
+use std::path::Path;
+
+use lofty::file::TaggedFileExt;
 use lofty::prelude::ItemKey;
 use lofty::tag::{Tag, TagType};
+
+use crate::media::ingest::metadata::{self, TagScope};
+use melodia_core::error::AppError;
 
 /// The top of the scale, matching the strip `crates/melodia-ui/ui/components/star-rating.slint` draws.
 pub const MAX_STARS: i32 = 5;
@@ -31,6 +37,14 @@ const RATE_EMAIL: &str = "MusicBee";
 /// through here, so a hand-edited or out-of-range value can never reach either.
 pub fn clamp_stars(stars: i32) -> i32 {
     stars.clamp(0, MAX_STARS)
+}
+
+/// The star rating `path`'s file holds, `None` for an unrated one. Reads tags alone: the rating is
+/// a text item, so a picture copy or a VBR frame scan would buy nothing.
+pub fn read_stars(path: &Path) -> Result<Option<i32>, AppError> {
+    let tagged = metadata::read_tags(path, TagScope::TagsOnly)?;
+    let tag = tagged.primary_tag().or_else(|| tagged.first_tag());
+    Ok(tag.and_then(stars_from_tag))
 }
 
 /// The star rating `tag` carries, or `None` when it carries none.

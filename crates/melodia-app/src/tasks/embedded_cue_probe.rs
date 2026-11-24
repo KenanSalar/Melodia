@@ -6,20 +6,15 @@
 //! and no hash, and blanks those rows' stamps alone, where `tag_backfill`'s pass would send every
 //! FLAC in the library back through a hash and a full read.
 
-use std::path::Path;
+use lofty::file::FileType;
 
 use crate::library;
 use crate::state::AppState;
 use crate::tasks::{TaskSpawner, one_shot};
-use melodia_core::error::{AppError, AppResult, describe};
-use melodia_core::utils::reach;
+use melodia_core::error::{AppError, AppResult};
 use melodia_store::database::DbPool;
 use melodia_store::database::queries;
 use melodia_store::media::cue;
-use melodia_store::media::ingest::scan_pool::ScanPool;
-
-/// Rows held and probed per page, which keeps a library-sized pass off the RSS budget.
-const PAGE_ROWS: i64 = 2_000;
 
 /// [`one_shot::OnFailure::Retry`]: nothing else marks these rows stale, and a pass run again only
 /// reads headers.
@@ -61,67 +56,30 @@ struct Tally {
     out_of_reach: usize,
 }
 
-/// Blanks the stamp of every whole-file FLAC carrying a sheet, a page at a time.
+/// Blanks the stamp of every whole-file FLAC carrying a sheet.
 async fn mark_carriers(db: &DbPool) -> AppResult<Tally> {
-    let mut after_id = 0;
     let mut tally = Tally::default();
-    loop {
-        let page = queries::track::get_whole_flac_paths_after(db, after_id, PAGE_ROWS).await?;
-        let Some(last_id) = page.last().map(|(id, _)| *id) else {
-            break;
-        };
-        after_id = last_id;
-
-        let probed = tokio::task::spawn_blocking(move || {
-            ScanPool::for_files(page.len()).install(|| probe_page(&page))
+    let mut pages = one_shot::Pages::default();
+    while let Some(page) = pages
+        .next_page(|after_id| {
+            queries::track::get_whole_file_paths_after(
+                db,
+                &[FileType::Flac],
+                after_id,
+                one_shot::PAGE_ROWS,
+            )
         })
-        .await
-        .map_err(|e| AppError::scanner("Embedded cue sheet probe panicked", e))?;
+        .await?
+    {
+        let probed =
+            one_shot::read_page(page, |rows| one_shot::read_files(rows, cue::carries_sheet))
+                .await?;
         tally.out_of_reach += probed.out_of_reach;
-        if !probed.carriers.is_empty() {
-            tally.marked += queries::track::mark_tracks_stale(db, probed.carriers).await?;
+        let carriers: Vec<i64> =
+            probed.read.into_iter().filter_map(|(id, sheet)| sheet.then_some(id)).collect();
+        if !carriers.is_empty() {
+            tally.marked += queries::track::mark_tracks_stale(db, carriers).await?;
         }
     }
     Ok(tally)
-}
-
-struct ProbedPage {
-    carriers: Vec<i64>,
-    out_of_reach: usize,
-}
-
-enum Probed {
-    Sheet,
-    NoSheet,
-    OutOfReach,
-}
-
-/// **Blocking**: which files of `rows` carry a sheet, and how many couldn't be reached.
-fn probe_page(rows: &[(i64, String)]) -> ProbedPage {
-    use rayon::prelude::*;
-
-    let probed: Vec<(i64, Probed)> =
-        rows.par_iter().map(|(id, path)| (*id, probe_file(Path::new(path)))).collect();
-    let mut page = ProbedPage { carriers: Vec::new(), out_of_reach: 0 };
-    for (id, probed) in probed {
-        match probed {
-            Probed::Sheet => page.carriers.push(id),
-            Probed::NoSheet => {}
-            Probed::OutOfReach => page.out_of_reach += 1,
-        }
-    }
-    page
-}
-
-/// A file that is there but won't read holds nothing the scan could split either, while one out of
-/// reach may carry a sheet once it reads.
-fn probe_file(path: &Path) -> Probed {
-    match cue::carries_sheet(path) {
-        Ok(true) => Probed::Sheet,
-        Ok(false) => Probed::NoSheet,
-        Err(e) => {
-            log::debug!("Embedded cue sheet probe: {}", describe(&e));
-            if reach::is_out_of_reach(path, &e) { Probed::OutOfReach } else { Probed::NoSheet }
-        }
-    }
 }
