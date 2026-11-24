@@ -284,8 +284,8 @@ impl FileDecoder {
 
     /// Opus's trim, the priming already off the samples ([`super::opus`]): the pre-skip is the
     /// offset where the demuxer's timeline counts it, its first packet at zero or later, and
-    /// nothing where it opens before zero. The stated length less that offset ends MP4's and CAF's
-    /// padding, which nothing else drops.
+    /// nothing where it opens before zero. The track's stated ticks, as frames, less that offset
+    /// end MP4's and CAF's padding, which nothing else drops; CAF ticks at its `desc` rate.
     fn opus_padding(&self, first_pts: Timestamp) -> Option<Trim> {
         let params = self.decoder.codec_params();
         if params.codec != CODEC_ID_OPUS {
@@ -293,7 +293,10 @@ impl FileDecoder {
         }
         let timeline_counts_priming = first_pts.get() >= 0;
         let head = if timeline_counts_priming { u64::from(opus::pre_skip(params)) } else { 0 };
-        let stated = decode::audio_track(&*self.format).and_then(|track| track.num_frames);
+        let stated_ticks = decode::audio_track(&*self.format).and_then(|track| track.num_frames);
+        let stated = stated_ticks.zip(self.time_base).and_then(|(ticks, time_base)| {
+            decode::ticks_to_frames(ticks, time_base, self.sample_rate(), Rounding::Down)
+        });
         Some(Trim { head, playable: stated.and_then(|frames| frames.checked_sub(head)), tail: 0 })
     }
 

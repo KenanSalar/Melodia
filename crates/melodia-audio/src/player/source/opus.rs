@@ -4,9 +4,9 @@
 //!
 //! Symphonia drops two of that packet's numbers, both read back below: the playback gain, and the
 //! pre-skip. **The priming comes off here** rather than in [`super::file_decode`], which covers
-//! every container and leaves only a timeline offset to take back. **The stream layout is ours
-//! to check**: neither crate reads the mapping table, so a file disagreeing with the canonical
-//! layout would decode into the wrong channels in silence.
+//! every container and leaves only an offset and a length. **The stream layout is ours to check**:
+//! neither crate reads the mapping table, so a file disagreeing with the canonical layout would
+//! decode into the wrong channels in silence.
 //!
 //! **No soft clip**: the output rings slightly past ±1, as libopus does, and the chain clamps
 //! whenever anything is enabled, so a nonlinearity on every Opus track is the wrong trade.
@@ -28,6 +28,10 @@ use symphonia::core::errors::{
     Error as SymphoniaError, Result as SymphoniaResult, decode_error, unsupported_error,
 };
 use symphonia::core::packet::PacketRef;
+use symphonia::core::units::TimeBase;
+
+use super::audio::SampleRate;
+use super::decode::{self, Rounding};
 
 /// The rate Opus decodes at, whichever rate the encoder was fed. `OpusHead` states that input
 /// rate too, and it describes nothing about playback, which is why nothing here reads it.
@@ -73,15 +77,15 @@ mod offset {
 
 /// Rewrites the header the container handed over into RFC 7845's, the one form read below. Ogg
 /// and Matroska hand that over as is; isomp4 puts MP4's `dOps` behind the magic, its fields
-/// big-endian. CAF carries none, Apple's cookie holding the encoder's settings, and states the
-/// priming in its packet table, which reaches here as `priming`.
+/// big-endian. CAF carries none, Apple's cookie holding the encoder's settings, and counts the
+/// priming at its `desc` rate in its packet table, which reaches here as `priming`.
 pub(super) fn standardize_head(params: &mut AudioCodecParameters, priming: Option<u32>) {
     if params.codec != CODEC_ID_OPUS {
         return;
     }
     let rewritten = match params.extra_data.as_deref() {
         Some(header) if header.starts_with(MAGIC) => from_dops(header),
-        _ => built_head(params.channels.as_ref(), priming),
+        _ => built_head(params, priming),
     };
     if let Some(header) = rewritten {
         params.extra_data = Some(header);
@@ -112,10 +116,13 @@ fn from_dops(header: &[u8]) -> Option<Box<[u8]>> {
 
 /// RFC 7845's header for a container that carries none. Family 0, nothing stating a mapping for
 /// more than two channels, so the decoder refuses those; no gain, CAF having nowhere to carry one.
-fn built_head(channels: Option<&Channels>, priming: Option<u32>) -> Option<Box<[u8]>> {
-    let channel_count = u8::try_from(channels?.count()).ok()?;
-    // Saturating rather than wrapping, as `trim_count` does.
-    let pre_skip = priming.map_or(0, |frames| u16::try_from(frames).unwrap_or(u16::MAX));
+fn built_head(params: &AudioCodecParameters, priming: Option<u32>) -> Option<Box<[u8]>> {
+    let channel_count = u8::try_from(params.channels.as_ref()?.count()).ok()?;
+    let pre_skip = priming.map_or(0, |frames| {
+        let frames = at_decode_rate(frames, params.sample_rate).unwrap_or(u64::from(frames));
+        // Saturating, so a priming past what the header can state drops all it can.
+        u16::try_from(frames).unwrap_or(u16::MAX)
+    });
     let fields: [&[u8]; 6] = [
         MAGIC,
         &[HEAD_VERSION, channel_count],
@@ -125,6 +132,14 @@ fn built_head(channels: Option<&Channels>, priming: Option<u32>) -> Option<Box<[
         &[0],
     ];
     Some(fields.concat().into_boxed_slice())
+}
+
+/// `frames` at the track's `rate`, counted again at [`DECODE_RATE`], where the header counts them.
+/// `None` where the track states no rate.
+fn at_decode_rate(frames: u32, rate: Option<u32>) -> Option<u64> {
+    let time_base = TimeBase::try_from_recip(rate?)?;
+    let decode_rate = SampleRate::new(DECODE_RATE)?;
+    decode::ticks_to_frames(u64::from(frames), time_base, decode_rate, Rounding::Down)
 }
 
 /// The priming the header in `params` states, once [`standardize_head`] has made it RFC 7845's.

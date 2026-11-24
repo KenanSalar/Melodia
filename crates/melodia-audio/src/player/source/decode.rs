@@ -94,8 +94,7 @@ pub(super) fn frames_to_ticks(frames: u64, time_base: TimeBase, rate: SampleRate
 }
 
 /// By value, to rewrite an HE-AAC config and an Opus header on the way past ([`super::aac_config`],
-/// [`opus::standardize_head`]), the track's `priming` building the header where it has none. The
-/// error goes back unwrapped, the caller being the one that can name the file or station.
+/// [`opus::standardize_head`]). Errors stay unwrapped, the caller naming the file or station.
 pub(super) fn make_decoder(
     mut params: AudioCodecParameters,
     priming: Option<u32>,
