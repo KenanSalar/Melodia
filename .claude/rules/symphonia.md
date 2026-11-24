@@ -37,7 +37,9 @@ Decoding only, against 0.6.1.
   the flag.
 - **Matroska**: `CodecDelay` already comes off the timestamps, and `DiscardPadding` is parsed and
   read nowhere.
-- **Opus**: Symphonia ships no decoder.
-- **`Track::delay` is a timeline offset, never frames to drop.** MP3 and CAF fill it and open their
-  timeline at `-delay`, so theirs lines up; Ogg fills it for Opus from `pre_skip` and keeps
-  `absgp_to_ts` at identity, so its timeline still counts the priming.
+- **Opus**: Symphonia ships no decoder, and leaves each container's header in that container's
+  form (`opus::standardize_head`).
+- **`Track::delay` is a timeline offset, and frames to drop only where no header states them**
+  (CAF's Opus). MP3 and CAF fill it and open their timeline at `-delay`, so theirs lines up; Ogg
+  fills it for Opus from `pre_skip` and keeps `absgp_to_ts` at identity, so its timeline still
+  counts the priming, as MP4's does with no delay filled, isomp4 applying no edit list.

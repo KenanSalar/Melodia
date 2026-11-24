@@ -42,7 +42,7 @@ repository = "https://github.com/KenanSalar/Melodia"
 # `WinitWindowAccessor` for `drag_window()` and `WindowEvent::Resized` (slint-ui#2521,
 # #6273, #4817); `renderer-femtovg` as the renderer the rounded clips, layers and gradients
 # are tuned against.
-slint = { version = "1.19.0", default-features = false, features = [
+slint = { version = "1.19.1", default-features = false, features = [
     "std",
     "backend-default",
     "accessibility",
@@ -55,7 +55,7 @@ slint = { version = "1.19.0", default-features = false, features = [
 # So must `slint-tr-extractor`: `scripts/update-translations.py` reads the version off the
 # `slint = { version = … }` line and refuses an extractor that doesn't match it. The default
 # `renderer-software` feature only embeds resources for a renderer we don't build.
-slint-build = { version = "1.19.0", default-features = false, features = ["compat-1-18"] }
+slint-build = { version = "1.19.1", default-features = false, features = ["compat-1-18"] }
 
 # Async runtime / synchronisation
 tokio = { version = "1.54.1", features = [
@@ -119,7 +119,7 @@ symphonia = { version = "0.6.1", default-features = false, features = [
 # registration into `decode::CODECS` over this. Pure Rust with no dependencies and no
 # `build.rs`: the libopus adapter would put CMake and a vendored C build in ten release slots
 # for a decoder that measured no better here.
-opus-pure = "0.2.3"
+opus-pure = "0.2.5"
 # The graphic EQ cascades this crate's `Type::PeakingEQ` filters. `DirectForm1` keeps
 # its delay line across a coefficient swap, so a slider drag injects no transient.
 biquad = "0.6.0"

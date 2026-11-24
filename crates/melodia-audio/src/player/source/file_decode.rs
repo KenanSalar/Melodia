@@ -75,9 +75,9 @@ impl MediaSource for FileSource {
     }
 }
 
-/// How much of the container's timeline isn't music, filled by [`super::aac_trim`], the Opus arm
-/// of [`FileDecoder::install_trim`] and [`super::mkv_trim`].
-#[derive(Clone, Copy)]
+/// How much of the container's timeline isn't music, filled by [`super::aac_trim`],
+/// [`FileDecoder::opus_padding`] and [`super::mkv_trim`].
+#[derive(Clone, Copy, Default)]
 pub(super) struct Trim {
     /// Encoder priming, ahead of the first real sample.
     pub head: u64,
@@ -163,6 +163,7 @@ impl FileDecoder {
             source_format,
             time_base,
             total_duration,
+            first_pts,
         } = decode::open(Box::new(FileSource::new(file)), &hint)
             .map_err(|e| AppError::player(path.display().to_string(), e))?;
 
@@ -178,7 +179,7 @@ impl FileDecoder {
             span: Span::WHOLE_FILE,
             end: None,
         };
-        decoded.install_trim(&edits, &discards);
+        decoded.install_trim(&edits, &discards, first_pts);
         Ok(decoded)
     }
 
@@ -234,11 +235,16 @@ impl FileDecoder {
 
     /// Lines this source's timeline up with the demuxer's. AAC's head comes off through
     /// [`Self::skip`], above the cursor the stream decoder shares; [`super::opus`] has already
-    /// dropped Opus's, leaving an offset; a tail is the container's, which only
+    /// dropped Opus's, leaving an offset and a length; a tail is the container's, which only
     /// [`super::mkv_trim`] answers. Never on the audio callback, every caller opening off the deck
     /// lock. Here rather than in [`super::decode`]: a mount has no container header to read a trim
     /// from and no gapless seam for one to spoil.
-    fn install_trim(&mut self, edits: &[aac_trim::Edit], discards: &[mkv_trim::Discard]) {
+    fn install_trim(
+        &mut self,
+        edits: &[aac_trim::Edit],
+        discards: &[mkv_trim::Discard],
+        first_pts: Timestamp,
+    ) {
         let tail = mkv_trim::resolve(discards, self.track, self.sample_rate()).unwrap_or(0);
 
         if let Some(aac) = self.aac_padding(edits) {
@@ -255,16 +261,17 @@ impl FileDecoder {
             return;
         }
 
-        let head = self.opus_priming().unwrap_or(0);
-        if head == 0 && tail == 0 {
+        let opus = self.opus_padding(first_pts).unwrap_or_default();
+        if opus.head == 0 && opus.playable.is_none() && tail == 0 {
             return;
         }
 
-        self.trim = Some(Trim { head, playable: None, tail });
+        self.trim = Some(Trim { tail, ..opus });
         self.measure_playable();
         log::debug!(
-            "Container padding: {head} priming frames already off the samples, {tail} trailing \
+            "Container padding: {} priming frames already off the samples, {tail} trailing \
              frames held back, {:?} of audio",
+            opus.head,
             self.file_duration
         );
     }
@@ -275,16 +282,19 @@ impl FileDecoder {
         aac_trim::resolve(&timing, &self.format.metadata(), edits, rate)
     }
 
-    /// The priming [`super::opus`] already dropped, which the demuxer's timeline still counts.
-    /// Gated on the codec rather than the field: MP3 and CAF fill `Track::delay` too, and a blanket
-    /// rule would take their delay off twice. Only Ogg fills it for Opus; Matroska subtracts
-    /// `CodecDelay` from its timestamps instead and MP4 states nothing.
-    fn opus_priming(&self) -> Option<u64> {
-        let track = decode::audio_track(&*self.format)?;
-        if decode::audio_params(track)?.codec != CODEC_ID_OPUS {
+    /// Opus's trim, the priming already off the samples ([`super::opus`]): the pre-skip is the
+    /// offset where the demuxer's timeline counts it, its first packet at zero or later, and
+    /// nothing where it opens before zero. The stated length less that offset ends MP4's and CAF's
+    /// padding, which nothing else drops.
+    fn opus_padding(&self, first_pts: Timestamp) -> Option<Trim> {
+        let params = self.decoder.codec_params();
+        if params.codec != CODEC_ID_OPUS {
             return None;
         }
-        track.delay.map(u64::from)
+        let timeline_counts_priming = first_pts.get() >= 0;
+        let head = if timeline_counts_priming { u64::from(opus::pre_skip(params)) } else { 0 };
+        let stated = decode::audio_track(&*self.format).and_then(|track| track.num_frames);
+        Some(Trim { head, playable: stated.and_then(|frames| frames.checked_sub(head)), tail: 0 })
     }
 
     /// Restates the length, and arms the end, against the real audio. The tail owes no

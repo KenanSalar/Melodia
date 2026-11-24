@@ -25,17 +25,17 @@ use symphonia::core::formats::probe::Hint;
 use symphonia::core::formats::{FormatOptions, FormatReader, Track, TrackType};
 use symphonia::core::io::{MediaSource, MediaSourceStream, MediaSourceStreamOptions};
 use symphonia::core::meta::MetadataOptions;
-use symphonia::core::units::{Duration as SymphoniaDuration, TimeBase};
+use symphonia::core::units::{Duration as SymphoniaDuration, TimeBase, Timestamp};
 
-use super::aac_config;
 use super::audio::{ChannelCount, SampleRate, Shape, SourceFormat};
+use super::{aac_config, opus};
 
 /// Ours rather than `symphonia::default::get_codecs`, which only the crate's own features fill, so
 /// registering [`super::opus`] is one line here and nothing at either call site.
 static CODECS: LazyLock<CodecRegistry> = LazyLock::new(|| {
     let mut registry = CodecRegistry::new();
     symphonia::default::register_enabled_codecs(&mut registry);
-    registry.register_audio_decoder::<super::opus::OpusDecoder>();
+    registry.register_audio_decoder::<opus::OpusDecoder>();
     registry
 });
 
@@ -93,12 +93,15 @@ pub(super) fn frames_to_ticks(frames: u64, time_base: TimeBase, rate: SampleRate
     u64::try_from(scaled / denom).ok()
 }
 
-/// By value, to rewrite an HE-AAC config on the way past ([`super::aac_config`]). The error goes
-/// back unwrapped, the caller being the one that can name the file or station.
+/// By value, to rewrite an HE-AAC config and an Opus header on the way past ([`super::aac_config`],
+/// [`opus::standardize_head`]), the track's `priming` building the header where it has none. The
+/// error goes back unwrapped, the caller being the one that can name the file or station.
 pub(super) fn make_decoder(
     mut params: AudioCodecParameters,
+    priming: Option<u32>,
 ) -> Result<Box<dyn AudioDecoder>, SymphoniaError> {
     aac_config::demote_he_aac(&mut params);
+    opus::standardize_head(&mut params, priming);
     drop_companded_sample_width(&mut params);
     CODECS.make_audio_decoder(&params, &AudioDecoderOptions::default())
 }
@@ -133,7 +136,7 @@ fn lossy_codec(codec: AudioCodecId) -> bool {
 }
 
 /// A demuxer, a decoder for its audio track, and enough of that track decoded to know its shape.
-/// `time_base` and `total_duration` are the two a mount drops.
+/// `time_base`, `total_duration` and `first_pts` are what a mount drops.
 pub(super) struct Opened {
     pub format: Box<dyn FormatReader>,
     pub decoder: Box<dyn AudioDecoder>,
@@ -142,6 +145,9 @@ pub(super) struct Opened {
     pub source_format: SourceFormat,
     pub time_base: Option<TimeBase>,
     pub total_duration: Option<Duration>,
+    /// Where the track's first packet sits on the demuxer's timeline: before zero where the
+    /// container has already taken the encoder's priming off it.
+    pub first_pts: Timestamp,
 }
 
 /// Phrased to follow the source's name, so one message reads "`/music/x.flac`: has no audio" or
@@ -175,11 +181,11 @@ pub(super) fn open(source: Box<dyn MediaSource>, hint: &Hint) -> Result<Opened, 
     let time_base = track.time_base;
     let total_duration = playing_time(&*format, track);
 
-    let mut decoder = make_decoder(params).map_err(OpenError::Undecodable)?;
+    let mut decoder = make_decoder(params, track.delay).map_err(OpenError::Undecodable)?;
     let (cursor, decoded) = Cursor::open(&mut *format, &mut *decoder, track_id)
         .map_err(OpenError::Unreadable)?
         .ok_or(OpenError::Empty)?;
-    let source_format = SourceFormat { lossy, ..narrowed_to_stated(decoded, stated_bits) };
+    let source_format = SourceFormat { lossy, ..narrowed_to_stated(decoded.format, stated_bits) };
 
     Ok(Opened {
         format,
@@ -189,6 +195,7 @@ pub(super) fn open(source: Box<dyn MediaSource>, hint: &Hint) -> Result<Opened, 
         source_format,
         time_base,
         total_duration,
+        first_pts: decoded.first_pts,
     })
 }
 
@@ -260,11 +267,11 @@ impl Cursor {
     /// Decodes the first packet eagerly: the deck builds its converter from the shape at the
     /// append, and the decoder's sample format can be read only here. `Ok(None)` is a source with
     /// no audio and `Err` an unreadable one, which the user is shown differently.
-    pub(super) fn open(
+    fn open(
         format: &mut dyn FormatReader,
         decoder: &mut dyn AudioDecoder,
         track: u32,
-    ) -> Result<Option<(Self, SourceFormat)>, SymphoniaError> {
+    ) -> Result<Option<(Self, Packet)>, SymphoniaError> {
         let mut samples = Vec::new();
         let Some(packet) = fill(format, decoder, track, &mut samples)? else {
             return Ok(None);
@@ -276,7 +283,7 @@ impl Cursor {
             positions: packet.positions,
             ended: None,
         };
-        Ok(Some((cursor, packet.format)))
+        Ok(Some((cursor, packet)))
     }
 
     pub(super) fn shape(&self) -> Shape {
@@ -354,6 +361,7 @@ fn fill(
     track: u32,
     samples: &mut Vec<f32>,
 ) -> Result<Option<Packet>, SymphoniaError> {
+    let mut first_read = None;
     loop {
         let Some(packet) = format.next_packet()? else {
             return Ok(None);
@@ -361,6 +369,7 @@ fn fill(
         if packet.track_id != track {
             continue;
         }
+        let first_pts = *first_read.get_or_insert(packet.pts);
 
         match decoder.decode(&packet) {
             Ok(decoded) => {
@@ -384,7 +393,7 @@ fn fill(
                         _ => None,
                     };
                     let format = decoded_format(&decoded);
-                    return Ok(Some(Packet { shape, positions, format }));
+                    return Ok(Some(Packet { shape, positions, format, first_pts }));
                 }
             }
             Err(SymphoniaError::DecodeError(_)) => {}
@@ -398,6 +407,8 @@ struct Packet {
     shape: Shape,
     positions: Option<Position>,
     format: SourceFormat,
+    /// The first packet read's, which need not be the one that decoded to audio.
+    first_pts: Timestamp,
 }
 
 #[cfg(test)]

@@ -1,10 +1,10 @@
 //! Opus over `opus-pure`, registered into [`super::decode::CODECS`], Symphonia demuxing it and
-//! shipping no decoder (`docs/adr/0040-opus-decodes-through-a-pure-rust-crate.md`). Ogg, Matroska
-//! and MP4 all hand the identification packet over whole, so the container is invisible from here.
+//! shipping no decoder (`docs/adr/0040-opus-decodes-through-a-pure-rust-crate.md`), and
+//! [`standardize_head`] making every header RFC 7845's, so the container is invisible past it.
 //!
 //! Symphonia drops two of that packet's numbers, both read back below: the playback gain, and the
 //! pre-skip. **The priming comes off here** rather than in [`super::file_decode`], which covers
-//! all three containers and leaves only a timeline offset to take back. **The stream layout is ours
+//! every container and leaves only a timeline offset to take back. **The stream layout is ours
 //! to check**: neither crate reads the mapping table, so a file disagreeing with the canonical
 //! layout would decode into the wrong channels in silence.
 //!
@@ -51,6 +51,87 @@ pub(super) fn seek_pre_roll(params: &AudioCodecParameters) -> Duration {
     if params.codec == CODEC_ID_OPUS { SEEK_PRE_ROLL } else { Duration::ZERO }
 }
 
+/// What opens RFC 7845's header, and what isomp4 puts in front of a `dOps` body.
+const MAGIC: &[u8; 8] = b"OpusHead";
+/// RFC 7845's header version, where a `dOps` body states [`DOPS_VERSION`].
+const HEAD_VERSION: u8 = 1;
+const DOPS_VERSION: u8 = 0;
+
+/// Each field's place in RFC 7845's header, counted from its magic. A `dOps` body behind the
+/// magic puts them at the same places.
+mod offset {
+    pub(super) const VERSION: usize = 8;
+    pub(super) const PRE_SKIP: usize = 10;
+    pub(super) const INPUT_RATE: usize = 12;
+    pub(super) const OUTPUT_GAIN: usize = 16;
+    pub(super) const MAPPING_FAMILY: usize = 18;
+    /// Straight after the mapping family, which only a non-zero one is followed by.
+    pub(super) const STREAM_COUNT: usize = 19;
+    pub(super) const COUPLED_COUNT: usize = 20;
+    pub(super) const MAPPING: usize = 21;
+}
+
+/// Rewrites the header the container handed over into RFC 7845's, the one form read below. Ogg
+/// and Matroska hand that over as is; isomp4 puts MP4's `dOps` behind the magic, its fields
+/// big-endian. CAF carries none, Apple's cookie holding the encoder's settings, and states the
+/// priming in its packet table, which reaches here as `priming`.
+pub(super) fn standardize_head(params: &mut AudioCodecParameters, priming: Option<u32>) {
+    if params.codec != CODEC_ID_OPUS {
+        return;
+    }
+    let rewritten = match params.extra_data.as_deref() {
+        Some(header) if header.starts_with(MAGIC) => from_dops(header),
+        _ => built_head(params.channels.as_ref(), priming),
+    };
+    if let Some(header) = rewritten {
+        params.extra_data = Some(header);
+    }
+}
+
+/// RFC 7845's header out of a `dOps` body behind the magic, each multi-byte field reversed in
+/// place. `None` for a header that is RFC 7845's already.
+fn from_dops(header: &[u8]) -> Option<Box<[u8]>> {
+    if header.get(offset::VERSION) != Some(&DOPS_VERSION) {
+        return None;
+    }
+    let mut standard = Box::<[u8]>::from(header);
+    if let Some(version) = standard.get_mut(offset::VERSION) {
+        *version = HEAD_VERSION;
+    }
+    for field in [
+        offset::PRE_SKIP..offset::INPUT_RATE,
+        offset::INPUT_RATE..offset::OUTPUT_GAIN,
+        offset::OUTPUT_GAIN..offset::MAPPING_FAMILY,
+    ] {
+        if let Some(bytes) = standard.get_mut(field) {
+            bytes.reverse();
+        }
+    }
+    Some(standard)
+}
+
+/// RFC 7845's header for a container that carries none. Family 0, nothing stating a mapping for
+/// more than two channels, so the decoder refuses those; no gain, CAF having nowhere to carry one.
+fn built_head(channels: Option<&Channels>, priming: Option<u32>) -> Option<Box<[u8]>> {
+    let channel_count = u8::try_from(channels?.count()).ok()?;
+    // Saturating rather than wrapping, as `trim_count` does.
+    let pre_skip = priming.map_or(0, |frames| u16::try_from(frames).unwrap_or(u16::MAX));
+    let fields: [&[u8]; 6] = [
+        MAGIC,
+        &[HEAD_VERSION, channel_count],
+        &pre_skip.to_le_bytes(),
+        &DECODE_RATE.to_le_bytes(),
+        &0_i16.to_le_bytes(),
+        &[0],
+    ];
+    Some(fields.concat().into_boxed_slice())
+}
+
+/// The priming the header in `params` states, once [`standardize_head`] has made it RFC 7845's.
+pub(super) fn pre_skip(params: &AudioCodecParameters) -> u16 {
+    Head::read(params.extra_data.as_deref()).pre_skip
+}
+
 /// What the identification packet says that reaches this decoder and nowhere else.
 #[derive(Clone, Copy, Default)]
 struct Head {
@@ -64,22 +145,18 @@ struct Head {
 }
 
 impl Head {
-    /// Offsets rather than a parse, RFC 7845 section 5.1 having frozen the layout and Symphonia
-    /// having validated the header. Too short states none, and family 0 is the right default.
+    /// Offsets rather than a parse, RFC 7845 section 5.1 having frozen the layout and
+    /// [`standardize_head`] the form. Too short states none, and family 0 is the right default.
     fn read(extra_data: Option<&[u8]>) -> Self {
-        /// From the `OpusHead` magic, which every container keeps at the front of `extra_data`.
-        const PRE_SKIP: usize = 10;
-        const OUTPUT_GAIN: usize = 16;
-        const MAPPING_FAMILY: usize = 18;
-
         let Some(data) = extra_data else {
             return Self::default();
         };
-        let (Some(pre_skip), Some(gain)) = (le_u16(data, PRE_SKIP), le_u16(data, OUTPUT_GAIN))
+        let (Some(pre_skip), Some(gain)) =
+            (le_u16(data, offset::PRE_SKIP), le_u16(data, offset::OUTPUT_GAIN))
         else {
             return Self::default();
         };
-        let mapping_family = data.get(MAPPING_FAMILY).copied().unwrap_or_default();
+        let mapping_family = data.get(offset::MAPPING_FAMILY).copied().unwrap_or_default();
         Self { pre_skip, gain_q8: gain.cast_signed(), mapping_family }
     }
 }
@@ -87,20 +164,15 @@ impl Head {
 /// Refuses a header stating a stream layout other than the one `layout` was built as. Family 0
 /// states none.
 fn check_stated_layout(extra_data: Option<&[u8]>, layout: &ChannelLayout) -> SymphoniaResult<()> {
-    /// Straight after the mapping family, which only a non-zero one is followed by.
-    const STREAM_COUNT: usize = 19;
-    const COUPLED_COUNT: usize = 20;
-    const MAPPING: usize = 21;
-
     if layout.mapping_family == 0 {
         return Ok(());
     }
 
     let data = extra_data.unwrap_or_default();
     let (Some(&streams), Some(&coupled), Some(mapping)) = (
-        data.get(STREAM_COUNT),
-        data.get(COUPLED_COUNT),
-        data.get(MAPPING..MAPPING + layout.nb_channels),
+        data.get(offset::STREAM_COUNT),
+        data.get(offset::COUPLED_COUNT),
+        data.get(offset::MAPPING..offset::MAPPING + layout.nb_channels),
     ) else {
         // Ogg admits a 19-byte packet and MP4 an 11-byte `dOps`, both stopping past the family.
         return unsupported_error("opus: header states no channel mapping");
