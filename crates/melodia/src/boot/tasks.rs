@@ -139,6 +139,24 @@ pub fn serve_file_opens(
     });
 }
 
+/// Quits on a console's Ctrl+C as the tray's Quit does, so `main` saves state on the way out
+/// instead of the OS ending the process at once. The listener goes with the first press, leaving
+/// a second to Windows' default handler, which ends a stuck shutdown.
+pub fn quit_on_console_interrupt(spawner: &tasks::TaskSpawner) {
+    spawner.spawn_cancellable(|shutdown| async move {
+        match shutdown.run_until_cancelled(tokio::signal::ctrl_c()).await {
+            Some(Ok(())) => {
+                log::info!("Ctrl+C received; quitting");
+                if let Err(e) = slint::quit_event_loop() {
+                    log::warn!("Ctrl+C: quit_event_loop: {}", describe(&e));
+                }
+            }
+            Some(Err(e)) => log::warn!("Ctrl+C listener: {}", describe(&e)),
+            None => {}
+        }
+    });
+}
+
 /// Restarts folder watching and runs the launch reconcile, tracked so shutdown awaits its writes.
 pub fn spawn_resume_watching(spawner: &tasks::TaskSpawner, state: &AppState) {
     let state_for_init = state.clone();

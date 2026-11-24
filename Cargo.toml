@@ -65,6 +65,7 @@ tokio = { version = "1.54.1", features = [
     "time",
     "fs",
     "process",
+    "signal",
 ] }
 tokio-util = { version = "0.7.20", features = ["rt"] }
 async-compat = "0.2.7"
