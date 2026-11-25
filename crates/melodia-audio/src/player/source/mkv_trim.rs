@@ -7,11 +7,12 @@
 //! by `TimestampScale`, and [`resolve`] converts them once the decoder's rate is known.
 
 use std::fs::File;
-use std::io::{Read, Seek, SeekFrom};
+use std::io::{Seek, SeekFrom};
 
 use symphonia::core::units::TimeBase;
 
 use super::audio::SampleRate;
+use super::file_source::read_at;
 
 // Element ids, spelled with the length-marker bits the spec writes them with.
 const EBML_HEADER: u32 = 0x1A45_DFA3;
@@ -82,7 +83,7 @@ fn read_discards(file: &mut File) -> Option<Vec<Discard>> {
 
 fn is_matroska(file: &mut File) -> bool {
     let mut magic = [0u8; MAX_ID_LEN];
-    read_at(file, 0, &mut magic).is_some() && u32::from_be_bytes(magic) == EBML_HEADER
+    read_at(file, 0, &mut magic).is_ok() && u32::from_be_bytes(magic) == EBML_HEADER
 }
 
 /// An element's id and the span its payload occupies.
@@ -188,7 +189,7 @@ fn block_track(file: &mut File, block: &Element) -> Option<u32> {
     if read == 0 {
         return None;
     }
-    read_at(file, block.payload, head.get_mut(..read)?)?;
+    read_at(file, block.payload, head.get_mut(..read)?).ok()?;
     u32::try_from(vint(head.get(..read)?)?.0?).ok()
 }
 
@@ -200,7 +201,7 @@ fn signed(file: &mut File, element: &Element) -> Option<i64> {
     }
 
     let mut stated = [0u8; MAX_VINT_LEN];
-    read_at(file, element.payload, stated.get_mut(..width)?)?;
+    read_at(file, element.payload, stated.get_mut(..width)?).ok()?;
 
     // Sign-extended from that width into eight bytes.
     let fill = if *stated.first()? & 0x80 == 0 { 0x00 } else { 0xFF };
@@ -215,7 +216,7 @@ fn read_element(file: &mut File, pos: u64, end: u64) -> Option<Element> {
     let mut head = [0u8; ELEMENT_HEADER_LEN];
     let available = usize::try_from(end.checked_sub(pos)?).unwrap_or(head.len());
     let read = available.min(head.len());
-    read_at(file, pos, head.get_mut(..read)?)?;
+    read_at(file, pos, head.get_mut(..read)?).ok()?;
 
     let (id, id_len) = element_id(head.get(..read)?)?;
     let (size, size_len) = vint(head.get(id_len..read)?)?;
@@ -271,11 +272,6 @@ fn vint_len(first: Option<&u8>) -> Option<usize> {
     let leading_zeros = usize::try_from(first?.leading_zeros()).ok()?;
     // An all-zero first byte states a width wider than EBML allows.
     (leading_zeros < MAX_VINT_LEN).then_some(leading_zeros + 1)
-}
-
-fn read_at(file: &mut File, pos: u64, buf: &mut [u8]) -> Option<()> {
-    file.seek(SeekFrom::Start(pos)).ok()?;
-    file.read_exact(buf).ok()
 }
 
 #[cfg(test)]

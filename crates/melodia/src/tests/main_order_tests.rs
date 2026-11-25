@@ -161,3 +161,18 @@ fn the_log_is_flushed_before_either_way_out_of_main() {
     assert!(flush < respawn, "`exec` replaces the image and never returns to flush anything");
     assert!(flush < exit, "`process::exit` runs no destructor that would flush the buffer");
 }
+
+/// Ahead of the task budget, the removal would refuse the exit drain's writes and delete the copies
+/// they were making; past either way out, it would never run.
+#[test]
+fn unfinished_writes_are_removed_after_the_task_budget_and_before_either_way_out() {
+    let main = body_of("main");
+    let budget = offset_in(&main, "flush_tasks_and_db(");
+    let remove = offset_in(&main, "remove_unfinished(");
+    let respawn = offset_in(&main, "respawn_if_requested(");
+    let exit = offset_in(&main, "std::process::exit(0);");
+
+    assert!(budget < remove, "the drain's writes would be refused and their copies deleted");
+    assert!(remove < respawn, "`exec` replaces the image and never returns to remove anything");
+    assert!(remove < exit, "`process::exit` runs no destructor that would remove the temp");
+}

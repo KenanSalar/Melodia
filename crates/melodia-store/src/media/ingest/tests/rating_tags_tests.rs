@@ -143,19 +143,20 @@ fn a_tag_with_no_rating_key_carries_no_stars() {
 
 // ------------------------------------------------------------------ writing
 
-/// `ID3v2` is the one type lofty encodes for us, so it is handed the triple and left to look the
-/// provider up. Everything else is handed the number already scaled.
+/// Each tag type is handed the one shape its writer keeps, as `write_stars` argues.
 #[test]
-fn id3v2_is_written_as_a_popm_triple_and_everything_else_as_a_percentage() {
+fn id3v2_and_ilst_are_written_as_a_popm_triple_and_vorbis_as_a_percentage() {
     let mut id3 = Tag::new(TagType::Id3v2);
     assert!(write_stars(&mut id3, 4));
     assert_eq!(rating_text(&id3), Some("Windows Media Player 9 Series|4|0"));
 
-    for tag_type in [TagType::VorbisComments, TagType::Mp4Ilst] {
-        let mut tag = Tag::new(tag_type);
-        assert!(write_stars(&mut tag, 4));
-        assert_eq!(rating_text(&tag), Some("80"), "{tag_type:?} takes the scaled number");
-    }
+    let mut ilst = Tag::new(TagType::Mp4Ilst);
+    assert!(write_stars(&mut ilst, 4));
+    assert_eq!(rating_text(&ilst), Some("MusicBee|4|0"));
+
+    let mut vorbis = Tag::new(TagType::VorbisComments);
+    assert!(write_stars(&mut vorbis, 4));
+    assert_eq!(rating_text(&vorbis), Some("80"));
 }
 
 /// The property the whole module exists for: whatever Melodia writes, Melodia reads back

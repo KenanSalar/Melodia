@@ -4,6 +4,7 @@
 use std::collections::{HashMap, HashSet};
 use std::sync::LazyLock;
 
+use lofty::file::FileType;
 use rusqlite::Connection;
 
 use super::file_rows::{
@@ -14,7 +15,8 @@ use super::{columns, json_array};
 use crate::database::queries::loudness::MATCHING_MEASUREMENT;
 use crate::database::rows::FromRow;
 use crate::database::sql::{self, Sql};
-use crate::database::{DbPool, chunked_in_query, in_id_order, select_in_id_order};
+use crate::database::{DbPool, chunked_in_query, in_id_order, placeholders, select_in_id_order};
+use crate::media::ingest::metadata::codec_name;
 use melodia_core::entities::cue::{CueTrack, SheetFile, SheetTrack};
 use melodia_core::entities::track;
 use melodia_core::entities::track_list::TrackListScope;
@@ -497,22 +499,74 @@ static UNRATED_WHOLE_FILES_AFTER: LazyLock<String> = LazyLock::new(|| {
     )
 });
 
-static WHOLE_FLACS_AFTER: LazyLock<String> = LazyLock::new(|| {
-    format!(
-        "SELECT id, file_path FROM tracks
-         WHERE codec = 'Flac' AND id > ? AND {WHOLE_FILE} AND {IN_LIBRARY}
-         ORDER BY id LIMIT ?"
-    )
-});
+/// One page of the library's whole-file rows past `after_id` whose container is one of `codecs`,
+/// the work list of a one-shot sweep over one kind of file.
+pub async fn get_library_file_paths_after(
+    db: &DbPool,
+    codecs: &[FileType],
+    after_id: i64,
+    limit: i64,
+) -> Result<Vec<(i64, String)>, AppError> {
+    fetch_page(db, codec_page(codecs, Some(IN_LIBRARY), after_id, limit)).await
+}
 
-/// One page of the library's whole-file FLACs past `after_id`, the work list of the one-shot sweep
-/// for the sheets inside files read before the scan looked for them.
-pub async fn get_whole_flac_paths_after(
+/// [`get_library_file_paths_after`] with the files opened from outside the library, the work list
+/// of a sweep over what a tag write reached.
+pub async fn get_whole_file_paths_after(
+    db: &DbPool,
+    codecs: &[FileType],
+    after_id: i64,
+    limit: i64,
+) -> Result<Vec<(i64, String)>, AppError> {
+    fetch_page(db, codec_page(codecs, None, after_id, limit)).await
+}
+
+/// The statement every codec page runs, `None` for no codecs, `scope` narrowing the whole files.
+fn codec_page(
+    codecs: &[FileType],
+    scope: Option<&'static str>,
+    after_id: i64,
+    limit: i64,
+) -> Option<Sql> {
+    if codecs.is_empty() {
+        return None;
+    }
+    let mut sql = Sql::vouched(format!(
+        "SELECT id, file_path FROM tracks WHERE codec IN ({}) AND id > ? AND {WHOLE_FILE}",
+        placeholders(codecs.len())
+    ));
+    if let Some(term) = scope {
+        sql.push(" AND ").push(term);
+    }
+    sql.push(" ORDER BY id LIMIT ?");
+    for &codec in codecs {
+        sql.bind(codec_name(codec));
+    }
+    sql.bind(after_id).bind(limit);
+    Some(sql)
+}
+
+async fn fetch_page(db: &DbPool, page: Option<Sql>) -> Result<Vec<(i64, String)>, AppError> {
+    let Some(page) = page else {
+        return Ok(Vec::new());
+    };
+    db.read(move |conn| page.fetch_all(conn)).await
+}
+
+/// One page of the rated whole-file MP4 rows past `after_id`, the one-shot M4A rating backfill's
+/// work list. Rows outside the library are included, a star set on one reaching its file too.
+pub async fn get_rated_mp4_paths_after(
     db: &DbPool,
     after_id: i64,
     limit: i64,
 ) -> Result<Vec<(i64, String)>, AppError> {
-    db.read(move |conn| sql::fetch_all(conn, WHOLE_FLACS_AFTER.as_str(), (after_id, limit))).await
+    fetch_page(db, codec_page(&[FileType::Mp4], Some("rating > 0"), after_id, limit)).await
+}
+
+/// The stars `id`'s row holds, `None` for a missing id.
+pub async fn get_rating(db: &DbPool, id: i64) -> Result<Option<i32>, AppError> {
+    db.read(move |conn| sql::fetch_optional(conn, "SELECT rating FROM tracks WHERE id = ?", (id,)))
+        .await
 }
 
 /// One page of unrated tracks past `after_id`, the one-shot rating import's work list.

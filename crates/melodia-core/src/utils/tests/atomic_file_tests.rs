@@ -1,5 +1,5 @@
 use std::collections::BTreeSet;
-use std::io::{Seek, SeekFrom};
+use std::io::{Read, Seek, SeekFrom};
 
 use serde::Deserialize;
 
@@ -238,8 +238,8 @@ fn a_rewrite_that_fails_leaves_the_file_as_it_was() -> Result<(), AppError> {
     let path = dir.path().join("track.mp3");
     std::fs::write(&path, "original bytes")?;
 
-    let failed = rewrite_with_sync(&path, |target| {
-        std::fs::write(target, "half an edit")?;
+    let failed = rewrite_with_sync(&path, |copy, _| {
+        copy.write_all(b"half an edit")?;
         Err(AppError::io_other("the tag writer gave up"))
     });
 
@@ -256,7 +256,7 @@ fn a_rewrite_that_fails_leaves_no_temp_file_behind() -> Result<(), AppError> {
     let path = dir.path().join("track.mp3");
     std::fs::write(&path, "original bytes")?;
 
-    let failed = rewrite_with_sync(&path, |_| Err(AppError::io_other("the tag writer gave up")));
+    let failed = rewrite_with_sync(&path, |_, _| Err(AppError::io_other("the tag writer gave up")));
 
     assert!(failed.is_err());
     assert_eq!(entries_in(dir.path())?, BTreeSet::from(["track.mp3".to_owned()]));
@@ -273,8 +273,8 @@ fn the_copy_is_written_beside_the_file_it_replaces() -> Result<(), AppError> {
     let resolved = std::fs::canonicalize(&path)?;
 
     let mut wrote_into = None;
-    rewrite_with_sync(&path, |target| {
-        wrote_into = target.parent().map(Path::to_path_buf);
+    rewrite_with_sync(&path, |_, copy_path| {
+        wrote_into = copy_path.parent().map(Path::to_path_buf);
         Ok(())
     })?;
 
@@ -282,21 +282,147 @@ fn the_copy_is_written_beside_the_file_it_replaces() -> Result<(), AppError> {
     Ok(())
 }
 
-/// The caller opens the path for itself and rewrites the whole file, so it has to be handed the
-/// content rather than an empty temp with the right name.
+/// The caller reads the file through the handle it is given and rewrites it whole, so the handle
+/// has to start at the content rather than at an empty temp with the right name.
 #[test]
 fn a_rewrite_hands_the_closure_the_bytes_it_started_with() -> Result<(), AppError> {
     let dir = tempfile::tempdir()?;
     let path = dir.path().join("track.mp3");
     std::fs::write(&path, "original bytes")?;
 
-    let mut handed = None;
-    rewrite_with_sync(&path, |target| {
-        handed = Some(std::fs::read_to_string(target)?);
+    let mut handed = String::new();
+    rewrite_with_sync(&path, |copy, _| {
+        copy.read_to_string(&mut handed)?;
         Ok(())
     })?;
 
-    assert_eq!(handed.as_deref(), Some("original bytes"));
+    assert_eq!(handed, "original bytes");
+    Ok(())
+}
+
+#[test]
+fn a_rewrite_replaces_the_file_with_what_the_closure_wrote() -> Result<(), AppError> {
+    let dir = tempfile::tempdir()?;
+    let path = dir.path().join("track.mp3");
+    std::fs::write(&path, "original bytes")?;
+
+    rewrite_with_sync(&path, |copy, _| {
+        copy.set_len(0)?;
+        Ok(copy.write_all(b"edited bytes")?)
+    })?;
+
+    assert_eq!(std::fs::read_to_string(&path)?, "edited bytes");
+    Ok(())
+}
+
+#[test]
+fn a_read_only_track_is_refused_and_left_as_it_was() -> Result<(), AppError> {
+    let dir = tempfile::tempdir()?;
+    let path = dir.path().join("track.mp3");
+    std::fs::write(&path, "original bytes")?;
+    let mut permissions = std::fs::metadata(&path)?.permissions();
+    permissions.set_readonly(true);
+    std::fs::set_permissions(&path, permissions)?;
+
+    let refused = rewrite_with_sync(&path, |copy, _| Ok(copy.write_all(b"edited bytes")?));
+
+    let denied =
+        matches!(&refused, Err(AppError::Io(e)) if e.kind() == io::ErrorKind::PermissionDenied);
+    assert!(denied, "{refused:?}");
+    assert_eq!(std::fs::read_to_string(&path)?, "original bytes");
+    Ok(())
+}
+
+#[cfg(unix)]
+#[test]
+fn a_rewrite_keeps_the_tracks_permissions() -> Result<(), AppError> {
+    use std::os::unix::fs::PermissionsExt;
+
+    let dir = tempfile::tempdir()?;
+    let path = dir.path().join("track.mp3");
+    std::fs::write(&path, "original bytes")?;
+    std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o640))?;
+
+    rewrite_with_sync(&path, |_, _| Ok(()))?;
+
+    assert_eq!(std::fs::metadata(&path)?.permissions().mode() & 0o777, 0o640);
+    Ok(())
+}
+
+#[cfg(target_os = "windows")]
+const FILE_ATTRIBUTE_HIDDEN: u32 = 0x2;
+#[cfg(target_os = "windows")]
+const FILE_ATTRIBUTE_SYSTEM: u32 = 0x4;
+#[cfg(target_os = "windows")]
+const FILE_SHARE_READ: u32 = 0x1;
+
+/// The temp becomes the track, so the attributes it carries are the track's from then on: its own
+/// `TEMPORARY` in place of a hidden or system flag the user set.
+#[cfg(target_os = "windows")]
+#[test]
+fn a_rewrite_keeps_the_tracks_attributes() -> Result<(), AppError> {
+    use std::os::windows::fs::{MetadataExt, OpenOptionsExt};
+
+    let rows = [
+        ("a plain track", 0),
+        ("a hidden system track", FILE_ATTRIBUTE_HIDDEN | FILE_ATTRIBUTE_SYSTEM),
+    ];
+    for (what, attributes) in rows {
+        let dir = tempfile::tempdir()?;
+        let path = dir.path().join("track.mp3");
+        let mut track =
+            File::options().write(true).create_new(true).attributes(attributes).open(&path)?;
+        track.write_all(b"original bytes")?;
+        drop(track);
+        let before = std::fs::metadata(&path)?.file_attributes();
+
+        rewrite_with_sync(&path, |_, _| Ok(()))?;
+
+        assert_eq!(std::fs::metadata(&path)?.file_attributes(), before, "{what}");
+    }
+    Ok(())
+}
+
+/// A bare `MoveFileExW` won't replace a name held open, even by a holder sharing delete as the
+/// deck's `File::open` does; std's POSIX rename will, and leaves the deck on the file it opened.
+#[cfg(target_os = "windows")]
+#[test]
+fn a_rewrite_lands_over_a_track_a_deck_holds_open() -> Result<(), AppError> {
+    let dir = tempfile::tempdir()?;
+    let path = dir.path().join("track.mp3");
+    std::fs::write(&path, "original bytes")?;
+    let mut deck = File::open(&path)?;
+
+    rewrite_with_sync(&path, |copy, _| {
+        copy.set_len(0)?;
+        Ok(copy.write_all(b"edited bytes")?)
+    })?;
+
+    let mut playing = String::new();
+    deck.read_to_string(&mut playing)?;
+    assert_eq!(std::fs::read_to_string(&path)?, "edited bytes", "the edit missed the held track");
+    assert_eq!(playing, "original bytes", "the deck was moved off the file it opened");
+    Ok(())
+}
+
+/// A holder denying delete sharing refuses even the POSIX rename. The temp's cleanup is disarmed by
+/// then, and Windows hides no dot-name, so a temp left behind would sit in plain sight.
+#[cfg(target_os = "windows")]
+#[test]
+fn a_rewrite_a_holder_refuses_leaves_no_temp_file_behind() -> Result<(), AppError> {
+    use std::os::windows::fs::OpenOptionsExt;
+
+    let dir = tempfile::tempdir()?;
+    let path = dir.path().join("track.mp3");
+    std::fs::write(&path, "original bytes")?;
+    let _holder = File::options().read(true).share_mode(FILE_SHARE_READ).open(&path)?;
+
+    let refused = rewrite_with_sync(&path, |_, _| Ok(()));
+
+    let denied =
+        matches!(&refused, Err(AppError::Io(e)) if e.kind() == io::ErrorKind::PermissionDenied);
+    assert!(denied, "{refused:?}");
+    assert_eq!(entries_in(dir.path())?, BTreeSet::from(["track.mp3".to_owned()]));
     Ok(())
 }
 
@@ -312,7 +438,10 @@ fn a_rewrite_replaces_the_file_the_link_points_at_rather_than_the_link() -> Resu
     std::fs::write(&kept, "original bytes")?;
     std::os::unix::fs::symlink(&kept, &link)?;
 
-    rewrite_with_sync(&link, |target| Ok(std::fs::write(target, "edited bytes")?))?;
+    rewrite_with_sync(&link, |copy, _| {
+        copy.set_len(0)?;
+        Ok(copy.write_all(b"edited bytes")?)
+    })?;
 
     assert_eq!(std::fs::read_to_string(&kept)?, "edited bytes", "the edit missed the kept file");
     assert!(

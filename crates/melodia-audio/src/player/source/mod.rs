@@ -11,6 +11,7 @@ pub mod audio;
 pub mod decode;
 pub mod decode_ahead;
 pub mod file_decode;
+pub(crate) mod file_source;
 pub mod hls;
 pub mod mkv_trim;
 pub mod opus;

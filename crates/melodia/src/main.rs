@@ -139,6 +139,7 @@ fn main() -> AppResult<()> {
     shutdown::drop_runtime_in_background(runtime);
 
     // Neither the respawn's `exec` nor the `process::exit` below runs a destructor.
+    utils::atomic_file::remove_unfinished();
     platform::logging::flush();
 
     shutdown::respawn_if_requested();

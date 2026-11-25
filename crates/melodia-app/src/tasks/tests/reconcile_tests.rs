@@ -207,6 +207,30 @@ async fn a_copy_beside_a_file_that_still_exists_is_a_duplicate() -> Result<(), A
     Ok(())
 }
 
+/// The old spelling still resolves on a disk that ignores case, as Windows' and macOS' defaults do,
+/// so only its folder's listing tells the rename from a copy beside the file.
+#[cfg(any(target_os = "windows", target_os = "macos"))]
+#[tokio::test]
+async fn a_rename_by_case_alone_keeps_the_original_row() -> Result<(), AppError> {
+    let tmp = TempDir::new()?;
+    let paths = paths_in(&tmp)?;
+    let cover_cache = artwork::new_cover_cache();
+    let (db, old, id) = seed_ingested(&tmp, &paths, &cover_cache).await?;
+    let respelled = old.with_file_name("OLD.mp3");
+    std::fs::rename(&old, &respelled)?;
+
+    let events = vec![FileEvent::Removed(old), FileEvent::Created(respelled.clone())];
+    process_batch(&db, &paths, &cover_cache, events).await?;
+
+    assert_eq!(track_id_at(&db, &respelled).await?, Some(id), "the rename must keep its row");
+    assert_eq!(
+        track_stats(&db, id).await?,
+        (4, 7),
+        "rating and play count are not in the file, so a re-import loses them for good"
+    );
+    Ok(())
+}
+
 /// `prune_orphans` and the cover roll-ups are gated on the batch having written
 /// something, so a batch of events for files nobody tracks pays for neither. Both sides of that
 /// gate, since a floor on one of them would pass whichever way the gate was wired.

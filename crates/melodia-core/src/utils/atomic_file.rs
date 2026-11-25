@@ -1,10 +1,17 @@
 //! Whole-file read and atomic whole-file write: the JSON and text beside the database, and a
 //! track's tag rewrite. The reads need no lock because every write lands through a same-directory
-//! temp file and a rename, so a reader or a crash only ever sees one whole file.
+//! temp file and a rename, so a reader only ever sees one whole file and a crash or power cut
+//! leaves one. The temp is flushed before the rename and, on unix, its folder after, so on unix a
+//! save that has returned survives a power cut too. A temp still being written when `main` exits
+//! is removed then ([`remove_unfinished`]).
 
 use std::fs::File;
-use std::io::{BufWriter, Write};
+use std::io::{self, BufReader, BufWriter, Seek, Write};
+use std::mem::DropGuard;
 use std::path::{Path, PathBuf};
+use std::sync::{Mutex, MutexGuard, PoisonError};
+
+use tempfile::NamedTempFile;
 
 use serde::Serialize;
 use serde::de::DeserializeOwned;
@@ -95,54 +102,157 @@ pub fn write_with_sync(
     path: &Path,
     write: impl FnOnce(&mut BufWriter<&mut File>) -> AppResult<()>,
 ) -> AppResult<()> {
-    if let Some(parent) = path.parent() {
-        std::fs::create_dir_all(parent)?;
-    }
-    let dir = path.parent().unwrap_or_else(|| Path::new("."));
-    let mut tmp = tempfile::NamedTempFile::new_in(dir)?;
+    let folder = folder_of(path);
+    std::fs::create_dir_all(folder)?;
+    let (_unfinished, mut tmp) = unfinished_temp(folder)?;
     {
         let mut writer = BufWriter::new(tmp.as_file_mut());
         write(&mut writer)?;
         writer.flush()?;
     }
-    rename_over(tmp.into_temp_path(), path)
+    tmp.as_file().sync_all()?;
+    // `keep` clears the `FILE_ATTRIBUTE_TEMPORARY` the temp was created with, or every file written
+    // here tells the cache manager not to flush it.
+    let tmp = tmp.into_temp_path().keep().map_err(|e| AppError::Io(e.error))?;
+    rename_over(&tmp, path)
 }
 
-/// Hands `rewrite` a copy of `path`, renamed over the original once `rewrite` succeeds, for a
-/// library that opens the path itself. A rewrite in place moves every byte after the edit under
+/// Hands `rewrite` a copy of `path`, as a read-write handle at its start and its path, renamed over
+/// the original once `rewrite` succeeds. A rewrite in place moves every byte after the edit under
 /// whoever has the file open, so a deck playing the track would read the wrong offsets; a rename
 /// leaves it on the file it opened. Costs one copy and write permission on the directory, with no
-/// in-place fallback: a second write path is the one nobody exercises.
+/// in-place fallback: a second write path is the one nobody exercises. A read-only file is refused.
+///
+/// The copy and `rewrite` both write through the handle, never a second open of the path: a write
+/// the disk or share refuses can surface only at the writer's close, whose error `Drop` discards,
+/// so the flush that reports it runs on the handle that wrote. `fs::copy` would write through
+/// `CopyFileExW`'s own handle, which denies delete, so [`remove_unfinished`] couldn't clear a copy
+/// cut short at exit.
 pub fn rewrite_with_sync(
     path: &Path,
-    rewrite: impl FnOnce(&Path) -> AppResult<()>,
+    rewrite: impl FnOnce(&mut File, &Path) -> AppResult<()>,
 ) -> AppResult<()> {
     // Resolved first: a rename replaces a symlink where a write in place followed it.
     let path = &std::fs::canonicalize(path)?;
-    let dir = path.parent().unwrap_or_else(|| Path::new("."));
-    // Closed, `rewrite` opening it itself, and without an extension, so the watcher skips it.
-    let tmp = tempfile::NamedTempFile::new_in(dir)?.into_temp_path();
-    std::fs::copy(path, &tmp)?;
-    rewrite(&tmp)?;
-    rename_over(tmp, path)
+    let track = File::open(path)?;
+    let permissions = track.metadata()?.permissions();
+    // rename(2) asks the folder's permission, not the file's, so on unix nothing else refuses it.
+    if permissions.readonly() {
+        let refusal = io::Error::new(io::ErrorKind::PermissionDenied, "the file is read-only");
+        return Err(AppError::Io(refusal));
+    }
+    // No extension, so the watcher skips it.
+    let (_unfinished, tmp) = unfinished_temp(folder_of(path))?;
+    let (mut copy, mut tmp) = tmp.into_parts();
+    io::copy(&mut BufReader::with_capacity(COPY_READ_SIZE, track), &mut copy)?;
+    copy.rewind()?;
+    rewrite(&mut copy, &tmp)?;
+    // Ahead of the flush, so it covers them: the track's permissions undo the temp's owner-only
+    // mode and `TEMPORARY` flag and carry over a hidden or system one, which `keep` would clear.
+    copy.set_permissions(permissions)?;
+    copy.sync_all()?;
+    drop(copy);
+    tmp.disable_cleanup(true);
+    rename_over(&tmp, path)
 }
 
-/// Renames `tmp` over `path`, removing it if the rename fails. Not `TempPath::persist`, a bare
-/// `MoveFileExW` on Windows that can't take a name a playing deck holds open; `std::fs::rename`
-/// retries with POSIX semantics, which can. A handle denying delete sharing still fails the write
-/// rather than corrupting it.
-///
-/// [`TempPath::keep`] first, clearing the `FILE_ATTRIBUTE_TEMPORARY` the temp was created with, or
-/// every file written here tells the cache manager not to flush it.
-///
-/// [`TempPath::keep`]: tempfile::TempPath::keep
-fn rename_over(tmp: tempfile::TempPath, path: &Path) -> AppResult<()> {
-    let tmp = tmp.keep().map_err(|e| AppError::Io(e.error))?;
-    std::fs::rename(&tmp, path).inspect_err(|_| {
-        // `keep` disarmed the cleanup, and there is nothing to report past the rename's own error.
-        let _ = std::fs::remove_file(&tmp);
+/// The read size of a track's copy off Linux, which hands it to `copy_file_range`: std's own
+/// buffer would cost a call every few kilobytes, which shows across an album of lossless files.
+const COPY_READ_SIZE: usize = 1 << 20;
+
+/// Renames `tmp`, its cleanup disarmed, over `path`, removing it if the rename fails. Not
+/// `TempPath::persist`, a bare `MoveFileExW` on Windows that can't take a name a playing deck holds
+/// open; `std::fs::rename` retries with POSIX semantics, which can on NTFS. On another Windows
+/// disk, or against a handle denying delete sharing, the write fails and the file stays whole.
+fn rename_over(tmp: &Path, path: &Path) -> AppResult<()> {
+    std::fs::rename(tmp, path).inspect_err(|_| {
+        // Its cleanup is disarmed, and there is nothing to report past the rename's own error.
+        let _ = std::fs::remove_file(tmp);
     })?;
+    #[cfg(unix)]
+    sync_parent(path);
     Ok(())
+}
+
+/// Flushes the folder holding `path`, so a rename into it survives a power cut. Logged rather than
+/// returned: the rename has landed by then.
+#[cfg(unix)]
+pub fn sync_parent(path: &Path) {
+    let folder = folder_of(path);
+    let Err(e) = File::open(folder).and_then(|handle| handle.sync_all()) else {
+        return;
+    };
+    // A filesystem that can't flush a folder says so on every write, thousands in a batch edit.
+    if matches!(e.kind(), std::io::ErrorKind::Unsupported | std::io::ErrorKind::InvalidInput) {
+        log::debug!("{} can't be flushed: {}", folder.display(), describe(&e));
+    } else {
+        log::warn!("Failed to flush {}: {}", folder.display(), describe(&e));
+    }
+}
+
+/// The temps of writes still running.
+static UNFINISHED: Mutex<Unfinished> = Mutex::new(Unfinished { closed: false, temps: Vec::new() });
+
+struct Unfinished {
+    /// Set by [`remove_unfinished`], after which no write starts.
+    closed: bool,
+    temps: Vec<PathBuf>,
+}
+
+fn unfinished() -> MutexGuard<'static, Unfinished> {
+    UNFINISHED.lock().unwrap_or_else(PoisonError::into_inner)
+}
+
+/// Unlists its temp from [`UNFINISHED`] once dropped.
+type Unlisting = DropGuard<PathBuf, fn(PathBuf)>;
+
+/// A temp in `folder`, listed as unfinished until the guard drops. Bound guard first, so the temp
+/// is gone or renamed before it is unlisted. Created outside the lock, which a slow disk would hold
+/// for every other write, and refused once [`remove_unfinished`] has run, its drop removing it.
+fn unfinished_temp(folder: &Path) -> AppResult<(Unlisting, NamedTempFile)> {
+    let tmp = NamedTempFile::new_in(folder)?;
+    let mut unfinished = unfinished();
+    if unfinished.closed {
+        return Err(AppError::io_other("Melodia is quitting, so no write starts"));
+    }
+    unfinished.temps.push(tmp.path().to_path_buf());
+    let unlist: fn(PathBuf) = |tmp| finished(&tmp);
+    Ok((DropGuard::new(tmp.path().to_path_buf(), unlist), tmp))
+}
+
+fn finished(tmp: &Path) {
+    let mut unfinished = unfinished();
+    if let Some(at) = unfinished.temps.iter().position(|held| held == tmp) {
+        unfinished.temps.swap_remove(at);
+    }
+}
+
+/// Removes the temps of writes still running and lets no other start, for `main`'s way out, which
+/// runs no destructor: a write the shutdown budget cut short would leave its copy beside the file
+/// for good. Each original stays whole, its rename never having run.
+pub fn remove_unfinished() {
+    let temps = {
+        let mut unfinished = unfinished();
+        unfinished.closed = true;
+        std::mem::take(&mut unfinished.temps)
+    };
+    let mut removed = 0;
+    for tmp in &temps {
+        match std::fs::remove_file(tmp) {
+            Ok(()) => removed += 1,
+            // Gone already: renamed over its file, or removed by its own failed write.
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
+            Err(e) => log::warn!("Failed to remove {}: {}", tmp.display(), describe(&e)),
+        }
+    }
+    if removed > 0 {
+        log::info!("Removed {removed} unfinished write(s) at exit");
+    }
+}
+
+/// The folder `path` sits in, `.` for a bare file name, whose empty parent won't open.
+fn folder_of(path: &Path) -> &Path {
+    path.parent().filter(|folder| !folder.as_os_str().is_empty()).unwrap_or(Path::new("."))
 }
 
 #[cfg(test)]

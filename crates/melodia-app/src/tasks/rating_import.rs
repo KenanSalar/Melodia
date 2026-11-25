@@ -6,21 +6,13 @@
 //! rows are read, and only once, since `rating = 0` can't tell an untouched row from a cleared one.
 
 use std::collections::HashMap;
-use std::path::Path;
-
-use lofty::file::TaggedFileExt;
 
 use crate::state::{AppState, Signal};
 use crate::tasks::{TaskSpawner, one_shot};
-use melodia_core::error::{AppError, AppResult};
+use melodia_core::error::AppResult;
 use melodia_store::database::DbPool;
 use melodia_store::database::queries;
-use melodia_store::media::ingest::scan_pool::ScanPool;
-use melodia_store::media::ingest::{metadata, rating_tags};
-
-/// Rows held and parsed per page. The whole library matches on the run that matters, so this is
-/// what keeps the pass off the RSS budget.
-const PAGE_ROWS: i64 = 2_000;
+use melodia_store::media::ingest::rating_tags;
 
 /// [`one_shot::OnFailure::Retry`]: two of the three failures write no rows, and a marker over them
 /// would put every rating in the files out of reach, nothing else repairing it. A half-run import
@@ -41,7 +33,7 @@ pub fn spawn(spawner: &TaskSpawner, state: &AppState) {
 }
 
 async fn import(db: &DbPool, library_changed: &Signal) -> AppResult<()> {
-    let imported = import_into(db, PAGE_ROWS).await?;
+    let imported = import_into(db, one_shot::PAGE_ROWS).await?;
     if imported == 0 {
         return Ok(());
     }
@@ -54,25 +46,19 @@ async fn import(db: &DbPool, library_changed: &Signal) -> AppResult<()> {
     Ok(())
 }
 
-/// Answers how many rows took a rating out of a file. Keyset rather than offset, each page's write
-/// taking its rows out of the predicate; `page_rows` is a parameter so a test can reach a second
-/// page.
+/// Answers how many rows took a rating out of a file. `page_rows` is a parameter so a test can
+/// reach a second page.
 async fn import_into(db: &DbPool, page_rows: i64) -> AppResult<usize> {
-    let mut after_id = 0;
     let mut imported = 0;
+    let mut pages = one_shot::Pages::default();
 
-    loop {
-        let page = queries::track::get_unrated_track_paths_after(db, after_id, page_rows).await?;
-        let Some(last_id) = page.last().map(|(id, _)| *id) else {
-            break;
-        };
-        after_id = last_id;
-
-        let found = tokio::task::spawn_blocking(move || {
-            ScanPool::for_files(page.len()).install(|| read_each(&page))
+    while let Some(page) = pages
+        .next_page(|after_id| {
+            queries::track::get_unrated_track_paths_after(db, after_id, page_rows)
         })
-        .await
-        .map_err(|e| AppError::scanner("Rating import task panicked", e))?;
+        .await?
+    {
+        let found = one_shot::read_page(page, read_each).await?;
         if found.is_empty() {
             continue;
         }
@@ -91,19 +77,10 @@ async fn import_into(db: &DbPool, page_rows: i64) -> AppResult<usize> {
     Ok(imported)
 }
 
-/// **Blocking**, fanned out like `retroactive_hash`. The rating is a text item, so this skips the
-/// picture copies and the VBR frame scan lofty would otherwise do on the way.
+/// **Blocking**: each file of `unrated` that holds stars, with them.
 fn read_each(unrated: &[(i64, String)]) -> Vec<(i64, i32)> {
-    use rayon::prelude::*;
-
-    unrated
-        .par_iter()
-        .filter_map(|(id, path)| {
-            let tagged = metadata::read_tags(Path::new(path), metadata::TagScope::TagsOnly).ok()?;
-            let tag = tagged.primary_tag().or_else(|| tagged.first_tag())?;
-            rating_tags::stars_from_tag(tag).map(|stars| (*id, stars))
-        })
-        .collect()
+    let reads = one_shot::read_files(unrated, rating_tags::read_stars);
+    reads.read.into_iter().filter_map(|(id, stars)| Some((id, stars?))).collect()
 }
 
 #[cfg(test)]

@@ -30,7 +30,7 @@ use super::subscribers::{
     install_toast_bridge,
 };
 use super::views::{UiHandles, install_library_settings_and_friends, install_views};
-use crate::boot::tasks::serve_file_opens;
+use crate::boot::tasks::{quit_on_console_interrupt, serve_file_opens};
 
 /// Installs every surface, subscriber and boot-time task the window carries. Each closure holds
 /// its own clone of what it reads, so nothing here outlives the call.
@@ -252,8 +252,8 @@ fn install_updater_and_onboarding(
     });
 }
 
-/// The boot-time housekeeping, the tray, the forwarded-launch server, and the Windows steps that
-/// need the window's handle.
+/// The boot-time housekeeping, the tray, the forwarded-launch server, Ctrl+C, and the Windows
+/// steps that need the window's handle.
 fn install_platform_hooks(
     app: &AppWindow,
     state: &AppState,
@@ -286,6 +286,10 @@ fn install_platform_hooks(
     if let Some(listener) = file_open_listener {
         serve_file_opens(state, app, listener);
     }
+
+    // Not with the background tasks: until the backend is selected there is no event loop to quit,
+    // and the press would be swallowed.
+    quit_on_console_interrupt(spawner);
 
     #[cfg(target_os = "windows")]
     {

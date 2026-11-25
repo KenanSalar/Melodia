@@ -11,13 +11,13 @@ export component ArtworkImage inherits Rectangle {
     in property <bool> has-cover: true;
     in property <length> tile-size: 56px;
     in property <length> tile-radius: Theme.radius-md;
-    // An SVG asset rather than a font glyph, for the reason the branches below give.
+    // Matched by name against the SVG branches below; any other name draws no glyph.
     in property <string> fallback-icon: "music-note";
     // Lettering in place of the glyph, for a host whose entries have identities of their own: on
     // the Radio grid, one repeated icon is what a station looks like least.
     in property <string> fallback-text;
-    // The hover zoom, cropped by the tile's clip.
-    in property <float> cover-scale: 1.0;
+    // The host's hover, which zooms the art within the tile's clip.
+    in property <bool> zoomed;
     // What the source would draw at 1:1, which only the host knows from its tier's decode size.
     // `0px` means don't ask; only the station tiles set it.
     in property <length> native-size: 0px;
@@ -33,9 +33,11 @@ export component ArtworkImage inherits Rectangle {
             && root.native-size < root.tile-size / root.max-upscale
         ? min(root.native-size * root.max-upscale, root.tile-size * root.max-inset-fraction)
         : 0px;
-    // **The ease is on this mirror, never the derived size**, so a frame resize tracks at once while
-    // a hover still eases.
-    property <float> anim-scale: root.cover-scale;
+    // On a glyph at half the tile, a cover's gentle zoom reads as none.
+    property <float> zoom-scale: root.shows-cover ? 1.04 : 1.15;
+    // Zoomed children take this as `transform-scale` at their resting size: FemtoVG rounds an
+    // unscaled image or rounded clip to whole pixels, so a resized one steps as it grows.
+    property <float> anim-scale: root.zoomed ? root.zoom-scale : 1.0;
     animate anim-scale { duration: Theme.dur-fast; easing: ease-in-out; }
     in property <brush> tile-bg: Theme.accent.with-alpha(0.15);
     in property <brush> tile-icon-color: Theme.accent;
@@ -63,25 +65,35 @@ export component ArtworkImage inherits Rectangle {
         background: root.tile-bg.transparentize(1.0 - root.fade);
     }
 
-    if root.shows-cover && !root.insets-cover: Image {
-        width: parent.width * root.anim-scale;
-        height: parent.height * root.anim-scale;
-        x: (parent.width - self.width) / 2;
-        y: (parent.height - self.height) / 2;
-        source: root.cover;
-        image-fit: ImageFit.cover;
-        opacity: root.fade;
+    // Holds the root's rounded-clip layer, placed at its children's bounds and rounded to whole
+    // pixels, at the tile, or the zoomed cover hops it. Radius-less, so a scissor, not a layer.
+    if root.shows-cover && !root.insets-cover: Rectangle {
+        x: 0;
+        y: 0;
+        width: 100%;
+        height: 100%;
+        clip: true;
+
+        Image {
+            width: 100%;
+            height: 100%;
+            source: root.cover;
+            image-fit: ImageFit.cover;
+            transform-scale: root.anim-scale;
+            opacity: root.fade;
+        }
     }
 
     // **A clipped `Rectangle` rather than a smaller `Image`**: the rounding is what makes it read as
     // a card, and its radius tracks the tile's by the card's own ratio.
     if root.insets-cover: Rectangle {
-        width: root.cover-inset-size * root.anim-scale;
+        width: root.cover-inset-size;
         height: self.width;
         x: (parent.width - self.width) / 2;
         y: (parent.height - self.height) / 2;
         border-radius: root.tile-radius * self.width / root.tile-size;
         clip: true;
+        transform-scale: root.anim-scale;
 
         Image {
             width: 100%;
@@ -92,8 +104,6 @@ export component ArtworkImage inherits Rectangle {
         }
     }
 
-    // **Outside the hover zoom**: scaling text means scaling `font-size`, which grows from its
-    // metrics origin rather than its centre.
     if !root.shows-cover && root.fallback-text != "": Text {
         x: (parent.width - self.width) / 2;
         y: (parent.height - self.height) / 2;
@@ -105,57 +115,60 @@ export component ArtworkImage inherits Rectangle {
         opacity: root.fade;
     }
 
-    // **SVG `Image`s, not Material Symbols glyphs**: a glyph scales from its metrics origin and
-    // drifts sideways under the zoom, where an `Image` scales its content. One `if` per name, an
-    // `@image-url` resolving at codegen.
+    // One `if` per name: an `@image-url` resolves at codegen, so the source can't be computed.
     if root.shows-glyph && root.fallback-icon == "music-note": Image {
         source: @image-url("../assets/icons/music-note.svg");
         colorize: root.tile-icon-color;
         image-fit: ImageFit.contain;
-        width: parent.width * 0.55 * root.anim-scale;
-        height: parent.height * 0.55 * root.anim-scale;
+        width: parent.width * 0.55;
+        height: parent.height * 0.55;
         x: (parent.width - self.width) / 2;
         y: (parent.height - self.height) / 2;
+        transform-scale: root.anim-scale;
         opacity: root.fade;
     }
     if root.shows-glyph && root.fallback-icon == "person": Image {
         source: @image-url("../assets/icons/person.svg");
         colorize: root.tile-icon-color;
         image-fit: ImageFit.contain;
-        width: parent.width * 0.55 * root.anim-scale;
-        height: parent.height * 0.55 * root.anim-scale;
+        width: parent.width * 0.55;
+        height: parent.height * 0.55;
         x: (parent.width - self.width) / 2;
         y: (parent.height - self.height) / 2;
+        transform-scale: root.anim-scale;
         opacity: root.fade;
     }
     if root.shows-glyph && root.fallback-icon == "playlist": Image {
         source: @image-url("../assets/icons/playlist.svg");
         colorize: root.tile-icon-color;
         image-fit: ImageFit.contain;
-        width: parent.width * 0.55 * root.anim-scale;
-        height: parent.height * 0.55 * root.anim-scale;
+        width: parent.width * 0.55;
+        height: parent.height * 0.55;
         x: (parent.width - self.width) / 2;
         y: (parent.height - self.height) / 2;
+        transform-scale: root.anim-scale;
         opacity: root.fade;
     }
     if root.shows-glyph && root.fallback-icon == "theater_comedy": Image {
         source: @image-url("../assets/icons/theater-comedy.svg");
         colorize: root.tile-icon-color;
         image-fit: ImageFit.contain;
-        width: parent.width * 0.55 * root.anim-scale;
-        height: parent.height * 0.55 * root.anim-scale;
+        width: parent.width * 0.55;
+        height: parent.height * 0.55;
         x: (parent.width - self.width) / 2;
         y: (parent.height - self.height) / 2;
+        transform-scale: root.anim-scale;
         opacity: root.fade;
     }
     if root.shows-glyph && root.fallback-icon == "album": Image {
         source: @image-url("../assets/icons/album.svg");
         colorize: root.tile-icon-color;
         image-fit: ImageFit.contain;
-        width: parent.width * 0.55 * root.anim-scale;
-        height: parent.height * 0.55 * root.anim-scale;
+        width: parent.width * 0.55;
+        height: parent.height * 0.55;
         x: (parent.width - self.width) / 2;
         y: (parent.height - self.height) / 2;
+        transform-scale: root.anim-scale;
         opacity: root.fade;
     }
     // A station whose logo is absent, or too small for `media::image::logo_tile` to store.
@@ -163,10 +176,11 @@ export component ArtworkImage inherits Rectangle {
         source: @image-url("../assets/icons/radio.svg");
         colorize: root.tile-icon-color;
         image-fit: ImageFit.contain;
-        width: parent.width * 0.55 * root.anim-scale;
-        height: parent.height * 0.55 * root.anim-scale;
+        width: parent.width * 0.55;
+        height: parent.height * 0.55;
         x: (parent.width - self.width) / 2;
         y: (parent.height - self.height) / 2;
+        transform-scale: root.anim-scale;
         opacity: root.fade;
     }
     // Browse's folder cards, which have no cover to have: their resting state, not a missing one.
@@ -174,10 +188,11 @@ export component ArtworkImage inherits Rectangle {
         source: @image-url("../assets/icons/folder.svg");
         colorize: root.tile-icon-color;
         image-fit: ImageFit.contain;
-        width: parent.width * 0.55 * root.anim-scale;
-        height: parent.height * 0.55 * root.anim-scale;
+        width: parent.width * 0.55;
+        height: parent.height * 0.55;
         x: (parent.width - self.width) / 2;
         y: (parent.height - self.height) / 2;
+        transform-scale: root.anim-scale;
         opacity: root.fade;
     }
 }

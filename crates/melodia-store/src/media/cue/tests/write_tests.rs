@@ -362,6 +362,20 @@ fn a_codepage_sheet_is_written_back_in_its_codepage() -> Result<(), AppError> {
     Ok(())
 }
 
+/// The rewrite starts from a copy of the old sheet, so a shorter one written over it from the
+/// start would keep the old one's tail.
+#[test]
+fn a_shorter_sheet_replaces_a_longer_one_whole() -> Result<(), AppError> {
+    let tmp = TempDir::new()?;
+    let path = tmp.path().join("album.cue");
+    fs::write(&path, SHEET.join("\n"))?;
+
+    replace_sheet(&path, b"TITLE \"Album\"")?;
+
+    assert_eq!(fs::read(&path)?, b"TITLE \"Album\"");
+    Ok(())
+}
+
 fn composer(name: &str) -> RoleCredit {
     RoleCredit { role: CreditRole::Composer, name: name.to_owned(), detail: String::new() }
 }

@@ -1,10 +1,12 @@
 use std::borrow::Cow;
+use std::collections::HashMap;
 use std::ops::Range;
 use std::path::{Path, PathBuf};
 
 use rayon::prelude::*;
 use walkdir::{DirEntry, WalkDir};
 
+use crate::database::queries::{case_folded, names_one_file};
 use crate::media::ingest::metadata::extract_or_filename_row;
 use melodia_core::entities::scan::{FileStamp, FileStampRef, ScannedFile};
 use melodia_core::utils::audio_ext::{is_audio_extension, is_cue_sheet};
@@ -97,6 +99,10 @@ impl WalkedPaths {
             WalkedPath::Text { start, end } => Cow::Borrowed(&self.text[start..end]),
             WalkedPath::Foreign(slot) => self.foreign[slot].to_string_lossy(),
         }
+    }
+
+    fn spellings(&self) -> impl Iterator<Item = Cow<'_, str>> {
+        self.entries.iter().map(|&entry| self.spelling(entry))
     }
 
     /// Orders the paths by [`Self::spelling`] on the current rayon pool.
@@ -239,8 +245,8 @@ pub fn scan_files_parallel(
 ///
 /// Rows arrive one at a time and find their files by binary search, so only an orphan's path is
 /// copied, and the sort is on the lossy string a row stores so the two compare equal. Orphans are
-/// the rows the **whole** walk didn't find, never those of the files left to parse, which would
-/// read a no-change rescan's entire library as gone.
+/// the rows the **whole** walk didn't find and whose files are gone, never those of the files left
+/// to parse, which would read a no-change rescan's entire library as gone.
 pub struct WalkIndex {
     files: WalkedPaths,
     stamps: Vec<Option<PackedStamp>>,
@@ -327,21 +333,56 @@ impl WalkIndex {
             .collect()
     }
 
-    /// The paths of the rows the walk didn't find, each once however many rows it held.
+    /// Whether a row the walk didn't find awaits [`Self::take_orphans`]' check.
+    pub fn has_orphans(&self) -> bool {
+        !self.orphans.is_empty()
+    }
+
+    /// The paths of the rows the walk didn't find and whose files are gone, each once however many
+    /// rows it held. **Blocking**: a `stat` per row the walk didn't find.
     pub fn take_orphans(&mut self) -> Vec<String> {
         let mut orphans = std::mem::take(&mut self.orphans);
         orphans.sort_unstable();
         orphans.dedup();
-        orphans
+        self.keep_gone(orphans)
     }
 
-    /// Those of `paths` the walk didn't find, sparing those under a path it couldn't read as
-    /// [`Self::add_row`] spares a row.
+    /// Those of `paths` the walk didn't find and that are gone, sparing those under a path it
+    /// couldn't read as [`Self::add_row`] spares a row. **Blocking**, as [`Self::take_orphans`].
     pub fn unwalked(&self, paths: impl IntoIterator<Item = String>) -> Vec<String> {
-        paths
+        let missed = paths
             .into_iter()
             .filter(|path| self.files.spelled(path).is_empty() && !self.under_unreadable(path))
-            .collect()
+            .collect();
+        self.keep_gone(missed)
+    }
+
+    /// Those of `missed` whose files are gone. A disk that ignores case answers a `stat` for a
+    /// file the walk found under another spelling, which leaves this spelling gone all the same.
+    fn keep_gone(&self, missed: Vec<String>) -> Vec<String> {
+        let (mut gone, on_disk): (Vec<String>, Vec<String>) =
+            missed.into_iter().partition(|path| is_gone(path));
+        if !on_disk.is_empty() {
+            gone.extend(self.respelled(on_disk));
+        }
+        gone
+    }
+
+    /// Those of `missed` the walk found under another spelling of the same file.
+    fn respelled(&self, missed: Vec<String>) -> Vec<String> {
+        let mut by_fold: HashMap<String, String> =
+            missed.into_iter().map(|path| (case_folded(&path), path)).collect();
+        let mut respelled = Vec::new();
+        for walked in self.files.spellings() {
+            if by_fold.is_empty() {
+                break;
+            }
+            let fold = case_folded(&walked);
+            if by_fold.get(&fold).is_some_and(|path| names_one_file(path, &walked)) {
+                respelled.extend(by_fold.remove(&fold));
+            }
+        }
+        respelled
     }
 
     fn stamp_files(&mut self, found: Range<usize>, stamp: FileStamp) {
@@ -366,6 +407,16 @@ impl WalkIndex {
 
     fn under_unreadable(&self, path: &str) -> bool {
         self.unreadable.iter().any(|dir| Path::new(path).starts_with(dir))
+    }
+}
+
+/// Whether the file at `path`, which a walk didn't find, is gone rather than missed: a directory
+/// read promises nothing about an entry renamed while it runs, which is how a tag write lands its
+/// copy. A regular file counts as there, as does one whose `stat` fails any other way.
+fn is_gone(path: &str) -> bool {
+    match std::fs::symlink_metadata(path) {
+        Ok(meta) => !meta.is_file(),
+        Err(e) => e.kind() == std::io::ErrorKind::NotFound,
     }
 }
 

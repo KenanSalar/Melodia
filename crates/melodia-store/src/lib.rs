@@ -2,8 +2,8 @@
 //! them, the filesystem watcher that keeps them true, and the tag reader and writer under both.
 //!
 //! Above `melodia-artwork`, which it stores covers through, and above `melodia-audio`, which it
-//! asks for a duration the container won't state. Below everything that decides *what* to scan:
-//! nothing here names a setting, a task or the app's state.
+//! asks for a duration the container won't state and whether a tag write kept the audio. Below
+//! everything that decides *what* to scan: nothing here names a setting, a task or the app's state.
 
 pub mod database;
 

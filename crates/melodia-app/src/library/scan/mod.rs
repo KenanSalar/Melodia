@@ -372,7 +372,6 @@ async fn discover(
 
     // `scan_one` purges nothing after an empty walk, so its rows would be read only to be dropped.
     let mut kept_out = Vec::new();
-    let mut gone_sheets = Vec::new();
     let mut claims = HashMap::new();
     if !index.is_empty() {
         index = queries::scan::fold_folder_tracks(db, folder_id, index, WalkIndex::add_row).await?;
@@ -382,13 +381,13 @@ async fn discover(
         }
         sheets =
             queries::scan::fold_folder_sheets(db, folder_id, sheets, WalkIndex::add_row).await?;
-        gone_sheets = sheets.take_orphans();
-        if !sheets.is_empty() || !gone_sheets.is_empty() {
+        if !sheets.is_empty() || sheets.has_orphans() {
             claims = queries::scan::sheet_claims(db, folder_id).await?;
         }
     }
 
     tokio::task::spawn_blocking(move || {
+        let gone_sheets = sheets.take_orphans();
         // Reads only what this folder owns, but the walk stays whole: the purge checks the
         // folder's rows against it, and some can sit inside a nested folder's directory. A
         // kept-out file is read only once it has changed, for the ingest to restamp it.

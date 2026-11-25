@@ -6,6 +6,7 @@
 //! where decoding and encoding it again would not. A written line takes the sheet's own encoding
 //! where every character fits, and the whole sheet becomes UTF-8 with a BOM where one doesn't.
 
+use std::io::Write;
 use std::path::Path;
 
 use lofty::tag::items::Timestamp;
@@ -160,8 +161,9 @@ pub(super) fn rewritten_comment(
 /// Replaces the sheet at `path` with `bytes` through a copy renamed over it, so nothing reads half
 /// a sheet and the file keeps its permissions. Blocking.
 pub fn replace_sheet(path: &Path, bytes: &[u8]) -> Result<(), AppError> {
-    atomic_file::rewrite_with_sync(path, |copy| {
-        std::fs::write(copy, bytes)
+    atomic_file::rewrite_with_sync(path, |copy, _| {
+        copy.set_len(0)
+            .and_then(|()| copy.write_all(bytes))
             .map_err(|e| AppError::metadata(format!("Failed to write {}", path.display()), e))
     })
 }

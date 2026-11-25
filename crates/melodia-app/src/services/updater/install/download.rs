@@ -243,7 +243,8 @@ async fn stream_to_file(
             last_pct = pct;
         }
     }
-    file.flush()?;
+    // Flushed before it's installed, or a power cut after the swap can leave the binary empty.
+    tokio::task::spawn_blocking(move || file.sync_all()).await.map_err(AppError::io_source)??;
     Ok(())
 }
 

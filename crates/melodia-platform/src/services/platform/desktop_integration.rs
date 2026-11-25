@@ -2,16 +2,18 @@
 //!
 //! RPM/DEB redeploy theirs on every upgrade and an `AppImage` carries its own, but the in-app
 //! updater's binary swap never refreshes what `install-linux.sh` deployed. So the payloads are
-//! compiled in and every boot BLAKE3s the on-disk copies against them, rewriting on mismatch.
+//! compiled in and every boot compares the on-disk copies against them, rewriting on mismatch.
 //!
 //! Skipped on RPM/DEB, where user-scoped copies diverging from the package's would leave which one
 //! wins to `XDG_DATA_DIRS` order, on an `AppImage`, and on a development build, whose `Exec=` would
 //! hijack the installed entry. The entry is the one every package ships, its `Exec=` taking the
 //! binary's absolute path, a tarball install not being on `$PATH`.
 
+use std::io::Write;
 use std::path::Path;
 
 use melodia_core::error::{AppError, AppResult, describe};
+use melodia_core::utils::atomic_file;
 
 use super::install_kind::{install_target, linux_pkg};
 
@@ -156,25 +158,14 @@ fn quote_exec(command: &str) -> String {
     quoted
 }
 
-/// Writes only when the on-disk BLAKE3 differs, returning whether it did, and through a temp file
-/// so a crash can't leave a half-written launcher.
+/// Writes only when the on-disk bytes differ, returning whether it did.
 fn write_if_changed(path: &Path, payload: &[u8]) -> AppResult<bool> {
     if let Ok(existing) = std::fs::read(path)
-        && blake3::hash(&existing) == blake3::hash(payload)
+        && existing == payload
     {
         return Ok(false);
     }
-    if let Some(parent) = path.parent() {
-        std::fs::create_dir_all(parent)?;
-    }
-    let dir = path.parent().unwrap_or_else(|| Path::new("."));
-    let mut tmp = tempfile::NamedTempFile::new_in(dir)?;
-    {
-        use std::io::Write;
-        tmp.as_file_mut().write_all(payload)?;
-        tmp.as_file_mut().flush()?;
-    }
-    tmp.persist(path).map_err(|e| AppError::Io(e.error))?;
+    atomic_file::write_with_sync(path, |writer| Ok(writer.write_all(payload)?))?;
     Ok(true)
 }
 

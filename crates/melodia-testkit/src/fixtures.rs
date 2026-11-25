@@ -43,3 +43,19 @@ pub fn write_test_jpeg_sized(
     .save(&path)?;
     Ok((tmp, path))
 }
+
+/// Restates the checksum of the Ogg page `page` holds whole, so a page a test edited still reads
+/// as intact: CRC-32 over the page with its own field zeroed, polynomial 0x04C11DB7, unreflected.
+pub fn restate_ogg_checksum(page: &mut [u8]) {
+    const CHECKSUM: std::ops::Range<usize> = 22..26;
+    let Some(field) = page.get_mut(CHECKSUM) else {
+        return;
+    };
+    field.fill(0);
+    let checksum = page.iter().fold(0_u32, |crc, &byte| {
+        (0..8).fold(crc ^ (u32::from(byte) << 24), |crc, _| {
+            if crc & 0x8000_0000 == 0 { crc << 1 } else { (crc << 1) ^ 0x04C1_1DB7 }
+        })
+    });
+    page[CHECKSUM].copy_from_slice(&checksum.to_le_bytes());
+}

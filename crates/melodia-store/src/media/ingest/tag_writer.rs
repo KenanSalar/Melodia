@@ -15,6 +15,7 @@
 //! and stale against the primary. `WriteOptions`' `remove_others: false` must stay: flipping it
 //! strips those tags outright.
 
+use std::fs::File;
 use std::path::Path;
 
 use lofty::config::WriteOptions;
@@ -26,13 +27,14 @@ use lofty::prelude::ItemKey;
 use lofty::tag::items::Timestamp;
 use lofty::tag::{ItemValue, Tag, TagExt, TagItem, TagType};
 
-use super::{metadata, rating_tags, role_tags};
+use super::{iff_repair, metadata, rating_tags, role_tags};
+use melodia_audio::audio_match::{self, AudioMatch};
 use melodia_core::entities::artist::ArtistCredit;
 use melodia_core::entities::genre::GenreList;
 use melodia_core::entities::tags::{
     ArtworkEdit, FieldEdit, FileTags, RoleCreditEdit, TagEdit, TagField,
 };
-use melodia_core::error::AppError;
+use melodia_core::error::{AppError, describe};
 use melodia_core::utils::atomic_file;
 
 /// The highest BPM written; past it is a typo, not a tempo.
@@ -409,25 +411,48 @@ pub fn apply_to_file(
     let unsupported = apply_edit(tag, edit, picture);
 
     // Not in place: a tag edit routinely targets the track a deck holds open.
-    atomic_file::rewrite_with_sync(path, move |target| {
-        save_tags(tagged, target).map_err(|e| {
+    atomic_file::rewrite_with_sync(path, move |copy, copy_path| {
+        save_tags(tagged, copy).map_err(|e| {
             AppError::metadata(format!("Failed to write tags to {}", path.display()), e)
-        })
+        })?;
+        require_same_audio(path, copy_path)
     })?;
 
     Ok(WriteOutcome { format, unsupported })
 }
 
-/// Saves `tagged` to `target`, a `VorbisComments` primary as [`vorbis_comments`] builds it: lofty's
+/// Refuses the rewrite at `copy` where its audio differs from `original`'s. An original that won't
+/// demux is written unchecked, its tags still worth fixing, and no measurement rides on it: the
+/// loudness pass reads through the same demuxer. Blocking.
+pub(crate) fn require_same_audio(original: &Path, copy: &Path) -> Result<(), AppError> {
+    match audio_match::compare(original, copy) {
+        AudioMatch::Same => Ok(()),
+        AudioMatch::Unchecked(reason) => {
+            log::warn!(
+                "Writing tags to {} without checking its audio: {}",
+                original.display(),
+                describe(&reason)
+            );
+            Ok(())
+        }
+        AudioMatch::Changed(change) => Err(AppError::metadata(
+            format!("Refused to write tags to {}", original.display()),
+            change,
+        )),
+    }
+}
+
+/// Saves `tagged` into `copy`, a `VorbisComments` primary as [`vorbis_comments`] builds it: lofty's
 /// generic save writes that block from mapped items alone, dropping the companion.
-fn save_tags(mut tagged: TaggedFile, target: &Path) -> Result<(), FileEncodingError> {
+pub(crate) fn save_tags(mut tagged: TaggedFile, copy: &mut File) -> Result<(), FileEncodingError> {
+    iff_repair::include_final_pad(copy, tagged.file_type())?;
     let options = WriteOptions::default();
     if tagged.primary_tag_type() == TagType::VorbisComments
         && let Some(tag) = tagged.remove(TagType::VorbisComments)
     {
-        return vorbis_comments(tag).save_to_path(target, options);
+        return vorbis_comments(tag).save_to(copy, options);
     }
-    tagged.save_to_path(target, options)
+    tagged.save_to(copy, options)
 }
 
 /// `tag`'s mapped items verbatim, as lofty's generic save writes them, beside its pictures and

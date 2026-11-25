@@ -2,8 +2,7 @@
 //! registry and the cursor are [`super::decode`]'s, shared with [`super::stream_decode`].
 
 use std::collections::VecDeque;
-use std::fs::{File, Metadata};
-use std::io::{Read, Seek, SeekFrom};
+use std::fs::File;
 use std::path::Path;
 use std::sync::Arc;
 use std::time::Duration;
@@ -11,9 +10,7 @@ use std::time::Duration;
 use symphonia::core::audio::Position;
 use symphonia::core::codecs::audio::AudioDecoder;
 use symphonia::core::codecs::audio::well_known::CODEC_ID_OPUS;
-use symphonia::core::formats::probe::Hint;
 use symphonia::core::formats::{FormatReader, SeekMode, SeekTo};
-use symphonia::core::io::MediaSource;
 use symphonia::core::units::{Time, TimeBase, Timestamp};
 
 use melodia_core::entities::cue::CueSpan;
@@ -26,6 +23,7 @@ use super::audio::{
     frames_to_duration, interleaved,
 };
 use super::decode::{self, Ended, Rounding};
+use super::file_source::{self, FileSource};
 use super::mkv_trim;
 use super::opus;
 use super::span::Span;
@@ -36,48 +34,9 @@ use super::span::Span;
 /// and the last decodable frame, which tags overstate routinely, and still sounds like the end.
 const SEEK_END_MARGIN: Duration = Duration::from_millis(100);
 
-/// A file with its seekability and length taken once: Symphonia's own `File` source re-reads the
-/// filesystem on every call, which the demuxer makes per probe and per seek. No `BufReader`,
-/// [`MediaSourceStream`] already being the read-ahead buffer.
-struct FileSource {
-    inner: File,
-    seekable: bool,
-    byte_len: Option<u64>,
-}
-
-impl FileSource {
-    fn new(inner: File) -> Self {
-        // Anything but a regular file is a pipe or a device wearing an audio extension.
-        let regular = inner.metadata().ok().filter(Metadata::is_file);
-        Self { seekable: regular.is_some(), byte_len: regular.map(|m| m.len()), inner }
-    }
-}
-
-impl Read for FileSource {
-    fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
-        self.inner.read(buf)
-    }
-}
-
-impl Seek for FileSource {
-    fn seek(&mut self, pos: SeekFrom) -> std::io::Result<u64> {
-        self.inner.seek(pos)
-    }
-}
-
-impl MediaSource for FileSource {
-    fn is_seekable(&self) -> bool {
-        self.seekable
-    }
-
-    fn byte_len(&self) -> Option<u64> {
-        self.byte_len
-    }
-}
-
-/// How much of the container's timeline isn't music, filled by [`super::aac_trim`], the Opus arm
-/// of [`FileDecoder::install_trim`] and [`super::mkv_trim`].
-#[derive(Clone, Copy)]
+/// How much of the container's timeline isn't music, filled by [`super::aac_trim`],
+/// [`FileDecoder::opus_padding`] and [`super::mkv_trim`].
+#[derive(Clone, Copy, Default)]
 pub(super) struct Trim {
     /// Encoder priming, ahead of the first real sample.
     pub head: u64,
@@ -150,11 +109,6 @@ impl FileDecoder {
         let edits = aac_trim::edit_lists(&mut file);
         let discards = mkv_trim::discard_padding(&mut file);
 
-        let mut hint = Hint::new();
-        if let Some(extension) = path.extension().and_then(|e| e.to_str()) {
-            hint.with_extension(extension);
-        }
-
         let decode::Opened {
             format,
             decoder,
@@ -163,7 +117,8 @@ impl FileDecoder {
             source_format,
             time_base,
             total_duration,
-        } = decode::open(Box::new(FileSource::new(file)), &hint)
+            first_pts,
+        } = decode::open(Box::new(FileSource::new(file)), &file_source::extension_hint(path))
             .map_err(|e| AppError::player(path.display().to_string(), e))?;
 
         let mut decoded = Self {
@@ -178,7 +133,7 @@ impl FileDecoder {
             span: Span::WHOLE_FILE,
             end: None,
         };
-        decoded.install_trim(&edits, &discards);
+        decoded.install_trim(&edits, &discards, first_pts);
         Ok(decoded)
     }
 
@@ -234,11 +189,16 @@ impl FileDecoder {
 
     /// Lines this source's timeline up with the demuxer's. AAC's head comes off through
     /// [`Self::skip`], above the cursor the stream decoder shares; [`super::opus`] has already
-    /// dropped Opus's, leaving an offset; a tail is the container's, which only
+    /// dropped Opus's, leaving an offset and a length; a tail is the container's, which only
     /// [`super::mkv_trim`] answers. Never on the audio callback, every caller opening off the deck
     /// lock. Here rather than in [`super::decode`]: a mount has no container header to read a trim
     /// from and no gapless seam for one to spoil.
-    fn install_trim(&mut self, edits: &[aac_trim::Edit], discards: &[mkv_trim::Discard]) {
+    fn install_trim(
+        &mut self,
+        edits: &[aac_trim::Edit],
+        discards: &[mkv_trim::Discard],
+        first_pts: Timestamp,
+    ) {
         let tail = mkv_trim::resolve(discards, self.track, self.sample_rate()).unwrap_or(0);
 
         if let Some(aac) = self.aac_padding(edits) {
@@ -255,16 +215,17 @@ impl FileDecoder {
             return;
         }
 
-        let head = self.opus_priming().unwrap_or(0);
-        if head == 0 && tail == 0 {
+        let opus = self.opus_padding(first_pts).unwrap_or_default();
+        if opus.head == 0 && opus.playable.is_none() && tail == 0 {
             return;
         }
 
-        self.trim = Some(Trim { head, playable: None, tail });
+        self.trim = Some(Trim { tail, ..opus });
         self.measure_playable();
         log::debug!(
-            "Container padding: {head} priming frames already off the samples, {tail} trailing \
+            "Container padding: {} priming frames already off the samples, {tail} trailing \
              frames held back, {:?} of audio",
+            opus.head,
             self.file_duration
         );
     }
@@ -275,16 +236,22 @@ impl FileDecoder {
         aac_trim::resolve(&timing, &self.format.metadata(), edits, rate)
     }
 
-    /// The priming [`super::opus`] already dropped, which the demuxer's timeline still counts.
-    /// Gated on the codec rather than the field: MP3 and CAF fill `Track::delay` too, and a blanket
-    /// rule would take their delay off twice. Only Ogg fills it for Opus; Matroska subtracts
-    /// `CodecDelay` from its timestamps instead and MP4 states nothing.
-    fn opus_priming(&self) -> Option<u64> {
-        let track = decode::audio_track(&*self.format)?;
-        if decode::audio_params(track)?.codec != CODEC_ID_OPUS {
+    /// Opus's trim, the priming already off the samples ([`super::opus`]): the pre-skip is the
+    /// offset where the demuxer's timeline counts it, its first packet at zero or later, and
+    /// nothing where it opens before zero. The track's stated ticks, as frames, less that offset
+    /// end MP4's and CAF's padding, which nothing else drops; CAF ticks at its `desc` rate.
+    fn opus_padding(&self, first_pts: Timestamp) -> Option<Trim> {
+        let params = self.decoder.codec_params();
+        if params.codec != CODEC_ID_OPUS {
             return None;
         }
-        track.delay.map(u64::from)
+        let timeline_counts_priming = first_pts.get() >= 0;
+        let head = if timeline_counts_priming { u64::from(opus::pre_skip(params)) } else { 0 };
+        let stated_ticks = decode::audio_track(&*self.format).and_then(|track| track.num_frames);
+        let stated = stated_ticks.zip(self.time_base).and_then(|(ticks, time_base)| {
+            decode::ticks_to_frames(ticks, time_base, self.sample_rate(), Rounding::Down)
+        });
+        Some(Trim { head, playable: stated.and_then(|frames| frames.checked_sub(head)), tail: 0 })
     }
 
     /// Restates the length, and arms the end, against the real audio. The tail owes no

@@ -30,9 +30,11 @@ pub fn spawn_background_tasks(
     tasks::search_text_backfill::spawn(spawner, state);
     tasks::artwork_restore::spawn(spawner, state);
     tasks::artwork_sweep::spawn(spawner, state);
-    // The four once-per-install passes, each gated on its own settings marker.
+    // The once-per-install passes, each gated on its own settings marker.
     tasks::artwork_renormalize::spawn(spawner, state);
     tasks::rating_import::spawn(spawner, state);
+    tasks::m4a_rating_backfill::spawn(spawner, state);
+    tasks::iff_tag_repair::spawn(spawner, state);
     tasks::tag_backfill::spawn(spawner, state);
     tasks::embedded_cue_probe::spawn(spawner, state);
     // Before any callback can set a rating.
@@ -135,6 +137,37 @@ pub fn serve_file_opens(
             }
         });
     });
+}
+
+/// What a shell reports for a process Ctrl+C ended: 128 plus SIGINT's number.
+const INTERRUPTED_EXIT_CODE: i32 = 130;
+
+/// Quits on a console's Ctrl+C as the tray's Quit does, so `main` saves state on the way out
+/// instead of the OS ending the process at once. A second press before the tasks are cancelled
+/// ends a shutdown that hangs, tokio keeping SIGINT on unix once it has listened.
+pub fn quit_on_console_interrupt(spawner: &tasks::TaskSpawner) {
+    spawner.spawn_cancellable(|shutdown| async move {
+        shutdown.run_until_cancelled(answer_console_interrupts()).await;
+    });
+}
+
+async fn answer_console_interrupts() {
+    if let Err(e) = tokio::signal::ctrl_c().await {
+        log::warn!("Ctrl+C listener: {}", describe(&e));
+        return;
+    }
+    log::info!("Ctrl+C received; quitting");
+    if let Err(e) = slint::quit_event_loop() {
+        log::warn!("Ctrl+C: quit_event_loop: {}", describe(&e));
+    }
+    match tokio::signal::ctrl_c().await {
+        Ok(()) => {
+            // No log flush or temp cleanup: both touch the disk, which may be what hangs.
+            log::warn!("Second Ctrl+C; exiting before the shutdown finished");
+            std::process::exit(INTERRUPTED_EXIT_CODE);
+        }
+        Err(e) => log::warn!("Ctrl+C listener: {}", describe(&e)),
+    }
 }
 
 /// Restarts folder watching and runs the launch reconcile, tracked so shutdown awaits its writes.

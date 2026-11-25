@@ -39,3 +39,40 @@ fn only_a_retry_sweep_that_failed_leaves_its_marker_down() {
         ]
     );
 }
+
+// --- A page's per-file read --------------------------------------------------
+
+/// A read a test can fail without a codec: the file's text as a number.
+fn number_in(path: &Path) -> AppResult<i64> {
+    let text = std::fs::read_to_string(path)?;
+    text.trim().parse().map_err(|e| AppError::validation("not a number", e))
+}
+
+fn row(id: i64, path: &Path) -> (i64, String) {
+    (id, path.to_string_lossy().into_owned())
+}
+
+/// It fails the same way at every launch, so a sweep counting it would never retire.
+#[test]
+fn a_file_there_that_wont_read_is_left_out_and_counted_nowhere() -> Result<(), AppError> {
+    let tmp = tempfile::tempdir()?;
+    let (readable, unreadable) = (tmp.path().join("a"), tmp.path().join("b"));
+    std::fs::write(&readable, "7")?;
+    std::fs::write(&unreadable, "seven")?;
+
+    let reads = read_files(&[row(1, &readable), row(2, &unreadable)], number_in);
+
+    assert_eq!((reads.read, reads.out_of_reach), (vec![(1, 7)], 0), "(read, out of reach)");
+    Ok(())
+}
+
+/// An unmounted drive's files read next launch, which a sweep only gets to by failing this one.
+#[test]
+fn a_file_gone_from_disk_is_counted_out_of_reach() -> Result<(), AppError> {
+    let tmp = tempfile::tempdir()?;
+
+    let reads = read_files(&[row(1, &tmp.path().join("gone"))], number_in);
+
+    assert_eq!((reads.read, reads.out_of_reach), (Vec::new(), 1), "(read, out of reach)");
+    Ok(())
+}

@@ -12,6 +12,7 @@ use tempfile::TempDir;
 
 use super::*;
 use melodia_core::entities::tags::{FieldEdit, TagEdit};
+use melodia_core::error::AppError;
 use melodia_store::media::ingest::tag_writer;
 use melodia_testkit::ASSETS_DIR;
 

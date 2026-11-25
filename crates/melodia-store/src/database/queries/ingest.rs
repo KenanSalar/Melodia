@@ -480,30 +480,51 @@ fn image_move_candidates(
 }
 
 fn keep_gone(
-    mut candidates: MoveCandidates,
+    candidates: MoveCandidates,
     new_files: &[&ScannedFile],
     pool: &ScanPool,
 ) -> MoveCandidates {
-    let mut still_present = batch_still_on_disk(candidates.old_paths(), pool);
-    if queries::DISK_IGNORES_CASE {
-        forget_respelled(&mut still_present, new_files);
-    }
+    let existing = batch_existing(candidates.old_paths(), pool);
+    let new_paths: Vec<&Path> = new_files.iter().map(|f| f.path.as_path()).collect();
+    keep_gone_from(candidates, existing, &new_paths)
+}
+
+/// Keeps the candidates whose file is gone, `existing` holding the old paths `exists()` answered
+/// for and `new_paths` the files the batch found new.
+///
+/// An old path counts as there only under its own spelling: a case-insensitive or normalizing
+/// filesystem answers `exists()` for a spelling no entry carries, and a rename by case or
+/// normalization alone is a move. Only the file name is asked, the folder root above it spelled as
+/// the user added it, leaving a directory renamed by case alone to [`forget_respelled`].
+pub(crate) fn keep_gone_from(
+    mut candidates: MoveCandidates,
+    existing: HashSet<String>,
+    new_paths: &[&Path],
+) -> MoveCandidates {
+    let mut still_present = listed_as_spelled(existing);
+    forget_respelled(&mut still_present, new_paths);
     candidates.retain_gone(&still_present);
     candidates
 }
 
-/// Drops the old paths a new file only respells: where the disk ignores case, two paths folding
-/// alike are one file, so the new one can't be a copy sitting beside it.
-fn forget_respelled(still_present: &mut HashSet<String>, new_files: &[&ScannedFile]) {
-    let spelling_by_fold: HashMap<String, Cow<'_, str>> = new_files
+/// Drops the old paths a new file only respells, naming the same file on a disk that ignores case,
+/// so the new one can't be a copy sitting beside it.
+fn forget_respelled(still_present: &mut HashSet<String>, new_paths: &[&Path]) {
+    if still_present.is_empty() {
+        return;
+    }
+    let spelling_by_fold: HashMap<String, Cow<'_, str>> = new_paths
         .iter()
-        .map(|f| {
-            let spelling = f.path.to_string_lossy();
-            (spelling.to_lowercase(), spelling)
+        .map(|path| {
+            let spelling = path.to_string_lossy();
+            (queries::case_folded(&spelling), spelling)
         })
         .collect();
     still_present.retain(|old_path| {
-        spelling_by_fold.get(&old_path.to_lowercase()).is_none_or(|new_path| new_path == old_path)
+        let new_path = spelling_by_fold.get(&queries::case_folded(old_path));
+        new_path.is_none_or(|new_path| {
+            new_path == old_path || !queries::names_one_file(old_path, new_path)
+        })
     });
 }
 
@@ -554,24 +575,18 @@ impl<'a> InsertBuffer<'a> {
 /// make walk sequentially.
 const STAT_PAR_THRESHOLD: usize = 32;
 
-/// The subset of `paths` still on disk under their own spelling, a batch past
-/// [`STAT_PAR_THRESHOLD`] stat'ed on the scan pool.
-///
-/// **Under their own spelling** because a case-insensitive or normalizing filesystem answers
-/// `exists()` for a spelling no entry carries, and a rename that changed only case or normalization
-/// is a move. Only the file name is asked, the folder root above it being spelled as the user added
-/// it, which leaves a directory renamed by case alone to [`forget_respelled`].
-fn batch_still_on_disk(paths: Vec<String>, pool: &ScanPool) -> HashSet<String> {
+/// The subset of `paths` `exists()` answers for, a batch past [`STAT_PAR_THRESHOLD`] stat'ed on the
+/// scan pool.
+fn batch_existing(paths: Vec<String>, pool: &ScanPool) -> HashSet<String> {
     if paths.is_empty() {
         return HashSet::new();
     }
     if paths.len() < STAT_PAR_THRESHOLD {
-        return listed_as_spelled(paths.into_iter().filter(|p| Path::new(p).exists()).collect());
+        return paths.into_iter().filter(|p| Path::new(p).exists()).collect();
     }
-    let existing = pool.install(|| {
+    pool.install(|| {
         paths.par_iter().filter(|p| Path::new(p).exists()).cloned().collect::<HashSet<String>>()
-    });
-    listed_as_spelled(existing)
+    })
 }
 
 /// Keeps the paths their directory lists under exactly that name, reading each directory once. A

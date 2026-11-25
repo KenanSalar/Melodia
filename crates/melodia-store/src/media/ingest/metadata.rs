@@ -373,6 +373,12 @@ fn open_tags(
     }
 }
 
+/// What the `codec` column holds for a file lofty reads as `file_type`, so a query by codec spells
+/// it as the ingest wrote it.
+pub(crate) fn codec_name(file_type: FileType) -> String {
+    format!("{file_type:?}")
+}
+
 /// What the stream is rather than what its tags say.
 struct AudioProperties {
     duration_ms: i64,
@@ -394,7 +400,7 @@ impl AudioProperties {
         };
         Self {
             duration_ms,
-            codec: tagged_file.map(|tagged| format!("{:?}", tagged.file_type())),
+            codec: tagged_file.map(|tagged| codec_name(tagged.file_type())),
             bitrate: properties
                 .and_then(|props| props.overall_bitrate().or(props.audio_bitrate()))
                 .map(|br| i32::try_from(br).unwrap_or(i32::MAX)),
