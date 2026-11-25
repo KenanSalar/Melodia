@@ -11,6 +11,7 @@ use crate::tasks::TaskSpawner;
 use melodia_core::error::{AppError, AppResult, describe};
 use melodia_core::utils::reach;
 use melodia_store::media::ingest::scan_pool::ScanPool;
+use tokio_util::sync::CancellationToken;
 
 /// Whether a pass that failed part way still records its marker.
 #[derive(Clone, Copy)]
@@ -159,6 +160,59 @@ fn reach_file<T>(id: i64, path: &Path, read: impl Fn(&Path) -> AppResult<T>) -> 
             None
         }
     }
+}
+
+/// What a rewriting sweep did with one file.
+pub enum Rewrite {
+    Written,
+    Failed,
+    Skipped,
+}
+
+/// A rewriting sweep's count, across its pages.
+#[derive(Default)]
+pub struct Rewrites {
+    pub written: usize,
+    pub failed: usize,
+    pub out_of_reach: usize,
+}
+
+impl Rewrites {
+    /// Runs `rewrite` over the files `reads` reached one at a time, so a quit stops the pass
+    /// between whole-file rewrites rather than inside one the exit would cut short.
+    pub async fn rewrite_each<T, F, Fut>(
+        &mut self,
+        shutdown: &CancellationToken,
+        reads: FileReads<T>,
+        mut rewrite: F,
+    ) -> AppResult<()>
+    where
+        F: FnMut(i64, T) -> Fut,
+        Fut: Future<Output = AppResult<Rewrite>>,
+    {
+        self.out_of_reach += reads.out_of_reach;
+        for (id, file) in reads.read {
+            if shutdown.is_cancelled() {
+                return Err(AppError::scanner_msg("stopped by the quit, finished next launch"));
+            }
+            match rewrite(id, file).await? {
+                Rewrite::Written => self.written += 1,
+                Rewrite::Failed => self.failed += 1,
+                Rewrite::Skipped => {}
+            }
+        }
+        Ok(())
+    }
+}
+
+/// Fails a pass that left `out_of_reach` of its `files` unread, so an [`OnFailure::Retry`] sweep
+/// runs again next launch.
+pub fn require_all_reached(out_of_reach: usize, files: &str) -> AppResult<()> {
+    (out_of_reach == 0).ok_or_else(|| {
+        AppError::scanner_msg(format!(
+            "{out_of_reach} {files} were out of reach, read again next launch"
+        ))
+    })
 }
 
 #[cfg(test)]

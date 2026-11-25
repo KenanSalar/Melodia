@@ -507,10 +507,7 @@ pub async fn get_library_file_paths_after(
     after_id: i64,
     limit: i64,
 ) -> Result<Vec<(i64, String)>, AppError> {
-    let Some(page) = codec_page(codecs, Some(IN_LIBRARY), after_id, limit) else {
-        return Ok(Vec::new());
-    };
-    db.read(move |conn| page.fetch_all(conn)).await
+    fetch_page(db, codec_page(codecs, Some(IN_LIBRARY), after_id, limit)).await
 }
 
 /// [`get_library_file_paths_after`] with the files opened from outside the library, the work list
@@ -521,10 +518,7 @@ pub async fn get_whole_file_paths_after(
     after_id: i64,
     limit: i64,
 ) -> Result<Vec<(i64, String)>, AppError> {
-    let Some(page) = codec_page(codecs, None, after_id, limit) else {
-        return Ok(Vec::new());
-    };
-    db.read(move |conn| page.fetch_all(conn)).await
+    fetch_page(db, codec_page(codecs, None, after_id, limit)).await
 }
 
 /// The statement every codec page runs, `None` for no codecs, `scope` narrowing the whole files.
@@ -552,6 +546,13 @@ fn codec_page(
     Some(sql)
 }
 
+async fn fetch_page(db: &DbPool, page: Option<Sql>) -> Result<Vec<(i64, String)>, AppError> {
+    let Some(page) = page else {
+        return Ok(Vec::new());
+    };
+    db.read(move |conn| page.fetch_all(conn)).await
+}
+
 /// One page of the rated whole-file MP4 rows past `after_id`, the one-shot M4A rating backfill's
 /// work list. Rows outside the library are included, a star set on one reaching its file too.
 pub async fn get_rated_mp4_paths_after(
@@ -559,10 +560,7 @@ pub async fn get_rated_mp4_paths_after(
     after_id: i64,
     limit: i64,
 ) -> Result<Vec<(i64, String)>, AppError> {
-    let Some(page) = codec_page(&[FileType::Mp4], Some("rating > 0"), after_id, limit) else {
-        return Ok(Vec::new());
-    };
-    db.read(move |conn| page.fetch_all(conn)).await
+    fetch_page(db, codec_page(&[FileType::Mp4], Some("rating > 0"), after_id, limit)).await
 }
 
 /// The stars `id`'s row holds, `None` for a missing id.

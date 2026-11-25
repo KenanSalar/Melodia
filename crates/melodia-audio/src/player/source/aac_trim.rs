@@ -8,7 +8,7 @@
 //! and a Matroska tail from elsewhere.
 
 use std::fs::File;
-use std::io::{Read, Seek, SeekFrom};
+use std::io::{Seek, SeekFrom};
 
 use symphonia::core::codecs::audio::well_known::CODEC_ID_AAC;
 use symphonia::core::formats::Track;
@@ -17,6 +17,7 @@ use symphonia::core::units::{Duration as SymphoniaDuration, TimeBase};
 
 use super::audio::SampleRate;
 use super::file_decode::Trim;
+use super::file_source::read_at;
 
 /// The walk descends four levels into boxes a muxer writes once each, so the real count is dozens;
 /// this only bounds a file claiming a million empty ones.
@@ -201,14 +202,14 @@ fn walk(
 
 fn read_header(file: &mut File, pos: u64, end: u64) -> Option<BoxHeader> {
     let mut head = [0u8; 8];
-    read_at(file, pos, &mut head)?;
+    read_at(file, pos, &mut head).ok()?;
 
     let kind = [head[4], head[5], head[6], head[7]];
     let (size, payload) = match be_u32(&head, 0)? {
         // A size of one puts the real one in the eight bytes after the type.
         1 => {
             let mut extended = [0u8; 8];
-            read_at(file, pos + BOX_HEADER_LEN, &mut extended)?;
+            read_at(file, pos + BOX_HEADER_LEN, &mut extended).ok()?;
             (u64::from_be_bytes(extended), pos + 16)
         }
         // A size of zero means the box runs to the end of its parent.
@@ -278,7 +279,7 @@ fn header_u32(file: &mut File, header: &BoxHeader) -> Option<u32> {
     }
 
     let mut buf = [0u8; HEADER_BOX_PREFIX];
-    read_at(file, header.payload, &mut buf)?;
+    read_at(file, header.payload, &mut buf).ok()?;
 
     // The version picks the width of the two timestamps sitting ahead of the field.
     let at = match buf[0] {
@@ -306,7 +307,7 @@ fn first_edit(file: &mut File, elst: &BoxHeader) -> Option<ElstEntry> {
     if read < ELST_HEADER {
         return None;
     }
-    read_at(file, elst.payload, buf.get_mut(..read)?)?;
+    read_at(file, elst.payload, buf.get_mut(..read)?).ok()?;
 
     let (width, wide) = match buf.first()? {
         0 => (ELST_ENTRY_V0, false),
@@ -327,11 +328,6 @@ fn first_edit(file: &mut File, elst: &BoxHeader) -> Option<ElstEntry> {
         };
         Some(ElstEntry { media_time: u64::try_from(media_time).ok()?, segment_duration })
     })
-}
-
-fn read_at(file: &mut File, pos: u64, buf: &mut [u8]) -> Option<()> {
-    file.seek(SeekFrom::Start(pos)).ok()?;
-    file.read_exact(buf).ok()
 }
 
 fn be_u32(bytes: &[u8], at: usize) -> Option<u32> {

@@ -3,7 +3,7 @@
 //! drops audio or leaves an offset stale doesn't.
 
 use std::fs::File;
-use std::io::{Read, Seek, SeekFrom};
+use std::io::{Seek, SeekFrom};
 use std::path::Path;
 
 use symphonia::core::codecs::CodecParameters;
@@ -13,7 +13,7 @@ use symphonia::core::formats::{FormatReader, Track};
 use symphonia::core::packet::Packet;
 
 use crate::player::source::decode;
-use crate::player::source::file_source::{self, FileSource};
+use crate::player::source::file_source::{self, FileSource, read_at};
 
 /// `ID3v1`'s fixed length, opening on `TAG`.
 const ID3V1_LEN: u64 = 128;
@@ -96,11 +96,6 @@ fn audio_end(file: &mut File) -> std::io::Result<u64> {
     }
     file.rewind()?;
     Ok(end)
-}
-
-fn read_at(file: &mut File, offset: u64, buf: &mut [u8]) -> std::io::Result<()> {
-    file.seek(SeekFrom::Start(offset))?;
-    file.read_exact(buf)
 }
 
 /// The whole `APEv2` tag's length, header included, where `footer` is one's footer.

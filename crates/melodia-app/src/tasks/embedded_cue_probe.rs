@@ -11,7 +11,7 @@ use lofty::file::FileType;
 use crate::library;
 use crate::state::AppState;
 use crate::tasks::{TaskSpawner, one_shot};
-use melodia_core::error::{AppError, AppResult};
+use melodia_core::error::AppResult;
 use melodia_store::database::DbPool;
 use melodia_store::database::queries;
 use melodia_store::media::cue;
@@ -41,13 +41,7 @@ async fn probe(state: &AppState) -> AppResult<()> {
         // has already passed picks them up at its next scan.
         library::scan::reconcile_watched_folders(state);
     }
-    if tally.out_of_reach > 0 {
-        return Err(AppError::scanner_msg(format!(
-            "{} FLAC(s) were out of reach, probed again next launch",
-            tally.out_of_reach
-        )));
-    }
-    Ok(())
+    one_shot::require_all_reached(tally.out_of_reach, "FLAC(s)")
 }
 
 #[derive(Default)]

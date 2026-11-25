@@ -36,32 +36,17 @@ async fn repair(state: &AppState) -> AppResult<()> {
     let tally = repair_damaged_files(state).await?;
     log::info!(
         "WAV and AIFF tag repair: {} file(s) repaired, {} failed",
-        tally.repaired,
+        tally.written,
         tally.failed
     );
-    if tally.repaired > 0 {
+    if tally.written > 0 {
         state.library_changed.bump();
     }
-    if tally.out_of_reach > 0 {
-        return Err(AppError::scanner_msg(format!(
-            "{} WAV or AIFF file(s) were out of reach, read again next launch",
-            tally.out_of_reach
-        )));
-    }
-    Ok(())
+    one_shot::require_all_reached(tally.out_of_reach, "WAV or AIFF file(s)")
 }
 
-#[derive(Default)]
-struct Tally {
-    repaired: usize,
-    failed: usize,
-    out_of_reach: usize,
-}
-
-/// One file at a time, so a quit stops the pass between whole-file rewrites rather than inside
-/// one the exit would cut short.
-async fn repair_damaged_files(state: &AppState) -> AppResult<Tally> {
-    let mut tally = Tally::default();
+async fn repair_damaged_files(state: &AppState) -> AppResult<one_shot::Rewrites> {
+    let mut tally = one_shot::Rewrites::default();
     let mut pages = one_shot::Pages::default();
     while let Some(page) = pages
         .next_page(|after_id| {
@@ -75,18 +60,11 @@ async fn repair_damaged_files(state: &AppState) -> AppResult<Tally> {
         .await?
     {
         let files = one_shot::read_page(page, |rows| one_shot::read_files(rows, damage_of)).await?;
-        tally.out_of_reach += files.out_of_reach;
-
-        let damaged = files.read.into_iter().filter_map(|(id, found)| Some((id, found?)));
-        for (id, (path, damage)) in damaged {
-            if state.shutdown_token.is_cancelled() {
-                return Err(AppError::scanner_msg("stopped by the quit, finished next launch"));
-            }
-            match repair_file(state, id, path, damage).await? {
-                Outcome::Repaired => tally.repaired += 1,
-                Outcome::Failed => tally.failed += 1,
-            }
-        }
+        tally
+            .rewrite_each(&state.shutdown_token, files, |id, found| {
+                repair_if_damaged(state, id, found)
+            })
+            .await?;
     }
     Ok(tally)
 }
@@ -106,28 +84,26 @@ fn damage_of(path: &Path) -> AppResult<Option<(String, Damage)>> {
     })
 }
 
-enum Outcome {
-    Repaired,
-    Failed,
-}
-
 /// Marked as this process's write first, so the watcher leaves the rename to the commit, and
 /// unmarked wherever no commit follows, so it reads back whatever did land.
-async fn repair_file(
+async fn repair_if_damaged(
     state: &AppState,
     id: i64,
-    path: String,
-    damage: Damage,
-) -> AppResult<Outcome> {
+    found: Option<(String, Damage)>,
+) -> AppResult<one_shot::Rewrite> {
+    let Some((path, damage)) = found else {
+        return Ok(one_shot::Rewrite::Skipped);
+    };
+    let marked = PathBuf::from(&path);
     let read_back = {
         let self_writes = Arc::clone(&state.self_writes);
         let artwork_dir = state.paths.artwork_dir.clone();
         let cover_cache = state.cover_cache.clone();
-        let path = PathBuf::from(&path);
+        let marked = marked.clone();
         tokio::task::spawn_blocking(move || {
-            self_writes.mark(&path);
-            iff_repair::repair(&path, damage)?;
-            extract_metadata(&path, &artwork_dir, &cover_cache, false)
+            self_writes.mark(&marked);
+            iff_repair::repair(&marked, damage)?;
+            extract_metadata(&marked, &artwork_dir, &cover_cache, false)
         })
         .await
         .map_err(|e| AppError::scanner("A tag repair panicked", e))?
@@ -136,16 +112,15 @@ async fn repair_file(
         Ok(meta) => meta,
         Err(e) => {
             log::warn!("WAV and AIFF tag repair: {path} failed: {}", describe(&e));
-            state.self_writes.unmark(&[PathBuf::from(path)]);
-            return Ok(Outcome::Failed);
+            state.self_writes.unmark(&[marked]);
+            return Ok(one_shot::Rewrite::Failed);
         }
     };
 
-    let marked = PathBuf::from(&path);
     let file = queries::scan::RetaggedFile { id, path, meta };
     if let Err(e) = queries::scan::commit_reread(&state.db, vec![file]).await {
         state.self_writes.unmark(&[marked]);
         return Err(e);
     }
-    Ok(Outcome::Repaired)
+    Ok(one_shot::Rewrite::Written)
 }

@@ -7,7 +7,7 @@
 use crate::library::ratings;
 use crate::state::AppState;
 use crate::tasks::{TaskSpawner, one_shot};
-use melodia_core::error::{AppError, AppResult};
+use melodia_core::error::AppResult;
 use melodia_store::database::queries;
 use melodia_store::media::ingest::rating_tags;
 
@@ -42,26 +42,11 @@ async fn backfill(state: &AppState) -> AppResult<()> {
         tally.written,
         tally.failed
     );
-    if tally.out_of_reach > 0 {
-        return Err(AppError::scanner_msg(format!(
-            "{} M4A(s) were out of reach, written next launch",
-            tally.out_of_reach
-        )));
-    }
-    Ok(())
+    one_shot::require_all_reached(tally.out_of_reach, "M4A(s)")
 }
 
-#[derive(Default)]
-struct Tally {
-    written: usize,
-    failed: usize,
-    out_of_reach: usize,
-}
-
-/// One file at a time, so a quit stops the pass between whole-file rewrites rather than inside
-/// one the exit would cut short.
-async fn write_stale_files(state: &AppState) -> AppResult<Tally> {
-    let mut tally = Tally::default();
+async fn write_stale_files(state: &AppState) -> AppResult<one_shot::Rewrites> {
+    let mut tally = one_shot::Rewrites::default();
     let mut pages = one_shot::Pages::default();
     while let Some(page) = pages
         .next_page(|after_id| {
@@ -72,36 +57,27 @@ async fn write_stale_files(state: &AppState) -> AppResult<Tally> {
         let files =
             one_shot::read_page(page, |rows| one_shot::read_files(rows, rating_tags::read_stars))
                 .await?;
-        tally.out_of_reach += files.out_of_reach;
-
-        for (id, file_stars) in files.read {
-            if state.shutdown_token.is_cancelled() {
-                return Err(AppError::scanner_msg("stopped by the quit, finished next launch"));
-            }
-            match write_if_stale(state, id, file_stars.unwrap_or(0)).await? {
-                Outcome::Wrote => tally.written += 1,
-                Outcome::Failed => tally.failed += 1,
-                Outcome::Skipped => {}
-            }
-        }
+        tally
+            .rewrite_each(&state.shutdown_token, files, |id, file_stars| {
+                write_if_stale(state, id, file_stars.unwrap_or(0))
+            })
+            .await?;
     }
     Ok(tally)
 }
 
-enum Outcome {
-    Wrote,
-    Failed,
-    Skipped,
-}
-
 /// The row is read beside the write rather than with its page, so a star clicked meanwhile is the
 /// one compared, and a row cleared meanwhile is left to the write-back its clear queued.
-async fn write_if_stale(state: &AppState, id: i64, file_stars: i32) -> AppResult<Outcome> {
+async fn write_if_stale(
+    state: &AppState,
+    id: i64,
+    file_stars: i32,
+) -> AppResult<one_shot::Rewrite> {
     let Some(rating) = queries::track::get_rating(&state.db, id).await? else {
-        return Ok(Outcome::Skipped);
+        return Ok(one_shot::Rewrite::Skipped);
     };
     if rating == 0 || rating == file_stars {
-        return Ok(Outcome::Skipped);
+        return Ok(one_shot::Rewrite::Skipped);
     }
 
     let written = ratings::write_rating_to_files(
@@ -113,5 +89,5 @@ async fn write_if_stale(state: &AppState, id: i64, file_stars: i32) -> AppResult
         rating,
     )
     .await?;
-    Ok(if written == 0 { Outcome::Failed } else { Outcome::Wrote })
+    Ok(if written == 0 { one_shot::Rewrite::Failed } else { one_shot::Rewrite::Written })
 }

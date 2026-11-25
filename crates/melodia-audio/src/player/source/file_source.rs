@@ -1,6 +1,4 @@
-//! A file as Symphonia reads it, its seekability and length taken once: Symphonia's own `File`
-//! source re-reads the filesystem on every call, which the demuxer makes per probe and per seek. No
-//! `BufReader`, `MediaSourceStream` already being the read-ahead buffer.
+//! A file as Symphonia reads it ([`FileSource`]) and as the trim and tag scans do ([`read_at`]).
 
 use std::fs::{File, Metadata};
 use std::io::{Read, Seek, SeekFrom};
@@ -17,6 +15,9 @@ pub(crate) fn extension_hint(path: &Path) -> Hint {
     hint
 }
 
+/// A file with its seekability and length taken once: Symphonia's own `File` source re-reads the
+/// filesystem on every call, which the demuxer makes per probe and per seek. No `BufReader`,
+/// `MediaSourceStream` already being the read-ahead buffer.
 pub(crate) struct FileSource {
     inner: File,
     seekable: bool,
@@ -84,6 +85,11 @@ impl MediaSource for FileSource {
     fn byte_len(&self) -> Option<u64> {
         self.end.or(self.byte_len)
     }
+}
+
+pub(crate) fn read_at(file: &mut File, pos: u64, buf: &mut [u8]) -> std::io::Result<()> {
+    file.seek(SeekFrom::Start(pos))?;
+    file.read_exact(buf)
 }
 
 #[cfg(test)]
