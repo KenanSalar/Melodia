@@ -217,7 +217,7 @@ export component PlaylistMosaicPicker inherits Rectangle {
                                 tile-size: root.cand-tile;
                                 // Square, `cand` rounding it.
                                 tile-radius: 0px;
-                                cover-scale: cand-touch.has-hover ? 1.06 : 1.0;
+                                zoomed: cand-touch.has-hover;
                             }
 
                             // On the eased float, so the fade-out plays.

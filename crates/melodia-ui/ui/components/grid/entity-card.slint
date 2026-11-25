@@ -99,9 +99,6 @@ export component EntityCard inherits Rectangle {
     private property <brush> title-ink: Theme.text.transparentize(1.0 - root.fade);
     private property <brush> subtitle-ink: Theme.subtext0.transparentize(1.0 - root.fade);
     private property <length> tile-radius: root.circular ? root.tile-size / 2 : Theme.radius-md;
-    // On a fallback glyph at half the tile, the covers' gentle zoom reads as none; real artwork
-    // stays gentle so it doesn't jitter in the clip.
-    private property <float> cover-scale-hover: root.artwork-path == "" ? 1.15 : 1.04;
     // Twice the row, so no two touching cards share a width, diagonals included. Not the place in
     // the whole list, which at five or ten columns would match every card down a column.
     private property <int> seed: 2 * root.row-index + root.column-index;
@@ -141,7 +138,7 @@ export component EntityCard inherits Rectangle {
                 cover: root.cover;
                 tile-size: root.tile-size;
                 tile-radius: root.tile-radius;
-                cover-scale: root.card-hovered ? root.cover-scale-hover : 1.0;
+                zoomed: root.card-hovered;
                 fallback-icon: root.fallback-icon;
                 fallback-text: root.fallback-text;
                 native-size: root.native-size;

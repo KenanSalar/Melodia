@@ -70,7 +70,7 @@ export component SelectableRow inherits Rectangle {
             artwork-path: root.artwork-path;
             cover: root.cover;
             fallback-icon: root.fallback-icon;
-            cover-scale: touch.has-hover && !root.disabled ? 1.05 : 1.0;
+            zoomed: touch.has-hover && !root.disabled;
             fade: root.fade;
         }
 

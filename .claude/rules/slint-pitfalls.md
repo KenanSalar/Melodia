@@ -311,6 +311,16 @@ there, never in the `.slint`.
   rotation and re-renders a view on every scroll frame. Clip a radius-less element with the rounded
   fill a child at `x: 0; y: 0`, or mask corners with `RoundedFrame` over an opaque ground.
 
+- **A rounded clip's layer sits at its children's bounds, rounded to whole device pixels, so a
+  child animating past the clip hops the whole element.** `render_layer`
+  (`i-slint-core/item_rendering.rs`) places the texture at `item_children_bounding_rect`, and
+  `visit_clip` (`i-slint-renderer-femtovg/itemrenderer.rs`) draws it and the outline under
+  `pixel_align_origin`: each frame moves the bounds a fraction of a pixel, and each flip of the
+  rounding moves the outline a whole one. Cap the bounds with a radius-less `clip: true` child,
+  which reports only its own geometry (`clips_children`), and zoom inside it through
+  `transform-scale`: `pixel_align_origin` acts only on a translate-only canvas, so a resized image
+  would step in its own snap (`ArtworkImage`).
+
 - **FemtoVG antialiases every rounded fill, stroke and clip on its own, and the coverages of one
   curve stack**, so a corner drawn twice reads harder than its radius: a `background` under a
   rounded clip filled to the edge, a border over a separately rounded fill, a stroke ending on a
