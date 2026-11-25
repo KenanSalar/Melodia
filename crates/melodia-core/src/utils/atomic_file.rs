@@ -147,11 +147,11 @@ pub fn rewrite_with_sync(
     io::copy(&mut BufReader::with_capacity(COPY_READ_SIZE, track), &mut copy)?;
     copy.rewind()?;
     rewrite(&mut copy, &tmp)?;
+    // Ahead of the flush, so it covers them: the track's permissions undo the temp's owner-only
+    // mode and `TEMPORARY` flag and carry over a hidden or system one, which `keep` would clear.
+    copy.set_permissions(permissions)?;
     copy.sync_all()?;
     drop(copy);
-    // The temp is owner-only on unix and `TEMPORARY` on Windows: the track's permissions undo
-    // both and carry a hidden or system flag over, where `keep` would clear every attribute.
-    std::fs::set_permissions(&tmp, permissions)?;
     tmp.disable_cleanup(true);
     rename_over(&tmp, path)
 }
